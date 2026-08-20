@@ -6,7 +6,7 @@
  * @package  Laravel
  */
 
-if (isset($_SERVER['REQUEST_URI']) && (str_contains($_SERVER['REQUEST_URI'], 'index.php') || str_starts_with($_SERVER['REQUEST_URI'], '/public'))) {
+if (isset($_SERVER['REQUEST_URI']) && (strpos($_SERVER['REQUEST_URI'], 'index.php') !== false || strpos($_SERVER['REQUEST_URI'], '/public') === 0)) {
     $uri = $_SERVER['REQUEST_URI'];
     $uri = preg_replace('#^/(public/)?(index\.php/?)?#i', '/', $uri);
     if (empty($uri) || $uri[0] !== '/') {

@@ -11,7 +11,7 @@ define('LARAVEL_START', microtime(true));
 |--------------------------------------------------------------------------
 | Fixes 404 errors when accessed via /public/index.php/ URL paths on server.
 */
-if (isset($_SERVER['REQUEST_URI']) && (str_contains($_SERVER['REQUEST_URI'], 'index.php') || str_starts_with($_SERVER['REQUEST_URI'], '/public'))) {
+if (isset($_SERVER['REQUEST_URI']) && (strpos($_SERVER['REQUEST_URI'], 'index.php') !== false || strpos($_SERVER['REQUEST_URI'], '/public') === 0)) {
     $uri = $_SERVER['REQUEST_URI'];
     // Strip /public/index.php/ or /index.php/ or /public/
     $uri = preg_replace('#^/(public/)?(index\.php/?)?#i', '/', $uri);
