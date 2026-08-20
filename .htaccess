@@ -1,10 +1,6 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Strip index.php from URL if present
-    RewriteCond %{THE_REQUEST} ^[A-Z]{3,9}\ /(public/)?index\.php/([^\ ]*) [NC]
-    RewriteRule ^ %2 [R=301,L]
-
     # Rewrite all requests to public folder
     RewriteCond %{REQUEST_URI} !^/public/
     RewriteRule ^(.*)$ public/$1 [L]
