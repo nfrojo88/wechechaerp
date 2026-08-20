@@ -94,7 +94,10 @@ class FileUploadService
             $relPath = ltrim($relPath, '/');
             if (!app()->runningInConsole() && request() && request()->hasHeader('host')) {
                 $base = rtrim(request()->getBasePath() ?? '', '/');
-                return request()->schemeAndHttpHost() . ($base ? $base : '') . '/' . $relPath;
+                $host = method_exists(request(), 'getSchemeAndHttpHost')
+                    ? request()->getSchemeAndHttpHost()
+                    : (request()->getScheme() . '://' . request()->getHttpHost());
+                return $host . ($base ? $base : '') . '/' . $relPath;
             }
             return asset($relPath);
         };
