@@ -34,7 +34,7 @@
                     <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm shadow-sm">
                         <i class="fa-solid fa-exchange-alt me-1"></i> New Transfer
                     </a>
-                    <a href="{{ route('store-keeper.weekly-material-demand') }}" class="btn btn-warning text-dark btn-sm shadow-sm">
+                    <a href="{{ \Illuminate\Support\Facades\Route::has('store-keeper.weekly-material-demand') ? route('store-keeper.weekly-material-demand') : (\Illuminate\Support\Facades\Route::has('store-manager.weekly-material-demand') ? route('store-manager.weekly-material-demand') : url('/store-keeper/weekly-material-demand')) }}" class="btn btn-warning text-dark btn-sm shadow-sm">
                         <i class="fa-solid fa-calendar-check me-1"></i> Weekly Material Demand
                     </a>
                     <a href="{{ route('store-manager.material-requests.index') }}" class="btn btn-danger btn-sm shadow-sm">
@@ -153,7 +153,7 @@
                         <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-outline-warning btn-sm px-3">
                             <i class="fa-solid fa-truck-moving me-1"></i> 3. Transfers &amp; Slips
                         </a>
-                        <a href="{{ route('store-keeper.weekly-material-demand') }}" class="btn btn-outline-primary btn-sm px-3">
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('store-keeper.weekly-material-demand') ? route('store-keeper.weekly-material-demand') : (\Illuminate\Support\Facades\Route::has('store-manager.weekly-material-demand') ? route('store-manager.weekly-material-demand') : url('/store-keeper/weekly-material-demand')) }}" class="btn btn-outline-primary btn-sm px-3">
                             <i class="fa-solid fa-calendar-check me-1"></i> 4. Weekly Material Demand
                         </a>
                         <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-success btn-sm px-3">

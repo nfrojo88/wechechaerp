@@ -1130,6 +1130,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard/foreman',        [App\Http\Controllers\DashboardController::class, 'foreman'])->name('dashboard.foreman');
     Route::get('/dashboard/store-manager',  [App\Http\Controllers\DashboardController::class, 'storeManager'])->name('dashboard.store-manager');
     Route::get('/dashboard/store-keeper',   [App\Http\Controllers\DashboardController::class, 'storeKeeper'])->name('dashboard.store-keeper');
+    Route::get('/store-keeper/weekly-material-demand', [App\Http\Controllers\StoreManagerController::class, 'weeklyMaterialDemand'])->name('store-keeper.weekly-material-demand');
     Route::get('/dashboard/hr',             [App\Http\Controllers\DashboardController::class, 'hr'])->name('dashboard.hr');
     Route::get('/dashboard/finance',        [App\Http\Controllers\DashboardController::class, 'finance'])->name('dashboard.finance');
     Route::get('/dashboard/purchase',       [App\Http\Controllers\DashboardController::class, 'purchase'])->name('dashboard.purchase');

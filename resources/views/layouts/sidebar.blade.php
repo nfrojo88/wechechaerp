@@ -214,7 +214,7 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('store-keeper.weekly-material-demand') }}" class="sidebar-nav-link {{ request()->routeIs('store-keeper.weekly-material-demand*') ? 'active' : '' }}">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('store-keeper.weekly-material-demand') ? route('store-keeper.weekly-material-demand') : (\Illuminate\Support\Facades\Route::has('store-manager.weekly-material-demand') ? route('store-manager.weekly-material-demand') : url('/store-keeper/weekly-material-demand')) }}" class="sidebar-nav-link {{ request()->routeIs('*weekly-material-demand*') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-check text-success"></i>
                 <span>Weekly Material Demand</span>
             </a>
