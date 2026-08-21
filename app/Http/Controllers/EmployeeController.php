@@ -155,20 +155,28 @@ class EmployeeController extends Controller
     public function create()
     {
         Gate::authorize('create', Employee::class);
-        $projects = Project::where('status', '!=', 'cancelled')->get();
-        $departments = \App\Models\Department::where('is_active', true)->get();
-        $products = \App\Models\Product::where('category', 'Fixed Asset')
-            ->where('current_location', 'Main Store')
-            ->where('asset_status', 'Available')
-            ->get();
+        $projects = Project::where('status', '!=', 'cancelled')->select('id', 'name', 'status')->get();
+        $departments = \App\Models\Department::where('is_active', true)->select('id', 'name')->get();
         
-        // Available Centralized Fixed Asset Units (In Store)
-        $fixedAssetUnits = \App\Models\FixedAssetUnit::with('parentAsset')
+        // Available Centralized Fixed Asset Units (In Store) - select light columns only
+        $fixedAssetUnits = \App\Models\FixedAssetUnit::select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number')
+            ->with(['parentAsset' => fn($q) => $q->select('id', 'name', 'category')])
             ->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE)
             ->orderBy('unit_code')
             ->get();
 
-        return view('hr.employees.create', compact('projects', 'products', 'departments', 'fixedAssetUnits'));
+        $fixedAssetsJson = $fixedAssetUnits->map(fn($u) => [
+            'id'           => $u->id,
+            'unit_code'    => $u->unit_code,
+            'name'         => $u->parentAsset->name ?? 'Asset',
+            'category'     => $u->parentAsset->category ?? 'General',
+            'plate_number' => $u->plate_number,
+            'serial_number'=> $u->serial_number,
+            'brand'        => $u->brand,
+            'model'        => $u->model,
+        ])->values();
+
+        return view('hr.employees.create', compact('projects', 'departments', 'fixedAssetUnits', 'fixedAssetsJson'));
     }
 
     public function store(Request $request)
@@ -420,17 +428,15 @@ class EmployeeController extends Controller
             'project',
             'education',
             'experience',
-            'assignedFixedAssets.parentAsset',
+            'assignedFixedAssets' => fn($q) => $q->select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number', 'assigned_to_employee_id'),
+            'assignedFixedAssets.parentAsset' => fn($q) => $q->select('id', 'name', 'category'),
         ]);
-        $projects     = Project::where('status', '!=', 'cancelled')->get();
-        $departments  = \App\Models\Department::where('is_active', true)->get();
-        $products     = \App\Models\Product::where('category', 'Fixed Asset')
-            ->where('current_location', 'Main Store')
-            ->where('asset_status', 'Available')
-            ->get();
+        $projects     = Project::where('status', '!=', 'cancelled')->select('id', 'name', 'status')->get();
+        $departments  = \App\Models\Department::where('is_active', true)->select('id', 'name')->get();
         
         // Available Centralized Fixed Asset Units (In Store OR currently assigned to this employee)
-        $fixedAssetUnits = \App\Models\FixedAssetUnit::with('parentAsset')
+        $fixedAssetUnits = \App\Models\FixedAssetUnit::select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number', 'assigned_to_employee_id')
+            ->with(['parentAsset' => fn($q) => $q->select('id', 'name', 'category')])
             ->where(function($q) use ($employee) {
                 $q->where('status', \App\Models\FixedAssetUnit::STATUS_IN_STORE)
                   ->orWhere('assigned_to_employee_id', $employee->id);
@@ -438,7 +444,19 @@ class EmployeeController extends Controller
             ->orderBy('unit_code')
             ->get();
 
-        return view('hr.employees.edit', compact('employee', 'projects', 'products', 'departments', 'fixedAssetUnits'));
+        $fixedAssetsJson = $fixedAssetUnits->map(fn($u) => [
+            'id'           => $u->id,
+            'unit_code'    => $u->unit_code,
+            'name'         => $u->parentAsset->name ?? 'Asset',
+            'category'     => $u->parentAsset->category ?? 'General',
+            'plate_number' => $u->plate_number,
+            'serial_number'=> $u->serial_number,
+            'brand'        => $u->brand,
+            'model'        => $u->model,
+            'assigned_to'  => $u->assigned_to_employee_id,
+        ])->values();
+
+        return view('hr.employees.edit', compact('employee', 'projects', 'departments', 'fixedAssetUnits', 'fixedAssetsJson'));
     }
 
     public function update(Request $request, Employee $employee)

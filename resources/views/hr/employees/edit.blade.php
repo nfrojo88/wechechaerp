@@ -686,22 +686,14 @@
     </div>
 </div>
 
-<div id="employeeWizardConfig" class="d-none"
-     data-education-count="{{ count($educations) }}"
-     data-experience-count="{{ count($experiences) }}"
-     data-asset-count="{{ count($assignedUnitIds) }}"
-     data-fixed-assets="{{ json_encode($fixedAssetUnits ?? []) }}">
-</div>
-
 <script>
+const fixedAssetUnitsList = @json($fixedAssetsJson ?? []);
 let currentStep = 1;
 const totalSteps = 6;
 
-const wizardCfg = document.getElementById('employeeWizardConfig')?.dataset || {};
-let educationCount = parseInt(wizardCfg.educationCount || '1', 10);
-let experienceCount = parseInt(wizardCfg.experienceCount || '1', 10);
-let assetCount = parseInt(wizardCfg.assetCount || '1', 10);
-const fixedAssetUnitsList = JSON.parse(wizardCfg.fixedAssets || '[]');
+let educationCount = {{ count($educations) }};
+let experienceCount = {{ count($experiences) }};
+let assetCount = {{ count($assignedUnitIds) }};
 let currentActiveCategory = 'ALL';
 
 function goToStep(step) {

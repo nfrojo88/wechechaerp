@@ -623,11 +623,8 @@
     </div>
 </div>
 
-<div id="employeeWizardConfig" class="d-none"
-     data-fixed-assets="{{ json_encode($fixedAssetUnits ?? []) }}">
-</div>
-
 <script>
+const fixedAssetUnitsList = @json($fixedAssetsJson ?? []);
 let currentStep = 1;
 const totalSteps = 6;
 
