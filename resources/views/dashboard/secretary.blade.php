@@ -305,7 +305,7 @@
                         @empty
                         <li class="list-group-item text-center py-3 text-muted">
                             No requests yet.
-                            <a href="{{ route('expense-requests.create') }}" class="d-block mt-1 small">Submit one →</a>
+                            <a href="{{ route('expense-requests.index') }}" class="d-block mt-1 small">Submit one →</a>
                         </li>
                         @endforelse
                     </ul>
