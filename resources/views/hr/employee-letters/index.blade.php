@@ -197,7 +197,7 @@
                         </td>
                         <td>
                             @if($letter->attachment_path)
-                            <a href="{{ asset('storage/' . $letter->attachment_path') }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="View Uploaded Signed Document">
+                            <a href="{{ asset('storage/' . $letter->attachment_path) }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="View Uploaded Signed Document">
                                 <i class="fa-solid fa-paperclip text-primary"></i>
                             </a>
                             @else
