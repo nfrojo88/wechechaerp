@@ -426,8 +426,8 @@
                         @endif
 
                         <div class="mt-3">
-                            <label class="form-label fw-semibold text-uppercase small text-muted">Rejection Reason (Required if rejecting)</label>
-                            <textarea name="rejection_reason" class="form-control" rows="3" placeholder="State reason if rejecting..."></textarea>
+                            <label class="form-label fw-semibold text-uppercase small text-muted">Rejection Reason (Optional)</label>
+                            <textarea name="rejection_reason" class="form-control" rows="3" placeholder="State reason if rejecting (optional)..."></textarea>
                         </div>
                     </div>
                     <div class="modal-footer bg-light border-top-0 d-flex justify-content-between">
@@ -489,8 +489,8 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label fw-semibold text-uppercase small text-muted">Rejection Reason (Required if rejecting)</label>
-                            <textarea name="rejection_reason" class="form-control" rows="3" placeholder="State reason if rejecting..."></textarea>
+                            <label class="form-label fw-semibold text-uppercase small text-muted">Rejection Reason (Optional)</label>
+                            <textarea name="rejection_reason" class="form-control" rows="3" placeholder="State reason if rejecting (optional)..."></textarea>
                         </div>
                     </div>
                     <div class="modal-footer bg-light border-top-0 d-flex justify-content-between">

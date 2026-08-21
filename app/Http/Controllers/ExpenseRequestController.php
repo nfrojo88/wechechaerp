@@ -396,7 +396,7 @@ class ExpenseRequestController extends Controller
 
         $validated = $request->validate([
             'action' => 'required|in:approve,reject',
-            'rejection_reason' => 'required_if:action,reject|nullable|string|max:1000',
+            'rejection_reason' => 'nullable|string|max:1000',
         ]);
 
         if ($expenseRequest->status !== ExpenseRequest::STATUS_PENDING_HR) {
@@ -406,11 +406,12 @@ class ExpenseRequestController extends Controller
         $user = auth()->user();
 
         if ($validated['action'] === 'reject') {
+            $reason = !empty($validated['rejection_reason']) ? $validated['rejection_reason'] : 'Rejected by HR reviewer';
             $expenseRequest->update([
                 'status' => ExpenseRequest::STATUS_REJECTED,
                 'hr_reviewer_id' => $user->id,
                 'hr_reviewed_at' => now(),
-                'rejection_reason' => $validated['rejection_reason'],
+                'rejection_reason' => $reason,
             ]);
 
             return back()->with('success', "Request #{$expenseRequest->request_number} rejected.");
@@ -447,7 +448,7 @@ class ExpenseRequestController extends Controller
 
         $validated = $request->validate([
             'action' => 'required|in:approve,reject',
-            'rejection_reason' => 'required_if:action,reject|nullable|string|max:1000',
+            'rejection_reason' => 'nullable|string|max:1000',
         ]);
 
         if ($expenseRequest->status !== ExpenseRequest::STATUS_PENDING_GM) {
@@ -457,13 +458,14 @@ class ExpenseRequestController extends Controller
         $user = auth()->user();
 
         if ($validated['action'] === 'reject') {
+            $reason = !empty($validated['rejection_reason']) ? $validated['rejection_reason'] : 'Rejected by General Manager (GM)';
             $expenseRequest->update([
                 'status' => ExpenseRequest::STATUS_REJECTED,
                 'gm_reviewer_id' => $user->id,
                 'gm_approver_id' => $user->id,
                 'gm_reviewed_at' => now(),
                 'gm_approved_at' => now(),
-                'rejection_reason' => $validated['rejection_reason'],
+                'rejection_reason' => $reason,
             ]);
 
             return back()->with('success', "Request #{$expenseRequest->request_number} rejected by GM.");
