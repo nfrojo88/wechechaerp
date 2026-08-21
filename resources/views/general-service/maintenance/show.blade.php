@@ -172,6 +172,13 @@
                                             {!! $exp->status_badge !!}
                                             @if($exp->status === \App\Models\ExpenseRequest::STATUS_PAID && $exp->paid_at)
                                                 <small class="text-muted d-block" style="font-size:0.75rem;">Paid {{ $exp->paid_at->format('d M') }}</small>
+                                            @elseif($exp->status === \App\Models\ExpenseRequest::STATUS_REJECTED)
+                                                <small class="text-danger d-block mt-1" style="font-size:0.74rem;">
+                                                    <i class="fa-solid fa-circle-xmark me-1"></i>{{ $exp->rejection_reason ?? 'Rejected' }}
+                                                    @if($exp->rejected_by_user)
+                                                        <span class="text-muted">by {{ $exp->rejected_by_user->name }}</span>
+                                                    @endif
+                                                </small>
                                             @endif
                                         </td>
                                         <td>

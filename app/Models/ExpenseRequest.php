@@ -278,4 +278,34 @@ class ExpenseRequest extends Model
                 return '<span class="badge bg-secondary">' . e($this->status) . '</span>';
         }
     }
+
+    /**
+     * Get the user who rejected the request.
+     */
+    public function getRejectedByUserAttribute()
+    {
+        return $this->gmReviewer ?? $this->gmApprover ?? $this->hrReviewer;
+    }
+
+    /**
+     * Get the role name / title of who rejected the request.
+     */
+    public function getRejectedByRoleAttribute()
+    {
+        if ($this->gm_reviewer_id || $this->gm_approver_id) {
+            return 'General Manager (GM)';
+        }
+        if ($this->hr_reviewer_id) {
+            return 'HR Officer';
+        }
+        return 'Reviewer';
+    }
+
+    /**
+     * Get the timestamp when the request was rejected.
+     */
+    public function getRejectedAtAttribute()
+    {
+        return $this->gm_reviewed_at ?? $this->gm_approved_at ?? $this->hr_reviewed_at ?? $this->updated_at;
+    }
 }

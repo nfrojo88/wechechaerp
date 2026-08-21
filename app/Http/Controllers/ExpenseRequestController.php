@@ -143,6 +143,9 @@ class ExpenseRequestController extends Controller
             'finance_queue' => ExpenseRequest::whereIn('status', [ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED])->count(),
             'my_assigned_payments' => ExpenseRequest::assignedToUser($user->id)->count(),
             'paid_history' => ExpenseRequest::paidHistoryForUser($user)->count(),
+            'rejected_history' => ($isHr || $isGm || $isFinanceHead || $user->hasRole('admin'))
+                ? ExpenseRequest::where('status', ExpenseRequest::STATUS_REJECTED)->count()
+                : ExpenseRequest::where('user_id', $user->id)->where('status', ExpenseRequest::STATUS_REJECTED)->count(),
         ];
 
         // Build query based on active tab
@@ -197,6 +200,15 @@ class ExpenseRequestController extends Controller
             case 'paid_history':
                 // Enforce STRICT query-level scoping per Rule 3
                 $query->paidHistoryForUser($user);
+                break;
+
+            case 'rejected_history':
+            case 'rejected':
+                if ($isHr || $isGm || $isFinanceHead || $user->hasRole('admin')) {
+                    $query->where('status', ExpenseRequest::STATUS_REJECTED);
+                } else {
+                    $query->where('user_id', $user->id)->where('status', ExpenseRequest::STATUS_REJECTED);
+                }
                 break;
 
             case 'my_requests':

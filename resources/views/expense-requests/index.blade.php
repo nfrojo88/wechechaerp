@@ -122,6 +122,16 @@
                 </div>
             </a>
         </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <a href="{{ route('expense-requests.index', ['tab' => 'rejected_history']) }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm rounded-3 bg-white h-100 border-start border-4 border-danger {{ $tab === 'rejected_history' ? 'border border-2 border-danger' : '' }}">
+                    <div class="card-body p-3 text-center">
+                        <div class="text-muted small fw-semibold text-danger">Rejected</div>
+                        <div class="fs-4 fw-bold text-danger mt-1">{{ $counters['rejected_history'] ?? 0 }}</div>
+                    </div>
+                </div>
+            </a>
+        </div>
     </div>
 
     {{-- Queue Tabs Navigation --}}
@@ -188,6 +198,16 @@
                     <a class="nav-link fw-semibold {{ $tab === 'paid_history' ? 'active text-success' : 'text-secondary' }}" 
                        href="{{ route('expense-requests.index', ['tab' => 'paid_history']) }}">
                         <i class="fa-solid fa-receipt me-1"></i> Paid History
+                    </a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link fw-semibold {{ $tab === 'rejected_history' ? 'active text-danger fw-bold' : 'text-secondary' }}" 
+                       href="{{ route('expense-requests.index', ['tab' => 'rejected_history']) }}">
+                        <i class="fa-solid fa-ban me-1"></i> Rejected History
+                        @if(($counters['rejected_history'] ?? 0) > 0)
+                            <span class="badge bg-danger ms-1">{{ $counters['rejected_history'] }}</span>
+                        @endif
                     </a>
                 </li>
             </ul>
@@ -294,9 +314,20 @@
                             </td>
                             <td>
                                 {!! $req->status_badge !!}
-                                @if($req->status === 'Rejected' && $req->rejection_reason)
-                                    <div class="small text-danger text-truncate mt-1" style="max-width: 160px;" title="{{ $req->rejection_reason }}">
-                                        <i class="fa-solid fa-comment-dots me-1"></i>{{ $req->rejection_reason }}
+                                @if($req->status === 'Rejected')
+                                    <div class="mt-1 p-1 bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded small text-danger" style="max-width: 220px; font-size: 0.76rem;">
+                                        <div class="fw-bold">
+                                            <i class="fa-solid fa-circle-xmark me-1"></i>Rejected by: 
+                                            <span class="text-dark">{{ $req->rejected_by_user->name ?? $req->rejected_by_role }}</span>
+                                        </div>
+                                        <div class="text-muted text-truncate" title="{{ $req->rejection_reason ?? 'No reason stated.' }}">
+                                            <strong>Reason:</strong> {{ $req->rejection_reason ?? 'Rejected upon review' }}
+                                        </div>
+                                        @if($req->rejected_at)
+                                            <div class="text-muted" style="font-size: 0.70rem;">
+                                                <i class="fa-regular fa-clock me-1"></i>{{ $req->rejected_at->format('d M Y, h:i A') }}
+                                            </div>
+                                        @endif
                                     </div>
                                 @endif
                             </td>
@@ -650,6 +681,36 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
+                    @if($req->status === 'Rejected')
+                    <div class="alert alert-danger border-start border-4 border-danger shadow-sm mb-3">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="rounded-circle bg-danger bg-opacity-10 p-2 text-danger flex-shrink-0">
+                                <i class="fa-solid fa-ban fa-xl"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h6 class="fw-bold text-danger mb-1"><i class="fa-solid fa-circle-xmark me-1"></i>Expense Request Rejected</h6>
+                                <div class="p-2 bg-white rounded border mb-2">
+                                    <strong class="text-dark small d-block mb-1"><i class="fa-solid fa-comment-dots text-danger me-1"></i>Rejection Reason:</strong>
+                                    <span class="text-danger fw-semibold">{{ $req->rejection_reason ?? 'Rejected upon review (No custom reason provided)' }}</span>
+                                </div>
+                                <div class="small text-muted d-flex flex-wrap gap-3">
+                                    <div>
+                                        <i class="fa-solid fa-user-xmark text-danger me-1"></i><strong>Rejected By:</strong> 
+                                        <span class="text-dark fw-semibold">{{ $req->rejected_by_user->name ?? 'Reviewer' }}</span>
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1">{{ $req->rejected_by_role }}</span>
+                                    </div>
+                                    @if($req->rejected_at)
+                                    <div>
+                                        <i class="fa-solid fa-calendar-xmark text-danger me-1"></i><strong>Date & Time:</strong>
+                                        <span class="text-dark">{{ $req->rejected_at->format('d M Y \a\t h:i A') }}</span>
+                                    </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    @endif
+
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <div class="p-3 bg-light rounded-3 border">
@@ -715,8 +776,17 @@
                             @endif
 
                             @if($req->status === 'Rejected')
-                            <li class="list-group-item bg-light-danger text-danger">
-                                <i class="fa-solid fa-times-circle me-2"></i><strong>Rejected:</strong> {{ $req->rejection_reason ?? 'No reason stated.' }}
+                            <li class="list-group-item bg-danger bg-opacity-10 text-danger border-start border-4 border-danger">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <i class="fa-solid fa-times-circle me-1 text-danger"></i>
+                                        <strong>Rejected by {{ $req->rejected_by_user->name ?? 'Reviewer' }} ({{ $req->rejected_by_role }})</strong>
+                                        <div class="small text-dark mt-1"><strong>Reason:</strong> {{ $req->rejection_reason ?? 'No reason stated.' }}</div>
+                                    </div>
+                                    @if($req->rejected_at)
+                                        <small class="text-muted text-nowrap ms-2">{{ $req->rejected_at->format('M d, Y H:i') }}</small>
+                                    @endif
+                                </div>
                             </li>
                             @endif
                         </ul>
