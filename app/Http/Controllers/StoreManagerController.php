@@ -190,6 +190,17 @@ class StoreManagerController extends Controller
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $products = Product::where('is_active', true)->orderBy('name')->get();
 
+        $user = Auth::user();
+        $isStoreKeeper = $user && $user->hasRole('store_keeper');
+        $assignedStore = null;
+
+        if ($isStoreKeeper) {
+            $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
+            if ($assignedStore) {
+                $selectedStoreId = $assignedStore->id;
+            }
+        }
+
         if ($selectedStoreId) {
             // Single Store View
             $query = Inventory::with('product', 'store')
@@ -288,7 +299,7 @@ class StoreManagerController extends Controller
             $isGrouped = true;
         }
 
-        return view('store-manager.inventory.all', compact('inventory', 'stores', 'products', 'isGrouped'));
+        return view('store-manager.inventory.all', compact('inventory', 'stores', 'products', 'isGrouped', 'isStoreKeeper', 'assignedStore'));
     }
 
     /**
@@ -348,21 +359,36 @@ class StoreManagerController extends Controller
      */
     public function transfersIndex(Request $request)
     {
+        $user = Auth::user();
+        $isStoreKeeper = $user && $user->hasRole('store_keeper');
+        $assignedStore = null;
+
         $query = Transfer::with(['fromStore', 'toStore', 'requestedBy', 'items.product']);
+
+        if ($isStoreKeeper) {
+            $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
+            $storeId = $assignedStore?->id;
+            if ($storeId) {
+                $query->where(function ($q) use ($storeId) {
+                    $q->where('from_store_id', $storeId)
+                      ->orWhere('to_store_id', $storeId);
+                });
+            }
+        } elseif ($request->filled('store_id')) {
+            $query->where(function ($q) use ($request) {
+                $q->where('from_store_id', $request->store_id)
+                  ->orWhere('to_store_id', $request->store_id);
+            });
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        if ($request->filled('store_id')) {
-            $query->where('from_store_id', $request->store_id)
-                  ->orWhere('to_store_id', $request->store_id);
-        }
-
         $transfers = $query->latest()->paginate(20)->withQueryString();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
 
-        return view('store-manager.transfers.index', compact('transfers', 'stores'));
+        return view('store-manager.transfers.index', compact('transfers', 'stores', 'isStoreKeeper', 'assignedStore'));
     }
 
     /**
@@ -370,16 +396,143 @@ class StoreManagerController extends Controller
      */
     public function showTransfer(Transfer $transfer)
     {
-        $transfer->load(['fromStore', 'toStore', 'requestedBy', 'approvedBy', 'items.product']);
-        return view('store-manager.transfers.show', compact('transfer'));
+        $user = Auth::user();
+        $isStoreKeeper = $user && $user->hasRole('store_keeper');
+        $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
+
+        $transfer->load(['fromStore', 'toStore', 'requestedBy', 'approvedBy', 'receivedBy', 'items.product']);
+        return view('store-manager.transfers.show', compact('transfer', 'isStoreKeeper', 'assignedStore'));
     }
 
     /**
-     * Material Requests from Coordinator
+     * Update Physical Slip # for a Transfer
+     */
+    public function updatePhysicalSlip(Request $request, Transfer $transfer)
+    {
+        $request->validate([
+            'physical_slip_no' => 'required|string|max:100',
+        ]);
+
+        $transfer->update([
+            'physical_slip_no' => $request->physical_slip_no,
+        ]);
+
+        return back()->with('success', 'Physical Slip #' . $request->physical_slip_no . ' saved successfully.');
+    }
+
+    /**
+     * Dispatch Transfer (Sender store keeper marks transfer in transit and logs stock deduction)
+     */
+    public function dispatchTransfer(Request $request, Transfer $transfer)
+    {
+        $request->validate([
+            'physical_slip_no' => 'nullable|string|max:100',
+        ]);
+
+        if ($request->filled('physical_slip_no')) {
+            $transfer->physical_slip_no = $request->physical_slip_no;
+        }
+
+        DB::transaction(function () use ($transfer) {
+            $transfer->load('items');
+            foreach ($transfer->items as $item) {
+                // Deduct inventory from origin store
+                $inv = Inventory::where('store_id', $transfer->from_store_id)
+                    ->where('product_id', $item->product_id)
+                    ->first();
+                if ($inv) {
+                    $qtyToSend = $item->approved_quantity > 0 ? $item->approved_quantity : $item->requested_quantity;
+                    $inv->decrement('quantity_on_hand', $qtyToSend);
+                    $item->update(['sent_quantity' => $qtyToSend]);
+
+                    DB::table('inventory_movements')->insert([
+                        'inventory_id' => $inv->id,
+                        'type'         => 'transfer_out',
+                        'quantity'     => -$qtyToSend,
+                        'reference_id' => $transfer->id,
+                        'notes'        => 'Transfer #' . $transfer->transfer_no . ' dispatched (Slip: ' . ($transfer->physical_slip_no ?? 'N/A') . ')',
+                        'created_at'   => now(),
+                        'updated_at'   => now(),
+                    ]);
+                }
+            }
+
+            $transfer->status = 'in_transit';
+            $transfer->save();
+        });
+
+        return back()->with('success', 'Transfer marked as In-Transit and dispatched from store.');
+    }
+
+    /**
+     * Receive Transfer (Destination store keeper confirms received items and adds to stock)
+     */
+    public function receiveTransfer(Request $request, Transfer $transfer)
+    {
+        $request->validate([
+            'physical_slip_no' => 'nullable|string|max:100',
+        ]);
+
+        if ($request->filled('physical_slip_no')) {
+            $transfer->physical_slip_no = $request->physical_slip_no;
+        }
+
+        DB::transaction(function () use ($transfer) {
+            $transfer->load('items');
+            foreach ($transfer->items as $item) {
+                $qtyReceived = $item->sent_quantity > 0 ? $item->sent_quantity : ($item->approved_quantity > 0 ? $item->approved_quantity : $item->requested_quantity);
+                $item->update(['received_quantity' => $qtyReceived]);
+
+                // Add or update inventory in destination store
+                $inv = Inventory::firstOrCreate(
+                    ['store_id' => $transfer->to_store_id, 'product_id' => $item->product_id],
+                    ['quantity_on_hand' => 0, 'min_stock' => 5, 'unit_cost' => 0]
+                );
+                $inv->increment('quantity_on_hand', $qtyReceived);
+
+                DB::table('inventory_movements')->insert([
+                    'inventory_id' => $inv->id,
+                    'type'         => 'transfer_in',
+                    'quantity'     => $qtyReceived,
+                    'reference_id' => $transfer->id,
+                    'notes'        => 'Transfer #' . $transfer->transfer_no . ' received into store (Slip: ' . ($transfer->physical_slip_no ?? 'N/A') . ')',
+                    'created_at'   => now(),
+                    'updated_at'   => now(),
+                ]);
+            }
+
+            $transfer->status = 'completed';
+            $transfer->received_by = Auth::id();
+            $transfer->received_at = now();
+            $transfer->save();
+        });
+
+        return back()->with('success', 'Transfer confirmed and received into store inventory successfully!');
+    }
+
+    /**
+     * Material Requests from Site Engineers / Coordinator
      */
     public function materialRequests(Request $request)
     {
+        $user = Auth::user();
+        $isStoreKeeper = $user && $user->hasRole('store_keeper');
+        $assignedStore = null;
+
         $query = MaterialRequest::with(['project', 'requestedBy', 'items.product']);
+
+        if ($isStoreKeeper) {
+            $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
+            $storeId = $assignedStore?->id;
+            $projectId = $assignedStore?->project_id;
+
+            if ($storeId || $projectId) {
+                $query->where(function ($q) use ($storeId, $projectId) {
+                    if ($storeId) $q->where('destination_store_id', $storeId);
+                    if ($projectId) $q->orWhere('project_id', $projectId);
+                });
+            }
+        }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -387,7 +540,101 @@ class StoreManagerController extends Controller
 
         $requests = $query->latest()->paginate(20)->withQueryString();
 
-        return view('store-manager.material-requests.index', compact('requests'));
+        // Calculate on-hand stock for request items in this store
+        $storeStock = [];
+        if ($assignedStore) {
+            $storeStock = Inventory::where('store_id', $assignedStore->id)->pluck('quantity_on_hand', 'product_id')->toArray();
+        }
+
+        return view('store-manager.material-requests.index', compact('requests', 'isStoreKeeper', 'assignedStore', 'storeStock'));
+    }
+
+    /**
+     * Issue Material Request to Site Engineer
+     */
+    public function issueMaterialRequest(Request $request, MaterialRequest $materialRequest)
+    {
+        $user = Auth::user();
+        $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
+        $storeId = $materialRequest->destination_store_id ?? $assignedStore?->id;
+
+        if (!$storeId) {
+            return back()->with('error', 'No store assigned to issue materials from.');
+        }
+
+        DB::transaction(function () use ($materialRequest, $storeId) {
+            $materialRequest->load('items.product');
+
+            foreach ($materialRequest->items as $item) {
+                $inv = Inventory::where('store_id', $storeId)
+                    ->where('product_id', $item->product_id)
+                    ->first();
+
+                if ($inv) {
+                    $inv->decrement('quantity_on_hand', $item->quantity);
+
+                    DB::table('inventory_movements')->insert([
+                        'inventory_id' => $inv->id,
+                        'type'         => 'issue',
+                        'quantity'     => -$item->quantity,
+                        'reference_id' => $materialRequest->id,
+                        'notes'        => 'Issued to Site Engineer for Material Request #' . ($materialRequest->reference_number ?? $materialRequest->id),
+                        'created_at'   => now(),
+                        'updated_at'   => now(),
+                    ]);
+                }
+            }
+
+            $materialRequest->update([
+                'status'      => 'issued',
+                'approved_by' => Auth::id(),
+                'approved_at' => now(),
+            ]);
+        });
+
+        return back()->with('success', 'Material successfully issued and handed over to the Site Engineer.');
+    }
+
+    /**
+     * Weekly Material Demand Schedule (Sent by Planning team to Site)
+     */
+    public function weeklyMaterialDemand(Request $request)
+    {
+        $user = Auth::user();
+        $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
+        $storeId = $assignedStore?->id;
+        $project = $assignedStore?->project;
+
+        $weeklyDispatches = collect();
+
+        if ($project) {
+            $weeklyDispatches = \App\Models\WeeklyPlanDispatch::with(['tasks', 'dispatchedTo'])
+                ->where('project_id', $project->id)
+                ->latest()
+                ->take(10)
+                ->get();
+        } else {
+            $weeklyDispatches = \App\Models\WeeklyPlanDispatch::with(['tasks', 'project', 'dispatchedTo'])
+                ->latest()
+                ->take(10)
+                ->get();
+        }
+
+        // Fetch products and correlate with store inventory
+        $storeInventoryMap = $storeId
+            ? Inventory::where('store_id', $storeId)->pluck('quantity_on_hand', 'product_id')->toArray()
+            : [];
+
+        // Build list of weekly material demands from active material plans or dispatches
+        $materialPlans = \App\Models\MaterialPlan::with(['items.product', 'project'])
+            ->when($project, fn($q) => $q->where('project_id', $project->id))
+            ->latest()
+            ->take(10)
+            ->get();
+
+        return view('store-keeper.weekly-material-demand', compact(
+            'assignedStore', 'project', 'weeklyDispatches', 'materialPlans', 'storeInventoryMap'
+        ));
     }
 
     /**

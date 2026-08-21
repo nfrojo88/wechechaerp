@@ -34,8 +34,11 @@
                     <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm shadow-sm">
                         <i class="fa-solid fa-exchange-alt me-1"></i> New Transfer
                     </a>
-                    <a href="{{ route('store-manager.slips.create') }}" class="btn btn-success btn-sm shadow-sm">
-                        <i class="fa-solid fa-receipt me-1"></i> Create Slip
+                    <a href="{{ route('store-keeper.weekly-material-demand') }}" class="btn btn-warning text-dark btn-sm shadow-sm">
+                        <i class="fa-solid fa-calendar-check me-1"></i> Weekly Material Demand
+                    </a>
+                    <a href="{{ route('store-manager.material-requests.index') }}" class="btn btn-danger btn-sm shadow-sm">
+                        <i class="fa-solid fa-clipboard-list me-1"></i> Material Requests
                     </a>
                     <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-outline-secondary btn-sm shadow-sm">
                         <i class="fa-solid fa-boxes-stacked me-1"></i> View Stock
@@ -139,28 +142,22 @@
         <div class="col-12">
             <div class="card border-0 shadow-sm rounded-3 bg-white">
                 <div class="card-body p-3">
-                    <p class="text-muted fw-semibold mb-2" style="font-size:0.78rem; text-transform:uppercase; letter-spacing:.05em;">Quick Actions</p>
+                    <p class="text-muted fw-semibold mb-2" style="font-size:0.78rem; text-transform:uppercase; letter-spacing:.05em;">Store Keeper Quick Modules</p>
                     <div class="d-flex flex-wrap gap-2">
-                        <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm px-3">
-                            <i class="fa-solid fa-plus me-1"></i> Create Transfer
-                        </a>
-                        <a href="{{ route('store-manager.slips.create') }}" class="btn btn-success btn-sm px-3">
-                            <i class="fa-solid fa-receipt me-1"></i> Receive / Issue Slip
-                        </a>
-                        <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-outline-warning btn-sm px-3">
-                            <i class="fa-solid fa-truck-moving me-1"></i> Transfer Records
-                        </a>
-                        <a href="{{ route('store-manager.slips.index') }}" class="btn btn-outline-secondary btn-sm px-3">
-                            <i class="fa-solid fa-file-invoice me-1"></i> Slip Records
-                        </a>
                         <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-outline-info btn-sm px-3">
-                            <i class="fa-solid fa-boxes-stacked me-1"></i> Full Inventory
+                            <i class="fa-solid fa-boxes-stacked me-1"></i> 1. Store Inventory
                         </a>
                         <a href="{{ route('store-manager.material-requests.index') }}" class="btn btn-outline-danger btn-sm px-3">
-                            <i class="fa-solid fa-clipboard-list me-1"></i> Material Requests
+                            <i class="fa-solid fa-clipboard-list me-1"></i> 2. Material Requests (Issue Stock)
+                        </a>
+                        <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-outline-warning btn-sm px-3">
+                            <i class="fa-solid fa-truck-moving me-1"></i> 3. Transfers &amp; Slips
+                        </a>
+                        <a href="{{ route('store-keeper.weekly-material-demand') }}" class="btn btn-outline-primary btn-sm px-3">
+                            <i class="fa-solid fa-calendar-check me-1"></i> 4. Weekly Material Demand
                         </a>
                         <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-success btn-sm px-3">
-                            <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask Money
+                            <i class="fa-solid fa-hand-holding-dollar me-1"></i> 5. Petty Cash (Site Purchase)
                         </a>
                     </div>
                 </div>
@@ -179,7 +176,7 @@
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
                     <div>
                         <h6 class="mb-0 fw-bold text-dark">
-                            <i class="fa-solid fa-truck-arrow-right text-primary me-2"></i>Site Store Transfers
+                            <i class="fa-solid fa-truck-arrow-right text-primary me-2"></i>Site Store Transfers &amp; Physical Slips
                         </h6>
                         <small class="text-muted">Incoming &amp; outgoing transfers for this store</small>
                     </div>
@@ -195,11 +192,10 @@
                         <thead class="table-light">
                             <tr>
                                 <th class="ps-3">Transfer #</th>
+                                <th>Physical Slip #</th>
                                 <th>Direction</th>
-                                <th>Origin Store</th>
-                                <th>Destination Store</th>
+                                <th>Origin / Dest</th>
                                 <th>Status</th>
-                                <th class="text-center">Date</th>
                                 <th class="text-end pe-3">Action</th>
                             </tr>
                         </thead>
@@ -219,9 +215,16 @@
                             @endphp
                             <tr>
                                 <td class="ps-3">
-                                    <span class="fw-bold font-monospace text-primary" style="font-size:0.82rem;">
+                                    <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="fw-bold font-monospace text-primary text-decoration-none">
                                         {{ $transfer->transfer_no ?? 'TR-'.$transfer->id }}
-                                    </span>
+                                    </a>
+                                </td>
+                                <td>
+                                    @if($transfer->physical_slip_no)
+                                        <span class="badge bg-success font-monospace" style="font-size:0.75rem;">{{ $transfer->physical_slip_no }}</span>
+                                    @else
+                                        <span class="text-muted small">—</span>
+                                    @endif
                                 </td>
                                 <td>
                                     @if($isIncoming)
@@ -237,18 +240,14 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <span class="fw-semibold text-dark small">{{ $transfer->fromStore->name ?? '—' }}</span>
-                                </td>
-                                <td>
-                                    <span class="fw-semibold text-dark small">{{ $transfer->toStore->name ?? '—' }}</span>
+                                    <span class="fw-semibold text-dark small">
+                                        {{ $isIncoming ? ($transfer->fromStore->name ?? 'Main Warehouse') : ($transfer->toStore->name ?? 'Destination') }}
+                                    </span>
                                 </td>
                                 <td>
                                     <span class="badge {{ $statusBadge }} small">
                                         {{ ucfirst(str_replace('_', ' ', $transfer->status ?? 'Draft')) }}
                                     </span>
-                                </td>
-                                <td class="text-center">
-                                    <small class="text-muted">{{ optional($transfer->required_date ?? $transfer->created_at)->format('d M Y') }}</small>
                                 </td>
                                 <td class="text-end pe-3">
                                     <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-outline-secondary">

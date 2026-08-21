@@ -11,7 +11,7 @@ class Transfer extends Model
     use SoftDeletes, ScopesByStore;
 
     protected $fillable = [
-        'transfer_no', 'from_store_id', 'to_store_id', 'requested_by',
+        'transfer_no', 'physical_slip_no', 'from_store_id', 'to_store_id', 'requested_by',
         'required_date', 'reason', 'status', 'approved_by', 'approved_at',
         'received_by', 'received_at', 'rejection_reason',
     ];

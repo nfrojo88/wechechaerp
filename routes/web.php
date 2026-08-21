@@ -1675,10 +1675,17 @@ Route::middleware(['auth'])->group(function () {
         Route::get('transfers/create', [App\Http\Controllers\StoreManagerController::class, 'createTransfer'])->name('transfers.create');
         Route::post('transfers', [App\Http\Controllers\StoreManagerController::class, 'storeTransfer'])->name('transfers.store');
         Route::get('transfers/{transfer}', [App\Http\Controllers\StoreManagerController::class, 'showTransfer'])->name('transfers.show');
+        Route::post('transfers/{transfer}/physical-slip', [App\Http\Controllers\StoreManagerController::class, 'updatePhysicalSlip'])->name('transfers.physical-slip');
+        Route::post('transfers/{transfer}/dispatch', [App\Http\Controllers\StoreManagerController::class, 'dispatchTransfer'])->name('transfers.dispatch');
+        Route::post('transfers/{transfer}/receive', [App\Http\Controllers\StoreManagerController::class, 'receiveTransfer'])->name('transfers.receive');
         
-        // Material Requests from Coordinator
+        // Material Requests from Site Engineers / Coordinator
         Route::get('material-requests', [App\Http\Controllers\StoreManagerController::class, 'materialRequests'])->name('material-requests.index');
         Route::post('material-requests/{materialRequest}/process', [App\Http\Controllers\StoreManagerController::class, 'processMaterialRequest'])->name('material-requests.process');
+        Route::post('material-requests/{materialRequest}/issue', [App\Http\Controllers\StoreManagerController::class, 'issueMaterialRequest'])->name('material-requests.issue');
+        
+        // Store Keeper Weekly Material Demand
+        Route::get('weekly-material-demand', [App\Http\Controllers\StoreManagerController::class, 'weeklyMaterialDemand'])->name('weekly-material-demand');
         
         // Product Catalog
         Route::get('products', [App\Http\Controllers\StoreManagerController::class, 'productCatalog'])->name('products.index');
