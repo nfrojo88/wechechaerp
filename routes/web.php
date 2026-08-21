@@ -105,17 +105,36 @@ Route::get('/migrate', function() {
     return redirect('/run-migrations');
 });
 
-// One-time query to lock/reset all employees for GM approval & clear non-admin credentials
+// Restore employee credentials & lock for GM approval
 Route::get('/reset-employees-for-gm-approval', function () {
     try {
         // Exempt list: General Admin and HR Officer
         $exemptCodes  = ['EMP-01', 'EMP-25', 'EMP-1', 'EMP-001', 'EMP-025'];
         $exemptEmails = ['wondeseyum573@gmail.com', 'natnael@wechecha.com'];
 
+        $determineRole = function($dept, $title) {
+            $str = strtolower(($dept ?? '') . ' ' . ($title ?? ''));
+            if (str_contains($str, 'admin') || str_contains($str, 'system')) return 'admin';
+            if (str_contains($str, 'general manager') || str_contains($str, 'gm')) return 'gm';
+            if (str_contains($str, 'site') || str_contains($str, 'engineer')) return 'site_engineer';
+            if (str_contains($str, 'foreman')) return 'foreman';
+            if (str_contains($str, 'store manager') || str_contains($str, 'store-manager')) return 'store_manager';
+            if (str_contains($str, 'store') || str_contains($str, 'warehouse')) return 'store_keeper';
+            if (str_contains($str, 'finance') || str_contains($str, 'account')) return 'finance';
+            if (str_contains($str, 'purchase') || str_contains($str, 'procurement')) return 'purchase';
+            if (str_contains($str, 'hr') || str_contains($str, 'human')) return 'hr';
+            if (str_contains($str, 'planning')) return 'planning';
+            if (str_contains($str, 'coord')) return 'coordinator';
+            if (str_contains($str, 'contract')) return 'contract_admin';
+            if (str_contains($str, 'audit')) return 'audit_team';
+            if (str_contains($str, 'secret')) return 'secretary';
+            return 'site_engineer';
+        };
+
         $allEmployees = \App\Models\Employee::all();
         $exempted = [];
-        $resetList = [];
-        $usersDeletedCount = 0;
+        $lockedList = [];
+        $usersRestoredCount = 0;
 
         foreach ($allEmployees as $emp) {
             $code  = strtoupper(trim($emp->employee_code ?? ''));
@@ -123,64 +142,86 @@ Route::get('/reset-employees-for-gm-approval', function () {
 
             $isExempt = in_array($code, $exemptCodes) || in_array($email, $exemptEmails);
 
+            // 1. Locate or restore the User login account
+            $user = null;
             if ($emp->user_id) {
-                $linkedUser = \App\Models\User::find($emp->user_id);
-                if ($linkedUser && ($linkedUser->hasAnyRole(['admin', 'global_admin', 'gm']) || in_array(strtolower($linkedUser->email), $exemptEmails))) {
-                    $isExempt = true;
+                $user = \App\Models\User::find($emp->user_id);
+            }
+
+            if (!$user && !empty($emp->email)) {
+                $user = \App\Models\User::where('email', trim($emp->email))->first();
+            }
+
+            if (!$user && !empty($emp->phone)) {
+                $cleanDigits = preg_replace('/[^\d]/', '', $emp->phone);
+                if (!empty($cleanDigits) && \Illuminate\Support\Facades\Schema::hasColumn('users', 'phone')) {
+                    $user = \App\Models\User::where('phone', 'like', "%{$cleanDigits}%")->first();
                 }
             }
 
+            if (!$user) {
+                $cleanCode = strtolower(str_replace(['-', ' ', '_'], '', $emp->employee_code ?: ('emp' . $emp->id)));
+                $generatedEmail = !empty($emp->email) ? trim($emp->email) : ($cleanCode . '@wechecha.com');
+
+                $user = \App\Models\User::where('email', $generatedEmail)->first();
+                if (!$user) {
+                    $user = \App\Models\User::create([
+                        'name'     => $emp->full_name ?: ('Employee ' . $emp->employee_code),
+                        'email'    => $generatedEmail,
+                        'password' => \Illuminate\Support\Facades\Hash::make('password'),
+                        'phone'    => $emp->phone ?? null,
+                    ]);
+                    $usersRestoredCount++;
+                }
+            }
+
+            if ($user && ($user->hasAnyRole(['admin', 'global_admin', 'gm']) || in_array(strtolower($user->email), $exemptEmails))) {
+                $isExempt = true;
+            }
+
+            // Assign system role to user if none exists
+            if ($user && $user->roles()->count() === 0) {
+                $roleName = $determineRole($emp->department, $emp->role_title);
+                try {
+                    $role = \Spatie\Permission\Models\Role::firstOrCreate(['name' => $roleName]);
+                    $user->assignRole($role);
+                } catch (\Throwable $e) {}
+            }
+
+            // Link employee to user
+            $emp->user_id = $user->id;
+
             if ($isExempt) {
-                // Ensure exempt admin accounts remain approved and active
-                $emp->update([
-                    'is_approved_by_gm'   => true,
-                    'gm_approval_status'  => 'approved',
-                    'gm_approved_at'      => $emp->gm_approved_at ?? now(),
-                ]);
+                // Ensure admin accounts remain approved and active
+                $emp->is_approved_by_gm   = true;
+                $emp->gm_approval_status  = 'approved';
+                $emp->gm_approved_at      = $emp->gm_approved_at ?? now();
+                $emp->save();
+
                 $exempted[] = [
                     'code'  => $emp->employee_code,
                     'name'  => $emp->full_name,
                     'role'  => $emp->role_title ?: $emp->department,
-                    'email' => $emp->email,
+                    'email' => $user->email,
                 ];
             } else {
-                $oldUserId = $emp->user_id;
+                // Lock employee for GM approval while preserving login account
+                $emp->is_approved_by_gm   = false;
+                $emp->gm_approval_status  = 'pending';
+                $emp->gm_approved_at      = null;
+                $emp->gm_approved_by      = null;
+                $emp->gm_rejection_reason = null;
+                $emp->gm_rejected_at      = null;
+                $emp->gm_rejected_by      = null;
+                $emp->save();
 
-                // 1. Reset employee record to Pending GM Approval and detach user credentials
-                $emp->update([
-                    'is_approved_by_gm'   => false,
-                    'gm_approval_status'  => 'pending',
-                    'gm_approved_at'      => null,
-                    'gm_approved_by'      => null,
-                    'gm_rejection_reason' => null,
-                    'gm_rejected_at'      => null,
-                    'gm_rejected_by'      => null,
-                    'user_id'             => null,
-                ]);
-
-                // 2. Delete non-admin user credentials so employee can re-register cleanly via phone OTP
-                if ($oldUserId) {
-                    $user = \App\Models\User::find($oldUserId);
-                    if ($user && !$user->hasAnyRole(['admin', 'global_admin', 'gm']) && !in_array(strtolower($user->email), $exemptEmails)) {
-                        $user->delete();
-                        $usersDeletedCount++;
-                    }
-                }
-
-                // 3. Clear old OTP verifications for this phone
-                if (!empty($emp->phone)) {
-                    $digits = preg_replace('/[^\d]/', '', $emp->phone);
-                    if (!empty($digits)) {
-                        \App\Models\OtpVerification::where('phone', 'like', "%{$digits}%")->delete();
-                    }
-                }
-
-                $resetList[] = [
+                $lockedList[] = [
                     'code'   => $emp->employee_code,
                     'name'   => $emp->full_name,
                     'dept'   => $emp->department,
                     'role'   => $emp->role_title ?: 'Employee',
-                    'salary' => number_format($emp->basic_salary, 2),
+                    'email'  => $user->email,
+                    'phone'  => $emp->phone ?: 'N/A',
                 ];
             }
         }
@@ -192,59 +233,62 @@ Route::get('/reset-employees-for-gm-approval', function () {
                 <td style='padding:10px 14px;font-weight:bold;color:#15803d;'>{$ex['code']}</td>
                 <td style='padding:10px 14px;font-weight:bold;color:#0f172a;'>{$ex['name']}</td>
                 <td style='padding:10px 14px;color:#475569;'>{$ex['role']}</td>
-                <td style='padding:10px 14px;color:#15803d;'><span style='background:#dcfce7;color:#166534;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:bold;'>🛡️ Admin Preserved & Approved</span></td>
+                <td style='padding:10px 14px;color:#0369a1;'><code>{$ex['email']}</code></td>
+                <td style='padding:10px 14px;color:#15803d;'><span style='background:#dcfce7;color:#166534;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:bold;'>🛡️ Admin Approved</span></td>
             </tr>";
         }
 
-        $resetRows = '';
-        foreach ($resetList as $rs) {
-            $resetRows .= "<tr style='border-bottom:1px solid #f1f5f9;'>
-                <td style='padding:10px 14px;font-family:monospace;font-weight:bold;color:#0f172a;'>{$rs['code']}</td>
-                <td style='padding:10px 14px;font-weight:600;color:#1e293b;'>{$rs['name']}</td>
-                <td style='padding:10px 14px;color:#64748b;'>{$rs['dept']} / {$rs['role']}</td>
-                <td style='padding:10px 14px;color:#b45309;'><span style='background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:bold;'>⏳ Awaiting GM Approval</span></td>
+        $lockedRows = '';
+        foreach ($lockedList as $lk) {
+            $lockedRows .= "<tr style='border-bottom:1px solid #f1f5f9;'>
+                <td style='padding:10px 14px;font-family:monospace;font-weight:bold;color:#0f172a;'>{$lk['code']}</td>
+                <td style='padding:10px 14px;font-weight:600;color:#1e293b;'>{$lk['name']}</td>
+                <td style='padding:10px 14px;color:#64748b;'>{$lk['dept']} / {$lk['role']}</td>
+                <td style='padding:10px 14px;color:#0369a1;'><code>{$lk['email']}</code></td>
+                <td style='padding:10px 14px;color:#b45309;'><span style='background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:bold;'>⏳ Locked (Awaiting GM Approval)</span></td>
             </tr>";
         }
 
         $exemptCount = count($exempted);
-        $resetCount  = count($resetList);
+        $lockedCount = count($lockedList);
 
-        return "<div style='font-family:sans-serif;max-width:960px;margin:40px auto;border-radius:16px;overflow:hidden;box-shadow:0 12px 36px rgba(0,0,0,0.12);background:#fff;'>"
+        return "<div style='font-family:sans-serif;max-width:980px;margin:40px auto;border-radius:16px;overflow:hidden;box-shadow:0 12px 36px rgba(0,0,0,0.12);background:#fff;'>"
              . "<div style='background:linear-gradient(135deg,#0f172a,#1e293b);padding:32px;color:#fff;'>"
              . "<div style='display:flex;align-items:center;gap:12px;'>"
-             . "<div style='background:rgba(245,158,11,0.2);color:#f59e0b;padding:12px;border-radius:12px;font-size:24px;'>🔒</div>"
+             . "<div style='background:rgba(245,158,11,0.2);color:#f59e0b;padding:12px;border-radius:12px;font-size:24px;'>🔑</div>"
              . "<div>"
-             . "<h2 style='margin:0;font-size:22px;color:#fff;'>Employee Security Reset & GM Approval Lock Applied</h2>"
-             . "<p style='margin:6px 0 0;color:#94a3b8;font-size:14px;'>All non-admin employees have been reset to <strong>Awaiting GM Approval</strong>. Login credentials detached for fresh self-registration upon approval.</p>"
+             . "<h2 style='margin:0;font-size:22px;color:#fff;'>Employee Credentials Restored & Locked for GM Approval</h2>"
+             . "<p style='margin:6px 0 0;color:#94a3b8;font-size:14px;'>All employee login accounts have been linked and preserved with password: <code>password</code>. Employees remain <strong>Locked for GM Approval</strong>.</p>"
              . "</div>"
              . "</div>"
              . "</div>"
              . "<div style='padding:32px;'>"
              . "<div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:16px;margin-bottom:24px;'>"
-             . "<div style='background:#f8fafc;border:1px solid #e2e8f0;padding:16px;border-radius:10px;text-align:center;'><div style='font-size:24px;font-weight:bold;color:#0f172a;'>{$resetCount}</div><small style='color:#64748b;font-weight:600;'>Employees Locked for GM Approval</small></div>"
-             . "<div style='background:#f0fdf4;border:1px solid #bbf7d0;padding:16px;border-radius:10px;text-align:center;'><div style='font-size:24px;font-weight:bold;color:#15803d;'>{$exemptCount}</div><small style='color:#15803d;font-weight:600;'>Admin Accounts Preserved (EMP-01, EMP-25)</small></div>"
-             . "<div style='background:#fef3c7;border:1px solid #fde68a;padding:16px;border-radius:10px;text-align:center;'><div style='font-size:24px;font-weight:bold;color:#92400e;'>{$usersDeletedCount}</div><small style='color:#92400e;font-weight:600;'>Old Login Credentials Cleared</small></div>"
+             . "<div style='background:#fef3c7;border:1px solid #fde68a;padding:16px;border-radius:10px;text-align:center;'><div style='font-size:24px;font-weight:bold;color:#92400e;'>{$lockedCount}</div><small style='color:#92400e;font-weight:600;'>Employees Locked for GM Approval</small></div>"
+             . "<div style='background:#f0fdf4;border:1px solid #bbf7d0;padding:16px;border-radius:10px;text-align:center;'><div style='font-size:24px;font-weight:bold;color:#15803d;'>{$exemptCount}</div><small style='color:#15803d;font-weight:600;'>Admin Accounts Approved</small></div>"
+             . "<div style='background:#f0f9ff;border:1px solid #bae6fd;padding:16px;border-radius:10px;text-align:center;'><div style='font-size:24px;font-weight:bold;color:#0284c7;'>{$usersRestoredCount}</div><small style='color:#0284c7;font-weight:600;'>Login Accounts Restored</small></div>"
              . "</div>"
-             . "<h4 style='color:#0f172a;margin-bottom:8px;'>🛡️ Preserved Administrator Accounts:</h4>"
+             . "<h4 style='color:#0f172a;margin-bottom:8px;'>🛡️ Administrator Accounts:</h4>"
              . "<table style='width:100%;border-collapse:collapse;margin-bottom:24px;font-size:13px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;'>"
-             . "<thead><tr style='background:#f8fafc;text-align:left;'><th style='padding:10px 14px;'>Code</th><th style='padding:10px 14px;'>Name</th><th style='padding:10px 14px;'>Role</th><th style='padding:10px 14px;'>Status</th></tr></thead>"
+             . "<thead><tr style='background:#f8fafc;text-align:left;'><th style='padding:10px 14px;'>Code</th><th style='padding:10px 14px;'>Name</th><th style='padding:10px 14px;'>Role</th><th style='padding:10px 14px;'>Login Email</th><th style='padding:10px 14px;'>Status</th></tr></thead>"
              . "<tbody>{$exemptRows}</tbody>"
              . "</table>"
-             . "<h4 style='color:#0f172a;margin-bottom:8px;'>⏳ Locked Employees (Awaiting GM Approval):</h4>"
+             . "<h4 style='color:#0f172a;margin-bottom:8px;'>⏳ Locked Employees with Restored Login Credentials:</h4>"
              . "<table style='width:100%;border-collapse:collapse;margin-bottom:28px;font-size:13px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;'>"
-             . "<thead><tr style='background:#f8fafc;text-align:left;'><th style='padding:10px 14px;'>Code</th><th style='padding:10px 14px;'>Name</th><th style='padding:10px 14px;'>Department / Role</th><th style='padding:10px 14px;'>State</th></tr></thead>"
-             . "<tbody>{$resetRows}</tbody>"
+             . "<thead><tr style='background:#f8fafc;text-align:left;'><th style='padding:10px 14px;'>Code</th><th style='padding:10px 14px;'>Name</th><th style='padding:10px 14px;'>Department / Role</th><th style='padding:10px 14px;'>Login Email</th><th style='padding:10px 14px;'>Status</th></tr></thead>"
+             . "<tbody>{$lockedRows}</tbody>"
              . "</table>"
              . "<div style='display:flex;gap:12px;flex-wrap:wrap;'>"
              . "<a href='/employees' style='background:#2563eb;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;'>👥 View Employee List</a>"
-             . "<a href='/dashboard' style='background:#0f172a;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;'>🏠 Go to Dashboard</a>"
+             . "<a href='/login' style='background:#10b981;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;'>🔑 Go to Login</a>"
+             . "<a href='/dashboard' style='background:#0f172a;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;'>🏠 Dashboard</a>"
              . "</div>"
              . "</div>"
              . "</div>";
 
     } catch (\Exception $e) {
         return "<div style='font-family:sans-serif;max-width:800px;margin:40px auto;padding:24px;border-radius:12px;background:#fee2e2;color:#991b1b;border:1px solid #fecaca;'>"
-             . "<h3 style='margin-top:0;'>❌ Error during employee reset:</h3>"
+             . "<h3 style='margin-top:0;'>❌ Error during employee credential restore:</h3>"
              . "<pre>" . htmlspecialchars($e->getMessage()) . "</pre>"
              . "</div>";
     }
