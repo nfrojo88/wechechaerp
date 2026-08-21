@@ -263,6 +263,7 @@
                                         'Office Material' => 'fa-boxes-packing',
                                         'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading' => 'fa-truck-ramp-box',
                                         'Contract Work' => 'fa-file-signature',
+                                        'Maintenance' => 'fa-screwdriver-wrench',
                                         default => 'fa-list',
                                     };
                                 @endphp
@@ -273,6 +274,13 @@
                                 @if($req->category === 'Other' && $req->other_reason)
                                     <div class="small text-muted text-truncate" style="max-width: 150px;" title="{{ $req->other_reason }}">
                                         Reason: {{ $req->other_reason }}
+                                    </div>
+                                @endif
+                                @if($req->maintenance_request_id && $req->maintenanceRequest)
+                                    <div class="mt-1">
+                                        <a href="{{ route('general-service.maintenance.show', $req->maintenanceRequest) }}" class="badge bg-warning text-dark text-decoration-none border shadow-xs" title="View linked maintenance ticket">
+                                            <i class="fa-solid fa-screwdriver-wrench me-1"></i>{{ $req->maintenanceRequest->request_no }}
+                                        </a>
                                     </div>
                                 @endif
                             </td>
@@ -752,6 +760,7 @@
                                 <option value="Office Material">Office Material</option>
                                 <option value="Loading & Unloading">Loading & Unloading</option>
                                 <option value="Contract Work">Contract Work</option>
+                                <option value="Maintenance">Maintenance &amp; Repairs</option>
                                 <option value="Other">Other</option>
                             </select>
                         </div>

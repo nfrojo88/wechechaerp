@@ -89,6 +89,9 @@ class ExpenseRequestController extends Controller
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'payment_notes')) {
                         $table->text('payment_notes')->nullable();
                     }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'maintenance_request_id')) {
+                        $table->unsignedBigInteger('maintenance_request_id')->nullable();
+                    }
                 });
             }
         } catch (\Throwable $e) {
@@ -155,7 +158,8 @@ class ExpenseRequestController extends Controller
             'paidBy',
             'bankAccount',
             'chartOfAccount',
-            'coa.manager'
+            'coa.manager',
+            'maintenanceRequest',
         ]);
 
         switch ($tab) {
@@ -339,8 +343,9 @@ class ExpenseRequestController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'category' => 'required|string|in:Transport,Office Material,Loading & Unloading,Loading / Unloading,Loading Unloading,Contract Work,Other',
+            'category' => 'required|string|in:Transport,Office Material,Loading & Unloading,Loading / Unloading,Loading Unloading,Contract Work,Maintenance,Other',
             'other_reason' => 'required_if:category,Other|nullable|string|max:255',
+            'maintenance_request_id' => 'nullable|exists:maintenance_requests,id',
             'amount' => 'required|numeric|min:1',
             'description' => 'required|string|max:2000',
             'attachment' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
@@ -367,8 +372,9 @@ class ExpenseRequestController extends Controller
             'request_number' => $requestNumber,
             'user_id' => $user->id,
             'employee_id' => $employee ? $employee->id : null,
+            'maintenance_request_id' => $request->input('maintenance_request_id'),
             'category' => $validated['category'],
-            'other_reason' => $validated['category'] === 'Other' ? $validated['other_reason'] : null,
+            'other_reason' => $validated['category'] === 'Other' ? $validated['other_reason'] : ($validated['category'] === 'Maintenance' ? ($validated['other_reason'] ?? 'Equipment / Asset Maintenance') : null),
             'amount' => $validated['amount'],
             'description' => $validated['description'],
             'attachment' => $attachmentUrl,
