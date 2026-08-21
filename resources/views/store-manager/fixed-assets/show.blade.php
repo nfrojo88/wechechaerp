@@ -171,6 +171,7 @@
                             <thead class="table-light text-muted small text-uppercase">
                                 <tr>
                                     <th>Unit Code</th>
+                                    <th>Available In Store</th>
                                     <th>Specifications</th>
                                     <th>Condition</th>
                                     <th>Status / Assigned To</th>
@@ -182,12 +183,31 @@
                                 @php
                                     $stBadge = $unit->status_badge;
                                     $condBadge = $unit->condition_badge;
+                                    $storeLocation = $unit->current_location ?: ($fixedAsset->store->name ?? 'Main Store');
                                 @endphp
                                 <tr>
                                     <td>
                                         <span class="badge bg-dark fw-mono px-2 py-1 fs-6">
                                             {{ $unit->unit_code }}
                                         </span>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark small">
+                                            <i class="fa-solid fa-warehouse text-primary me-1"></i>{{ $storeLocation }}
+                                        </div>
+                                        @if($unit->isAvailable())
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-1 py-0 mt-1" style="font-size: 0.72rem;">
+                                                <i class="fa-solid fa-circle-check me-1"></i>Available in Store
+                                            </span>
+                                        @elseif($unit->isAssigned())
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-1 py-0 mt-1" style="font-size: 0.72rem;">
+                                                <i class="fa-solid fa-user me-1"></i>Deployed / In Use
+                                            </span>
+                                        @elseif($unit->status === 'maintenance')
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-1 py-0 mt-1" style="font-size: 0.72rem;">
+                                                <i class="fa-solid fa-wrench me-1"></i>Maintenance
+                                            </span>
+                                        @endif
                                     </td>
                                     <td>
                                         <div class="small">
@@ -238,7 +258,8 @@
                                                 data-condition="{{ $unit->condition }}"
                                                 data-status="{{ $unit->status }}"
                                                 data-specifications="{{ $unit->specifications }}"
-                                                data-location="{{ $unit->current_location }}"
+                                                data-location="{{ $unit->current_location ?: ($fixedAsset->store->name ?? 'Main Store') }}"
+                                                data-default-store="{{ $fixedAsset->store->name ?? 'Main Store' }}"
                                                 data-purchase-price="{{ $unit->purchase_price }}"
                                                 data-warranty-expiry="{{ $unit->warranty_expiry ? $unit->warranty_expiry->format('Y-m-d') : '' }}"
                                                 data-notes="{{ $unit->notes }}"
@@ -501,6 +522,9 @@
                     <div class="d-flex align-items-center justify-content-between mb-2">
                         <span class="badge rounded-pill px-3 py-2 fw-semibold" id="eu_cat_badge"
                               style="font-size:0.8rem;"></span>
+                        <span class="badge bg-light text-dark border px-3 py-2 shadow-sm" style="font-size:0.8rem;">
+                            <i class="fa-solid fa-warehouse text-primary me-1"></i>Available In Store: <strong id="eu_store_location_display" class="text-primary"></strong>
+                        </span>
                     </div>
                     <ul class="nav nav-tabs border-0" id="editUnitTabs">
                         <li class="nav-item">
@@ -550,6 +574,27 @@
                                        class="form-control font-monospace fw-bold fs-5" required
                                        style="letter-spacing:2px;">
                                 <div class="form-text">This is the unique identifier for this specific unit.</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small text-uppercase text-muted mb-1">
+                                    <i class="fa-solid fa-warehouse text-primary me-1"></i>Available in Store / Physical Location
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="fa-solid fa-location-dot text-primary"></i></span>
+                                    <input type="text" id="eu_location" name="current_location" class="form-control" list="storesDatalist"
+                                           placeholder="e.g. Head Office, Main Store, Workshop, Site A"
+                                           oninput="document.getElementById('eu_store_location_display').textContent = this.value || 'Main Store'; if(document.getElementById('eu_location_status')) document.getElementById('eu_location_status').value = this.value;">
+                                    <datalist id="storesDatalist">
+                                        @foreach($stores as $st)
+                                            <option value="{{ $st->name }}">{{ $st->name }} (Active Store)</option>
+                                        @endforeach
+                                        <option value="Head Office">Head Office</option>
+                                        <option value="Main Store">Main Store</option>
+                                        <option value="Workshop">Workshop</option>
+                                        <option value="Project Site">Project Site</option>
+                                    </datalist>
+                                </div>
+                                <div class="form-text">The store branch or site where this unit code is physically stored and available.</div>
                             </div>
                             <div class="col-6">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Brand / Manufacturer</label>
@@ -682,9 +727,12 @@
                                 </select>
                             </div>
                             <div class="col-12">
-                                <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Current Location</label>
-                                <input type="text" id="eu_location" name="current_location" class="form-control"
-                                       placeholder="e.g. Main Store, Construction Site A, IT Room">
+                                <label class="form-label fw-semibold small text-uppercase text-muted mb-1">
+                                    <i class="fa-solid fa-warehouse text-primary me-1"></i>Current Location / Store
+                                </label>
+                                <input type="text" id="eu_location_status" class="form-control" list="storesDatalist"
+                                       placeholder="e.g. Main Store, Head Office, IT Room"
+                                       oninput="document.getElementById('eu_location').value = this.value; document.getElementById('eu_store_location_display').textContent = this.value || 'Main Store';">
                             </div>
                         </div>
                     </div>
@@ -808,6 +856,11 @@
         document.getElementById('sharedEditUnitModalLabel').textContent = 'Edit Unit: ' + d.unitCode;
         document.getElementById('sharedEditUnitSubtitle').textContent   = 'Unit ID #' + d.unitId;
 
+        // ── Store Location ──
+        const storeLoc = d.location || d.defaultStore || 'Main Store';
+        const storeDisplay = document.getElementById('eu_store_location_display');
+        if (storeDisplay) storeDisplay.textContent = storeLoc;
+
         // ── Category badge ──
         const badge = document.getElementById('eu_cat_badge');
         badge.innerHTML = '<i class="fa-solid ' + cfg.icon + ' me-2"></i>' + category;
@@ -826,6 +879,7 @@
 
         // ── Populate Identity fields ──
         document.getElementById('eu_unit_code').value = d.unitCode || '';
+        document.getElementById('eu_location').value  = d.location || storeLoc;
         document.getElementById('eu_brand').value     = d.brand    || '';
         document.getElementById('eu_model').value     = d.model    || '';
         document.getElementById('eu_year').value      = d.year     || '';
@@ -840,7 +894,9 @@
         // ── Populate Status fields ──
         setSelect('eu_condition', d.condition || 'good');
         setSelect('eu_status',    d.status    || 'in_store');
-        document.getElementById('eu_location').value = d.location || '';
+        if (document.getElementById('eu_location_status')) {
+            document.getElementById('eu_location_status').value = d.location || storeLoc;
+        }
 
         // ── Populate Finance ──
         document.getElementById('eu_purchase_price').value = d.purchasePrice || '';

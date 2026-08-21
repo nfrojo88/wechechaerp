@@ -301,6 +301,7 @@
                                                 <thead class="table-light small text-muted">
                                                     <tr>
                                                         <th class="ps-3">Unit Code</th>
+                                                        <th>Available In Store</th>
                                                         <th>Brand / Model</th>
                                                         <th>Serial Number</th>
                                                         <th>Plate / VIN</th>
@@ -314,12 +315,23 @@
                                                     @php
                                                         $badge = $unit->status_badge;
                                                         $cond = $unit->condition_badge;
+                                                        $unitStore = $unit->current_location ?: ($asset->store->name ?? 'Main Store');
                                                     @endphp
                                                     <tr>
                                                         <td class="ps-3">
                                                             <span class="badge bg-dark fw-mono px-2 py-1">
                                                                 {{ $unit->unit_code }}
                                                             </span>
+                                                        </td>
+                                                        <td class="small">
+                                                            <div class="fw-semibold text-dark">
+                                                                <i class="fa-solid fa-warehouse text-primary me-1"></i>{{ $unitStore }}
+                                                            </div>
+                                                            @if($unit->isAvailable())
+                                                                <span class="badge bg-success-subtle text-success border border-success-subtle px-1 py-0" style="font-size:0.7rem;">
+                                                                    <i class="fa-solid fa-circle-check me-1"></i>In Store
+                                                                </span>
+                                                            @endif
                                                         </td>
                                                         <td class="small">{{ trim("{$unit->brand} {$unit->model}") ?: '—' }}</td>
                                                         <td class="small font-monospace">{{ $unit->serial_number ?: '—' }}</td>
@@ -337,7 +349,7 @@
                                                         </td>
                                                         <td class="text-end pe-3">
                                                             <div class="btn-group btn-group-sm">
-                                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="openEditUnitModal({{ json_encode($unit) }}, '{{ addslashes($asset->category) }}')" title="Edit Unit Specs">
+                                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="openEditUnitModal({{ json_encode($unit) }}, '{{ addslashes($asset->category) }}', '{{ addslashes($unitStore) }}')" title="Edit Unit Specs">
                                                                     <i class="fa-solid fa-pencil"></i>
                                                                 </button>
                                                                 @if($unit->isAvailable())
@@ -357,7 +369,7 @@
                                                     </tr>
                                                     @empty
                                                     <tr>
-                                                        <td colspan="7" class="text-center py-3 text-muted small">No unit codes generated yet.</td>
+                                                        <td colspan="8" class="text-center py-3 text-muted small">No unit codes generated yet.</td>
                                                     </tr>
                                                     @endforelse
                                                 </tbody>
@@ -505,6 +517,12 @@
 
                 {{-- Category Badge & Tabs --}}
                 <div class="px-4 pt-3 pb-0 flex-shrink-0 bg-white border-bottom">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="badge bg-purple-subtle text-purple border border-purple-subtle px-3 py-1 fw-semibold" id="dyn_cat_pill"></span>
+                        <span class="badge bg-light text-dark border px-3 py-1 shadow-sm" style="font-size:0.8rem;">
+                            <i class="fa-solid fa-warehouse text-primary me-1"></i>Available In Store: <strong id="dyn_store_location_display" class="text-primary"></strong>
+                        </span>
+                    </div>
                     <ul class="nav nav-tabs border-0" id="indexEditUnitTabs">
                         <li class="nav-item">
                             <button type="button" class="nav-link active fw-semibold px-3" data-ieu-tab="identity">
@@ -548,6 +566,27 @@
                             <div class="col-12">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Unit Code <span class="text-danger">*</span></label>
                                 <input type="text" name="unit_code" id="dyn_unit_code" class="form-control font-monospace fw-bold fs-5" required style="letter-spacing:2px;">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold small text-uppercase text-muted mb-1">
+                                    <i class="fa-solid fa-warehouse text-primary me-1"></i>Available in Store / Physical Location
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="fa-solid fa-location-dot text-primary"></i></span>
+                                    <input type="text" name="current_location" id="dyn_unit_location" class="form-control" list="indexStoresDatalist"
+                                           placeholder="e.g. Head Office, Main Store, Workshop, Site A"
+                                           oninput="document.getElementById('dyn_store_location_display').textContent = this.value || 'Main Store'; if(document.getElementById('dyn_unit_location_status')) document.getElementById('dyn_unit_location_status').value = this.value;">
+                                    <datalist id="indexStoresDatalist">
+                                        @foreach($stores as $st)
+                                            <option value="{{ $st->name }}">{{ $st->name }} (Active Store)</option>
+                                        @endforeach
+                                        <option value="Head Office">Head Office</option>
+                                        <option value="Main Store">Main Store</option>
+                                        <option value="Workshop">Workshop</option>
+                                        <option value="Project Site">Project Site</option>
+                                    </datalist>
+                                </div>
+                                <div class="form-text">The warehouse or site where this unit is physically located and available.</div>
                             </div>
                             <div class="col-6">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Brand</label>
@@ -799,63 +838,56 @@
     </div>
 </div>
 
-{{-- Client-Side JavaScript for Instant Responsive Modals & Live Previews --}}
+@endsection
+
+@push('scripts')
 <script>
+// Code Prefix Auto-Generator for Create Modal
 document.addEventListener('DOMContentLoaded', function() {
-    // 1. Auto Code Prefix & Quantity Preview in New Asset Modal
-    const nameInput = document.getElementById('new_asset_name');
-    const prefixInput = document.getElementById('new_asset_prefix');
-    const qtyInput = document.getElementById('new_asset_qty');
-    const previewContainer = document.getElementById('codePreviewList');
+    const nameInput = document.getElementById('asset_name_input');
+    const prefixInput = document.getElementById('code_prefix_input');
+    const qtyInput = document.getElementById('total_quantity_input');
+    const previewContainer = document.getElementById('unit_codes_preview');
 
     function updateCodePreview() {
-        if (!nameInput || !prefixInput || !qtyInput || !previewContainer) return;
-        
-        let prefix = prefixInput.value.trim().toUpperCase();
-        if (!prefix && nameInput.value.trim()) {
-            prefix = nameInput.value.trim().replace(/[^A-Za-z0-9]/g, '').substring(0, 4).toUpperCase();
-            prefixInput.value = prefix;
-        }
-        if (!prefix) prefix = 'AST';
-
+        if (!previewContainer) return;
+        const prefix = (prefixInput.value || 'ITEM').toUpperCase().trim();
         const qty = parseInt(qtyInput.value) || 1;
-        let previewHtml = '';
         const limit = Math.min(qty, 6);
-
+        let previewHtml = '';
         for (let i = 1; i <= limit; i++) {
-            previewHtml += `<span class="badge bg-dark fw-mono px-2 py-1 me-1 mb-1">${prefix}-${i}</span>`;
+            previewHtml += `<span class="badge bg-dark fw-mono px-2 py-1">${prefix}-${i}</span> `;
         }
         if (qty > 6) {
-            previewHtml += `<span class="badge bg-secondary fw-mono px-2 py-1 me-1 mb-1">... and ${qty - 6} more</span>`;
+            previewHtml += `<span class="text-muted small">... and ${qty - 6} more (up to ${prefix}-${qty})</span>`;
         }
         previewContainer.innerHTML = previewHtml;
     }
 
     if (nameInput && prefixInput && qtyInput) {
-        nameInput.addEventListener('input', function() {
-            if (!prefixInput.dataset.touched) {
-                prefixInput.value = this.value.replace(/[^A-Za-z0-9]/g, '').substring(0, 4).toUpperCase();
-            }
-            updateCodePreview();
-        });
-        prefixInput.addEventListener('input', function() {
-            this.dataset.touched = true;
-            this.value = this.value.toUpperCase();
-            updateCodePreview();
-        });
+        nameInput.addEventListener('input', updateCodePreview);
+        prefixInput.addEventListener('input', updateCodePreview);
         qtyInput.addEventListener('input', updateCodePreview);
     }
 });
 
 // Dynamic Edit Unit Modal Opener (Category-Aware)
-function openEditUnitModal(unit, category) {
+function openEditUnitModal(unit, category, defaultStore) {
     category = category || 'Other';
     const isVehicle = ['Vehicle', 'Heavy Machinery'].includes(category);
     const isComputer = ['Computer & IT', 'Electronics'].includes(category);
 
+    const storeLocation = unit.current_location || defaultStore || 'Main Store';
+
     document.getElementById('dyn_unit_code_header').textContent = unit.unit_code;
     document.getElementById('dyn_unit_cat_sub').textContent = category + ' Unit #' + unit.id;
     document.getElementById('dyn_footer_cat').textContent = category;
+    if (document.getElementById('dyn_cat_pill')) {
+        document.getElementById('dyn_cat_pill').textContent = category;
+    }
+    if (document.getElementById('dyn_store_location_display')) {
+        document.getElementById('dyn_store_location_display').textContent = storeLocation;
+    }
 
     // Show/hide category tabs
     document.getElementById('dyn_tab_vehicle_li').style.display = isVehicle ? '' : 'none';
@@ -863,6 +895,7 @@ function openEditUnitModal(unit, category) {
 
     // Populate Identity
     document.getElementById('dyn_unit_code').value = unit.unit_code;
+    document.getElementById('dyn_unit_location').value = storeLocation;
     document.getElementById('dyn_unit_brand').value = unit.brand || '';
     document.getElementById('dyn_unit_model').value = unit.model || '';
     document.getElementById('dyn_unit_year').value = unit.year || '';
@@ -877,7 +910,9 @@ function openEditUnitModal(unit, category) {
     // Status fields
     document.getElementById('dyn_unit_condition').value = unit.condition || 'good';
     document.getElementById('dyn_unit_status').value = unit.status || 'in_store';
-    document.getElementById('dyn_unit_location').value = unit.current_location || '';
+    if (document.getElementById('dyn_unit_location_status')) {
+        document.getElementById('dyn_unit_location_status').value = storeLocation;
+    }
 
     // Finance
     document.getElementById('dyn_unit_price').value = unit.purchase_price || '';
