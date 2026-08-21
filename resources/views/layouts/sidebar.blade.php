@@ -32,6 +32,7 @@
                 @endif
             </a>
         </li>
+        @if(!auth()->check() || !auth()->user()->hasRole('secretary'))
         <li class="sidebar-nav-item">
             <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-envelope-open-text text-primary"></i>
@@ -54,6 +55,7 @@
                 @endif
             </a>
         </li>
+        @endif
 
         {{-- General Manager Section --}}
         @role('gm')
@@ -488,8 +490,64 @@
         </li>
         @endif
 
+        {{-- Secretary Section --}}
+        @if(auth()->check() && auth()->user()->hasRole('secretary'))
+        <li class="sidebar-heading">Secretary</li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('dashboard.secretary') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.secretary') ? 'active' : '' }}">
+                <i class="fa-solid fa-id-badge text-primary"></i>
+                <span>Secretary Dashboard</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-envelope-open-text text-info"></i>
+                <span>Letters & Correspondence</span>
+                @php
+                    $secLetterCount = 0;
+                    try {
+                        $secLetterCount = \App\Models\Letter::whereIn('status', ['pending', 'forwarded', 'in_progress'])->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($secLetterCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $secLetterCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.create') }}" class="sidebar-nav-link {{ request()->routeIs('letters.create') ? 'active' : '' }}">
+                <i class="fa-solid fa-pen-to-square text-success"></i>
+                <span>New Letter</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-users text-warning"></i>
+                <span>Employees</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('schedules.index') }}" class="sidebar-nav-link {{ request()->routeIs('schedules.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-calendar-days text-success"></i>
+                <span>Project Schedules</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('projects.index') }}" class="sidebar-nav-link {{ request()->routeIs('projects.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-building text-secondary"></i>
+                <span>Projects</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-hand-holding-dollar text-success"></i>
+                <span>Ask Money</span>
+            </a>
+        </li>
+        @endif
+
         {{-- Coordinator Tools --}}
-        @if(auth()->check() && (auth()->user()->hasAnyRole(['Coordinator', 'coordinator', 'admin', 'global_admin'])))
+        @if(auth()->check() && auth()->user()->hasAnyRole(['Coordinator', 'coordinator', 'admin', 'global_admin']))
 
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.coordinator') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.coordinator') ? 'active' : '' }}">
@@ -528,6 +586,7 @@
             </a>
         </li>
         @endif
+
 
         {{-- General Service & Operations Tools --}}
         @if(auth()->check() && ($isGeneralServiceUser || auth()->user()->hasAnyRole(['admin', 'global_admin', 'coordinator'])))

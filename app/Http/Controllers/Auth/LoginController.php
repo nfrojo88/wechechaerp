@@ -133,7 +133,7 @@ class LoginController extends Controller
             'purchase', 'purchase_manager', 'market_research' => route('dashboard.purchase'),
             'contract_admin'      => route('dashboard.contract-admin'),
             'bid_team'            => route('bidding.index'),
-            'secretary'           => route('dashboard.coordinator'),
+            'secretary'           => route('dashboard.secretary'),
             'general_service', 'general_services' => route('dashboard.general_service'),
             'law'                 => route('subcon.index'),
             'marketing'           => route('marketing.dashboard'),

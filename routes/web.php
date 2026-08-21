@@ -1121,6 +1121,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard/gm',             [App\Http\Controllers\DashboardController::class, 'gm'])->name('dashboard.gm');
     Route::get('/dashboard/planning',       [App\Http\Controllers\DashboardController::class, 'planning'])->name('dashboard.planning');
     Route::get('/dashboard/coordinator',    [App\Http\Controllers\DashboardController::class, 'coordinator'])->name('dashboard.coordinator');
+    Route::get('/dashboard/secretary',      [App\Http\Controllers\DashboardController::class, 'secretary'])->name('dashboard.secretary');
     
     // Coordinator Routes
     Route::get('/coordinator/forecast',     [App\Http\Controllers\CoordinatorController::class, 'forecastDemand'])->name('coordinator.forecast');
