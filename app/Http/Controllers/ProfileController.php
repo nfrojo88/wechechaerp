@@ -23,6 +23,7 @@ class ProfileController extends Controller
                 'project',
                 'education',
                 'experience',
+                'licenses',
                 'assets.product',
                 'assignedFixedAssets.parentAsset',
                 'contracts',

@@ -186,6 +186,11 @@ class Employee extends Model
         return $this->hasMany(EmployeeExperience::class)->orderBy('start_date', 'desc');
     }
 
+    public function licenses()
+    {
+        return $this->hasMany(EmployeeLicense::class)->orderBy('expiry_date', 'desc');
+    }
+
     /**
      * Check if guarantee letter is overdue and account should be blocked (30+ days)
      */

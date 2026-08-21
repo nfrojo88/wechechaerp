@@ -92,7 +92,33 @@ class FileStreamController extends Controller
     }
 
     /**
-     * Dedicated route to view an employee license.
+     * Dedicated route to view an employee license (from dedicated employee_licenses table).
+     */
+    public function viewLicenseDocument($id)
+    {
+        $license = \App\Models\EmployeeLicense::find($id);
+
+        if (!$license || empty($license->license_document)) {
+            // Fallback check in legacy experience table
+            $exp = EmployeeExperience::find($id);
+            if ($exp && !empty($exp->license_document)) {
+                if (Str::startsWith($exp->license_document, ['http://', 'https://'])) {
+                    return redirect()->away($exp->license_document);
+                }
+                return $this->respondWithFile($exp->license_document, 'uploads', 'License - ' . ($exp->license_number ?? 'Document'));
+            }
+            return $this->renderMissingDocument('Professional License', 'No license document is recorded for this license entry.');
+        }
+
+        if (Str::startsWith($license->license_document, ['http://', 'https://'])) {
+            return redirect()->away($license->license_document);
+        }
+
+        return $this->respondWithFile($license->license_document, 'uploads', 'License - ' . ($license->license_name ?? 'Document'));
+    }
+
+    /**
+     * Dedicated route to view an employee license (legacy experience entry).
      */
     public function viewLicense($id)
     {

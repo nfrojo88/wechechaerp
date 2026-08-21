@@ -69,6 +69,13 @@
                 </div>
                 <small class="text-muted d-block mt-1 fw-semibold">Experience</small>
             </div>
+            <div class="flex-grow-1 step-line" style="height: 2px; background: #dee2e6; margin: 0 10px; margin-top: -15px;"></div>
+            <div class="text-center flex-grow-1 cursor-pointer" onclick="goToStep(7)">
+                <div class="step-indicator" id="step-ind-7">
+                    <span class="step-number">7</span>
+                </div>
+                <small class="text-muted d-block mt-1 fw-semibold">Licenses</small>
+            </div>
         </div>
     </div>
 </div>
@@ -500,16 +507,16 @@
                 </button>
             </div>
 
-            {{-- STEP 6: Work Experience & Professional License --}}
+            {{-- STEP 6: Work Experience --}}
             <div class="step-panel" id="step-panel-6">
                 <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
-                    <h5 class="mb-0"><i class="fa-solid fa-briefcase text-success me-2"></i>Step 6: Work Experience & Professional License</h5>
-                    <span class="badge bg-success">Step 6 of 6</span>
+                    <h5 class="mb-0"><i class="fa-solid fa-briefcase text-success me-2"></i>Step 6: Work Experience</h5>
+                    <span class="badge bg-success">Step 6 of 7</span>
                 </div>
                 
                 <div class="alert alert-info py-2 small mb-3">
                     <i class="fa-solid fa-info-circle me-1"></i>
-                    <strong>Optional:</strong> Add previous employment history and license documents. If not applicable, click <strong>"Complete Registration"</strong> directly.
+                    <strong>Optional:</strong> Add previous employment history and experience certificates. If not applicable, click <strong>"Next Step"</strong> to proceed.
                 </div>
 
                 <div id="experienceContainer">
@@ -523,59 +530,57 @@
                         
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label class="form-label">Job Title</label>
+                                <label class="form-label fw-semibold">Job Title</label>
                                 <input type="text" name="experience[0][job_title]" class="form-control" 
-                                       placeholder="e.g., Site Engineer">
+                                       placeholder="e.g., Site Engineer, Project Manager">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Company Name</label>
+                                <label class="form-label fw-semibold">Company Name</label>
                                 <input type="text" name="experience[0][company_name]" class="form-control" 
-                                       placeholder="e.g., ABC Construction">
+                                       placeholder="e.g., ABC Construction Plc">
                             </div>
                             <div class="col-md-12">
-                                <label class="form-label">Location</label>
+                                <label class="form-label fw-semibold">Location</label>
                                 <input type="text" name="experience[0][location]" class="form-control" 
                                        placeholder="e.g., Addis Ababa, Ethiopia">
                             </div>
                             <div class="col-md-5">
-                                <label class="form-label">Start Date</label>
+                                <label class="form-label fw-semibold">Start Date</label>
                                 <input type="date" name="experience[0][start_date]" class="form-control">
                             </div>
                             <div class="col-md-5">
-                                <label class="form-label">End Date</label>
+                                <label class="form-label fw-semibold">End Date</label>
                                 <input type="date" name="experience[0][end_date]" class="form-control" id="exp_end_date_0">
                             </div>
                             <div class="col-md-2 d-flex align-items-end">
                                 <div class="form-check">
                                     <input type="checkbox" name="experience[0][is_current]" class="form-check-input" 
                                            id="is_current_0" value="1" onchange="toggleEndDate(0)">
-                                    <label class="form-check-label" for="is_current_0">
+                                    <label class="form-check-label fw-semibold" for="is_current_0">
                                         Current
                                     </label>
                                 </div>
                             </div>
                             <div class="col-12">
-                                <label class="form-label">Key Responsibilities</label>
+                                <label class="form-label fw-semibold">Key Responsibilities</label>
                                 <textarea name="experience[0][responsibilities]" class="form-control" rows="2" 
-                                          placeholder="Describe your main duties and achievements..."></textarea>
+                                          placeholder="Describe main duties, projects handled, and achievements..."></textarea>
                             </div>
                             
                             <!-- Reference Section -->
                             <div class="col-md-6">
-                                <label class="form-label">Reference Name</label>
+                                <label class="form-label fw-semibold">Reference Name</label>
                                 <input type="text" name="experience[0][reference_name]" class="form-control" 
-                                       placeholder="e.g., John Doe">
+                                       placeholder="e.g., John Doe (Direct Supervisor)">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Reference Phone</label>
+                                <label class="form-label fw-semibold">Reference Phone</label>
                                 <input type="text" name="experience[0][reference_phone]" class="form-control" 
                                        placeholder="+251 911 234 567">
                             </div>
 
-                            <!-- Document Uploads -->
-                            <div class="col-12"><hr class="my-2"><h6 class="text-muted small fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2 text-primary"></i>Experience Documents & Certifications (Optional)</h6></div>
-
-                            <div class="col-md-6">
+                            <!-- Document Upload -->
+                            <div class="col-12">
                                 <label class="form-label fw-semibold">
                                     <i class="fa-solid fa-file-lines text-primary me-1"></i>Experience Certificate / Recommendation Letter
                                     <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
@@ -587,36 +592,84 @@
                                     <img src="" alt="Certificate Preview" class="img-preview-box">
                                 </div>
                             </div>
-
-                            <div class="col-md-6">
-                                <label class="form-label fw-semibold">
-                                    <i class="fa-solid fa-file-shield text-success me-1"></i>Professional License Document or Photo
-                                    <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
-                                </label>
-                                <input type="file" name="experience[0][license_document]" class="form-control" 
-                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
-                                       onchange="previewArrayFile(this)">
-                                <div class="file-preview-target mt-2 d-none">
-                                    <img src="" alt="License Preview" class="img-preview-box">
-                                </div>
-                            </div>
-
-                            <!-- Professional License Section -->
-                            <div class="col-md-6">
-                                <label class="form-label">License Number</label>
-                                <input type="text" name="experience[0][license_number]" class="form-control" 
-                                       placeholder="e.g., PE-12345">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">License Expiry Date</label>
-                                <input type="date" name="experience[0][license_expiry]" class="form-control">
-                            </div>
                         </div>
                     </div>
                 </div>
 
                 <button type="button" class="btn btn-outline-success btn-sm" onclick="addExperience()">
                     <i class="fa-solid fa-plus me-1"></i>Add Another Experience Record
+                </button>
+            </div>
+
+            {{-- STEP 7: Professional Licenses & Certifications --}}
+            <div class="step-panel" id="step-panel-7">
+                <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+                    <h5 class="mb-0"><i class="fa-solid fa-id-card-clip text-warning me-2"></i>Step 7: Professional Licenses & Certifications</h5>
+                    <span class="badge bg-warning text-dark">Step 7 of 7</span>
+                </div>
+                
+                <div class="alert alert-warning bg-warning bg-opacity-10 py-2 small mb-3 border-start border-4 border-warning">
+                    <i class="fa-solid fa-certificate me-1 text-warning"></i>
+                    <strong>Professional Credentials:</strong> Register practicing licenses (e.g. Advocate/Lawyer license, Professional Engineer PE certificate, Commercial Driving License, ACCA, etc.). If none, click <strong>"Complete Registration"</strong> directly.
+                </div>
+
+                <div id="licensesContainer">
+                    <div class="license-entry border rounded p-3 mb-3 bg-light" data-index="0">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-award text-warning me-2"></i>License #1</h6>
+                            <button type="button" class="btn btn-sm btn-outline-danger remove-license" onclick="removeLicense(0)" style="display: none;">
+                                <i class="fa-solid fa-trash me-1"></i>Remove
+                            </button>
+                        </div>
+                        
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">License / Certification Title <span class="text-danger">*</span></label>
+                                <input type="text" name="licenses[0][license_name]" class="form-control" 
+                                       placeholder="e.g., Practicing Attorney, Professional Engineer PE, Driving License Grade 3">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Issuing Authority / Organization</label>
+                                <input type="text" name="licenses[0][issuing_organization]" class="form-control" 
+                                       placeholder="e.g., Ministry of Justice, Ethiopian Construction Authority, Transport Authority">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">License / Registration Number</label>
+                                <input type="text" name="licenses[0][license_number]" class="form-control font-monospace" 
+                                       placeholder="e.g., EFAA-00247, PE-12345">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Issue Date</label>
+                                <input type="date" name="licenses[0][issue_date]" class="form-control">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Expiry Date</label>
+                                <input type="date" name="licenses[0][expiry_date]" class="form-control">
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    <i class="fa-solid fa-file-shield text-success me-1"></i>Upload License Document / Certificate / Card Photo
+                                    <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                                </label>
+                                <input type="file" name="licenses[0][license_document]" class="form-control" 
+                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
+                                       onchange="previewArrayFile(this)">
+                                <div class="file-preview-target mt-2 d-none">
+                                    <img src="" alt="License Preview" class="img-preview-box">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Notes / Specialization / Scope of Practice</label>
+                                <textarea name="licenses[0][notes]" class="form-control" rows="2" 
+                                          placeholder="e.g., Federal First Instance & High Court jurisdiction, Heavy Duty Machinery..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-outline-warning text-dark btn-sm fw-semibold" onclick="addLicense()">
+                    <i class="fa-solid fa-plus me-1"></i>Add Another License
                 </button>
             </div>
 
@@ -643,7 +696,8 @@
 <script>
 const fixedAssetUnitsList = @json($fixedAssetsJson ?? []);
 let currentStep = 1;
-const totalSteps = 6;
+const totalSteps = 7;
+let licenseCount = 1;
 
 function goToStep(step) {
     if (step < 1 || step > totalSteps) return;
@@ -1066,58 +1120,57 @@ function addExperience() {
             
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label">Job Title</label>
+                    <label class="form-label fw-semibold">Job Title</label>
                     <input type="text" name="experience[${index}][job_title]" class="form-control" 
-                           placeholder="e.g., Site Engineer">
+                           placeholder="e.g., Site Engineer, Project Manager">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">Company Name</label>
+                    <label class="form-label fw-semibold">Company Name</label>
                     <input type="text" name="experience[${index}][company_name]" class="form-control" 
-                           placeholder="e.g., ABC Construction">
+                           placeholder="e.g., ABC Construction Plc">
                 </div>
                 <div class="col-md-12">
-                    <label class="form-label">Location</label>
+                    <label class="form-label fw-semibold">Location</label>
                     <input type="text" name="experience[${index}][location]" class="form-control" 
                            placeholder="e.g., Addis Ababa, Ethiopia">
                 </div>
                 <div class="col-md-5">
-                    <label class="form-label">Start Date</label>
+                    <label class="form-label fw-semibold">Start Date</label>
                     <input type="date" name="experience[${index}][start_date]" class="form-control">
                 </div>
                 <div class="col-md-5">
-                    <label class="form-label">End Date</label>
+                    <label class="form-label fw-semibold">End Date</label>
                     <input type="date" name="experience[${index}][end_date]" class="form-control" id="exp_end_date_${index}">
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
                     <div class="form-check">
                         <input type="checkbox" name="experience[${index}][is_current]" class="form-check-input" 
                                id="is_current_${index}" value="1" onchange="toggleEndDate(${index})">
-                        <label class="form-check-label" for="is_current_${index}">
+                        <label class="form-check-label fw-semibold" for="is_current_${index}">
                             Current
                         </label>
                     </div>
                 </div>
                 <div class="col-12">
-                    <label class="form-label">Key Responsibilities</label>
+                    <label class="form-label fw-semibold">Key Responsibilities</label>
                     <textarea name="experience[${index}][responsibilities]" class="form-control" rows="2" 
-                              placeholder="Describe your main duties and achievements..."></textarea>
+                              placeholder="Describe main duties, projects handled, and achievements..."></textarea>
                 </div>
                 
+                <!-- Reference Section -->
                 <div class="col-md-6">
-                    <label class="form-label">Reference Name</label>
+                    <label class="form-label fw-semibold">Reference Name</label>
                     <input type="text" name="experience[${index}][reference_name]" class="form-control" 
-                           placeholder="e.g., John Doe">
+                           placeholder="e.g., John Doe (Direct Supervisor)">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">Reference Phone</label>
+                    <label class="form-label fw-semibold">Reference Phone</label>
                     <input type="text" name="experience[${index}][reference_phone]" class="form-control" 
                            placeholder="+251 911 234 567">
                 </div>
 
-                <!-- Document Uploads -->
-                <div class="col-12"><hr class="my-2"><h6 class="text-muted small fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2 text-primary"></i>Experience Documents & Certifications (Optional)</h6></div>
-
-                <div class="col-md-6">
+                <!-- Document Upload -->
+                <div class="col-12">
                     <label class="form-label fw-semibold">
                         <i class="fa-solid fa-file-lines text-primary me-1"></i>Experience Certificate / Recommendation Letter
                         <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
@@ -1128,30 +1181,6 @@ function addExperience() {
                     <div class="file-preview-target mt-2 d-none">
                         <img src="" alt="Certificate Preview" class="img-preview-box">
                     </div>
-                </div>
-
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold">
-                        <i class="fa-solid fa-file-shield text-success me-1"></i>Professional License Document or Photo
-                        <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
-                    </label>
-                    <input type="file" name="experience[${index}][license_document]" class="form-control" 
-                           accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
-                           onchange="previewArrayFile(this)">
-                    <div class="file-preview-target mt-2 d-none">
-                        <img src="" alt="License Preview" class="img-preview-box">
-                    </div>
-                </div>
-
-                <!-- Professional License Section -->
-                <div class="col-md-6">
-                    <label class="form-label">License Number</label>
-                    <input type="text" name="experience[${index}][license_number]" class="form-control" 
-                           placeholder="e.g., PE-12345">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">License Expiry Date</label>
-                    <input type="date" name="experience[${index}][license_expiry]" class="form-control">
                 </div>
             </div>
         </div>
@@ -1164,6 +1193,79 @@ function addExperience() {
 
 function removeExperience(index) {
     const entry = document.querySelector(`.experience-entry[data-index="${index}"]`);
+    if (entry) {
+        entry.remove();
+    }
+    updateRemoveButtons();
+}
+
+// Professional Licenses dynamic rows
+function addLicense() {
+    const container = document.getElementById('licensesContainer');
+    const index = licenseCount;
+    
+    const html = `
+        <div class="license-entry border rounded p-3 mb-3 bg-light" data-index="${index}">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-award text-warning me-2"></i>License #${index + 1}</h6>
+                <button type="button" class="btn btn-sm btn-outline-danger remove-license" onclick="removeLicense(${index})">
+                    <i class="fa-solid fa-trash me-1"></i>Remove
+                </button>
+            </div>
+            
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">License / Certification Title <span class="text-danger">*</span></label>
+                    <input type="text" name="licenses[${index}][license_name]" class="form-control" 
+                           placeholder="e.g., Practicing Attorney, Professional Engineer PE, Driving License Grade 3">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Issuing Authority / Organization</label>
+                    <input type="text" name="licenses[${index}][issuing_organization]" class="form-control" 
+                           placeholder="e.g., Ministry of Justice, Ethiopian Construction Authority, Transport Authority">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">License / Registration Number</label>
+                    <input type="text" name="licenses[${index}][license_number]" class="form-control font-monospace" 
+                           placeholder="e.g., EFAA-00247, PE-12345">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Issue Date</label>
+                    <input type="date" name="licenses[${index}][issue_date]" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Expiry Date</label>
+                    <input type="date" name="licenses[${index}][expiry_date]" class="form-control">
+                </div>
+                
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">
+                        <i class="fa-solid fa-file-shield text-success me-1"></i>Upload License Document / Certificate / Card Photo
+                        <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                    </label>
+                    <input type="file" name="licenses[${index}][license_document]" class="form-control" 
+                           accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
+                           onchange="previewArrayFile(this)">
+                    <div class="file-preview-target mt-2 d-none">
+                        <img src="" alt="License Preview" class="img-preview-box">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Notes / Specialization / Scope of Practice</label>
+                    <textarea name="licenses[${index}][notes]" class="form-control" rows="2" 
+                              placeholder="e.g., Federal First Instance & High Court jurisdiction, Heavy Duty Machinery..."></textarea>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.insertAdjacentHTML('beforeend', html);
+    licenseCount++;
+    updateRemoveButtons();
+}
+
+function removeLicense(index) {
+    const entry = document.querySelector(`.license-entry[data-index="${index}"]`);
     if (entry) {
         entry.remove();
     }
@@ -1196,6 +1298,14 @@ function updateRemoveButtons() {
         const removeBtn = entry.querySelector('.remove-experience');
         if (removeBtn) {
             removeBtn.style.display = experienceEntries.length > 1 ? 'inline-block' : 'none';
+        }
+    });
+
+    const licenseEntries = document.querySelectorAll('.license-entry');
+    licenseEntries.forEach((entry) => {
+        const removeBtn = entry.querySelector('.remove-license');
+        if (removeBtn) {
+            removeBtn.style.display = licenseEntries.length > 1 ? 'inline-block' : 'none';
         }
     });
     

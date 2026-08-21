@@ -76,6 +76,13 @@
                 </div>
                 <small class="text-muted d-block mt-1 fw-semibold">Experience</small>
             </div>
+            <div class="flex-grow-1 step-line" style="height: 2px; background: #dee2e6; margin: 0 10px; margin-top: -15px;"></div>
+            <div class="text-center flex-grow-1 cursor-pointer" onclick="goToStep(7)">
+                <div class="step-indicator" id="step-ind-7">
+                    <span class="step-number">7</span>
+                </div>
+                <small class="text-muted d-block mt-1 fw-semibold">Licenses</small>
+            </div>
         </div>
     </div>
 </div>
@@ -559,14 +566,14 @@
                 </button>
             </div>
 
-            {{-- STEP 6: Work Experience & Licenses --}}
+            {{-- STEP 6: Work Experience --}}
             <div class="step-panel" id="step-panel-6">
                 <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
                     <div>
-                        <h5 class="mb-1"><i class="fa-solid fa-briefcase text-success me-2"></i>Step 6: Work Experience & Professional Licenses</h5>
-                        <p class="text-muted small mb-0">Update previous jobs, responsibilities, professional licenses, and certifications.</p>
+                        <h5 class="mb-1"><i class="fa-solid fa-briefcase text-success me-2"></i>Step 6: Work Experience</h5>
+                        <p class="text-muted small mb-0">Update previous jobs, employment history, and recommendation letters.</p>
                     </div>
-                    <span class="badge bg-success">Step 6 of 6</span>
+                    <span class="badge bg-success">Step 6 of 7</span>
                 </div>
 
                 <div id="experienceContainer">
@@ -590,27 +597,27 @@
                         
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label class="form-label">Job Title</label>
+                                <label class="form-label fw-semibold">Job Title</label>
                                 <input type="text" name="experience[{{ $index }}][job_title]" class="form-control" 
-                                       value="{{ $exp['job_title'] ?? '' }}" placeholder="e.g., Site Engineer">
+                                       value="{{ $exp['job_title'] ?? '' }}" placeholder="e.g., Site Engineer, Project Manager">
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label">Company Name</label>
+                                <label class="form-label fw-semibold">Company Name</label>
                                 <input type="text" name="experience[{{ $index }}][company_name]" class="form-control" 
-                                       value="{{ $exp['company_name'] ?? '' }}" placeholder="e.g., ABC Construction">
+                                       value="{{ $exp['company_name'] ?? '' }}" placeholder="e.g., ABC Construction Plc">
                             </div>
                             <div class="col-md-12">
-                                <label class="form-label">Location</label>
+                                <label class="form-label fw-semibold">Location</label>
                                 <input type="text" name="experience[{{ $index }}][location]" class="form-control" 
                                        value="{{ $exp['location'] ?? '' }}" placeholder="e.g., Addis Ababa, Ethiopia">
                             </div>
                             <div class="col-md-5">
-                                <label class="form-label">Start Date</label>
+                                <label class="form-label fw-semibold">Start Date</label>
                                 <input type="date" name="experience[{{ $index }}][start_date]" class="form-control"
                                        value="{{ isset($exp['start_date']) ? (is_string($exp['start_date']) ? substr($exp['start_date'], 0, 10) : $exp['start_date']) : '' }}">
                             </div>
                             <div class="col-md-5">
-                                <label class="form-label">End Date</label>
+                                <label class="form-label fw-semibold">End Date</label>
                                 <input type="date" name="experience[{{ $index }}][end_date]" class="form-control" id="exp_end_date_{{ $index }}"
                                        value="{{ isset($exp['end_date']) ? (is_string($exp['end_date']) ? substr($exp['end_date'], 0, 10) : $exp['end_date']) : '' }}"
                                        {{ !empty($exp['is_current']) ? 'disabled' : '' }}>
@@ -619,18 +626,16 @@
                                 <div class="form-check mb-2">
                                     <input type="checkbox" name="experience[{{ $index }}][is_current]" class="form-check-input" 
                                            id="is_current_{{ $index }}" value="1" {{ !empty($exp['is_current']) ? 'checked' : '' }} onchange="toggleEndDate({{ $index }})">
-                                    <label class="form-check-label small" for="is_current_{{ $index }}">Current</label>
+                                    <label class="form-check-label small fw-semibold" for="is_current_{{ $index }}">Current</label>
                                 </div>
                             </div>
                             <div class="col-12">
-                                <label class="form-label">Key Responsibilities</label>
+                                <label class="form-label fw-semibold">Key Responsibilities</label>
                                 <textarea name="experience[{{ $index }}][responsibilities]" class="form-control" rows="3" 
-                                          placeholder="Describe duties...">{{ $exp['responsibilities'] ?? '' }}</textarea>
+                                          placeholder="Describe main duties, projects handled, and achievements...">{{ $exp['responsibilities'] ?? '' }}</textarea>
                             </div>
                             
-                            <div class="col-12"><hr class="my-2"><h6 class="text-muted small fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2 text-primary"></i>Experience Documents & Certifications (Optional)</h6></div>
-
-                            <div class="col-md-6">
+                            <div class="col-12">
                                 @if(!empty($exp['experience_letter']))
                                     <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
                                         <i class="fa-solid fa-file-lines text-primary"></i>
@@ -646,34 +651,6 @@
                                 </label>
                                 <input type="file" name="experience[{{ $index }}][experience_letter]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
                             </div>
-
-                            <div class="col-md-6">
-                                @if(!empty($exp['license_document']))
-                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
-                                        <i class="fa-solid fa-file-shield text-success"></i>
-                                        <small class="text-muted text-truncate">License Document on file</small>
-                                        <a href="{{ uploaded_asset($exp['license_document']) }}" target="_blank" class="btn btn-xs btn-outline-success ms-auto">
-                                            <i class="fa-solid fa-eye me-1"></i>View Document
-                                        </a>
-                                    </div>
-                                @endif
-                                <label class="form-label small fw-semibold">
-                                    <i class="fa-solid fa-file-shield text-success me-1"></i>Upload / Replace License Document
-                                    <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
-                                </label>
-                                <input type="file" name="experience[{{ $index }}][license_document]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
-                            </div>
-
-                            <div class="col-md-6">
-                                <label class="form-label">License Number</label>
-                                <input type="text" name="experience[{{ $index }}][license_number]" class="form-control" 
-                                       value="{{ $exp['license_number'] ?? '' }}" placeholder="e.g., PE-12345">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">License Expiry Date</label>
-                                <input type="date" name="experience[{{ $index }}][license_expiry]" class="form-control"
-                                       value="{{ isset($exp['license_expiry']) ? (is_string($exp['license_expiry']) ? substr($exp['license_expiry'], 0, 10) : $exp['license_expiry']) : '' }}">
-                            </div>
                         </div>
                     </div>
                     @endforeach
@@ -681,6 +658,106 @@
 
                 <button type="button" class="btn btn-outline-success btn-sm fw-semibold" onclick="addExperience()">
                     <i class="fa-solid fa-plus me-1"></i> Add Another Experience Record
+                </button>
+            </div>
+
+            {{-- STEP 7: Professional Licenses & Certifications --}}
+            <div class="step-panel" id="step-panel-7">
+                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                    <div>
+                        <h5 class="mb-1"><i class="fa-solid fa-id-card-clip text-warning me-2"></i>Step 7: Professional Licenses & Certifications</h5>
+                        <p class="text-muted small mb-0">Manage practicing licenses, engineering certifications, professional registrations, and driving licenses.</p>
+                    </div>
+                    <span class="badge bg-warning text-dark">Step 7 of 7</span>
+                </div>
+
+                <div id="licensesContainer">
+                    @php
+                        $licenses = old('licenses', $employee->licenses ? $employee->licenses->toArray() : []);
+                        if (empty($licenses)) {
+                            // Check fallback legacy licenses in experience
+                            $legacyLics = $employee->experience->filter(fn($e) => !empty($e->license_number) || !empty($e->license_document));
+                            if ($legacyLics->isNotEmpty()) {
+                                $licenses = $legacyLics->map(fn($e) => [
+                                    'license_name'         => 'Professional License (' . $e->job_title . ')',
+                                    'issuing_organization' => $e->company_name ?? '',
+                                    'license_number'       => $e->license_number ?? '',
+                                    'expiry_date'          => $e->license_expiry ? (is_string($e->license_expiry) ? substr($e->license_expiry, 0, 10) : $e->license_expiry) : null,
+                                    'license_document'     => $e->license_document ?? null,
+                                ])->values()->toArray();
+                            }
+                        }
+                    @endphp
+
+                    @if(!empty($licenses))
+                        @foreach($licenses as $index => $lic)
+                        <div class="license-entry border rounded p-3 mb-3 bg-light" data-index="{{ $index }}">
+                            @if(!empty($lic['id']))
+                                <input type="hidden" name="licenses[{{ $index }}][id]" value="{{ $lic['id'] }}">
+                            @endif
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-award text-warning me-2"></i>License #{{ $index + 1 }}</h6>
+                                <button type="button" class="btn btn-sm btn-outline-danger remove-license" onclick="removeLicense({{ $index }})">
+                                    <i class="fa-solid fa-trash me-1"></i>Remove
+                                </button>
+                            </div>
+                            
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">License / Certification Title <span class="text-danger">*</span></label>
+                                    <input type="text" name="licenses[{{ $index }}][license_name]" class="form-control" 
+                                           value="{{ $lic['license_name'] ?? '' }}" placeholder="e.g., Practicing Attorney, Professional Engineer PE, Driving License Grade 3">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">Issuing Authority / Organization</label>
+                                    <input type="text" name="licenses[{{ $index }}][issuing_organization]" class="form-control" 
+                                           value="{{ $lic['issuing_organization'] ?? '' }}" placeholder="e.g., Ministry of Justice, Ethiopian Construction Authority">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-semibold">License / Registration Number</label>
+                                    <input type="text" name="licenses[{{ $index }}][license_number]" class="form-control font-monospace" 
+                                           value="{{ $lic['license_number'] ?? '' }}" placeholder="e.g., EFAA-00247, PE-12345">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-semibold">Issue Date</label>
+                                    <input type="date" name="licenses[{{ $index }}][issue_date]" class="form-control"
+                                           value="{{ isset($lic['issue_date']) ? (is_string($lic['issue_date']) ? substr($lic['issue_date'], 0, 10) : $lic['issue_date']) : '' }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-semibold">Expiry Date</label>
+                                    <input type="date" name="licenses[{{ $index }}][expiry_date]" class="form-control"
+                                           value="{{ isset($lic['expiry_date']) ? (is_string($lic['expiry_date']) ? substr($lic['expiry_date'], 0, 10) : $lic['expiry_date']) : '' }}">
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    @if(!empty($lic['license_document']))
+                                        <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
+                                            <i class="fa-solid fa-file-shield text-success"></i>
+                                            <small class="text-muted text-truncate">License Document on file</small>
+                                            <a href="{{ uploaded_asset($lic['license_document']) }}" target="_blank" class="btn btn-xs btn-outline-success ms-auto">
+                                                <i class="fa-solid fa-eye me-1"></i>View Document
+                                            </a>
+                                        </div>
+                                    @endif
+                                    <label class="form-label small fw-semibold">
+                                        <i class="fa-solid fa-file-shield text-success me-1"></i>Upload / Replace License Document
+                                        <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                                    </label>
+                                    <input type="file" name="licenses[{{ $index }}][license_document]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold">Notes / Specialization / Scope of Practice</label>
+                                    <textarea name="licenses[{{ $index }}][notes]" class="form-control" rows="2" 
+                                              placeholder="e.g., Federal High Court jurisdiction, Heavy Machinery operation...">{{ $lic['notes'] ?? '' }}</textarea>
+                                </div>
+                            </div>
+                        </div>
+                        @endforeach
+                    @endif
+                </div>
+
+                <button type="button" class="btn btn-outline-warning text-dark btn-sm fw-semibold" onclick="addLicense()">
+                    <i class="fa-solid fa-plus me-1"></i> Add Another License Record
                 </button>
             </div>
 
@@ -711,10 +788,11 @@
 <script>
 const fixedAssetUnitsList = @json($fixedAssetsJson ?? []);
 let currentStep = 1;
-const totalSteps = 6;
+const totalSteps = 7;
 
 let educationCount = {{ count($educations) }};
 let experienceCount = {{ count($experiences) }};
+let licenseCount = {{ count($licenses ?? []) }};
 let assetCount = {{ count($assignedUnitIds) }};
 let currentActiveCategory = 'ALL';
 
@@ -1044,61 +1122,43 @@ function addExperience() {
             
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label">Job Title</label>
-                    <input type="text" name="experience[${index}][job_title]" class="form-control" placeholder="e.g., Site Engineer">
+                    <label class="form-label fw-semibold">Job Title</label>
+                    <input type="text" name="experience[${index}][job_title]" class="form-control" placeholder="e.g., Site Engineer, Project Manager">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">Company Name</label>
-                    <input type="text" name="experience[${index}][company_name]" class="form-control" placeholder="e.g., ABC Construction">
+                    <label class="form-label fw-semibold">Company Name</label>
+                    <input type="text" name="experience[${index}][company_name]" class="form-control" placeholder="e.g., ABC Construction Plc">
                 </div>
                 <div class="col-md-12">
-                    <label class="form-label">Location</label>
+                    <label class="form-label fw-semibold">Location</label>
                     <input type="text" name="experience[${index}][location]" class="form-control" placeholder="e.g., Addis Ababa, Ethiopia">
                 </div>
                 <div class="col-md-5">
-                    <label class="form-label">Start Date</label>
+                    <label class="form-label fw-semibold">Start Date</label>
                     <input type="date" name="experience[${index}][start_date]" class="form-control">
                 </div>
                 <div class="col-md-5">
-                    <label class="form-label">End Date</label>
+                    <label class="form-label fw-semibold">End Date</label>
                     <input type="date" name="experience[${index}][end_date]" class="form-control" id="exp_end_date_${index}">
                 </div>
                 <div class="col-md-2 d-flex align-items-end">
                     <div class="form-check mb-2">
                         <input type="checkbox" name="experience[${index}][is_current]" class="form-check-input" 
                                id="is_current_${index}" value="1" onchange="toggleEndDate(${index})">
-                        <label class="form-check-label small" for="is_current_${index}">Current</label>
+                        <label class="form-check-label small fw-semibold" for="is_current_${index}">Current</label>
                     </div>
                 </div>
                 <div class="col-12">
-                    <label class="form-label">Key Responsibilities</label>
-                    <textarea name="experience[${index}][responsibilities]" class="form-control" rows="3" placeholder="Describe duties..."></textarea>
+                    <label class="form-label fw-semibold">Key Responsibilities</label>
+                    <textarea name="experience[${index}][responsibilities]" class="form-control" rows="3" placeholder="Describe main duties, projects handled, and achievements..."></textarea>
                 </div>
-                <div class="col-12"><hr class="my-2"><h6 class="text-muted small fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2 text-primary"></i>Experience Documents & Certifications (Optional)</h6></div>
-
-                <div class="col-md-6">
+                
+                <div class="col-12">
                     <label class="form-label small fw-semibold">
-                        <i class="fa-solid fa-file-lines text-primary me-1"></i>Experience Certificate / Recommendation Letter
+                        <i class="fa-solid fa-file-lines text-primary me-1"></i>Upload / Replace Experience Certificate
                         <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
                     </label>
                     <input type="file" name="experience[${index}][experience_letter]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
-                </div>
-
-                <div class="col-md-6">
-                    <label class="form-label small fw-semibold">
-                        <i class="fa-solid fa-file-shield text-success me-1"></i>Professional License Document or Photo
-                        <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
-                    </label>
-                    <input type="file" name="experience[${index}][license_document]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
-                </div>
-
-                <div class="col-md-6">
-                    <label class="form-label">License Number</label>
-                    <input type="text" name="experience[${index}][license_number]" class="form-control" placeholder="e.g., PE-12345">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">License Expiry Date</label>
-                    <input type="date" name="experience[${index}][license_expiry]" class="form-control">
                 </div>
             </div>
         </div>
@@ -1111,6 +1171,72 @@ function addExperience() {
 
 function removeExperience(index) {
     const entry = document.querySelector(`.experience-entry[data-index="${index}"]`);
+    if (entry) entry.remove();
+    updateRemoveButtons();
+}
+
+// Professional License Functions
+function addLicense() {
+    const container = document.getElementById('licensesContainer');
+    const index = licenseCount;
+    
+    const html = `
+        <div class="license-entry border rounded p-3 mb-3 bg-light" data-index="${index}">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-award text-warning me-2"></i>License #${index + 1}</h6>
+                <button type="button" class="btn btn-sm btn-outline-danger remove-license" onclick="removeLicense(${index})">
+                    <i class="fa-solid fa-trash me-1"></i>Remove
+                </button>
+            </div>
+            
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">License / Certification Title <span class="text-danger">*</span></label>
+                    <input type="text" name="licenses[${index}][license_name]" class="form-control" 
+                           placeholder="e.g., Practicing Attorney, Professional Engineer PE, Driving License Grade 3">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Issuing Authority / Organization</label>
+                    <input type="text" name="licenses[${index}][issuing_organization]" class="form-control" 
+                           placeholder="e.g., Ministry of Justice, Ethiopian Construction Authority">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">License / Registration Number</label>
+                    <input type="text" name="licenses[${index}][license_number]" class="form-control font-monospace" 
+                           placeholder="e.g., EFAA-00247, PE-12345">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Issue Date</label>
+                    <input type="date" name="licenses[${index}][issue_date]" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Expiry Date</label>
+                    <input type="date" name="licenses[${index}][expiry_date]" class="form-control">
+                </div>
+                
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">
+                        <i class="fa-solid fa-file-shield text-success me-1"></i>Upload / Replace License Document
+                        <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                    </label>
+                    <input type="file" name="licenses[${index}][license_document]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Notes / Specialization / Scope of Practice</label>
+                    <textarea name="licenses[${index}][notes]" class="form-control" rows="2" 
+                              placeholder="e.g., Federal High Court jurisdiction, Heavy Machinery operation..."></textarea>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.insertAdjacentHTML('beforeend', html);
+    licenseCount++;
+    updateRemoveButtons();
+}
+
+function removeLicense(index) {
+    const entry = document.querySelector(`.license-entry[data-index="${index}"]`);
     if (entry) entry.remove();
     updateRemoveButtons();
 }
@@ -1135,6 +1261,12 @@ function updateRemoveButtons() {
     experienceEntries.forEach(entry => {
         const removeBtn = entry.querySelector('.remove-experience');
         if (removeBtn) removeBtn.style.display = experienceEntries.length > 1 ? 'inline-block' : 'none';
+    });
+
+    const licenseEntries = document.querySelectorAll('.license-entry');
+    licenseEntries.forEach(entry => {
+        const removeBtn = entry.querySelector('.remove-license');
+        if (removeBtn) removeBtn.style.display = licenseEntries.length > 1 ? 'inline-block' : 'none';
     });
     
     const assetEntries = document.querySelectorAll('.asset-entry');

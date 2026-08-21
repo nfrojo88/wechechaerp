@@ -199,6 +199,16 @@ class EmployeeController extends Controller
             $request->merge(['experience' => empty($filteredExp) ? null : array_values($filteredExp)]);
         }
 
+        // Sanitize empty license rows
+        if ($request->has('licenses') && is_array($request->licenses)) {
+            $filteredLic = array_filter($request->licenses, function($lic) {
+                return !empty($lic['license_name']) || !empty($lic['license_number']) || !empty($lic['issuing_organization']);
+            });
+            $request->merge(['licenses' => empty($filteredLic) ? null : array_values($filteredLic)]);
+        }
+
+        $this->ensureLicenseTableExists();
+
         // Validate all fields
         $validated = $request->validate([
             'employee_code'                 => 'required|string|unique:employees,employee_code',
@@ -233,7 +243,13 @@ class EmployeeController extends Controller
             'experience.*.company_name'      => 'nullable|string',
             'experience.*.start_date'        => 'nullable|date',
             'experience.*.experience_letter' => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
-            'experience.*.license_document'  => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'licenses'                       => 'nullable|array',
+            'licenses.*.license_name'        => 'nullable|string|max:255',
+            'licenses.*.issuing_organization'=> 'nullable|string|max:255',
+            'licenses.*.license_number'      => 'nullable|string|max:100',
+            'licenses.*.issue_date'          => 'nullable|date',
+            'licenses.*.expiry_date'         => 'nullable|date',
+            'licenses.*.license_document'    => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
             'device_user_id'                => 'nullable|string|max:100',
         ]);
 
@@ -268,7 +284,7 @@ class EmployeeController extends Controller
             $validated['user_id'] = $user->id;
 
             // Strip nested arrays before Eloquent creation
-            $employeeData = \Illuminate\Support\Arr::except($validated, ['fixed_asset_units', 'education', 'experience']);
+            $employeeData = \Illuminate\Support\Arr::except($validated, ['fixed_asset_units', 'education', 'experience', 'licenses']);
             $employee = Employee::create($employeeData);
 
             // Attach Centralized Fixed Asset Units
@@ -292,6 +308,11 @@ class EmployeeController extends Controller
             // Save Experience records with file uploads
             if ($request->has('experience') && is_array($request->experience)) {
                 $this->saveExperienceRecords($employee, $request->experience);
+            }
+
+            // Save Dedicated Professional License records with file uploads
+            if ($request->has('licenses') && is_array($request->licenses)) {
+                $this->saveLicenseRecords($employee, $request->licenses);
             }
 
             // Clear any lingering session cache
@@ -405,21 +426,78 @@ class EmployeeController extends Controller
                 'experience_letter' => $letterPath,
                 'reference_name'    => $experience['reference_name']   ?? null,
                 'reference_phone'   => $experience['reference_phone']  ?? null,
-                'license_document'  => $licensePath,
-                'license_number'    => $experience['license_number']   ?? null,
-                'license_expiry'    => $expLicExpiry,
             ]);
+        }
+    }
+
+    /**
+     * Save dedicated professional license records with file uploads
+     */
+    private function saveLicenseRecords(Employee $employee, array $licenseData): void
+    {
+        $this->ensureLicenseTableExists();
+
+        foreach ($licenseData as $index => $lic) {
+            if (empty($lic['license_name']) && empty($lic['license_number'])) {
+                continue;
+            }
+
+            $docPath = null;
+            if (request()->hasFile("licenses.{$index}.license_document")) {
+                $file = request()->file("licenses.{$index}.license_document");
+                $docPath = \App\Services\FileUploadService::upload($file, 'employee_licenses');
+            }
+
+            \App\Models\EmployeeLicense::create([
+                'employee_id'          => $employee->id,
+                'license_name'         => !empty($lic['license_name']) ? $lic['license_name'] : 'Professional License',
+                'issuing_organization' => $lic['issuing_organization'] ?? null,
+                'license_number'       => $lic['license_number'] ?? null,
+                'issue_date'           => !empty($lic['issue_date']) ? $lic['issue_date'] : null,
+                'expiry_date'          => !empty($lic['expiry_date']) ? $lic['expiry_date'] : null,
+                'license_document'     => $docPath,
+                'status'               => $lic['status'] ?? 'active',
+                'notes'                => $lic['notes'] ?? null,
+            ]);
+        }
+    }
+
+    /**
+     * Auto-heal ensure employee_licenses table exists
+     */
+    private function ensureLicenseTableExists(): void
+    {
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('employee_licenses')) {
+                \Illuminate\Support\Facades\Schema::create('employee_licenses', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->id();
+                    $table->foreignId('employee_id')->constrained('employees')->onDelete('cascade');
+                    $table->string('license_name');
+                    $table->string('issuing_organization')->nullable();
+                    $table->string('license_number')->nullable();
+                    $table->date('issue_date')->nullable();
+                    $table->date('expiry_date')->nullable();
+                    $table->string('license_document')->nullable();
+                    $table->string('status')->default('active');
+                    $table->text('notes')->nullable();
+                    $table->timestamps();
+                });
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Employee license table auto-heal: ' . $e->getMessage());
         }
     }
 
     public function show(Employee $employee)
     {
         Gate::authorize('view', $employee);
+        $this->ensureLicenseTableExists();
         $employee->load([
             'project', 
             'payrolls' => fn($q) => $q->latest()->limit(12),
             'education',
             'experience',
+            'licenses',
             'activeAssets.product',
             'assignedFixedAssets.parentAsset',
             'fixedAssetAssignments.unit.parentAsset',
@@ -432,10 +510,12 @@ class EmployeeController extends Controller
     public function edit(Employee $employee)
     {
         Gate::authorize('update', $employee);
+        $this->ensureLicenseTableExists();
         $employee->load([
             'project',
             'education',
             'experience',
+            'licenses',
             'assignedFixedAssets' => fn($q) => $q->select('id', 'fixed_asset_id', 'unit_code', 'status', 'condition', 'brand', 'model', 'serial_number', 'plate_number', 'assigned_to_employee_id'),
             'assignedFixedAssets.parentAsset' => fn($q) => $q->select('id', 'name', 'category'),
         ]);
@@ -470,6 +550,7 @@ class EmployeeController extends Controller
     public function update(Request $request, Employee $employee)
     {
         Gate::authorize('update', $employee);
+        $this->ensureLicenseTableExists();
 
         $validated = $request->validate([
             'employee_code'        => 'required|string|unique:employees,employee_code,'.$employee->id,
@@ -496,6 +577,7 @@ class EmployeeController extends Controller
             'fixed_asset_units'    => 'nullable|array',
             'education'            => 'nullable|array',
             'experience'           => 'nullable|array',
+            'licenses'             => 'nullable|array',
         ]);
 
         // Handle guarantee letter upload if provided
@@ -516,7 +598,7 @@ class EmployeeController extends Controller
         $wasTerminated = $employee->status !== 'terminated' && $validated['status'] === 'terminated';
 
         // Strip non-model attributes
-        $employeeData = \Illuminate\Support\Arr::except($validated, ['fixed_asset_units', 'education', 'experience']);
+        $employeeData = \Illuminate\Support\Arr::except($validated, ['fixed_asset_units', 'education', 'experience', 'licenses']);
         $employee->update($employeeData);
 
         // ── Sync Fixed Asset Units ──────────────────────────────────────────
@@ -588,7 +670,7 @@ class EmployeeController extends Controller
             }
         }
 
-        // ── Sync Experience Records ─────────────────────────────────────────
+        // ── Sync Experience Records (Clean: Job experience only) ─────────────
         if ($request->has('experience') && is_array($request->experience)) {
             $submittedExpIds = [];
             foreach ($request->experience as $index => $expData) {
@@ -599,11 +681,6 @@ class EmployeeController extends Controller
                 $letterDocPath = null;
                 if ($request->hasFile("experience.{$index}.experience_letter")) {
                     $letterDocPath = \App\Services\FileUploadService::upload($request->file("experience.{$index}.experience_letter"), 'employee_experiences');
-                }
-
-                $licenseDocPath = null;
-                if ($request->hasFile("experience.{$index}.license_document")) {
-                    $licenseDocPath = \App\Services\FileUploadService::upload($request->file("experience.{$index}.license_document"), 'employee_licenses');
                 }
 
                 $isCurrent = isset($expData['is_current']) && $expData['is_current'] == '1';
@@ -619,14 +696,9 @@ class EmployeeController extends Controller
                     'responsibilities' => $expData['responsibilities'] ?? null,
                     'reference_name'   => $expData['reference_name']   ?? null,
                     'reference_phone'  => $expData['reference_phone']  ?? null,
-                    'license_number'   => $expData['license_number']   ?? null,
-                    'license_expiry'   => !empty($expData['license_expiry']) ? $expData['license_expiry'] : null,
                 ];
                 if ($letterDocPath) {
                     $expPayload['experience_letter'] = $letterDocPath;
-                }
-                if ($licenseDocPath) {
-                    $expPayload['license_document'] = $licenseDocPath;
                 }
 
                 if (!empty($expData['id'])) {
@@ -645,6 +717,52 @@ class EmployeeController extends Controller
             // Remove experience records deleted in UI
             if (!empty($submittedExpIds)) {
                 \App\Models\EmployeeExperience::where('employee_id', $employee->id)->whereNotIn('id', $submittedExpIds)->delete();
+            }
+        }
+
+        // ── Sync Professional Licenses Records (Dedicated) ──────────────────
+        if ($request->has('licenses') && is_array($request->licenses)) {
+            $submittedLicIds = [];
+            foreach ($request->licenses as $index => $licData) {
+                if (empty($licData['license_name']) && empty($licData['license_number']) && empty($licData['issuing_organization'])) {
+                    continue;
+                }
+
+                $licenseDocPath = null;
+                if ($request->hasFile("licenses.{$index}.license_document")) {
+                    $licenseDocPath = \App\Services\FileUploadService::upload($request->file("licenses.{$index}.license_document"), 'employee_licenses');
+                }
+
+                $licPayload = [
+                    'employee_id'          => $employee->id,
+                    'license_name'         => !empty($licData['license_name']) ? $licData['license_name'] : 'Professional License',
+                    'issuing_organization' => $licData['issuing_organization'] ?? null,
+                    'license_number'       => $licData['license_number'] ?? null,
+                    'issue_date'           => !empty($licData['issue_date']) ? $licData['issue_date'] : null,
+                    'expiry_date'          => !empty($licData['expiry_date']) ? $licData['expiry_date'] : null,
+                    'status'               => $licData['status'] ?? 'active',
+                    'notes'                => $licData['notes'] ?? null,
+                ];
+                if ($licenseDocPath) {
+                    $licPayload['license_document'] = $licenseDocPath;
+                }
+
+                if (!empty($licData['id'])) {
+                    $licRecord = \App\Models\EmployeeLicense::where('employee_id', $employee->id)->find($licData['id']);
+                    if ($licRecord) {
+                        $licRecord->update($licPayload);
+                        $submittedLicIds[] = $licRecord->id;
+                        continue;
+                    }
+                }
+
+                $newLic = \App\Models\EmployeeLicense::create($licPayload);
+                $submittedLicIds[] = $newLic->id;
+            }
+
+            // Remove license records deleted in UI
+            if (!empty($submittedLicIds)) {
+                \App\Models\EmployeeLicense::where('employee_id', $employee->id)->whereNotIn('id', $submittedLicIds)->delete();
             }
         }
 

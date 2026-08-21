@@ -299,62 +299,95 @@
                 @endif
                 {{-- Professional Licenses Card (Standalone) --}}
                 @php
-                    $allLicenses = $employee->experience ? $employee->experience->filter(fn($exp) => $exp->license_number || $exp->license_document) : collect();
+                    $dedicatedLicenses = $employee->licenses ?? collect();
+                    $legacyLicenses = $employee->experience ? $employee->experience->filter(fn($exp) => $exp->license_number || $exp->license_document)->map(function($exp) {
+                        return (object)[
+                            'id'                   => $exp->id,
+                            'license_name'         => 'Professional License (' . $exp->job_title . ')',
+                            'issuing_organization' => $exp->company_name,
+                            'license_number'       => $exp->license_number,
+                            'issue_date'           => null,
+                            'expiry_date'          => $exp->license_expiry,
+                            'is_expired'           => $exp->is_license_expired,
+                            'license_url'          => $exp->license_url,
+                            'license_document'     => $exp->license_document,
+                            'notes'                => null,
+                        ];
+                    }) : collect();
+                    $allLicensesList = $dedicatedLicenses->isNotEmpty() ? $dedicatedLicenses : $legacyLicenses;
                 @endphp
-                @if($allLicenses->count() > 0)
+                @if($allLicensesList->count() > 0)
                 <div class="card border-0 shadow-sm rounded-4 mb-4">
                     <div class="card-header bg-white py-3 border-0 rounded-top-4 d-flex justify-content-between align-items-center">
                         <h5 class="mb-0 fw-bold">
                             <i class="fa-solid fa-id-card-clip text-warning me-2"></i>Professional Licenses
                         </h5>
-                        <span class="badge bg-warning text-dark rounded-pill px-3">{{ $allLicenses->count() }} License(s)</span>
+                        <span class="badge bg-warning text-dark rounded-pill px-3">{{ $allLicensesList->count() }} License(s)</span>
                     </div>
                     <div class="card-body p-4 pt-2">
                         <div class="row g-3">
-                            @foreach($allLicenses as $licExp)
+                            @foreach($allLicensesList as $lic)
                             <div class="col-md-6">
                                 <div class="border rounded-3 p-3 h-100 border-start border-4 border-warning bg-warning bg-opacity-10">
                                     {{-- License Header --}}
                                     <div class="d-flex align-items-center gap-2 mb-2">
-                                        <div class="rounded-circle bg-warning bg-opacity-25 d-flex align-items-center justify-content-center flex-shrink-0" style="width:36px;height:36px;">
-                                            <i class="fa-solid fa-certificate text-warning"></i>
+                                        <div class="rounded-circle bg-warning bg-opacity-25 d-flex align-items-center justify-content-center flex-shrink-0" style="width:38px;height:38px;">
+                                            <i class="fa-solid fa-certificate text-warning fa-lg"></i>
                                         </div>
-                                        <div>
-                                            <div class="fw-bold text-dark small">{{ $licExp->job_title }}</div>
-                                            <div class="text-muted" style="font-size:0.78rem;">{{ $licExp->company_name }}</div>
+                                        <div class="overflow-hidden">
+                                            <div class="fw-bold text-dark text-truncate">{{ $lic->license_name }}</div>
+                                            @if($lic->issuing_organization)
+                                                <div class="text-muted small text-truncate"><i class="fa-solid fa-building me-1"></i>{{ $lic->issuing_organization }}</div>
+                                            @endif
                                         </div>
                                     </div>
 
                                     {{-- License Details --}}
-                                    <div class="d-flex flex-column gap-1 small">
-                                        @if($licExp->license_number)
+                                    <div class="d-flex flex-column gap-1 small mt-2">
+                                        @if($lic->license_number)
                                         <div class="d-flex align-items-center gap-2">
                                             <span class="text-muted fw-semibold" style="min-width:80px;">License #:</span>
-                                            <span class="badge bg-dark font-monospace">{{ $licExp->license_number }}</span>
+                                            <span class="badge bg-dark font-monospace">{{ $lic->license_number }}</span>
                                         </div>
                                         @endif
-                                        @if($licExp->license_expiry)
+
+                                        @if(!empty($lic->issue_date))
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="text-muted fw-semibold" style="min-width:80px;">Issued:</span>
+                                            <span class="text-secondary">{{ is_object($lic->issue_date) ? $lic->issue_date->format('d M Y') : $lic->issue_date }}</span>
+                                        </div>
+                                        @endif
+
+                                        @if($lic->expiry_date)
                                         <div class="d-flex align-items-center gap-2">
                                             <span class="text-muted fw-semibold" style="min-width:80px;">Expiry:</span>
-                                            <span class="fw-semibold text-dark">{{ $licExp->license_expiry->format('d M Y') }}</span>
-                                            @if($licExp->is_license_expired)
-                                                <span class="badge bg-danger">Expired</span>
+                                            <span class="fw-semibold text-dark">{{ is_object($lic->expiry_date) ? $lic->expiry_date->format('d M Y') : \Carbon\Carbon::parse($lic->expiry_date)->format('d M Y') }}</span>
+                                            @php
+                                                $expDate = is_object($lic->expiry_date) ? $lic->expiry_date : \Carbon\Carbon::parse($lic->expiry_date);
+                                                $isExp = $expDate->isPast();
+                                                $daysLeft = now()->diffInDays($expDate, false);
+                                            @endphp
+                                            @if($isExp)
+                                                <span class="badge bg-danger ms-1">Expired</span>
+                                            @elseif($daysLeft <= 90)
+                                                <span class="badge bg-warning text-dark ms-1">Expiring Soon</span>
                                             @else
-                                                @php $daysLeft = now()->diffInDays($licExp->license_expiry, false); @endphp
-                                                @if($daysLeft <= 90)
-                                                    <span class="badge bg-warning text-dark">Expiring Soon</span>
-                                                @else
-                                                    <span class="badge bg-success">Valid</span>
-                                                @endif
+                                                <span class="badge bg-success ms-1">Valid</span>
                                             @endif
+                                        </div>
+                                        @endif
+
+                                        @if(!empty($lic->notes))
+                                        <div class="mt-1 text-secondary" style="font-size:0.8rem;">
+                                            <i class="fa-solid fa-circle-info me-1 text-warning"></i>{{ $lic->notes }}
                                         </div>
                                         @endif
                                     </div>
 
                                     {{-- View Document Button --}}
-                                    @if($licExp->license_document)
+                                    @if($lic->license_document)
                                     <div class="mt-3">
-                                        <a href="{{ $licExp->license_url }}" target="_blank" class="btn btn-sm btn-outline-warning fw-semibold rounded-3">
+                                        <a href="{{ $lic->license_url }}" target="_blank" class="btn btn-sm btn-outline-warning text-dark fw-semibold rounded-3">
                                             <i class="fa-solid fa-file-shield me-1"></i>View License Document
                                         </a>
                                     </div>
@@ -367,11 +400,11 @@
                 </div>
                 @endif
 
-                {{-- Work Experience & Licenses Card --}}
+                {{-- Work Experience Card (Clean: Experience only) --}}
                 @if($employee->experience && $employee->experience->count() > 0)
                 <div class="card border-0 shadow-sm rounded-4 mb-4">
                     <div class="card-header bg-white py-3 border-0 rounded-top-4 d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 fw-bold"><i class="fa-solid fa-briefcase text-success me-2"></i>Work Experience & Professional Licenses</h5>
+                        <h5 class="mb-0 fw-bold"><i class="fa-solid fa-briefcase text-success me-2"></i>Work Experience</h5>
                         <span class="badge bg-success rounded-pill px-3">{{ $employee->experience->count() }} Position(s)</span>
                     </div>
                     <div class="card-body p-4 pt-1">
@@ -400,30 +433,11 @@
                                     @if($exp->responsibilities)
                                         <p class="mb-2 small text-secondary">{{ Str::limit($exp->responsibilities, 250) }}</p>
                                     @endif
-
-                                    @if($exp->license_number || $exp->license_document)
-                                        <div class="alert alert-light border-start border-4 border-warning py-2 px-3 mt-2 mb-1 rounded-3">
-                                            <small class="text-muted d-block fw-bold"><i class="fa-solid fa-certificate text-warning me-1"></i>Professional License</small>
-                                            @if($exp->license_number)
-                                                <small class="d-block">License #: <strong>{{ $exp->license_number }}</strong></small>
-                                            @endif
-                                            @if($exp->license_expiry)
-                                                <small class="d-block">
-                                                    Expiry: {{ $exp->license_expiry->format('d M Y') }}
-                                                    @if($exp->is_license_expired)
-                                                        <span class="badge bg-danger ms-1">Expired</span>
-                                                    @else
-                                                        <span class="badge bg-success ms-1">Valid</span>
-                                                    @endif
-                                                </small>
-                                            @endif
-                                        </div>
-                                    @endif
                                 </div>
                                 <div class="col-md-4 text-md-end mt-2 mt-md-0">
-                                    @if($exp->license_document)
-                                        <a href="{{ $exp->license_url }}" target="_blank" class="btn btn-sm btn-outline-success shadow-sm rounded-3">
-                                            <i class="fa-solid fa-file-pdf me-1"></i>View License
+                                    @if($exp->experience_letter)
+                                        <a href="{{ $exp->experience_letter_url }}" target="_blank" class="btn btn-sm btn-outline-primary shadow-sm rounded-3">
+                                            <i class="fa-solid fa-file-lines me-1"></i>View Experience Letter
                                         </a>
                                     @endif
                                 </div>
