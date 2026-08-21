@@ -47,10 +47,11 @@ class DepartmentController extends Controller
             'code'        => 'required|string|max:50|unique:departments,code,' . $department->id,
             'head_id'     => 'nullable|exists:employees,id',
             'description' => 'nullable|string',
-            'is_active'   => 'boolean',
         ]);
 
+        $data['is_active'] = $request->boolean('is_active');
+
         $department->update($data);
-        return redirect()->route('departments.index')->with('success', 'Department updated.');
+        return redirect()->route('departments.index')->with('success', 'Department updated successfully.');
     }
 }
