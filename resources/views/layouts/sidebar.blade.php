@@ -386,7 +386,7 @@
         @endcanany
 
         {{-- Procurement / Stores --}}
-        @if(auth()->check() && !$isSiteStaffUser && !$isGeneralServiceUser && (auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin']) || auth()->user()->canAny(['inventory.view', 'inventory.*', 'purchases.suppliers.manage', 'suppliers.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'purchases.requests.create', 'purchases.view', 'purchases.receive', 'purchases.*', 'transfers.view', 'transfers.*'])))
+        @if(auth()->check() && !$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isContractAdmin && (auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin']) || auth()->user()->canAny(['inventory.view', 'inventory.*', 'purchases.suppliers.manage', 'suppliers.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'purchases.requests.create', 'purchases.view', 'purchases.receive', 'purchases.*', 'transfers.view', 'transfers.*'])))
 
         @if(!auth()->user()->hasAnyRole(['planning_manager', 'planning']) && auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin', 'gm', 'general_manager']))
         <li class="sidebar-nav-item">
@@ -477,7 +477,7 @@
         @endcanany
 
         {{-- ── Marketing & Pricing (Hidden from Planning Manager) ─────────────────────────────────────────── --}}
-        @if(auth()->check() && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin', 'finance_manager', 'finance', 'project_manager']) && !auth()->user()->hasAnyRole(['planning_manager', 'planning']))
+        @if(auth()->check() && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin', 'finance_manager', 'finance', 'project_manager']) && !auth()->user()->hasAnyRole(['planning_manager', 'planning', 'contract_admin', 'secretary']))
         <li class="sidebar-nav-item sidebar-section-label" style="padding:8px 16px 4px; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; pointer-events:none; user-select:none;">Marketing &amp; Pricing</li>
         <li class="sidebar-nav-item">
             <a href="{{ route('marketing.dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('marketing.dashboard') ? 'active' : '' }}">
@@ -508,7 +508,7 @@
         @endif
 
         {{-- Planning vs Actual (Available to Planning Manager, PMs, Finance, Marketing, Admins) --}}
-        @if(auth()->check() && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin', 'planning_manager', 'planning', 'finance_manager', 'finance', 'project_manager']))
+        @if(auth()->check() && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin', 'planning_manager', 'planning', 'finance_manager', 'finance', 'project_manager']) && !auth()->user()->hasAnyRole(['contract_admin', 'secretary']))
         <li class="sidebar-nav-item">
             <a href="{{ route('marketing.reports.planning-vs-actual') }}" class="sidebar-nav-link {{ request()->routeIs('marketing.reports.planning-vs-actual') ? 'active' : '' }}">
                 <i class="fa-solid fa-scale-balanced text-warning"></i>
