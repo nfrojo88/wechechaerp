@@ -1290,13 +1290,36 @@
 <div class="row g-3 mt-1">
     <div class="col-12">
         <div class="card border-0 shadow-sm">
-            <div class="card-header bg-light d-flex align-items-center justify-content-between">
-                <h5 class="mb-0"><i class="fa-solid fa-clock text-primary me-2"></i>Attendance History</h5>
-                @if($employee->device_user_id)
-                    <span class="badge bg-success"><i class="fa-solid fa-link me-1"></i>Device ID: {{ $employee->device_user_id }}</span>
-                @else
-                    <span class="badge bg-warning text-dark"><i class="fa-solid fa-unlink me-1"></i>No Device Linked — Set Device User ID in Edit</span>
-                @endif
+            <div class="card-header bg-white py-3 px-4 border-bottom d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <h5 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-clock text-primary me-2"></i>Attendance History</h5>
+                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-1 small">
+                        <i class="fa-solid fa-fingerprint me-1"></i>Biometric ADMS
+                    </span>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    @if($employee->device_user_id)
+                        <span class="badge bg-success py-2 px-3 fw-semibold shadow-xs" style="font-size:0.82rem;">
+                            <i class="fa-solid fa-link me-1"></i>Device User ID: <strong>{{ $employee->device_user_id }}</strong>
+                        </span>
+                        <form action="{{ \Illuminate\Support\Facades\Route::has('employees.sync-device-attendance') ? route('employees.sync-device-attendance', $employee) : url('/employees/'.$employee->id.'/sync-device-attendance') }}" method="POST" class="d-inline mb-0">
+                            @csrf
+                            <button type="submit" class="btn btn-sm btn-outline-success fw-bold" title="Scan and sync attendance punches from ZKTeco MB460 device for this employee">
+                                <i class="fa-solid fa-rotate me-1"></i>Sync Punches Now
+                            </button>
+                        </form>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#linkDeviceIdModal">
+                            <i class="fa-solid fa-pen-to-square me-1"></i>Change ID
+                        </button>
+                    @else
+                        <span class="badge bg-warning text-dark py-2 px-3 fw-semibold shadow-xs" style="font-size:0.82rem;">
+                            <i class="fa-solid fa-triangle-exclamation me-1"></i>No Device ID Linked
+                        </span>
+                        <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#linkDeviceIdModal">
+                            <i class="fa-solid fa-link me-1"></i>Link Device User ID
+                        </button>
+                    @endif
+                </div>
             </div>
             <div class="card-body p-0">
                 {{-- Summary Stats --}}
@@ -1859,6 +1882,56 @@
                     <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-danger btn-sm px-4 fw-bold shadow-sm">
                         <i class="fa-solid fa-minus me-1"></i> Confirm Deduction
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- Modal: Link / Edit Biometric Device User ID --}}
+<div class="modal fade" id="linkDeviceIdModal" tabindex="-1" aria-labelledby="linkDeviceIdModalLabel" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('employees.update-device-id') ? route('employees.update-device-id', $employee) : url('/employees/'.$employee->id.'/update-device-id') }}" method="POST">
+                @csrf
+                <div class="modal-header py-3 px-4" style="background: #0f172a !important; color: #ffffff !important;">
+                    <h5 class="modal-title fs-6 fw-bold text-white mb-0" id="linkDeviceIdModalLabel">
+                        <i class="fa-solid fa-fingerprint text-success me-2"></i>Link Biometric Device User ID
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="mb-3 p-3 bg-light rounded-3 border">
+                        <span class="text-muted small fw-semibold text-uppercase d-block" style="font-size:0.72rem;">Target Employee</span>
+                        <div class="fw-bold text-dark fs-6">{{ $employee->full_name }} <span class="text-muted font-monospace fw-normal">({{ $employee->employee_code }})</span></div>
+                        <small class="text-muted">Role: <strong>{{ $employee->role_title ?: 'N/A' }}</strong> • Site: <strong>{{ $employee->project->name ?? 'Head Office' }}</strong></small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">
+                            Device User ID / PIN <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="fa-solid fa-id-card text-muted"></i></span>
+                            <input type="text" name="device_user_id" class="form-control font-monospace fw-bold fs-6" 
+                                   value="{{ old('device_user_id', $employee->device_user_id) }}" 
+                                   placeholder="e.g. 1, 2, 11, or 101" required>
+                        </div>
+                        <small class="text-muted mt-1 d-block" style="font-size:0.75rem;">
+                            Enter the numeric <strong>User ID / PIN</strong> registered for this employee on the <strong>ZKTeco MB460</strong> device (e.g., <code>11</code> for EMP-11).
+                        </small>
+                    </div>
+
+                    <div class="alert alert-success border-0 rounded-3 p-3 small mb-0">
+                        <div class="fw-bold mb-1"><i class="fa-solid fa-bolt me-1 text-success"></i>Real-Time Automatic Sync:</div>
+                        <div>Once linked, whenever the employee punches in/out using Face or Fingerprint on the terminal, the ERP will automatically record their <strong>Check-In</strong>, <strong>Check-Out</strong>, and calculate <strong>Hours Worked</strong> without any manual work.</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4 border-top">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success btn-sm px-4 fw-bold shadow-sm">
+                        <i class="fa-solid fa-check me-1"></i> Save &amp; Auto-Sync Punches
                     </button>
                 </div>
             </form>

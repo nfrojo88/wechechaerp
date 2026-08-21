@@ -212,12 +212,18 @@ function _updateDeviceSeen(string $sn): void
 function _autoSyncPunch(string $sn, string $userId, string $punchTime, string $status): void
 {
     try {
-        // Find employee by device_user_id
+        // Find employee by device_user_id, stripped zero, or employee_code
+        $cleanId = trim($userId);
         $employee = DB::table('employees')
-            ->where('device_user_id', $userId)
+            ->where('device_user_id', $cleanId)
+            ->orWhere('device_user_id', ltrim($cleanId, '0'))
+            ->orWhere('employee_code', $cleanId)
+            ->orWhere('employee_code', 'EMP-' . $cleanId)
+            ->orWhere('employee_code', 'EMP-' . str_pad($cleanId, 2, '0', STR_PAD_LEFT))
             ->first();
 
         if (!$employee) {
+            adms_log("UNMATCHED PUNCH: user_id={$userId} (no employee mapped)");
             return; // No employee mapped to this device user ID yet
         }
 

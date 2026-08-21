@@ -1026,6 +1026,125 @@ class EmployeeController extends Controller
     }
 
     /**
+     * Link / Update Biometric Device User ID for an employee and auto-sync punches.
+     */
+    public function updateDeviceId(Request $request, Employee $employee)
+    {
+        $request->validate([
+            'device_user_id' => 'nullable|string|max:50',
+        ]);
+
+        $deviceId = $request->filled('device_user_id') ? trim($request->device_user_id) : null;
+        $employee->update(['device_user_id' => $deviceId]);
+
+        $syncedCount = 0;
+        if ($deviceId) {
+            $syncedCount = $this->syncPunchesForEmployee($employee);
+        }
+
+        return back()->with('success', "Biometric Device ID updated successfully for {$employee->full_name}." . ($syncedCount > 0 ? " Synced {$syncedCount} punch records." : ""));
+    }
+
+    /**
+     * On-demand manual sync of all device punch logs for this employee.
+     */
+    public function syncDeviceAttendance(Request $request, Employee $employee)
+    {
+        if (empty($employee->device_user_id)) {
+            return back()->with('error', "Cannot sync: No Biometric Device ID linked for {$employee->full_name}. Please link a Device ID first.");
+        }
+
+        $synced = $this->syncPunchesForEmployee($employee);
+
+        return back()->with('success', "Biometric attendance sync complete for {$employee->full_name}. Synced/Updated {$synced} day(s) of attendance.");
+    }
+
+    /**
+     * Helper to sync all punch logs for a single employee into the attendance table.
+     */
+    private function syncPunchesForEmployee(Employee $employee): int
+    {
+        $deviceId = trim((string) $employee->device_user_id);
+        if (empty($deviceId)) return 0;
+
+        $punches = DB::table('device_attendance_logs')
+            ->where(function ($q) use ($deviceId, $employee) {
+                $q->where('device_user_id', $deviceId)
+                  ->orWhere('device_user_id', ltrim($deviceId, '0'))
+                  ->orWhere('device_user_id', $employee->employee_code);
+            })
+            ->whereNotNull('punch_time')
+            ->orderBy('punch_time', 'asc')
+            ->get();
+
+        if ($punches->isEmpty()) return 0;
+
+        // Group punches by date (Y-m-d)
+        $byDate = $punches->groupBy(function ($item) {
+            return substr($item->punch_time, 0, 10);
+        });
+
+        $count = 0;
+        foreach ($byDate as $date => $dayPunches) {
+            $firstPunch = $dayPunches->first()->punch_time;
+            $lastPunch  = $dayPunches->last()->punch_time;
+            $sn         = $dayPunches->first()->device_sn ?: 'AF6P230860018';
+
+            $checkInTime  = substr($firstPunch, 11, 8);
+            $checkOutTime = ($lastPunch !== $firstPunch) ? substr($lastPunch, 11, 8) : null;
+
+            $hoursWorked = null;
+            if ($checkInTime && $checkOutTime) {
+                $inSecs  = strtotime("{$date} {$checkInTime}");
+                $outSecs = strtotime("{$date} {$checkOutTime}");
+                $hoursWorked = $outSecs > $inSecs ? round(($outSecs - $inSecs) / 3600, 2) : null;
+            }
+
+            $existing = DB::table('attendance')
+                ->where('employee_id', $employee->id)
+                ->where('attendance_date', $date)
+                ->first();
+
+            if (!$existing) {
+                DB::table('attendance')->insert([
+                    'employee_id'         => $employee->id,
+                    'attendance_date'     => $date,
+                    'check_in'            => $checkInTime,
+                    'check_out'           => $checkOutTime,
+                    'hours_worked'        => $hoursWorked,
+                    'status'              => 'present',
+                    'source'              => 'biometric',
+                    'biometric_device_id' => $sn,
+                    'is_approved'         => true,
+                    'created_at'          => now(),
+                    'updated_at'          => now(),
+                ]);
+            } else {
+                DB::table('attendance')
+                    ->where('employee_id', $employee->id)
+                    ->where('attendance_date', $date)
+                    ->update([
+                        'check_in'            => $existing->check_in ?: $checkInTime,
+                        'check_out'           => $checkOutTime ?: $existing->check_out,
+                        'hours_worked'        => $hoursWorked ?: $existing->hours_worked,
+                        'source'              => 'biometric',
+                        'biometric_device_id' => $sn ?: ($existing->biometric_device_id ?? 'AF6P230860018'),
+                        'updated_at'          => now(),
+                    ]);
+            }
+
+            // Mark logs as synced
+            DB::table('device_attendance_logs')
+                ->whereIn('id', $dayPunches->pluck('id'))
+                ->update(['synced_at' => now()]);
+
+            $count++;
+        }
+
+        return $count;
+    }
+
+    /**
      * Remove the specified employee from storage.
      */
     public function destroy(Employee $employee)
@@ -1049,3 +1168,4 @@ class EmployeeController extends Controller
             ->with('success', "Employee {$name} ({$code}) has been deleted successfully. If this employee is registered or added again later, fresh GM approval will be strictly required.");
     }
 }
+

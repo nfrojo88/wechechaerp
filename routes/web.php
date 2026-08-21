@@ -32,6 +32,16 @@ Route::get('/', function () {
 Route::get('/uploads/{path}', [App\Http\Controllers\FileStreamController::class, 'streamUpload'])->where('path', '.*')->name('media.upload');
 Route::get('/storage/{path}', [App\Http\Controllers\FileStreamController::class, 'streamStorage'])->where('path', '.*')->name('media.storage');
 
+// ─── ZKTeco ADMS Device Receiver Endpoints (Public Biometric Push Protocol) ───
+Route::any('iclock/cdata', [App\Http\Controllers\ZkTecoAdmsController::class, 'cdata']);
+Route::any('iclock/cdata.php', [App\Http\Controllers\ZkTecoAdmsController::class, 'cdata']);
+Route::any('iclock/getrequest', [App\Http\Controllers\ZkTecoAdmsController::class, 'getrequest']);
+Route::any('iclock/getrequest.php', [App\Http\Controllers\ZkTecoAdmsController::class, 'getrequest']);
+Route::any('iclock/devicecmd', [App\Http\Controllers\ZkTecoAdmsController::class, 'devicecmd']);
+Route::any('iclock/devicecmd.php', [App\Http\Controllers\ZkTecoAdmsController::class, 'devicecmd']);
+Route::any('iclock/fdata', [App\Http\Controllers\ZkTecoAdmsController::class, 'fdata']);
+Route::any('iclock/push', [App\Http\Controllers\ZkTecoAdmsController::class, 'push']);
+
 // Git pull deployment route (triggers server-side git pull from GitHub)
 Route::get('/deploy-from-github', function () {
     $output = [];
@@ -1396,6 +1406,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('employees/{employee}/upload-guarantee', [App\Http\Controllers\EmployeeController::class, 'uploadGuaranteeLetter'])->name('employees.upload-guarantee');
     Route::post('employees/{employee}/initialize-leave-balance', [App\Http\Controllers\EmployeeController::class, 'initializeLeaveBalance'])->name('employees.initialize-leave-balance');
     Route::post('employees/{employee}/record-leave-deduction', [App\Http\Controllers\EmployeeController::class, 'recordLeaveDeduction'])->name('employees.record-leave-deduction');
+    Route::post('employees/{employee}/update-device-id', [App\Http\Controllers\EmployeeController::class, 'updateDeviceId'])->name('employees.update-device-id');
+    Route::post('employees/{employee}/sync-device-attendance', [App\Http\Controllers\EmployeeController::class, 'syncDeviceAttendance'])->name('employees.sync-device-attendance');
     Route::resource('employees', App\Http\Controllers\EmployeeController::class);
     Route::resource('contracts', App\Http\Controllers\EmployeeContractController::class)->only(['index', 'create', 'store', 'show']);
     Route::resource('manpower-requests', App\Http\Controllers\ManpowerRequestController::class)->only(['index', 'create', 'store', 'show']);
