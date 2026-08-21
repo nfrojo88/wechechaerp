@@ -716,12 +716,20 @@ function validateStep(step) {
         } else {
             input.classList.remove('is-invalid');
         }
+
+        // Auto remove is-invalid when user starts typing / selecting
+        if (!input.dataset.hasValidationListener) {
+            input.dataset.hasValidationListener = 'true';
+            input.addEventListener('input', () => input.classList.remove('is-invalid'));
+            input.addEventListener('change', () => input.classList.remove('is-invalid'));
+        }
     });
 
     if (!isValid) {
         const firstInvalid = panel.querySelector('.is-invalid');
         if (firstInvalid) {
             firstInvalid.focus();
+            firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }
 
@@ -781,8 +789,6 @@ function previewArrayFile(input) {
 }
 
 // Asset Management
-const wizardCfg = document.getElementById('employeeWizardConfig')?.dataset || {};
-const fixedAssetUnitsList = JSON.parse(wizardCfg.fixedAssets || '[]');
 let currentActiveCategory = 'ALL';
 let assetCount = 1;
 let educationCount = 1;
