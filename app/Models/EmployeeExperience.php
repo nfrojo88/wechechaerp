@@ -49,6 +49,20 @@ class EmployeeExperience extends Model
      */
     public function getLicenseUrlAttribute()
     {
+        if (empty($this->license_document)) {
+            return null;
+        }
+
+        if (\Illuminate\Support\Str::startsWith($this->license_document, ['http://', 'https://'])) {
+            return $this->license_document;
+        }
+
+        if ($this->id) {
+            try {
+                return route('employees.experience.license', $this->id);
+            } catch (\Throwable $e) {}
+        }
+
         return \App\Services\FileUploadService::url($this->license_document);
     }
 

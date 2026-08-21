@@ -26,6 +26,10 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
+// Media & Uploads Stream Routes (Universal fallback to prevent 404s on images/documents)
+Route::get('/uploads/{path}', [App\Http\Controllers\FileStreamController::class, 'streamUpload'])->where('path', '.*')->name('media.upload');
+Route::get('/storage/{path}', [App\Http\Controllers\FileStreamController::class, 'streamStorage'])->where('path', '.*')->name('media.storage');
+
 // Git pull deployment route (triggers server-side git pull from GitHub)
 Route::get('/deploy-from-github', function () {
     $output = [];
@@ -1302,6 +1306,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('employees/bulk-reject', [App\Http\Controllers\EmployeeController::class, 'bulkReject'])->name('employees.bulk-reject');
     Route::put('employees/{employee}/approve', [App\Http\Controllers\EmployeeController::class, 'approve'])->name('employees.approve');
     Route::put('employees/{employee}/reject', [App\Http\Controllers\EmployeeController::class, 'reject'])->name('employees.reject');
+    Route::get('employees/education/{education}/certificate', [App\Http\Controllers\FileStreamController::class, 'viewCertificate'])->name('employees.education.certificate');
+    Route::get('employees/experience/{experience}/license', [App\Http\Controllers\FileStreamController::class, 'viewLicense'])->name('employees.experience.license');
+    Route::get('employees/{employee}/guarantee-letter-file', [App\Http\Controllers\FileStreamController::class, 'viewGuaranteeLetter'])->name('employees.guarantee-letter.view');
     Route::resource('employees', App\Http\Controllers\EmployeeController::class);
     Route::post('employees/{employee}/upload-guarantee', [App\Http\Controllers\EmployeeController::class, 'uploadGuaranteeLetter'])->name('employees.upload-guarantee');
     Route::resource('contracts', App\Http\Controllers\EmployeeContractController::class)->only(['index', 'create', 'store', 'show']);

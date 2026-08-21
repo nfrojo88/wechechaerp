@@ -45,6 +45,20 @@ class EmployeeEducation extends Model
      */
     public function getCertificateUrlAttribute()
     {
+        if (empty($this->certificate_photo)) {
+            return null;
+        }
+
+        if (\Illuminate\Support\Str::startsWith($this->certificate_photo, ['http://', 'https://'])) {
+            return $this->certificate_photo;
+        }
+
+        if ($this->id) {
+            try {
+                return route('employees.education.certificate', $this->id);
+            } catch (\Throwable $e) {}
+        }
+
         return \App\Services\FileUploadService::url($this->certificate_photo);
     }
 

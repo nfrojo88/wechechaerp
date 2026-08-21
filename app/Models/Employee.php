@@ -203,6 +203,20 @@ class Employee extends Model
      */
     public function getGuaranteeLetterUrlAttribute()
     {
+        if (empty($this->guarantee_letter)) {
+            return null;
+        }
+
+        if (\Illuminate\Support\Str::startsWith($this->guarantee_letter, ['http://', 'https://'])) {
+            return $this->guarantee_letter;
+        }
+
+        if ($this->id) {
+            try {
+                return route('employees.guarantee-letter.view', $this->id);
+            } catch (\Throwable $e) {}
+        }
+
         return \App\Services\FileUploadService::url($this->guarantee_letter);
     }
 
