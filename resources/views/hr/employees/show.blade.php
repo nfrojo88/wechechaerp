@@ -886,7 +886,7 @@
                     <h5 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-envelope-open-text text-primary me-2"></i>Official Letters &amp; Recognition / Warning History</h5>
                     <small class="text-muted">Archived appreciation letters, written warnings, and disciplinary notices for this employee</small>
                 </div>
-                <a href="{{ route('employee-letters.create', ['employee_id' => $employee->id]) }}" class="btn btn-sm btn-primary shadow-sm">
+                <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.create') ? route('employee-letters.create', ['employee_id' => $employee->id]) : url('/employee-letters/create?employee_id='.$employee->id) }}" class="btn btn-sm btn-primary shadow-sm">
                     <i class="fa-solid fa-plus me-1"></i> Issue Official Letter
                 </a>
             </div>
@@ -911,7 +911,7 @@
                             @foreach($empLetters as $ltr)
                             <tr>
                                 <td class="ps-3">
-                                    <a href="{{ route('employee-letters.show', $ltr) }}" class="fw-bold font-monospace text-primary text-decoration-none">
+                                    <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.show') ? route('employee-letters.show', $ltr) : url('/employee-letters/'.$ltr->id) }}" class="fw-bold font-monospace text-primary text-decoration-none">
                                         {{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }}
                                     </a>
                                 </td>
@@ -938,10 +938,10 @@
                                 </td>
                                 <td class="text-end pe-3">
                                     <div class="btn-group btn-group-sm">
-                                        <a href="{{ route('employee-letters.show', $ltr) }}" class="btn btn-outline-primary" title="View">
+                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.show') ? route('employee-letters.show', $ltr) : url('/employee-letters/'.$ltr->id) }}" class="btn btn-outline-primary" title="View">
                                             <i class="fa-solid fa-eye"></i>
                                         </a>
-                                        <a href="{{ route('employee-letters.print', $ltr) }}" target="_blank" class="btn btn-outline-secondary" title="Print Letterhead">
+                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.print') ? route('employee-letters.print', $ltr) : url('/employee-letters/'.$ltr->id.'/print') }}" target="_blank" class="btn btn-outline-secondary" title="Print Letterhead">
                                             <i class="fa-solid fa-print"></i>
                                         </a>
                                         @if($ltr->attachment_path)
@@ -960,7 +960,7 @@
                 <div class="text-center py-4 text-muted">
                     <i class="fa-solid fa-envelope-open-text fa-2x mb-2 d-block opacity-25"></i>
                     <p class="small mb-2">No official letters or warning notices issued to this employee yet.</p>
-                    <a href="{{ route('employee-letters.create', ['employee_id' => $employee->id]) }}" class="btn btn-sm btn-outline-primary">
+                    <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.create') ? route('employee-letters.create', ['employee_id' => $employee->id]) : url('/employee-letters/create?employee_id='.$employee->id) }}" class="btn btn-sm btn-outline-primary">
                         <i class="fa-solid fa-plus me-1"></i> Issue Thanks / Warning Letter
                     </a>
                 </div>

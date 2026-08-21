@@ -1806,7 +1806,13 @@ Route::middleware(['auth'])->group(function () {
     });
 
     // ─── Employee Letters & Disciplinary / Recognition Records ───────────────────────
-    Route::resource('employee-letters', App\Http\Controllers\EmployeeLetterController::class);
+    Route::get('employee-letters', [App\Http\Controllers\EmployeeLetterController::class, 'index'])->name('employee-letters.index');
+    Route::get('employee-letters/create', [App\Http\Controllers\EmployeeLetterController::class, 'create'])->name('employee-letters.create');
+    Route::post('employee-letters', [App\Http\Controllers\EmployeeLetterController::class, 'store'])->name('employee-letters.store');
+    Route::get('employee-letters/{employeeLetter}', [App\Http\Controllers\EmployeeLetterController::class, 'show'])->name('employee-letters.show');
+    Route::get('employee-letters/{employeeLetter}/edit', [App\Http\Controllers\EmployeeLetterController::class, 'edit'])->name('employee-letters.edit');
+    Route::put('employee-letters/{employeeLetter}', [App\Http\Controllers\EmployeeLetterController::class, 'update'])->name('employee-letters.update');
+    Route::delete('employee-letters/{employeeLetter}', [App\Http\Controllers\EmployeeLetterController::class, 'destroy'])->name('employee-letters.destroy');
     Route::get('employee-letters/{employeeLetter}/print', [App\Http\Controllers\EmployeeLetterController::class, 'print'])->name('employee-letters.print');
 });
 
