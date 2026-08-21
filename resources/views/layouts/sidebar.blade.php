@@ -1,7 +1,14 @@
+@php
+    $authUser = auth()->user();
+    $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+    $isGeneralServiceUser = in_array('general_service', $rawUserRoles) || in_array('general_services', $rawUserRoles);
+    $isSiteStaffUser = in_array('site_engineer', $rawUserRoles) || in_array('foreman', $rawUserRoles);
+@endphp
+
 <div class="sidebar-scroll">
     <ul class="sidebar-nav">
 
-        @if(!auth()->check() || !auth()->user()->hasAnyRole(['site_engineer', 'foreman']))
+        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high"></i>
@@ -97,7 +104,7 @@
         @endrole
         {{-- Masters --}}
 
-        @if(!auth()->check() || !auth()->user()->hasAnyRole(['site_engineer', 'foreman', 'general_service', 'general_services']))
+        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
         @canany(['projects.view', 'planning.view', 'schedule.view', 'stores.view', 'stores.create', 'stores.edit', 'stores.delete', 'products.view', 'products.create', 'products.edit', 'products.delete'])
 
         @canany(['projects.view', 'planning.view', 'schedule.view'])
@@ -128,7 +135,7 @@
         @endif
 
         {{-- Inventory --}}
-        @if(!auth()->check() || !auth()->user()->hasAnyRole(['site_engineer', 'foreman', 'general_service', 'general_services']))
+        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
         @canany(['inventory.view', 'inventory.view_all_stores', 'inventory.*'])
 
         <li class="sidebar-nav-item">
@@ -141,7 +148,7 @@
         @endif
 
         {{-- Store Manager Hub --}}
-        @if(auth()->check() && auth()->user()->hasAnyRole(['store_manager', 'store_keeper', 'admin', 'global_admin']))
+        @if(auth()->check() && !$isGeneralServiceUser && auth()->user()->hasAnyRole(['store_manager', 'store_keeper', 'admin', 'global_admin']))
 
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.store-manager') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.store-manager') || request()->routeIs('store-manager.dashboard') ? 'active' : '' }}">
@@ -224,7 +231,7 @@
         @endif
 
         {{-- Planning Section --}}
-        @if(auth()->user() && !auth()->user()->hasAnyRole(['site_engineer', 'foreman', 'general_service', 'general_services']) && (auth()->user()->hasAnyPermission(['planning.boq.manage', 'boq.view', 'boq.create', 'schedule.view', 'schedule.approve', 'schedule.create', 'schedule.edit', 'schedule.*', 'planning.view', 'planning.*', 'takeoff.view', 'takeoff.create', 'takeoff.edit', 'takeoff.*', 'resources.dispatch', 'material_planning.view', 'material_planning.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'reports.view', 'reports.weekly.view', 'reports.*.view', 'finance.budgets.manage']) || auth()->user()->hasRole(['planning_manager', 'planning', 'technical_manager'])))
+        @if(auth()->user() && !$isSiteStaffUser && !$isGeneralServiceUser && (auth()->user()->hasAnyPermission(['planning.boq.manage', 'boq.view', 'boq.create', 'schedule.view', 'schedule.approve', 'schedule.create', 'schedule.edit', 'schedule.*', 'planning.view', 'planning.*', 'takeoff.view', 'takeoff.create', 'takeoff.edit', 'takeoff.*', 'resources.dispatch', 'material_planning.view', 'material_planning.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'reports.view', 'reports.weekly.view', 'reports.*.view', 'finance.budgets.manage']) || auth()->user()->hasRole(['planning_manager', 'planning', 'technical_manager'])))
 
         @role('planning_manager|planning|technical_manager')
         <li class="sidebar-nav-item">
@@ -358,7 +365,7 @@
         @endcanany
 
         {{-- Procurement / Stores --}}
-        @if(auth()->check() && !auth()->user()->hasAnyRole(['site_engineer', 'foreman', 'general_service', 'general_services']) && (auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin']) || auth()->user()->canAny(['inventory.view', 'inventory.*', 'purchases.suppliers.manage', 'suppliers.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'purchases.requests.create', 'purchases.view', 'purchases.receive', 'purchases.*', 'transfers.view', 'transfers.*'])))
+        @if(auth()->check() && !$isSiteStaffUser && !$isGeneralServiceUser && (auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin']) || auth()->user()->canAny(['inventory.view', 'inventory.*', 'purchases.suppliers.manage', 'suppliers.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'purchases.requests.create', 'purchases.view', 'purchases.receive', 'purchases.*', 'transfers.view', 'transfers.*'])))
 
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.purchase') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.purchase') ? 'active' : '' }}">
@@ -519,7 +526,7 @@
         @endif
 
         {{-- General Service & Operations Tools --}}
-        @if(auth()->check() && (auth()->user()->hasAnyRole(['General Service', 'general_service', 'general_services', 'admin', 'global_admin', 'coordinator'])))
+        @if(auth()->check() && ($isGeneralServiceUser || auth()->user()->hasAnyRole(['admin', 'global_admin', 'coordinator'])))
         <li class="sidebar-heading">General Service</li>
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.general_service') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.general_service') || request()->routeIs('general-service.*') ? 'active' : '' }}">
