@@ -12,10 +12,24 @@
     <ul class="sidebar-nav">
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
+        @php
+            $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard') ? route('dashboard') : url('/dashboard');
+            $dashTitle = 'Dashboard';
+            if ($isSecretary) {
+                $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.secretary') ? route('dashboard.secretary') : url('/dashboard/secretary');
+                $dashTitle = 'Secretary Dashboard';
+            } elseif ($isContractAdmin) {
+                $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.contract-admin') ? route('dashboard.contract-admin') : url('/dashboard/contract-admin');
+                $dashTitle = 'Contract Dashboard';
+            } elseif ($isStoreKeeper) {
+                $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.store-keeper') ? route('dashboard.store-keeper') : url('/dashboard/store-keeper');
+                $dashTitle = 'Store Keeper Dashboard';
+            }
+        @endphp
         <li class="sidebar-nav-item">
-            <a href="{{ $isSecretary ? route('dashboard.secretary') : ($isContractAdmin ? route('dashboard.contract-admin') : ($isStoreKeeper ? route('dashboard.store-keeper') : route('dashboard'))) }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') ? 'active' : '' }}">
+            <a href="{{ $dashUrl }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high"></i>
-                <span>{{ $isSecretary ? 'Secretary Dashboard' : ($isContractAdmin ? 'Contract Dashboard' : ($isStoreKeeper ? 'Store Keeper Dashboard' : 'Dashboard')) }}</span>
+                <span>{{ $dashTitle }}</span>
             </a>
         </li>
         @endif
