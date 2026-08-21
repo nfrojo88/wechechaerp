@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\MaintenanceRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -50,7 +51,16 @@ class ProfileController extends Controller
             }
         }
 
-        return view('profile.edit', compact('user', 'employee', 'totalExperienceYears', 'totalExperienceMonths'));
+        // Load this employee's maintenance requests
+        $maintenanceRequests = collect();
+        if ($employee) {
+            $maintenanceRequests = MaintenanceRequest::where('employee_id', $employee->id)
+                ->latest()
+                ->limit(10)
+                ->get();
+        }
+
+        return view('profile.edit', compact('user', 'employee', 'totalExperienceYears', 'totalExperienceMonths', 'maintenanceRequests'));
     }
 
     /**

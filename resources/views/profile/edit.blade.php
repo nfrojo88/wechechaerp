@@ -385,7 +385,8 @@
                                         <th class="ps-4 py-3">Asset / Unit Code</th>
                                         <th class="py-3">Value</th>
                                         <th class="py-3">Condition</th>
-                                        <th class="py-3 pe-4">Assigned Date</th>
+                                        <th class="py-3">Assigned Date</th>
+                                        <th class="py-3 pe-4 text-center">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -418,10 +419,81 @@
                                         <td class="py-3">
                                             <span class="badge {{ $condBadge['class'] }}">{{ $condBadge['label'] }}</span>
                                         </td>
-                                        <td class="py-3 pe-4 text-muted small">
+                                        <td class="py-3 text-muted small">
                                             {{ $fUnit->assigned_date ? $fUnit->assigned_date->format('d M Y') : 'N/A' }}
                                         </td>
+                                        <td class="py-3 pe-4 text-center">
+                                            <button type="button"
+                                                class="btn btn-sm btn-outline-warning rounded-pill px-2 py-1"
+                                                style="font-size:0.75rem;"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#reportMaintenanceModal-{{ $fUnit->id }}"
+                                                title="Report maintenance issue for this asset">
+                                                <i class="fa-solid fa-wrench me-1"></i>Report Issue
+                                            </button>
+                                        </td>
                                     </tr>
+
+                                    {{-- Maintenance Report Modal for this asset --}}
+                                    <div class="modal fade" id="reportMaintenanceModal-{{ $fUnit->id }}" tabindex="-1" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-content border-0 shadow">
+                                                <form method="POST" action="{{ route('maintenance.store') }}">
+                                                    @csrf
+                                                    <input type="hidden" name="fixed_asset_unit_id" value="{{ $fUnit->id }}">
+                                                    <input type="hidden" name="asset_name" value="{{ $fUnit->parentAsset->name ?? 'Fixed Asset' }}">
+                                                    <input type="hidden" name="asset_code" value="{{ $fUnit->unit_code }}">
+                                                    <div class="modal-header" style="background: linear-gradient(135deg, #f59e0b, #d97706); color:#fff;">
+                                                        <h5 class="modal-title fs-6 fw-bold">
+                                                            <i class="fa-solid fa-wrench me-2"></i>Report Maintenance Issue
+                                                        </h5>
+                                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body p-4">
+                                                        <div class="alert alert-light border mb-3 py-2">
+                                                            <div class="small text-muted">Asset:</div>
+                                                            <strong>{{ $fUnit->parentAsset->name ?? 'Fixed Asset' }}</strong>
+                                                            <span class="badge bg-dark font-monospace ms-2">{{ $fUnit->unit_code }}</span>
+                                                        </div>
+
+                                                        <div class="row g-3">
+                                                            <div class="col-md-6">
+                                                                <label class="form-label fw-semibold small">Issue Type <span class="text-danger">*</span></label>
+                                                                <select name="issue_type" class="form-select form-select-sm" required>
+                                                                    <option value="breakdown">⚡ Breakdown</option>
+                                                                    <option value="damage">💥 Physical Damage</option>
+                                                                    <option value="service_due">🔧 Service Due</option>
+                                                                    <option value="malfunction">⚠️ Malfunction</option>
+                                                                    <option value="needs_repair">🛠️ Needs Repair</option>
+                                                                    <option value="other">📋 Other</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <label class="form-label fw-semibold small">Urgency <span class="text-danger">*</span></label>
+                                                                <select name="urgency" class="form-select form-select-sm" required>
+                                                                    <option value="low">🟢 Low — Not urgent</option>
+                                                                    <option value="normal" selected>🔵 Normal</option>
+                                                                    <option value="urgent">🟠 Urgent</option>
+                                                                    <option value="critical">🔴 Critical — Blocking work</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-12">
+                                                                <label class="form-label fw-semibold small">Description <span class="text-danger">*</span></label>
+                                                                <textarea name="description" class="form-control form-control-sm" rows="4" required
+                                                                    placeholder="Describe the issue clearly: what happened, when it started, what you observed..."></textarea>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer bg-light py-2">
+                                                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                        <button type="submit" class="btn btn-sm btn-warning fw-bold px-4">
+                                                            <i class="fa-solid fa-paper-plane me-1"></i>Submit Report
+                                                        </button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
                                     @endforeach
 
                                     @foreach($legacyActiveAssets as $asset)
@@ -439,10 +511,79 @@
                                         <td class="py-3">
                                             <span class="badge bg-success">In Use</span>
                                         </td>
-                                        <td class="py-3 pe-4 text-muted small">
+                                        <td class="py-3 text-muted small">
                                             {{ $asset->assigned_date ? $asset->assigned_date->format('d M Y') : 'N/A' }}
                                         </td>
+                                        <td class="py-3 pe-4 text-center">
+                                            <button type="button"
+                                                class="btn btn-sm btn-outline-warning rounded-pill px-2 py-1"
+                                                style="font-size:0.75rem;"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#reportLegacyModal-{{ $asset->id }}"
+                                                title="Report maintenance issue">
+                                                <i class="fa-solid fa-wrench me-1"></i>Report Issue
+                                            </button>
+                                        </td>
                                     </tr>
+
+                                    {{-- Maintenance Report Modal for legacy asset --}}
+                                    <div class="modal fade" id="reportLegacyModal-{{ $asset->id }}" tabindex="-1" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-content border-0 shadow">
+                                                <form method="POST" action="{{ route('maintenance.store') }}">
+                                                    @csrf
+                                                    <input type="hidden" name="employee_asset_id" value="{{ $asset->id }}">
+                                                    <input type="hidden" name="asset_name" value="{{ $asset->product->name ?? 'Asset' }}">
+                                                    <input type="hidden" name="asset_code" value="{{ $asset->product->code ?? '' }}">
+                                                    <div class="modal-header" style="background: linear-gradient(135deg, #f59e0b, #d97706); color:#fff;">
+                                                        <h5 class="modal-title fs-6 fw-bold">
+                                                            <i class="fa-solid fa-wrench me-2"></i>Report Maintenance Issue
+                                                        </h5>
+                                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body p-4">
+                                                        <div class="alert alert-light border mb-3 py-2">
+                                                            <div class="small text-muted">Asset:</div>
+                                                            <strong>{{ $asset->product->name ?? 'Asset' }}</strong>
+                                                        </div>
+                                                        <div class="row g-3">
+                                                            <div class="col-md-6">
+                                                                <label class="form-label fw-semibold small">Issue Type <span class="text-danger">*</span></label>
+                                                                <select name="issue_type" class="form-select form-select-sm" required>
+                                                                    <option value="breakdown">⚡ Breakdown</option>
+                                                                    <option value="damage">💥 Physical Damage</option>
+                                                                    <option value="service_due">🔧 Service Due</option>
+                                                                    <option value="malfunction">⚠️ Malfunction</option>
+                                                                    <option value="needs_repair">🛠️ Needs Repair</option>
+                                                                    <option value="other">📋 Other</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <label class="form-label fw-semibold small">Urgency <span class="text-danger">*</span></label>
+                                                                <select name="urgency" class="form-select form-select-sm" required>
+                                                                    <option value="low">🟢 Low</option>
+                                                                    <option value="normal" selected>🔵 Normal</option>
+                                                                    <option value="urgent">🟠 Urgent</option>
+                                                                    <option value="critical">🔴 Critical</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-12">
+                                                                <label class="form-label fw-semibold small">Description <span class="text-danger">*</span></label>
+                                                                <textarea name="description" class="form-control form-control-sm" rows="4" required
+                                                                    placeholder="Describe the issue clearly..."></textarea>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer bg-light py-2">
+                                                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                        <button type="submit" class="btn btn-sm btn-warning fw-bold px-4">
+                                                            <i class="fa-solid fa-paper-plane me-1"></i>Submit Report
+                                                        </button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
                                     @endforeach
                                 </tbody>
                             </table>
@@ -451,6 +592,36 @@
                         <div class="text-center py-4 text-muted">
                             <i class="fa-solid fa-box-open fa-2x mb-2 opacity-25 d-block"></i>
                             <span class="small">No equipment or company assets currently assigned.</span>
+                        </div>
+                        @endif
+
+                        {{-- My Maintenance Requests Summary --}}
+                        @if($maintenanceRequests->count() > 0)
+                        <div class="border-top px-4 py-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <small class="fw-bold text-muted"><i class="fa-solid fa-wrench me-1 text-warning"></i>My Maintenance Requests</small>
+                                <span class="badge bg-warning text-dark rounded-pill">{{ $maintenanceRequests->count() }}</span>
+                            </div>
+                            <div class="d-flex flex-column gap-2">
+                                @foreach($maintenanceRequests as $mr)
+                                @php $sb = $mr->status_badge; $ub = $mr->urgency_badge; @endphp
+                                <div class="d-flex align-items-center justify-content-between rounded-3 border px-3 py-2" style="background: #fafafa; font-size:0.82rem;">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge {{ $sb['class'] }} rounded-pill"><i class="fa-solid {{ $sb['icon'] }} me-1"></i>{{ $sb['label'] }}</span>
+                                        <span class="fw-semibold text-dark">{{ $mr->asset_name }}</span>
+                                        @if($mr->asset_code)
+                                            <span class="badge bg-dark font-monospace">{{ $mr->asset_code }}</span>
+                                        @endif
+                                        <span class="text-muted">— {{ $mr->issue_type_label }}</span>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge {{ $ub['class'] }} rounded-pill" style="font-size:0.7rem;">{{ $ub['label'] }}</span>
+                                        <small class="text-muted">{{ $mr->created_at->format('d M Y') }}</small>
+                                        <a href="{{ route('maintenance.show', $mr) }}" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:0.72rem;">View</a>
+                                    </div>
+                                </div>
+                                @endforeach
+                            </div>
                         </div>
                         @endif
                     </div>

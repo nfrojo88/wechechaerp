@@ -11,7 +11,9 @@ use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\EmployeeRatingController;
 use App\Http\Controllers\Admin\RoleAssignmentController;
 use App\Http\Controllers\Admin\AdminTicketController;
+use App\Http\Controllers\Admin\GeneralServiceController;
 use App\Http\Controllers\SupportTicketController;
+use App\Http\Controllers\MaintenanceRequestController;
 
 /*
 |--------------------------------------------------------------------------
@@ -1024,6 +1026,17 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/tickets', [SupportTicketController::class, 'store'])->name('tickets.store');
     Route::get('/tickets/{ticket}', [SupportTicketController::class, 'show'])->name('tickets.show');
     Route::post('/tickets/{ticket}/reply', [SupportTicketController::class, 'reply'])->name('tickets.reply');
+
+    // Maintenance Requests (Employee — report from profile page)
+    Route::post('/maintenance-requests', [MaintenanceRequestController::class, 'store'])->name('maintenance.store');
+    Route::get('/maintenance-requests/{maintenanceRequest}', [MaintenanceRequestController::class, 'show'])->name('maintenance.show');
+
+    // General Service — Maintenance Management (Admin / Store Manager)
+    Route::prefix('general-service')->name('general-service.')->group(function () {
+        Route::get('/maintenance', [GeneralServiceController::class, 'index'])->name('maintenance.index');
+        Route::get('/maintenance/{maintenanceRequest}', [GeneralServiceController::class, 'show'])->name('maintenance.show');
+        Route::post('/maintenance/{maintenanceRequest}/status', [GeneralServiceController::class, 'updateStatus'])->name('maintenance.update-status');
+    });
     // ------------------------------------
     // System Actions – GET so we can trigger it directly from a sidebar link
     Route::get('/system/run-migrations', function () {
