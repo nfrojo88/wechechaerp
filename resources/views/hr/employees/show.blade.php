@@ -1283,95 +1283,6 @@
             </div>
         </div>
 
-        {{-- Modal: Initialize / Custom Quota --}}
-        <div class="modal fade" id="initLeaveModal" tabindex="-1" aria-labelledby="initLeaveModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content border-0 shadow">
-                    <form action="{{ \Illuminate\Support\Facades\Route::has('employees.initialize-leave-balance') ? route('employees.initialize-leave-balance', $employee) : url('/employees/'.$employee->id.'/initialize-leave-balance') }}" method="POST">
-                        @csrf
-                        <div class="modal-header bg-primary text-white">
-                            <h5 class="modal-title fs-6 fw-bold" id="initLeaveModalLabel"><i class="fa-solid fa-umbrella-beach me-2"></i>Allocate Annual Leave Balance</h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body p-4">
-                            <div class="mb-3">
-                                <label class="form-label fw-bold small text-muted">EMPLOYEE</label>
-                                <div class="fw-bold text-dark">{{ $employee->full_name }} ({{ $employee->employee_code }})</div>
-                                <small class="text-muted">Date of Joining: {{ optional($joinDate)->format('d M Y') ?? 'N/A' }}</small>
-                            </div>
-                            <div class="row g-2 mb-3">
-                                <div class="col-6">
-                                    <label class="form-label fw-bold small">Year <span class="text-danger">*</span></label>
-                                    <input type="number" name="year" class="form-control" value="{{ $currentYear }}" required>
-                                </div>
-                                <div class="col-6">
-                                    <label class="form-label fw-bold small">Annual Quota (Days) <span class="text-danger">*</span></label>
-                                    <input type="number" step="0.5" name="total_days" class="form-control" value="{{ $leaveBalance->total_days ?? 16.0 }}" required>
-                                    <small class="text-muted">Default: 16.0 days/year</small>
-                                </div>
-                            </div>
-                            <div class="alert alert-info border-0 rounded-3 p-3 small mb-0">
-                                <i class="fa-solid fa-circle-info me-1"></i>
-                                <strong>Accrual Formula:</strong> 16 days ÷ 12 months = 1.33 days per month. The system tracks approved leave requests and automatically deducts days from this balance.
-                            </div>
-                        </div>
-                        <div class="modal-footer bg-light py-2">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-primary btn-sm fw-bold">
-                                <i class="fa-solid fa-check me-1"></i> Save &amp; Allocate Balance
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        {{-- Modal: Record Leave Deduction --}}
-        <div class="modal fade" id="deductLeaveModal" tabindex="-1" aria-labelledby="deductLeaveModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content border-0 shadow">
-                    <form action="{{ \Illuminate\Support\Facades\Route::has('employees.record-leave-deduction') ? route('employees.record-leave-deduction', $employee) : url('/employees/'.$employee->id.'/record-leave-deduction') }}" method="POST">
-                        @csrf
-                        <div class="modal-header bg-danger text-white">
-                            <h5 class="modal-title fs-6 fw-bold" id="deductLeaveModalLabel"><i class="fa-solid fa-minus me-2"></i>Record Leave Taken &amp; Deduct Days</h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body p-4">
-                            <div class="mb-3">
-                                <label class="form-label fw-bold small text-muted">EMPLOYEE</label>
-                                <div class="fw-bold text-dark">{{ $employee->full_name }} ({{ $employee->employee_code }})</div>
-                                <div class="small text-success fw-semibold">Current Available Balance: {{ number_format($leaveBalance->remaining_days ?? 16, 2) }} Days</div>
-                            </div>
-                            <div class="row g-2 mb-3">
-                                <div class="col-6">
-                                    <label class="form-label fw-bold small">Days to Deduct <span class="text-danger">*</span></label>
-                                    <input type="number" step="0.5" name="days" class="form-control" placeholder="e.g. 2.0" required max="{{ $leaveBalance->remaining_days ?? 16 }}">
-                                </div>
-                                <div class="col-6">
-                                    <label class="form-label fw-bold small">Start Date <span class="text-danger">*</span></label>
-                                    <input type="date" name="start_date" class="form-control" value="{{ date('Y-m-d') }}" required>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-bold small">End Date (Optional)</label>
-                                <input type="date" name="end_date" class="form-control" value="{{ date('Y-m-d') }}">
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-bold small">Reason / Leave Notes <span class="text-danger">*</span></label>
-                                <textarea name="reason" rows="3" class="form-control" placeholder="e.g. Approved annual vacation leave" required></textarea>
-                            </div>
-                        </div>
-                        <div class="modal-footer bg-light py-2">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-danger btn-sm fw-bold">
-                                <i class="fa-solid fa-minus me-1"></i> Confirm Deduction
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
     </div>
 </div>
 
@@ -1857,6 +1768,103 @@
     </div>
 </div>
 @endforeach
+
+{{-- ===================== LEAVE MANAGEMENT MODALS (ROOT LEVEL) ===================== --}}
+
+{{-- Modal: Initialize / Custom Quota --}}
+<div class="modal fade" id="initLeaveModal" tabindex="-1" aria-labelledby="initLeaveModalLabel" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('employees.initialize-leave-balance') ? route('employees.initialize-leave-balance', $employee) : url('/employees/'.$employee->id.'/initialize-leave-balance') }}" method="POST">
+                @csrf
+                <div class="modal-header py-3 px-4" style="background: #0f172a !important; color: #ffffff !important;">
+                    <h5 class="modal-title fs-6 fw-bold text-white mb-0" id="initLeaveModalLabel">
+                        <i class="fa-solid fa-umbrella-beach text-info me-2"></i>Allocate Annual Leave Balance
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="mb-3 p-3 bg-light rounded-3 border">
+                        <span class="text-muted small fw-semibold text-uppercase d-block" style="font-size:0.72rem;">Employee Recipient</span>
+                        <div class="fw-bold text-dark fs-6">{{ $employee->full_name }} <span class="text-muted font-monospace fw-normal">({{ $employee->employee_code }})</span></div>
+                        <small class="text-muted">Date of Joining: <strong>{{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}</strong></small>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-bold small text-dark">Year <span class="text-danger">*</span></label>
+                            <input type="number" name="year" class="form-control" value="{{ $currentYear ?? date('Y') }}" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold small text-dark">Annual Quota (Days) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.5" name="total_days" class="form-control font-monospace fw-bold" value="{{ $leaveBalance->total_days ?? 16.0 }}" required>
+                            <small class="text-muted" style="font-size:0.75rem;">Standard: 16.0 days/year</small>
+                        </div>
+                    </div>
+                    <div class="alert alert-info border-0 rounded-3 p-3 small mb-0">
+                        <div class="fw-bold mb-1 text-dark"><i class="fa-solid fa-calculator me-1 text-info"></i>Monthly Accrual Formula:</div>
+                        <div>16 days ÷ 12 months = <strong>1.33 days per month</strong>. Approved leave days are automatically deducted from this allocated balance.</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4 border-top">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm">
+                        <i class="fa-solid fa-check me-1"></i> Save &amp; Allocate Balance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- Modal: Record Leave Deduction --}}
+<div class="modal fade" id="deductLeaveModal" tabindex="-1" aria-labelledby="deductLeaveModalLabel" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('employees.record-leave-deduction') ? route('employees.record-leave-deduction', $employee) : url('/employees/'.$employee->id.'/record-leave-deduction') }}" method="POST">
+                @csrf
+                <div class="modal-header py-3 px-4" style="background: #991b1b !important; color: #ffffff !important;">
+                    <h5 class="modal-title fs-6 fw-bold text-white mb-0" id="deductLeaveModalLabel">
+                        <i class="fa-solid fa-minus-circle me-2"></i>Record Leave Taken &amp; Deduct Days
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="mb-3 p-3 bg-light rounded-3 border">
+                        <span class="text-muted small fw-semibold text-uppercase d-block" style="font-size:0.72rem;">Employee</span>
+                        <div class="fw-bold text-dark">{{ $employee->full_name }} <span class="text-muted font-monospace fw-normal">({{ $employee->employee_code }})</span></div>
+                        <div class="small text-success fw-bold mt-1">
+                            <i class="fa-solid fa-circle-check me-1"></i>Available Balance: {{ number_format($leaveBalance->remaining_days ?? 16, 2) }} Days
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-bold small text-dark">Days to Deduct <span class="text-danger">*</span></label>
+                            <input type="number" step="0.5" name="days" class="form-control font-monospace fw-bold" placeholder="e.g. 2.0" required max="{{ $leaveBalance->remaining_days ?? 16 }}" min="0.5">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold small text-dark">Start Date <span class="text-danger">*</span></label>
+                            <input type="date" name="start_date" class="form-control" value="{{ date('Y-m-d') }}" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">End Date (Optional)</label>
+                        <input type="date" name="end_date" class="form-control" value="{{ date('Y-m-d') }}">
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label fw-bold small text-dark">Reason / Leave Notes <span class="text-danger">*</span></label>
+                        <textarea name="reason" rows="3" class="form-control" placeholder="e.g. Approved annual vacation leave" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4 border-top">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm px-4 fw-bold shadow-sm">
+                        <i class="fa-solid fa-minus me-1"></i> Confirm Deduction
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <script>
 function openRejectModal() {
