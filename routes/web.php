@@ -1389,6 +1389,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('employees/{employee}/national-id', [App\Http\Controllers\FileStreamController::class, 'viewNationalIdCard'])->name('employees.national-id');
     Route::get('employees/{employee}/asset-handover', [App\Http\Controllers\FileStreamController::class, 'viewAssetHandoverDocument'])->name('employees.asset-handover');
     Route::get('employees/{employee}/registration-letter', [App\Http\Controllers\FileStreamController::class, 'viewRegistrationLetter'])->name('employees.registration-letter');
+    Route::get('employees/{employee}/guarantor-id', [App\Http\Controllers\FileStreamController::class, 'viewGuarantorId'])->name('employees.guarantor-id');
     Route::resource('employees', App\Http\Controllers\EmployeeController::class);
     Route::post('employees/{employee}/upload-guarantee', [App\Http\Controllers\EmployeeController::class, 'uploadGuaranteeLetter'])->name('employees.upload-guarantee');
     Route::resource('contracts', App\Http\Controllers\EmployeeContractController::class)->only(['index', 'create', 'store', 'show']);

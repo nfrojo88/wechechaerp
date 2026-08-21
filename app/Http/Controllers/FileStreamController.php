@@ -245,6 +245,24 @@ class FileStreamController extends Controller
     }
 
     /**
+     * Dedicated route to view an employee guarantor ID card / document.
+     */
+    public function viewGuarantorId($id)
+    {
+        $emp = Employee::find($id);
+
+        if (!$emp || empty($emp->guarantor_id_card)) {
+            return $this->renderMissingDocument('Guarantor National ID Document', 'No guarantor ID card or document is on file for this employee.');
+        }
+
+        if (Str::startsWith($emp->guarantor_id_card, ['http://', 'https://'])) {
+            return redirect()->away($emp->guarantor_id_card);
+        }
+
+        return $this->respondWithFile($emp->guarantor_id_card, 'uploads', 'Guarantor ID - ' . ($emp->guarantor_name ?: $emp->full_name));
+    }
+
+    /**
      * Return file response or friendly fallback page.
      */
     protected function respondWithFile(string $path, string $prefix = 'uploads', ?string $customTitle = null)

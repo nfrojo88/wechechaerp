@@ -331,20 +331,56 @@
                         <input type="text" name="account_number" class="form-control" value="{{ old('account_number') }}" placeholder="1000123456789">
                     </div>
 
+                    {{-- Guarantee & Guarantor Person Details --}}
                     <div class="col-12">
-                        <div class="card border-warning bg-light p-3">
-                            <h6 class="fw-bold mb-2 text-dark">
-                                <i class="fa-solid fa-shield-halved text-warning me-2"></i>Guarantee Letter (Optional Attachment)
-                            </h6>
-                            <p class="small text-muted mb-2">
-                                <i class="fa-solid fa-info-circle me-1 text-primary"></i>
-                                Upload signed guarantee letter document or photo. Supports <strong>JPG, PNG, JPEG, WEBP, PDF</strong> (up to 15MB).
-                            </p>
-                            <input type="file" name="guarantee_letter" id="guarantee_letter_input" class="form-control" 
-                                   accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
-                                   onchange="previewSingleFile(this, 'guarantee_preview')">
-                            <div id="guarantee_preview" class="mt-2 d-none">
-                                <img src="" alt="Guarantee Preview" class="img-preview-box">
+                        <div class="card border-warning bg-light">
+                            <div class="card-header bg-warning bg-opacity-10 border-warning-subtle py-2 px-3">
+                                <h6 class="fw-bold mb-0 text-dark">
+                                    <i class="fa-solid fa-shield-halved text-warning me-2"></i>Guarantee & Guarantor Person Information (Optional)
+                                </h6>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-semibold">Guarantor / Guarantee Person Name</label>
+                                        <input type="text" name="guarantor_name" class="form-control" value="{{ old('guarantor_name') }}" placeholder="e.g. Abebe Kebede">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-semibold">Guarantor National ID / ID Number</label>
+                                        <input type="text" name="guarantor_id_number" class="form-control" value="{{ old('guarantor_id_number') }}" placeholder="e.g. ET-NAT-987654">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-semibold">Guarantor Phone Number</label>
+                                        <input type="text" name="guarantor_phone" class="form-control" value="{{ old('guarantor_phone') }}" placeholder="e.g. +251 91 123 4567">
+                                    </div>
+
+                                    {{-- Guarantor ID Document Upload --}}
+                                    <div class="col-md-6">
+                                        <div class="p-3 bg-white border rounded">
+                                            <label class="form-label fw-semibold mb-1 d-block">
+                                                <i class="fa-solid fa-id-card text-primary me-1"></i>Guarantor National ID Document / Photo
+                                            </label>
+                                            <small class="text-muted d-block mb-2">Upload photo of guarantor ID or Kebele ID (PDF, PNG, JPG - Max 15MB).</small>
+                                            <input type="file" name="guarantor_id_card" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                        </div>
+                                    </div>
+
+                                    {{-- Guarantee Letter Upload --}}
+                                    <div class="col-md-6">
+                                        <div class="p-3 bg-white border rounded">
+                                            <label class="form-label fw-semibold mb-1 d-block">
+                                                <i class="fa-solid fa-file-shield text-warning me-1"></i>Signed Guarantee Letter Document
+                                            </label>
+                                            <small class="text-muted d-block mb-2">Upload official signed guarantee document (PDF, PNG, JPG - Max 15MB).</small>
+                                            <input type="file" name="guarantee_letter" id="guarantee_letter_input" class="form-control form-control-sm" 
+                                                   accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
+                                                   onchange="previewSingleFile(this, 'guarantee_preview')">
+                                            <div id="guarantee_preview" class="mt-2 d-none">
+                                                <img src="" alt="Guarantee Preview" class="img-preview-box" style="max-height:80px;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -770,13 +806,20 @@
                         </div>
                     </div>
 
-                    {{-- Guarantee Letter (also accessible here) --}}
+                    {{-- Guarantee & Guarantor Documents --}}
                     <div class="col-md-4">
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body">
-                                <h6 class="fw-bold mb-1"><i class="fa-solid fa-shield-halved text-warning me-1"></i>Guarantee Letter</h6>
-                                <p class="text-muted small mb-3">Upload signed guarantee letter document or photo (also available in Step 3). PDF, PNG, JPG, WEBP — Max 15MB.</p>
-                                <small class="text-muted"><i class="fa-solid fa-circle-info me-1"></i>If already uploaded in Step 3, you don't need to re-upload here.</small>
+                                <h6 class="fw-bold mb-1"><i class="fa-solid fa-shield-halved text-warning me-1"></i>Guarantee & Guarantor Documents</h6>
+                                <p class="text-muted small mb-2">Upload guarantee letter and guarantor ID document (if not uploaded in Step 3).</p>
+
+                                <label class="form-label small fw-semibold">Guarantee Letter Document:</label>
+                                <input type="file" name="guarantee_letter" class="form-control form-control-sm mb-2"
+                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+
+                                <label class="form-label small fw-semibold">Guarantor National ID Document:</label>
+                                <input type="file" name="guarantor_id_card" class="form-control form-control-sm"
+                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
                             </div>
                         </div>
                     </div>

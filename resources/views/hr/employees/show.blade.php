@@ -256,103 +256,137 @@
             </div>
         </div>
 
-        {{-- Guarantee Letter Status Card --}}
-        @if($employee->guarantee_letter_required)
+        {{-- Guarantee & Guarantor Person Card --}}
         <div class="card border-0 shadow-sm mb-3 @if($employee->is_guarantee_overdue) border-danger @elseif($employee->show_guarantee_warning) border-warning @endif">
             <div class="card-header @if($employee->is_guarantee_overdue) bg-danger text-white @elseif($employee->show_guarantee_warning) bg-warning text-dark @else bg-light @endif">
                 <h5 class="mb-0">
-                    <i class="fa-solid fa-shield-halved me-2"></i>Guarantee Letter Status
+                    <i class="fa-solid fa-shield-halved me-2"></i>Guarantee & Guarantor Information
                 </h5>
             </div>
             <div class="card-body">
-                @if($employee->guarantee_letter)
-                    {{-- Guarantee letter submitted --}}
-                    <div class="alert alert-success">
-                        <i class="fa-solid fa-check-circle me-2"></i>
-                        <strong>Guarantee Letter Submitted</strong>
-                        <br><small>Submitted on: {{ $employee->guarantee_letter_submitted_at ? $employee->guarantee_letter_submitted_at->format('d M Y') : 'Unknown Date' }}</small>
-                    </div>
-                    <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                        <i class="fa-solid fa-file-pdf me-1"></i>View Guarantee Letter
-                    </a>
-                @elseif($employee->is_guarantee_overdue)
-                    {{-- Overdue - 30+ days --}}
-                    <div class="alert alert-danger mb-3">
-                        <i class="fa-solid fa-exclamation-circle me-2"></i>
-                        <strong>OVERDUE!</strong> Guarantee letter was due {{ abs($employee->days_until_guarantee_deadline) }} days ago.
-                        <br><small>Login access has been blocked until submission.</small>
-                    </div>
-                    <p class="text-muted mb-3">
-                        <i class="fa-solid fa-calendar me-2"></i>
-                        Joined: {{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}
-                        <br>
-                        <i class="fa-solid fa-clock me-2"></i>
-                        Deadline was: {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}
-                    </p>
-                    <form action="{{ route('employees.upload-guarantee', $employee) }}" method="POST" enctype="multipart/form-data">
-                        @csrf
-                        <div class="mb-3">
-                            <label class="form-label">Upload Guarantee Letter <span class="text-danger">*</span></label>
-                            <input type="file" name="guarantee_letter" class="form-control" required accept="application/pdf,image/jpeg,image/png,image/jpg">
-                            <small class="text-muted">PDF or Image (Max 10MB)</small>
+                @if($employee->guarantor_name || $employee->guarantor_id_number || $employee->guarantor_phone)
+                    <div class="row g-3 mb-3 p-3 bg-light rounded border">
+                        <div class="col-md-4">
+                            <small class="text-muted d-block mb-1"><i class="fa-solid fa-user-shield text-primary me-1"></i>Guarantor Person Name</small>
+                            <h6 class="mb-0 fw-bold text-dark">{{ $employee->guarantor_name ?: 'Not Provided' }}</h6>
                         </div>
-                        <button type="submit" class="btn btn-danger">
-                            <i class="fa-solid fa-upload me-2"></i>Submit Now to Restore Access
-                        </button>
-                    </form>
-                @elseif($employee->show_guarantee_warning)
-                    {{-- Warning - 20+ days --}}
-                    <div class="alert alert-warning mb-3">
-                        <i class="fa-solid fa-exclamation-triangle me-2"></i>
-                        <strong>Warning!</strong> Guarantee letter must be submitted within {{ $employee->days_until_guarantee_deadline }} days.
-                        <br><small>Login will be blocked after {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}</small>
-                    </div>
-                    <p class="text-muted mb-3">
-                        <i class="fa-solid fa-calendar me-2"></i>
-                        Joined: {{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}
-                        <br>
-                        <i class="fa-solid fa-clock me-2"></i>
-                        Deadline: {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}
-                    </p>
-                    <form action="{{ route('employees.upload-guarantee', $employee) }}" method="POST" enctype="multipart/form-data">
-                        @csrf
-                        <div class="mb-3">
-                            <label class="form-label">Upload Guarantee Letter</label>
-                            <input type="file" name="guarantee_letter" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg">
-                            <small class="text-muted">PDF or Image (Max 10MB)</small>
+                        <div class="col-md-4">
+                            <small class="text-muted d-block mb-1"><i class="fa-solid fa-id-card text-success me-1"></i>Guarantor National ID No</small>
+                            <h6 class="mb-0 fw-bold text-dark">{{ $employee->guarantor_id_number ?: 'Not Provided' }}</h6>
                         </div>
-                        <button type="submit" class="btn btn-warning">
-                            <i class="fa-solid fa-upload me-2"></i>Submit Now
-                        </button>
-                    </form>
-                @else
-                    {{-- Not yet 20 days --}}
-                    <div class="alert alert-info mb-3">
-                        <i class="fa-solid fa-info-circle me-2"></i>
-                        Guarantee letter due in {{ $employee->days_until_guarantee_deadline }} days.
-                    </div>
-                    <p class="text-muted mb-3">
-                        <i class="fa-solid fa-calendar me-2"></i>
-                        Joined: {{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}
-                        <br>
-                        <i class="fa-solid fa-clock me-2"></i>
-                        Deadline: {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}
-                    </p>
-                    <form action="{{ route('employees.upload-guarantee', $employee) }}" method="POST" enctype="multipart/form-data">
-                        @csrf
-                        <div class="mb-3">
-                            <label class="form-label">Upload Guarantee Letter (Optional - can submit anytime)</label>
-                            <input type="file" name="guarantee_letter" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg">
-                            <small class="text-muted">PDF or Image (Max 10MB)</small>
+                        <div class="col-md-4">
+                            <small class="text-muted d-block mb-1"><i class="fa-solid fa-phone text-info me-1"></i>Guarantor Phone</small>
+                            <h6 class="mb-0 fw-bold text-dark">{{ $employee->guarantor_phone ?: 'Not Provided' }}</h6>
                         </div>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fa-solid fa-upload me-2"></i>Submit Early
-                        </button>
-                    </form>
+                    </div>
+                @endif
+
+                <div class="row g-3 mb-3">
+                    @if($employee->guarantor_id_card)
+                        <div class="col-md-6">
+                            <div class="border rounded p-3 text-center bg-white h-100 shadow-xs">
+                                <i class="fa-solid fa-id-card fa-2x text-primary mb-2"></i>
+                                <h6 class="fw-bold mb-1 small">Guarantor National ID Document</h6>
+                                <a href="{{ $employee->guarantor_id_card_url }}" target="_blank" class="btn btn-sm btn-outline-primary mt-2">
+                                    <i class="fa-solid fa-eye me-1"></i>View Guarantor ID
+                                </a>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if($employee->guarantee_letter)
+                        <div class="col-md-{{ $employee->guarantor_id_card ? '6' : '12' }}">
+                            <div class="border rounded p-3 text-center bg-white h-100 shadow-xs">
+                                <i class="fa-solid fa-file-pdf fa-2x text-danger mb-2"></i>
+                                <h6 class="fw-bold mb-1 small">Guarantee Letter Document</h6>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Submitted: {{ $employee->guarantee_letter_submitted_at ? $employee->guarantee_letter_submitted_at->format('d M Y') : 'Active' }}</small>
+                                <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-sm btn-outline-danger mt-2">
+                                    <i class="fa-solid fa-file-pdf me-1"></i>View Guarantee Letter
+                                </a>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+
+                @if(!$employee->guarantee_letter)
+                    @if($employee->is_guarantee_overdue)
+                        {{-- Overdue - 30+ days --}}
+                        <div class="alert alert-danger mb-3">
+                            <i class="fa-solid fa-exclamation-circle me-2"></i>
+                            <strong>OVERDUE!</strong> Guarantee letter was due {{ abs($employee->days_until_guarantee_deadline) }} days ago.
+                            <br><small>Login access has been blocked until submission.</small>
+                        </div>
+                        <p class="text-muted mb-3">
+                            <i class="fa-solid fa-calendar me-2"></i>
+                            Joined: {{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}
+                            <br>
+                            <i class="fa-solid fa-clock me-2"></i>
+                            Deadline was: {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}
+                        </p>
+                        <form action="{{ route('employees.upload-guarantee', $employee) }}" method="POST" enctype="multipart/form-data">
+                            @csrf
+                            <div class="mb-3">
+                                <label class="form-label">Upload Guarantee Letter <span class="text-danger">*</span></label>
+                                <input type="file" name="guarantee_letter" class="form-control" required accept="application/pdf,image/jpeg,image/png,image/jpg">
+                                <small class="text-muted">PDF or Image (Max 10MB)</small>
+                            </div>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fa-solid fa-upload me-2"></i>Submit Now to Restore Access
+                            </button>
+                        </form>
+                    @elseif($employee->show_guarantee_warning)
+                        {{-- Warning - 20+ days --}}
+                        <div class="alert alert-warning mb-3">
+                            <i class="fa-solid fa-exclamation-triangle me-2"></i>
+                            <strong>Warning!</strong> Guarantee letter must be submitted within {{ $employee->days_until_guarantee_deadline }} days.
+                            <br><small>Login will be blocked after {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}</small>
+                        </div>
+                        <p class="text-muted mb-3">
+                            <i class="fa-solid fa-calendar me-2"></i>
+                            Joined: {{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}
+                            <br>
+                            <i class="fa-solid fa-clock me-2"></i>
+                            Deadline: {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}
+                        </p>
+                        <form action="{{ route('employees.upload-guarantee', $employee) }}" method="POST" enctype="multipart/form-data">
+                            @csrf
+                            <div class="mb-3">
+                                <label class="form-label">Upload Guarantee Letter</label>
+                                <input type="file" name="guarantee_letter" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg">
+                                <small class="text-muted">PDF or Image (Max 10MB)</small>
+                            </div>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fa-solid fa-upload me-2"></i>Submit Now
+                            </button>
+                        </form>
+                    @else
+                        {{-- Not yet 20 days --}}
+                        <div class="alert alert-info mb-3">
+                            <i class="fa-solid fa-info-circle me-2"></i>
+                            Guarantee letter due in {{ $employee->days_until_guarantee_deadline }} days.
+                        </div>
+                        <p class="text-muted mb-3">
+                            <i class="fa-solid fa-calendar me-2"></i>
+                            Joined: {{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}
+                            <br>
+                            <i class="fa-solid fa-clock me-2"></i>
+                            Deadline: {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}
+                        </p>
+                        <form action="{{ route('employees.upload-guarantee', $employee) }}" method="POST" enctype="multipart/form-data">
+                            @csrf
+                            <div class="mb-3">
+                                <label class="form-label">Upload Guarantee Letter (Optional - can submit anytime)</label>
+                                <input type="file" name="guarantee_letter" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg">
+                                <small class="text-muted">PDF or Image (Max 10MB)</small>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-upload me-2"></i>Submit Early
+                            </button>
+                        </form>
+                    @endif
                 @endif
             </div>
         </div>
-        @endif
 
         {{-- Educational Background Card --}}
         @if($employee->education()->count() > 0)

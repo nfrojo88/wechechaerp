@@ -256,6 +256,10 @@ class EmployeeController extends Controller
             'licenses.*.expiry_date'         => 'nullable|date',
             'licenses.*.license_document'    => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
             'device_user_id'                => 'nullable|string|max:100',
+            'guarantor_name'                => 'nullable|string|max:255',
+            'guarantor_id_number'           => 'nullable|string|max:100',
+            'guarantor_id_card'             => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'guarantor_phone'               => 'nullable|string|max:50',
         ]);
 
         // Apply defaults
@@ -271,6 +275,11 @@ class EmployeeController extends Controller
             $letterPath = \App\Services\FileUploadService::upload($request->file('guarantee_letter'), 'guarantee_letters');
             $validated['guarantee_letter'] = $letterPath;
             $validated['guarantee_letter_submitted_at'] = now();
+        }
+
+        // Handle Guarantor National ID card upload
+        if ($request->hasFile('guarantor_id_card')) {
+            $validated['guarantor_id_card'] = \App\Services\FileUploadService::upload($request->file('guarantor_id_card'), 'employee_guarantor_ids');
         }
 
         // Handle National ID card upload
@@ -598,7 +607,11 @@ class EmployeeController extends Controller
             'status'               => 'required|in:active,suspended,terminated',
             'notes'                => 'nullable|string',
             'device_user_id'       => 'nullable|string|max:100',
-            'guarantee_letter'     => 'nullable|file|mimes:pdf,jpeg,png,jpg|max:10240',
+            'guarantee_letter'     => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'guarantor_name'       => 'nullable|string|max:255',
+            'guarantor_id_number'  => 'nullable|string|max:100',
+            'guarantor_id_card'    => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'guarantor_phone'      => 'nullable|string|max:50',
             'national_id_number'   => 'nullable|string|max:100',
             'national_id_card'     => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:10240',
             'asset_handover_document' => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:10240',
@@ -615,6 +628,11 @@ class EmployeeController extends Controller
             $letterPath = \App\Services\FileUploadService::upload($request->file('guarantee_letter'), 'guarantee_letters');
             $validated['guarantee_letter'] = $letterPath;
             $validated['guarantee_letter_submitted_at'] = now();
+        }
+
+        // Handle Guarantor National ID card upload (replace if new)
+        if ($request->hasFile('guarantor_id_card')) {
+            $validated['guarantor_id_card'] = \App\Services\FileUploadService::upload($request->file('guarantor_id_card'), 'employee_guarantor_ids');
         }
 
         // Handle National ID card upload (replace if new)

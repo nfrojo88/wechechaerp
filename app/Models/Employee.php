@@ -17,6 +17,7 @@ class Employee extends Model
         'transport_allowance', 'house_allowance', 'position_allowance',
         'status', 'notes', 'bank_name', 'account_number',
         'guarantee_letter', 'guarantee_letter_submitted_at', 'guarantee_letter_required',
+        'guarantor_name', 'guarantor_id_number', 'guarantor_id_card', 'guarantor_phone',
         'device_user_id', 'asset_handover_document', 'profile_picture', 'registration_letter',
         'is_approved_by_gm', 'gm_approved_at', 'gm_approved_by',
         'gm_approval_status', 'gm_rejection_reason', 'gm_rejected_at', 'gm_rejected_by',
@@ -323,6 +324,17 @@ class Employee extends Model
     {
         if ($this->registration_letter) {
             return route('employees.registration-letter', $this->id);
+        }
+        return null;
+    }
+
+    /**
+     * Get guarantor ID card document/photo URL
+     */
+    public function getGuarantorIdCardUrlAttribute()
+    {
+        if ($this->guarantor_id_card) {
+            return route('employees.guarantor-id', $this->id);
         }
         return null;
     }
