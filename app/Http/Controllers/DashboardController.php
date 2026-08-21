@@ -333,7 +333,106 @@ class DashboardController extends Controller
         return view('dashboard.foreman', compact('kpi', 'recentDaily'));
     }
 
-    // ─── Store Manager / Store Keeper ───────────────────────────────────────────
+    // ─── Store Keeper Dashboard (Scoped strictly to assigned store/site) ───────
+    public function storeKeeper()
+    {
+        $user = auth()->user();
+        
+        // Find assigned store for this user
+        $assignedStore = $user->store ?? \App\Models\Store::where('manager_id', $user->id)->first();
+        $storeId = $assignedStore?->id;
+
+        $storeInventory         = collect();
+        $lowStockItems          = collect();
+        $incomingTransfers      = collect();
+        $outgoingTransfers      = collect();
+        $recentTransfers        = collect();
+        $materialRequests       = collect();
+        $recentDeliveryReceipts = collect();
+        $recentSlips            = collect();
+
+        $kpi = [
+            'total_items'       => 0,
+            'total_stock_qty'   => 0,
+            'low_stock_count'   => 0,
+            'pending_incoming'  => 0,
+            'pending_outgoing'  => 0,
+            'total_transfers'   => 0,
+            'pending_requests'  => 0,
+            'completed_today'   => 0,
+        ];
+
+        if ($storeId) {
+            // Inventory & Stock counts
+            $kpi['total_items']     = $this->safe(fn() => \App\Models\Inventory::where('store_id', $storeId)->count(), 0);
+            $kpi['total_stock_qty'] = (float) $this->safe(fn() => \App\Models\Inventory::where('store_id', $storeId)->sum('quantity_on_hand'), 0);
+            
+            $lowStockQuery = \App\Models\Inventory::with('product')
+                ->where('store_id', $storeId)
+                ->whereColumn('quantity_on_hand', '<=', 'min_stock');
+            $kpi['low_stock_count'] = $this->safe(fn() => (clone $lowStockQuery)->count(), 0);
+            $lowStockItems          = $this->safe(fn() => $lowStockQuery->take(8)->get(), collect());
+
+            $storeInventory = $this->safe(fn() => \App\Models\Inventory::with('product')
+                ->where('store_id', $storeId)
+                ->orderBy('quantity_on_hand', 'desc')
+                ->take(12)
+                ->get(), collect());
+
+            // Site Transfers for this store
+            $kpi['pending_incoming'] = $this->safe(fn() => \App\Models\Transfer::where('to_store_id', $storeId)
+                ->whereIn('status', ['draft', 'pending', 'in_transit', 'approved'])->count(), 0);
+            $kpi['pending_outgoing'] = $this->safe(fn() => \App\Models\Transfer::where('from_store_id', $storeId)
+                ->whereIn('status', ['draft', 'pending', 'in_transit', 'approved'])->count(), 0);
+            $kpi['total_transfers']  = $this->safe(fn() => \App\Models\Transfer::where(function($q) use ($storeId) {
+                $q->where('from_store_id', $storeId)->orWhere('to_store_id', $storeId);
+            })->count(), 0);
+
+            $incomingTransfers = $this->safe(fn() => \App\Models\Transfer::with(['fromStore', 'toStore', 'requestedBy', 'items.product'])
+                ->where('to_store_id', $storeId)
+                ->latest()
+                ->take(8)
+                ->get(), collect());
+
+            $outgoingTransfers = $this->safe(fn() => \App\Models\Transfer::with(['fromStore', 'toStore', 'requestedBy', 'items.product'])
+                ->where('from_store_id', $storeId)
+                ->latest()
+                ->take(8)
+                ->get(), collect());
+
+            $recentTransfers = $this->safe(fn() => \App\Models\Transfer::with(['fromStore', 'toStore', 'requestedBy', 'items.product'])
+                ->where(function($q) use ($storeId) {
+                    $q->where('from_store_id', $storeId)->orWhere('to_store_id', $storeId);
+                })
+                ->latest()
+                ->take(10)
+                ->get(), collect());
+
+            // Site Material Requests for this store
+            $kpi['pending_requests'] = $this->safe(fn() => \App\Models\MaterialRequest::where('store_id', $storeId)->where('status', 'pending')->count(), 0);
+            $materialRequests = $this->safe(fn() => \App\Models\MaterialRequest::with(['project', 'requestedBy', 'items.product'])
+                ->where('store_id', $storeId)
+                ->latest()
+                ->take(8)
+                ->get(), collect());
+
+            // Delivery Receipts for this store
+            $recentDeliveryReceipts = $this->safe(fn() => \App\Models\DeliveryReceipt::with(['supplier', 'purchaseOrder'])
+                ->where('store_id', $storeId)
+                ->latest()
+                ->take(6)
+                ->get(), collect());
+        }
+
+        return view('dashboard.store-keeper', compact(
+            'assignedStore', 'storeId', 'kpi',
+            'storeInventory', 'lowStockItems',
+            'incomingTransfers', 'outgoingTransfers', 'recentTransfers',
+            'materialRequests', 'recentDeliveryReceipts'
+        ));
+    }
+
+    // ─── Store Manager ──────────────────────────────────────────────────────────
     public function storeManager()
     {
         $kpi = [

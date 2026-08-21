@@ -5,6 +5,7 @@
     $isSiteStaffUser = in_array('site_engineer', $rawUserRoles) || in_array('foreman', $rawUserRoles);
     $isSecretary = in_array('secretary', $rawUserRoles);
     $isContractAdmin = in_array('contract_admin', $rawUserRoles);
+    $isStoreKeeper = in_array('store_keeper', $rawUserRoles);
 @endphp
 
 <div class="sidebar-scroll">
@@ -12,9 +13,9 @@
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
         <li class="sidebar-nav-item">
-            <a href="{{ $isSecretary ? route('dashboard.secretary') : ($isContractAdmin ? route('dashboard.contract-admin') : route('dashboard')) }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') ? 'active' : '' }}">
+            <a href="{{ $isSecretary ? route('dashboard.secretary') : ($isContractAdmin ? route('dashboard.contract-admin') : ($isStoreKeeper ? route('dashboard.store-keeper') : route('dashboard'))) }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high"></i>
-                <span>{{ $isSecretary ? 'Secretary Dashboard' : ($isContractAdmin ? 'Contract Dashboard' : 'Dashboard') }}</span>
+                <span>{{ $isSecretary ? 'Secretary Dashboard' : ($isContractAdmin ? 'Contract Dashboard' : ($isStoreKeeper ? 'Store Keeper Dashboard' : 'Dashboard')) }}</span>
             </a>
         </li>
         @endif
@@ -176,18 +177,21 @@
         @endcanany
         @endif
 
-        {{-- Store Manager Hub --}}
+        {{-- Store Hub (Store Manager / Store Keeper) --}}
         @if(auth()->check() && !$isGeneralServiceUser && auth()->user()->hasAnyRole(['store_manager', 'store_keeper', 'admin', 'global_admin']))
 
+        @if(!$isStoreKeeper)
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.store-manager') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.store-manager') || request()->routeIs('store-manager.dashboard') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high text-primary"></i>
-                <span>Dashboard</span>
+                <span>Store Dashboard</span>
             </a>
+        </li>
+        @endif
         <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.inventory.all') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.inventory.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-boxes-stacked text-info"></i>
-                <span>All Inventory</span>
+                <span>{{ $isStoreKeeper ? 'Store Inventory' : 'All Inventory' }}</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -217,7 +221,7 @@
         <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.index') || request()->routeIs('store-manager.transfers.show') ? 'active' : '' }}">
                 <i class="fa-solid fa-truck-moving text-warning"></i>
-                <span>Transfer List</span>
+                <span>{{ $isStoreKeeper ? 'Site Transfers' : 'Transfer List' }}</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -251,12 +255,14 @@
             </a>
         </li>
 
+        @if(auth()->user()->hasAnyRole(['store_manager', 'admin', 'global_admin']))
         <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.slip-sequences.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.slip-sequences.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-stream text-info"></i>
                 <span>Slip Sequences</span>
             </a>
         </li>
+        @endif
         @endif
 
         {{-- Planning Section --}}

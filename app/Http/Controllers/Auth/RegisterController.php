@@ -350,7 +350,7 @@ class RegisterController extends Controller
             'site_engineer'       => route('dashboard.site-engineer'),
             'foreman'             => route('dashboard.foreman'),
             'store_manager', 'storemanager', 'store' => route('store-manager.dashboard'),
-            'store_keeper', 'storekeeper'           => route('store-manager.dashboard'),
+            'store_keeper', 'storekeeper'           => route('dashboard.store-keeper'),
             'hr', 'hr_officer'    => route('dashboard.hr'),
             'finance', 'finance_head' => route('dashboard.finance'),
             'purchase', 'purchase_manager', 'market_research' => route('dashboard.purchase'),
