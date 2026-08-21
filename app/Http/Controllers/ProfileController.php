@@ -33,23 +33,35 @@ class ProfileController extends Controller
         }
 
         // Calculate total experience duration
+        // Includes: all external work experience records + tenure at this company (date_of_joining)
         $totalExperienceYears = 0;
         $totalExperienceMonths = 0;
+        $totalExpMonthsRaw = 0;
+
         if ($employee && $employee->experience) {
             foreach ($employee->experience as $exp) {
                 if ($exp->start_date) {
                     $end = $exp->end_date ?? now();
-                    $diffYears = $exp->start_date->diffInYears($end);
-                    $diffMonths = $exp->start_date->diffInMonths($end) % 12;
-                    $totalExperienceYears += $diffYears;
-                    $totalExperienceMonths += $diffMonths;
+                    $totalExpMonthsRaw += $exp->start_date->diffInMonths($end);
                 }
             }
-            if ($totalExperienceMonths >= 12) {
-                $totalExperienceYears += intdiv($totalExperienceMonths, 12);
-                $totalExperienceMonths = $totalExperienceMonths % 12;
-            }
         }
+
+        // Add tenure at THIS company from date_of_joining
+        if ($employee && $employee->date_of_joining) {
+            $totalExpMonthsRaw += $employee->date_of_joining->diffInMonths(now());
+        }
+
+        $totalExperienceYears  = intdiv($totalExpMonthsRaw, 12);
+        $totalExperienceMonths = $totalExpMonthsRaw % 12;
+
+        // Also compute company tenure separately for display
+        $companyTenureMonths = ($employee && $employee->date_of_joining)
+            ? $employee->date_of_joining->diffInMonths(now())
+            : 0;
+        $companyTenureYears  = intdiv($companyTenureMonths, 12);
+        $companyTenureRem    = $companyTenureMonths % 12;
+
 
         // Load this employee's maintenance requests
         $maintenanceRequests = collect();
@@ -60,7 +72,12 @@ class ProfileController extends Controller
                 ->get();
         }
 
-        return view('profile.edit', compact('user', 'employee', 'totalExperienceYears', 'totalExperienceMonths', 'maintenanceRequests'));
+        return view('profile.edit', compact(
+            'user', 'employee',
+            'totalExperienceYears', 'totalExperienceMonths',
+            'companyTenureYears', 'companyTenureRem',
+            'maintenanceRequests'
+        ));
     }
 
     /**

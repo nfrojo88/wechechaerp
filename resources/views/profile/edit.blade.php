@@ -657,6 +657,15 @@
                                 {{ $totalExperienceYears > 0 ? "{$totalExperienceYears}y " : '' }}{{ $totalExperienceMonths }}m
                             </h4>
                             <small class="text-muted fw-semibold">Total Experience</small>
+                            @if(isset($companyTenureYears) && ($companyTenureYears > 0 || $companyTenureRem > 0))
+                            <div class="mt-1 pt-1 border-top">
+                                <small class="text-muted d-block" style="font-size:0.72rem; line-height:1.3;">
+                                    <i class="fa-solid fa-building me-1 text-primary"></i>
+                                    <strong>This Company:</strong><br>
+                                    {{ $companyTenureYears > 0 ? "{$companyTenureYears}y " : '' }}{{ $companyTenureRem }}m
+                                </small>
+                            </div>
+                            @endif
                         </div>
                     </div>
                 </div>

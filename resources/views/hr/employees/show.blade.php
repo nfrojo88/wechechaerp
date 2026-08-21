@@ -830,22 +830,39 @@
             </div>
             <div class="col-6">
                 @php
-                    $totalExpMonths = 0;
+                    // External work experience months
+                    $totalExpMonthsRaw = 0;
                     foreach($employee->experience as $exp) {
-                        if ($exp->is_current) {
-                            $totalExpMonths += $exp->start_date->diffInMonths(now());
-                        } elseif ($exp->end_date) {
-                            $totalExpMonths += $exp->start_date->diffInMonths($exp->end_date);
+                        if ($exp->start_date) {
+                            $end = $exp->end_date ?? now();
+                            $totalExpMonthsRaw += $exp->start_date->diffInMonths($end);
                         }
                     }
-                    $totalYears  = floor($totalExpMonths / 12);
-                    $totalMonths = $totalExpMonths % 12;
+                    // Add tenure at THIS company from date_of_joining
+                    $companyTenureMonthsRaw = 0;
+                    if ($employee->date_of_joining) {
+                        $companyTenureMonthsRaw = $employee->date_of_joining->diffInMonths(now());
+                        $totalExpMonthsRaw += $companyTenureMonthsRaw;
+                    }
+                    $totalYears       = intdiv($totalExpMonthsRaw, 12);
+                    $totalMonths      = $totalExpMonthsRaw % 12;
+                    $compTenureYears  = intdiv($companyTenureMonthsRaw, 12);
+                    $compTenureMonths = $companyTenureMonthsRaw % 12;
                 @endphp
                 <div class="card border-0 shadow-sm text-center h-100" style="background:linear-gradient(135deg,#fce7f3,#fdf2f8);">
                     <div class="card-body py-3">
                         <i class="fa-solid fa-clock fa-2x mb-2" style="color:#db2777;"></i>
                         <div class="h5 fw-bold mb-0" style="color:#be185d;">{{ $totalYears }}y {{ $totalMonths }}m</div>
                         <small class="text-muted">Total Experience</small>
+                        @if($companyTenureMonthsRaw > 0)
+                        <div class="mt-1 pt-1 border-top">
+                            <small class="text-muted d-block" style="font-size:0.72rem; line-height:1.3;">
+                                <i class="fa-solid fa-building me-1 text-primary"></i>
+                                <strong>This Company:</strong><br>
+                                {{ $compTenureYears > 0 ? "{$compTenureYears}y " : '' }}{{ $compTenureMonths }}m
+                            </small>
+                        </div>
+                        @endif
                     </div>
                 </div>
             </div>
