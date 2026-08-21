@@ -4,6 +4,7 @@
     $isGeneralServiceUser = in_array('general_service', $rawUserRoles) || in_array('general_services', $rawUserRoles);
     $isSiteStaffUser = in_array('site_engineer', $rawUserRoles) || in_array('foreman', $rawUserRoles);
     $isSecretary = in_array('secretary', $rawUserRoles);
+    $isContractAdmin = in_array('contract_admin', $rawUserRoles);
 @endphp
 
 <div class="sidebar-scroll">
@@ -11,9 +12,9 @@
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
         <li class="sidebar-nav-item">
-            <a href="{{ $isSecretary ? route('dashboard.secretary') : route('dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') ? 'active' : '' }}">
+            <a href="{{ $isSecretary ? route('dashboard.secretary') : ($isContractAdmin ? route('dashboard.contract-admin') : route('dashboard')) }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high"></i>
-                <span>{{ $isSecretary ? 'Secretary Dashboard' : 'Dashboard' }}</span>
+                <span>{{ $isSecretary ? 'Secretary Dashboard' : ($isContractAdmin ? 'Contract Dashboard' : 'Dashboard') }}</span>
             </a>
         </li>
         @endif
@@ -259,7 +260,7 @@
         @endif
 
         {{-- Planning Section --}}
-        @if(auth()->user() && !$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && (auth()->user()->hasAnyPermission(['planning.boq.manage', 'boq.view', 'boq.create', 'schedule.view', 'schedule.approve', 'schedule.create', 'schedule.edit', 'schedule.*', 'planning.view', 'planning.*', 'takeoff.view', 'takeoff.create', 'takeoff.edit', 'takeoff.*', 'resources.dispatch', 'material_planning.view', 'material_planning.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'reports.view', 'reports.weekly.view', 'reports.*.view', 'finance.budgets.manage']) || auth()->user()->hasRole(['planning_manager', 'planning', 'technical_manager'])))
+        @if(auth()->user() && !$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isContractAdmin && (auth()->user()->hasAnyPermission(['planning.boq.manage', 'boq.view', 'boq.create', 'schedule.view', 'schedule.approve', 'schedule.create', 'schedule.edit', 'schedule.*', 'planning.view', 'planning.*', 'takeoff.view', 'takeoff.create', 'takeoff.edit', 'takeoff.*', 'resources.dispatch', 'material_planning.view', 'material_planning.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'reports.view', 'reports.weekly.view', 'reports.*.view', 'finance.budgets.manage']) || auth()->user()->hasRole(['planning_manager', 'planning', 'technical_manager'])))
 
         @role('planning_manager|planning|technical_manager')
         <li class="sidebar-nav-item">
@@ -712,7 +713,7 @@
         @endif
 
         {{-- Operational --}}
-
+        @if(!$isContractAdmin && !$isSecretary)
         @canany(['material_usage.view', 'material_usage.*', 'cut_optimization.view_results', 'cut_optimization.*', 'issues.view', 'issues.create', 'issues.resolve', 'issues.*', 'waste.view', 'waste.create', 'waste.*', 'reports.daily.view', 'reports.daily.create', 'reports.weekly.view', 'reports.view', 'reports.*.view'])
 
         @canany(['material_usage.view', 'material_usage.*'])
@@ -764,16 +765,19 @@
         </li>
         @endcanany
         @endcanany
+        @endif
 
         {{-- Contract Admin Tools --}}
         @if(auth()->check() && (auth()->user()->hasAnyRole(['Contract admin', 'contract_admin', 'admin', 'global_admin'])))
 
+        @if(!$isContractAdmin)
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.contract-admin') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.contract-admin') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high text-primary"></i>
                 <span>Contract Dashboard</span>
             </a>
         </li>
+        @endif
         <li class="sidebar-nav-item">
             <a href="{{ route('boqs.index') }}" class="sidebar-nav-link {{ request()->routeIs('boqs.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-file-invoice-dollar text-danger"></i>
@@ -783,13 +787,13 @@
         <li class="sidebar-nav-item">
             <a href="{{ route('ipcs.index') }}" class="sidebar-nav-link {{ request()->routeIs('ipcs.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-money-check-dollar text-success"></i>
-                <span>IPCs & Payments</span>
+                <span>IPCs &amp; Payments</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('contracts.index') }}" class="sidebar-nav-link {{ request()->routeIs('contracts.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-file-contract text-warning"></i>
-                <span>Employee Contracts</span>
+                <span>Contracts</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -798,10 +802,16 @@
                 <span>Subcontractors</span>
             </a>
         </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('subcon-agreements.index') }}" class="sidebar-nav-link {{ request()->routeIs('subcon-agreements.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-file-signature text-primary"></i>
+                <span>Subcon Agreements</span>
+            </a>
+        </li>
         @endif
 
         {{-- Finance --}}
-        @if(auth()->check() && !auth()->user()->hasRole('site_engineer') && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'admin', 'global_admin']) || auth()->user()->canAny(['finance.chart_of_accounts.view', 'finance.bank.manage', 'finance.income.view', 'finance.income.*', 'finance.expenses.view', 'finance.expenses.approve', 'finance.expenses.create', 'payments.view', 'payments.create', 'payments.approve', 'payments.*', 'subcon.view', 'subcon.create', 'subcon.edit', 'subcon.approve', 'subcon.*', 'finance.ipcs.manage', 'finance.*'])))
+        @if(auth()->check() && !auth()->user()->hasRole('site_engineer') && !$isContractAdmin && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'admin', 'global_admin']) || auth()->user()->canAny(['finance.chart_of_accounts.view', 'finance.bank.manage', 'finance.income.view', 'finance.income.*', 'finance.expenses.view', 'finance.expenses.approve', 'finance.expenses.create', 'payments.view', 'payments.create', 'payments.approve', 'payments.*', 'subcon.view', 'subcon.create', 'subcon.edit', 'subcon.approve', 'subcon.*', 'finance.ipcs.manage', 'finance.*'])))
 
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.finance') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.finance') ? 'active' : '' }}">
@@ -925,6 +935,7 @@
         @endcanany
 
         {{-- HR --}}
+        @if(!$isContractAdmin && !$isSecretary)
         @canany(['hr.departments.view', 'hr.employees.view', 'hr.employees.create', 'hr.employees.edit', 'hr.attendance.view', 'hr.attendance.manage', 'finance.payroll.process', 'hr.payroll.view', 'hr.*'])
 
         @canany(['hr.departments.view', 'hr.*'])
@@ -960,6 +971,7 @@
         </li>
         @endcanany
         @endcanany
+        @endif
 
         {{-- HR Manager Dashboard --}}
         @if(auth()->check() && (auth()->user()->hasAnyRole(['hr_officer', 'hr_manager', 'admin', 'global_admin'])))
