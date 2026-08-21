@@ -35,8 +35,8 @@ Route::get('/deploy-from-github', function () {
     $output = [];
     $return = 0;
 
-    // Run git pull
-    exec('cd ' . base_path() . ' && git pull origin main 2>&1', $output, $return);
+    // Run git pull with auto-discard of local server changes
+    exec('cd ' . base_path() . ' && git fetch origin main 2>&1 && git reset --hard origin/main 2>&1', $output, $return);
     $pullResult = implode("\n", $output);
 
     // Clear caches
