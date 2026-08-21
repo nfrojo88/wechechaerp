@@ -17,11 +17,10 @@
     {{-- Page Header --}}
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
-            <h3 class="fw-bold mb-1">
+            <h3 class="fw-bold mb-0">
                 <i class="fa-solid fa-hand-holding-dollar text-success me-2"></i>Ask Money
                 <span class="fs-6 text-muted ms-2">(Employee Expense Request Module)</span>
             </h3>
-            <p class="text-muted small mb-0">Submit operational expense requests, track approval status, and manage payment disbursements.</p>
         </div>
         <div class="d-flex gap-2">
             <button type="button" class="btn btn-success shadow-sm px-3 fw-bold" data-bs-toggle="modal" data-bs-target="#createRequestModal">
@@ -59,80 +58,6 @@
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     @endif
-
-    {{-- Stat Cards (Clickable Links to Queues) --}}
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-4 col-xl-2">
-            <a href="{{ route('expense-requests.index', ['tab' => 'my_requests']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 bg-white h-100 {{ $tab === 'my_requests' ? 'border border-2 border-dark' : '' }}">
-                    <div class="card-body p-3 text-center">
-                        <div class="text-muted small fw-semibold">My Requests</div>
-                        <div class="fs-4 fw-bold text-dark mt-1">{{ $counters['my_requests'] }}</div>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-            <a href="{{ route('expense-requests.index', ['tab' => 'hr_queue']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 bg-white h-100 border-start border-4 border-warning {{ $tab === 'hr_queue' ? 'border border-2 border-warning' : '' }}">
-                    <div class="card-body p-3 text-center">
-                        <div class="text-muted small fw-semibold">Pending HR</div>
-                        <div class="fs-4 fw-bold text-warning mt-1">{{ $counters['hr_queue'] }}</div>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-            <a href="{{ route('expense-requests.index', ['tab' => 'gm_queue']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 bg-white h-100 border-start border-4 border-info {{ $tab === 'gm_queue' ? 'border border-2 border-info' : '' }}">
-                    <div class="card-body p-3 text-center">
-                        <div class="text-muted small fw-semibold">Pending GM (&gt; 5k)</div>
-                        <div class="fs-4 fw-bold text-info mt-1">{{ $counters['gm_queue'] }}</div>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-            <a href="{{ route('expense-requests.index', ['tab' => 'finance_queue']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 bg-white h-100 border-start border-4 border-primary {{ $tab === 'finance_queue' ? 'border border-2 border-primary' : '' }}">
-                    <div class="card-body p-3 text-center">
-                        <div class="text-muted small fw-semibold">In Finance</div>
-                        <div class="fs-4 fw-bold text-primary mt-1">{{ $counters['finance_queue'] }}</div>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-            <a href="{{ route('expense-requests.index', ['tab' => 'my_assigned_payments']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 bg-white h-100 border-start border-4 border-indigo {{ $tab === 'my_assigned_payments' ? 'border border-2 border-purple' : '' }}">
-                    <div class="card-body p-3 text-center">
-                        <div class="text-muted small fw-semibold">My Assigned</div>
-                        <div class="fs-4 fw-bold text-purple mt-1">{{ $counters['my_assigned_payments'] }}</div>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-            <a href="{{ route('expense-requests.index', ['tab' => 'paid_history']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 bg-white h-100 border-start border-4 border-success {{ $tab === 'paid_history' ? 'border border-2 border-success' : '' }}">
-                    <div class="card-body p-3 text-center">
-                        <div class="text-muted small fw-semibold">Paid History</div>
-                        <div class="fs-4 fw-bold text-success mt-1">{{ $counters['paid_history'] }}</div>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-6 col-md-4 col-xl-2">
-            <a href="{{ route('expense-requests.index', ['tab' => 'rejected_history']) }}" class="text-decoration-none">
-                <div class="card border-0 shadow-sm rounded-3 bg-white h-100 border-start border-4 border-danger {{ $tab === 'rejected_history' ? 'border border-2 border-danger' : '' }}">
-                    <div class="card-body p-3 text-center">
-                        <div class="text-muted small fw-semibold text-danger">Rejected</div>
-                        <div class="fs-4 fw-bold text-danger mt-1">{{ $counters['rejected_history'] ?? 0 }}</div>
-                    </div>
-                </div>
-            </a>
-        </div>
-    </div>
 
     {{-- Queue Tabs Navigation --}}
     <div class="card border-0 shadow-sm mb-4">
