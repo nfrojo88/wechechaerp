@@ -83,6 +83,13 @@
                 </div>
                 <small class="text-muted d-block mt-1 fw-semibold">Licenses</small>
             </div>
+            <div class="flex-grow-1 step-line" style="height: 2px; background: #dee2e6; margin: 0 10px; margin-top: -15px;"></div>
+            <div class="text-center flex-grow-1 cursor-pointer" onclick="goToStep(8)">
+                <div class="step-indicator" id="step-ind-8">
+                    <span class="step-number">8</span>
+                </div>
+                <small class="text-muted d-block mt-1 fw-semibold">Documents</small>
+            </div>
         </div>
     </div>
 </div>
@@ -138,7 +145,7 @@
             <div class="step-panel active" id="step-panel-1">
                 <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
                     <h5 class="mb-0"><i class="fa-solid fa-user-circle text-primary me-2"></i>Step 1: Basic Information</h5>
-                    <span class="badge bg-primary">Step 1 of 6</span>
+                    <span class="badge bg-primary">Step 1 of 8</span>
                 </div>
                 
                 <div class="row g-3">
@@ -196,6 +203,34 @@
                         <input type="text" name="role_title" class="form-control" 
                                value="{{ old('role_title', $employee->role_title) }}" placeholder="e.g. Site Engineer">
                     </div>
+
+                    {{-- National ID Fields --}}
+                    <div class="col-12"><hr class="my-2"><small class="text-muted fw-bold"><i class="fa-solid fa-id-card me-1"></i>National / Government ID</small></div>
+                    <div class="col-md-6">
+                        <label class="form-label">National ID Number <small class="text-muted">(Kebele ID / Fayda ID / Passport)</small></label>
+                        <input type="text" name="national_id_number" class="form-control @error('national_id_number') is-invalid @enderror"
+                               value="{{ old('national_id_number', $employee->national_id_number) }}" placeholder="e.g. 1234/12/5678 or ETH-00000001">
+                        @error('national_id_number')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            <i class="fa-solid fa-camera text-primary me-1"></i>National ID Card / Scan / Photo
+                            <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP – Max 10MB)</small>
+                        </label>
+                        @if($employee->national_id_card)
+                            <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-light rounded border">
+                                <i class="fa-solid fa-id-card text-success"></i>
+                                <small class="text-muted">National ID on file</small>
+                                <a href="{{ $employee->national_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary ms-auto">
+                                    <i class="fa-solid fa-eye me-1"></i>View Current Card
+                                </a>
+                            </div>
+                        @endif
+                        <input type="file" name="national_id_card" id="national_id_card_input"
+                               class="form-control @error('national_id_card') is-invalid @enderror"
+                               accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                        @error('national_id_card')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
                 </div>
             </div>
 
@@ -203,7 +238,7 @@
             <div class="step-panel" id="step-panel-2">
                 <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
                     <h5 class="mb-0"><i class="fa-solid fa-briefcase text-success me-2"></i>Step 2: Employment Details</h5>
-                    <span class="badge bg-success">Step 2 of 6</span>
+                    <span class="badge bg-success">Step 2 of 8</span>
                 </div>
                 
                 <div class="row g-3">
@@ -355,7 +390,7 @@
                         <h5 class="mb-1"><i class="fa-solid fa-truck-monster text-warning me-2"></i>Step 4: Assigned Fixed Assets & Equipment</h5>
                         <p class="text-muted small mb-0">Select equipment from Store inventory or update currently assigned units for this employee.</p>
                     </div>
-                    <span class="badge bg-warning text-dark">Step 4 of 6</span>
+                    <span class="badge bg-warning text-dark">Step 4 of 8</span>
                 </div>
 
                 {{-- Category Filter Pills --}}
@@ -463,6 +498,27 @@
                         <i class="fa-solid fa-plus me-1"></i> Assign Another Asset
                     </button>
                 </div>
+
+                {{-- Asset Handover Document Upload --}}
+                <div class="mt-4 pt-3 border-top">
+                    <label class="form-label fw-semibold">
+                        <i class="fa-solid fa-file-signature text-success me-1"></i>Asset Handover Receipt / Condition Photo
+                        <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP – Max 10MB) — Upload signed handover receipt or condition inspection photo.</small>
+                    </label>
+                    @if($employee->asset_handover_document)
+                        <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
+                            <i class="fa-solid fa-file-signature text-success"></i>
+                            <small class="text-muted">Handover document on file</small>
+                            <a href="{{ $employee->asset_handover_document_url }}" target="_blank" class="btn btn-xs btn-outline-success ms-auto">
+                                <i class="fa-solid fa-eye me-1"></i>View Current Handover Receipt
+                            </a>
+                        </div>
+                    @endif
+                    <input type="file" name="asset_handover_document" id="asset_handover_input"
+                           class="form-control @error('asset_handover_document') is-invalid @enderror"
+                           accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                    @error('asset_handover_document')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                </div>
             </div>
 
             {{-- STEP 5: Educational Background --}}
@@ -472,7 +528,7 @@
                         <h5 class="mb-1"><i class="fa-solid fa-graduation-cap text-primary me-2"></i>Step 5: Educational Background</h5>
                         <p class="text-muted small mb-0">Update educational degrees, diplomas, certificates, and qualification photos.</p>
                     </div>
-                    <span class="badge bg-primary">Step 5 of 6</span>
+                    <span class="badge bg-primary">Step 5 of 8</span>
                 </div>
 
                 <div id="educationContainer">
@@ -573,7 +629,7 @@
                         <h5 class="mb-1"><i class="fa-solid fa-briefcase text-success me-2"></i>Step 6: Work Experience</h5>
                         <p class="text-muted small mb-0">Update previous jobs, employment history, and recommendation letters.</p>
                     </div>
-                    <span class="badge bg-success">Step 6 of 7</span>
+                    <span class="badge bg-success">Step 6 of 8</span>
                 </div>
 
                 <div id="experienceContainer">
@@ -668,7 +724,7 @@
                         <h5 class="mb-1"><i class="fa-solid fa-id-card-clip text-warning me-2"></i>Step 7: Professional Licenses & Certifications</h5>
                         <p class="text-muted small mb-0">Manage practicing licenses, engineering certifications, professional registrations, and driving licenses.</p>
                     </div>
-                    <span class="badge bg-warning text-dark">Step 7 of 7</span>
+                    <span class="badge bg-warning text-dark">Step 7 of 8</span>
                 </div>
 
                 <div id="licensesContainer">
@@ -761,6 +817,84 @@
                 </button>
             </div>
 
+            {{-- STEP 8: Profile Photo & Registration Documents --}}
+            <div class="step-panel" id="step-panel-8">
+                <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
+                    <div>
+                        <h5 class="mb-1"><i class="fa-solid fa-camera-retro text-info me-2"></i>Step 8: Profile Photo & Registration Documents</h5>
+                        <p class="text-muted small mb-0">Upload or replace employee profile photo, official employment/registration contract, and guarantee letter.</p>
+                    </div>
+                    <span class="badge bg-info text-dark">Step 8 of 8</span>
+                </div>
+
+                <div class="row g-4">
+                    {{-- Profile Picture --}}
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body text-center">
+                                <div class="mb-3">
+                                    <img src="{{ $employee->profile_picture_url }}" id="profile_pic_edit_preview"
+                                         style="width:120px;height:120px;object-fit:cover;border-radius:50%;border:3px solid #0d6efd;"
+                                         alt="{{ $employee->full_name }}">
+                                </div>
+                                <h6 class="fw-bold mb-1"><i class="fa-solid fa-camera text-primary me-1"></i>Profile Photo</h6>
+                                <p class="text-muted small mb-3">PNG, JPG, WEBP — Max 5MB.</p>
+                                <input type="file" name="profile_picture" id="profile_picture_input"
+                                       class="form-control form-control-sm @error('profile_picture') is-invalid @enderror"
+                                       accept="image/jpeg,image/png,image/jpg,image/webp"
+                                       onchange="previewProfilePicEdit(this)">
+                                @error('profile_picture')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Registration / Employment Letter --}}
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body">
+                                <h6 class="fw-bold mb-1"><i class="fa-solid fa-file-contract text-success me-1"></i>Employment / Registration Letter</h6>
+                                <p class="text-muted small mb-3">Official signed employment contract or registration letter. PDF, PNG, JPG, WEBP — Max 15MB.</p>
+                                @if($employee->registration_letter)
+                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-light rounded border">
+                                        <i class="fa-solid fa-file-pdf text-success"></i>
+                                        <small class="text-muted text-truncate">Registration Letter on file</small>
+                                        <a href="{{ $employee->registration_letter_url }}" target="_blank" class="btn btn-xs btn-outline-success ms-auto">
+                                            <i class="fa-solid fa-eye me-1"></i>View
+                                        </a>
+                                    </div>
+                                @endif
+                                <label class="form-label small fw-semibold">{{ $employee->registration_letter ? 'Upload New to Replace:' : 'Upload Registration Letter:' }}</label>
+                                <input type="file" name="registration_letter" class="form-control @error('registration_letter') is-invalid @enderror"
+                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                @error('registration_letter')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Guarantee Letter --}}
+                    <div class="col-md-4">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body">
+                                <h6 class="fw-bold mb-1"><i class="fa-solid fa-shield-halved text-warning me-1"></i>Guarantee Letter</h6>
+                                <p class="text-muted small mb-3">Official guarantee document. PDF, PNG, JPG, WEBP — Max 15MB.</p>
+                                @if($employee->guarantee_letter)
+                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-light rounded border">
+                                        <i class="fa-solid fa-file-shield text-warning"></i>
+                                        <small class="text-muted text-truncate">Guarantee Letter on file</small>
+                                        <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-xs btn-outline-warning ms-auto">
+                                            <i class="fa-solid fa-eye me-1"></i>View
+                                        </a>
+                                    </div>
+                                @endif
+                                <label class="form-label small fw-semibold">{{ $employee->guarantee_letter ? 'Upload New to Replace:' : 'Upload Guarantee Letter:' }}</label>
+                                <input type="file" name="guarantee_letter" class="form-control"
+                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             {{-- Navigation Action Buttons --}}
             <div class="d-flex justify-content-between mt-4 pt-3 border-top">
                 <div>
@@ -788,7 +922,21 @@
 <script>
 const fixedAssetUnitsList = @json($fixedAssetsJson ?? []);
 let currentStep = 1;
-const totalSteps = 7;
+const totalSteps = 8;
+
+function previewProfilePicEdit(input) {
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.getElementById('profile_pic_edit_preview');
+                if (img) img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+}
 
 let educationCount = {{ count($educations) }};
 let experienceCount = {{ count($experiences) }};

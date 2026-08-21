@@ -63,6 +63,11 @@
                 <a href="{{ url('/') }}" class="btn btn-sm btn-outline-secondary me-3 shadow-sm rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
                     <i class="fa-solid fa-arrow-left"></i>
                 </a>
+                <div class="me-3">
+                    <img src="{{ $employee->profile_picture_url }}" alt="{{ $employee->full_name }}"
+                         style="width:58px;height:58px;border-radius:50%;object-fit:cover;border:2px solid #0d6efd;"
+                         class="shadow-sm">
+                </div>
                 <div>
                     <h1 class="h3 mb-0 fw-bold text-gray-800">{{ $employee->full_name }}</h1>
                     <div class="d-flex flex-wrap align-items-center gap-2 mt-1">

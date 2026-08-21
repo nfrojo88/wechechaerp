@@ -43,10 +43,15 @@
         <a href="{{ route('employees.index') }}" class="btn btn-sm btn-outline-secondary me-3">
             <i class="fa-solid fa-arrow-left"></i>
         </a>
+        <div class="me-3">
+            <img src="{{ $employee->profile_picture_url }}" alt="{{ $employee->full_name }}"
+                 style="width:58px;height:58px;border-radius:50%;object-fit:cover;border:2px solid #0d6efd;"
+                 class="shadow-sm">
+        </div>
         <div>
             <h1 class="h3 mb-0">{{ $employee->full_name }}</h1>
             <div class="d-flex align-items-center gap-2 mt-1">
-                <small class="text-muted">{{ $employee->employee_code }} • {{ $employee->role_title }}</small>
+                <small class="text-muted">{{ $employee->employee_code }} • {{ $employee->role_title ?? 'Employee' }}</small>
                 @if($employee->is_approved_by_gm)
                     <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>GM Approved</span>
                 @elseif($employee->gm_approval_status === 'rejected')
@@ -147,20 +152,84 @@
             </div>
         </div>
 
-        {{-- Contact Information Card --}}
+        {{-- Contact & Identity Information Card --}}
         <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-light">
-                <h5 class="mb-0"><i class="fa-solid fa-phone text-primary me-2"></i>Contact Information</h5>
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fa-solid fa-id-card text-primary me-2"></i>Contact & Identity Information</h5>
+                @if($employee->national_id_card)
+                    <a href="{{ $employee->national_id_card_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                        <i class="fa-solid fa-eye me-1"></i>View National ID Card
+                    </a>
+                @endif
             </div>
             <div class="card-body">
                 <div class="row g-4">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <small class="text-muted d-block mb-1">Phone</small>
                         <h6 class="mb-0">{{ $employee->phone ?? 'N/A' }}</h6>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <small class="text-muted d-block mb-1">Email</small>
                         <h6 class="mb-0">{{ $employee->email ?? 'N/A' }}</h6>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block mb-1">National ID / Fayda No.</small>
+                        <h6 class="mb-0 font-monospace">
+                            {{ $employee->national_id_number ?? 'Not Provided' }}
+                            @if($employee->national_id_card)
+                                <span class="badge bg-success ms-1"><i class="fa-solid fa-check me-1"></i>Card on File</span>
+                            @endif
+                        </h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Official Documents & Contracts Card --}}
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="fa-solid fa-folder-open text-info me-2"></i>Official Registration & Documents</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 text-center bg-light h-100">
+                            <i class="fa-solid fa-file-contract fa-2x text-primary mb-2"></i>
+                            <h6 class="fw-bold mb-1 small">Registration / Contract</h6>
+                            @if($employee->registration_letter)
+                                <a href="{{ $employee->registration_letter_url }}" target="_blank" class="btn btn-sm btn-primary mt-2">
+                                    <i class="fa-solid fa-eye me-1"></i>View Contract
+                                </a>
+                            @else
+                                <span class="badge bg-secondary mt-2">Not Uploaded</span>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 text-center bg-light h-100">
+                            <i class="fa-solid fa-id-card fa-2x text-success mb-2"></i>
+                            <h6 class="fw-bold mb-1 small">National ID Card</h6>
+                            @if($employee->national_id_card)
+                                <a href="{{ $employee->national_id_card_url }}" target="_blank" class="btn btn-sm btn-success mt-2">
+                                    <i class="fa-solid fa-eye me-1"></i>View ID Card
+                                </a>
+                            @else
+                                <span class="badge bg-secondary mt-2">Not Uploaded</span>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 text-center bg-light h-100">
+                            <i class="fa-solid fa-file-signature fa-2x text-warning mb-2"></i>
+                            <h6 class="fw-bold mb-1 small">Asset Handover Receipt</h6>
+                            @if($employee->asset_handover_document)
+                                <a href="{{ $employee->asset_handover_document_url }}" target="_blank" class="btn btn-sm btn-warning text-dark mt-2">
+                                    <i class="fa-solid fa-eye me-1"></i>View Receipt
+                                </a>
+                            @else
+                                <span class="badge bg-secondary mt-2">Not Uploaded</span>
+                            @endif
+                        </div>
                     </div>
                 </div>
             </div>
