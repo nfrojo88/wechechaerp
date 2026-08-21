@@ -228,11 +228,12 @@ class EmployeeController extends Controller
             'education.*.field_of_study'    => 'nullable|string',
             'education.*.institution_name'  => 'nullable|string',
             'education.*.certificate_photo' => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
-            'experience'                    => 'nullable|array',
-            'experience.*.job_title'        => 'nullable|string',
-            'experience.*.company_name'     => 'nullable|string',
-            'experience.*.start_date'       => 'nullable|date',
-            'experience.*.license_document' => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'experience'                     => 'nullable|array',
+            'experience.*.job_title'         => 'nullable|string',
+            'experience.*.company_name'      => 'nullable|string',
+            'experience.*.start_date'        => 'nullable|date',
+            'experience.*.experience_letter' => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'experience.*.license_document'  => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
             'device_user_id'                => 'nullable|string|max:100',
         ]);
 
@@ -374,6 +375,12 @@ class EmployeeController extends Controller
                 continue;
             }
 
+            $letterPath = null;
+            if (request()->hasFile("experience.{$index}.experience_letter")) {
+                $file = request()->file("experience.{$index}.experience_letter");
+                $letterPath = \App\Services\FileUploadService::upload($file, 'employee_experiences');
+            }
+
             $licensePath = null;
             if (request()->hasFile("experience.{$index}.license_document")) {
                 $file = request()->file("experience.{$index}.license_document");
@@ -387,19 +394,20 @@ class EmployeeController extends Controller
             $expLicExpiry   = !empty($experience['license_expiry']) ? $experience['license_expiry'] : null;
 
             \App\Models\EmployeeExperience::create([
-                'employee_id'      => $employee->id,
-                'job_title'        => !empty($experience['job_title'])    ? $experience['job_title']    : 'N/A',
-                'company_name'     => !empty($experience['company_name']) ? $experience['company_name'] : 'N/A',
-                'location'         => $experience['location']         ?? null,
-                'start_date'       => $expStartDate,
-                'end_date'         => $expEndDate,
-                'is_current'       => $isCurrent,
-                'responsibilities' => $experience['responsibilities'] ?? null,
-                'reference_name'   => $experience['reference_name']   ?? null,
-                'reference_phone'  => $experience['reference_phone']  ?? null,
-                'license_document' => $licensePath,
-                'license_number'   => $experience['license_number']   ?? null,
-                'license_expiry'   => $expLicExpiry,
+                'employee_id'       => $employee->id,
+                'job_title'         => !empty($experience['job_title'])    ? $experience['job_title']    : 'N/A',
+                'company_name'      => !empty($experience['company_name']) ? $experience['company_name'] : 'N/A',
+                'location'          => $experience['location']         ?? null,
+                'start_date'        => $expStartDate,
+                'end_date'          => $expEndDate,
+                'is_current'        => $isCurrent,
+                'responsibilities'  => $experience['responsibilities'] ?? null,
+                'experience_letter' => $letterPath,
+                'reference_name'    => $experience['reference_name']   ?? null,
+                'reference_phone'   => $experience['reference_phone']  ?? null,
+                'license_document'  => $licensePath,
+                'license_number'    => $experience['license_number']   ?? null,
+                'license_expiry'    => $expLicExpiry,
             ]);
         }
     }
@@ -588,6 +596,11 @@ class EmployeeController extends Controller
                     continue;
                 }
 
+                $letterDocPath = null;
+                if ($request->hasFile("experience.{$index}.experience_letter")) {
+                    $letterDocPath = \App\Services\FileUploadService::upload($request->file("experience.{$index}.experience_letter"), 'employee_experiences');
+                }
+
                 $licenseDocPath = null;
                 if ($request->hasFile("experience.{$index}.license_document")) {
                     $licenseDocPath = \App\Services\FileUploadService::upload($request->file("experience.{$index}.license_document"), 'employee_licenses');
@@ -609,6 +622,9 @@ class EmployeeController extends Controller
                     'license_number'   => $expData['license_number']   ?? null,
                     'license_expiry'   => !empty($expData['license_expiry']) ? $expData['license_expiry'] : null,
                 ];
+                if ($letterDocPath) {
+                    $expPayload['experience_letter'] = $letterDocPath;
+                }
                 if ($licenseDocPath) {
                     $expPayload['license_document'] = $licenseDocPath;
                 }

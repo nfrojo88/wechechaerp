@@ -1352,6 +1352,7 @@ Route::middleware(['auth'])->group(function () {
     Route::put('employees/{employee}/reject', [App\Http\Controllers\EmployeeController::class, 'reject'])->name('employees.reject');
     Route::get('employees/education/{education}/certificate', [App\Http\Controllers\FileStreamController::class, 'viewCertificate'])->name('employees.education.certificate');
     Route::get('employees/experience/{experience}/license', [App\Http\Controllers\FileStreamController::class, 'viewLicense'])->name('employees.experience.license');
+    Route::get('employees/experience/{experience}/letter', [App\Http\Controllers\FileStreamController::class, 'viewExperienceLetter'])->name('employees.experience.letter');
     Route::get('employees/{employee}/guarantee-letter-file', [App\Http\Controllers\FileStreamController::class, 'viewGuaranteeLetter'])->name('employees.guarantee-letter.view');
     Route::resource('employees', App\Http\Controllers\EmployeeController::class);
     Route::post('employees/{employee}/upload-guarantee', [App\Http\Controllers\EmployeeController::class, 'uploadGuaranteeLetter'])->name('employees.upload-guarantee');

@@ -110,6 +110,24 @@ class FileStreamController extends Controller
     }
 
     /**
+     * Dedicated route to view an employee experience letter / certificate.
+     */
+    public function viewExperienceLetter($id)
+    {
+        $exp = EmployeeExperience::find($id);
+
+        if (!$exp || empty($exp->experience_letter)) {
+            return $this->renderMissingDocument('Experience Certificate', 'No experience certificate or letter is recorded for this experience entry.');
+        }
+
+        if (Str::startsWith($exp->experience_letter, ['http://', 'https://'])) {
+            return redirect()->away($exp->experience_letter);
+        }
+
+        return $this->respondWithFile($exp->experience_letter, 'uploads', 'Experience Certificate - ' . ($exp->company_name ?? 'Document'));
+    }
+
+    /**
      * Dedicated route to view an employee guarantee letter.
      */
     public function viewGuaranteeLetter($id)

@@ -572,6 +572,35 @@
                                        placeholder="+251 911 234 567">
                             </div>
 
+                            <!-- Document Uploads -->
+                            <div class="col-12"><hr class="my-2"><h6 class="text-muted small fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2 text-primary"></i>Experience Documents & Certifications (Optional)</h6></div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    <i class="fa-solid fa-file-lines text-primary me-1"></i>Experience Certificate / Recommendation Letter
+                                    <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                                </label>
+                                <input type="file" name="experience[0][experience_letter]" class="form-control" 
+                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
+                                       onchange="previewArrayFile(this)">
+                                <div class="file-preview-target mt-2 d-none">
+                                    <img src="" alt="Certificate Preview" class="img-preview-box">
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">
+                                    <i class="fa-solid fa-file-shield text-success me-1"></i>Professional License Document or Photo
+                                    <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                                </label>
+                                <input type="file" name="experience[0][license_document]" class="form-control" 
+                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
+                                       onchange="previewArrayFile(this)">
+                                <div class="file-preview-target mt-2 d-none">
+                                    <img src="" alt="License Preview" class="img-preview-box">
+                                </div>
+                            </div>
+
                             <!-- Professional License Section -->
                             <div class="col-md-6">
                                 <label class="form-label">License Number</label>
@@ -581,18 +610,6 @@
                             <div class="col-md-6">
                                 <label class="form-label">License Expiry Date</label>
                                 <input type="date" name="experience[0][license_expiry]" class="form-control">
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label fw-bold">
-                                    <i class="fa-solid fa-file-shield text-success me-1"></i>Professional License Document or Photo
-                                    <small class="text-muted fw-normal">(PNG, JPG, JPEG, WEBP, PDF - Max 15MB)</small>
-                                </label>
-                                <input type="file" name="experience[0][license_document]" class="form-control" 
-                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
-                                       onchange="previewArrayFile(this)">
-                                <div class="file-preview-target mt-2 d-none">
-                                    <img src="" alt="License Preview" class="img-preview-box">
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -1091,6 +1108,36 @@ function addExperience() {
                            placeholder="+251 911 234 567">
                 </div>
 
+                <!-- Document Uploads -->
+                <div class="col-12"><hr class="my-2"><h6 class="text-muted small fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2 text-primary"></i>Experience Documents & Certifications (Optional)</h6></div>
+
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">
+                        <i class="fa-solid fa-file-lines text-primary me-1"></i>Experience Certificate / Recommendation Letter
+                        <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                    </label>
+                    <input type="file" name="experience[${index}][experience_letter]" class="form-control" 
+                           accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
+                           onchange="previewArrayFile(this)">
+                    <div class="file-preview-target mt-2 d-none">
+                        <img src="" alt="Certificate Preview" class="img-preview-box">
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">
+                        <i class="fa-solid fa-file-shield text-success me-1"></i>Professional License Document or Photo
+                        <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                    </label>
+                    <input type="file" name="experience[${index}][license_document]" class="form-control" 
+                           accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
+                           onchange="previewArrayFile(this)">
+                    <div class="file-preview-target mt-2 d-none">
+                        <img src="" alt="License Preview" class="img-preview-box">
+                    </div>
+                </div>
+
+                <!-- Professional License Section -->
                 <div class="col-md-6">
                     <label class="form-label">License Number</label>
                     <input type="text" name="experience[${index}][license_number]" class="form-control" 
@@ -1099,18 +1146,6 @@ function addExperience() {
                 <div class="col-md-6">
                     <label class="form-label">License Expiry Date</label>
                     <input type="date" name="experience[${index}][license_expiry]" class="form-control">
-                </div>
-                <div class="col-12">
-                    <label class="form-label fw-bold">
-                        <i class="fa-solid fa-file-shield text-success me-1"></i>Professional License Document or Photo
-                        <small class="text-muted fw-normal">(PNG, JPG, JPEG, WEBP, PDF - Max 15MB)</small>
-                    </label>
-                    <input type="file" name="experience[${index}][license_document]" class="form-control" 
-                           accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
-                           onchange="previewArrayFile(this)">
-                    <div class="file-preview-target mt-2 d-none">
-                        <img src="" alt="License Preview" class="img-preview-box">
-                    </div>
                 </div>
             </div>
         </div>

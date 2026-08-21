@@ -628,7 +628,42 @@
                                           placeholder="Describe duties...">{{ $exp['responsibilities'] ?? '' }}</textarea>
                             </div>
                             
-                            <div class="col-12"><hr class="my-2"><h6 class="text-muted small fw-bold"><i class="fa-solid fa-certificate me-2 text-warning"></i>Professional License (Optional)</h6></div>
+                            <div class="col-12"><hr class="my-2"><h6 class="text-muted small fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2 text-primary"></i>Experience Documents & Certifications (Optional)</h6></div>
+
+                            <div class="col-md-6">
+                                @if(!empty($exp['experience_letter']))
+                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
+                                        <i class="fa-solid fa-file-lines text-primary"></i>
+                                        <small class="text-muted text-truncate">Experience Certificate on file</small>
+                                        <a href="{{ uploaded_asset($exp['experience_letter']) }}" target="_blank" class="btn btn-xs btn-outline-primary ms-auto">
+                                            <i class="fa-solid fa-eye me-1"></i>View Document
+                                        </a>
+                                    </div>
+                                @endif
+                                <label class="form-label small fw-semibold">
+                                    <i class="fa-solid fa-file-lines text-primary me-1"></i>Upload / Replace Experience Certificate
+                                    <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                                </label>
+                                <input type="file" name="experience[{{ $index }}][experience_letter]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                            </div>
+
+                            <div class="col-md-6">
+                                @if(!empty($exp['license_document']))
+                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
+                                        <i class="fa-solid fa-file-shield text-success"></i>
+                                        <small class="text-muted text-truncate">License Document on file</small>
+                                        <a href="{{ uploaded_asset($exp['license_document']) }}" target="_blank" class="btn btn-xs btn-outline-success ms-auto">
+                                            <i class="fa-solid fa-eye me-1"></i>View Document
+                                        </a>
+                                    </div>
+                                @endif
+                                <label class="form-label small fw-semibold">
+                                    <i class="fa-solid fa-file-shield text-success me-1"></i>Upload / Replace License Document
+                                    <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                                </label>
+                                <input type="file" name="experience[{{ $index }}][license_document]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                            </div>
+
                             <div class="col-md-6">
                                 <label class="form-label">License Number</label>
                                 <input type="text" name="experience[{{ $index }}][license_number]" class="form-control" 
@@ -638,19 +673,6 @@
                                 <label class="form-label">License Expiry Date</label>
                                 <input type="date" name="experience[{{ $index }}][license_expiry]" class="form-control"
                                        value="{{ isset($exp['license_expiry']) ? (is_string($exp['license_expiry']) ? substr($exp['license_expiry'], 0, 10) : $exp['license_expiry']) : '' }}">
-                            </div>
-                            <div class="col-12">
-                                @if(!empty($exp['license_document']))
-                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
-                                        <i class="fa-solid fa-file-pdf text-danger"></i>
-                                        <small class="text-muted">License Document on file</small>
-                                        <a href="{{ uploaded_asset($exp['license_document']) }}" target="_blank" class="btn btn-xs btn-outline-primary ms-auto">
-                                            <i class="fa-solid fa-eye me-1"></i>View Document
-                                        </a>
-                                    </div>
-                                @endif
-                                <label class="form-label small fw-semibold">Upload / Replace License Document <small class="text-muted">(Max 10MB)</small></label>
-                                <input type="file" name="experience[{{ $index }}][license_document]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg">
                             </div>
                         </div>
                     </div>
@@ -1052,7 +1074,24 @@ function addExperience() {
                     <label class="form-label">Key Responsibilities</label>
                     <textarea name="experience[${index}][responsibilities]" class="form-control" rows="3" placeholder="Describe duties..."></textarea>
                 </div>
-                <div class="col-12"><hr class="my-2"><h6 class="text-muted small fw-bold"><i class="fa-solid fa-certificate me-2 text-warning"></i>Professional License (Optional)</h6></div>
+                <div class="col-12"><hr class="my-2"><h6 class="text-muted small fw-bold"><i class="fa-solid fa-cloud-arrow-up me-2 text-primary"></i>Experience Documents & Certifications (Optional)</h6></div>
+
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">
+                        <i class="fa-solid fa-file-lines text-primary me-1"></i>Experience Certificate / Recommendation Letter
+                        <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                    </label>
+                    <input type="file" name="experience[${index}][experience_letter]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">
+                        <i class="fa-solid fa-file-shield text-success me-1"></i>Professional License Document or Photo
+                        <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP - Max 15MB)</small>
+                    </label>
+                    <input type="file" name="experience[${index}][license_document]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                </div>
+
                 <div class="col-md-6">
                     <label class="form-label">License Number</label>
                     <input type="text" name="experience[${index}][license_number]" class="form-control" placeholder="e.g., PE-12345">
@@ -1060,10 +1099,6 @@ function addExperience() {
                 <div class="col-md-6">
                     <label class="form-label">License Expiry Date</label>
                     <input type="date" name="experience[${index}][license_expiry]" class="form-control">
-                </div>
-                <div class="col-12">
-                    <label class="form-label small fw-semibold">License Document <small class="text-muted">(Max 10MB)</small></label>
-                    <input type="file" name="experience[${index}][license_document]" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg">
                 </div>
             </div>
         </div>

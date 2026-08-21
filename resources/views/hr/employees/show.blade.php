@@ -405,13 +405,19 @@
                                 </div>
                             @endif
                         </div>
-                        <div class="col-md-4 text-end">
+                        <div class="col-md-4 text-end d-flex flex-column align-items-end gap-2">
+                            @if($exp->experience_letter)
+                                <a href="{{ $exp->experience_letter_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="fa-solid fa-file-lines me-1"></i>View Experience Letter
+                                </a>
+                            @endif
                             @if($exp->license_document)
                                 <a href="{{ $exp->license_url }}" target="_blank" class="btn btn-sm btn-outline-success">
-                                    <i class="fa-solid fa-file-pdf me-1"></i>View License
+                                    <i class="fa-solid fa-file-shield me-1"></i>View License
                                 </a>
-                            @else
-                                <small class="text-muted">No license document</small>
+                            @endif
+                            @if(!$exp->experience_letter && !$exp->license_document)
+                                <small class="text-muted">No documents uploaded</small>
                             @endif
                         </div>
                     </div>

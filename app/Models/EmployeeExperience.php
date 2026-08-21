@@ -22,6 +22,7 @@ class EmployeeExperience extends Model
         'end_date',
         'is_current',
         'responsibilities',
+        'experience_letter',
         'reference_name',
         'reference_phone',
         'license_document',
@@ -42,6 +43,28 @@ class EmployeeExperience extends Model
     public function employee()
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    /**
+     * Get the experience letter / certificate document URL
+     */
+    public function getExperienceLetterUrlAttribute()
+    {
+        if (empty($this->experience_letter)) {
+            return null;
+        }
+
+        if (\Illuminate\Support\Str::startsWith($this->experience_letter, ['http://', 'https://'])) {
+            return $this->experience_letter;
+        }
+
+        if ($this->id) {
+            try {
+                return route('employees.experience.letter', $this->id);
+            } catch (\Throwable $e) {}
+        }
+
+        return \App\Services\FileUploadService::url($this->experience_letter);
     }
 
     /**
