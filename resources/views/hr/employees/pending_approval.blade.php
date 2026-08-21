@@ -202,12 +202,49 @@
 
                     {{-- Quick Reason Tags --}}
                     <div>
-                        <small class="text-muted d-block fw-semibold mb-2"><i class="fa-solid fa-tags me-1"></i>Quick Reason Templates:</small>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted fw-bold"><i class="fa-solid fa-tags me-1 text-primary"></i>Quick Reason Templates <span class="badge bg-light text-secondary border fw-normal">Select Multiple</span>:</small>
+                            <button type="button" class="btn btn-link btn-xs text-muted p-0 text-decoration-none" onclick="clearReasonTemplates(this)" style="font-size: 0.75rem;">
+                                <i class="fa-solid fa-rotate-left me-1"></i>Reset Selection
+                            </button>
+                        </div>
                         <div class="d-flex flex-wrap gap-1">
-                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2" onclick="setReason('Basic salary or allowances exceed approved scale. Please adjust.')">Salary Discrepancy</button>
-                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2" onclick="setReason('Valid guarantee letter is mandatory for this role before approval.')">Guarantee Letter Missing</button>
-                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2" onclick="setReason('Incorrect department or project site assigned. Please re-assign.')">Wrong Site/Dept</button>
-                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2" onclick="setReason('Educational certificate or professional license photo is missing/illegible.')">Missing Documents</button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2.5 rounded-pill quick-template-btn d-inline-flex align-items-center gap-1"
+                                    data-text="Basic salary or allowances exceed approved scale. Please adjust."
+                                    onclick="toggleReasonTemplate(this)">
+                                <i class="fa-solid fa-check d-none template-check-icon text-white me-1"></i>
+                                <span>💰 Salary Discrepancy</span>
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2.5 rounded-pill quick-template-btn d-inline-flex align-items-center gap-1"
+                                    data-text="Valid guarantee letter is mandatory for this role before approval."
+                                    onclick="toggleReasonTemplate(this)">
+                                <i class="fa-solid fa-check d-none template-check-icon text-white me-1"></i>
+                                <span>📜 Guarantee Letter Missing</span>
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2.5 rounded-pill quick-template-btn d-inline-flex align-items-center gap-1"
+                                    data-text="Incorrect department or project site assigned. Please re-assign."
+                                    onclick="toggleReasonTemplate(this)">
+                                <i class="fa-solid fa-check d-none template-check-icon text-white me-1"></i>
+                                <span>📍 Wrong Site/Dept</span>
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2.5 rounded-pill quick-template-btn d-inline-flex align-items-center gap-1"
+                                    data-text="Educational certificate or professional license photo is missing/illegible."
+                                    onclick="toggleReasonTemplate(this)">
+                                <i class="fa-solid fa-check d-none template-check-icon text-white me-1"></i>
+                                <span>📁 Missing Documents</span>
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2.5 rounded-pill quick-template-btn d-inline-flex align-items-center gap-1"
+                                    data-text="Contract type, job title, or date of joining needs correction."
+                                    onclick="toggleReasonTemplate(this)">
+                                <i class="fa-solid fa-check d-none template-check-icon text-white me-1"></i>
+                                <span>📋 Contract / Role Details</span>
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2.5 rounded-pill quick-template-btn d-inline-flex align-items-center gap-1"
+                                    data-text="Bank account number or bank name is missing or invalid."
+                                    onclick="toggleReasonTemplate(this)">
+                                <i class="fa-solid fa-check d-none template-check-icon text-white me-1"></i>
+                                <span>🏦 Bank Account Details</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -241,7 +278,43 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-bold">Rejection Reason / Notes <span class="text-danger">*</span></label>
-                        <textarea name="rejection_reason" class="form-control" rows="3" required placeholder="Enter reasons for rejecting selected employees..."></textarea>
+                        <textarea name="rejection_reason" id="bulkRejectionReason" class="form-control" rows="3" required placeholder="Enter reasons for rejecting selected employees..."></textarea>
+                    </div>
+
+                    {{-- Bulk Quick Reason Tags --}}
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted fw-bold"><i class="fa-solid fa-tags me-1 text-primary"></i>Quick Reason Templates <span class="badge bg-light text-secondary border fw-normal">Select Multiple</span>:</small>
+                            <button type="button" class="btn btn-link btn-xs text-muted p-0 text-decoration-none" onclick="clearReasonTemplates(this)" style="font-size: 0.75rem;">
+                                <i class="fa-solid fa-rotate-left me-1"></i>Reset Selection
+                            </button>
+                        </div>
+                        <div class="d-flex flex-wrap gap-1">
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2.5 rounded-pill quick-template-btn d-inline-flex align-items-center gap-1"
+                                    data-text="Basic salary or allowances exceed approved scale. Please adjust."
+                                    onclick="toggleReasonTemplate(this)">
+                                <i class="fa-solid fa-check d-none template-check-icon text-white me-1"></i>
+                                <span>💰 Salary Discrepancy</span>
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2.5 rounded-pill quick-template-btn d-inline-flex align-items-center gap-1"
+                                    data-text="Valid guarantee letter is mandatory for this role before approval."
+                                    onclick="toggleReasonTemplate(this)">
+                                <i class="fa-solid fa-check d-none template-check-icon text-white me-1"></i>
+                                <span>📜 Guarantee Letter Missing</span>
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2.5 rounded-pill quick-template-btn d-inline-flex align-items-center gap-1"
+                                    data-text="Incorrect department or project site assigned. Please re-assign."
+                                    onclick="toggleReasonTemplate(this)">
+                                <i class="fa-solid fa-check d-none template-check-icon text-white me-1"></i>
+                                <span>📍 Wrong Site/Dept</span>
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-1 px-2.5 rounded-pill quick-template-btn d-inline-flex align-items-center gap-1"
+                                    data-text="Educational certificate or professional license photo is missing/illegible."
+                                    onclick="toggleReasonTemplate(this)">
+                                <i class="fa-solid fa-check d-none template-check-icon text-white me-1"></i>
+                                <span>📁 Missing Documents</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
@@ -287,14 +360,78 @@ function openRejectModal(id, name, code) {
     form.action = `/employees/${id}/reject`;
     document.getElementById('modalEmployeeName').textContent = name;
     document.getElementById('modalEmployeeCode').textContent = code;
-    document.getElementById('singleRejectionReason').value = '';
 
-    const modal = new bootstrap.Modal(document.getElementById('rejectEmployeeModal'));
+    const modalEl = document.getElementById('rejectEmployeeModal');
+    clearReasonTemplates(modalEl);
+
+    const modal = new bootstrap.Modal(modalEl);
     modal.show();
 }
 
-function setReason(text) {
-    document.getElementById('singleRejectionReason').value = text;
+function toggleReasonTemplate(btn) {
+    const modal = btn.closest('.modal');
+    const textarea = modal ? modal.querySelector('textarea[name="rejection_reason"]') : null;
+    if (!textarea) return;
+
+    const templateText = (btn.dataset.text || btn.textContent).trim();
+    const isActive = btn.classList.contains('active');
+    const checkIcon = btn.querySelector('.template-check-icon');
+
+    let currentLines = textarea.value.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+    if (isActive) {
+        // Deselect
+        btn.classList.remove('active', 'btn-danger', 'text-white');
+        btn.classList.add('btn-outline-secondary');
+        if (checkIcon) checkIcon.classList.add('d-none');
+
+        // Remove matching line (ignoring leading bullets)
+        currentLines = currentLines.filter(line => {
+            const cleanLine = line.replace(/^[•\-\*\d\.]+\s*/, '').trim();
+            return cleanLine !== templateText;
+        });
+    } else {
+        // Select
+        btn.classList.add('active', 'btn-danger', 'text-white');
+        btn.classList.remove('btn-outline-secondary');
+        if (checkIcon) checkIcon.classList.remove('d-none');
+
+        const exists = currentLines.some(line => {
+            const cleanLine = line.replace(/^[•\-\*\d\.]+\s*/, '').trim();
+            return cleanLine === templateText;
+        });
+
+        if (!exists) {
+            currentLines.push('• ' + templateText);
+        }
+    }
+
+    // Format lines: ensure bullets if multiple lines
+    if (currentLines.length > 1) {
+        currentLines = currentLines.map(line => {
+            if (!line.startsWith('• ') && !line.startsWith('- ') && !/^\d+\./.test(line)) {
+                return '• ' + line;
+            }
+            return line;
+        });
+    }
+
+    textarea.value = currentLines.join('\n');
+    textarea.focus();
+}
+
+function clearReasonTemplates(btnOrModal) {
+    const modal = btnOrModal.closest ? btnOrModal.closest('.modal') : btnOrModal;
+    if (!modal) return;
+    const textarea = modal.querySelector('textarea[name="rejection_reason"]');
+    if (textarea) textarea.value = '';
+
+    modal.querySelectorAll('.quick-template-btn').forEach(btn => {
+        btn.classList.remove('active', 'btn-danger', 'text-white');
+        btn.classList.add('btn-outline-secondary');
+        const checkIcon = btn.querySelector('.template-check-icon');
+        if (checkIcon) checkIcon.classList.add('d-none');
+    });
 }
 
 function submitBulkApprove() {
@@ -319,7 +456,10 @@ function openBulkRejectModal() {
         container.appendChild(input);
     });
 
-    const modal = new bootstrap.Modal(document.getElementById('bulkRejectModal'));
+    const modalEl = document.getElementById('bulkRejectModal');
+    clearReasonTemplates(modalEl);
+
+    const modal = new bootstrap.Modal(modalEl);
     modal.show();
 }
 </script>
