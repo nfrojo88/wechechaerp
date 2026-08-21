@@ -35,19 +35,19 @@
                         </tr>
                         <tr>
                             <th>Project:</th>
-                            <td>{{ $subconAgreement->project->name }}</td>
+                            <td>{{ $subconAgreement->project?->name ?? 'N/A' }}</td>
                         </tr>
                         <tr>
                             <th>Subcontractor:</th>
-                            <td>{{ $subconAgreement->subcontractor->name }}</td>
+                            <td>{{ $subconAgreement->subcontractor?->name ?? 'N/A' }}</td>
                         </tr>
                         <tr>
                             <th>Start Date:</th>
-                            <td>{{ $subconAgreement->start_date->format('M d, Y') }}</td>
+                            <td>{{ optional($subconAgreement->start_date)->format('M d, Y') ?? '-' }}</td>
                         </tr>
                         <tr>
                             <th>End Date:</th>
-                            <td>{{ $subconAgreement->end_date->format('M d, Y') }}</td>
+                            <td>{{ optional($subconAgreement->end_date)->format('M d, Y') ?? '-' }}</td>
                         </tr>
                         <tr>
                             <th>Total Value:</th>

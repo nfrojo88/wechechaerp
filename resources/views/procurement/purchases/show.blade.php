@@ -82,8 +82,8 @@
                     <div class="fs-3 fw-bold text-primary">{{ number_format($purchaseOrder->total_amount, 2) }} ETB</div>
                 </div>
                 <div class="text-muted small">
-                    <div>Created By: <span class="fw-semibold text-dark">{{ $purchaseOrder->creator->name }}</span></div>
-                    <div>{{ $purchaseOrder->created_at->format('d M Y H:i') }}</div>
+                    <div>Created By: <span class="fw-semibold text-dark">{{ $purchaseOrder->creator?->name ?? 'Staff' }}</span></div>
+                    <div>{{ $purchaseOrder->created_at?->format('d M Y H:i') ?? '—' }}</div>
                 </div>
             </div>
         </div>

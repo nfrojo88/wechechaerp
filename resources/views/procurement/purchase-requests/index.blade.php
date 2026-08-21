@@ -18,12 +18,12 @@
                         @forelse($prs as $pr)
                         <tr>
                             <td><strong>{{ $pr->pr_no }}</strong></td>
-                            <td>{{ $pr->project->name }}</td>
-                            <td><span class="badge bg-{{ $pr->priority === 'urgent' ? 'danger' : ($pr->priority === 'high' ? 'warning' : 'secondary') }}">{{ ucfirst($pr->priority) }}</span></td>
-                            <td>{{ ucfirst($pr->type) }}</td>
+                            <td>{{ $pr->project?->name ?? $pr->project?->project_name ?? 'N/A' }}</td>
+                            <td><span class="badge bg-{{ $pr->priority === 'urgent' ? 'danger' : ($pr->priority === 'high' ? 'warning' : 'secondary') }}">{{ ucfirst($pr->priority ?? 'normal') }}</span></td>
+                            <td>{{ ucfirst($pr->type ?? 'material') }}</td>
                             <td>{{ optional($pr->required_date)->format('d M Y') ?? '-' }}</td>
-                            <td><span class="badge bg-info">{{ str_replace('_',' ',ucfirst($pr->status)) }}</span></td>
-                            <td>{{ $pr->requestedBy->name }}</td>
+                            <td><span class="badge bg-info">{{ str_replace('_',' ',ucfirst($pr->status ?? 'pending')) }}</span></td>
+                            <td>{{ $pr->requestedBy?->name ?? 'Staff' }}</td>
                             <td class="text-center"><a href="{{ route('purchase-requests.show', $pr) }}" class="btn btn-sm btn-outline-info"><i class="fas fa-eye"></i></a></td>
                         </tr>
                         @empty

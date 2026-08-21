@@ -34,14 +34,18 @@
                         <td class="fw-semibold">{{ $req->reference_number }}</td>
                         <td><small class="badge bg-light text-dark border">{{ $req->source ?? 'Manual Creation' }}</small></td>
                         <td>
-                            <a href="{{ route('projects.show', $req->project) }}" class="text-decoration-none">
-                                {{ $req->project->name }}
-                            </a>
+                            @if($req->project)
+                                <a href="{{ route('projects.show', $req->project) }}" class="text-decoration-none">
+                                    {{ $req->project->name }}
+                                </a>
+                            @else
+                                <span class="text-muted">Central/HQ</span>
+                            @endif
                         </td>
-                        <td>{{ $req->store->name }}</td>
+                        <td>{{ $req->store?->name ?? 'General Store' }}</td>
                         <td>
-                            <span class="{{ $req->required_date->isPast() && $req->status != 'fulfilled' ? 'text-danger fw-bold' : '' }}">
-                                {{ $req->required_date->format('d M Y') }}
+                            <span class="{{ optional($req->required_date)->isPast() && $req->status != 'fulfilled' ? 'text-danger fw-bold' : '' }}">
+                                {{ optional($req->required_date)->format('d M Y') ?? '-' }}
                             </span>
                         </td>
                         <td>
@@ -61,12 +65,12 @@
                                     'sent_to_store_manager' => 'SENT TO STORE MANAGER',
                                     'sent_to_pr' => 'SENT TO PR',
                                     'transfer_created' => 'TRANSFER CREATED',
-                                    default => strtoupper($req->status)
+                                    default => strtoupper(str_replace('_', ' ', $req->status ?? 'pending'))
                                 };
                             @endphp
                             <span class="badge bg-{{ $badge }}">{{ $statusText }}</span>
                         </td>
-                        <td class="small text-muted">{{ $req->creator->name }}</td>
+                        <td class="small text-muted">{{ $req->creator?->name ?? 'Staff' }}</td>
                         <td class="text-end">
                             <a href="{{ route('material-requests.show', $req) }}" class="btn btn-sm btn-outline-primary">View</a>
                         </td>
