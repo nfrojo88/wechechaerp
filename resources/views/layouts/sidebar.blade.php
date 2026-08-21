@@ -322,14 +322,6 @@
             </a>
         </li>
         @endcanany
-        @canany(['material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*'])
-        <li class="sidebar-nav-item">
-            <a href="{{ route('material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-requests.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-cart-flatbed"></i>
-                <span>Material Requests</span>
-            </a>
-        </li>
-        @endcanany
         @canany(['material_damage_reports.view', 'material_damage_reports.create', 'material_damage_reports.*'])
         <li class="sidebar-nav-item">
             <a href="{{ route('material-damage-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-damage-reports.*') ? 'active' : '' }}">
@@ -354,14 +346,14 @@
             </a>
         </li>
         @endcanany
-        @canany(['finance.budgets.manage', 'finance.*'])
+        @if(auth()->check() && (auth()->user()->hasAnyRole(['admin', 'global_admin', 'planning_manager', 'planning', 'technical_manager', 'finance_manager', 'finance', 'general_manager', 'gm', 'project_manager']) || auth()->user()->canAny(['finance.budgets.manage', 'finance.*', 'planning.*'])))
         <li class="sidebar-nav-item">
             <a href="{{ route('budgets.index') }}" class="sidebar-nav-link {{ request()->routeIs('budgets.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-sack-dollar"></i>
+                <i class="fa-solid fa-sack-dollar text-warning"></i>
                 <span>Project Budgets</span>
             </a>
         </li>
-        @endcanany
+        @endif
         @endcanany
 
         {{-- Procurement / Stores --}}

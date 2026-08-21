@@ -104,6 +104,159 @@
         </div>
     </div>
 
+    {{-- ── Project Budget, Cost & Current Balance Section ──────────────────────── --}}
+    <div class="card border-0 shadow-sm mb-4 overflow-hidden">
+        <div class="card-header bg-white border-bottom py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h5 class="mb-0 fw-bold text-dark">
+                    <i class="fa-solid fa-sack-dollar text-warning me-2"></i>Project Budget, Cost &amp; Current Balance
+                </h5>
+                <small class="text-muted">Track approved project budgets, actual expenses (cost), and remaining funds in real-time.</small>
+            </div>
+            <a href="{{ route('budgets.index') }}" class="btn btn-sm btn-outline-warning fw-semibold">
+                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> View Detailed Budgets
+            </a>
+        </div>
+
+        <div class="card-body p-4 bg-light bg-opacity-50">
+            {{-- Financial KPI Cards --}}
+            <div class="row g-3 mb-4">
+                <div class="col-sm-6 col-xl-3">
+                    <div class="card border-0 shadow-sm rounded-3 h-100 bg-white border-start border-4 border-primary">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <small class="text-muted fw-semibold text-uppercase" style="font-size:0.75rem; letter-spacing:0.05em;">Approved Budget</small>
+                                    <h4 class="fw-bold text-primary mb-0 mt-1">Br {{ number_format($totalApprovedBudget, 2) }}</h4>
+                                </div>
+                                <div class="p-2 rounded-3 bg-primary bg-opacity-10 text-primary">
+                                    <i class="fa-solid fa-file-invoice-dollar fa-lg"></i>
+                                </div>
+                            </div>
+                            <small class="text-muted mt-2 d-block" style="font-size:0.75rem;">Total GM &amp; Client Approved Funds</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-sm-6 col-xl-3">
+                    <div class="card border-0 shadow-sm rounded-3 h-100 bg-white border-start border-4 border-danger">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <small class="text-muted fw-semibold text-uppercase" style="font-size:0.75rem; letter-spacing:0.05em;">Actual Expenses (Cost)</small>
+                                    <h4 class="fw-bold text-danger mb-0 mt-1">Br {{ number_format($totalActualExpense, 2) }}</h4>
+                                </div>
+                                <div class="p-2 rounded-3 bg-danger bg-opacity-10 text-danger">
+                                    <i class="fa-solid fa-money-bill-transfer fa-lg"></i>
+                                </div>
+                            </div>
+                            <small class="text-muted mt-2 d-block" style="font-size:0.75rem;">Total Payments &amp; Direct Costs</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-sm-6 col-xl-3">
+                    <div class="card border-0 shadow-sm rounded-3 h-100 bg-white border-start border-4 border-success">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <small class="text-muted fw-semibold text-uppercase" style="font-size:0.75rem; letter-spacing:0.05em;">Remaining Budget</small>
+                                    <h4 class="fw-bold text-success mb-0 mt-1">Br {{ number_format($totalRemainingBudget, 2) }}</h4>
+                                </div>
+                                <div class="p-2 rounded-3 bg-success bg-opacity-10 text-success">
+                                    <i class="fa-solid fa-wallet fa-lg"></i>
+                                </div>
+                            </div>
+                            <small class="text-muted mt-2 d-block" style="font-size:0.75rem;">Current Available Project Balance</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-sm-6 col-xl-3">
+                    <div class="card border-0 shadow-sm rounded-3 h-100 bg-white border-start border-4 border-info">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <small class="text-muted fw-semibold text-uppercase" style="font-size:0.75rem; letter-spacing:0.05em;">Budget Utilization</small>
+                                    <h4 class="fw-bold text-dark mb-0 mt-1">{{ number_format($overallUtilization, 1) }}%</h4>
+                                </div>
+                                <div class="p-2 rounded-3 bg-info bg-opacity-10 text-info">
+                                    <i class="fa-solid fa-chart-pie fa-lg"></i>
+                                </div>
+                            </div>
+                            <div class="progress mt-2" style="height:6px;">
+                                <div class="progress-bar {{ $overallUtilization > 90 ? 'bg-danger' : ($overallUtilization > 75 ? 'bg-warning' : 'bg-success') }}" 
+                                     style="width: {{ min(100, $overallUtilization) }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Project Financial Status Table --}}
+            <div class="card border-0 shadow-sm rounded-3 bg-white overflow-hidden">
+                <div class="card-header bg-white py-3 px-3 border-bottom d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-list-check text-primary me-2"></i>Active Projects Budget &amp; Expense Summary</h6>
+                    <span class="badge bg-secondary">{{ count($projectFinancials) }} Project(s)</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">Project</th>
+                                <th>Client</th>
+                                <th class="text-end">Approved Budget</th>
+                                <th class="text-end">Actual Expenses (Cost)</th>
+                                <th class="text-end">Remaining Balance</th>
+                                <th style="min-width: 140px;">Utilization</th>
+                                <th class="text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($projectFinancials as $pf)
+                            <tr>
+                                <td class="ps-3">
+                                    <span class="fw-bold text-dark d-block">{{ $pf['name'] }}</span>
+                                    @if($pf['code'])
+                                        <small class="text-muted font-monospace">{{ $pf['code'] }}</small>
+                                    @endif
+                                </td>
+                                <td><span class="small text-muted">{{ $pf['client_name'] ?: 'N/A' }}</span></td>
+                                <td class="text-end fw-semibold text-primary">Br {{ number_format($pf['approved_budget'], 2) }}</td>
+                                <td class="text-end fw-semibold text-danger">Br {{ number_format($pf['actual_expense'], 2) }}</td>
+                                <td class="text-end fw-bold text-success">Br {{ number_format($pf['remaining_budget'], 2) }}</td>
+                                <td>
+                                    <div class="d-flex justify-content-between align-items-center mb-1" style="font-size:0.75rem;">
+                                        <span class="fw-bold">{{ number_format($pf['utilization'], 1) }}%</span>
+                                    </div>
+                                    <div class="progress" style="height:6px;">
+                                        <div class="progress-bar {{ $pf['utilization'] > 90 ? 'bg-danger' : ($pf['utilization'] > 75 ? 'bg-warning' : 'bg-success') }}" 
+                                             role="progressbar" 
+                                             style="width: {{ min(100, $pf['utilization']) }}%"></div>
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    @if($pf['status'] === 'Exceeded')
+                                        <span class="badge bg-danger">Exceeded</span>
+                                    @elseif($pf['status'] === 'Warning')
+                                        <span class="badge bg-warning text-dark">Warning (&gt;80%)</span>
+                                    @else
+                                        <span class="badge bg-success">Healthy</span>
+                                    @endif
+                                </td>
+                            </tr>
+                            @empty
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">No active project budget records found.</td>
+                            </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row g-4">
         {{-- Recent ERP Plans --}}
         <div class="col-md-6">

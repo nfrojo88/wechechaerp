@@ -136,12 +136,57 @@ class DashboardController extends Controller
     // ─── Planning (used by: planning, planning_manager, technical_manager) ───────
     public function planning()
     {
-        $projects = Project::where('status', 'active')->get();
+        $projects = Project::where('status', 'active')->with(['budgets'])->get();
         $erpPlans = \App\Models\ErpPlanHeader::with('project', 'creator')->latest()->take(5)->get();
         $schedules = \App\Models\Schedule::with('project')->latest()->take(5)->get();
         $takeoffs = \App\Models\TakeoffSheet::with('project', 'creator')->latest()->take(5)->get();
 
-        return view('dashboard.planning', compact('projects', 'erpPlans', 'schedules', 'takeoffs'));
+        // Project Budgets, Costs & Current Balance Calculations
+        $totalApprovedBudget = (float) $projects->sum(function ($p) {
+            $sumDetailed = (float) $p->budgets->sum('budgeted_amount');
+            return $sumDetailed > 0 ? $sumDetailed : (float) $p->budget_allocated;
+        });
+
+        $totalActualExpense = (float) $projects->sum(function ($p) {
+            $sumDetailed = (float) $p->budgets->sum('actual_amount');
+            return $sumDetailed > 0 ? $sumDetailed : (float) $p->budget_consumed;
+        });
+
+        $totalRemainingBudget = max(0, $totalApprovedBudget - $totalActualExpense);
+        $overallUtilization = $totalApprovedBudget > 0 ? min(100, round(($totalActualExpense / $totalApprovedBudget) * 100, 1)) : 0;
+
+        // Project-by-project breakdown
+        $projectFinancials = $projects->map(function ($p) {
+            $budget = (float) $p->budgets->sum('budgeted_amount');
+            if ($budget <= 0) {
+                $budget = (float) $p->budget_allocated;
+            }
+            $actual = (float) $p->budgets->sum('actual_amount');
+            if ($actual <= 0) {
+                $actual = (float) $p->budget_consumed;
+            }
+            $remaining = max(0, $budget - $actual);
+            $utilization = $budget > 0 ? min(100, round(($actual / $budget) * 100, 1)) : 0;
+            $status = $utilization >= 100 ? 'Exceeded' : ($utilization > 80 ? 'Warning' : 'Healthy');
+
+            return [
+                'id' => $p->id,
+                'name' => $p->name,
+                'code' => $p->code,
+                'client_name' => $p->client_name,
+                'approved_budget' => $budget,
+                'actual_expense' => $actual,
+                'remaining_budget' => $remaining,
+                'utilization' => $utilization,
+                'status' => $status,
+            ];
+        });
+
+        return view('dashboard.planning', compact(
+            'projects', 'erpPlans', 'schedules', 'takeoffs',
+            'totalApprovedBudget', 'totalActualExpense', 'totalRemainingBudget',
+            'overallUtilization', 'projectFinancials'
+        ));
     }
 
     // ─── Coordinator (also: secretary, general_service) ─────────────────────────
