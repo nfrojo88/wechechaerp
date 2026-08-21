@@ -1165,6 +1165,7 @@
             </div>
         </div>
     </div>
+</div> {{-- Close .row.g-3 --}}
 
 {{-- =========================================================================
      MODALS SECTION (Placed at bottom outside all grid containers)
@@ -1203,7 +1204,7 @@
                     <div>
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <small class="text-muted fw-bold"><i class="fa-solid fa-tags me-1 text-primary"></i>Quick Reason Templates <span class="badge bg-light text-secondary border fw-normal">Select Multiple</span>:</small>
-                            <button type="button" class="btn btn-link btn-xs text-muted p-0 text-decoration-none" onclick="clearReasonTemplates(this)" style="font-size: 0.75rem;">
+                            <button type="button" class="btn-link btn-xs text-muted p-0 text-decoration-none" onclick="clearReasonTemplates(this)" style="font-size: 0.75rem;">
                                 <i class="fa-solid fa-rotate-left me-1"></i>Reset Selection
                             </button>
                         </div>
@@ -1268,20 +1269,30 @@
 @foreach($modalAssetUnits as $fUnit)
 @php
     $condBadge = $fUnit->condition_badge;
+    $assetCategory = strtolower($fUnit->parentAsset->category ?? '');
+    $assetIcon = match(true) {
+        str_contains($assetCategory, 'vehicle') || str_contains($assetCategory, 'car') => 'fa-car-side',
+        str_contains($assetCategory, 'machinery') || str_contains($assetCategory, 'heavy') => 'fa-truck-monster',
+        str_contains($assetCategory, 'furniture') || str_contains($assetCategory, 'chair') || str_contains($assetCategory, 'table') => 'fa-chair',
+        str_contains($assetCategory, 'computer') || str_contains($assetCategory, 'it') || str_contains($assetCategory, 'electronics') => 'fa-laptop',
+        str_contains($assetCategory, 'tool') => 'fa-screwdriver-wrench',
+        str_contains($assetCategory, 'office') => 'fa-paperclip',
+        default => 'fa-box-open',
+    };
 @endphp
 
 {{-- 1. Asset Specifications Modal --}}
 @php
     $unitPrice = $fUnit->purchase_price ?? $fUnit->parentAsset->unit_cost ?? 0;
 @endphp
-<div class="modal fade" id="viewAssetUnitModal_{{ $fUnit->id }}" tabindex="-1" aria-labelledby="viewAssetUnitModalLabel_{{ $fUnit->id }}" aria-hidden="true" style="z-index: 1060;">
-    <div class="modal-dialog modal-dialog-centered" style="max-width: 640px;">
+<div class="modal fade" id="viewAssetUnitModal_{{ $fUnit->id }}" tabindex="-1" aria-labelledby="viewAssetUnitModalLabel_{{ $fUnit->id }}" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 680px;">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; overflow: hidden;">
             {{-- Modal Header --}}
             <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff;">
                 <div class="d-flex align-items-center gap-3">
                     <div class="rounded-3 p-2 text-warning d-flex align-items-center justify-content-center" style="background: rgba(245, 158, 11, 0.15); width: 44px; height: 44px;">
-                        <i class="fa-solid fa-truck-monster fa-xl"></i>
+                        <i class="fa-solid {{ $assetIcon }} fa-xl"></i>
                     </div>
                     <div>
                         <h5 class="modal-title fw-bold mb-0 text-white" id="viewAssetUnitModalLabel_{{ $fUnit->id }}">
