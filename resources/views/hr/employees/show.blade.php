@@ -1267,7 +1267,7 @@
                         </div>
                     </div>
 
-                    <form action="{{ route('employees.initialize-leave-balance', $employee) }}" method="POST">
+                    <form action="{{ \Illuminate\Support\Facades\Route::has('employees.initialize-leave-balance') ? route('employees.initialize-leave-balance', $employee) : url('/employees/'.$employee->id.'/initialize-leave-balance') }}" method="POST">
                         @csrf
                         <input type="hidden" name="year" value="{{ $currentYear }}">
                         <input type="hidden" name="total_days" value="16.0">
@@ -1287,7 +1287,7 @@
         <div class="modal fade" id="initLeaveModal" tabindex="-1" aria-labelledby="initLeaveModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content border-0 shadow">
-                    <form action="{{ route('employees.initialize-leave-balance', $employee) }}" method="POST">
+                    <form action="{{ \Illuminate\Support\Facades\Route::has('employees.initialize-leave-balance') ? route('employees.initialize-leave-balance', $employee) : url('/employees/'.$employee->id.'/initialize-leave-balance') }}" method="POST">
                         @csrf
                         <div class="modal-header bg-primary text-white">
                             <h5 class="modal-title fs-6 fw-bold" id="initLeaveModalLabel"><i class="fa-solid fa-umbrella-beach me-2"></i>Allocate Annual Leave Balance</h5>
@@ -1330,7 +1330,7 @@
         <div class="modal fade" id="deductLeaveModal" tabindex="-1" aria-labelledby="deductLeaveModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content border-0 shadow">
-                    <form action="{{ route('employees.record-leave-deduction', $employee) }}" method="POST">
+                    <form action="{{ \Illuminate\Support\Facades\Route::has('employees.record-leave-deduction') ? route('employees.record-leave-deduction', $employee) : url('/employees/'.$employee->id.'/record-leave-deduction') }}" method="POST">
                         @csrf
                         <div class="modal-header bg-danger text-white">
                             <h5 class="modal-title fs-6 fw-bold" id="deductLeaveModalLabel"><i class="fa-solid fa-minus me-2"></i>Record Leave Taken &amp; Deduct Days</h5>
