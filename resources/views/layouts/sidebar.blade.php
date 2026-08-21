@@ -6,6 +6,8 @@
     $isSecretary = in_array('secretary', $rawUserRoles);
     $isContractAdmin = in_array('contract_admin', $rawUserRoles);
     $isStoreKeeper = in_array('store_keeper', $rawUserRoles);
+    $isHrOfficer = in_array('hr_officer', $rawUserRoles) || in_array('hr', $rawUserRoles);
+    $isHrManager = in_array('hr_manager', $rawUserRoles);
 @endphp
 
 <div class="sidebar-scroll">
@@ -24,10 +26,13 @@
             } elseif ($isStoreKeeper) {
                 $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.store-keeper') ? route('dashboard.store-keeper') : url('/dashboard/store-keeper');
                 $dashTitle = 'Store Keeper Dashboard';
+            } elseif ($isHrOfficer || $isHrManager) {
+                $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.hr') ? route('dashboard.hr') : (\Illuminate\Support\Facades\Route::has('hr-manager.dashboard') ? route('hr-manager.dashboard') : url('/dashboard/hr'));
+                $dashTitle = 'HR Dashboard';
             }
         @endphp
         <li class="sidebar-nav-item">
-            <a href="{{ $dashUrl }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') ? 'active' : '' }}">
+            <a href="{{ $dashUrl }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') || request()->routeIs('hr-manager.dashboard') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high"></i>
                 <span>{{ $dashTitle }}</span>
             </a>
@@ -988,64 +993,25 @@
         @endcanany
         @endcanany
 
-        {{-- HR --}}
-        @if(!$isContractAdmin && !$isSecretary && !$isStoreKeeper)
-        @canany(['hr.departments.view', 'hr.employees.view', 'hr.employees.create', 'hr.employees.edit', 'hr.attendance.view', 'hr.attendance.manage', 'finance.payroll.process', 'hr.payroll.view', 'hr.*'])
+        {{-- HR Management --}}
+        @if(!$isContractAdmin && !$isSecretary && !$isStoreKeeper && (auth()->check() && (auth()->user()->hasAnyRole(['hr_officer', 'hr_manager', 'hr', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['hr.departments.view', 'hr.employees.view', 'hr.employees.create', 'hr.employees.edit', 'hr.attendance.view', 'hr.attendance.manage', 'finance.payroll.process', 'hr.payroll.view', 'hr.*']))))
 
-        @canany(['hr.departments.view', 'hr.*'])
-        <li class="sidebar-nav-item">
-            <a href="{{ route('departments.index') }}" class="sidebar-nav-link {{ request()->routeIs('departments.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-building"></i>
-                <span>Departments</span>
-            </a>
-        </li>
-        @endcanany
-        @canany(['hr.employees.view', 'hr.employees.create', 'hr.employees.edit', 'hr.*'])
         <li class="sidebar-nav-item">
             <a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-users"></i>
+                <i class="fa-solid fa-users text-primary"></i>
                 <span>Employees</span>
             </a>
         </li>
-        @endcanany
-        @canany(['hr.attendance.view', 'hr.attendance.manage', 'hr.*'])
+        <li class="sidebar-nav-item">
+            <a href="{{ route('departments.index') }}" class="sidebar-nav-link {{ request()->routeIs('departments.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-building text-secondary"></i>
+                <span>Departments</span>
+            </a>
+        </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('attendance.index') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-calendar-check"></i>
-                <span>Attendance</span>
-            </a>
-        </li>
-        @endcanany
-        @canany(['finance.payroll.process', 'hr.payroll.view', 'hr.*'])
-        <li class="sidebar-nav-item">
-            <a href="{{ route('payrolls.index') }}" class="sidebar-nav-link {{ request()->routeIs('payrolls.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-money-bill-wave"></i>
-                <span>Payroll</span>
-            </a>
-        </li>
-        @endcanany
-        @endcanany
-        @endif
-
-        {{-- HR Manager Dashboard --}}
-        @if(auth()->check() && (auth()->user()->hasAnyRole(['hr_officer', 'hr_manager', 'admin', 'global_admin'])))
-
-        <li class="sidebar-nav-item">
-            <a href="{{ route('hr-manager.dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('hr-manager.dashboard') ? 'active' : '' }}">
-                <i class="fa-solid fa-gauge-high text-primary"></i>
-                <span>HR Dashboard</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('attendance.create') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.create') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-check text-success"></i>
-                <span>Record Attendance</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('employees.create') }}" class="sidebar-nav-link {{ request()->routeIs('employees.create') ? 'active' : '' }}">
-                <i class="fa-solid fa-user-plus text-success"></i>
-                <span>Create Employee</span>
+                <span>Attendance</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -1061,27 +1027,27 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('subcon-agreements.index') }}" class="sidebar-nav-link {{ request()->routeIs('subcon-agreements.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-handshake text-warning"></i>
-                <span>Subcon Agreements</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
             <a href="{{ route('manpower-forecast.index') }}" class="sidebar-nav-link {{ request()->routeIs('manpower-forecast.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-chart-line text-primary"></i>
                 <span>Manpower Forecast</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('assets.dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('assets.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-computer text-info"></i>
-                <span>Asset Management</span>
+            <a href="{{ route('payrolls.index') }}" class="sidebar-nav-link {{ request()->routeIs('payrolls.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-money-bill-wave text-success"></i>
+                <span>Payroll</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('payroll.advances') }}" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') ? 'active' : '' }}">
+                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                <span>Salary Advance Loans</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('performance-dashboard.index') }}" class="sidebar-nav-link {{ request()->routeIs('performance-dashboard.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-chart-bar text-info"></i>
-                <span>Performance Dashboard</span>
+                <span>Performance Reviews</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -1094,12 +1060,6 @@
             <a href="{{ route('employee.dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('employee.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-user-tie text-info"></i>
                 <span>Self-Service Portal</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('payroll.advances') }}" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') ? 'active' : '' }}">
-                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
-                <span>Salary Advance Loans</span>
             </a>
         </li>
         @endif
