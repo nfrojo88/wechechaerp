@@ -18,9 +18,9 @@
                         @forelse($transfers as $t)
                         <tr>
                             <td><strong>{{ $t->transfer_no }}</strong></td>
-                            <td>{{ $t->fromStore->name }}</td>
-                            <td>{{ $t->toStore->name }}</td>
-                            <td>{{ $t->requestedBy->name }}</td>
+                            <td>{{ $t->fromStore->name ?? 'Main Store' }}</td>
+                            <td>{{ $t->toStore->name ?? 'Workshop / Site' }}</td>
+                            <td>{{ $t->requestedBy->name ?? 'Staff' }}</td>
                             <td>{{ optional($t->required_date)->format('d M Y') ?? '-' }}</td>
                             <td>
                                 @php $colors = ['draft'=>'secondary','pending_approval'=>'warning','approved'=>'info','in_transit'=>'primary','completed'=>'success','rejected'=>'danger','cancelled'=>'dark']; @endphp

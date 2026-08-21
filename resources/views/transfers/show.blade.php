@@ -13,13 +13,13 @@
                 <div class="card-header fw-semibold">Transfer Info</div>
                 <div class="card-body">
                     <table class="table table-sm table-borderless mb-0">
-                        <tr><th width="40%">From Store</th><td>{{ $transfer->fromStore->name }}</td></tr>
-                        <tr><th>To Store</th><td>{{ $transfer->toStore->name }}</td></tr>
-                        <tr><th>Requested By</th><td>{{ $transfer->requestedBy->name }}</td></tr>
+                        <tr><th width="40%">From Store</th><td>{{ $transfer->fromStore->name ?? 'Main Store' }}</td></tr>
+                        <tr><th>To Store</th><td>{{ $transfer->toStore->name ?? 'Workshop / Site' }}</td></tr>
+                        <tr><th>Requested By</th><td>{{ $transfer->requestedBy->name ?? 'Staff' }}</td></tr>
                         <tr><th>Required Date</th><td>{{ optional($transfer->required_date)->format('d M Y') ?? '-' }}</td></tr>
                         <tr><th>Reason</th><td>{{ $transfer->reason ?? '-' }}</td></tr>
                         <tr><th>Status</th><td><span class="badge bg-info">{{ str_replace('_',' ', ucfirst($transfer->status)) }}</span></td></tr>
-                        @if($transfer->approvedBy)<tr><th>Approved By</th><td>{{ $transfer->approvedBy->name }} — {{ optional($transfer->approved_at)->format('d M Y') }}</td></tr>@endif
+                        @if($transfer->approvedBy)<tr><th>Approved By</th><td>{{ $transfer->approvedBy->name ?? 'Approver' }} — {{ optional($transfer->approved_at)->format('d M Y') }}</td></tr>@endif
                     </table>
                 </div>
                 @if(in_array($transfer->status, ['draft','pending_approval']))
@@ -52,7 +52,7 @@
                         <tbody>
                             @foreach($transfer->items as $item)
                             <tr>
-                                <td>{{ $item->product->name }}</td>
+                                <td>{{ $item->product->name ?? 'Item' }}</td>
                                 <td>{{ $item->requested_quantity }} {{ $item->unit }}</td>
                                 <td>{{ $item->approved_quantity }} {{ $item->unit }}</td>
                                 <td>{{ $item->sent_quantity }} {{ $item->unit }}</td>
