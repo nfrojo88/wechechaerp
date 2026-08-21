@@ -357,7 +357,7 @@ class RegisterController extends Controller
             'contract_admin'      => route('dashboard.contract-admin'),
             'bid_team'            => route('bidding.index'),
             'secretary'           => route('dashboard.coordinator'),
-            'general_service'     => route('dashboard.coordinator'),
+            'general_service', 'general_services' => route('dashboard.general_service'),
             'law'                 => route('subcon.index'),
             'marketing'           => route('marketing.dashboard'),
             'audit_team'          => route('audit.index'),

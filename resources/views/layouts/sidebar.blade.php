@@ -518,6 +518,44 @@
         </li>
         @endif
 
+        {{-- General Service & Operations Tools --}}
+        @if(auth()->check() && (auth()->user()->hasAnyRole(['General Service', 'general_service', 'general_services', 'admin', 'global_admin', 'coordinator'])))
+        <li class="sidebar-heading">General Service</li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('dashboard.general_service') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.general_service') || request()->routeIs('general-service.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-screwdriver-wrench text-warning"></i>
+                <span>General Service Hub</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('general-service.maintenance.index') }}" class="sidebar-nav-link {{ request()->routeIs('general-service.maintenance.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-wrench text-danger"></i>
+                <span>Maintenance Requests</span>
+                @php
+                    $pendingMaintCount = 0;
+                    try {
+                        $pendingMaintCount = \App\Models\MaintenanceRequest::where('status', 'pending')->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingMaintCount > 0)
+                    <span class="badge bg-warning text-dark ms-auto">{{ $pendingMaintCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('fixed-assets.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-truck-monster text-primary"></i>
+                <span>Workshop &amp; Fixed Assets</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('transfers.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-dolly text-info"></i>
+                <span>Store Transfers &amp; Logistics</span>
+            </a>
+        </li>
+        @endif
+
         {{-- Site Engineer Tools --}}
         @if(auth()->check() && (auth()->user()->hasAnyRole(['site_engineer', 'admin', 'global_admin'])))
 

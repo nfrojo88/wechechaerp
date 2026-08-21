@@ -1124,6 +1124,7 @@ Route::middleware(['auth'])->group(function () {
     
     // Coordinator Routes
     Route::get('/coordinator/forecast',     [App\Http\Controllers\CoordinatorController::class, 'forecastDemand'])->name('coordinator.forecast');
+    Route::get('/dashboard/general-service', [App\Http\Controllers\DashboardController::class, 'generalService'])->name('dashboard.general_service');
     Route::get('/dashboard/site-engineer',  [App\Http\Controllers\DashboardController::class, 'siteEngineer'])->name('dashboard.site-engineer');
     Route::get('/dashboard/foreman',        [App\Http\Controllers\DashboardController::class, 'foreman'])->name('dashboard.foreman');
     Route::get('/dashboard/store-manager',  [App\Http\Controllers\DashboardController::class, 'storeManager'])->name('dashboard.store-manager');
@@ -1134,6 +1135,18 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/bidding',                  fn() => view('dashboard.admin'))->name('bidding.index');
     Route::get('/subcon',                   fn() => view('dashboard.admin'))->name('subcon.index');
     Route::get('/audit',                    fn() => view('dashboard.admin'))->name('audit.index');
+
+    // ─── General Service Routes ────────────────────────────────────────────────
+    Route::prefix('general-service')->name('general-service.')->group(function () {
+        Route::get('/',                     [App\Http\Controllers\DashboardController::class, 'generalService'])->name('dashboard');
+        Route::get('/maintenance',          [App\Http\Controllers\Admin\GeneralServiceController::class, 'index'])->name('maintenance.index');
+        Route::get('/maintenance/{maintenanceRequest}', [App\Http\Controllers\Admin\GeneralServiceController::class, 'show'])->name('maintenance.show');
+        Route::put('/maintenance/{maintenanceRequest}/status', [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.status');
+    });
+
+    // ─── Employee Maintenance Routes ───────────────────────────────────────────
+    Route::post('/maintenance',             [App\Http\Controllers\MaintenanceRequestController::class, 'store'])->name('maintenance.store');
+    Route::get('/maintenance/{maintenanceRequest}', [App\Http\Controllers\MaintenanceRequestController::class, 'show'])->name('maintenance.show');
 
     // ─── Phase 2 Core Masters ─────────────────────────────────────────────────
 

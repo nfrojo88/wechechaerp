@@ -167,6 +167,42 @@ class DashboardController extends Controller
         return view('dashboard.coordinator', compact('kpi', 'recentSchedules', 'recentDailyReports', 'pendingPlansFromPlanning', 'erpPlans'));
     }
 
+    // ─── General Service Hub ───────────────────────────────────────────────────
+    public function generalService(Request $request)
+    {
+        $kpi = [
+            'pending_maintenance'     => $this->safe(fn() => \App\Models\MaintenanceRequest::where('status', 'pending')->count(), 0),
+            'in_progress_maintenance' => $this->safe(fn() => \App\Models\MaintenanceRequest::where('status', 'in_progress')->count(), 0),
+            'resolved_this_month'     => $this->safe(fn() => \App\Models\MaintenanceRequest::where('status', 'resolved')->whereMonth('resolved_at', now()->month)->count(), 0),
+            'critical_breakdowns'     => $this->safe(fn() => \App\Models\MaintenanceRequest::whereIn('urgency', ['critical', 'urgent'])->whereIn('status', ['pending', 'in_progress'])->count(), 0),
+            'transfers_count'         => $this->safe(fn() => \App\Models\Transfer::whereIn('status', ['approved', 'in_transit', 'draft', 'pending'])->count(), 0),
+            'assets_in_maintenance'   => $this->safe(fn() => \App\Models\FixedAssetUnit::where('status', 'maintenance')->orWhereIn('condition', ['needs_repair', 'damaged'])->count(), 0),
+        ];
+
+        $maintenanceRequests = $this->safe(fn() => \App\Models\MaintenanceRequest::with(['employee', 'reportedBy', 'assignedTo', 'fixedAssetUnit.parentAsset'])
+            ->latest()
+            ->take(15)
+            ->get(), collect());
+
+        $transfers = $this->safe(fn() => \App\Models\Transfer::with(['fromStore', 'toStore', 'requestedBy', 'items.product'])
+            ->latest()
+            ->take(10)
+            ->get(), collect());
+
+        $maintenanceAssets = $this->safe(fn() => \App\Models\FixedAssetUnit::with('parentAsset', 'assignedEmployee')
+            ->where('status', 'maintenance')
+            ->orWhereIn('condition', ['needs_repair', 'damaged'])
+            ->latest()
+            ->take(10)
+            ->get(), collect());
+
+        $staff = $this->safe(fn() => User::whereHas('roles', fn($q) => $q->whereIn('name', [
+            'global_admin', 'admin', 'store_manager', 'general_service', 'coordinator'
+        ]))->get(['id', 'name']), collect());
+
+        return view('dashboard.general-service', compact('kpi', 'maintenanceRequests', 'transfers', 'maintenanceAssets', 'staff'));
+    }
+
     // ─── Site Engineer ──────────────────────────────────────────────────────────
     public function siteEngineer()
     {
