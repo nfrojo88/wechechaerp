@@ -67,6 +67,11 @@ class MaintenanceRequest extends Model
         return $this->belongsTo(User::class, 'assigned_to_user_id');
     }
 
+    public function expenseRequests()
+    {
+        return $this->hasMany(ExpenseRequest::class, 'maintenance_request_id');
+    }
+
     // ─── Accessors ────────────────────────────────────────────────────────────
 
     public function getStatusBadgeAttribute(): array

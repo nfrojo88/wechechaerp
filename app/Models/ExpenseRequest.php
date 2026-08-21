@@ -17,6 +17,7 @@ class ExpenseRequest extends Model
         'request_number',
         'user_id',
         'employee_id',
+        'maintenance_request_id',
         'category',
         'other_reason',
         'amount',
@@ -65,6 +66,7 @@ class ExpenseRequest extends Model
     public const CATEGORY_OFFICE_MATERIAL = 'Office Material';
     public const CATEGORY_LOADING_UNLOADING = 'Loading & Unloading';
     public const CATEGORY_CONTRACT_WORK = 'Contract Work';
+    public const CATEGORY_MAINTENANCE = 'Maintenance';
     public const CATEGORY_OTHER = 'Other';
 
     /**
@@ -81,6 +83,14 @@ class ExpenseRequest extends Model
     public function employee()
     {
         return $this->belongsTo(Employee::class, 'employee_id');
+    }
+
+    /**
+     * Linked Maintenance Request (if requested from General Service).
+     */
+    public function maintenanceRequest()
+    {
+        return $this->belongsTo(MaintenanceRequest::class, 'maintenance_request_id');
     }
 
     /**
