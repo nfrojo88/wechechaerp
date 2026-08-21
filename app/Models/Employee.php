@@ -11,12 +11,14 @@ class Employee extends Model
 
     protected $fillable = [
         'user_id', 'project_id', 'employee_code', 'full_name',
+        'national_id_number', 'national_id_card',
         'phone', 'email', 'role_title', 'department',
         'employment_type', 'contract_type', 'date_of_joining', 'basic_salary',
         'transport_allowance', 'house_allowance', 'position_allowance',
         'status', 'notes', 'bank_name', 'account_number',
         'guarantee_letter', 'guarantee_letter_submitted_at', 'guarantee_letter_required',
-        'device_user_id', 'is_approved_by_gm', 'gm_approved_at', 'gm_approved_by',
+        'device_user_id', 'asset_handover_document', 'profile_picture', 'registration_letter',
+        'is_approved_by_gm', 'gm_approved_at', 'gm_approved_by',
         'gm_approval_status', 'gm_rejection_reason', 'gm_rejected_at', 'gm_rejected_by',
     ];
 
@@ -278,5 +280,50 @@ class Employee extends Model
     public function attendances()
     {
         return $this->hasMany(Attendance::class);
+    }
+
+    /**
+     * Get employee profile picture URL with fallback
+     */
+    public function getProfilePictureUrlAttribute()
+    {
+        if ($this->profile_picture) {
+            return route('employees.profile-picture', $this->id);
+        }
+        $name = urlencode($this->full_name ?? 'Employee');
+        return "https://ui-avatars.com/api/?name={$name}&background=198754&color=fff&size=150&bold=true";
+    }
+
+    /**
+     * Get national ID card document/photo URL
+     */
+    public function getNationalIdCardUrlAttribute()
+    {
+        if ($this->national_id_card) {
+            return route('employees.national-id', $this->id);
+        }
+        return null;
+    }
+
+    /**
+     * Get asset handover document URL
+     */
+    public function getAssetHandoverDocumentUrlAttribute()
+    {
+        if ($this->asset_handover_document) {
+            return route('employees.asset-handover', $this->id);
+        }
+        return null;
+    }
+
+    /**
+     * Get registration letter URL
+     */
+    public function getRegistrationLetterUrlAttribute()
+    {
+        if ($this->registration_letter) {
+            return route('employees.registration-letter', $this->id);
+        }
+        return null;
     }
 }

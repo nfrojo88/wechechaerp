@@ -231,6 +231,11 @@ class EmployeeController extends Controller
             'account_number'                => 'nullable|string|max:50',
             'notes'                         => 'nullable|string',
             'guarantee_letter'              => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'national_id_number'            => 'nullable|string|max:100',
+            'national_id_card'              => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:10240',
+            'asset_handover_document'       => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:10240',
+            'profile_picture'               => 'nullable|file|mimes:jpeg,png,jpg,webp|max:5120',
+            'registration_letter'           => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
             'fixed_asset_units'             => 'nullable|array',
             'fixed_asset_units.*'           => 'nullable|exists:fixed_asset_units,id',
             'education'                     => 'nullable|array',
@@ -266,6 +271,26 @@ class EmployeeController extends Controller
             $letterPath = \App\Services\FileUploadService::upload($request->file('guarantee_letter'), 'guarantee_letters');
             $validated['guarantee_letter'] = $letterPath;
             $validated['guarantee_letter_submitted_at'] = now();
+        }
+
+        // Handle National ID card upload
+        if ($request->hasFile('national_id_card')) {
+            $validated['national_id_card'] = \App\Services\FileUploadService::upload($request->file('national_id_card'), 'employee_national_ids');
+        }
+
+        // Handle Asset Handover document upload
+        if ($request->hasFile('asset_handover_document')) {
+            $validated['asset_handover_document'] = \App\Services\FileUploadService::upload($request->file('asset_handover_document'), 'employee_asset_handovers');
+        }
+
+        // Handle Profile Picture upload
+        if ($request->hasFile('profile_picture')) {
+            $validated['profile_picture'] = \App\Services\FileUploadService::upload($request->file('profile_picture'), 'employee_profile_pictures');
+        }
+
+        // Handle Registration Letter upload
+        if ($request->hasFile('registration_letter')) {
+            $validated['registration_letter'] = \App\Services\FileUploadService::upload($request->file('registration_letter'), 'employee_registration_letters');
         }
 
         // Create or find User account
@@ -574,6 +599,11 @@ class EmployeeController extends Controller
             'notes'                => 'nullable|string',
             'device_user_id'       => 'nullable|string|max:100',
             'guarantee_letter'     => 'nullable|file|mimes:pdf,jpeg,png,jpg|max:10240',
+            'national_id_number'   => 'nullable|string|max:100',
+            'national_id_card'     => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:10240',
+            'asset_handover_document' => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:10240',
+            'profile_picture'      => 'nullable|file|mimes:jpeg,png,jpg,webp|max:5120',
+            'registration_letter'  => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
             'fixed_asset_units'    => 'nullable|array',
             'education'            => 'nullable|array',
             'experience'           => 'nullable|array',
@@ -585,6 +615,26 @@ class EmployeeController extends Controller
             $letterPath = \App\Services\FileUploadService::upload($request->file('guarantee_letter'), 'guarantee_letters');
             $validated['guarantee_letter'] = $letterPath;
             $validated['guarantee_letter_submitted_at'] = now();
+        }
+
+        // Handle National ID card upload (replace if new)
+        if ($request->hasFile('national_id_card')) {
+            $validated['national_id_card'] = \App\Services\FileUploadService::upload($request->file('national_id_card'), 'employee_national_ids');
+        }
+
+        // Handle Asset Handover document upload (replace if new)
+        if ($request->hasFile('asset_handover_document')) {
+            $validated['asset_handover_document'] = \App\Services\FileUploadService::upload($request->file('asset_handover_document'), 'employee_asset_handovers');
+        }
+
+        // Handle Profile Picture upload (replace if new)
+        if ($request->hasFile('profile_picture')) {
+            $validated['profile_picture'] = \App\Services\FileUploadService::upload($request->file('profile_picture'), 'employee_profile_pictures');
+        }
+
+        // Handle Registration Letter upload (replace if new)
+        if ($request->hasFile('registration_letter')) {
+            $validated['registration_letter'] = \App\Services\FileUploadService::upload($request->file('registration_letter'), 'employee_registration_letters');
         }
 
         // If employee was rejected by GM, resubmitting clears rejection and queues for GM review

@@ -172,6 +172,79 @@ class FileStreamController extends Controller
     }
 
     /**
+     * Dedicated route to view an employee National ID card / scan / photo.
+     */
+    public function viewNationalIdCard($id)
+    {
+        $emp = Employee::find($id);
+
+        if (!$emp || empty($emp->national_id_card)) {
+            return $this->renderMissingDocument('National ID Card', 'No National ID document or photo is on file for this employee.');
+        }
+
+        if (Str::startsWith($emp->national_id_card, ['http://', 'https://'])) {
+            return redirect()->away($emp->national_id_card);
+        }
+
+        return $this->respondWithFile($emp->national_id_card, 'uploads', 'National ID - ' . $emp->full_name);
+    }
+
+    /**
+     * Dedicated route to view an employee asset handover document / receipt.
+     */
+    public function viewAssetHandoverDocument($id)
+    {
+        $emp = Employee::find($id);
+
+        if (!$emp || empty($emp->asset_handover_document)) {
+            return $this->renderMissingDocument('Asset Handover Document', 'No asset handover receipt or condition photo is on file for this employee.');
+        }
+
+        if (Str::startsWith($emp->asset_handover_document, ['http://', 'https://'])) {
+            return redirect()->away($emp->asset_handover_document);
+        }
+
+        return $this->respondWithFile($emp->asset_handover_document, 'uploads', 'Asset Handover - ' . $emp->full_name);
+    }
+
+    /**
+     * Dedicated route to view an employee profile picture / avatar.
+     */
+    public function viewProfilePicture($id)
+    {
+        $emp = Employee::find($id);
+
+        if (!$emp || empty($emp->profile_picture)) {
+            $name = urlencode($emp->full_name ?? 'Employee');
+            return redirect()->away("https://ui-avatars.com/api/?name={$name}&background=198754&color=fff&size=200&bold=true");
+        }
+
+        if (Str::startsWith($emp->profile_picture, ['http://', 'https://'])) {
+            return redirect()->away($emp->profile_picture);
+        }
+
+        return $this->respondWithFile($emp->profile_picture, 'uploads', 'Profile Photo - ' . $emp->full_name);
+    }
+
+    /**
+     * Dedicated route to view an employee registration letter / contract.
+     */
+    public function viewRegistrationLetter($id)
+    {
+        $emp = Employee::find($id);
+
+        if (!$emp || empty($emp->registration_letter)) {
+            return $this->renderMissingDocument('Registration Letter', 'No registration letter or employment contract document is on file for this employee.');
+        }
+
+        if (Str::startsWith($emp->registration_letter, ['http://', 'https://'])) {
+            return redirect()->away($emp->registration_letter);
+        }
+
+        return $this->respondWithFile($emp->registration_letter, 'uploads', 'Registration Letter - ' . $emp->full_name);
+    }
+
+    /**
      * Return file response or friendly fallback page.
      */
     protected function respondWithFile(string $path, string $prefix = 'uploads', ?string $customTitle = null)

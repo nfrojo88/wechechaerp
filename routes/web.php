@@ -1385,6 +1385,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('employees/experience/{experience}/license', [App\Http\Controllers\FileStreamController::class, 'viewLicense'])->name('employees.experience.license');
     Route::get('employees/experience/{experience}/letter', [App\Http\Controllers\FileStreamController::class, 'viewExperienceLetter'])->name('employees.experience.letter');
     Route::get('employees/{employee}/guarantee-letter-file', [App\Http\Controllers\FileStreamController::class, 'viewGuaranteeLetter'])->name('employees.guarantee-letter.view');
+    Route::get('employees/{employee}/profile-picture', [App\Http\Controllers\FileStreamController::class, 'viewProfilePicture'])->name('employees.profile-picture');
+    Route::get('employees/{employee}/national-id', [App\Http\Controllers\FileStreamController::class, 'viewNationalIdCard'])->name('employees.national-id');
+    Route::get('employees/{employee}/asset-handover', [App\Http\Controllers\FileStreamController::class, 'viewAssetHandoverDocument'])->name('employees.asset-handover');
+    Route::get('employees/{employee}/registration-letter', [App\Http\Controllers\FileStreamController::class, 'viewRegistrationLetter'])->name('employees.registration-letter');
     Route::resource('employees', App\Http\Controllers\EmployeeController::class);
     Route::post('employees/{employee}/upload-guarantee', [App\Http\Controllers\EmployeeController::class, 'uploadGuaranteeLetter'])->name('employees.upload-guarantee');
     Route::resource('contracts', App\Http\Controllers\EmployeeContractController::class)->only(['index', 'create', 'store', 'show']);
