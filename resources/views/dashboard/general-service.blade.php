@@ -362,7 +362,7 @@
                         <a href="{{ route('general-service.maintenance.index') }}" class="btn btn-warning btn-sm fw-bold text-dark text-start">
                             <i class="fa-solid fa-list-check me-2"></i>Manage All Maintenance Tickets
                         </a>
-                        <a href="{{ route('fixed-assets.index') }}" class="btn btn-outline-light btn-sm text-start">
+                        <a href="{{ route('store-manager.fixed-assets.index') }}" class="btn btn-outline-light btn-sm text-start">
                             <i class="fa-solid fa-truck-pickup me-2"></i>View Company Fixed Assets & Fleet
                         </a>
                         <a href="{{ route('transfers.index') }}" class="btn btn-outline-light btn-sm text-start">

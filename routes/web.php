@@ -1144,6 +1144,9 @@ Route::middleware(['auth'])->group(function () {
         Route::put('/maintenance/{maintenanceRequest}/status', [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.status');
     });
 
+    // ─── Fixed Assets Route Alias ──────────────────────────────────────────────
+    Route::get('/fixed-assets', fn() => redirect()->route('store-manager.fixed-assets.index'))->name('fixed-assets.index');
+
     // ─── Employee Maintenance Routes ───────────────────────────────────────────
     Route::post('/maintenance',             [App\Http\Controllers\MaintenanceRequestController::class, 'store'])->name('maintenance.store');
     Route::get('/maintenance/{maintenanceRequest}', [App\Http\Controllers\MaintenanceRequestController::class, 'show'])->name('maintenance.show');

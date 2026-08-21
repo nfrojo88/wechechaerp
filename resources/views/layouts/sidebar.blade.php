@@ -543,7 +543,7 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('fixed-assets.*') ? 'active' : '' }}">
+            <a href="{{ route('store-manager.fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.fixed-assets.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-truck-monster text-primary"></i>
                 <span>Workshop &amp; Fixed Assets</span>
             </a>
