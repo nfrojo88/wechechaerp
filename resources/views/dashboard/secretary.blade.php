@@ -28,7 +28,7 @@
     <div class="row g-3 mb-4">
         {{-- Total Letters --}}
         <div class="col-6 col-xl-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #6366f1 !important; border-left-width: 4px !important;">
+            <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #6366f1 !important;">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
@@ -62,38 +62,38 @@
             </div>
         </div>
 
-        {{-- Active Projects --}}
+        {{-- Closed / Resolved Letters --}}
         <div class="col-6 col-xl-3">
             <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #10b981 !important;">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <p class="text-muted fw-semibold mb-1" style="font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase;">Active Projects</p>
-                            <h3 class="fw-bold text-success mb-0">{{ $activeProjects }}</h3>
+                            <p class="text-muted fw-semibold mb-1" style="font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase;">Closed / Completed</p>
+                            <h3 class="fw-bold text-success mb-0">{{ $closedLetters }}</h3>
                         </div>
                         <div class="p-2 rounded-3" style="background: rgba(16,185,129,.12);">
-                            <i class="fa-solid fa-building fa-lg text-success"></i>
+                            <i class="fa-solid fa-circle-check fa-lg text-success"></i>
                         </div>
                     </div>
-                    <small class="text-muted mt-2 d-block" style="font-size:0.73rem;">Running construction projects</small>
+                    <small class="text-muted mt-2 d-block" style="font-size:0.73rem;">Completed letters</small>
                 </div>
             </div>
         </div>
 
-        {{-- Active Employees --}}
+        {{-- My Registered Letters --}}
         <div class="col-6 col-xl-3">
             <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #3b82f6 !important;">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <p class="text-muted fw-semibold mb-1" style="font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase;">Active Employees</p>
-                            <h3 class="fw-bold text-primary mb-0">{{ $totalEmployees }}</h3>
+                            <p class="text-muted fw-semibold mb-1" style="font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase;">Registered By Me</p>
+                            <h3 class="fw-bold text-primary mb-0">{{ $myLettersCount }}</h3>
                         </div>
                         <div class="p-2 rounded-3" style="background: rgba(59,130,246,.12);">
-                            <i class="fa-solid fa-users fa-lg text-primary"></i>
+                            <i class="fa-solid fa-user-pen fa-lg text-primary"></i>
                         </div>
                     </div>
-                    <small class="text-muted mt-2 d-block" style="font-size:0.73rem;">Staff currently on record</small>
+                    <small class="text-muted mt-2 d-block" style="font-size:0.73rem;">Created under your account</small>
                 </div>
             </div>
         </div>
@@ -107,22 +107,16 @@
                     <p class="text-muted fw-semibold mb-3" style="font-size:0.8rem; text-transform:uppercase; letter-spacing:.05em;">Quick Actions</p>
                     <div class="d-flex flex-wrap gap-2">
                         <a href="{{ route('letters.create') }}" class="btn btn-primary btn-sm px-3">
-                            <i class="fa-solid fa-plus me-1"></i> New Letter
+                            <i class="fa-solid fa-plus me-1"></i> Register New Letter
                         </a>
                         <a href="{{ route('letters.index', ['tab' => 'inbox']) }}" class="btn btn-outline-info btn-sm px-3">
-                            <i class="fa-solid fa-inbox me-1"></i> Inbox
+                            <i class="fa-solid fa-inbox me-1"></i> Letter Inbox
                         </a>
                         <a href="{{ route('letters.index', ['tab' => 'sent']) }}" class="btn btn-outline-secondary btn-sm px-3">
                             <i class="fa-solid fa-paper-plane me-1"></i> Sent Letters
                         </a>
                         <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="btn btn-outline-dark btn-sm px-3">
-                            <i class="fa-solid fa-list me-1"></i> All Letters
-                        </a>
-                        <a href="{{ route('employees.index') }}" class="btn btn-outline-warning btn-sm px-3">
-                            <i class="fa-solid fa-users me-1"></i> Employees
-                        </a>
-                        <a href="{{ route('schedules.index') }}" class="btn btn-outline-success btn-sm px-3">
-                            <i class="fa-solid fa-calendar-days me-1"></i> Schedules
+                            <i class="fa-solid fa-list me-1"></i> All Correspondence
                         </a>
                         <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-success btn-sm px-3">
                             <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask Money
@@ -165,7 +159,7 @@
                                     <span class="fw-bold text-primary font-monospace" style="font-size:0.8rem;">{{ $letter->reference_number ?? '#'.$letter->id }}</span>
                                 </td>
                                 <td>
-                                    <span class="fw-semibold text-dark d-block" style="max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                    <span class="fw-semibold text-dark d-block" style="max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                                         {{ $letter->subject }}
                                     </span>
                                     <small class="text-muted">{{ Str::limit($letter->sender_name ?? '', 30) }}</small>
@@ -217,62 +211,32 @@
         {{-- Right column --}}
         <div class="col-lg-4">
 
-            {{-- Active Projects --}}
+            {{-- Correspondence Status Summary Card --}}
             <div class="card border-0 shadow-sm rounded-3 mb-4">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold text-dark">
-                        <i class="fa-solid fa-building text-success me-2"></i>Active Projects
+                        <i class="fa-solid fa-folder-tree text-info me-2"></i>Letters Navigation
                     </h6>
-                    <a href="{{ route('projects.index') }}" class="btn btn-sm btn-outline-success">View All</a>
                 </div>
                 <div class="card-body p-0">
-                    <ul class="list-group list-group-flush">
-                        @forelse($recentProjects as $project)
-                        <li class="list-group-item px-3 py-2">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <span class="fw-semibold text-dark d-block" style="font-size:0.85rem;">{{ $project->name }}</span>
-                                    <small class="text-muted font-monospace">{{ $project->code }}</small>
-                                </div>
-                                <span class="badge bg-success rounded-pill">Active</span>
-                            </div>
-                        </li>
-                        @empty
-                        <li class="list-group-item text-center py-3 text-muted">No active projects.</li>
-                        @endforelse
-                    </ul>
-                </div>
-            </div>
-
-            {{-- Upcoming Schedules --}}
-            <div class="card border-0 shadow-sm rounded-3 mb-4">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 fw-bold text-dark">
-                        <i class="fa-solid fa-calendar-days text-warning me-2"></i>Project Schedules
-                        @if($activeSchedules > 0)
-                            <span class="badge bg-warning text-dark ms-1">{{ $activeSchedules }} active</span>
-                        @endif
-                    </h6>
-                    <a href="{{ route('schedules.index') }}" class="btn btn-sm btn-outline-warning">View All</a>
-                </div>
-                <div class="card-body p-0">
-                    <ul class="list-group list-group-flush">
-                        @forelse($recentSchedules as $schedule)
-                        <li class="list-group-item px-3 py-2">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <span class="fw-semibold d-block" style="font-size:0.85rem;">{{ $schedule->title }}</span>
-                                    <small class="text-muted">{{ $schedule->project->name ?? 'N/A' }}</small>
-                                </div>
-                                <span class="badge bg-{{ $schedule->status === 'approved' ? 'success' : 'warning' }} text-{{ $schedule->status !== 'approved' ? 'dark' : '' }}" style="font-size:0.7rem;">
-                                    {{ ucfirst($schedule->status) }}
-                                </span>
-                            </div>
-                        </li>
-                        @empty
-                        <li class="list-group-item text-center py-3 text-muted">No schedules found.</li>
-                        @endforelse
-                    </ul>
+                    <div class="list-group list-group-flush">
+                        <a href="{{ route('letters.index', ['tab' => 'inbox']) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-2">
+                            <span><i class="fa-solid fa-inbox text-primary me-2"></i>Inbox (Assigned To You)</span>
+                            <i class="fa-solid fa-chevron-right text-muted small"></i>
+                        </a>
+                        <a href="{{ route('letters.index', ['tab' => 'sent']) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-2">
+                            <span><i class="fa-solid fa-paper-plane text-success me-2"></i>Sent Letters</span>
+                            <i class="fa-solid fa-chevron-right text-muted small"></i>
+                        </a>
+                        <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-2">
+                            <span><i class="fa-solid fa-envelope-open-text text-info me-2"></i>All Correspondence</span>
+                            <span class="badge bg-secondary rounded-pill">{{ $totalLetters }}</span>
+                        </a>
+                        <a href="{{ route('letters.create') }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-3 py-2 text-primary fw-semibold">
+                            <span><i class="fa-solid fa-plus-circle text-primary me-2"></i>Register New Letter</span>
+                            <i class="fa-solid fa-chevron-right text-muted small"></i>
+                        </a>
+                    </div>
                 </div>
             </div>
 

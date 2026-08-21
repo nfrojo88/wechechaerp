@@ -3,6 +3,7 @@
     $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
     $isGeneralServiceUser = in_array('general_service', $rawUserRoles) || in_array('general_services', $rawUserRoles);
     $isSiteStaffUser = in_array('site_engineer', $rawUserRoles) || in_array('foreman', $rawUserRoles);
+    $isSecretary = in_array('secretary', $rawUserRoles);
 @endphp
 
 <div class="sidebar-scroll">
@@ -10,9 +11,33 @@
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
         <li class="sidebar-nav-item">
-            <a href="{{ route('dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') ? 'active' : '' }}">
+            <a href="{{ $isSecretary ? route('dashboard.secretary') : route('dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard*') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high"></i>
-                <span>Dashboard</span>
+                <span>{{ $isSecretary ? 'Secretary Dashboard' : 'Dashboard' }}</span>
+            </a>
+        </li>
+        @endif
+
+        @if($isSecretary)
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.index') || request()->routeIs('letters.show') ? 'active' : '' }}">
+                <i class="fa-solid fa-envelope-open-text text-primary"></i>
+                <span>Letters &amp; Correspondence</span>
+                @php
+                    $secLetterCount = 0;
+                    try {
+                        $secLetterCount = \App\Models\Letter::whereIn('status', ['pending', 'forwarded', 'in_progress'])->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($secLetterCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $secLetterCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.create') }}" class="sidebar-nav-link {{ request()->routeIs('letters.create') ? 'active' : '' }}">
+                <i class="fa-solid fa-pen-to-square text-success"></i>
+                <span>New Letter</span>
             </a>
         </li>
         @endif
@@ -32,7 +57,8 @@
                 @endif
             </a>
         </li>
-        @if(!auth()->check() || !auth()->user()->hasRole('secretary'))
+
+        @if(!$isSecretary)
         <li class="sidebar-nav-item">
             <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-envelope-open-text text-primary"></i>
@@ -106,7 +132,7 @@
         @endrole
         {{-- Masters --}}
 
-        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
+        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary))
         @canany(['projects.view', 'planning.view', 'schedule.view', 'stores.view', 'stores.create', 'stores.edit', 'stores.delete', 'products.view', 'products.create', 'products.edit', 'products.delete'])
 
         @canany(['projects.view', 'planning.view', 'schedule.view'])
@@ -233,7 +259,7 @@
         @endif
 
         {{-- Planning Section --}}
-        @if(auth()->user() && !$isSiteStaffUser && !$isGeneralServiceUser && (auth()->user()->hasAnyPermission(['planning.boq.manage', 'boq.view', 'boq.create', 'schedule.view', 'schedule.approve', 'schedule.create', 'schedule.edit', 'schedule.*', 'planning.view', 'planning.*', 'takeoff.view', 'takeoff.create', 'takeoff.edit', 'takeoff.*', 'resources.dispatch', 'material_planning.view', 'material_planning.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'reports.view', 'reports.weekly.view', 'reports.*.view', 'finance.budgets.manage']) || auth()->user()->hasRole(['planning_manager', 'planning', 'technical_manager'])))
+        @if(auth()->user() && !$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && (auth()->user()->hasAnyPermission(['planning.boq.manage', 'boq.view', 'boq.create', 'schedule.view', 'schedule.approve', 'schedule.create', 'schedule.edit', 'schedule.*', 'planning.view', 'planning.*', 'takeoff.view', 'takeoff.create', 'takeoff.edit', 'takeoff.*', 'resources.dispatch', 'material_planning.view', 'material_planning.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'reports.view', 'reports.weekly.view', 'reports.*.view', 'finance.budgets.manage']) || auth()->user()->hasRole(['planning_manager', 'planning', 'technical_manager'])))
 
         @role('planning_manager|planning|technical_manager')
         <li class="sidebar-nav-item">
@@ -486,62 +512,6 @@
             <a href="{{ route('marketing.reports.planning-vs-actual') }}" class="sidebar-nav-link {{ request()->routeIs('marketing.reports.planning-vs-actual') ? 'active' : '' }}">
                 <i class="fa-solid fa-scale-balanced text-warning"></i>
                 <span>Planning vs Actual</span>
-            </a>
-        </li>
-        @endif
-
-        {{-- Secretary Section --}}
-        @if(auth()->check() && auth()->user()->hasRole('secretary'))
-        <li class="sidebar-heading">Secretary</li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('dashboard.secretary') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.secretary') ? 'active' : '' }}">
-                <i class="fa-solid fa-id-badge text-primary"></i>
-                <span>Secretary Dashboard</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-envelope-open-text text-info"></i>
-                <span>Letters & Correspondence</span>
-                @php
-                    $secLetterCount = 0;
-                    try {
-                        $secLetterCount = \App\Models\Letter::whereIn('status', ['pending', 'forwarded', 'in_progress'])->count();
-                    } catch (\Exception $e) {}
-                @endphp
-                @if($secLetterCount > 0)
-                    <span class="badge bg-danger rounded-pill ms-auto">{{ $secLetterCount }}</span>
-                @endif
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('letters.create') }}" class="sidebar-nav-link {{ request()->routeIs('letters.create') ? 'active' : '' }}">
-                <i class="fa-solid fa-pen-to-square text-success"></i>
-                <span>New Letter</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-users text-warning"></i>
-                <span>Employees</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('schedules.index') }}" class="sidebar-nav-link {{ request()->routeIs('schedules.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-calendar-days text-success"></i>
-                <span>Project Schedules</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('projects.index') }}" class="sidebar-nav-link {{ request()->routeIs('projects.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-building text-secondary"></i>
-                <span>Projects</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-hand-holding-dollar text-success"></i>
-                <span>Ask Money</span>
             </a>
         </li>
         @endif

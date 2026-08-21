@@ -198,29 +198,17 @@ class DashboardController extends Controller
         $totalLetters        = $this->safe(fn() => \App\Models\Letter::count(), 0);
         $pendingLetters      = $this->safe(fn() => \App\Models\Letter::whereIn('status', ['pending', 'forwarded', 'in_progress'])->count(), 0);
         $closedLetters       = $this->safe(fn() => \App\Models\Letter::where('status', 'closed')->count(), 0);
+        $myLettersCount      = $this->safe(fn() => \App\Models\Letter::where('created_by', $user->id)->count(), 0);
         $myLetters           = $this->safe(fn() => \App\Models\Letter::where('created_by', $user->id)->latest()->take(8)->get(), collect());
-        $recentLetters       = $this->safe(fn() => \App\Models\Letter::with(['creator', 'recipients'])->latest()->take(8)->get(), collect());
-
-        // Projects
-        $activeProjects      = $this->safe(fn() => \App\Models\Project::where('status', 'active')->count(), 0);
-        $recentProjects      = $this->safe(fn() => \App\Models\Project::where('status', 'active')->latest()->take(5)->get(), collect());
-
-        // Schedules
-        $activeSchedules     = $this->safe(fn() => \App\Models\Schedule::whereDate('start_date', '<=', now())->whereDate('end_date', '>=', now())->count(), 0);
-        $recentSchedules     = $this->safe(fn() => \App\Models\Schedule::with('project')->latest()->take(5)->get(), collect());
-
-        // Employees
-        $totalEmployees      = $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count(), 0);
+        $recentLetters       = $this->safe(fn() => \App\Models\Letter::with(['creator', 'recipients'])->latest()->take(10)->get(), collect());
 
         // My expense requests
-        $myExpenseRequests   = $this->safe(fn() => \App\Models\ExpenseRequest::where('requested_by', $user->id)->latest()->take(5)->get(), collect());
+        $myExpenseRequests   = $this->safe(fn() => \App\Models\ExpenseRequest::where('requested_by', $user->id)->latest()->take(6)->get(), collect());
+        $myExpenseCount      = $this->safe(fn() => \App\Models\ExpenseRequest::where('requested_by', $user->id)->count(), 0);
 
         return view('dashboard.secretary', compact(
-            'totalLetters', 'pendingLetters', 'closedLetters',
-            'myLetters', 'recentLetters',
-            'activeProjects', 'recentProjects',
-            'activeSchedules', 'recentSchedules',
-            'totalEmployees', 'myExpenseRequests'
+            'totalLetters', 'pendingLetters', 'closedLetters', 'myLettersCount',
+            'myLetters', 'recentLetters', 'myExpenseRequests', 'myExpenseCount'
         ));
     }
 
