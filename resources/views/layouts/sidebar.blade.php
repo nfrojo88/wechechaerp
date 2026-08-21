@@ -97,7 +97,7 @@
         @endrole
         {{-- Masters --}}
 
-        @if(!auth()->check() || !auth()->user()->hasAnyRole(['site_engineer', 'foreman']))
+        @if(!auth()->check() || !auth()->user()->hasAnyRole(['site_engineer', 'foreman', 'general_service', 'general_services']))
         @canany(['projects.view', 'planning.view', 'schedule.view', 'stores.view', 'stores.create', 'stores.edit', 'stores.delete', 'products.view', 'products.create', 'products.edit', 'products.delete'])
 
         @canany(['projects.view', 'planning.view', 'schedule.view'])
@@ -128,7 +128,7 @@
         @endif
 
         {{-- Inventory --}}
-        @if(!auth()->check() || !auth()->user()->hasAnyRole(['site_engineer', 'foreman']))
+        @if(!auth()->check() || !auth()->user()->hasAnyRole(['site_engineer', 'foreman', 'general_service', 'general_services']))
         @canany(['inventory.view', 'inventory.view_all_stores', 'inventory.*'])
 
         <li class="sidebar-nav-item">
@@ -224,7 +224,7 @@
         @endif
 
         {{-- Planning Section --}}
-        @if(auth()->user() && !auth()->user()->hasAnyRole(['site_engineer', 'foreman']) && (auth()->user()->hasAnyPermission(['planning.boq.manage', 'boq.view', 'boq.create', 'schedule.view', 'schedule.approve', 'schedule.create', 'schedule.edit', 'schedule.*', 'planning.view', 'planning.*', 'takeoff.view', 'takeoff.create', 'takeoff.edit', 'takeoff.*', 'resources.dispatch', 'material_planning.view', 'material_planning.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'reports.view', 'reports.weekly.view', 'reports.*.view', 'finance.budgets.manage']) || auth()->user()->hasRole(['planning_manager', 'planning', 'technical_manager'])))
+        @if(auth()->user() && !auth()->user()->hasAnyRole(['site_engineer', 'foreman', 'general_service', 'general_services']) && (auth()->user()->hasAnyPermission(['planning.boq.manage', 'boq.view', 'boq.create', 'schedule.view', 'schedule.approve', 'schedule.create', 'schedule.edit', 'schedule.*', 'planning.view', 'planning.*', 'takeoff.view', 'takeoff.create', 'takeoff.edit', 'takeoff.*', 'resources.dispatch', 'material_planning.view', 'material_planning.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'reports.view', 'reports.weekly.view', 'reports.*.view', 'finance.budgets.manage']) || auth()->user()->hasRole(['planning_manager', 'planning', 'technical_manager'])))
 
         @role('planning_manager|planning|technical_manager')
         <li class="sidebar-nav-item">
@@ -358,7 +358,7 @@
         @endcanany
 
         {{-- Procurement / Stores --}}
-        @if(auth()->check() && !auth()->user()->hasAnyRole(['site_engineer', 'foreman']) && (auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin']) || auth()->user()->canAny(['inventory.view', 'inventory.*', 'purchases.suppliers.manage', 'suppliers.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'purchases.requests.create', 'purchases.view', 'purchases.receive', 'purchases.*', 'transfers.view', 'transfers.*'])))
+        @if(auth()->check() && !auth()->user()->hasAnyRole(['site_engineer', 'foreman', 'general_service', 'general_services']) && (auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin']) || auth()->user()->canAny(['inventory.view', 'inventory.*', 'purchases.suppliers.manage', 'suppliers.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'purchases.requests.create', 'purchases.view', 'purchases.receive', 'purchases.*', 'transfers.view', 'transfers.*'])))
 
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.purchase') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.purchase') ? 'active' : '' }}">
