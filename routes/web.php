@@ -1395,6 +1395,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('employees/{employee}/guarantor-id', [App\Http\Controllers\FileStreamController::class, 'viewGuarantorId'])->name('employees.guarantor-id');
     Route::resource('employees', App\Http\Controllers\EmployeeController::class);
     Route::post('employees/{employee}/upload-guarantee', [App\Http\Controllers\EmployeeController::class, 'uploadGuaranteeLetter'])->name('employees.upload-guarantee');
+    Route::post('employees/{employee}/initialize-leave-balance', [App\Http\Controllers\EmployeeController::class, 'initializeLeaveBalance'])->name('employees.initialize-leave-balance');
+    Route::post('employees/{employee}/record-leave-deduction', [App\Http\Controllers\EmployeeController::class, 'recordLeaveDeduction'])->name('employees.record-leave-deduction');
     Route::resource('contracts', App\Http\Controllers\EmployeeContractController::class)->only(['index', 'create', 'store', 'show']);
     Route::resource('manpower-requests', App\Http\Controllers\ManpowerRequestController::class)->only(['index', 'create', 'store', 'show']);
 

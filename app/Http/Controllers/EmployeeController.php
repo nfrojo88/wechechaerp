@@ -913,6 +913,119 @@ class EmployeeController extends Controller
     }
 
     /**
+     * One-time initialization and allocation of annual leave balance (16 days/year standard).
+     */
+    public function initializeLeaveBalance(Request $request, Employee $employee)
+    {
+        Gate::authorize('update', $employee);
+
+        $request->validate([
+            'year'       => 'nullable|integer|min:2020|max:2050',
+            'total_days' => 'nullable|numeric|min:1|max:60',
+        ]);
+
+        $year = $request->input('year', date('Y'));
+        $totalDays = (float) $request->input('total_days', 16.0);
+
+        // Ensure LeaveType "Annual Leave" exists
+        $leaveType = \App\Models\LeaveType::firstOrCreate(
+            ['code' => 'ANNUAL'],
+            [
+                'name' => 'Annual Leave',
+                'days_allowed' => 16,
+                'is_paid' => true,
+                'requires_documentation' => false,
+                'description' => 'Standard statutory annual leave (16 working days/year at 1.33 days/month rate)',
+                'is_active' => true,
+            ]
+        );
+
+        // Calculate already taken/approved leave in current year
+        $usedDays = \App\Models\LeaveRequest::where('employee_id', $employee->id)
+            ->where('leave_type_id', $leaveType->id)
+            ->whereYear('start_date', $year)
+            ->where('status', 'approved')
+            ->get()
+            ->sum(function ($req) {
+                return (float) ($req->days_requested ?? 1);
+            });
+
+        $remainingDays = max(0, $totalDays - $usedDays);
+
+        // Create or update LeaveBalance
+        $balance = \App\Models\LeaveBalance::updateOrCreate(
+            [
+                'employee_id'   => $employee->id,
+                'leave_type_id' => $leaveType->id,
+                'year'          => $year,
+            ],
+            [
+                'total_days'     => $totalDays,
+                'used_days'      => $usedDays,
+                'remaining_days' => $remainingDays,
+            ]
+        );
+
+        return back()->with('success', "Annual leave balance for {$year} initialized successfully! Allocated: {$totalDays} days (1.33 days/month rate). Remaining: {$remainingDays} days.");
+    }
+
+    /**
+     * Record a direct leave deduction from employee profile.
+     */
+    public function recordLeaveDeduction(Request $request, Employee $employee)
+    {
+        Gate::authorize('update', $employee);
+
+        $validated = $request->validate([
+            'days'       => 'required|numeric|min:0.5|max:30',
+            'start_date' => 'required|date',
+            'end_date'   => 'nullable|date|after_or_equal:start_date',
+            'reason'     => 'required|string|max:500',
+        ]);
+
+        $year = \Carbon\Carbon::parse($validated['start_date'])->year;
+        $leaveType = \App\Models\LeaveType::firstOrCreate(
+            ['code' => 'ANNUAL'],
+            [
+                'name' => 'Annual Leave',
+                'days_allowed' => 16,
+                'is_paid' => true,
+                'is_active' => true,
+            ]
+        );
+
+        $balance = \App\Models\LeaveBalance::firstOrCreate(
+            [
+                'employee_id'   => $employee->id,
+                'leave_type_id' => $leaveType->id,
+                'year'          => $year,
+            ],
+            [
+                'total_days'     => 16.0,
+                'used_days'      => 0,
+                'remaining_days' => 16.0,
+            ]
+        );
+
+        // Deduct from balance
+        $balance->updateBalance((float) $validated['days']);
+
+        // Create approved LeaveRequest record for auditing
+        \App\Models\LeaveRequest::create([
+            'employee_id'   => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'start_date'    => $validated['start_date'],
+            'end_date'      => $validated['end_date'] ?? $validated['start_date'],
+            'reason'        => $validated['reason'],
+            'status'        => 'approved',
+            'approved_by'   => auth()->id(),
+            'approved_at'   => now(),
+        ]);
+
+        return back()->with('success', "Deducted {$validated['days']} leave days. Remaining available balance: {$balance->remaining_days} days.");
+    }
+
+    /**
      * Remove the specified employee from storage.
      */
     public function destroy(Employee $employee)

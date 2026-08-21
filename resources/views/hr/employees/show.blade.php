@@ -1156,55 +1156,219 @@
         </div>
 
         {{-- Leave Balance Card --}}
-        <div class="card border-0 shadow-sm">
-            <div class="card-header bg-white border-bottom-0 pt-3 pb-0">
-                <h6 class="mb-0 fw-bold"><i class="fa-solid fa-umbrella-beach text-info me-2"></i>Leave Balance {{ date('Y') }}</h6>
+        @php
+            $currentYear = (int) date('Y');
+            $joinDate = $employee->date_of_joining ? \Carbon\Carbon::parse($employee->date_of_joining) : null;
+            
+            // Calculate months active in current year for monthly accrual calculation (16 days / 12 months = 1.333 days/mo)
+            if ($joinDate && $joinDate->year < $currentYear) {
+                $monthsActive = (int) date('n');
+            } elseif ($joinDate && $joinDate->year == $currentYear) {
+                $monthsActive = max(1, (int) date('n') - (int) $joinDate->month + 1);
+            } else {
+                $monthsActive = (int) date('n');
+            }
+            $accruedDays = min(16.0, round($monthsActive * (16.0 / 12.0), 2));
+
+            $leaveBalance = $employee->leaveBalances()->where('year', $currentYear)->first();
+        @endphp
+
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-umbrella-beach text-info me-2"></i>Leave Balance {{ $currentYear }}</h6>
+                    <small class="text-muted" style="font-size:0.75rem;">16 Days/Year (1.33 Days/Month)</small>
+                </div>
+                @if($leaveBalance)
+                <button type="button" class="btn btn-xs btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deductLeaveModal" title="Deduct Leave Days">
+                    <i class="fa-solid fa-minus me-1"></i>Deduct Leave
+                </button>
+                @endif
             </div>
-            <div class="card-body">
-                @php
-                    $leaveBalance = $employee->leaveBalances()->where('year', date('Y'))->latest()->first();
-                @endphp
+            <div class="card-body p-3">
                 @if($leaveBalance)
                 @php
-                    $casualUsed  = $leaveBalance->casual_used ?? 0;
-                    $casualTotal = $leaveBalance->casual_allotted ?? 0;
-                    $casualPct   = $casualTotal > 0 ? round(($casualUsed / $casualTotal) * 100) : 0;
-                    $annualUsed  = $leaveBalance->annual_used ?? 0;
-                    $annualTotal = $leaveBalance->annual_allotted ?? 0;
-                    $annualPct   = $annualTotal > 0 ? round(($annualUsed / $annualTotal) * 100) : 0;
+                    $totalDays = (float) $leaveBalance->total_days;
+                    $usedDays  = (float) $leaveBalance->used_days;
+                    $remaining = (float) $leaveBalance->remaining_days;
+                    $usedPct   = $totalDays > 0 ? min(100, round(($usedDays / $totalDays) * 100)) : 0;
                 @endphp
-                <div class="mb-4">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="small fw-semibold"><i class="fa-solid fa-mug-hot text-success me-1"></i>Casual Leave</span>
-                        <span class="small text-muted">{{ $casualUsed }} used / {{ $casualTotal }} total</span>
-                    </div>
-                    <div class="progress rounded-pill" style="height:10px;">
-                        <div class="progress-bar bg-success" style="width:{{ $casualPct }}%;"></div>
-                    </div>
-                    <div class="d-flex justify-content-between mt-1">
-                        <small class="text-muted">{{ $casualTotal - $casualUsed }} days remaining</small>
-                        <small class="{{ $casualPct > 80 ? 'text-danger' : 'text-muted' }}">{{ $casualPct }}%</small>
+                {{-- Active Balance Display --}}
+                <div class="bg-light rounded-3 p-3 text-center mb-3 border">
+                    <span class="text-muted small fw-semibold text-uppercase d-block" style="letter-spacing:0.05em; font-size:0.72rem;">Available Balance</span>
+                    <h2 class="fw-bold text-primary mb-0 font-monospace">{{ number_format($remaining, 2) }} <span class="fs-6 text-muted fw-normal">Days</span></h2>
+                    <div class="badge bg-info bg-opacity-10 text-info mt-1 font-monospace" style="font-size:0.75rem;">
+                        Accrued to Date: {{ number_format($accruedDays, 2) }} Days ({{ $monthsActive }} Mos)
                     </div>
                 </div>
-                <div>
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <span class="small fw-semibold"><i class="fa-solid fa-plane-departure text-info me-1"></i>Annual Leave</span>
-                        <span class="small text-muted">{{ $annualUsed }} used / {{ $annualTotal }} total</span>
+
+                {{-- Progress Bar --}}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1 small">
+                        <span class="text-muted fw-semibold"><i class="fa-solid fa-plane-departure text-info me-1"></i>Annual Leave</span>
+                        <span class="fw-bold text-dark">{{ number_format($usedDays, 1) }} used / {{ number_format($totalDays, 1) }} total</span>
                     </div>
                     <div class="progress rounded-pill" style="height:10px;">
-                        <div class="progress-bar bg-info" style="width:{{ $annualPct }}%;"></div>
+                        <div class="progress-bar {{ $usedPct > 80 ? 'bg-danger' : ($usedPct > 50 ? 'bg-warning' : 'bg-info') }}" style="width:{{ $usedPct }}%;"></div>
                     </div>
-                    <div class="d-flex justify-content-between mt-1">
-                        <small class="text-muted">{{ $annualTotal - $annualUsed }} days remaining</small>
-                        <small class="{{ $annualPct > 80 ? 'text-danger' : 'text-muted' }}">{{ $annualPct }}%</small>
+                    <div class="d-flex justify-content-between mt-1" style="font-size:0.75rem;">
+                        <span class="text-success fw-semibold">{{ number_format($remaining, 1) }} days remaining</span>
+                        <span class="text-muted">{{ $usedPct }}% taken</span>
                     </div>
                 </div>
+
+                {{-- Calculation Metadata --}}
+                <div class="p-2 bg-light rounded-2 small text-muted" style="font-size:0.75rem;">
+                    <div class="d-flex justify-content-between py-1 border-bottom border-light">
+                        <span>Standard Quota:</span>
+                        <strong class="text-dark">16.0 Days / Year</strong>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 border-bottom border-light">
+                        <span>Monthly Accrual:</span>
+                        <strong class="text-dark">1.33 Days / Month</strong>
+                    </div>
+                    <div class="d-flex justify-content-between py-1">
+                        <span>Service Since:</span>
+                        <strong class="text-dark">{{ optional($joinDate)->format('d M Y') ?? 'N/A' }}</strong>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 mt-3">
+                    <button type="button" class="btn btn-sm btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#deductLeaveModal">
+                        <i class="fa-solid fa-minus me-1"></i> Record Leave Taken
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#initLeaveModal" title="Adjust / Re-allocate Quota">
+                        <i class="fa-solid fa-sliders"></i>
+                    </button>
+                </div>
+
                 @else
-                <div class="text-center py-4 text-muted">
-                    <i class="fa-solid fa-calendar-xmark fa-2x mb-2 d-block opacity-25"></i>
-                    <p class="mb-0 small">No leave balance for {{ date('Y') }}</p>
+                {{-- One-Time Initialization Card --}}
+                <div class="text-center py-2">
+                    <div class="p-3 bg-light rounded-3 mb-3 border border-dashed">
+                        <i class="fa-solid fa-umbrella-beach fa-2x text-info mb-2 d-block opacity-75"></i>
+                        <h6 class="fw-bold text-dark mb-1">Annual Leave (16 Days / Year)</h6>
+                        <p class="text-muted small mb-2" style="font-size:0.8rem;">
+                            Standard statutory annual leave is <strong>16 days per year</strong> (accruing at <strong>1.33 days per month</strong>).
+                        </p>
+                        <div class="bg-white rounded-2 p-2 border small font-monospace text-start mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Monthly Rate:</span>
+                                <strong>1.33 Days/Mo</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Active in {{ $currentYear }}:</span>
+                                <strong>{{ $monthsActive }} Months</strong>
+                            </div>
+                            <div class="d-flex justify-content-between border-top pt-1 text-primary">
+                                <span>Earned to Date:</span>
+                                <strong>{{ number_format($accruedDays, 2) }} Days</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form action="{{ route('employees.initialize-leave-balance', $employee) }}" method="POST">
+                        @csrf
+                        <input type="hidden" name="year" value="{{ $currentYear }}">
+                        <input type="hidden" name="total_days" value="16.0">
+                        <button type="submit" class="btn btn-primary btn-sm w-100 py-2 fw-bold shadow-sm" onclick="return confirm('Initialize 16 Days annual leave balance for {{ addslashes($employee->full_name) }} for {{ $currentYear }}?')">
+                            <i class="fa-solid fa-plus-circle me-1"></i> Allocate 16 Days Leave (One-Time)
+                        </button>
+                    </form>
+                    <button type="button" class="btn btn-link btn-sm text-decoration-none mt-1" data-bs-toggle="modal" data-bs-target="#initLeaveModal" style="font-size:0.75rem;">
+                        <i class="fa-solid fa-gear me-1"></i>Custom Quota / Carried-Over
+                    </button>
                 </div>
                 @endif
+            </div>
+        </div>
+
+        {{-- Modal: Initialize / Custom Quota --}}
+        <div class="modal fade" id="initLeaveModal" tabindex="-1" aria-labelledby="initLeaveModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <form action="{{ route('employees.initialize-leave-balance', $employee) }}" method="POST">
+                        @csrf
+                        <div class="modal-header bg-primary text-white">
+                            <h5 class="modal-title fs-6 fw-bold" id="initLeaveModalLabel"><i class="fa-solid fa-umbrella-beach me-2"></i>Allocate Annual Leave Balance</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small text-muted">EMPLOYEE</label>
+                                <div class="fw-bold text-dark">{{ $employee->full_name }} ({{ $employee->employee_code }})</div>
+                                <small class="text-muted">Date of Joining: {{ optional($joinDate)->format('d M Y') ?? 'N/A' }}</small>
+                            </div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label fw-bold small">Year <span class="text-danger">*</span></label>
+                                    <input type="number" name="year" class="form-control" value="{{ $currentYear }}" required>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-bold small">Annual Quota (Days) <span class="text-danger">*</span></label>
+                                    <input type="number" step="0.5" name="total_days" class="form-control" value="{{ $leaveBalance->total_days ?? 16.0 }}" required>
+                                    <small class="text-muted">Default: 16.0 days/year</small>
+                                </div>
+                            </div>
+                            <div class="alert alert-info border-0 rounded-3 p-3 small mb-0">
+                                <i class="fa-solid fa-circle-info me-1"></i>
+                                <strong>Accrual Formula:</strong> 16 days ÷ 12 months = 1.33 days per month. The system tracks approved leave requests and automatically deducts days from this balance.
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light py-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary btn-sm fw-bold">
+                                <i class="fa-solid fa-check me-1"></i> Save &amp; Allocate Balance
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {{-- Modal: Record Leave Deduction --}}
+        <div class="modal fade" id="deductLeaveModal" tabindex="-1" aria-labelledby="deductLeaveModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <form action="{{ route('employees.record-leave-deduction', $employee) }}" method="POST">
+                        @csrf
+                        <div class="modal-header bg-danger text-white">
+                            <h5 class="modal-title fs-6 fw-bold" id="deductLeaveModalLabel"><i class="fa-solid fa-minus me-2"></i>Record Leave Taken &amp; Deduct Days</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small text-muted">EMPLOYEE</label>
+                                <div class="fw-bold text-dark">{{ $employee->full_name }} ({{ $employee->employee_code }})</div>
+                                <div class="small text-success fw-semibold">Current Available Balance: {{ number_format($leaveBalance->remaining_days ?? 16, 2) }} Days</div>
+                            </div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label fw-bold small">Days to Deduct <span class="text-danger">*</span></label>
+                                    <input type="number" step="0.5" name="days" class="form-control" placeholder="e.g. 2.0" required max="{{ $leaveBalance->remaining_days ?? 16 }}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-bold small">Start Date <span class="text-danger">*</span></label>
+                                    <input type="date" name="start_date" class="form-control" value="{{ date('Y-m-d') }}" required>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">End Date (Optional)</label>
+                                <input type="date" name="end_date" class="form-control" value="{{ date('Y-m-d') }}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">Reason / Leave Notes <span class="text-danger">*</span></label>
+                                <textarea name="reason" rows="3" class="form-control" placeholder="e.g. Approved annual vacation leave" required></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light py-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-danger btn-sm fw-bold">
+                                <i class="fa-solid fa-minus me-1"></i> Confirm Deduction
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
 
