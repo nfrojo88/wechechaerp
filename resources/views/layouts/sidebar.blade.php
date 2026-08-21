@@ -1003,6 +1003,12 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('employee-letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('employee-letters.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-envelope-open-text text-warning"></i>
+                <span>Employee Letters &amp; History</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('departments.index') }}" class="sidebar-nav-link {{ request()->routeIs('departments.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-building text-secondary"></i>
                 <span>Departments</span>

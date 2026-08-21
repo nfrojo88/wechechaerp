@@ -877,6 +877,96 @@
             </div>
         </div>
         @endif
+        {{-- ============================
+             Official Letters & Disciplinary / Recognition History
+        ============================= --}}
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-envelope-open-text text-primary me-2"></i>Official Letters &amp; Recognition / Warning History</h5>
+                    <small class="text-muted">Archived appreciation letters, written warnings, and disciplinary notices for this employee</small>
+                </div>
+                <a href="{{ route('employee-letters.create', ['employee_id' => $employee->id]) }}" class="btn btn-sm btn-primary shadow-sm">
+                    <i class="fa-solid fa-plus me-1"></i> Issue Official Letter
+                </a>
+            </div>
+            <div class="card-body p-0">
+                @php
+                    $empLetters = $employee->letters ?? collect();
+                @endphp
+                @if($empLetters->count() > 0)
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">Ref #</th>
+                                <th>Letter Type</th>
+                                <th>Subject / Title</th>
+                                <th>Issued Date</th>
+                                <th>Status</th>
+                                <th class="text-end pe-3">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($empLetters as $ltr)
+                            <tr>
+                                <td class="ps-3">
+                                    <a href="{{ route('employee-letters.show', $ltr) }}" class="fw-bold font-monospace text-primary text-decoration-none">
+                                        {{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge {{ $ltr->badge_class }} px-2 py-1">
+                                        <i class="{{ $ltr->icon }} me-1"></i>{{ $ltr->type_label }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <strong class="text-dark small d-block">{{ $ltr->title }}</strong>
+                                    <small class="text-muted">{{ Str::limit(strip_tags($ltr->content), 60) }}</small>
+                                </td>
+                                <td>
+                                    <small class="text-dark">{{ optional($ltr->issued_date)->format('d M Y') }}</small>
+                                </td>
+                                <td>
+                                    @if($ltr->acknowledgement_status === 'acknowledged')
+                                        <span class="badge bg-success small"><i class="fa-solid fa-check me-1"></i>Signed</span>
+                                    @elseif($ltr->acknowledgement_status === 'pending')
+                                        <span class="badge bg-warning text-dark small">Pending</span>
+                                    @else
+                                        <span class="badge bg-danger small">Refused</span>
+                                    @endif
+                                </td>
+                                <td class="text-end pe-3">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ route('employee-letters.show', $ltr) }}" class="btn btn-outline-primary" title="View">
+                                            <i class="fa-solid fa-eye"></i>
+                                        </a>
+                                        <a href="{{ route('employee-letters.print', $ltr) }}" target="_blank" class="btn btn-outline-secondary" title="Print Letterhead">
+                                            <i class="fa-solid fa-print"></i>
+                                        </a>
+                                        @if($ltr->attachment_path)
+                                        <a href="{{ asset('storage/' . $ltr->attachment_path) }}" target="_blank" class="btn btn-outline-success" title="Attachment">
+                                            <i class="fa-solid fa-paperclip"></i>
+                                        </a>
+                                        @endif
+                                    </div>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                @else
+                <div class="text-center py-4 text-muted">
+                    <i class="fa-solid fa-envelope-open-text fa-2x mb-2 d-block opacity-25"></i>
+                    <p class="small mb-2">No official letters or warning notices issued to this employee yet.</p>
+                    <a href="{{ route('employee-letters.create', ['employee_id' => $employee->id]) }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fa-solid fa-plus me-1"></i> Issue Thanks / Warning Letter
+                    </a>
+                </div>
+                @endif
+            </div>
+        </div>
     </div>
 
     {{-- ============================

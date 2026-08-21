@@ -1805,10 +1805,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/attachments/{attachment}/download', [App\Http\Controllers\LetterController::class, 'downloadAttachment'])->name('attachments.download');
     });
 
-    // ─── Admin Role Management ──────────────────────────────────────────────────────
-    Route::prefix('admin/roles')->name('admin.roles.')->group(function () {
-        Route::post('/',                [App\Http\Controllers\Admin\RoleAssignmentController::class, 'storeRole'])->name('store');
-        Route::delete('/{role}',        [App\Http\Controllers\Admin\RoleAssignmentController::class, 'destroyRole'])->name('destroy');
-    });
+    // ─── Employee Letters & Disciplinary / Recognition Records ───────────────────────
+    Route::resource('employee-letters', App\Http\Controllers\EmployeeLetterController::class);
+    Route::get('employee-letters/{employeeLetter}/print', [App\Http\Controllers\EmployeeLetterController::class, 'print'])->name('employee-letters.print');
 });
 

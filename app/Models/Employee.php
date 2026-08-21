@@ -139,6 +139,11 @@ class Employee extends Model
         return $this->hasMany(EmployeeAchievement::class);
     }
 
+    public function letters()
+    {
+        return $this->hasMany(EmployeeLetter::class)->latest('issued_date');
+    }
+
     public function contracts()
     {
         return $this->hasMany(EmployeeContract::class);
