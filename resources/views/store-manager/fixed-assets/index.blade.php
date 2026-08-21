@@ -988,4 +988,4 @@ function openEditAssetModal(asset) {
     new bootstrap.Modal(document.getElementById('sharedEditAssetModal')).show();
 }
 </script>
-@endsection
+@endpush
