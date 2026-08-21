@@ -28,7 +28,32 @@ class DashboardController extends Controller
         $kpi = [
             'total_projects'   => $this->safe(fn() => \App\Models\Project::where('status', 'active')->count()),
             'total_employees'  => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count()),
-            'monthly_expenses' => $this->safe(fn() => \App\Models\Expense::whereMonth('expense_date', now()->month)->sum('amount')),
+            'monthly_expenses' => $this->safe(function() {
+                $now = now();
+                $direct = (float) (\App\Models\Expense::whereMonth('expense_date', $now->month)
+                    ->whereYear('expense_date', $now->year)
+                    ->sum('amount') ?? 0);
+
+                $paidRequests = (float) (\App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                    ->where(function($q) use ($now) {
+                        $q->where(function($sq) use ($now) {
+                            $sq->whereNotNull('paid_at')
+                               ->whereMonth('paid_at', $now->month)
+                               ->whereYear('paid_at', $now->year);
+                        })->orWhere(function($sq) use ($now) {
+                            $sq->whereNull('paid_at')
+                               ->whereMonth('updated_at', $now->month)
+                               ->whereYear('updated_at', $now->year);
+                        })->orWhere(function($sq) use ($now) {
+                            $sq->whereNull('paid_at')
+                               ->whereMonth('created_at', $now->month)
+                               ->whereYear('created_at', $now->year);
+                        });
+                    })
+                    ->sum('amount') ?? 0);
+
+                return $direct + $paidRequests;
+            }, 0),
             'inventory_value'  => $this->safe(function() {
                 return \Illuminate\Support\Facades\DB::table('inventory')
                     ->join('products', 'inventory.product_id', '=', 'products.id')
@@ -82,12 +107,13 @@ class DashboardController extends Controller
             'total_contract_value'=> $this->safe(fn() => \App\Models\Project::sum('contract_value'), 0),
             'budget_utilization'  => $this->safe(function() {
                 $contractValue = \App\Models\Project::sum('contract_value');
-                $expenseValue = \Illuminate\Support\Facades\DB::table('expenses')->sum('amount') ?? 0;
+                $expenseValue = (\Illuminate\Support\Facades\DB::table('expenses')->sum('amount') ?? 0)
+                              + (\App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)->sum('amount') ?? 0);
                 return $contractValue > 0 ? round(($expenseValue / $contractValue) * 100, 1) : 0;
             }),
             'pending_approvals'   => $this->safe(fn() => \App\Models\Employee::where('is_approved_by_gm', false)->orWhereNull('is_approved_by_gm')->count(), 0),
             'total_employees'     => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count(), 0),
-            'pending_expenses'    => $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')->where('status', 'pending')->count(), 0),
+            'pending_expenses'    => $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')->where('status', 'pending')->count() + \App\Models\ExpenseRequest::whereIn('status', ['pending', 'reviewed', 'approved', 'assigned'])->count(), 0),
             'pending_payroll'     => $this->safe(fn() => \Illuminate\Support\Facades\DB::table('payrolls')->where('status', 'pending')->count(), 0),
             'open_issues'         => $this->safe(fn() => \App\Models\Issue::where('status', 'open')->count(), 0),
         ];
@@ -323,9 +349,9 @@ class DashboardController extends Controller
 
         $kpi = [
             'total_income'    => $this->safe(fn() => (float) \App\Models\Payment::sum('amount') + (float) \Illuminate\Support\Facades\DB::table('client_ipcs')->where('status', 'paid')->sum('gross_amount'), 0),
-            'total_expense'   => $this->safe(fn() => (float) \Illuminate\Support\Facades\DB::table('expenses')->sum('amount') + (float) \Illuminate\Support\Facades\DB::table('payrolls')->sum('net_salary'), 0),
+            'total_expense'   => $this->safe(fn() => (float) \Illuminate\Support\Facades\DB::table('expenses')->sum('amount') + (float) \App\Models\ExpenseRequest::where('status', 'paid')->sum('amount') + (float) \Illuminate\Support\Facades\DB::table('payrolls')->sum('net_salary'), 0),
             'cash_balance'    => $this->safe(fn() => (float) \Illuminate\Support\Facades\DB::table('bank_accounts')->sum('current_balance'), 0),
-            'pending_payments'=> $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')->where('status', 'pending')->count() + \Illuminate\Support\Facades\DB::table('payrolls')->where('status', 'pending')->count(), 0),
+            'pending_payments'=> $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')->where('status', 'pending')->count() + \App\Models\ExpenseRequest::whereIn('status', ['pending', 'reviewed', 'approved', 'assigned'])->count() + \Illuminate\Support\Facades\DB::table('payrolls')->where('status', 'pending')->count(), 0),
         ];
 
         // 6-Month Real Monthly Income vs Expense Data
@@ -343,6 +369,17 @@ class DashboardController extends Controller
                 $exp = (float) \Illuminate\Support\Facades\DB::table('expenses')
                     ->whereMonth('expense_date', $monthDate->month)
                     ->whereYear('expense_date', $monthDate->year)
+                    ->sum('amount')
+                    + (float) \App\Models\ExpenseRequest::where('status', 'paid')
+                    ->where(function($q) use ($monthDate) {
+                        $q->where(function($sq) use ($monthDate) {
+                            $sq->whereNotNull('paid_at')->whereMonth('paid_at', $monthDate->month)->whereYear('paid_at', $monthDate->year);
+                        })->orWhere(function($sq) use ($monthDate) {
+                            $sq->whereNull('paid_at')->whereMonth('updated_at', $monthDate->month)->whereYear('updated_at', $monthDate->year);
+                        })->orWhere(function($sq) use ($monthDate) {
+                            $sq->whereNull('paid_at')->whereMonth('created_at', $monthDate->month)->whereYear('created_at', $monthDate->year);
+                        });
+                    })
                     ->sum('amount');
                 $incomes[] = $inc;
                 $expenses[] = $exp;
