@@ -85,6 +85,9 @@
                 </span>
             @endif
         @endrole
+        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.create') ? route('employee-letters.create', ['employee_id' => $employee->id]) : url('/employee-letters/create?employee_id='.$employee->id) }}" class="btn btn-sm btn-outline-warning text-dark fw-bold">
+            <i class="fa-solid fa-envelope-open-text me-1"></i>Issue Letter
+        </a>
         <a href="{{ route('employees.edit', $employee) }}" class="btn btn-sm btn-primary">
             <i class="fa-solid fa-edit me-2"></i>Edit
         </a>

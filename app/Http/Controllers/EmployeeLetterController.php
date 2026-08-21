@@ -13,6 +13,34 @@ class EmployeeLetterController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
+        $this->ensureLettersTableExists();
+    }
+
+    private function ensureLettersTableExists(): void
+    {
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('employee_letters')) {
+                \Illuminate\Support\Facades\Schema::create('employee_letters', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->id();
+                    $table->foreignId('employee_id')->constrained('employees')->onDelete('cascade');
+                    $table->string('reference_number')->nullable()->unique();
+                    $table->string('letter_type');
+                    $table->string('title');
+                    $table->text('content');
+                    $table->string('severity')->default('info');
+                    $table->date('issued_date');
+                    $table->foreignId('issued_by')->nullable()->constrained('users')->onDelete('set null');
+                    $table->string('attachment_path')->nullable();
+                    $table->date('effective_date')->nullable();
+                    $table->text('action_required')->nullable();
+                    $table->string('acknowledgement_status')->default('acknowledged');
+                    $table->timestamp('acknowledged_at')->nullable();
+                    $table->timestamps();
+                });
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Employee letters table auto-heal: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -20,6 +48,7 @@ class EmployeeLetterController extends Controller
      */
     public function index(Request $request)
     {
+        $this->ensureLettersTableExists();
         $query = EmployeeLetter::with(['employee.project', 'issuer'])->latest('issued_date');
 
         if ($request->filled('employee_id')) {
