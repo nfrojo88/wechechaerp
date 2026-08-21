@@ -37,7 +37,7 @@ class RouteServiceProvider extends ServiceProvider
     {
         $this->configureRateLimiting();
 
-        Route::model('unit', \App\Models\EquipmentFixedAssetUnit::class);
+        Route::model('unit', \App\Models\FixedAssetUnit::class);
 
         $this->routes(function () {
             Route::prefix('api')
