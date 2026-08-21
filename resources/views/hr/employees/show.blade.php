@@ -256,61 +256,39 @@
             </div>
         </div>
 
-        {{-- Guarantee & Guarantor Person Card --}}
-        <div class="card border-0 shadow-sm mb-3 @if($employee->is_guarantee_overdue) border-danger @elseif($employee->show_guarantee_warning) border-warning @endif">
+        {{-- ── Card 1: Guarantee Letter ──────────────────────────────────────── --}}
+        <div class="card border-0 shadow-sm mb-3
+            @if($employee->is_guarantee_overdue) border-danger @elseif($employee->show_guarantee_warning) border-warning @endif">
             <div class="card-header @if($employee->is_guarantee_overdue) bg-danger text-white @elseif($employee->show_guarantee_warning) bg-warning text-dark @else bg-light @endif">
                 <h5 class="mb-0">
-                    <i class="fa-solid fa-shield-halved me-2"></i>Guarantee & Guarantor Information
+                    <i class="fa-solid fa-file-shield me-2"></i>Guarantee Letter
                 </h5>
             </div>
             <div class="card-body">
-                @if($employee->guarantor_name || $employee->guarantor_id_number || $employee->guarantor_phone)
-                    <div class="row g-3 mb-3 p-3 bg-light rounded border">
-                        <div class="col-md-4">
-                            <small class="text-muted d-block mb-1"><i class="fa-solid fa-user-shield text-primary me-1"></i>Guarantor Person Name</small>
-                            <h6 class="mb-0 fw-bold text-dark">{{ $employee->guarantor_name ?: 'Not Provided' }}</h6>
+                @if($employee->guarantee_letter)
+                    {{-- Guarantee letter is on file --}}
+                    <div class="d-flex align-items-center gap-4 p-3 border rounded bg-white shadow-xs">
+                        <div class="text-center" style="min-width:80px;">
+                            <i class="fa-solid fa-file-pdf fa-3x text-danger"></i>
                         </div>
-                        <div class="col-md-4">
-                            <small class="text-muted d-block mb-1"><i class="fa-solid fa-id-card text-success me-1"></i>Guarantor National ID No</small>
-                            <h6 class="mb-0 fw-bold text-dark">{{ $employee->guarantor_id_number ?: 'Not Provided' }}</h6>
+                        <div class="flex-grow-1">
+                            <h6 class="fw-bold mb-1 text-dark">Guarantee Letter Document</h6>
+                            <small class="text-muted d-block" style="font-size:0.78rem;">
+                                <i class="fa-regular fa-calendar-check me-1 text-success"></i>
+                                Submitted: {{ $employee->guarantee_letter_submitted_at ? $employee->guarantee_letter_submitted_at->format('d M Y') : 'On File' }}
+                            </small>
+                            <span class="badge bg-success mt-1"><i class="fa-solid fa-check me-1"></i>Submitted</span>
                         </div>
-                        <div class="col-md-4">
-                            <small class="text-muted d-block mb-1"><i class="fa-solid fa-phone text-info me-1"></i>Guarantor Phone</small>
-                            <h6 class="mb-0 fw-bold text-dark">{{ $employee->guarantor_phone ?: 'Not Provided' }}</h6>
+                        <div>
+                            <a href="{{ $employee->guarantee_letter_url }}" target="_blank"
+                               class="btn btn-outline-danger btn-sm px-3">
+                                <i class="fa-solid fa-file-pdf me-1"></i>View Guarantee Letter
+                            </a>
                         </div>
                     </div>
-                @endif
-
-                <div class="row g-3 mb-3">
-                    @if($employee->guarantor_id_card)
-                        <div class="col-md-6">
-                            <div class="border rounded p-3 text-center bg-white h-100 shadow-xs">
-                                <i class="fa-solid fa-id-card fa-2x text-primary mb-2"></i>
-                                <h6 class="fw-bold mb-1 small">Guarantor National ID Document</h6>
-                                <a href="{{ $employee->guarantor_id_card_url }}" target="_blank" class="btn btn-sm btn-outline-primary mt-2">
-                                    <i class="fa-solid fa-eye me-1"></i>View Guarantor ID
-                                </a>
-                            </div>
-                        </div>
-                    @endif
-
-                    @if($employee->guarantee_letter)
-                        <div class="col-md-{{ $employee->guarantor_id_card ? '6' : '12' }}">
-                            <div class="border rounded p-3 text-center bg-white h-100 shadow-xs">
-                                <i class="fa-solid fa-file-pdf fa-2x text-danger mb-2"></i>
-                                <h6 class="fw-bold mb-1 small">Guarantee Letter Document</h6>
-                                <small class="text-muted d-block" style="font-size:0.75rem;">Submitted: {{ $employee->guarantee_letter_submitted_at ? $employee->guarantee_letter_submitted_at->format('d M Y') : 'Active' }}</small>
-                                <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-sm btn-outline-danger mt-2">
-                                    <i class="fa-solid fa-file-pdf me-1"></i>View Guarantee Letter
-                                </a>
-                            </div>
-                        </div>
-                    @endif
-                </div>
-
-                @if(!$employee->guarantee_letter)
+                @else
+                    {{-- No guarantee letter yet --}}
                     @if($employee->is_guarantee_overdue)
-                        {{-- Overdue - 30+ days --}}
                         <div class="alert alert-danger mb-3">
                             <i class="fa-solid fa-exclamation-circle me-2"></i>
                             <strong>OVERDUE!</strong> Guarantee letter was due {{ abs($employee->days_until_guarantee_deadline) }} days ago.
@@ -335,7 +313,6 @@
                             </button>
                         </form>
                     @elseif($employee->show_guarantee_warning)
-                        {{-- Warning - 20+ days --}}
                         <div class="alert alert-warning mb-3">
                             <i class="fa-solid fa-exclamation-triangle me-2"></i>
                             <strong>Warning!</strong> Guarantee letter must be submitted within {{ $employee->days_until_guarantee_deadline }} days.
@@ -360,7 +337,6 @@
                             </button>
                         </form>
                     @else
-                        {{-- Not yet 20 days --}}
                         <div class="alert alert-info mb-3">
                             <i class="fa-solid fa-info-circle me-2"></i>
                             Guarantee letter due in {{ $employee->days_until_guarantee_deadline }} days.
@@ -384,6 +360,79 @@
                             </button>
                         </form>
                     @endif
+                @endif
+            </div>
+        </div>
+
+        {{-- ── Card 2: Guarantor Person Information ─────────────────────────── --}}
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="fa-solid fa-user-shield me-2 text-primary"></i>Guarantor Person Information
+                </h5>
+            </div>
+            <div class="card-body">
+                {{-- Person Details Row --}}
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded border h-100">
+                            <small class="text-muted d-block mb-1 fw-semibold" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:.04em;">
+                                <i class="fa-solid fa-user-tie text-primary me-1"></i>Guarantor Full Name
+                            </small>
+                            <h6 class="mb-0 fw-bold text-dark">{{ $employee->guarantor_name ?: '—' }}</h6>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded border h-100">
+                            <small class="text-muted d-block mb-1 fw-semibold" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:.04em;">
+                                <i class="fa-solid fa-id-card text-success me-1"></i>National ID Number
+                            </small>
+                            <h6 class="mb-0 fw-bold text-dark font-monospace">{{ $employee->guarantor_id_number ?: '—' }}</h6>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 bg-light rounded border h-100">
+                            <small class="text-muted d-block mb-1 fw-semibold" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:.04em;">
+                                <i class="fa-solid fa-phone text-info me-1"></i>Phone Number
+                            </small>
+                            <h6 class="mb-0 fw-bold text-dark">{{ $employee->guarantor_phone ?: '—' }}</h6>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Guarantor ID Card Document --}}
+                @if($employee->guarantor_id_card)
+                    <div class="d-flex align-items-center gap-4 p-3 border rounded bg-white shadow-xs">
+                        <div class="text-center" style="min-width:80px;">
+                            <i class="fa-solid fa-id-card fa-3x text-primary"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <h6 class="fw-bold mb-1 text-dark">Guarantor National ID Document</h6>
+                            <small class="text-muted d-block" style="font-size:0.78rem;">
+                                ID card / photo uploaded for verification
+                            </small>
+                            <span class="badge bg-success mt-1"><i class="fa-solid fa-check me-1"></i>On File</span>
+                        </div>
+                        <div>
+                            <a href="{{ $employee->guarantor_id_card_url }}" target="_blank"
+                               class="btn btn-outline-primary btn-sm px-3">
+                                <i class="fa-solid fa-eye me-1"></i>View Guarantor ID
+                            </a>
+                        </div>
+                    </div>
+                @else
+                    <div class="text-center py-3 text-muted border rounded bg-light">
+                        <i class="fa-solid fa-id-card fa-2x mb-2 opacity-25 d-block"></i>
+                        <small>No Guarantor ID document uploaded yet.</small>
+                    </div>
+                @endif
+
+                @if(!$employee->guarantor_name && !$employee->guarantor_id_number && !$employee->guarantor_phone && !$employee->guarantor_id_card)
+                    <div class="alert alert-secondary mt-3 mb-0">
+                        <i class="fa-solid fa-circle-info me-2"></i>
+                        No guarantor person information has been recorded for this employee.
+                        <a href="{{ route('employees.edit', $employee) }}" class="alert-link ms-1">Add Guarantor →</a>
+                    </div>
                 @endif
             </div>
         </div>
