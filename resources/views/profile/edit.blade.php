@@ -421,79 +421,19 @@
                                         </td>
                                         <td class="py-3 text-muted small">
                                             {{ $fUnit->assigned_date ? $fUnit->assigned_date->format('d M Y') : 'N/A' }}
-                                        </td>
-                                        <td class="py-3 pe-4 text-center">
+                                                                         <td class="py-3 pe-4 text-center">
                                             <button type="button"
-                                                class="btn btn-sm btn-outline-warning rounded-pill px-2 py-1"
+                                                class="btn btn-sm btn-outline-warning rounded-pill px-2 py-1 btn-report-issue"
                                                 style="font-size:0.75rem;"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#reportMaintenanceModal-{{ $fUnit->id }}"
+                                                data-unit-id="{{ $fUnit->id }}"
+                                                data-legacy-id=""
+                                                data-asset-name="{{ $fUnit->parentAsset->name ?? 'Fixed Asset' }}"
+                                                data-asset-code="{{ $fUnit->unit_code }}"
                                                 title="Report maintenance issue for this asset">
                                                 <i class="fa-solid fa-wrench me-1"></i>Report Issue
                                             </button>
                                         </td>
                                     </tr>
-
-                                    {{-- Maintenance Report Modal for this asset --}}
-                                    <div class="modal fade" id="reportMaintenanceModal-{{ $fUnit->id }}" tabindex="-1" aria-hidden="true">
-                                        <div class="modal-dialog modal-dialog-centered">
-                                            <div class="modal-content border-0 shadow">
-                                                <form method="POST" action="{{ route('maintenance.store') }}">
-                                                    @csrf
-                                                    <input type="hidden" name="fixed_asset_unit_id" value="{{ $fUnit->id }}">
-                                                    <input type="hidden" name="asset_name" value="{{ $fUnit->parentAsset->name ?? 'Fixed Asset' }}">
-                                                    <input type="hidden" name="asset_code" value="{{ $fUnit->unit_code }}">
-                                                    <div class="modal-header" style="background: linear-gradient(135deg, #f59e0b, #d97706); color:#fff;">
-                                                        <h5 class="modal-title fs-6 fw-bold">
-                                                            <i class="fa-solid fa-wrench me-2"></i>Report Maintenance Issue
-                                                        </h5>
-                                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                                    </div>
-                                                    <div class="modal-body p-4">
-                                                        <div class="alert alert-light border mb-3 py-2">
-                                                            <div class="small text-muted">Asset:</div>
-                                                            <strong>{{ $fUnit->parentAsset->name ?? 'Fixed Asset' }}</strong>
-                                                            <span class="badge bg-dark font-monospace ms-2">{{ $fUnit->unit_code }}</span>
-                                                        </div>
-
-                                                        <div class="row g-3">
-                                                            <div class="col-md-6">
-                                                                <label class="form-label fw-semibold small">Issue Type <span class="text-danger">*</span></label>
-                                                                <select name="issue_type" class="form-select form-select-sm" required>
-                                                                    <option value="breakdown">⚡ Breakdown</option>
-                                                                    <option value="damage">💥 Physical Damage</option>
-                                                                    <option value="service_due">🔧 Service Due</option>
-                                                                    <option value="malfunction">⚠️ Malfunction</option>
-                                                                    <option value="needs_repair">🛠️ Needs Repair</option>
-                                                                    <option value="other">📋 Other</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="col-md-6">
-                                                                <label class="form-label fw-semibold small">Urgency <span class="text-danger">*</span></label>
-                                                                <select name="urgency" class="form-select form-select-sm" required>
-                                                                    <option value="low">🟢 Low — Not urgent</option>
-                                                                    <option value="normal" selected>🔵 Normal</option>
-                                                                    <option value="urgent">🟠 Urgent</option>
-                                                                    <option value="critical">🔴 Critical — Blocking work</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="col-12">
-                                                                <label class="form-label fw-semibold small">Description <span class="text-danger">*</span></label>
-                                                                <textarea name="description" class="form-control form-control-sm" rows="4" required
-                                                                    placeholder="Describe the issue clearly: what happened, when it started, what you observed..."></textarea>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer bg-light py-2">
-                                                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-sm btn-warning fw-bold px-4">
-                                                            <i class="fa-solid fa-paper-plane me-1"></i>Submit Report
-                                                        </button>
-                                                    </div>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
                                     @endforeach
 
                                     @foreach($legacyActiveAssets as $asset)
@@ -516,74 +456,17 @@
                                         </td>
                                         <td class="py-3 pe-4 text-center">
                                             <button type="button"
-                                                class="btn btn-sm btn-outline-warning rounded-pill px-2 py-1"
+                                                class="btn btn-sm btn-outline-warning rounded-pill px-2 py-1 btn-report-issue"
                                                 style="font-size:0.75rem;"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#reportLegacyModal-{{ $asset->id }}"
+                                                data-unit-id=""
+                                                data-legacy-id="{{ $asset->id }}"
+                                                data-asset-name="{{ $asset->product->name ?? 'Asset' }}"
+                                                data-asset-code="{{ $asset->product->code ?? '' }}"
                                                 title="Report maintenance issue">
                                                 <i class="fa-solid fa-wrench me-1"></i>Report Issue
                                             </button>
                                         </td>
                                     </tr>
-
-                                    {{-- Maintenance Report Modal for legacy asset --}}
-                                    <div class="modal fade" id="reportLegacyModal-{{ $asset->id }}" tabindex="-1" aria-hidden="true">
-                                        <div class="modal-dialog modal-dialog-centered">
-                                            <div class="modal-content border-0 shadow">
-                                                <form method="POST" action="{{ route('maintenance.store') }}">
-                                                    @csrf
-                                                    <input type="hidden" name="employee_asset_id" value="{{ $asset->id }}">
-                                                    <input type="hidden" name="asset_name" value="{{ $asset->product->name ?? 'Asset' }}">
-                                                    <input type="hidden" name="asset_code" value="{{ $asset->product->code ?? '' }}">
-                                                    <div class="modal-header" style="background: linear-gradient(135deg, #f59e0b, #d97706); color:#fff;">
-                                                        <h5 class="modal-title fs-6 fw-bold">
-                                                            <i class="fa-solid fa-wrench me-2"></i>Report Maintenance Issue
-                                                        </h5>
-                                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                                    </div>
-                                                    <div class="modal-body p-4">
-                                                        <div class="alert alert-light border mb-3 py-2">
-                                                            <div class="small text-muted">Asset:</div>
-                                                            <strong>{{ $asset->product->name ?? 'Asset' }}</strong>
-                                                        </div>
-                                                        <div class="row g-3">
-                                                            <div class="col-md-6">
-                                                                <label class="form-label fw-semibold small">Issue Type <span class="text-danger">*</span></label>
-                                                                <select name="issue_type" class="form-select form-select-sm" required>
-                                                                    <option value="breakdown">⚡ Breakdown</option>
-                                                                    <option value="damage">💥 Physical Damage</option>
-                                                                    <option value="service_due">🔧 Service Due</option>
-                                                                    <option value="malfunction">⚠️ Malfunction</option>
-                                                                    <option value="needs_repair">🛠️ Needs Repair</option>
-                                                                    <option value="other">📋 Other</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="col-md-6">
-                                                                <label class="form-label fw-semibold small">Urgency <span class="text-danger">*</span></label>
-                                                                <select name="urgency" class="form-select form-select-sm" required>
-                                                                    <option value="low">🟢 Low</option>
-                                                                    <option value="normal" selected>🔵 Normal</option>
-                                                                    <option value="urgent">🟠 Urgent</option>
-                                                                    <option value="critical">🔴 Critical</option>
-                                                                </select>
-                                                            </div>
-                                                            <div class="col-12">
-                                                                <label class="form-label fw-semibold small">Description <span class="text-danger">*</span></label>
-                                                                <textarea name="description" class="form-control form-control-sm" rows="4" required
-                                                                    placeholder="Describe the issue clearly..."></textarea>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="modal-footer bg-light py-2">
-                                                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                        <button type="submit" class="btn btn-sm btn-warning fw-bold px-4">
-                                                            <i class="fa-solid fa-paper-plane me-1"></i>Submit Report
-                                                        </button>
-                                                    </div>
-                                                </form>
-                                            </div>
-                                        </div>
-                                    </div>
                                     @endforeach
                                 </tbody>
                             </table>
@@ -856,6 +739,71 @@
 
 </div>
 
+{{-- Global Maintenance Report Modal --}}
+<div class="modal fade" id="reportMaintenanceModal" tabindex="-1" aria-labelledby="reportMaintenanceModalLabel" aria-hidden="true" style="z-index: 1055;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form method="POST" action="{{ route('maintenance.store') }}">
+                @csrf
+                <input type="hidden" name="fixed_asset_unit_id" id="rm_unit_id" value="">
+                <input type="hidden" name="employee_asset_id" id="rm_legacy_id" value="">
+                <input type="hidden" name="asset_name" id="rm_asset_name_input" value="">
+                <input type="hidden" name="asset_code" id="rm_asset_code_input" value="">
+                
+                <div class="modal-header border-0 px-4 py-3" style="background: linear-gradient(135deg, #f59e0b, #d97706); color:#fff;">
+                    <h5 class="modal-title fs-6 fw-bold mb-0" id="reportMaintenanceModalLabel">
+                        <i class="fa-solid fa-wrench me-2"></i>Report Maintenance Issue
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="alert alert-light border mb-3 py-2 px-3 rounded-3 d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="text-muted" style="font-size:0.75rem;">Selected Asset:</div>
+                            <strong id="rm_asset_name_display" class="text-dark">Fixed Asset</strong>
+                        </div>
+                        <span id="rm_asset_code_display" class="badge bg-dark font-monospace px-2 py-1"></span>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Issue Type <span class="text-danger">*</span></label>
+                            <select name="issue_type" class="form-select form-select-sm" required>
+                                <option value="breakdown">⚡ Breakdown</option>
+                                <option value="damage">💥 Physical Damage</option>
+                                <option value="service_due">🔧 Service Due</option>
+                                <option value="malfunction">⚠️ Malfunction</option>
+                                <option value="needs_repair">🛠️ Needs Repair</option>
+                                <option value="other">📋 Other</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small">Urgency <span class="text-danger">*</span></label>
+                            <select name="urgency" class="form-select form-select-sm" required>
+                                <option value="low">🟢 Low — Not urgent</option>
+                                <option value="normal" selected>🔵 Normal</option>
+                                <option value="urgent">🟠 Urgent</option>
+                                <option value="critical">🔴 Critical — Blocking work</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small">Description <span class="text-danger">*</span></label>
+                            <textarea name="description" class="form-control form-control-sm" rows="4" required
+                                placeholder="Describe the issue clearly: what happened, when it started, what you observed..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-secondary px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-warning fw-bold px-4 text-dark shadow-sm">
+                        <i class="fa-solid fa-paper-plane me-1"></i>Submit Report
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Interactive password visibility toggler
@@ -875,6 +823,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 icon.classList.add('fa-eye');
             }
         });
+    });
+
+    // Report Maintenance Issue modal opener
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-report-issue');
+        if (!btn) return;
+        
+        const d = btn.dataset;
+        document.getElementById('rm_unit_id').value = d.unitId || '';
+        document.getElementById('rm_legacy_id').value = d.legacyId || '';
+        document.getElementById('rm_asset_name_input').value = d.assetName || 'Fixed Asset';
+        document.getElementById('rm_asset_code_input').value = d.assetCode || '';
+        document.getElementById('rm_asset_name_display').textContent = d.assetName || 'Fixed Asset';
+        document.getElementById('rm_asset_code_display').textContent = d.assetCode || '';
+        
+        const modalEl = document.getElementById('reportMaintenanceModal');
+        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modalInstance.show();
     });
 });
 </script>
