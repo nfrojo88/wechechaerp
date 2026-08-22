@@ -107,7 +107,7 @@
                     </button>
                 </div>
                 <div class="collapse p-3 bg-light border-bottom" id="createRoleCollapse">
-                    <form action="{{ route('admin.roles.store') }}" method="POST" class="row g-2 align-items-center">
+                    <form action="{{ Route::has('admin.roles.store') ? route('admin.roles.store') : (Route::has('admin.role-assignment.store') ? route('admin.role-assignment.store') : url('/admin/roles')) }}" method="POST" class="row g-2 align-items-center">
                         @csrf
                         <div class="col-md-6">
                             <input type="text" name="name" class="form-control form-control-sm" placeholder="Enter new role name (e.g., Secretary, Legal, Audit)..." required>
@@ -126,7 +126,7 @@
                                 <i class="fa-solid fa-user-tag text-primary"></i>
                                 <span class="fw-bold">{{ ucfirst(str_replace('_', ' ', $r->name)) }}</span>
                                 @if(!in_array($r->name, ['admin', 'global_admin', 'gm', 'secretary']))
-                                    <form action="{{ route('admin.roles.destroy', $r->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this role?');">
+                                    <form action="{{ Route::has('admin.roles.destroy') ? route('admin.roles.destroy', $r->id) : (Route::has('admin.role-assignment.destroy') ? route('admin.role-assignment.destroy', $r->id) : url('/admin/roles/' . $r->id)) }}" method="POST" class="d-inline" onsubmit="return confirm('Delete this role?');">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="btn btn-link text-danger p-0 ms-1" style="font-size: 0.8rem;" title="Delete Role">

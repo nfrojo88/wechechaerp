@@ -1022,6 +1022,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/admin/role-assignment', [RoleAssignmentController::class, 'index'])->name('admin.role-assignment.index');
         Route::post('/admin/role-assignment/{user}', [RoleAssignmentController::class, 'assign'])->name('admin.role-assignment.assign');
         Route::post('/admin/role-assignment/{user}/remove', [RoleAssignmentController::class, 'removeRole'])->name('admin.role-assignment.remove');
+        Route::post('/admin/roles', [RoleAssignmentController::class, 'storeRole'])->name('admin.roles.store');
+        Route::delete('/admin/roles/{role}', [RoleAssignmentController::class, 'destroyRole'])->name('admin.roles.destroy');
+        Route::post('/admin/role-assignment/store', [RoleAssignmentController::class, 'storeRole'])->name('admin.role-assignment.store');
+        Route::delete('/admin/role-assignment/destroy/{role}', [RoleAssignmentController::class, 'destroyRole'])->name('admin.role-assignment.destroy');
         
         Route::get('/admin/tickets', [AdminTicketController::class, 'index'])->name('admin.tickets.index');
         Route::get('/admin/tickets/{ticket}', [AdminTicketController::class, 'show'])->name('admin.tickets.show');
