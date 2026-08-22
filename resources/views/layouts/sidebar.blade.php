@@ -8,6 +8,7 @@
     $isStoreKeeper = in_array('store_keeper', $rawUserRoles);
     $isHrOfficer = in_array('hr_officer', $rawUserRoles) || in_array('hr', $rawUserRoles);
     $isHrManager = in_array('hr_manager', $rawUserRoles);
+    $isCoordinator = in_array('coordinator', $rawUserRoles);
 @endphp
 
 <div class="sidebar-scroll">
@@ -29,6 +30,9 @@
             } elseif ($isHrOfficer || $isHrManager) {
                 $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.hr') ? route('dashboard.hr') : (\Illuminate\Support\Facades\Route::has('hr-manager.dashboard') ? route('hr-manager.dashboard') : url('/dashboard/hr'));
                 $dashTitle = 'HR Dashboard';
+            } elseif ($isCoordinator) {
+                $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.coordinator') ? route('dashboard.coordinator') : url('/coordinator/dashboard');
+                $dashTitle = 'Coordinator Dashboard';
             }
         @endphp
         <li class="sidebar-nav-item">
@@ -426,14 +430,6 @@
             </a>
         </li>
         @endcanany
-        @canany(['reports.view', 'reports.weekly.view', 'reports.*.view'])
-        <li class="sidebar-nav-item">
-            <a href="{{ route('weekly-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('weekly-reports.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-chart-bar"></i>
-                <span>Weekly Reports</span>
-            </a>
-        </li>
-        @endcanany
         @if(auth()->check() && (auth()->user()->hasAnyRole(['admin', 'global_admin', 'planning_manager', 'planning', 'technical_manager', 'finance_manager', 'finance', 'general_manager', 'gm', 'project_manager']) || auth()->user()->canAny(['finance.budgets.manage', 'finance.*', 'planning.*'])))
         <li class="sidebar-nav-item">
             <a href="{{ route('budgets.index') }}" class="sidebar-nav-link {{ request()->routeIs('budgets.*') ? 'active' : '' }}">
@@ -578,37 +574,14 @@
 
         {{-- Coordinator Tools --}}
         @if(auth()->check() && auth()->user()->hasAnyRole(['Coordinator', 'coordinator', 'admin', 'global_admin']))
-
+        @if(!$isCoordinator)
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.coordinator') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.coordinator') ? 'active' : '' }}">
                 <i class="fa-solid fa-users-viewfinder text-primary"></i>
                 <span>Coordinator Dashboard</span>
             </a>
         </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('erp-plans.index') }}" class="sidebar-nav-link {{ request()->routeIs('erp-plans.*') || request()->routeIs('takeoff.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-calculator text-primary"></i>
-                <span>ERP Plans &amp; Take-Offs</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('schedules.index') }}" class="sidebar-nav-link {{ request()->routeIs('schedules.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-calendar-alt text-success"></i>
-                <span>Site Schedules</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('inventory.index') }}" class="sidebar-nav-link {{ request()->routeIs('inventory.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-boxes text-info"></i>
-                <span>Global Inventory</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('daily-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('daily-reports.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-file-contract text-warning"></i>
-                <span>Daily Site Reports</span>
-            </a>
-        </li>
+        @endif
         <li class="sidebar-nav-item">
             <a href="{{ route('coordinator.forecast') }}" class="sidebar-nav-link {{ request()->routeIs('coordinator.forecast') ? 'active' : '' }}">
                 <i class="fa-solid fa-chart-pie text-danger"></i>
@@ -619,7 +592,7 @@
 
 
         {{-- General Service & Operations Tools --}}
-        @if(auth()->check() && ($isGeneralServiceUser || auth()->user()->hasAnyRole(['admin', 'global_admin', 'coordinator'])))
+        @if(auth()->check() && ($isGeneralServiceUser || auth()->user()->hasAnyRole(['admin', 'global_admin'])))
         <li class="sidebar-heading">General Service</li>
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.general_service') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.general_service') || request()->routeIs('general-service.*') ? 'active' : '' }}">
@@ -899,10 +872,6 @@
             </a>
         </li>
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
-        <li class="sidebar-nav-item">
-            <a href="{{ route('income.index') }}" class="sidebar-nav-link {{ request()->routeIs('income.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-receipt text-success"></i>
-                <span>View Receipts</span>
         <li class="sidebar-nav-item">
             <a href="{{ route('finance.payroll.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.payroll.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-money-bill-wave text-success"></i>
