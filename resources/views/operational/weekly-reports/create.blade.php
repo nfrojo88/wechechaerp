@@ -20,11 +20,13 @@
                     </div>
                     <div class="card-body">
                         <div class="form-group mb-3">
-                            <label>Project <span class="text-danger">*</span></label>
-                            <select name="project_id" class="form-control" required>
+                            <label class="font-weight-bold">Project <span class="text-danger">*</span></label>
+                            <select name="project_id" class="form-control form-select" required>
                                 <option value="">-- Select Project --</option>
                                 @foreach($projects as $project)
-                                    <option value="{{ $project->id }}">{{ $project->name }}</option>
+                                    <option value="{{ $project->id }}" {{ old('project_id', request('project_id')) == $project->id ? 'selected' : '' }}>
+                                        {{ $project->name }}{{ $project->code ? ' (' . $project->code . ')' : '' }}
+                                    </option>
                                 @endforeach
                             </select>
                         </div>

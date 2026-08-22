@@ -13,12 +13,19 @@ class WeeklyReportController extends Controller
 
         /** @var \App\Models\User|null $user */
         $user = auth()->user();
-        if ($user && $user->hasRole('site_engineer') && !$user->hasAnyRole(['admin', 'global_admin', 'gm', 'planning_manager'])) {
+        if ($user && $user->hasRole('site_engineer') && !$user->hasAnyRole(['admin', 'global_admin', 'gm', 'planning_manager', 'planning', 'coordinator'])) {
             $assignedProjectIds = $user->projects()->pluck('projects.id');
             if ($user->store && $user->store->project_id) {
                 $assignedProjectIds->push($user->store->project_id);
             }
-            $query->whereIn('project_id', $assignedProjectIds->unique());
+            if ($user->employee && $user->employee->project_id) {
+                $assignedProjectIds->push($user->employee->project_id);
+            }
+            $assignedProjectIds = $assignedProjectIds->filter()->unique();
+
+            if ($assignedProjectIds->isNotEmpty()) {
+                $query->whereIn('project_id', $assignedProjectIds);
+            }
         }
 
         $reports = $query->get();
@@ -27,19 +34,39 @@ class WeeklyReportController extends Controller
 
     public function create()
     {
-        $query = \App\Models\Project::where('status', 'active');
-
         /** @var \App\Models\User|null $user */
         $user = auth()->user();
-        if ($user && $user->hasRole('site_engineer') && !$user->hasAnyRole(['admin', 'global_admin', 'gm', 'planning_manager'])) {
+        $assignedProjectIds = collect();
+
+        if ($user && $user->hasRole('site_engineer') && !$user->hasAnyRole(['admin', 'global_admin', 'gm', 'planning_manager', 'planning', 'coordinator'])) {
             $assignedProjectIds = $user->projects()->pluck('projects.id');
             if ($user->store && $user->store->project_id) {
                 $assignedProjectIds->push($user->store->project_id);
             }
-            $query->whereIn('id', $assignedProjectIds->unique());
+            if ($user->employee && $user->employee->project_id) {
+                $assignedProjectIds->push($user->employee->project_id);
+            }
+            $assignedProjectIds = $assignedProjectIds->filter()->unique();
         }
 
-        $projects = $query->get();
+        $query = \App\Models\Project::query();
+        if ($assignedProjectIds->isNotEmpty()) {
+            $query->whereIn('id', $assignedProjectIds);
+        }
+
+        // Exclude cancelled projects
+        $projects = (clone $query)->whereNotIn('status', ['cancelled', 'Cancelled'])->orderBy('name')->get();
+
+        // Fallback 1: If user has assigned project filter but no projects returned, get all non-cancelled projects
+        if ($projects->isEmpty()) {
+            $projects = \App\Models\Project::whereNotIn('status', ['cancelled', 'Cancelled'])->orderBy('name')->get();
+        }
+
+        // Fallback 2: If still empty, return all projects
+        if ($projects->isEmpty()) {
+            $projects = \App\Models\Project::orderBy('name')->get();
+        }
+
         return view('operational.weekly-reports.create', compact('projects'));
     }
 
