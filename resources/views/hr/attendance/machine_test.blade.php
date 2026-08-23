@@ -129,8 +129,7 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Machine Serial (SN)</th>
-                                <th>Device IP</th>
-                                <th>Firmware</th>
+                                <th>Device Name / Location</th>
                                 <th>Last Ping / Heartbeat</th>
                                 <th>Status</th>
                             </tr>
@@ -138,9 +137,8 @@
                         <tbody>
                             @forelse($devices as $dev)
                             <tr>
-                                <td class="fw-bold text-dark"><code>{{ $dev->device_sn }}</code></td>
-                                <td>{{ $dev->ip_address ?? '—' }}</td>
-                                <td><small class="text-muted">{{ $dev->firmware_version ?? 'ADMS Standalone' }}</small></td>
+                                <td class="fw-bold text-dark"><code>{{ $dev->serial_number ?? ($dev->device_sn ?? 'Unknown') }}</code></td>
+                                <td>{{ $dev->name ?? ($dev->location ?? 'Main Gate') }}</td>
                                 <td>{{ $dev->last_seen_at ? \Carbon\Carbon::parse($dev->last_seen_at)->diffForHumans() : 'Never' }}</td>
                                 <td>
                                     <span class="badge bg-success rounded-pill px-3"><i class="fa-solid fa-circle-check me-1"></i>Online</span>
@@ -148,7 +146,7 @@
                             </tr>
                             @empty
                             <tr>
-                                <td colspan="5" class="text-center py-4 text-muted">
+                                <td colspan="4" class="text-center py-4 text-muted">
                                     <i class="fa-solid fa-satellite-dish fa-2x mb-2 opacity-50"></i>
                                     <p class="mb-0 small">No physical machine heartbeat recorded yet. Once configured in menu, it will appear here automatically.</p>
                                 </td>
