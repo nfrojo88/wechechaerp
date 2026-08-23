@@ -1566,6 +1566,9 @@ Route::middleware(['auth'])->group(function () {
 
     // ─── HR Reports ─────────────────────────────────────────────────────────────
     Route::get('reports/attendance', [App\Http\Controllers\HRReportsController::class, 'attendanceReport'])->name('reports.attendance');
+    Route::post('reports/attendance/send-gm', [App\Http\Controllers\HRReportsController::class, 'sendToGM'])->name('reports.attendance.send-gm');
+    Route::post('reports/submission/{submission}/review', [App\Http\Controllers\HRReportsController::class, 'gmReview'])->name('reports.submission.review');
+    Route::get('gm/hr-reports', [App\Http\Controllers\HRReportsController::class, 'gmIndex'])->name('gm.hr-reports');
     Route::get('reports/turnover', [App\Http\Controllers\HRReportsController::class, 'turnoverReport'])->name('reports.turnover');
     Route::get('reports/cost-analysis', [App\Http\Controllers\HRReportsController::class, 'costAnalysisReport'])->name('reports.cost-analysis');
     Route::get('reports/leave-analysis', [App\Http\Controllers\HRReportsController::class, 'leaveAnalysisReport'])->name('reports.leave-analysis');

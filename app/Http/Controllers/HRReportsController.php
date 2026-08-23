@@ -88,8 +88,13 @@ class HRReportsController extends Controller
             'total_working_days' => $totalWorkingDays,
         ];
 
+        $recentSubmissions = [];
+        try {
+            $recentSubmissions = \App\Models\HrReportSubmission::with(['submitter', 'reviewer'])->latest()->take(5)->get();
+        } catch (\Throwable $e) {}
+
         return view('hr-manager.reports.attendance', compact(
-            'attendanceData', 'departmentSummary', 'stats', 'fromDate', 'toDate'
+            'attendanceData', 'departmentSummary', 'stats', 'fromDate', 'toDate', 'recentSubmissions'
         ));
     }
 
@@ -361,6 +366,110 @@ class HRReportsController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * Send HR Report to General Manager (GM)
+     */
+    public function sendToGM(Request $request)
+    {
+        $request->validate([
+            'report_type' => 'required|string',
+            'from_date'   => 'nullable|date',
+            'to_date'     => 'nullable|date',
+            'notes'       => 'nullable|string|max:2000',
+        ]);
+
+        $fromDate = $request->input('from_date', Carbon::now()->subMonth()->toDateString());
+        $toDate   = $request->input('to_date', Carbon::now()->toDateString());
+        $totalWorkingDays = $this->getWorkingDays($fromDate, $toDate);
+
+        $employees = Employee::where(function($q) {
+            $q->where('status', 'active')->orWhereNull('status');
+        })->get();
+
+        $presentTotal = 0;
+        $absentTotal = 0;
+        $leaveTotal = 0;
+        foreach ($employees as $emp) {
+            $presentTotal += Attendance::where('employee_id', $emp->id)->whereBetween('attendance_date', [$fromDate, $toDate])->where('status', 'present')->count();
+            $absentTotal += Attendance::where('employee_id', $emp->id)->whereBetween('attendance_date', [$fromDate, $toDate])->where('status', 'absent')->count();
+            $leaveTotal += Attendance::where('employee_id', $emp->id)->whereBetween('attendance_date', [$fromDate, $toDate])->where('status', 'leave')->count();
+        }
+
+        $grandTotal = $presentTotal + $absentTotal + $leaveTotal;
+        $avgRate = $grandTotal > 0 ? ($presentTotal / $grandTotal) * 100 : 0.00;
+
+        $submission = \App\Models\HrReportSubmission::create([
+            'report_type'         => $request->input('report_type', 'Attendance Report'),
+            'from_date'           => $fromDate,
+            'to_date'             => $toDate,
+            'total_employees'     => $employees->count(),
+            'avg_attendance_rate' => $avgRate,
+            'total_working_days'  => $totalWorkingDays,
+            'notes'               => $request->input('notes'),
+            'summary_data'        => [
+                'present_days' => $presentTotal,
+                'absent_days'  => $absentTotal,
+                'leave_days'   => $leaveTotal,
+                'from_date'    => $fromDate,
+                'to_date'      => $toDate,
+                'submitted_by' => Auth::user()->name ?? 'HR Officer',
+            ],
+            'submitted_by'        => Auth::id(),
+            'status'              => 'submitted',
+        ]);
+
+        // Notify GM users
+        try {
+            $gmUsers = \App\Models\User::whereHas('roles', function($r) {
+                $r->whereIn('name', ['gm', 'general_manager', 'admin', 'global_admin']);
+            })->get();
+
+            foreach ($gmUsers as $gm) {
+                // If notification system exists or send internal message
+                if (class_exists('\App\Models\Notification')) {
+                    \App\Models\Notification::create([
+                        'user_id' => $gm->id,
+                        'title'   => 'New HR Report Submitted to GM',
+                        'message' => (Auth::user()->name ?? 'HR Officer') . ' submitted the ' . $submission->report_type . ' (' . Carbon::parse($fromDate)->format('d M') . ' – ' . Carbon::parse($toDate)->format('d M Y') . '). Notes: ' . ($request->notes ?: 'None'),
+                        'type'    => 'hr_report',
+                        'data'    => ['submission_id' => $submission->id, 'url' => route('reports.attendance')],
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        return redirect()->back()->with('success', 'HR Report (' . $submission->report_type . ') has been successfully submitted to the General Manager (GM)!');
+    }
+
+    /**
+     * GM Review / Acknowledge HR Report Submission
+     */
+    public function gmReview(Request $request, \App\Models\HrReportSubmission $submission)
+    {
+        $request->validate([
+            'status'     => 'required|in:reviewed,acknowledged,rejected',
+            'gm_remarks' => 'nullable|string|max:1000',
+        ]);
+
+        $submission->update([
+            'status'      => $request->status,
+            'reviewed_by' => Auth::id(),
+            'reviewed_at' => now(),
+            'gm_remarks'  => $request->gm_remarks,
+        ]);
+
+        return redirect()->back()->with('success', 'Report status updated to: ' . ucfirst($request->status));
+    }
+
+    /**
+     * GM Dedicated HR Reports View
+     */
+    public function gmIndex(Request $request)
+    {
+        $submissions = \App\Models\HrReportSubmission::with(['submitter', 'reviewer'])->latest()->paginate(15);
+        return view('dashboard.gm-hr-reports', compact('submissions'));
     }
 
     /**

@@ -2,10 +2,18 @@
 @section('title', 'GM Dashboard')
 @section('content')
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
             <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-chart-line me-2 text-primary"></i>General Manager Dashboard</h1>
             <small class="text-muted">{{ now()->format('l, F j, Y') }}</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ route('gm.hr-reports') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm">
+                <i class="fa-solid fa-file-signature me-1"></i>Submitted HR Reports
+            </a>
+            <a href="{{ route('reports.attendance') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm">
+                <i class="fa-solid fa-calendar-check me-1"></i>HR Reports
+            </a>
         </div>
     </div>
 

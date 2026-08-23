@@ -974,7 +974,7 @@
         @endcanany
 
         {{-- HR Management --}}
-        @if(!$isContractAdmin && !$isSecretary && !$isStoreKeeper && (auth()->check() && (auth()->user()->hasAnyRole(['hr_officer', 'hr_manager', 'hr', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['hr.departments.view', 'hr.employees.view', 'hr.employees.create', 'hr.employees.edit', 'hr.attendance.view', 'hr.attendance.manage', 'finance.payroll.process', 'hr.payroll.view', 'hr.*']))))
+        @if(!$isContractAdmin && !$isSecretary && !$isStoreKeeper && (auth()->check() && (auth()->user()->hasAnyRole(['hr_officer', 'hr_manager', 'hr', 'admin', 'global_admin', 'gm', 'general_manager']) || auth()->user()->hasAnyPermission(['hr.departments.view', 'hr.employees.view', 'hr.employees.create', 'hr.employees.edit', 'hr.attendance.view', 'hr.attendance.manage', 'finance.payroll.process', 'hr.payroll.view', 'hr.*']))))
 
         <li class="sidebar-nav-item">
             <a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') ? 'active' : '' }}">

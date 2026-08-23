@@ -11,7 +11,10 @@
             </h2>
             <p class="text-muted small mb-0">Overview of staff attendance rate, presence, absences, and leaves across departments</p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#sendToGmModal">
+                <i class="fa-solid fa-paper-plane me-1"></i>Send to GM
+            </button>
             <a href="{{ route('reports.attendance.export', ['from_date' => $fromDate, 'to_date' => $toDate]) }}" class="btn btn-outline-success btn-sm rounded-pill px-3 shadow-sm">
                 <i class="fa-solid fa-file-csv me-1"></i>Export CSV
             </a>
@@ -218,6 +221,95 @@
                     @endforelse
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- GM Submissions History -->
+    @if(isset($recentSubmissions) && count($recentSubmissions) > 0)
+    <div class="card border-0 shadow-sm rounded-4 mt-4">
+        <div class="card-header bg-light py-3 border-0 rounded-top-4 d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark">
+                <i class="fa-solid fa-paper-plane me-2 text-primary"></i>Recent Submissions to General Manager (GM)
+            </h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Report Type</th>
+                        <th>Period</th>
+                        <th>Submitted By</th>
+                        <th>Submitted At</th>
+                        <th>Status</th>
+                        <th>GM Remarks</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($recentSubmissions as $sub)
+                    <tr>
+                        <td class="fw-bold text-dark">{{ $sub->report_type }}</td>
+                        <td>{{ $sub->from_date ? $sub->from_date->format('d M') : '-' }} to {{ $sub->to_date ? $sub->to_date->format('d M Y') : '-' }}</td>
+                        <td>{{ $sub->submitter->name ?? 'HR Officer' }}</td>
+                        <td>{{ $sub->created_at ? $sub->created_at->format('d M Y, h:i A') : '-' }}</td>
+                        <td>
+                            @if($sub->status === 'reviewed' || $sub->status === 'acknowledged')
+                                <span class="badge bg-success rounded-pill px-3"><i class="fa-solid fa-check me-1"></i>{{ ucfirst($sub->status) }}</span>
+                            @else
+                                <span class="badge bg-warning text-dark rounded-pill px-3"><i class="fa-solid fa-clock me-1"></i>Sent / Pending GM</span>
+                            @endif
+                        </td>
+                        <td class="small text-muted">{{ $sub->gm_remarks ?? ($sub->notes ?? '—') }}</td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    </div>
+    @endif
+</div>
+
+<!-- Modal: Send Report to GM -->
+<div class="modal fade" id="sendToGmModal" tabindex="-1" aria-labelledby="sendToGmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <form action="{{ route('reports.attendance.send-gm') }}" method="POST">
+                @csrf
+                <div class="modal-header border-0 bg-light rounded-top-4 py-3">
+                    <h5 class="modal-title fw-bold text-dark" id="sendToGmModalLabel">
+                        <i class="fa-solid fa-paper-plane text-primary me-2"></i>Send Report to General Manager
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-secondary">Report Type</label>
+                        <input type="text" name="report_type" class="form-control rounded-3" value="HR Attendance & Manpower Report" required>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-secondary">Period From</label>
+                            <input type="date" name="from_date" class="form-control rounded-3" value="{{ $fromDate }}" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-secondary">Period To</label>
+                            <input type="date" name="to_date" class="form-control rounded-3" value="{{ $toDate }}" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-secondary">Notes / Summary Remarks for GM (Optional)</label>
+                        <textarea name="notes" class="form-control rounded-3" rows="3" placeholder="e.g. Attendance summary across all departments for management review. Overall attendance rate is {{ number_format($stats['avg_attendance'] ?? 0, 1) }}%."></textarea>
+                    </div>
+                    <div class="alert alert-info py-2 small rounded-3 border-0 mb-0">
+                        <i class="fa-solid fa-circle-info me-1"></i>This report will be sent directly to the General Manager's dashboard and alerts.
+                    </div>
+                </div>
+                <div class="modal-footer border-0 bg-light rounded-bottom-4 py-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4 shadow-sm">
+                        <i class="fa-solid fa-paper-plane me-1"></i>Confirm &amp; Send to GM
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
