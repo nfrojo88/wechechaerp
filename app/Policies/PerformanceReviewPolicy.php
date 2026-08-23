@@ -9,26 +9,26 @@ class PerformanceReviewPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->hasRole(['hr_manager', 'hr_officer', 'admin']);
+        return $user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']);
     }
 
     public function view(User $user, PerformanceReview $review): bool
     {
-        return $user->hasRole(['hr_manager', 'hr_officer', 'admin']);
+        return $user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']);
     }
 
     public function create(User $user): bool
     {
-        return $user->hasRole(['hr_manager', 'admin']);
+        return $user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin']);
     }
 
     public function update(User $user, PerformanceReview $review): bool
     {
-        return $user->hasRole(['hr_manager', 'admin']) && $review->status === 'draft';
+        return $user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin']) && $review->status === 'draft';
     }
 
     public function approve(User $user): bool
     {
-        return $user->hasRole(['hr_manager', 'admin']);
+        return $user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']);
     }
 }

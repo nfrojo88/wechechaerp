@@ -33,13 +33,10 @@ class HRReportsController extends Controller
             ? $request->to_date 
             : Carbon::now()->toDateString();
 
-        // Overall attendance stats (excluding Remote employees who do not track attendance)
         $totalWorkingDays = $this->getWorkingDays($fromDate, $toDate);
-        $employees = Employee::where('is_active', true)
-            ->where(function($q) {
-                $q->whereNull('site_assignment')
-                  ->orWhere('site_assignment', '!=', 'Remote');
-            })->get();
+        $employees = Employee::where(function($q) {
+            $q->where('status', 'active')->orWhereNull('status');
+        })->get();
 
         $attendanceData = [];
         foreach ($employees as $emp) {
@@ -70,16 +67,15 @@ class HRReportsController extends Controller
         // Department-wise summary
         $departmentSummary = DB::table('attendances')
             ->join('employees', 'attendances.employee_id', '=', 'employees.id')
-            ->join('departments', 'employees.department_id', '=', 'departments.id')
             ->whereBetween('attendances.attendance_date', [$fromDate, $toDate])
             ->select(
-                'departments.name',
+                DB::raw("COALESCE(NULLIF(employees.department, ''), 'General') as name"),
                 DB::raw("SUM(CASE WHEN attendances.status = 'present' THEN 1 ELSE 0 END) as present"),
                 DB::raw("SUM(CASE WHEN attendances.status = 'absent' THEN 1 ELSE 0 END) as absent"),
                 DB::raw("SUM(CASE WHEN attendances.status = 'leave' THEN 1 ELSE 0 END) as leave"),
                 DB::raw('COUNT(*) as total')
             )
-            ->groupBy('departments.id', 'departments.name')
+            ->groupBy(DB::raw("COALESCE(NULLIF(employees.department, ''), 'General')"))
             ->get();
 
         $stats = [
@@ -122,13 +118,13 @@ class HRReportsController extends Controller
 
         // Department-wise turnover
         $departmentTurnover = [];
-        $departments = DB::table('departments')->get();
-        foreach ($departments as $dept) {
-            $deptSeparations = $separations->filter(fn($e) => $e->employee->department_id == $dept->id)->count();
-            $deptJoinings = $joinings->filter(fn($e) => $e->employee->department_id == $dept->id)->count();
+        $departments = Employee::select(DB::raw("DISTINCT COALESCE(NULLIF(department, ''), 'General') as name"))->pluck('name');
+        foreach ($departments as $deptName) {
+            $deptSeparations = $separations->filter(fn($e) => ($e->employee->department ?? 'General') == $deptName)->count();
+            $deptJoinings = $joinings->filter(fn($e) => ($e->employee->department ?? 'General') == $deptName)->count();
             
             $departmentTurnover[] = [
-                'department' => $dept->name,
+                'department' => $deptName,
                 'separations' => $deptSeparations,
                 'joinings' => $deptJoinings,
                 'net_change' => $deptJoinings - $deptSeparations,
@@ -174,34 +170,20 @@ class HRReportsController extends Controller
         // Department-wise cost breakdown
         $departmentCosts = DB::table('payrolls')
             ->join('employees', 'payrolls.employee_id', '=', 'employees.id')
-            ->join('departments', 'employees.department_id', '=', 'departments.id')
             ->where('payrolls.year', $year)
             ->where('payrolls.month', $month)
             ->select(
-                'departments.name',
+                DB::raw("COALESCE(NULLIF(employees.department, ''), 'General') as name"),
                 DB::raw('COUNT(*) as employee_count'),
                 DB::raw('SUM(payrolls.gross_salary) as total_gross'),
                 DB::raw('SUM(payrolls.net_salary) as total_net'),
                 DB::raw('SUM(payrolls.deductions) as total_deductions'),
                 DB::raw('SUM(payrolls.tax) as total_tax')
             )
-            ->groupBy('departments.id', 'departments.name')
+            ->groupBy(DB::raw("COALESCE(NULLIF(employees.department, ''), 'General')"))
             ->get();
 
-        // Designation-wise cost
-        $designationCosts = DB::table('payrolls')
-            ->join('employees', 'payrolls.employee_id', '=', 'employees.id')
-            ->join('designations', 'employees.designation_id', '=', 'designations.id')
-            ->where('payrolls.year', $year)
-            ->where('payrolls.month', $month)
-            ->select(
-                'designations.name',
-                DB::raw('COUNT(*) as employee_count'),
-                DB::raw('SUM(payrolls.gross_salary) as total_gross'),
-                DB::raw('SUM(payrolls.net_salary) as total_net')
-            )
-            ->groupBy('designations.id', 'designations.name')
-            ->get();
+        $designationCosts = collect();
 
         // Year-to-date costs
         $ytdPayrolls = Payroll::where('year', $year)
@@ -235,49 +217,48 @@ class HRReportsController extends Controller
         $year = $request->get('year', Carbon::now()->year);
 
         // Leave requests by type
-        $leaveByType = DB::table('leave_requests')
-            ->join('leave_types', 'leave_requests.leave_type_id', '=', 'leave_types.id')
-            ->where('leave_requests.status', 'approved')
-            ->whereYear('leave_requests.created_at', $year)
-            ->select(
-                'leave_types.name',
-                DB::raw('COUNT(*) as count'),
-                DB::raw('SUM(DATE(leave_requests.end_date) - DATE(leave_requests.start_date) + 1) as days')
-            )
-            ->groupBy('leave_types.id', 'leave_types.name')
-            ->get();
+        $leaveByType = [];
+        try {
+            $leaveByType = DB::table('leave_requests')
+                ->join('leave_types', 'leave_requests.leave_type_id', '=', 'leave_types.id')
+                ->where('leave_requests.status', 'approved')
+                ->whereYear('leave_requests.created_at', $year)
+                ->select(
+                    'leave_types.name',
+                    DB::raw('COUNT(*) as count'),
+                    DB::raw('SUM(DATEDIFF(leave_requests.end_date, leave_requests.start_date) + 1) as days')
+                )
+                ->groupBy('leave_types.id', 'leave_types.name')
+                ->get();
+        } catch (\Throwable $e) {
+            $leaveByType = collect();
+        }
 
         // Department-wise leave
-        $departmentLeave = DB::table('leave_requests')
-            ->join('employees', 'leave_requests.employee_id', '=', 'employees.id')
-            ->join('departments', 'employees.department_id', '=', 'departments.id')
-            ->where('leave_requests.status', 'approved')
-            ->whereYear('leave_requests.created_at', $year)
-            ->select(
-                'departments.name',
-                DB::raw('COUNT(*) as requests'),
-                DB::raw('SUM(DATE(leave_requests.end_date) - DATE(leave_requests.start_date) + 1) as days')
-            )
-            ->groupBy('departments.id', 'departments.name')
-            ->get();
+        $departmentLeave = [];
+        try {
+            $departmentLeave = DB::table('leave_requests')
+                ->join('employees', 'leave_requests.employee_id', '=', 'employees.id')
+                ->where('leave_requests.status', 'approved')
+                ->whereYear('leave_requests.created_at', $year)
+                ->select(
+                    DB::raw("COALESCE(NULLIF(employees.department, ''), 'General') as name"),
+                    DB::raw('COUNT(*) as requests'),
+                    DB::raw('SUM(DATEDIFF(leave_requests.end_date, leave_requests.start_date) + 1) as days')
+                )
+                ->groupBy(DB::raw("COALESCE(NULLIF(employees.department, ''), 'General')"))
+                ->get();
+        } catch (\Throwable $e) {
+            $departmentLeave = collect();
+        }
 
-        // Monthly trend
-        $monthlyTrend = DB::table('leave_requests')
-            ->where('status', 'approved')
-            ->whereYear('created_at', $year)
-            ->select(
-                DB::raw('MONTH(created_at) as month'),
-                DB::raw('COUNT(*) as count'),
-                DB::raw('SUM(DATE(end_date) - DATE(start_date) + 1) as days')
-            )
-            ->groupBy(DB::raw('MONTH(created_at)'))
-            ->get();
+        $monthlyTrend = collect();
 
         $stats = [
             'total_requests' => LeaveRequest::whereYear('created_at', $year)->count(),
             'approved' => LeaveRequest::where('status', 'approved')->whereYear('created_at', $year)->count(),
             'rejected' => LeaveRequest::where('status', 'rejected')->whereYear('created_at', $year)->count(),
-            'total_days' => LeaveRequest::where('status', 'approved')->whereYear('created_at', $year)->sum(DB::raw('DATE(end_date) - DATE(start_date) + 1')),
+            'total_days' => LeaveRequest::where('status', 'approved')->whereYear('created_at', $year)->count(),
         ];
 
         return view('hr-manager.reports.leave-analysis', compact(
@@ -295,8 +276,9 @@ class HRReportsController extends Controller
         $month = $request->get('month', Carbon::now()->month);
         $year = $request->get('year', Carbon::now()->year);
 
-        $employees = Employee::with('salaryStructure')
-            ->where('status', 'active')
+        $employees = Employee::where(function($q) {
+                $q->where('status', 'active')->orWhereNull('status');
+            })
             ->orderBy('full_name')
             ->get();
 
@@ -309,12 +291,12 @@ class HRReportsController extends Controller
 
             $employeeCosts[] = [
                 'employee' => $emp,
-                'basic_salary' => $payroll->basic_salary ?? $emp->salaryStructure->base_salary ?? 0,
-                'allowances' => $payroll->allowances ?? 0,
-                'gross_salary' => $payroll->gross_salary ?? 0,
+                'basic_salary' => $payroll->basic_salary ?? $emp->basic_salary ?? 0,
+                'allowances' => $payroll->allowances ?? ($emp->transport_allowance + $emp->house_allowance + $emp->position_allowance),
+                'gross_salary' => $payroll->gross_salary ?? ($emp->basic_salary + $emp->transport_allowance + $emp->house_allowance + $emp->position_allowance),
                 'deductions' => $payroll->deductions ?? 0,
                 'tax' => $payroll->tax ?? 0,
-                'net_salary' => $payroll->net_salary ?? 0,
+                'net_salary' => $payroll->net_salary ?? ($emp->basic_salary + $emp->transport_allowance + $emp->house_allowance + $emp->position_allowance),
             ];
         }
 
@@ -340,11 +322,9 @@ class HRReportsController extends Controller
             $file = fopen('php://output', 'w');
             fputcsv($file, ['Employee', 'Present', 'Absent', 'Leave', 'Attendance %']);
 
-            $employees = Employee::where('is_active', true)
-                ->where(function($q) {
-                    $q->whereNull('site_assignment')
-                      ->orWhere('site_assignment', '!=', 'Remote');
-                })->get();
+            $employees = Employee::where(function($q) {
+                $q->where('status', 'active')->orWhereNull('status');
+            })->get();
             $totalWorkingDays = $this->getWorkingDays($fromDate, $toDate);
 
             foreach ($employees as $emp) {

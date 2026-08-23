@@ -57,6 +57,11 @@ class AuthServiceProvider extends ServiceProvider
         PurchaseOrder::class   => PurchaseOrderPolicy::class,
         // Phase 5
         Employee::class        => EmployeePolicy::class,
+        \App\Models\Attendance::class => \App\Policies\AttendancePolicy::class,
+        \App\Models\LeaveRequest::class => \App\Policies\LeaveRequestPolicy::class,
+        \App\Models\EmployeeContract::class => \App\Policies\EmployeeContractPolicy::class,
+        \App\Models\PerformanceReview::class => \App\Policies\PerformanceReviewPolicy::class,
+        \App\Models\ManpowerForecast::class => \App\Policies\ManpowerForecastPolicy::class,
         Payroll::class         => PayrollPolicy::class,
         Expense::class         => ExpensePolicy::class,
         Payment::class         => PaymentPolicy::class,

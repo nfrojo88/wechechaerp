@@ -12,7 +12,7 @@ class LeaveRequestPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole(['hr_manager', 'hr_officer', 'admin']);
+        return $user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']);
     }
 
     /**
@@ -21,7 +21,7 @@ class LeaveRequestPolicy
     public function view(User $user, LeaveRequest $leaveRequest): bool
     {
         // HR staff can view all, employees can view their own
-        if ($user->hasRole(['hr_manager', 'hr_officer', 'admin'])) {
+        if ($user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager'])) {
             return true;
         }
 
@@ -42,7 +42,7 @@ class LeaveRequestPolicy
      */
     public function approve(User $user): bool
     {
-        return $user->hasRole(['hr_manager', 'hr_officer', 'admin']);
+        return $user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']);
     }
 
     /**
