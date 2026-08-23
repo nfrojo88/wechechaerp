@@ -92,24 +92,28 @@ if ($method === 'GET' && $options === 'all') {
     // Update device last-seen timestamp
     _updateDeviceSeen($sn);
 
-    echo "GET OPTION FROM: {$sn}\n";
-    echo "Stamp=9999\n";        // Send ALL records (no filter by timestamp)
-    echo "OpStamp=9999\n";
-    echo "ErrorDelay=60\n";     // Retry on error after 60 seconds
-    echo "Delay=30\n";          // Heartbeat every 30 seconds
-    echo "TransFlag=1111000000\n";
-    echo "TransInterval=1\n";   // Push attendance every 1 minute
-    echo "TransTables=ATTLOG\n";// Only send attendance logs
+    echo "GET OPTION FROM: {$sn}\r\n";
+    echo "Stamp=9999\r\n";
+    echo "OpStamp=9999\r\n";
+    echo "ErrorDelay=60\r\n";
+    echo "Delay=30\r\n";
+    echo "TransTimes=00:00;14:05\r\n";
+    echo "TransInterval=1\r\n";
+    echo "TransFlag=1111000000\r\n";
+    echo "Realtime=1\r\n";
+    echo "Encrypt=0\r\n";
+    echo "ServerVersion=2.4.1\r\n";
+    echo "PushProtVer=2.4.1\r\n";
+    echo "TransTables=User Transaction\r\n";
+    echo "SessionID=" . substr(md5($sn . time()), 0, 16) . "\r\n";
     exit;
 }
 
 // ── 5. HEARTBEAT — Keep-alive ping ───────────────────────────────────────────
-// Device sends: GET /iclock/getrequest.php?SN=XXXX
-// OR sometimes: GET /iclock/cdata.php?SN=XXXX (without options or body)
 if ($method === 'GET' && empty($body)) {
     adms_log("HEARTBEAT from SN: {$sn}");
     _updateDeviceSeen($sn);
-    echo "OK\n";
+    echo "OK\r\n";
     exit;
 }
 

@@ -1,7 +1,11 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Rewrite all requests to public folder
+    # Direct pass-through for ZKTeco ADMS biometrics endpoints
+    RewriteCond %{REQUEST_URI} ^/iclock [NC]
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    # Rewrite all other requests to public folder
     RewriteCond %{REQUEST_URI} !^/public/
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>

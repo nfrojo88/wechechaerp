@@ -14,47 +14,63 @@ class ZkTecoAdmsController extends Controller
 {
     /**
      * Handle ZKTeco ADMS cdata endpoint (Handshake, Heartbeat & ATTLOG punch push)
+     * Supports: GET /iclock/cdata and POST /iclock/cdata
      */
     public function cdata(Request $request)
     {
         $sn      = $this->extractParam($request, 'SN');
         $table   = strtoupper($this->extractParam($request, 'table'));
-        $options = $this->extractParam($request, 'options');
-        $method  = $request->method();
+        $options = strtolower($this->extractParam($request, 'options'));
+        $method  = strtoupper($request->method());
         $body    = $request->getContent();
 
-        $this->logAdms("METHOD: {$method} | SN: {$sn} | TABLE: {$table} | OPTIONS: {$options} | URL: " . $request->fullUrl());
+        $this->logAdms("METHOD: {$method} | SN: {$sn} | TABLE: {$table} | OPTIONS: {$options} | QUERY: " . $request->getQueryString());
 
         if (!empty($sn)) {
             $this->updateDeviceSeen($sn, $request->ip());
         }
 
-        // ── 1. HANDSHAKE (GET /iclock/cdata?SN=...&options=all) ───────────────────
-        if ($method === 'GET' && $options === 'all') {
+        // ── 1. INITIAL HANDSHAKE (GET /iclock/cdata?SN=...&options=all) ──────────
+        // ZKTeco requests server configuration upon startup/reconnection
+        if ($method === 'GET' && ($options === 'all' || empty($table))) {
             $this->logAdms("HANDSHAKE accepted from device SN: {$sn}");
 
-            $response = "GET OPTION FROM: {$sn}\n"
-                      . "Stamp=9999\n"
-                      . "OpStamp=9999\n"
-                      . "ErrorDelay=60\n"
-                      . "Delay=30\n"
-                      . "TransFlag=1111000000\n"
-                      . "TransInterval=1\n"
-                      . "TransTables=ATTLOG\n"
-                      . "ServerVersion=2.4.1\n"
-                      . "PushProtVer=2.4.1\n";
+            // Standard ZKTeco ADMS Handshake response using \r\n
+            $response = "GET OPTION FROM: {$sn}\r\n"
+                      . "Stamp=9999\r\n"
+                      . "OpStamp=9999\r\n"
+                      . "ErrorDelay=60\r\n"
+                      . "Delay=30\r\n"
+                      . "TransTimes=00:00;14:05\r\n"
+                      . "TransInterval=1\r\n"
+                      . "TransFlag=1111000000\r\n"
+                      . "Realtime=1\r\n"
+                      . "Encrypt=0\r\n"
+                      . "ServerVersion=2.4.1\r\n"
+                      . "PushProtVer=2.4.1\r\n"
+                      . "TransTables=User Transaction\r\n"
+                      . "SessionID=" . substr(md5($sn . time()), 0, 16) . "\r\n";
 
-            return response($response, 200)->header('Content-Type', 'text/plain');
+            return response($response, 200, [
+                'Content-Type'   => 'text/plain; charset=utf-8',
+                'Content-Length' => strlen($response),
+                'Connection'     => 'close',
+            ]);
         }
 
         // ── 2. HEARTBEAT / GET request ─────────────────────────────────────────────
         if ($method === 'GET') {
-            return response("OK\n", 200)->header('Content-Type', 'text/plain');
+            $response = "OK\r\n";
+            return response($response, 200, [
+                'Content-Type'   => 'text/plain; charset=utf-8',
+                'Content-Length' => strlen($response),
+                'Connection'     => 'close',
+            ]);
         }
 
         // ── 3. ATTENDANCE PUNCH PUSH (POST /iclock/cdata?table=ATTLOG) ────────────
-        if ($method === 'POST' && ($table === 'ATTLOG' || empty($table))) {
-            $this->logAdms("ATTLOG POST from SN: {$sn} — Raw Body length: " . strlen($body));
+        if ($method === 'POST') {
+            $this->logAdms("POST RECEIVED from SN: [{$sn}] TABLE: [{$table}] — Payload Length: " . strlen($body));
 
             $lines = explode("\n", trim($body));
             $saved = 0;
@@ -64,16 +80,27 @@ class ZkTecoAdmsController extends Controller
                 $line = trim($line);
                 if (empty($line)) continue;
 
-                // Split by tab or multiple spaces
-                $parts = preg_split('/\t+/', $line);
-                if (count($parts) < 2) {
-                    $parts = preg_split('/\s{2,}/', $line);
-                }
+                $userId = '';
+                $punchTime = '';
+                $status = '0';
+                $verifyMode = '1';
 
-                $userId     = isset($parts[0]) ? trim($parts[0]) : '';
-                $punchTime  = isset($parts[1]) ? trim($parts[1]) : '';
-                $status     = isset($parts[2]) ? trim($parts[2]) : '0';
-                $verifyMode = isset($parts[3]) ? trim($parts[3]) : '';
+                // Format A: Tab or multiple spaces separated (Standard ZKTeco: "PIN\tTIME\tSTATUS\tVERIFY")
+                if (str_contains($line, "\t") || preg_match('/\s{2,}/', $line)) {
+                    $parts = preg_split('/\t+|\s{2,}/', $line);
+                    $userId     = isset($parts[0]) ? trim($parts[0]) : '';
+                    $punchTime  = isset($parts[1]) ? trim($parts[1]) : '';
+                    $status     = isset($parts[2]) ? trim($parts[2]) : '0';
+                    $verifyMode = isset($parts[3]) ? trim($parts[3]) : '1';
+                }
+                // Format B: Key=Value format (e.g. "PIN=1\tTIME=2026-08-23 08:30:00")
+                elseif (str_contains($line, '=')) {
+                    parse_str(str_replace("\t", '&', $line), $kv);
+                    $userId    = $kv['PIN'] ?? $kv['pin'] ?? $kv['USERID'] ?? $kv['userId'] ?? '';
+                    $punchTime = $kv['TIME'] ?? $kv['time'] ?? $kv['CHECKTIME'] ?? '';
+                    $status    = $kv['STATUS'] ?? $kv['status'] ?? '0';
+                    $verifyMode= $kv['VERIFY'] ?? $kv['verify'] ?? '1';
+                }
 
                 if (empty($userId) || empty($punchTime) || !preg_match('/\d{4}-\d{2}-\d{2}/', $punchTime)) {
                     $skipped++;
@@ -81,31 +108,58 @@ class ZkTecoAdmsController extends Controller
                 }
 
                 try {
+                    // Match employee by device_user_id or employee_code
+                    $cleanId = trim($userId);
+                    $employee = DB::table('employees')
+                        ->where('device_user_id', $cleanId)
+                        ->orWhere('device_user_id', ltrim($cleanId, '0'))
+                        ->orWhere('employee_code', $cleanId)
+                        ->orWhere('employee_code', 'EMP-' . $cleanId)
+                        ->first();
+
+                    $fullName = $employee ? $employee->full_name : null;
+
                     // 1. Insert into raw device attendance logs
                     DB::table('device_attendance_logs')->insertOrIgnore([
                         'device_sn'      => $sn ?: 'AF6P230860018',
-                        'device_user_id' => $userId,
+                        'device_user_id' => $cleanId,
                         'punch_time'     => $punchTime,
-                        'status'         => $status,
-                        'verify_mode'    => $verifyMode ?: null,
+                        'status'         => (string)$status,
+                        'verify_mode'    => (string)$verifyMode,
+                        'full_name'      => $fullName,
                         'created_at'     => now(),
                         'updated_at'     => now(),
                     ]);
 
                     // 2. Real-time auto-sync to employee attendance table
-                    $this->autoSyncPunch($sn, $userId, $punchTime, $status);
+                    if ($employee) {
+                        $this->autoSyncPunch($sn, $employee, $punchTime, (string)$status);
+                    }
+
                     $saved++;
                 } catch (\Throwable $e) {
-                    $this->logAdms("ERROR processing punch line [{$line}]: " . $e->getMessage());
+                    $this->logAdms("ERROR processing punch [{$line}]: " . $e->getMessage());
                 }
             }
 
-            $this->logAdms("PUNCH PROCESS RESULT: Saved/Synced={$saved}, Skipped={$skipped}");
-            return response("OK: {$saved}\n", 200)->header('Content-Type', 'text/plain');
+            $this->logAdms("PUNCH PROCESS RESULT: Saved={$saved}, Skipped={$skipped}");
+
+            // ZKTeco expects "OK: {count}\r\n" or "OK\r\n"
+            $response = ($saved > 0) ? "OK: {$saved}\r\n" : "OK\r\n";
+            return response($response, 200, [
+                'Content-Type'   => 'text/plain; charset=utf-8',
+                'Content-Length' => strlen($response),
+                'Connection'     => 'close',
+            ]);
         }
 
-        // ── 4. Fallback for other tables (OPERLOG, OPTIONS, etc.) ──────────────────
-        return response("OK\n", 200)->header('Content-Type', 'text/plain');
+        // ── 4. Fallback ───────────────────────────────────────────────────────────
+        $response = "OK\r\n";
+        return response($response, 200, [
+            'Content-Type'   => 'text/plain; charset=utf-8',
+            'Content-Length' => strlen($response),
+            'Connection'     => 'close',
+        ]);
     }
 
     /**
@@ -117,48 +171,54 @@ class ZkTecoAdmsController extends Controller
         if (!empty($sn)) {
             $this->updateDeviceSeen($sn, $request->ip());
         }
-        return response("OK\n", 200)->header('Content-Type', 'text/plain');
+
+        $response = "OK\r\n";
+        return response($response, 200, [
+            'Content-Type'   => 'text/plain; charset=utf-8',
+            'Content-Length' => strlen($response),
+            'Connection'     => 'close',
+        ]);
     }
 
     /**
-     * Handle devicecmd / fdata / push
+     * Handle devicecmd / fdata / push endpoints
      */
     public function devicecmd(Request $request)
     {
-        return response("OK\n", 200)->header('Content-Type', 'text/plain');
+        $response = "OK\r\n";
+        return response($response, 200, [
+            'Content-Type'   => 'text/plain; charset=utf-8',
+            'Content-Length' => strlen($response),
+            'Connection'     => 'close',
+        ]);
     }
 
     public function fdata(Request $request)
     {
-        return response("OK\n", 200)->header('Content-Type', 'text/plain');
+        $response = "OK\r\n";
+        return response($response, 200, [
+            'Content-Type'   => 'text/plain; charset=utf-8',
+            'Content-Length' => strlen($response),
+            'Connection'     => 'close',
+        ]);
     }
 
     public function push(Request $request)
     {
-        return response("OK\n", 200)->header('Content-Type', 'text/plain');
+        $response = "OK\r\n";
+        return response($response, 200, [
+            'Content-Type'   => 'text/plain; charset=utf-8',
+            'Content-Length' => strlen($response),
+            'Connection'     => 'close',
+        ]);
     }
 
     /**
      * Automatically sync a single punch in real-time to the main attendance table.
      */
-    private function autoSyncPunch(?string $sn, string $userId, string $punchTime, string $status): void
+    private function autoSyncPunch(?string $sn, $employee, string $punchTime, string $status): void
     {
         try {
-            // Find employee by device_user_id or employee_code
-            $cleanId = trim($userId);
-            $employee = DB::table('employees')
-                ->where('device_user_id', $cleanId)
-                ->orWhere('device_user_id', ltrim($cleanId, '0'))
-                ->orWhere('employee_code', $cleanId)
-                ->orWhere('employee_code', 'EMP-' . $cleanId)
-                ->orWhere('employee_code', 'EMP-' . str_pad($cleanId, 2, '0', STR_PAD_LEFT))
-                ->first();
-
-            if (!$employee) {
-                $this->logAdms("UNMATCHED PUNCH: device_user_id={$userId} (No employee linked yet)");
-                return;
-            }
-
             $dateStr = substr($punchTime, 0, 10);
             $timeStr = strlen($punchTime) > 10 ? substr($punchTime, 11, 8) : '00:00:00';
 
@@ -168,17 +228,14 @@ class ZkTecoAdmsController extends Controller
                 ->first();
 
             if (!$existing) {
-                // First punch of the day: Check-In
-                $workStartTime = '09:15:00';
-                $attStatus = ($timeStr > $workStartTime) ? 'present' : 'present';
-
+                // First punch: Check-In
                 DB::table('attendance')->insert([
                     'employee_id'         => $employee->id,
                     'attendance_date'     => $dateStr,
                     'check_in'            => $timeStr,
                     'check_out'           => null,
                     'hours_worked'        => null,
-                    'status'              => $attStatus,
+                    'status'              => 'present',
                     'source'              => 'biometric',
                     'biometric_device_id' => $sn ?: 'AF6P230860018',
                     'is_approved'         => true,
@@ -186,7 +243,7 @@ class ZkTecoAdmsController extends Controller
                     'updated_at'          => now(),
                 ]);
 
-                $this->logAdms("CHECK-IN RECORDED: Employee {$employee->full_name} (ID: {$employee->id}, Device ID: {$userId}) at {$timeStr} on {$dateStr}");
+                $this->logAdms("CHECK-IN RECORDED: {$employee->full_name} at {$timeStr} on {$dateStr}");
             } else {
                 // Subsequent punch: Check-Out
                 $checkIn = $existing->check_in;
@@ -206,13 +263,13 @@ class ZkTecoAdmsController extends Controller
                             'updated_at'          => now(),
                         ]);
 
-                    $this->logAdms("CHECK-OUT UPDATED: Employee {$employee->full_name} at {$timeStr} (Total Hours: {$hours} hrs)");
+                    $this->logAdms("CHECK-OUT UPDATED: {$employee->full_name} at {$timeStr} (Hours: {$hours})");
                 }
             }
 
             // Mark punch log as synced
             DB::table('device_attendance_logs')
-                ->where('device_user_id', $userId)
+                ->where('device_user_id', $employee->device_user_id)
                 ->where('punch_time', $punchTime)
                 ->update(['synced_at' => now()]);
 
@@ -222,7 +279,7 @@ class ZkTecoAdmsController extends Controller
     }
 
     /**
-     * Update device heartbeat status
+     * Update device heartbeat status in zk_devices table
      */
     private function updateDeviceSeen(string $sn, ?string $ip = null): void
     {
@@ -230,16 +287,15 @@ class ZkTecoAdmsController extends Controller
             DB::table('zk_devices')->updateOrInsert(
                 ['serial_number' => $sn],
                 [
-                    'device_name'   => 'ZKTeco MB460 / Face & Fingerprint',
-                    'ip_address'    => $ip,
-                    'port'          => 4370,
-                    'status'        => 'online',
-                    'last_seen_at'  => now(),
-                    'updated_at'    => now(),
+                    'name'         => 'ZKTeco ' . $sn,
+                    'location'     => 'Main Office Gate',
+                    'is_active'    => true,
+                    'last_seen_at' => now(),
+                    'updated_at'   => now(),
                 ]
             );
         } catch (\Throwable $e) {
-            // Log without failing
+            $this->logAdms("NOTE: zk_devices update note: " . $e->getMessage());
         }
     }
 
@@ -254,7 +310,7 @@ class ZkTecoAdmsController extends Controller
                 }
             }
         }
-        return trim($val);
+        return trim((string)$val);
     }
 
     private function logAdms(string $msg): void
@@ -268,3 +324,4 @@ class ZkTecoAdmsController extends Controller
         }
     }
 }
+
