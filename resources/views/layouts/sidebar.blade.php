@@ -17,9 +17,13 @@
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
         @php
+            $isFinanceHead = auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head']);
             $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard') ? route('dashboard') : url('/dashboard');
             $dashTitle = 'Dashboard';
-            if ($isSecretary) {
+            if ($isFinanceHead) {
+                $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.finance') ? route('dashboard.finance') : url('/dashboard/finance');
+                $dashTitle = 'Finance Dashboard';
+            } elseif ($isSecretary) {
                 $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.secretary') ? route('dashboard.secretary') : url('/dashboard/secretary');
                 $dashTitle = 'Secretary Dashboard';
             } elseif ($isContractAdmin) {
@@ -858,12 +862,14 @@
         {{-- Finance --}}
         @if(auth()->check() && !auth()->user()->hasRole('site_engineer') && !$isContractAdmin && !$isStoreKeeper && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'admin', 'global_admin']) || auth()->user()->canAny(['finance.chart_of_accounts.view', 'finance.bank.manage', 'finance.income.view', 'finance.income.*', 'finance.expenses.view', 'finance.expenses.approve', 'finance.expenses.create', 'payments.view', 'payments.create', 'payments.approve', 'payments.*', 'subcon.view', 'subcon.create', 'subcon.edit', 'subcon.approve', 'subcon.*', 'finance.ipcs.manage', 'finance.*'])))
 
+        @if(!auth()->user()->hasAnyRole(['Finance head', 'finance_head']))
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.finance') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.finance') ? 'active' : '' }}">
                 <i class="fa-solid fa-chart-line text-info"></i>
                 <span>Finance Dashboard</span>
             </a>
         </li>
+        @endif
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
         <li class="sidebar-nav-item">
             <a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') && !request()->routeIs('coa-transfers.*') ? 'active' : '' }}">
