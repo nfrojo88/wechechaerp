@@ -304,12 +304,6 @@
             <a href="{{ route('store-manager.transfers.create') }}" class="qa-btn btn btn-primary">
                 <i class="fas fa-exchange-alt me-1"></i> Create Transfer
             </a>
-            <a href="{{ route('store-manager.slips.create') }}" class="qa-btn btn btn-success">
-                <i class="fas fa-arrow-down me-1"></i> New Slip
-            </a>
-            <a href="{{ route('store-manager.slips.index') }}" class="qa-btn btn btn-outline-secondary">
-                <i class="fas fa-file-invoice me-1"></i> Slip Records
-            </a>
             <a href="{{ route('store-manager.products.create') }}" class="qa-btn btn btn-secondary">
                 <i class="fas fa-plus me-1"></i> Add Product
             </a>

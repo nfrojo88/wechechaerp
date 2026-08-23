@@ -294,18 +294,6 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('store-manager.slips.create') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.slips.create') ? 'active' : '' }}">
-                <i class="fa-solid fa-receipt text-success"></i>
-                <span>Create Slip</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('store-manager.slips.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.slips.index') ? 'active' : '' }}">
-                <i class="fa-solid fa-file-invoice text-secondary"></i>
-                <span>Slip Records</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.issued.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.issued.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding text-warning"></i>
                 <span>Issued Materials</span>
