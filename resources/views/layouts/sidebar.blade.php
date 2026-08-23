@@ -1020,6 +1020,7 @@
                 <span>Manpower Forecast</span>
             </a>
         </li>
+        @if(!auth()->user()->hasAnyRole(['Finance head', 'finance_head']))
         <li class="sidebar-nav-item">
             <a href="{{ route('payrolls.index') }}" class="sidebar-nav-link {{ request()->routeIs('payrolls.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-money-bill-wave text-success"></i>
@@ -1032,6 +1033,7 @@
                 <span>Salary Advance Loans</span>
             </a>
         </li>
+        @endif
         <li class="sidebar-nav-item">
             <a href="{{ route('performance-dashboard.index') }}" class="sidebar-nav-link {{ request()->routeIs('performance-dashboard.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-chart-bar text-info"></i>
