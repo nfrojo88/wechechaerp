@@ -22,6 +22,15 @@ return new class extends Migration
             if (!Schema::hasColumn('payrolls', 'taxable_income')) {
                 $table->decimal('taxable_income', 15, 2)->default(0)->after('company_pension');
             }
+            if (!Schema::hasColumn('payrolls', 'loan_deduction')) {
+                $table->decimal('loan_deduction', 15, 2)->default(0)->after('deductions');
+            }
+            if (!Schema::hasColumn('payrolls', 'absence_deduction')) {
+                $table->decimal('absence_deduction', 15, 2)->default(0)->after('loan_deduction');
+            }
+            if (!Schema::hasColumn('payrolls', 'absent_days')) {
+                $table->integer('absent_days')->default(0)->after('absence_deduction');
+            }
         });
     }
 
@@ -35,11 +44,11 @@ return new class extends Migration
         }
 
         Schema::table('payrolls', function (Blueprint $table) {
-            if (Schema::hasColumn('payrolls', 'company_pension')) {
-                $table->dropColumn('company_pension');
-            }
-            if (Schema::hasColumn('payrolls', 'taxable_income')) {
-                $table->dropColumn('taxable_income');
+            $cols = ['company_pension', 'taxable_income', 'loan_deduction', 'absence_deduction', 'absent_days'];
+            foreach ($cols as $col) {
+                if (Schema::hasColumn('payrolls', $col)) {
+                    $table->dropColumn($col);
+                }
             }
         });
     }

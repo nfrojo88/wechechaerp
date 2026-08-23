@@ -1599,6 +1599,7 @@ Route::middleware(['auth'])->group(function () {
     // ─── Finance Head & GM Payroll Workflow ─────────────────────────────────
     Route::get('finance/payroll',               [App\Http\Controllers\FinancePayrollController::class, 'index'])->name('finance.payroll.index');
     Route::post('finance/payroll/generate',      [App\Http\Controllers\FinancePayrollController::class, 'generate'])->name('finance.payroll.generate');
+    Route::post('finance/payroll/recalculate',   [App\Http\Controllers\FinancePayrollController::class, 'recalculate'])->name('finance.payroll.recalculate');
     Route::post('finance/payroll/submit-gm',     [App\Http\Controllers\FinancePayrollController::class, 'submitToGM'])->name('finance.payroll.submit-gm');
 
     Route::get('finance/payroll/gm-approval',   [App\Http\Controllers\FinancePayrollController::class, 'gmIndex'])->name('finance.payroll.gm');

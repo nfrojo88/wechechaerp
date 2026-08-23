@@ -35,13 +35,13 @@ class FinancePayrollController extends Controller
 
         // Summary totals
         $totals = [
-            'basic'           => $payrolls->sum('basic_salary'),
-            'transport'       => $hasTransport ? $payrolls->sum('transport_allowance') : 0,
-            'house'           => $hasTransport ? $payrolls->sum('house_allowance') : 0,
-            'position'        => $hasTransport ? $payrolls->sum('position_allowance') : 0,
-            'overtime'        => $payrolls->sum('overtime_pay'),
-            'gross'           => $payrolls->sum(function($p) { return $p->gross_salary ?? ($p->basic_salary + $p->allowances + $p->overtime_pay); }),
-            'taxable_income'  => $payrolls->sum(function($p) {
+            'basic'             => $payrolls->sum('basic_salary'),
+            'transport'         => $hasTransport ? $payrolls->sum('transport_allowance') : 0,
+            'house'             => $hasTransport ? $payrolls->sum('house_allowance') : 0,
+            'position'          => $hasTransport ? $payrolls->sum('position_allowance') : 0,
+            'overtime'          => $payrolls->sum('overtime_pay'),
+            'gross'             => $payrolls->sum(function($p) { return $p->gross_salary ?? ($p->basic_salary + $p->allowances + $p->overtime_pay); }),
+            'taxable_income'    => $payrolls->sum(function($p) {
                 return $p->taxable_income ?? Payroll::calculateTaxableIncome(
                     (float) $p->basic_salary,
                     (float) ($p->house_allowance ?? 0),
@@ -50,12 +50,15 @@ class FinancePayrollController extends Controller
                     (float) ($p->overtime_pay ?? 0)
                 );
             }),
-            'pension'         => $hasTransport ? $payrolls->sum('pension') : round($payrolls->sum('basic_salary') * 0.07, 2),
-            'company_pension' => $payrolls->sum(function($p) { return $p->company_pension ?? round($p->basic_salary * 0.11, 2); }),
-            'tax'             => $payrolls->sum('tax'),
-            'deductions'      => $payrolls->sum('deductions'),
-            'net'             => $payrolls->sum('net_salary'),
-            'count'           => $payrolls->count(),
+            'pension'           => $hasTransport ? $payrolls->sum('pension') : round($payrolls->sum('basic_salary') * 0.07, 2),
+            'company_pension'   => $payrolls->sum(function($p) { return $p->company_pension ?? round($p->basic_salary * 0.11, 2); }),
+            'tax'               => $payrolls->sum('tax'),
+            'loan_deductions'   => $payrolls->sum(function($p) { return $p->loan_deduction ?? 0; }),
+            'absence_deductions'=> $payrolls->sum(function($p) { return $p->absence_deduction ?? 0; }),
+            'absent_days'       => $payrolls->sum('absent_days'),
+            'deductions'        => $payrolls->sum('deductions'),
+            'net'               => $payrolls->sum('net_salary'),
+            'count'             => $payrolls->count(),
         ];
 
         // GM status for this batch
@@ -100,20 +103,20 @@ class FinancePayrollController extends Controller
             $house    = $emp->house_allowance     ?? 0;
             $position = $emp->position_allowance  ?? 0;
 
-            // Check for active disbursed salary advance loan installments for this employee
-            $loanDeduction = 0;
-            if (\Illuminate\Support\Facades\Schema::hasTable('employee_advances')) {
-                $activeAdvances = \App\Models\EmployeeAdvance::where('employee_id', $emp->id)
-                    ->where('status', 'disbursed')
-                    ->get();
+            // 1. Salary advance loan monthly deduction
+            $loanDeduction = Payroll::calculateLoanDeduction($emp->id);
 
-                foreach ($activeAdvances as $adv) {
-                    $monthly = $adv->installments > 0 ? round($adv->amount / $adv->installments, 2) : $adv->amount;
-                    $loanDeduction += $monthly;
-                }
-            }
+            // 2. Unexcused attendance absences without approved leave
+            // Daily rate = basic / 30; each missed day deducts (basic / 30)
+            $absenceInfo      = Payroll::calculateUnexcusedAbsences($emp->id, $month, $year);
+            $absentDays       = $absenceInfo['days'];
+            $dailyRate        = $basic > 0 ? ($basic / 30) : 0;
+            $absenceDeduction = round($dailyRate * $absentDays, 2);
 
-            // Sum overtime pay from approved attendance records for this month
+            // Total other deductions = loan repayment + absence deduction
+            $totalDeductions  = round($loanDeduction + $absenceDeduction, 2);
+
+            // 3. Sum overtime pay from approved attendance records for this month
             $overtimePay = \App\Models\Attendance::where('employee_id', $emp->id)
                 ->whereYear('attendance_date', $year)
                 ->whereMonth('attendance_date', $month)
@@ -121,29 +124,32 @@ class FinancePayrollController extends Controller
                 ->sum('overtime_pay');
             $overtimePay = round((float) $overtimePay, 2);
 
-            // Employee Pension (7% of basic) & Company Pension (11% of basic)
+            // 4. Employee Pension (7% of basic) & Company Pension (11% of basic)
             $pension        = round($basic * 0.07, 2);
             $companyPension = round($basic * 0.11, 2);
 
-            // Taxable income = basic + house + position + max(0, transport - 2200) + overtime
+            // 5. Taxable income = basic + house + position + max(0, transport - 2200) + overtime
             // (pension 7% is NOT deducted for income tax calculation as requested)
             $taxable  = Payroll::calculateTaxableIncome($basic, $house, $position, $transport, $overtimePay);
             $tax      = Payroll::calculateIncomeTax($taxable);
 
             $payload = [
-                'employee_id'     => $emp->id,
-                'month'           => $month,
-                'year'            => $year,
-                'basic_salary'    => $basic,
-                'allowances'      => $transport + $house + $position,
-                'overtime_pay'    => $overtimePay,
-                'pension'         => $pension,
-                'company_pension' => $companyPension,
-                'taxable_income'  => $taxable,
-                'deductions'      => round($loanDeduction, 2),
-                'tax'             => round($tax, 2),
-                'status'          => 'draft',
-                'created_by'      => auth()->id(),
+                'employee_id'       => $emp->id,
+                'month'             => $month,
+                'year'              => $year,
+                'basic_salary'      => $basic,
+                'allowances'        => $transport + $house + $position,
+                'overtime_pay'      => $overtimePay,
+                'pension'           => $pension,
+                'company_pension'   => $companyPension,
+                'taxable_income'    => $taxable,
+                'loan_deduction'    => $loanDeduction,
+                'absence_deduction' => $absenceDeduction,
+                'absent_days'       => $absentDays,
+                'deductions'        => $totalDeductions,
+                'tax'               => round($tax, 2),
+                'status'            => 'draft',
+                'created_by'        => auth()->id(),
             ];
 
             if ($hasTransport) {
@@ -161,6 +167,105 @@ class FinancePayrollController extends Controller
 
         return redirect()->route('finance.payroll.index', ['month' => $month, 'year' => $year])
                          ->with('success', $msg);
+    }
+
+    /**
+     * Recalculate/Sync payroll for all employees in this period with latest attendance & loans.
+     */
+    public function recalculate(Request $request)
+    {
+        $request->validate([
+            'month' => 'required|integer|between:1,12',
+            'year'  => 'required|integer|min:2020|max:2099',
+        ]);
+
+        $month = (int) $request->month;
+        $year  = (int) $request->year;
+
+        $employees = Employee::where('status', 'active')->get();
+        $updatedCount = 0;
+        $createdCount = 0;
+
+        $hasTransport = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'transport_allowance');
+
+        foreach ($employees as $emp) {
+            $basic     = $emp->basic_salary ?? 0;
+            $transport = $emp->transport_allowance ?? 0;
+            $house     = $emp->house_allowance ?? 0;
+            $position  = $emp->position_allowance ?? 0;
+
+            // 1. Salary advance loan monthly deduction
+            $loanDeduction = Payroll::calculateLoanDeduction($emp->id);
+
+            // 2. Unexcused attendance absences without approved leave
+            // Daily rate = basic / 30; each missed day deducts (basic / 30)
+            $absenceInfo      = Payroll::calculateUnexcusedAbsences($emp->id, $month, $year);
+            $absentDays       = $absenceInfo['days'];
+            $dailyRate        = $basic > 0 ? ($basic / 30) : 0;
+            $absenceDeduction = round($dailyRate * $absentDays, 2);
+
+            // Total other deductions = loan repayment + absence deduction
+            $totalDeductions  = round($loanDeduction + $absenceDeduction, 2);
+
+            // 3. Overtime Pay from approved attendance records
+            $overtimePay = \App\Models\Attendance::where('employee_id', $emp->id)
+                ->whereYear('attendance_date', $year)
+                ->whereMonth('attendance_date', $month)
+                ->where('is_approved', true)
+                ->sum('overtime_pay');
+            $overtimePay = round((float) $overtimePay, 2);
+
+            // 4. Pensions & Taxable Income & Tax
+            $pension        = round($basic * 0.07, 2);
+            $companyPension = round($basic * 0.11, 2);
+            $taxable        = Payroll::calculateTaxableIncome($basic, $house, $position, $transport, $overtimePay);
+            $tax            = Payroll::calculateIncomeTax($taxable);
+
+            $payload = [
+                'employee_id'       => $emp->id,
+                'month'             => $month,
+                'year'              => $year,
+                'basic_salary'      => $basic,
+                'allowances'        => $transport + $house + $position,
+                'overtime_pay'      => $overtimePay,
+                'pension'           => $pension,
+                'company_pension'   => $companyPension,
+                'taxable_income'    => $taxable,
+                'loan_deduction'    => $loanDeduction,
+                'absence_deduction' => $absenceDeduction,
+                'absent_days'       => $absentDays,
+                'deductions'        => $totalDeductions,
+                'tax'               => round($tax, 2),
+            ];
+
+            if ($hasTransport) {
+                $payload['transport_allowance'] = $transport;
+                $payload['house_allowance']     = $house;
+                $payload['position_allowance']  = $position;
+            }
+
+            $existing = Payroll::where('employee_id', $emp->id)
+                ->where('month', $month)
+                ->where('year', $year)
+                ->first();
+
+            if ($existing) {
+                // Only update if not already approved by GM or marked paid
+                if ($existing->gm_status !== 'approved' && $existing->status !== 'paid') {
+                    $existing->update($payload);
+                    $updatedCount++;
+                }
+            } else {
+                $payload['status'] = 'draft';
+                $payload['created_by'] = auth()->id();
+                Payroll::create($payload);
+                $createdCount++;
+            }
+        }
+
+        $period = date('F Y', mktime(0, 0, 0, $month, 1, $year));
+        return redirect()->route('finance.payroll.index', ['month' => $month, 'year' => $year])
+                         ->with('success', "Recalculated payroll for {$period}: {$updatedCount} entries refreshed with latest attendance and loan deductions, {$createdCount} new entries added.");
     }
 
     /**

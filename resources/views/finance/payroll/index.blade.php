@@ -82,19 +82,30 @@
                 </button>
             </form>
             @elseif(!$batchSubmitted && !$batchApproved)
-            {{-- Generate (add missing) + Submit to GM --}}
-            <form method="POST" action="{{ route('finance.payroll.generate') }}">
+            {{-- Recalculate / Sync Button --}}
+            <form method="POST" action="{{ route('finance.payroll.recalculate') }}">
                 @csrf
                 <input type="hidden" name="month" value="{{ $month }}">
                 <input type="hidden" name="year"  value="{{ $year }}">
-                <button type="submit" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
-                    <i class="fa-solid fa-rotate me-1"></i>Add Missing
+                <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3"
+                        onclick="return confirm('Recalculate payroll for {{ $period }}? This will refresh all attendance records (absent days cut = Basic/30, overtime) and salary advance loan payments.')">
+                    <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate / Sync
                 </button>
             </form>
             <button class="btn btn-warning btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#submitGMModal">
                 <i class="fa-solid fa-paper-plane me-1"></i>Send to GM for Approval
             </button>
             @elseif($batchRejected)
+            {{-- Recalculate Button on Rejected --}}
+            <form method="POST" action="{{ route('finance.payroll.recalculate') }}">
+                @csrf
+                <input type="hidden" name="month" value="{{ $month }}">
+                <input type="hidden" name="year"  value="{{ $year }}">
+                <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3"
+                        onclick="return confirm('Recalculate payroll for {{ $period }}?')">
+                    <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate / Sync
+                </button>
+            </form>
             <button class="btn btn-warning btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#submitGMModal">
                 <i class="fa-solid fa-paper-plane me-1"></i>Re-Submit to GM
             </button>
@@ -182,11 +193,23 @@
 <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
     <div class="card-header bg-white py-3 px-4 border-bottom d-flex align-items-center justify-content-between">
         <h6 class="fw-bold mb-0"><i class="fa-solid fa-table-list text-primary me-2"></i>{{ $period }} Payroll Sheet</h6>
-        @if($payrolls->isNotEmpty())
-        <a href="#" onclick="window.print()" class="btn btn-sm btn-outline-secondary rounded-pill">
-            <i class="fa-solid fa-print me-1"></i>Print
-        </a>
-        @endif
+        <div class="d-flex gap-2 align-items-center">
+            @if($payrolls->isNotEmpty() && !$batchApproved && !$batchSubmitted)
+            <form method="POST" action="{{ route('finance.payroll.recalculate') }}">
+                @csrf
+                <input type="hidden" name="month" value="{{ $month }}">
+                <input type="hidden" name="year"  value="{{ $year }}">
+                <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill">
+                    <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate
+                </button>
+            </form>
+            @endif
+            @if($payrolls->isNotEmpty())
+            <a href="#" onclick="window.print()" class="btn btn-sm btn-outline-secondary rounded-pill">
+                <i class="fa-solid fa-print me-1"></i>Print
+            </a>
+            @endif
+        </div>
     </div>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0 small">
@@ -237,7 +260,19 @@
                     <td class="text-end text-secondary">{{ number_format($p->pension ?? round($p->basic_salary * 0.07, 2), 2) }}</td>
                     <td class="text-end" style="color:#6f42c1;">{{ number_format($calcCoPension, 2) }}</td>
                     <td class="text-end text-warning">{{ number_format($p->tax, 2) }}</td>
-                    <td class="text-end text-danger">{{ number_format($p->deductions, 2) }}</td>
+                    <td class="text-end text-danger">
+                        <div class="fw-semibold">{{ number_format($p->deductions, 2) }}</div>
+                        @if(($p->loan_deduction ?? 0) > 0 || ($p->absence_deduction ?? 0) > 0)
+                        <div class="text-muted" style="font-size:.7rem; line-height: 1.15;">
+                            @if(($p->loan_deduction ?? 0) > 0)
+                                <span title="Salary Advance Loan Repayment" class="d-block text-warning"><i class="fa-solid fa-hand-holding-dollar me-1"></i>Loan: {{ number_format($p->loan_deduction, 2) }}</span>
+                            @endif
+                            @if(($p->absence_deduction ?? 0) > 0 || ($p->absent_days ?? 0) > 0)
+                                <span title="{{ $p->absent_days }} day(s) missed without approved leave (Basic / 30 x {{ $p->absent_days }})" class="d-block text-danger"><i class="fa-solid fa-calendar-xmark me-1"></i>Absent ({{ $p->absent_days }}d): {{ number_format($p->absence_deduction, 2) }}</span>
+                            @endif
+                        </div>
+                        @endif
+                    </td>
                     <td class="text-end fw-bold text-success">{{ number_format($p->net_salary, 2) }}</td>
                     <td class="text-center">
                         @if($p->gm_status === 'approved')
@@ -276,7 +311,19 @@
                     <td class="text-end text-secondary">{{ number_format($totals['pension'],2) }}</td>
                     <td class="text-end" style="color:#6f42c1;">{{ number_format($totals['company_pension'],2) }}</td>
                     <td class="text-end text-warning">{{ number_format($totals['tax'],2) }}</td>
-                    <td class="text-end text-danger">{{ number_format($totals['deductions'],2) }}</td>
+                    <td class="text-end text-danger">
+                        <div>{{ number_format($totals['deductions'],2) }}</div>
+                        @if(($totals['loan_deductions'] ?? 0) > 0 || ($totals['absence_deductions'] ?? 0) > 0)
+                        <div style="font-size:.68rem; font-weight:normal; line-height:1.15;">
+                            @if(($totals['loan_deductions'] ?? 0) > 0)
+                                <span class="d-block text-warning">Loans: {{ number_format($totals['loan_deductions'], 2) }}</span>
+                            @endif
+                            @if(($totals['absence_deductions'] ?? 0) > 0)
+                                <span class="d-block text-danger">Absence ({{ $totals['absent_days'] }}d): {{ number_format($totals['absence_deductions'], 2) }}</span>
+                            @endif
+                        </div>
+                        @endif
+                    </td>
                     <td class="text-end text-success">{{ number_format($totals['net'],2) }}</td>
                     <td></td>
                 </tr>

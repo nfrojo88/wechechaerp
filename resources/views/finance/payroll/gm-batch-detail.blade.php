@@ -106,7 +106,19 @@
                         <td class="text-end text-secondary">{{ number_format($p->pension ?? round($p->basic_salary * 0.07, 2), 2) }}</td>
                         <td class="text-end" style="color:#6f42c1;">{{ number_format($calcCoPension, 2) }}</td>
                         <td class="text-end text-warning">{{ number_format($p->tax, 2) }}</td>
-                        <td class="text-end text-danger">{{ number_format($p->deductions, 2) }}</td>
+                        <td class="text-end text-danger">
+                            <div class="fw-semibold">{{ number_format($p->deductions, 2) }}</div>
+                            @if(($p->loan_deduction ?? 0) > 0 || ($p->absence_deduction ?? 0) > 0)
+                            <div class="text-muted" style="font-size:.7rem; line-height: 1.15;">
+                                @if(($p->loan_deduction ?? 0) > 0)
+                                    <span title="Salary Advance Loan Repayment" class="d-block text-warning"><i class="fa-solid fa-hand-holding-dollar me-1"></i>Loan: {{ number_format($p->loan_deduction, 2) }}</span>
+                                @endif
+                                @if(($p->absence_deduction ?? 0) > 0 || ($p->absent_days ?? 0) > 0)
+                                    <span title="{{ $p->absent_days }} day(s) missed without approved leave (Basic / 30 x {{ $p->absent_days }})" class="d-block text-danger"><i class="fa-solid fa-calendar-xmark me-1"></i>Absent ({{ $p->absent_days }}d): {{ number_format($p->absence_deduction, 2) }}</span>
+                                @endif
+                            </div>
+                            @endif
+                        </td>
                         <td class="text-end fw-bold text-success">{{ number_format($p->net_salary, 2) }}</td>
                     </tr>
                     @endforeach
@@ -123,7 +135,24 @@
                         <td class="text-end text-secondary">{{ number_format($totals['pension'],2) }}</td>
                         <td class="text-end" style="color:#6f42c1;">{{ number_format($totals['company_pension'],2) }}</td>
                         <td class="text-end text-warning">{{ number_format($totals['tax'],2) }}</td>
-                        <td class="text-end text-danger">{{ number_format($totals['deductions'],2) }}</td>
+                        <td class="text-end text-danger">
+                            <div>{{ number_format($totals['deductions'] ?? $payrolls->sum('deductions'),2) }}</div>
+                            @php
+                                $totalLoans = $payrolls->sum(function($p) { return $p->loan_deduction ?? 0; });
+                                $totalAbsence = $payrolls->sum(function($p) { return $p->absence_deduction ?? 0; });
+                                $totalDays = $payrolls->sum('absent_days');
+                            @endphp
+                            @if($totalLoans > 0 || $totalAbsence > 0)
+                            <div style="font-size:.68rem; font-weight:normal; line-height:1.15;">
+                                @if($totalLoans > 0)
+                                    <span class="d-block text-warning">Loans: {{ number_format($totalLoans, 2) }}</span>
+                                @endif
+                                @if($totalAbsence > 0)
+                                    <span class="d-block text-danger">Absence ({{ $totalDays }}d): {{ number_format($totalAbsence, 2) }}</span>
+                                @endif
+                            </div>
+                            @endif
+                        </td>
                         <td class="text-end text-success">{{ number_format($totals['net'],2) }}</td>
                     </tr>
                 </tfoot>

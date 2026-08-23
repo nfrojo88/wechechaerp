@@ -18,7 +18,10 @@ class Payroll extends Model
         'pension',         // 7% of basic (employee contribution)
         'company_pension', // 11% of basic (employer contribution)
         'taxable_income',  // gross income WITHOUT deducting pension — used for income tax calculation
-        'deductions',      // other deductions
+        'loan_deduction',  // salary advance monthly payment
+        'absence_deduction', // missed attendance without approved leave deduction (basic/30 * days)
+        'absent_days',     // number of unexcused absent days
+        'deductions',      // total other deductions (loan + absence + misc)
         'tax',             // income tax
         'gross_salary',
         'net_salary',
@@ -47,6 +50,9 @@ class Payroll extends Model
         'pension'             => 'decimal:2',
         'company_pension'     => 'decimal:2',
         'taxable_income'      => 'decimal:2',
+        'loan_deduction'      => 'decimal:2',
+        'absence_deduction'   => 'decimal:2',
+        'absent_days'         => 'integer',
         'deductions'          => 'decimal:2',
         'tax'                 => 'decimal:2',
         'net_salary'          => 'decimal:2',
@@ -97,12 +103,66 @@ class Payroll extends Model
               + ($p->overtime_pay       ?? 0),
             2);
 
+            // Ensure deductions includes loan + absence deductions if set
+            if (($p->loan_deduction !== null || $p->absence_deduction !== null) && ($p->loan_deduction > 0 || $p->absence_deduction > 0)) {
+                $p->deductions = round(($p->loan_deduction ?? 0) + ($p->absence_deduction ?? 0), 2);
+            }
+
             // Net = gross − employee pension − tax − other deductions
             $p->net_salary  = $p->gross_salary
                             - ($p->pension     ?? 0)
                             - ($p->tax         ?? 0)
                             - ($p->deductions  ?? 0);
         });
+    }
+
+    /**
+     * Calculate unexcused absences (days absent without an approved leave request).
+     */
+    public static function calculateUnexcusedAbsences(int $employeeId, int $month, int $year): array
+    {
+        $absentRecords = Attendance::where('employee_id', $employeeId)
+            ->whereYear('attendance_date', $year)
+            ->whereMonth('attendance_date', $month)
+            ->where('status', 'absent')
+            ->get();
+
+        $unexcusedDays = 0;
+        foreach ($absentRecords as $att) {
+            $date = $att->attendance_date;
+            $hasApprovedLeave = LeaveRequest::where('employee_id', $employeeId)
+                ->where('status', 'approved')
+                ->whereDate('start_date', '<=', $date)
+                ->whereDate('end_date', '>=', $date)
+                ->exists();
+
+            if (!$hasApprovedLeave) {
+                $unexcusedDays++;
+            }
+        }
+
+        return [
+            'days' => $unexcusedDays,
+        ];
+    }
+
+    /**
+     * Calculate monthly salary advance loan deduction for an employee.
+     */
+    public static function calculateLoanDeduction(int $employeeId): float
+    {
+        $loanDeduction = 0;
+        if (\Illuminate\Support\Facades\Schema::hasTable('employee_advances')) {
+            $activeAdvances = \App\Models\EmployeeAdvance::where('employee_id', $employeeId)
+                ->where('status', 'disbursed')
+                ->get();
+
+            foreach ($activeAdvances as $adv) {
+                $monthly = $adv->installments > 0 ? round($adv->amount / $adv->installments, 2) : $adv->amount;
+                $loanDeduction += $monthly;
+            }
+        }
+        return round($loanDeduction, 2);
     }
 
     public function isPaid() { return $this->status === 'paid' && $this->paid_at !== null; }
