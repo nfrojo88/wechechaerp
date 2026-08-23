@@ -551,10 +551,28 @@ class DashboardController extends Controller
         $user = auth()->user();
         $isFinanceHead = $user && $user->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']);
 
+        // ── Cash & Bank Accounts (from Chart of Accounts where category is Cash and Bank) ──
+        $cashAndBankCoas = $this->safe(function() {
+            return \App\Models\ChartOfAccount::with('manager')
+                ->where('is_active', true)
+                ->where(function($q) {
+                    $q->where('subtype', 'Cash and Bank')
+                      ->orWhere('subtype', 'like', '%Cash%')
+                      ->orWhere('subtype', 'like', '%Bank%')
+                      ->orWhere('name', 'like', '%Bank%')
+                      ->orWhere('name', 'like', '%Cash%')
+                      ->orWhere('code', 'like', '10%');
+                })
+                ->orderBy('code')
+                ->get();
+        }, collect());
+
+        $totalCashBankBalance = (float) $cashAndBankCoas->sum('current_balance');
+
         $kpi = [
             'total_income'    => $this->safe(fn() => (float) \App\Models\Payment::sum('amount') + (float) \Illuminate\Support\Facades\DB::table('client_ipcs')->where('status', 'paid')->sum('gross_amount'), 0),
             'total_expense'   => $this->safe(fn() => (float) \Illuminate\Support\Facades\DB::table('expenses')->sum('amount') + (float) \App\Models\ExpenseRequest::where('status', 'paid')->sum('amount') + (float) \Illuminate\Support\Facades\DB::table('payrolls')->sum('net_salary'), 0),
-            'cash_balance'    => $this->safe(fn() => (float) \Illuminate\Support\Facades\DB::table('bank_accounts')->sum('current_balance'), 0),
+            'cash_balance'    => $totalCashBankBalance,
             'pending_payments'=> $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')->where('status', 'pending')->count() + \App\Models\ExpenseRequest::whereIn('status', ['pending', 'reviewed', 'approved', 'assigned'])->count() + \Illuminate\Support\Facades\DB::table('payrolls')->where('status', 'pending')->count(), 0),
         ];
 
@@ -605,18 +623,15 @@ class DashboardController extends Controller
         $coas               = $this->safe(fn() => \App\Models\ChartOfAccount::with('parent')->orderBy('code')->get(), collect());
 
         // ── Bank Accounts (role-scoped) ──────────────────────────────────────────
-        // Finance Head → ALL bank accounts
-        // Regular Finance → only their assigned Chart of Account records
         if ($isFinanceHead) {
-            $bankAccounts = $this->safe(fn() => \App\Models\BankAccount::where('is_active', true)->orderByDesc('current_balance')->get(), collect());
+            $bankAccounts = $cashAndBankCoas;
             $assignedAccounts = collect();
         } else {
             $bankAccounts = collect();
-            $assignedAccounts = $this->safe(fn() => \App\Models\ChartOfAccount::where('assigned_to', $user->id)->get(), collect());
+            $assignedAccounts = $this->safe(fn() => \App\Models\ChartOfAccount::with('manager')->where('assigned_to', $user->id)->get(), collect());
         }
 
         // ── Plan vs Actual (Finance Head only) ───────────────────────────────────
-        // Compare project_budgets.budgeted_amount vs actual expenses per project
         $planVsActual = collect();
         if ($isFinanceHead) {
             $planVsActual = $this->safe(function() {
@@ -646,7 +661,8 @@ class DashboardController extends Controller
         return view('dashboard.finance', compact(
             'kpi', 'monthlyAnalytics', 'expenseCategories',
             'recentTransactions', 'recentExpenses', 'coas',
-            'bankAccounts', 'assignedAccounts', 'planVsActual', 'isFinanceHead'
+            'bankAccounts', 'assignedAccounts', 'planVsActual', 'isFinanceHead',
+            'cashAndBankCoas', 'totalCashBankBalance'
         ));
     }
 

@@ -74,7 +74,7 @@
                     <div>
                         <div class="text-uppercase small fw-bold text-muted mb-1">Total Bank Balance</div>
                         <h3 class="fw-bold text-info mb-0">ETB {{ number_format($kpi['cash_balance'] ?? 0, 2) }}</h3>
-                        <div class="small text-muted mt-1"><i class="fa-solid fa-building-columns text-info me-1"></i>All active accounts</div>
+                        <div class="small text-muted mt-1"><i class="fa-solid fa-building-columns text-info me-1"></i>All Cash & Bank COA Accounts</div>
                     </div>
                     <div class="bg-info-subtle text-info rounded-4 p-3 fs-3 d-flex align-items-center justify-content-center" style="width:54px;height:54px">
                         <i class="fa-solid fa-coins"></i>
@@ -85,65 +85,75 @@
     </div>
     @endif
 
-    {{-- ═══ BANK ACCOUNTS SECTION ═══════════════════════════════════════════════ --}}
-    @if($isFinanceHead && $bankAccounts->count() > 0)
-    {{-- Finance Head: ALL bank accounts --}}
+    {{-- ═══ BANK & CASH ACCOUNTS SECTION ═══════════════════════════════════════════════ --}}
+    @if($isFinanceHead && isset($cashAndBankCoas) && $cashAndBankCoas->count() > 0)
+    {{-- Finance Head: ALL Cash & Bank COA accounts --}}
     <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden mb-4">
         <div class="card-header bg-white py-3 px-4 d-flex align-items-center justify-content-between border-bottom">
             <h6 class="fw-bold text-dark mb-0">
-                <i class="fa-solid fa-building-columns text-primary me-2"></i>All Bank Accounts
-                <span class="badge bg-primary-subtle text-primary ms-2">{{ $bankAccounts->count() }} Accounts</span>
+                <i class="fa-solid fa-building-columns text-primary me-2"></i>All Bank & Cash Accounts (COA)
+                <span class="badge bg-primary-subtle text-primary ms-2">{{ $cashAndBankCoas->count() }} Accounts</span>
             </h6>
-            <span class="badge bg-success-subtle text-success fw-bold">Finance Head View — Full Access</span>
+            <span class="badge bg-success-subtle text-success fw-bold">Chart of Accounts — Cash & Bank Category</span>
         </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-                <thead class="bg-light">
+                <thead class="bg-light text-uppercase small text-muted fw-bold">
                     <tr>
-                        <th class="ps-4">Bank Name</th>
+                        <th class="ps-4">Code</th>
                         <th>Account Name</th>
-                        <th>Account No.</th>
-                        <th>Type</th>
-                        <th>Currency</th>
+                        <th>Category</th>
+                        <th>Assigned Manager</th>
                         <th class="text-end pe-4">Current Balance</th>
                         <th class="text-center">Status</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($bankAccounts as $bank)
+                    @forelse($cashAndBankCoas as $bank)
                     <tr>
                         <td class="ps-4">
+                            <span class="badge bg-dark font-monospace px-2 py-1">{{ $bank->code }}</span>
+                        </td>
+                        <td>
                             <div class="d-flex align-items-center gap-2">
-                                <div class="bg-primary-subtle rounded-3 d-flex align-items-center justify-content-center" style="width:36px;height:36px">
-                                    <i class="fa-solid fa-building-columns text-primary small"></i>
+                                <div class="bg-primary-subtle text-primary rounded-3 d-flex align-items-center justify-content-center" style="width:32px;height:32px">
+                                    <i class="fa-solid fa-building-columns small"></i>
                                 </div>
-                                <span class="fw-semibold small">{{ $bank->bank_name }}</span>
+                                <span class="fw-bold text-dark">{{ $bank->name }}</span>
                             </div>
                         </td>
-                        <td class="small">{{ $bank->account_name }}</td>
-                        <td><code class="small">{{ $bank->account_number }}</code></td>
-                        <td><span class="badge bg-secondary-subtle text-secondary text-capitalize">{{ str_replace('_', ' ', $bank->account_type ?? 'General') }}</span></td>
-                        <td class="small fw-semibold">{{ $bank->currency ?? 'ETB' }}</td>
-                        <td class="text-end pe-4 fw-bold {{ $bank->current_balance >= 0 ? 'text-success' : 'text-danger' }}">
-                            {{ $bank->currency ?? 'ETB' }} {{ number_format($bank->current_balance ?? 0, 2) }}
+                        <td>
+                            <span class="badge rounded-pill" style="background-color: #d1f4e0; color: #0d9446; font-weight: 600;">
+                                <i class="fa-solid fa-money-bill-transfer me-1"></i>{{ $bank->subtype ?? 'Cash and Bank' }}
+                            </span>
+                        </td>
+                        <td>
+                            @if($bank->manager)
+                                <span class="badge bg-light text-dark border"><i class="fa-solid fa-user-tie me-1 text-primary"></i>{{ $bank->manager->name }}</span>
+                            @else
+                                <span class="text-muted small">&mdash; No Manager &mdash;</span>
+                            @endif
+                        </td>
+                        <td class="text-end pe-4 fw-bold {{ (float)$bank->current_balance >= 0 ? 'text-success' : 'text-danger' }}">
+                            ETB {{ number_format($bank->current_balance ?? 0, 2) }}
                         </td>
                         <td class="text-center">
-                            @if($bank->is_default)
-                                <span class="badge bg-warning-subtle text-warning"><i class="fa-solid fa-star me-1"></i>Default</span>
-                            @else
+                            @if($bank->is_active)
                                 <span class="badge bg-success-subtle text-success"><i class="fa-solid fa-check me-1"></i>Active</span>
+                            @else
+                                <span class="badge bg-secondary-subtle text-secondary">Inactive</span>
                             @endif
                         </td>
                     </tr>
                     @empty
-                    <tr><td colspan="7" class="text-center py-4 text-muted small">No bank accounts found.</td></tr>
+                    <tr><td colspan="6" class="text-center py-4 text-muted small">No Cash and Bank accounts found in Chart of Accounts.</td></tr>
                     @endforelse
                 </tbody>
-                @if($bankAccounts->count() > 0)
+                @if($cashAndBankCoas->count() > 0)
                 <tfoot class="bg-light">
                     <tr>
-                        <td colspan="5" class="ps-4 fw-bold small text-muted">Total Balance Across All Accounts</td>
-                        <td class="text-end pe-4 fw-bold text-success">ETB {{ number_format($bankAccounts->sum('current_balance'), 2) }}</td>
+                        <td colspan="4" class="ps-4 fw-bold small text-muted">Total Cash & Bank Balance Across All Accounts</td>
+                        <td class="text-end pe-4 fw-bold text-success fs-6">ETB {{ number_format($totalCashBankBalance ?? $cashAndBankCoas->sum('current_balance'), 2) }}</td>
                         <td></td>
                     </tr>
                 </tfoot>
