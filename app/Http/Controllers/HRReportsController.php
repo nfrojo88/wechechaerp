@@ -65,14 +65,14 @@ class HRReportsController extends Controller
         }
 
         // Department-wise summary
-        $departmentSummary = DB::table('attendances')
-            ->join('employees', 'attendances.employee_id', '=', 'employees.id')
-            ->whereBetween('attendances.attendance_date', [$fromDate, $toDate])
+        $departmentSummary = DB::table('attendance')
+            ->join('employees', 'attendance.employee_id', '=', 'employees.id')
+            ->whereBetween('attendance.attendance_date', [$fromDate, $toDate])
             ->select(
                 DB::raw("COALESCE(NULLIF(employees.department, ''), 'General') as name"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'present' THEN 1 ELSE 0 END) as present"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'absent' THEN 1 ELSE 0 END) as absent"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'leave' THEN 1 ELSE 0 END) as `leave_count`"),
+                DB::raw("SUM(CASE WHEN attendance.status = 'present' THEN 1 ELSE 0 END) as present"),
+                DB::raw("SUM(CASE WHEN attendance.status = 'absent' THEN 1 ELSE 0 END) as absent"),
+                DB::raw("SUM(CASE WHEN attendance.status = 'leave' THEN 1 ELSE 0 END) as `leave_count`"),
                 DB::raw('COUNT(*) as total')
             )
             ->groupBy(DB::raw("COALESCE(NULLIF(employees.department, ''), 'General')"))
