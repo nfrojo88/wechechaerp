@@ -153,13 +153,13 @@
 
     <div class="row g-4 mb-4">
         <!-- New Transaction Form -->
-        <div class="col-lg-6">
+        <div class="col-lg-5">
             <div class="card shadow-sm border-0 rounded-4 h-100">
                 <div class="card-header bg-white border-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
                     <h5 class="fw-bold text-dark mb-0">
                         <i class="fas fa-money-bill-wave me-2 text-success"></i>New Transaction
                     </h5>
-                    <span class="badge bg-light text-secondary border">Log Payment / Receipt</span>
+                    <span class="badge bg-light text-secondary border">Direct Ledger Entry</span>
                 </div>
                 <div class="card-body p-4">
                     <form method="POST" action="{{ route('assigned-accounts.pay', $account->id) }}">
@@ -212,7 +212,7 @@
         </div>
 
         <!-- Current Cycle Payment History Overview (To be submitted in next Ask Money) -->
-        <div class="col-lg-6">
+        <div class="col-lg-7">
             <div class="card shadow-sm border-0 rounded-4 h-100">
                 <div class="card-header bg-white border-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
                     <div>
@@ -228,35 +228,43 @@
                     @endif
                 </div>
                 <div class="card-body p-0 mt-3">
-                    <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
+                    <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="bg-light text-muted small text-uppercase sticky-top">
                                 <tr>
-                                    <th class="px-4 py-2">Date</th>
-                                    <th class="py-2">Description / Target</th>
-                                    <th class="px-4 py-2 text-end">Amount (ETB)</th>
+                                    <th class="px-3 py-2">Date</th>
+                                    <th class="py-2">Ref / Requester</th>
+                                    <th class="py-2">Category & Description</th>
+                                    <th class="px-3 py-2 text-end">Amount (ETB)</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse($unreplenishedExpenses as $exp)
-                                    @php
-                                        $otherLine = $exp->journalEntry?->lines?->where('id', '!=', $exp->id)->first();
-                                    @endphp
                                     <tr>
-                                        <td class="px-4 py-2 text-muted small">
-                                            {{ \Carbon\Carbon::parse($exp->journalEntry->entry_date ?? $exp->created_at)->format('M d, Y') }}
+                                        <td class="px-3 py-2 text-muted small" style="white-space: nowrap;">
+                                            {{ \Carbon\Carbon::parse($exp->date)->format('M d, Y') }}
+                                            <div class="text-muted" style="font-size: 0.75rem;">{{ \Carbon\Carbon::parse($exp->date)->format('H:i') }}</div>
                                         </td>
                                         <td class="py-2">
-                                            <div class="fw-semibold text-dark">{{ Str::limit($exp->description ?? $exp->journalEntry?->description, 35) }}</div>
-                                            <small class="text-muted">{{ $otherLine?->account ? $otherLine->account->name : 'Expense Account' }}</small>
+                                            <span class="badge bg-light text-primary border fw-bold mb-1">{{ $exp->reference }}</span>
+                                            <div class="fw-semibold text-dark small">{{ $exp->requester }}</div>
+                                            @if($exp->department)
+                                                <small class="text-muted">{{ $exp->department }}</small>
+                                            @endif
                                         </td>
-                                        <td class="px-4 py-2 text-end fw-bold text-danger">
+                                        <td class="py-2">
+                                            @if($exp->category)
+                                                <span class="badge bg-primary-subtle text-primary border mb-1">{{ $exp->category }}</span>
+                                            @endif
+                                            <div class="text-dark small">{{ Str::limit($exp->description, 45) }}</div>
+                                        </td>
+                                        <td class="px-3 py-2 text-end fw-bold text-danger" style="white-space: nowrap;">
                                             ETB {{ number_format($exp->amount, 2) }}
                                         </td>
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="3" class="text-center py-5 text-muted">
+                                        <td colspan="4" class="text-center py-5 text-muted">
                                             <i class="fas fa-check-circle text-success fa-2x mb-2"></i>
                                             <div>All expenses up to date! No un-replenished payments in the current cycle.</div>
                                         </td>
@@ -267,7 +275,7 @@
                     </div>
                 </div>
                 <div class="card-footer bg-light border-0 py-3 px-4 d-flex justify-content-between align-items-center rounded-bottom-4">
-                    <span class="text-muted small fw-bold">Active Cycle Total:</span>
+                    <span class="text-muted small fw-bold">Active Cycle Total ({{ $unreplenishedCount }} items):</span>
                     <span class="fw-bold fs-5 text-danger">ETB {{ number_format($unreplenishedExpensesTotal, 2) }}</span>
                 </div>
             </div>
@@ -451,7 +459,7 @@
 <!-- MODAL: ASK MONEY / REQUEST REPLENISHMENT FROM FINANCE HEAD               -->
 <!-- ========================================================================= -->
 <div class="modal fade" id="requestReplenishmentModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow rounded-4">
             <div class="modal-header bg-primary text-white border-0 py-3">
                 <h5 class="modal-title fw-bold">
@@ -469,10 +477,10 @@
                         </div>
                     </div>
 
-                    <div class="row g-3 mb-3">
+                    <div class="row g-3 mb-4">
                         <div class="col-md-6">
                             <label class="form-label text-muted small fw-bold text-uppercase">Current Petty Cash Balance</label>
-                            <input type="text" class="form-control bg-light border-0 py-2 fw-bold text-dark" value="ETB {{ number_format($account->current_balance, 2) }}" readonly>
+                            <input type="text" class="form-control bg-light border-0 py-2 fw-bold text-dark fs-5" value="ETB {{ number_format($account->current_balance, 2) }}" readonly>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label text-muted small fw-bold text-uppercase">Requested Replenishment Amount (ETB)</label>
@@ -480,22 +488,24 @@
                                 <span class="input-group-text bg-light border-0 fw-bold">ETB</span>
                                 <input type="number" step="0.01" min="0.01" name="requested_amount" class="form-control bg-light border-0 py-2 fw-bold text-primary fs-5" value="{{ $unreplenishedExpensesTotal > 0 ? $unreplenishedExpensesTotal : '' }}" placeholder="Enter requested amount" required>
                             </div>
-                            <small class="text-muted">Suggested: Equal to total expenses incurred (ETB {{ number_format($unreplenishedExpensesTotal, 2) }}).</small>
+                            <small class="text-muted">Suggested: Equal to total expenses incurred in this cycle (ETB {{ number_format($unreplenishedExpensesTotal, 2) }}).</small>
                         </div>
                     </div>
 
                     <!-- Payment History Preview Table -->
                     <div class="mb-4">
-                        <label class="form-label text-muted small fw-bold text-uppercase d-flex justify-content-between">
+                        <label class="form-label text-muted small fw-bold text-uppercase d-flex justify-content-between align-items-center mb-2">
                             <span><i class="fas fa-paperclip me-1"></i> Attached Payment History ({{ $unreplenishedCount }} Records)</span>
-                            <span class="text-danger fw-bold">Total: ETB {{ number_format($unreplenishedExpensesTotal, 2) }}</span>
+                            <span class="text-danger fw-bold fs-6">Total: ETB {{ number_format($unreplenishedExpensesTotal, 2) }}</span>
                         </label>
-                        <div class="border rounded-4 overflow-hidden" style="max-height: 220px; overflow-y: auto;">
-                            <table class="table table-sm table-striped align-middle mb-0 small">
+                        <div class="border rounded-4 overflow-hidden" style="max-height: 280px; overflow-y: auto;">
+                            <table class="table table-sm table-striped table-hover align-middle mb-0 small">
                                 <thead class="bg-light text-muted sticky-top">
                                     <tr>
                                         <th class="px-3 py-2">Date</th>
-                                        <th class="py-2">Reference</th>
+                                        <th class="py-2">Req # / Reference</th>
+                                        <th class="py-2">Requester / Dept</th>
+                                        <th class="py-2">Category</th>
                                         <th class="py-2">Description</th>
                                         <th class="px-3 py-2 text-end">Amount (ETB)</th>
                                     </tr>
@@ -503,14 +513,29 @@
                                 <tbody>
                                     @forelse($unreplenishedExpenses as $exp)
                                         <tr>
-                                            <td class="px-3 py-2 text-muted">{{ \Carbon\Carbon::parse($exp->journalEntry->entry_date ?? $exp->created_at)->format('M d, Y') }}</td>
-                                            <td class="py-2"><span class="badge bg-light text-dark border">{{ $exp->journalEntry->entry_no ?? 'REF' }}</span></td>
-                                            <td class="py-2">{{ Str::limit($exp->description ?? $exp->journalEntry?->description, 40) }}</td>
-                                            <td class="px-3 py-2 text-end fw-bold text-danger">ETB {{ number_format($exp->amount, 2) }}</td>
+                                            <td class="px-3 py-2 text-muted" style="white-space: nowrap;">
+                                                {{ \Carbon\Carbon::parse($exp->date)->format('M d, Y H:i') }}
+                                            </td>
+                                            <td class="py-2">
+                                                <span class="badge bg-light text-primary border fw-bold">{{ $exp->reference }}</span>
+                                            </td>
+                                            <td class="py-2">
+                                                <span class="fw-semibold text-dark">{{ $exp->requester }}</span>
+                                                @if($exp->department)
+                                                    <span class="text-muted d-block small">{{ $exp->department }}</span>
+                                                @endif
+                                            </td>
+                                            <td class="py-2">
+                                                <span class="badge bg-primary-subtle text-primary border">{{ $exp->category }}</span>
+                                            </td>
+                                            <td class="py-2">{{ Str::limit($exp->description, 50) }}</td>
+                                            <td class="px-3 py-2 text-end fw-bold text-danger" style="white-space: nowrap;">
+                                                ETB {{ number_format($exp->amount, 2) }}
+                                            </td>
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="4" class="text-center py-3 text-muted">No expense records in the active cycle.</td>
+                                            <td colspan="6" class="text-center py-4 text-muted">No expense records in the active cycle.</td>
                                         </tr>
                                     @endforelse
                                 </tbody>
@@ -532,7 +557,7 @@
                 </div>
                 <div class="modal-footer bg-light border-0 py-3 px-4">
                     <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
+                    <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" {{ $unreplenishedCount === 0 ? '' : '' }}>
                         <i class="fas fa-paper-plane me-2"></i> Submit Request to Finance Head
                     </button>
                 </div>
@@ -546,7 +571,7 @@
 <!-- ========================================================================= -->
 @foreach($replenishments as $rep)
 <div class="modal fade" id="viewReplenishmentModal_{{ $rep->id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow rounded-4">
             <div class="modal-header bg-dark text-white border-0 py-3">
                 <div>
@@ -611,7 +636,7 @@
                                 <th class="px-3 py-2">Date</th>
                                 <th class="py-2">Reference</th>
                                 <th class="py-2">Description</th>
-                                <th class="py-2">Target Account</th>
+                                <th class="py-2">Category / Target</th>
                                 <th class="px-3 py-2 text-end">Amount (ETB)</th>
                             </tr>
                         </thead>
