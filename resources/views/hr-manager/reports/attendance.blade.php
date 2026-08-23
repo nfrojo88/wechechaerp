@@ -147,7 +147,7 @@
                         <td class="fw-bold text-dark">{{ $dept->name }}</td>
                         <td class="text-center fw-semibold text-success">{{ $dept->present }}</td>
                         <td class="text-center fw-semibold text-danger">{{ $dept->absent }}</td>
-                        <td class="text-center fw-semibold text-warning">{{ $dept->leave }}</td>
+                        <td class="text-center fw-semibold text-warning">{{ $dept->leave_count ?? $dept->leave ?? 0 }}</td>
                         <td class="text-center text-muted">{{ $dept->total }}</td>
                         <td class="text-center">
                             <span class="badge {{ $deptRate >= 85 ? 'bg-success' : ($deptRate >= 70 ? 'bg-warning text-dark' : 'bg-danger') }} rounded-pill px-3 py-1">

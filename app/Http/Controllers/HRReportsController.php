@@ -72,7 +72,7 @@ class HRReportsController extends Controller
                 DB::raw("COALESCE(NULLIF(employees.department, ''), 'General') as name"),
                 DB::raw("SUM(CASE WHEN attendances.status = 'present' THEN 1 ELSE 0 END) as present"),
                 DB::raw("SUM(CASE WHEN attendances.status = 'absent' THEN 1 ELSE 0 END) as absent"),
-                DB::raw("SUM(CASE WHEN attendances.status = 'leave' THEN 1 ELSE 0 END) as leave"),
+                DB::raw("SUM(CASE WHEN attendances.status = 'leave' THEN 1 ELSE 0 END) as `leave_count`"),
                 DB::raw('COUNT(*) as total')
             )
             ->groupBy(DB::raw("COALESCE(NULLIF(employees.department, ''), 'General')"))
