@@ -45,6 +45,13 @@
                 <span>{{ $dashTitle }}</span>
             </a>
         </li>
+        @elseif($isGeneralServiceUser)
+        <li class="sidebar-nav-item">
+            <a href="{{ route('dashboard.general_service') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.general_service') ? 'active' : '' }}">
+                <i class="fa-solid fa-screwdriver-wrench text-warning"></i>
+                <span>General Service Hub</span>
+            </a>
+        </li>
         @endif
 
         @if($isSecretary)
@@ -71,7 +78,7 @@
         </li>
         @endif
 
-        @if(!$isSecretary && !$isStoreKeeper)
+        @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser)
         <li class="sidebar-nav-item">
             <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-success"></i>
@@ -89,7 +96,7 @@
         </li>
         @endif
 
-        @if(!$isSecretary && !$isStoreKeeper)
+        @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser)
         <li class="sidebar-nav-item">
             <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-envelope-open-text text-primary"></i>
@@ -590,12 +597,14 @@
         {{-- General Service & Operations Tools --}}
         @if(auth()->check() && ($isGeneralServiceUser || auth()->user()->hasAnyRole(['admin', 'global_admin'])))
         <li class="sidebar-heading">General Service</li>
+        @if(!$isGeneralServiceUser)
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.general_service') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.general_service') || request()->routeIs('general-service.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-screwdriver-wrench text-warning"></i>
                 <span>General Service Hub</span>
             </a>
         </li>
+        @endif
         <li class="sidebar-nav-item">
             <a href="{{ route('general-service.maintenance.index') }}" class="sidebar-nav-link {{ request()->routeIs('general-service.maintenance.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-wrench text-danger"></i>
