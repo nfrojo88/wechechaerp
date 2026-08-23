@@ -5,9 +5,22 @@
 
     RewriteEngine On
 
-    # 1. Allow direct HTTP communication for ZKTeco ADMS biometrics endpoints (DO NOT REDIRECT TO HTTPS OR STRIP URL)
+    # ── ZKTeco ADMS Biometric Device: BYPASS ALL REDIRECTS ───────────────────────
+    # The ZKTeco firmware CANNOT follow 301/302 redirects.
+    # These rules MUST come first, before any HTTPS or trailing slash redirects.
     RewriteCond %{REQUEST_URI} ^/iclock [NC]
+    RewriteRule ^ - [L,E=HTTPS_SKIP:1]
+
+    # Also skip HTTPS redirect for iclock (cPanel global SSL redirect override)
+    RewriteCond %{REQUEST_URI} ^/iclock [NC]
+    RewriteCond %{HTTPS} off
     RewriteRule ^ - [L]
+
+    # ── HTTPS Enforcement for all other paths (cPanel auto-generated) ────────────
+    # NOTE: iclock/* is excluded above so it stays on HTTP port 80
+    RewriteCond %{REQUEST_URI} !^/iclock [NC]
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
