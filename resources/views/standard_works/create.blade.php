@@ -573,9 +573,9 @@
 @push('scripts')
 <script>
     /* ─── Product, Equipment & Manpower Roles data from PHP ─── */
-    const PRODUCTS      = @json($productsJson);
-    const EQUIPMENT     = @json($equipmentJson);
-    let MANPOWER_ROLES  = @json($manpowerRoles);
+    const PRODUCTS      = {!! json_encode($productsJson ?? []) !!};
+    const EQUIPMENT     = {!! json_encode($equipmentJson ?? []) !!};
+    let MANPOWER_ROLES  = {!! json_encode($manpowerRoles ?? []) !!};
 
     /* ─── Row counters ─── */
     const counts = { materials: 1, manpower: 1, scientific_manpower: 1, equipment: 1 };

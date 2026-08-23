@@ -278,14 +278,23 @@
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Site Assignment</label>
+                        <label class="form-label">
+                            Site Assignment
+                            <span class="badge bg-info text-dark ms-1" id="remote-edit-attendance-badge" style="{{ $site == 'Remote' ? '' : 'display:none;' }}">
+                                <i class="fa-solid fa-house-laptop me-1"></i>No Attendance Tracking
+                            </span>
+                        </label>
                         @php $site = old('site_assignment', $employee->site_assignment ?? ''); @endphp
-                        <select name="site_assignment" class="form-select">
+                        <select name="site_assignment" class="form-select" onchange="document.getElementById('remote-edit-attendance-badge').style.display = (this.value === 'Remote') ? 'inline-block' : 'none';">
                             <option value="">-- No Specific Site --</option>
-                            <option value="HQ"     {{ $site == 'HQ'     ? 'selected' : '' }}>Headquarters</option>
-                            <option value="Site_A" {{ $site == 'Site_A' ? 'selected' : '' }}>Site A</option>
-                            <option value="Site_B" {{ $site == 'Site_B' ? 'selected' : '' }}>Site B</option>
+                            <option value="Head Office"  {{ in_array($site, ['Head Office', 'HQ']) ? 'selected' : '' }}>Head Office</option>
+                            <option value="Project Site" {{ in_array($site, ['Project Site', 'Site_A', 'Site_B']) ? 'selected' : '' }}>Project Site</option>
+                            <option value="Workshop"     {{ $site == 'Workshop' ? 'selected' : '' }}>Workshop</option>
+                            <option value="Remote"       {{ $site == 'Remote' ? 'selected' : '' }}>Remote (Exempt from Attendance Tracking)</option>
                         </select>
+                        <div class="form-text text-muted">
+                            Remote workers are exempt from daily biometric / attendance logging.
+                        </div>
                     </div>
                 </div>
             </div>

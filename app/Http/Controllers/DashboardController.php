@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Inventory;
 use App\Models\Transfer;
 use App\Models\DeliveryReceipt;
+use App\Models\MaterialRequest;
 
 class DashboardController extends Controller
 {

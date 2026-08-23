@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 @section('title', $isFinanceHead ? 'Finance Head Dashboard' : 'Finance Dashboard')
 
 @section('content')
@@ -356,6 +356,14 @@
 
 @push('scripts')
 @if($isFinanceHead)
+@php
+    $expLabels = []; $expTotals = [];
+    foreach($expenseCategories ?? [] as $ec) {
+        $expLabels[] = $ec->category ?: 'General';
+        $expTotals[] = (float) $ec->total;
+    }
+    if(empty($expLabels)) { $expLabels = ['Materials','Payroll','Overhead']; $expTotals = [1,1,1]; }
+@endphp
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -375,15 +383,6 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } }
     });
-
-    @php
-        $expLabels = []; $expTotals = [];
-        foreach($expenseCategories ?? [] as $ec) {
-            $expLabels[] = $ec->category ?: 'General';
-            $expTotals[] = (float) $ec->total;
-        }
-        if(empty($expLabels)) { $expLabels = ['Materials','Payroll','Overhead']; $expTotals = [1,1,1]; }
-    @endphp
 
     const expLabels = {!! json_encode($expLabels) !!};
     const expTotals = {!! json_encode($expTotals) !!};

@@ -579,9 +579,9 @@
 
 @push('scripts')
 <script>
-    const PRODUCTS      = @json($productsJson);
-    const EQUIPMENT     = @json($equipmentJson);
-    let MANPOWER_ROLES  = @json($manpowerRoles);
+    const PRODUCTS      = {!! json_encode($productsJson ?? []) !!};
+    const EQUIPMENT     = {!! json_encode($equipmentJson ?? []) !!};
+    let MANPOWER_ROLES  = {!! json_encode($manpowerRoles ?? []) !!};
 
     const counts = {
         materials: {{ count($mats) ?: 1 }},

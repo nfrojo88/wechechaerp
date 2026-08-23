@@ -271,13 +271,21 @@
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Site Assignment</label>
-                        <select name="site_assignment" class="form-select">
+                        <label class="form-label">
+                            Site Assignment 
+                            <span class="badge bg-info text-dark ms-1" id="remote-attendance-badge" style="display:none;">
+                                <i class="fa-solid fa-house-laptop me-1"></i>No Attendance Tracking
+                            </span>
+                        </label>
+                        <select name="site_assignment" id="site_assignment_select" class="form-select" onchange="toggleRemoteNotice(this)">
                             <option value="Head Office"  {{ old('site_assignment', 'Head Office') == 'Head Office' ? 'selected' : '' }}>Head Office</option>
                             <option value="Project Site" {{ old('site_assignment') == 'Project Site' ? 'selected' : '' }}>Project Site</option>
                             <option value="Workshop"     {{ old('site_assignment') == 'Workshop' ? 'selected' : '' }}>Workshop</option>
-                            <option value="Remote"       {{ old('site_assignment') == 'Remote' ? 'selected' : '' }}>Remote</option>
+                            <option value="Remote"       {{ old('site_assignment') == 'Remote' ? 'selected' : '' }}>Remote (Exempt from Attendance Tracking)</option>
                         </select>
+                        <div class="form-text text-muted id="remote_info_text">
+                            Remote workers are exempt from daily biometric / attendance logging.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1487,8 +1495,18 @@ function updateRemoveButtons() {
     });
 }
 
+function toggleRemoteNotice(selectEl) {
+    const badge = document.getElementById('remote-attendance-badge');
+    if (badge) {
+        badge.style.display = (selectEl.value === 'Remote') ? 'inline-block' : 'none';
+    }
+}
+
 // ── Multi-Step Form Submit Handler ───────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
+    const siteSel = document.getElementById('site_assignment_select');
+    if (siteSel) toggleRemoteNotice(siteSel);
+
     const form = document.getElementById('employeeForm');
     if (!form) return;
 

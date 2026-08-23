@@ -9,6 +9,7 @@
     $isHrOfficer = in_array('hr_officer', $rawUserRoles) || in_array('hr', $rawUserRoles);
     $isHrManager = in_array('hr_manager', $rawUserRoles);
     $isCoordinator = in_array('coordinator', $rawUserRoles);
+    $isStoreManager = in_array('store_manager', $rawUserRoles);
 @endphp
 
 <div class="sidebar-scroll">
@@ -33,6 +34,9 @@
             } elseif ($isCoordinator) {
                 $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.coordinator') ? route('dashboard.coordinator') : url('/coordinator/dashboard');
                 $dashTitle = 'Coordinator Dashboard';
+            } elseif ($isStoreManager) {
+                $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.store-manager') ? route('dashboard.store-manager') : url('/store-manager/dashboard');
+                $dashTitle = 'Store Dashboard';
             }
         @endphp
         <li class="sidebar-nav-item">
@@ -159,7 +163,7 @@
         @endrole
         {{-- Masters --}}
 
-        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isStoreKeeper))
+        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isStoreKeeper && !$isStoreManager))
         @canany(['projects.view', 'planning.view', 'schedule.view', 'stores.view', 'stores.create', 'stores.edit', 'stores.delete', 'products.view', 'products.create', 'products.edit', 'products.delete'])
 
         @canany(['projects.view', 'planning.view', 'schedule.view'])
@@ -190,7 +194,7 @@
         @endif
 
         {{-- Inventory --}}
-        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isStoreKeeper))
+        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isStoreKeeper && !$isStoreManager))
         @canany(['inventory.view', 'inventory.view_all_stores', 'inventory.*'])
 
         <li class="sidebar-nav-item">
@@ -239,12 +243,14 @@
         {{-- Store Hub (Central Store Manager / Admins) --}}
         @if(auth()->check() && !$isGeneralServiceUser && !$isStoreKeeper && auth()->user()->hasAnyRole(['store_manager', 'admin', 'global_admin']))
 
+        @if(!$isStoreManager)
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.store-manager') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.store-manager') || request()->routeIs('store-manager.dashboard') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high text-primary"></i>
                 <span>Store Dashboard</span>
             </a>
         </li>
+        @endif
         <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.inventory.all') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.inventory.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-boxes-stacked text-info"></i>
@@ -441,7 +447,7 @@
         @endcanany
 
         {{-- Procurement / Stores --}}
-        @if(auth()->check() && !$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isContractAdmin && !$isStoreKeeper && (auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin']) || auth()->user()->canAny(['inventory.view', 'inventory.*', 'purchases.suppliers.manage', 'suppliers.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'purchases.requests.create', 'purchases.view', 'purchases.receive', 'purchases.*', 'transfers.view', 'transfers.*'])))
+        @if(auth()->check() && !$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isContractAdmin && !$isStoreKeeper && !$isStoreManager && (auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin']) || auth()->user()->canAny(['inventory.view', 'inventory.*', 'purchases.suppliers.manage', 'suppliers.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'purchases.requests.create', 'purchases.view', 'purchases.receive', 'purchases.*', 'transfers.view', 'transfers.*'])))
 
         @if(!auth()->user()->hasAnyRole(['planning_manager', 'planning']) && auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin', 'gm', 'general_manager']))
         <li class="sidebar-nav-item">

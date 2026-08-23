@@ -249,8 +249,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const ctx = document.getElementById('priceTrendChart').getContext('2d');
-    const months = @json($months);
-    const datasetsRaw = @json($chartDatasets);
+    const months = {!! json_encode($months ?? []) !!};
+    const datasetsRaw = {!! json_encode($chartDatasets ?? []) !!};
 
     const colors = ['#2563eb', '#dc2626', '#16a34a', '#d97706'];
     const datasets = datasetsRaw.map((ds, idx) => ({

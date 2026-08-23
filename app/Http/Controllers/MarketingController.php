@@ -180,6 +180,8 @@ class MarketingController extends Controller
         $startOfMonth = $date->copy()->startOfMonth()->toDateString();
         $endOfMonth   = $date->copy()->endOfMonth()->toDateString();
 
+        $msg = 'Price record updated successfully.';
+
         if ($type === 'material') {
             $existing = MaterialPrice::where('product_id', $request->product_id)
                 ->whereBetween('effective_date', [$startOfMonth, $endOfMonth])

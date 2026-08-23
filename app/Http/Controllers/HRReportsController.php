@@ -33,9 +33,13 @@ class HRReportsController extends Controller
             ? $request->to_date 
             : Carbon::now()->toDateString();
 
-        // Overall attendance stats
+        // Overall attendance stats (excluding Remote employees who do not track attendance)
         $totalWorkingDays = $this->getWorkingDays($fromDate, $toDate);
-        $employees = Employee::where('is_active', true)->get();
+        $employees = Employee::where('is_active', true)
+            ->where(function($q) {
+                $q->whereNull('site_assignment')
+                  ->orWhere('site_assignment', '!=', 'Remote');
+            })->get();
 
         $attendanceData = [];
         foreach ($employees as $emp) {
@@ -336,7 +340,11 @@ class HRReportsController extends Controller
             $file = fopen('php://output', 'w');
             fputcsv($file, ['Employee', 'Present', 'Absent', 'Leave', 'Attendance %']);
 
-            $employees = Employee::where('is_active', true)->get();
+            $employees = Employee::where('is_active', true)
+                ->where(function($q) {
+                    $q->whereNull('site_assignment')
+                      ->orWhere('site_assignment', '!=', 'Remote');
+                })->get();
             $totalWorkingDays = $this->getWorkingDays($fromDate, $toDate);
 
             foreach ($employees as $emp) {
