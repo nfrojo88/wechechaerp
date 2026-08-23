@@ -387,23 +387,10 @@ class HRReportsController extends Controller
      */
     private function getAverageHeadcount($fromDate, $toDate)
     {
-        $from = Carbon::parse($fromDate);
-        $to = Carbon::parse($toDate);
-        $monthCount = $from->diffInMonths($to) + 1;
+        $count = Employee::where(function ($q) {
+            $q->where('status', 'active')->orWhereNull('status');
+        })->count();
 
-        $totalHeadcount = 0;
-        for ($i = 0; $i < $monthCount; $i++) {
-            $count = Employee::where('is_active', true)
-                ->where('date_of_joining', '<=', $from->copy()->endOfMonth())
-                ->where(function ($q) use ($from) {
-                    $q->whereNull('termination_date')
-                      ->orWhere('termination_date', '>=', $from->copy()->startOfMonth());
-                })
-                ->count();
-            $totalHeadcount += $count;
-            $from->addMonth();
-        }
-
-        return $monthCount > 0 ? $totalHeadcount / $monthCount : 0;
+        return $count > 0 ? $count : 1;
     }
 }
