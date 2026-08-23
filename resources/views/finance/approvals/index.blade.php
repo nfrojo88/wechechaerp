@@ -33,6 +33,7 @@
                         <span class="badge {{ $activeTab === 'all' ? 'bg-primary text-white' : 'bg-secondary' }} ms-1">{{ $tabCounts['all'] }}</span>
                     </a>
                 </li>
+                @if(!empty($isAdmin) || !empty($isHR))
                 <li class="nav-item">
                     <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'pending_hr' ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'pending_hr', 'page' => 1]) }}">
@@ -40,6 +41,8 @@
                         <span class="badge {{ $activeTab === 'pending_hr' ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1">{{ $tabCounts['pending_hr'] }}</span>
                     </a>
                 </li>
+                @endif
+                @if(!empty($isAdmin) || !empty($isGM))
                 <li class="nav-item">
                     <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'pending_gm' ? 'active shadow-sm bg-info text-white' : 'text-secondary bg-white' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'pending_gm', 'page' => 1]) }}">
@@ -47,6 +50,8 @@
                         <span class="badge {{ $activeTab === 'pending_gm' ? 'bg-white text-info' : 'bg-info text-white' }} ms-1">{{ $tabCounts['pending_gm'] }}</span>
                     </a>
                 </li>
+                @endif
+                @if(!empty($isAdmin) || !empty($isFinance))
                 <li class="nav-item">
                     <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'finance_queue' ? 'active shadow-sm bg-primary text-white' : 'text-secondary bg-white' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'finance_queue', 'page' => 1]) }}">
@@ -54,6 +59,7 @@
                         <span class="badge {{ $activeTab === 'finance_queue' ? 'bg-white text-primary' : 'bg-primary text-white' }} ms-1">{{ $tabCounts['finance_queue'] }}</span>
                     </a>
                 </li>
+                @endif
                 <li class="nav-item">
                     <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'paid' ? 'active shadow-sm bg-success text-white' : 'text-secondary bg-white' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'paid', 'page' => 1]) }}">

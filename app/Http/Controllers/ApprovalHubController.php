@@ -228,6 +228,31 @@ class ApprovalHubController extends Controller
             $items = $items->concat($efs);
         }
 
+        $user = Auth::user();
+        $rolesStr = strtolower(implode(' ', $user ? $user->getRoleNames()->toArray() : []));
+        $isAdmin = $user && ($user->hasAnyRole(['admin', 'global_admin']) || str_contains($rolesStr, 'admin'));
+        $isHR = $user && ($user->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'hr']) || str_contains($rolesStr, 'hr') || $user->can('hr.view'));
+        $isGM = $user && ($user->hasAnyRole(['General Manager', 'general_manager', 'gm']) || str_contains($rolesStr, 'gm'));
+        $isFinance = $user && ($user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance staff', 'finance_staff', 'finance', 'cashier', 'accountant']) || str_contains($rolesStr, 'finance') || str_contains($rolesStr, 'cashier') || str_contains($rolesStr, 'accountant'));
+
+        // Role-based visibility scoping
+        if ($isFinance && !$isAdmin && !$isHR && !$isGM) {
+            // Finance only sees requests approved for finance queue, paid history, and rejected
+            $items = $items->filter(function ($item) {
+                return in_array($item->status_key, ['finance_queue', 'paid', 'rejected']);
+            });
+        } elseif ($isHR && !$isAdmin && !$isGM) {
+            // HR only sees pending HR reviews and approved/rejected history
+            $items = $items->filter(function ($item) {
+                return in_array($item->status_key, ['pending_hr', 'paid', 'rejected', 'finance_queue']);
+            });
+        } elseif ($isGM && !$isAdmin) {
+            // GM only sees pending GM reviews and approved/rejected history
+            $items = $items->filter(function ($item) {
+                return in_array($item->status_key, ['pending_gm', 'finance_queue', 'paid', 'rejected']);
+            });
+        }
+
         // Calculate Tab Counts
         $tabCounts = [
             'all'           => $items->count(),
@@ -238,8 +263,22 @@ class ApprovalHubController extends Controller
             'rejected'      => $items->where('status_key', 'rejected')->count(),
         ];
 
+        // Determine default tab based on role
+        if ($request->has('tab')) {
+            $activeTab = $request->input('tab');
+        } else {
+            if ($isFinance && !$isAdmin && !$isHR && !$isGM) {
+                $activeTab = 'finance_queue';
+            } elseif ($isHR && !$isAdmin && !$isGM) {
+                $activeTab = 'pending_hr';
+            } elseif ($isGM && !$isAdmin) {
+                $activeTab = 'pending_gm';
+            } else {
+                $activeTab = 'all';
+            }
+        }
+
         // Apply Tab Filter
-        $activeTab = $request->input('tab', 'all');
         if ($activeTab !== 'all' && array_key_exists($activeTab, $tabCounts)) {
             $items = $items->where('status_key', $activeTab);
         }
@@ -334,7 +373,11 @@ class ApprovalHubController extends Controller
             'activeTab',
             'chartOfAccounts',
             'bankAccounts',
-            'financeStaff'
+            'financeStaff',
+            'isAdmin',
+            'isHR',
+            'isGM',
+            'isFinance'
         ));
     }
 }
