@@ -913,6 +913,14 @@
             </a>
         </li>
 
+        <!-- Receipts & Verification -->
+        <li class="sidebar-nav-item">
+            <a href="{{ route('delivery-receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('delivery-receipts.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-receipt text-warning"></i>
+                <span>Receipts & Verification</span>
+            </a>
+        </li>
+
         <!-- Reports -->
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
         <li class="sidebar-nav-item">
