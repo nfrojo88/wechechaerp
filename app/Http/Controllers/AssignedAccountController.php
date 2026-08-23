@@ -101,12 +101,17 @@ class AssignedAccountController extends Controller
         $authId = auth()->id();
         
         if ($isFinanceHead) {
-            $accounts = ChartOfAccount::whereNotNull('assigned_to')
-                ->orWhere('assigned_to', $authId)
-                ->orWhere('type', 'asset')
+            // Finance Head sees all accounts that have an assigned custodian
+            $accounts = ChartOfAccount::with('manager')
+                ->whereNotNull('assigned_to')
+                ->orderBy('code')
                 ->get();
         } else {
-            $accounts = ChartOfAccount::where('assigned_to', $authId)->get();
+            // Regular custodian only sees accounts assigned to them
+            $accounts = ChartOfAccount::with('manager')
+                ->where('assigned_to', $authId)
+                ->orderBy('code')
+                ->get();
         }
 
         return view('finance.assigned_accounts.index', compact('accounts', 'isFinanceHead'));

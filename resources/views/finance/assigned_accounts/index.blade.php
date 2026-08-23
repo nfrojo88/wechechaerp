@@ -37,7 +37,7 @@
                                         </small>
                                     @endif
                                 </div>
-                                <div class="p-3 bg-primary bg-opacity-10 rounded-circle text-primary">
+                                <div class="rounded-circle shadow-sm" style="width: 48px; height: 48px; min-width: 48px; display: flex; align-items: center; justify-content: center; background-color: #e0f2fe; color: #0284c7;">
                                     <i class="fas fa-wallet fa-lg"></i>
                                 </div>
                             </div>
