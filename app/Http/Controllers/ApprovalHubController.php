@@ -311,7 +311,9 @@ class ApprovalHubController extends Controller
         $bankAccounts = BankAccount::orderBy('bank_name')->get();
         $financeStaff = User::whereHas('roles', function($q) {
             $q->whereIn('name', ['Finance staff', 'finance_staff', 'Finance head', 'finance_head', 'cashier', 'accountant', 'admin', 'global_admin']);
-        })->orWhere('department', 'like', '%Finance%')->orderBy('name')->get();
+        })->orWhereHas('employee', function($q) {
+            $q->where('department', 'like', '%Finance%');
+        })->orderBy('name')->get();
 
         // Pagination
         $perPage = 20;
