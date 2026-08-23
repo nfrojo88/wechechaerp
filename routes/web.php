@@ -1657,12 +1657,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('weekly-manpower-report', [App\Http\Controllers\WeeklyManpowerReportController::class, 'index'])->name('weekly-manpower.index');
     Route::post('weekly-manpower-report/send-gm', [App\Http\Controllers\WeeklyManpowerReportController::class, 'sendToGM'])->name('weekly-manpower.sendGM');
     Route::get('weekly-manpower-report/export', [App\Http\Controllers\WeeklyManpowerReportController::class, 'exportCSV'])->name('weekly-manpower.export');
-    Route::resource('daily-reports', App\Http\Controllers\DailyReportController::class)->only(['index', 'create', 'store', 'show']);
     Route::get('daily-reports/approval', [App\Http\Controllers\DailyReportController::class, 'approvalDashboard'])->name('daily-reports.approval');
-    Route::post('daily-reports/{dailyReport}/approve', [App\Http\Controllers\DailyReportController::class, 'approve'])->name('daily-reports.approve');
-    Route::post('daily-reports/{dailyReport}/reject', [App\Http\Controllers\DailyReportController::class, 'reject'])->name('daily-reports.reject');
     Route::post('daily-reports/bulk-approve', [App\Http\Controllers\DailyReportController::class, 'bulkApprove'])->name('daily-reports.bulkApprove');
     Route::get('daily-reports/stats/manpower', [App\Http\Controllers\DailyReportController::class, 'getManpowerStats'])->name('daily-reports.manpowerStats');
+    Route::resource('daily-reports', App\Http\Controllers\DailyReportController::class)->only(['index', 'create', 'store', 'show']);
+    Route::post('daily-reports/{dailyReport}/approve', [App\Http\Controllers\DailyReportController::class, 'approve'])->name('daily-reports.approve');
+    Route::post('daily-reports/{dailyReport}/reject', [App\Http\Controllers\DailyReportController::class, 'reject'])->name('daily-reports.reject');
     Route::resource('weekly-reports', App\Http\Controllers\WeeklyReportController::class)->only(['index', 'create', 'store', 'show']);
 
     // ─── Phase 9 Communication ──────────────────────────────────────────────
