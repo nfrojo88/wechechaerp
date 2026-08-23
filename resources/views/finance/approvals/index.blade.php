@@ -221,13 +221,38 @@
                                             @endif
 
                                             <!-- Finance Assign / Pay Action Button -->
-                                            @if(in_array($req->status, [\App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED, \App\Models\ExpenseRequest::STATUS_ASSIGNED]) && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'Finance staff', 'finance_staff', 'admin', 'global_admin'])))
-                                                <button type="button" class="btn btn-primary btn-sm text-white fw-semibold" 
-                                                        data-bs-toggle="modal" 
-                                                        data-bs-target="#financeAssignModal{{ $req->id }}"
-                                                        title="Assign Account or Disburse Payment">
-                                                    <i class="fa-solid fa-money-bill-wave me-1"></i> Assign / Pay
-                                                </button>
+                                            @if(in_array($req->status, [\App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED, \App\Models\ExpenseRequest::STATUS_ASSIGNED, 'Assigned to Finance', 'Approved - Assigned to Finance']))
+                                                @php
+                                                    $authUser = auth()->user();
+                                                    $authRoleNames = strtolower(implode(' ', $authUser->getRoleNames()->toArray()));
+                                                    $isFinHeadOrAdmin = $authUser->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']) 
+                                                        || str_contains($authRoleNames, 'finance_head') 
+                                                        || str_contains($authRoleNames, 'finance_manager') 
+                                                        || str_contains($authRoleNames, 'admin');
+
+                                                    $isAssignedToMe = (
+                                                        $req->assigned_finance_staff_id == $authUser->id ||
+                                                        $req->finance_staff_id == $authUser->id ||
+                                                        ($req->chartOfAccount && $req->chartOfAccount->assigned_to == $authUser->id) ||
+                                                        ($req->coa && $req->coa->assigned_to == $authUser->id)
+                                                    );
+                                                @endphp
+
+                                                @if($isFinHeadOrAdmin)
+                                                    <button type="button" class="btn btn-primary btn-sm text-white fw-semibold" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#financeAssignModal{{ $req->id }}"
+                                                            title="Assign Account or Disburse Payment">
+                                                        <i class="fa-solid fa-money-bill-wave me-1"></i> Assign / Pay
+                                                    </button>
+                                                @elseif($isAssignedToMe)
+                                                    <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#payModal{{ $req->id }}"
+                                                            title="Pay this assigned expense">
+                                                        <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
+                                                    </button>
+                                                @endif
                                             @endif
 
                                             <!-- Paid Indicator Button -->
@@ -554,6 +579,64 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Dedicated Pay Modal for Assigned Finance Staff -->
+        <div class="modal fade" id="payModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                    <form method="POST" action="{{ route('expense-requests.mark-paid', $req->id) }}">
+                        @csrf
+                        <div class="modal-header bg-success text-white border-0 py-3 px-4">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-white bg-opacity-20 text-white p-2 rounded-3 fs-6">
+                                    <i class="fa-solid fa-money-bill-wave"></i>
+                                </span>
+                                <div>
+                                    <h5 class="modal-title fw-bold mb-0">Disburse Payment: {{ $req->request_number }}</h5>
+                                    <span class="text-white-50 small">Amount: <strong>ETB {{ number_format($req->amount, 2) }}</strong> &bull; Requester: <strong>{{ $item->applicant_name }}</strong></span>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body p-4 bg-white">
+                            <div class="p-3 bg-light rounded-3 mb-3 border">
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted small">Requester:</span>
+                                    <span class="fw-bold text-dark">{{ $item->applicant_name }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted small">Category:</span>
+                                    <span class="badge bg-primary-subtle text-primary border">{{ $item->category }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between mb-1">
+                                    <span class="text-muted small">Account:</span>
+                                    <span class="fw-bold text-dark">{{ $req->chartOfAccount->name ?? ($req->coa->name ?? 'Assigned Petty Cash') }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between mt-2 pt-2 border-top">
+                                    <span class="text-muted small fw-bold">Disbursement Amount:</span>
+                                    <span class="fw-bold text-success fs-5">ETB {{ number_format($req->amount, 2) }}</span>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-dark">Payment Reference / Voucher / Txn #</label>
+                                <input type="text" name="payment_reference" class="form-control bg-light border-0 py-2" placeholder="e.g. PV-260823, Cash Voucher #14" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-dark">Payment Notes (Optional)</label>
+                                <textarea name="payment_notes" class="form-control bg-light border-0" rows="2" placeholder="Enter any payment notes or disbursement remarks..."></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light border-0 py-3 px-4">
+                            <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                                <i class="fa-solid fa-circle-check me-1"></i> Confirm Paid (ETB {{ number_format($req->amount, 2) }})
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

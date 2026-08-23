@@ -74,9 +74,12 @@ class ExpenseRequestPolicy
     public function financeAssign(User $user, ExpenseRequest $expenseRequest): bool
     {
         $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
-        $isFinanceHead = $user->hasAnyRole(['finance_head', 'finance_manager']) || str_contains($roleNames, 'finance_head') || str_contains($roleNames, 'finance_manager');
+        $isFinanceHead = $user->hasAnyRole(['finance_head', 'finance_manager', 'Finance head', 'admin', 'global_admin']) 
+            || str_contains($roleNames, 'finance_head') 
+            || str_contains($roleNames, 'finance_manager')
+            || str_contains($roleNames, 'admin');
 
-        return $isFinanceHead && in_array($expenseRequest->status, ['Approved - Assigned to Finance', 'Assigned to Finance']);
+        return $isFinanceHead && in_array($expenseRequest->status, ['Approved - Assigned to Finance', 'Assigned to Finance', ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED]);
     }
 
     /**
@@ -85,9 +88,18 @@ class ExpenseRequestPolicy
     public function markPaid(User $user, ExpenseRequest $expenseRequest): bool
     {
         $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
-        $isFinanceHead = $user->hasAnyRole(['finance_head', 'finance_manager']) || str_contains($roleNames, 'finance_head') || str_contains($roleNames, 'finance_manager');
-        $isAssignedStaff = ($expenseRequest->assigned_finance_staff_id === $user->id || $expenseRequest->finance_staff_id === $user->id);
+        $isFinanceHead = $user->hasAnyRole(['finance_head', 'finance_manager', 'Finance head', 'admin', 'global_admin']) 
+            || str_contains($roleNames, 'finance_head') 
+            || str_contains($roleNames, 'finance_manager')
+            || str_contains($roleNames, 'admin');
 
-        return ($isFinanceHead || $isAssignedStaff) && $expenseRequest->status === 'Assigned to Finance';
+        $isAssignedStaff = (
+            $expenseRequest->assigned_finance_staff_id === $user->id || 
+            $expenseRequest->finance_staff_id === $user->id ||
+            ($expenseRequest->chartOfAccount && $expenseRequest->chartOfAccount->assigned_to === $user->id) ||
+            ($expenseRequest->coa && $expenseRequest->coa->assigned_to === $user->id)
+        );
+
+        return ($isFinanceHead || $isAssignedStaff) && in_array($expenseRequest->status, ['Approved - Assigned to Finance', 'Assigned to Finance', ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED]);
     }
 }
