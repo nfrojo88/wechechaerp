@@ -1057,6 +1057,13 @@ Route::middleware(['auth'])->group(function () {
         try {
             \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
             $output = \Illuminate\Support\Facades\Artisan::output();
+
+            // Clear cached routes, views and config
+            try {
+                \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+                $output .= ' | Route & App Cache Cleared.';
+            } catch (\Throwable $ce) {}
+
             // Reseed roles & permissions in case new ones were added
             try {
                 \Illuminate\Support\Facades\Artisan::call('db:seed', [
@@ -1094,6 +1101,16 @@ Route::middleware(['auth'])->group(function () {
         }
     })->name('system.run-migrations');
 
+    // Dedicated route to clear all route and app caches
+    Route::get('/system/clear-cache', function () {
+        try {
+            \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+            return redirect()->back()->with('success', 'Cache cleared successfully! (Routes, config, views, and cache refreshed)');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Cache clear failed: ' . $e->getMessage());
+        }
+    })->name('system.clear-cache');
+
     // Dedicated route to (re-)seed products
     Route::get('/system/seed-products', function () {
         try {
@@ -1111,7 +1128,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/system/run-migrations', function () {
         try {
             \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-            return back()->with('success', 'Migrations completed successfully.');
+            \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+            return back()->with('success', 'Migrations and cache clearing completed successfully.');
         } catch (\Exception $e) {
             return back()->with('error', 'Migration failed: ' . $e->getMessage());
         }
