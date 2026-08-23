@@ -69,7 +69,8 @@ class DailyReportController extends Controller
         $minManpower = $request->input('min_manpower');
         $maxManpower = $request->input('max_manpower');
 
-        $query = DailyReport::with(['project', 'items', 'createdBy']);
+        $query = DailyReport::with(['project', 'items', 'createdBy'])
+            ->whereHas('createdBy.roles', fn($r) => $r->where('name', 'site_engineer'));
 
         // Filter by status (pending approval)
         if ($status === 'all') {
@@ -193,13 +194,34 @@ class DailyReportController extends Controller
                 'approved_at' => now(),
             ]);
 
-            // Optionally: Update attendance records for that day with manpower data
+            // Automatically create ExpenseRequest for Finance Head upon manpower approval
             if ($dailyReport->total_manpower > 0) {
-                // Sync attendance records if needed
+                $user = auth()->user();
+                $reqNo = 'EXP-MP-' . date('Ymd') . '-' . strtoupper(\Illuminate\Support\Str::random(4));
+                $projectName = $dailyReport->project->project_name ?? $dailyReport->project->name ?? 'Site Project';
+                $reportDateStr = $dailyReport->report_date ? $dailyReport->report_date->format('d M Y') : now()->format('d M Y');
+
+                // Check if expense already created for this daily report to avoid duplication
+                $existingExpense = \App\Models\ExpenseRequest::where('other_reason', 'like', "%Daily Report #{$dailyReport->id}%")->first();
+
+                if (!$existingExpense) {
+                    \App\Models\ExpenseRequest::create([
+                        'request_number' => $reqNo,
+                        'user_id'        => $user->id,
+                        'employee_id'    => $user->employee->id ?? null,
+                        'category'       => \App\Models\ExpenseRequest::CATEGORY_CONTRACT_WORK,
+                        'other_reason'   => "Approved Manpower Expense for Site Daily Report #{$dailyReport->id} ({$projectName})",
+                        'amount'         => 0.00, // Finance Head / Admin can specify rate or amount
+                        'description'    => "Daily Manpower Report approved on {$reportDateStr} by HR Officer.\nProject: {$projectName}\nTotal Manpower: {$dailyReport->total_manpower} workers.\nReported By: " . ($dailyReport->createdBy->name ?? 'Site Engineer') . ".\nNotes: " . ($request->approval_notes ?? 'Approved by HR Officer'),
+                        'status'         => \App\Models\ExpenseRequest::STATUS_ASSIGNED,
+                        'hr_reviewer_id' => $user->id,
+                        'hr_reviewed_at' => now(),
+                    ]);
+                }
             }
         });
 
-        return back()->with('success', 'Daily report approved successfully.');
+        return back()->with('success', 'Daily report approved and manpower expense record sent to Finance Head successfully!');
     }
 
     /**

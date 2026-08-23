@@ -141,15 +141,20 @@
                                 <th>Date</th>
                                 <th>Submitted By</th>
                                 <th class="text-center">
-                                    <i class="fas fa-people-group me-1"></i>Manpower
+                                    <i class="fas fa-people-group me-1"></i>Sent Manpower
                                 </th>
-                                <th>Weather</th>
+                                <th class="text-center">
+                                    <i class="fas fa-tasks me-1"></i>Tasks Breakdown
+                                </th>
                                 <th>Status</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($reports as $report)
+                            @php
+                                $itemWorkers = $report->items->sum('workers_count');
+                            @endphp
                             <tr>
                                 <td>
                                     <input type="checkbox" class="form-check-input report-checkbox" 
@@ -161,20 +166,20 @@
                                     </a>
                                 </td>
                                 <td>
-                                    <small>{{ $report->project->project_name ?? $report->project->name ?? 'N/A' }}</small>
+                                    <small class="fw-bold">{{ $report->project->project_name ?? $report->project->name ?? 'N/A' }}</small>
                                 </td>
                                 <td>{{ $report->report_date->format('M d, Y') }}</td>
                                 <td>
-                                    <small>{{ $report->createdBy->name ?? 'System' }}</small>
+                                    <small><i class="fas fa-user-hard-hat me-1 text-secondary"></i>{{ $report->createdBy->name ?? 'Site Engineer' }}</small>
                                 </td>
                                 <td class="text-center">
-                                    <span class="badge bg-info">{{ $report->total_manpower }} workers</span>
+                                    <span class="badge bg-primary fs-6 px-3 py-1">{{ $report->total_manpower }} Total Sent</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-light text-dark border">{{ $report->items->count() }} Tasks ({{ $itemWorkers }} Allocated)</span>
                                 </td>
                                 <td>
-                                    <small>{{ ucfirst($report->weather_conditions ?? 'N/A') }}</small>
-                                </td>
-                                <td>
-                                    <span class="badge bg-{{ $report->status === 'submitted' ? 'warning' : 'secondary' }}">
+                                    <span class="badge bg-{{ $report->status === 'submitted' ? 'warning text-dark' : 'secondary' }}">
                                         {{ ucfirst($report->status) }}
                                     </span>
                                 </td>
