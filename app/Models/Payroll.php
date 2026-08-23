@@ -136,7 +136,7 @@ class Payroll extends Model
                 return \Carbon\Carbon::parse($item->attendance_date)->toDateString();
             });
 
-        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+        $daysInMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->daysInMonth;
         $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
         $cutoffDay = $isCurrentMonth ? (int)date('j') : $daysInMonth;
 
