@@ -5,34 +5,21 @@
 
     RewriteEngine On
 
-    # ── ZKTeco ADMS Biometric Device: BYPASS ALL REDIRECTS ───────────────────────
-    # The ZKTeco firmware CANNOT follow 301/302 redirects.
-    # These rules MUST come first, before any HTTPS or trailing slash redirects.
+    # ── ZKTeco ADMS Biometric: Pass through WITHOUT any redirect ─────────────────
     RewriteCond %{REQUEST_URI} ^/iclock [NC]
-    RewriteRule ^ - [L,E=HTTPS_SKIP:1]
-
-    # Also skip HTTPS redirect for iclock (cPanel global SSL redirect override)
-    RewriteCond %{REQUEST_URI} ^/iclock [NC]
-    RewriteCond %{HTTPS} off
     RewriteRule ^ - [L]
-
-    # ── HTTPS Enforcement for all other paths (cPanel auto-generated) ────────────
-    # NOTE: iclock/* is excluded above so it stays on HTTP port 80
-    RewriteCond %{REQUEST_URI} !^/iclock [NC]
-    RewriteCond %{HTTPS} off
-    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-    # Redirect Trailing Slashes If Not A Folder (Exclude /iclock)
+    # Redirect Trailing Slashes If Not A Folder
     RewriteCond %{REQUEST_URI} !^/iclock [NC]
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
-    # Send Requests To Front Controller...
+    # Send Requests To Front Controller
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]

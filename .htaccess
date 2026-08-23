@@ -1,7 +1,8 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Direct pass-through for ZKTeco ADMS biometrics endpoints
+    # ── ZKTeco ADMS biometric device: pass directly through to public/ ───────────
+    # IMPORTANT: NO HTTPS redirect for /iclock — ZKTeco firmware cannot follow redirects
     RewriteCond %{REQUEST_URI} ^/iclock [NC]
     RewriteRule ^(.*)$ public/$1 [L]
 
