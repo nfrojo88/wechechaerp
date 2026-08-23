@@ -69,18 +69,15 @@ class TransferController extends Controller
     {
         $transfer->load(['fromStore', 'toStore', 'requestedBy', 'approvedBy', 'driver', 'items.product']);
         
-        // Fetch drivers from Drivers department or with Driver role title
+        // Fetch drivers where department string or role_title contains driver
         $drivers = \App\Models\Employee::where('status', 'active')
             ->where(function($q) {
-                $q->whereHas('department', fn($d) => $d->where('name', 'like', '%driver%'))
-                  ->orWhere('department', 'like', '%driver%')
+                $q->where('department', 'like', '%driver%')
                   ->orWhere('role_title', 'like', '%driver%');
             })->orderBy('full_name')->get();
 
         if ($drivers->isEmpty()) {
-            $drivers = \App\Models\Employee::where('status', 'active')
-                ->where('role_title', 'like', '%driver%')
-                ->orderBy('full_name')->get();
+            $drivers = \App\Models\Employee::where('status', 'active')->orderBy('full_name')->get();
         }
 
         return view('transfers.show', compact('transfer', 'drivers'));

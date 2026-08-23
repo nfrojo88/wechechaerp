@@ -37,7 +37,7 @@
                                 <option value="">— Select Assigned Driver —</option>
                                 @foreach($drivers as $driver)
                                     <option value="{{ $driver->id }}" {{ old('driver_employee_id', $transfer->driver_employee_id) == $driver->id ? 'selected' : '' }}>
-                                        {{ $driver->full_name }} ({{ $driver->department->name ?? $driver->department ?? 'Drivers Dept' }}) — {{ $driver->phone }}
+                                        {{ $driver->full_name }} ({{ $driver->department ?? 'Drivers Dept' }}) — {{ $driver->phone }}
                                     </option>
                                 @endforeach
                             </select>
