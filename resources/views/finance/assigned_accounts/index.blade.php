@@ -2,19 +2,23 @@
 @section('title', 'My Assigned Accounts & Petty Cash')
 @section('content')
 <div class="container-fluid py-3">
+    @php
+        $isViewingAll = !empty($viewAll);
+        $isFinHead = !empty($isFinanceHead);
+    @endphp
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
         <div>
             <h1 class="h3 mb-1 text-dark fw-bold">
-                <i class="fas fa-wallet me-2 text-primary"></i>{{ $viewAll ? 'All Assigned Custodian Accounts' : 'My Assigned Accounts & Petty Cash' }}
+                <i class="fas fa-wallet me-2 text-primary"></i>{{ $isViewingAll ? 'All Assigned Custodian Accounts' : 'My Assigned Accounts & Petty Cash' }}
             </h1>
             <p class="text-muted small mb-0">Manage your petty cash funds, log payments, track expense cycles, and submit replenishment requests to the Finance Head.</p>
         </div>
-        @if($isFinanceHead)
+        @if($isFinHead)
             <div class="btn-group p-1 bg-light rounded-pill border shadow-sm">
-                <a href="{{ route('assigned-accounts.index') }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ !$viewAll ? 'btn-primary shadow-sm' : 'text-muted' }}">
+                <a href="{{ route('assigned-accounts.index') }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ !$isViewingAll ? 'btn-primary shadow-sm' : 'text-muted' }}">
                     <i class="fas fa-user-check me-1"></i> My Accounts
                 </a>
-                <a href="{{ route('assigned-accounts.index', ['view' => 'all']) }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ $viewAll ? 'btn-primary shadow-sm' : 'text-muted' }}">
+                <a href="{{ route('assigned-accounts.index', ['view' => 'all']) }}" class="btn btn-sm rounded-pill px-3 fw-bold {{ $isViewingAll ? 'btn-primary shadow-sm' : 'text-muted' }}">
                     <i class="fas fa-users me-1"></i> All Custodians
                 </a>
             </div>
