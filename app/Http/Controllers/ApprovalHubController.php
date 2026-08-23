@@ -26,7 +26,7 @@ class ApprovalHubController extends Controller
         // 1. Fetch Expense Requests (Employee "Ask Money" Requests)
         $expenseRequests = ExpenseRequest::with([
             'user',
-            'employee.department',
+            'employee',
             'hrReviewer',
             'gmApprover',
             'financeHead',
