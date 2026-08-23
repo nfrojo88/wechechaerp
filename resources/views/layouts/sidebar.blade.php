@@ -437,7 +437,7 @@
             </a>
         </li>
         @endcanany
-        @if(auth()->check() && (auth()->user()->hasAnyRole(['admin', 'global_admin', 'planning_manager', 'planning', 'technical_manager', 'finance_manager', 'finance', 'general_manager', 'gm', 'project_manager']) || auth()->user()->canAny(['finance.budgets.manage', 'finance.*', 'planning.*'])))
+        @if(auth()->check() && (auth()->user()->hasAnyRole(['admin', 'global_admin', 'planning_manager', 'planning', 'technical_manager', 'general_manager', 'gm', 'project_manager']) || auth()->user()->canAny(['finance.budgets.manage', 'planning.*'])))
         <li class="sidebar-nav-item">
             <a href="{{ route('budgets.index') }}" class="sidebar-nav-link {{ request()->routeIs('budgets.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-sack-dollar text-warning"></i>
