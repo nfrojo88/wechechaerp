@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Session Expired — Construct-Pro ERP</title>
+    <title>Session Expired — Wechecha Construction ERP</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -225,8 +225,10 @@
     <div class="particles" id="particles"></div>
 
     <div class="brand-logo">
-        <div class="logo-mark"><i class="fa-solid fa-helmet-safety"></i></div>
-        <span class="logo-text">Construct-Pro ERP</span>
+        <div class="logo-mark" style="overflow:hidden;padding:2px;">
+            <img src="https://res.cloudinary.com/dg1ijsqx6/image/upload/v1785238806/Gemini_Generated_Image_4aap624aap624aap_1_djaxwl.png" alt="Logo" style="width:28px;height:28px;object-fit:contain;">
+        </div>
+        <span class="logo-text">Wechecha Construction ERP</span>
     </div>
 
     <div class="expired-card">

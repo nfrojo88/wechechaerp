@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Log;
 
 class PhonePasswordResetController extends Controller
 {
-    protected $smsService;
+    protected SmsEthiopiaService $smsService;
 
     public function __construct(SmsEthiopiaService $smsService)
     {
@@ -26,7 +26,7 @@ class PhonePasswordResetController extends Controller
     /**
      * Normalize phone number to local (09...) and international (+2519...) formats
      */
-    private function normalizePhone($phone)
+    private function normalizePhone(string $phone): array
     {
         $phone = preg_replace('/[^\d+]/', '', $phone);
         
@@ -164,7 +164,7 @@ class PhonePasswordResetController extends Controller
             return redirect()->route('password.verify')
                 ->with('success', 'Password reset code sent to your phone. Please check your messages.');
         } else {
-            \Log::warning("SMS Failed - Showing OTP for testing", [
+            Log::warning("SMS Failed - Showing OTP for testing", [
                 'phone' => $standardPhone,
                 'otp' => $otp,
                 'error' => $result['message']
@@ -324,7 +324,7 @@ class PhonePasswordResetController extends Controller
         if ($result['success']) {
             return back()->with('success', 'A new code has been sent to your phone number.');
         } else {
-            \Log::warning("SMS Failed - Showing OTP for testing", [
+            Log::warning("SMS Failed - Showing OTP for testing", [
                 'phone' => $phone,
                 'otp' => $otp,
                 'error' => $result['message']
