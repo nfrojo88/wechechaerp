@@ -272,7 +272,7 @@
 <div class="modal fade" id="sendToGmModal" tabindex="-1" aria-labelledby="sendToGmModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content rounded-4 border-0 shadow">
-            <form action="{{ route('reports.attendance.send-gm') }}" method="POST">
+            <form action="{{ Route::has('reports.attendance.send-gm') ? route('reports.attendance.send-gm') : url('/reports/attendance/send-gm') }}" method="POST">
                 @csrf
                 <div class="modal-header border-0 bg-light rounded-top-4 py-3">
                     <h5 class="modal-title fw-bold text-dark" id="sendToGmModalLabel">
