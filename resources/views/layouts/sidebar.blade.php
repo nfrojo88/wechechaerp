@@ -17,10 +17,10 @@
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
         @php
-            $isFinanceHead = auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head']);
+            $isFinanceUser = auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_manager', 'cashier', 'accountant']);
             $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard') ? route('dashboard') : url('/dashboard');
             $dashTitle = 'Dashboard';
-            if ($isFinanceHead) {
+            if ($isFinanceUser) {
                 $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.finance') ? route('dashboard.finance') : url('/dashboard/finance');
                 $dashTitle = 'Finance Dashboard';
             } elseif ($isSecretary) {
@@ -538,8 +538,8 @@
         @endcanany
         @endcanany
 
-        {{-- ── Marketing & Pricing (Hidden from Planning Manager) ─────────────────────────────────────────── --}}
-        @if(auth()->check() && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin', 'finance_manager', 'finance', 'project_manager']) && !auth()->user()->hasAnyRole(['planning_manager', 'planning', 'contract_admin', 'secretary', 'store_keeper']))
+        {{-- ── Marketing & Pricing (Hidden from Planning Manager & Finance Staff) ───────────────────────── --}}
+        @if(auth()->check() && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin']) && !auth()->user()->hasAnyRole(['planning_manager', 'planning', 'contract_admin', 'secretary', 'store_keeper']))
         <li class="sidebar-nav-item sidebar-section-label" style="padding:8px 16px 4px; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; pointer-events:none; user-select:none;">Marketing &amp; Pricing</li>
         <li class="sidebar-nav-item">
             <a href="{{ route('marketing.dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('marketing.dashboard') ? 'active' : '' }}">
@@ -569,8 +569,8 @@
         </li>
         @endif
 
-        {{-- Planning vs Actual (Available to Planning Manager, PMs, Finance, Marketing, Admins) --}}
-        @if(auth()->check() && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin', 'planning_manager', 'planning', 'finance_manager', 'finance', 'project_manager']) && !auth()->user()->hasAnyRole(['contract_admin', 'secretary', 'store_keeper']))
+        {{-- Planning vs Actual (Available to Planning Manager, PMs, Finance Head, Marketing, Admins) --}}
+        @if(auth()->check() && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin', 'planning_manager', 'planning', 'finance_head', 'Finance head', 'project_manager', 'gm', 'general_manager']) && !auth()->user()->hasAnyRole(['contract_admin', 'secretary', 'store_keeper']))
         <li class="sidebar-nav-item">
             <a href="{{ route('marketing.reports.planning-vs-actual') }}" class="sidebar-nav-link {{ request()->routeIs('marketing.reports.planning-vs-actual') ? 'active' : '' }}">
                 <i class="fa-solid fa-scale-balanced text-warning"></i>
@@ -760,7 +760,7 @@
         @endif
 
         {{-- Operational --}}
-        @if(!$isContractAdmin && !$isSecretary && !$isStoreKeeper)
+        @if(!$isContractAdmin && !$isSecretary && !$isStoreKeeper && (!auth()->check() || !auth()->user()->hasAnyRole(['finance', 'Finance', 'cashier', 'accountant'])))
         @canany(['material_usage.view', 'material_usage.*', 'cut_optimization.view_results', 'cut_optimization.*', 'issues.view', 'issues.create', 'issues.resolve', 'issues.*', 'waste.view', 'waste.create', 'waste.*', 'reports.daily.view', 'reports.daily.create', 'reports.weekly.view', 'reports.view', 'reports.*.view'])
 
         @canany(['material_usage.view', 'material_usage.*'])
@@ -862,14 +862,6 @@
         {{-- Finance --}}
         @if(auth()->check() && !auth()->user()->hasRole('site_engineer') && !$isContractAdmin && !$isStoreKeeper && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'admin', 'global_admin']) || auth()->user()->canAny(['finance.chart_of_accounts.view', 'finance.bank.manage', 'finance.income.view', 'finance.income.*', 'finance.expenses.view', 'finance.expenses.approve', 'finance.expenses.create', 'payments.view', 'payments.create', 'payments.approve', 'payments.*', 'subcon.view', 'subcon.create', 'subcon.edit', 'subcon.approve', 'subcon.*', 'finance.ipcs.manage', 'finance.*'])))
 
-        @if(!auth()->user()->hasAnyRole(['Finance head', 'finance_head']))
-        <li class="sidebar-nav-item">
-            <a href="{{ route('dashboard.finance') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.finance') ? 'active' : '' }}">
-                <i class="fa-solid fa-chart-line text-info"></i>
-                <span>Finance Dashboard</span>
-            </a>
-        </li>
-        @endif
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
         <li class="sidebar-nav-item">
             <a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') && !request()->routeIs('coa-transfers.*') ? 'active' : '' }}">
@@ -901,14 +893,6 @@
             <a href="{{ route('payroll.advances') }}" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
                 <span>Salary Advance Loans</span>
-            </a>
-        </li>
-        @endif
-        @if(!auth()->check() || !auth()->user()->hasAnyRole(['Finance head', 'finance_head']))
-        <li class="sidebar-nav-item">
-            <a href="{{ route('budgets.index') }}" class="sidebar-nav-link {{ request()->routeIs('budgets.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-sack-dollar text-warning"></i>
-                <span>Project Budget</span>
             </a>
         </li>
         @endif
