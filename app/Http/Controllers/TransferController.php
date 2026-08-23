@@ -67,18 +67,72 @@ class TransferController extends Controller
 
     public function show(Transfer $transfer)
     {
-        $transfer->load(['fromStore', 'toStore', 'requestedBy', 'approvedBy', 'items.product']);
-        return view('transfers.show', compact('transfer'));
+        $transfer->load(['fromStore', 'toStore', 'requestedBy', 'approvedBy', 'driver', 'items.product']);
+        
+        // Fetch drivers from Drivers department or with Driver role title
+        $drivers = \App\Models\Employee::where('status', 'active')
+            ->where(function($q) {
+                $q->whereHas('department', fn($d) => $d->where('name', 'like', '%driver%'))
+                  ->orWhere('department', 'like', '%driver%')
+                  ->orWhere('role_title', 'like', '%driver%');
+            })->orderBy('full_name')->get();
+
+        if ($drivers->isEmpty()) {
+            $drivers = \App\Models\Employee::where('status', 'active')
+                ->where('role_title', 'like', '%driver%')
+                ->orderBy('full_name')->get();
+        }
+
+        return view('transfers.show', compact('transfer', 'drivers'));
     }
 
-    public function approve(Transfer $transfer)
+    public function approve(Request $request, Transfer $transfer)
+    {
+        $request->validate([
+            'driver_employee_id' => 'required|exists:employees,id',
+            'dispatch_notes'     => 'nullable|string',
+        ]);
+
+        $transfer->update([
+            'status'             => 'approved',
+            'approved_by'        => Auth::id(),
+            'approved_at'        => now(),
+            'driver_employee_id' => $request->driver_employee_id,
+            'dispatch_notes'     => $request->dispatch_notes,
+        ]);
+
+        return back()->with('success', 'Transfer approved and driver assigned successfully.');
+    }
+
+    public function sendToDriver(Request $request, Transfer $transfer)
     {
         $transfer->update([
-            'status'      => 'approved',
-            'approved_by' => Auth::id(),
-            'approved_at' => now(),
+            'status'        => 'dispatched',
+            'dispatched_at' => now(),
         ]);
-        return back()->with('success', 'Transfer approved.');
+
+        // Send SMS to Driver
+        $driver = $transfer->driver;
+        if ($driver && $driver->phone) {
+            try {
+                $fromStoreName = $transfer->fromStore->name ?? 'Main Store';
+                $toStoreName   = $transfer->toStore->name ?? 'Destination Store';
+                $timeSent      = now()->format('d M Y, h:i A');
+
+                $materialsList = $transfer->items->map(function($item) {
+                    return ($item->product->name ?? 'Item') . ' (' . number_format($item->requested_quantity, 2) . ' ' . $item->unit . ')';
+                })->implode(', ');
+
+                $smsMessage = "ConstructPro Dispatch: Transfer #{$transfer->transfer_no} has been assigned to you.\nFrom: {$fromStoreName}\nTo: {$toStoreName}\nTime: {$timeSent}\nItems: {$materialsList}";
+
+                $smsService = app(\App\Services\SmsEthiopiaService::class);
+                $smsService->sendMessage($driver->phone, $smsMessage);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Transfer Driver SMS error: ' . $e->getMessage());
+            }
+        }
+
+        return back()->with('success', 'Transfer dispatched and SMS notification sent to driver successfully!');
     }
 
     public function complete(Transfer $transfer)

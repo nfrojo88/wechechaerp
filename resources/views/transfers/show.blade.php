@@ -19,25 +19,75 @@
                         <tr><th>Required Date</th><td>{{ optional($transfer->required_date)->format('d M Y') ?? '-' }}</td></tr>
                         <tr><th>Reason</th><td>{{ $transfer->reason ?? '-' }}</td></tr>
                         <tr><th>Status</th><td><span class="badge bg-info">{{ str_replace('_',' ', ucfirst($transfer->status)) }}</span></td></tr>
-                        @if($transfer->approvedBy)<tr><th>Approved By</th><td>{{ $transfer->approvedBy->name ?? 'Approver' }} — {{ optional($transfer->approved_at)->format('d M Y') }}</td></tr>@endif
+                        @if($transfer->approvedBy)<tr><th>Approved By</th><td>{{ $transfer->approvedBy->name ?? 'Approver' }} — {{ optional($transfer->approved_at)->format('d M Y, H:i') }}</td></tr>@endif
+                        @if($transfer->driver)<tr><th>Assigned Driver</th><td><span class="fw-bold text-dark">{{ $transfer->driver->full_name }}</span> <small class="text-muted">({{ $transfer->driver->phone }})</small></td></tr>@endif
+                        @if($transfer->dispatched_at)<tr><th>Dispatched At</th><td>{{ $transfer->dispatched_at->format('d M Y, H:i A') }}</td></tr>@endif
+                        @if($transfer->dispatch_notes)<tr><th>Dispatch Notes</th><td>{{ $transfer->dispatch_notes }}</td></tr>@endif
                     </table>
                 </div>
                 @if(in_array($transfer->status, ['draft','pending_approval']))
-                <div class="card-footer d-flex gap-2">
+                <div class="card-footer p-3 bg-light">
                     <form action="{{ route('transfers.approve', $transfer) }}" method="POST">
-                        @csrf <button class="btn btn-success btn-sm"><i class="fas fa-check me-1"></i>Approve</button>
-                    </form>
-                    <form action="{{ route('transfers.reject', $transfer) }}" method="POST" class="d-flex gap-2">
                         @csrf
-                        <input type="text" name="rejection_reason" class="form-control form-control-sm" placeholder="Reason" required>
-                        <button class="btn btn-danger btn-sm"><i class="fas fa-times me-1"></i>Reject</button>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-uppercase text-secondary">
+                                Select Driver <span class="text-danger">*</span>
+                            </label>
+                            <select name="driver_employee_id" class="form-select form-select-sm" required>
+                                <option value="">— Select Assigned Driver —</option>
+                                @foreach($drivers as $driver)
+                                    <option value="{{ $driver->id }}" {{ old('driver_employee_id', $transfer->driver_employee_id) == $driver->id ? 'selected' : '' }}>
+                                        {{ $driver->full_name }} ({{ $driver->department->name ?? $driver->department ?? 'Drivers Dept' }}) — {{ $driver->phone }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-uppercase text-secondary">
+                                Dispatch Notes / Time Info
+                            </label>
+                            <textarea name="dispatch_notes" class="form-control form-control-sm" rows="2" placeholder="Enter store dispatch notes or estimated time of departure...">{{ old('dispatch_notes', $transfer->dispatch_notes) }}</textarea>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-success btn-sm fw-bold">
+                                <i class="fas fa-check me-1"></i>Approve &amp; Assign Driver
+                            </button>
+                    </form>
+                    <form action="{{ route('transfers.reject', $transfer) }}" method="POST" class="d-flex gap-1 flex-fill">
+                        @csrf
+                        <input type="text" name="rejection_reason" class="form-control form-control-sm" placeholder="Reject Reason" required>
+                        <button class="btn btn-danger btn-sm text-nowrap"><i class="fas fa-times me-1"></i>Reject</button>
+                    </form>
+                        </div>
+                </div>
+                @endif
+
+                @if($transfer->status === 'approved')
+                <div class="card-footer p-3 bg-light">
+                    <div class="alert alert-info py-2 px-3 mb-2 small">
+                        <i class="fa-solid fa-circle-info me-1"></i>
+                        <strong>Driver Assigned:</strong> {{ $transfer->driver->full_name ?? 'Driver' }} ({{ $transfer->driver->phone ?? 'N/A' }}). Click below to dispatch and send SMS.
+                    </div>
+                    <form action="{{ route('transfers.send-to-driver', $transfer) }}" method="POST">
+                        @csrf
+                        <button type="submit" class="btn btn-primary fw-bold w-100 shadow-sm">
+                            <i class="fas fa-paper-plane me-2"></i>Send to Driver (Send SMS)
+                        </button>
                     </form>
                 </div>
                 @endif
-                @if($transfer->status === 'approved')
-                <div class="card-footer">
+
+                @if($transfer->status === 'dispatched')
+                <div class="card-footer p-3 bg-light">
+                    <div class="alert alert-success py-2 px-3 mb-2 small">
+                        <i class="fa-solid fa-truck-fast me-1"></i>
+                        <strong>Dispatched:</strong> Materials are currently in transit with {{ $transfer->driver->full_name ?? 'Driver' }}.
+                    </div>
                     <form action="{{ route('transfers.complete', $transfer) }}" method="POST">
-                        @csrf <button class="btn btn-primary btn-sm"><i class="fas fa-check-double me-1"></i>Mark Completed / Received</button>
+                        @csrf 
+                        <button class="btn btn-success btn-sm fw-bold w-100">
+                            <i class="fas fa-check-double me-1"></i>Mark Completed / Received at Store
+                        </button>
                     </form>
                 </div>
                 @endif

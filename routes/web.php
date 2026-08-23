@@ -1294,6 +1294,7 @@ Route::middleware(['auth'])->group(function () {
     
     Route::resource('transfers', App\Http\Controllers\TransferController::class)->except(['edit', 'update', 'destroy']);
     Route::post('transfers/{transfer}/approve', [App\Http\Controllers\TransferController::class, 'approve'])->name('transfers.approve');
+    Route::post('transfers/{transfer}/send-to-driver', [App\Http\Controllers\TransferController::class, 'sendToDriver'])->name('transfers.send-to-driver');
     Route::post('transfers/{transfer}/reject', [App\Http\Controllers\TransferController::class, 'reject'])->name('transfers.reject');
     Route::post('transfers/{transfer}/complete', [App\Http\Controllers\TransferController::class, 'complete'])->name('transfers.complete');
 

@@ -14,12 +14,14 @@ class Transfer extends Model
         'transfer_no', 'physical_slip_no', 'from_store_id', 'to_store_id', 'requested_by',
         'required_date', 'reason', 'status', 'approved_by', 'approved_at',
         'received_by', 'received_at', 'rejection_reason',
+        'driver_employee_id', 'dispatch_notes', 'dispatched_at',
     ];
 
     protected $casts = [
         'required_date' => 'date',
         'approved_at'   => 'datetime',
         'received_at'   => 'datetime',
+        'dispatched_at' => 'datetime',
     ];
 
     public function fromStore()
@@ -45,6 +47,11 @@ class Transfer extends Model
     public function receivedBy()
     {
         return $this->belongsTo(User::class, 'received_by');
+    }
+
+    public function driver()
+    {
+        return $this->belongsTo(Employee::class, 'driver_employee_id');
     }
 
     public function items()
