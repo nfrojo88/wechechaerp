@@ -27,6 +27,105 @@ class ManpowerForecastController extends Controller
     {
         $this->authorize('viewAny', ManpowerForecast::class);
 
+        // Calculate next week range (Monday to Sunday)
+        $nextWeekStart = Carbon::now()->addWeek()->startOfWeek();
+        $nextWeekEnd   = Carbon::now()->addWeek()->endOfWeek();
+
+        // 1. Fetch Approved ERP Plans & Next Week Manpower Breakdown
+        $erpPlans = \App\Models\ErpPlanHeader::with([
+            'project',
+            'approver',
+            'tasks' => function($tq) {
+                $tq->with(['resources' => function($rq) {
+                    $rq->whereIn('resource_type', ['manpower', 'regular_manpower', 'scientific_manpower'])
+                       ->orWhere('resource_type', 'like', '%manpower%');
+                }]);
+            }
+        ])
+        ->where(function($q) {
+            $q->where('status', 'approved')
+              ->orWhereNotNull('approved_at')
+              ->orWhereNotNull('approved_by');
+        })
+        ->get();
+
+        if ($erpPlans->isEmpty()) {
+            $erpPlans = \App\Models\ErpPlanHeader::with([
+                'project',
+                'approver',
+                'tasks' => function($tq) {
+                    $tq->with(['resources' => function($rq) {
+                        $rq->whereIn('resource_type', ['manpower', 'regular_manpower', 'scientific_manpower'])
+                           ->orWhere('resource_type', 'like', '%manpower%');
+                    }]);
+                }
+            ])->latest()->get();
+        }
+
+        $projectManpowerForecasts = [];
+        $totalErpNextWeekHeadcount = 0;
+        $totalErpNextWeekCost = 0;
+
+        foreach ($erpPlans as $plan) {
+            $project = $plan->project;
+            if (!$project) continue;
+
+            $projId = $project->id;
+            if (!isset($projectManpowerForecasts[$projId])) {
+                $projectManpowerForecasts[$projId] = [
+                    'project'         => $project,
+                    'plan'            => $plan,
+                    'plan_title'      => $plan->plan_title ?? $plan->name ?? ("ERP Plan #" . $plan->id),
+                    'approved_by'     => $plan->approver->name ?? 'Planning Manager',
+                    'approved_at'     => $plan->approved_at,
+                    'tasks'           => [],
+                    'manpower_roles'  => [],
+                    'total_headcount' => 0,
+                    'total_cost'      => 0,
+                ];
+            }
+
+            foreach ($plan->tasks as $task) {
+                $taskManpowerList = [];
+                foreach ($task->resources as $res) {
+                    $roleName = trim($res->resource_name);
+                    $qty = (float)$res->quantity;
+                    $cost = (float)$res->total_cost ?: ($qty * (float)$res->rate);
+
+                    if ($qty > 0) {
+                        if (!isset($projectManpowerForecasts[$projId]['manpower_roles'][$roleName])) {
+                            $projectManpowerForecasts[$projId]['manpower_roles'][$roleName] = [
+                                'count' => 0,
+                                'unit'  => $res->unit ?: 'workers',
+                                'cost'  => 0,
+                            ];
+                        }
+                        $projectManpowerForecasts[$projId]['manpower_roles'][$roleName]['count'] += $qty;
+                        $projectManpowerForecasts[$projId]['manpower_roles'][$roleName]['cost'] += $cost;
+
+                        $projectManpowerForecasts[$projId]['total_headcount'] += $qty;
+                        $projectManpowerForecasts[$projId]['total_cost'] += $cost;
+
+                        $totalErpNextWeekHeadcount += $qty;
+                        $totalErpNextWeekCost += $cost;
+
+                        $taskManpowerList[] = "{$roleName} ({$qty} {$res->unit})";
+                    }
+                }
+
+                if (!empty($taskManpowerList)) {
+                    $projectManpowerForecasts[$projId]['tasks'][] = [
+                        'name'             => $task->task_name ?? $task->name ?? ("Task #" . $task->id),
+                        'wbs'              => $task->wbs_code ?? '-',
+                        'start_date'       => $task->start_date,
+                        'end_date'         => $task->end_date,
+                        'manpower_summary' => implode(', ', $taskManpowerList),
+                    ];
+                }
+            }
+        }
+
+        // 2. Custom Manpower Forecasts Query
         $query = ManpowerForecast::with(['project', 'designation', 'assignments']);
 
         if ($request->filled('project_id')) {
@@ -43,21 +142,31 @@ class ManpowerForecastController extends Controller
 
         $forecasts = $query->orderBy('week_starting', 'desc')->paginate(15);
 
-        $projects = Project::where('is_active', true)->orderBy('name')->get();
-        $designations = Designation::where('is_active', true)->get();
+        $projects = Project::where(function($q) {
+            $q->where('status', 'active')->orWhere('status', 'planning');
+        })->orderBy('name')->get();
+
+        $designations = Designation::all();
 
         $stats = [
             'total_forecasts' => ManpowerForecast::count(),
             'pending_approval' => ManpowerForecast::where('status', 'submitted')->count(),
             'this_week' => ManpowerForecast::whereDate('week_starting', Carbon::now()->startOfWeek())->count(),
             'total_headcount_forecast' => ManpowerForecast::sum('forecasted_headcount'),
+            'erp_next_week_headcount' => $totalErpNextWeekHeadcount,
+            'erp_next_week_projects'  => count($projectManpowerForecasts),
         ];
 
         return view('hr-manager.manpower-forecast.index', compact(
             'forecasts',
             'projects',
             'designations',
-            'stats'
+            'stats',
+            'projectManpowerForecasts',
+            'nextWeekStart',
+            'nextWeekEnd',
+            'totalErpNextWeekHeadcount',
+            'totalErpNextWeekCost'
         ));
     }
 

@@ -12,7 +12,7 @@ class ManpowerForecastPolicy
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasRole(['planning_manager', 'hr_manager', 'admin']);
+        return $user->hasAnyRole(['planning_manager', 'hr_manager', 'hr_officer', 'hr', 'admin', 'global_admin', 'gm', 'general_manager']);
     }
 
     /**
@@ -20,7 +20,7 @@ class ManpowerForecastPolicy
      */
     public function view(User $user, ManpowerForecast $forecast): bool
     {
-        return $user->hasRole(['planning_manager', 'hr_manager', 'admin']);
+        return $user->hasAnyRole(['planning_manager', 'hr_manager', 'hr_officer', 'hr', 'admin', 'global_admin', 'gm', 'general_manager']);
     }
 
     /**
@@ -28,7 +28,7 @@ class ManpowerForecastPolicy
      */
     public function create(User $user): bool
     {
-        return $user->hasRole(['planning_manager', 'admin']);
+        return $user->hasAnyRole(['planning_manager', 'hr_manager', 'hr_officer', 'admin', 'global_admin']);
     }
 
     /**
@@ -36,7 +36,7 @@ class ManpowerForecastPolicy
      */
     public function update(User $user, ManpowerForecast $forecast): bool
     {
-        return $user->hasRole(['planning_manager', 'admin']) && $forecast->status === 'draft';
+        return $user->hasAnyRole(['planning_manager', 'hr_manager', 'hr_officer', 'admin', 'global_admin']) && $forecast->status === 'draft';
     }
 
     /**
@@ -44,6 +44,6 @@ class ManpowerForecastPolicy
      */
     public function approve(User $user): bool
     {
-        return $user->hasRole(['hr_manager', 'admin']);
+        return $user->hasAnyRole(['hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']);
     }
 }
