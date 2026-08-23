@@ -83,7 +83,7 @@
             </form>
             @elseif(!$batchSubmitted && !$batchApproved)
             {{-- Recalculate / Sync Button --}}
-            <form method="POST" action="{{ route('finance.payroll.recalculate') }}">
+            <form method="POST" action="{{ url('/finance/payroll/recalculate') }}">
                 @csrf
                 <input type="hidden" name="month" value="{{ $month }}">
                 <input type="hidden" name="year"  value="{{ $year }}">
@@ -97,7 +97,7 @@
             </button>
             @elseif($batchRejected)
             {{-- Recalculate Button on Rejected --}}
-            <form method="POST" action="{{ route('finance.payroll.recalculate') }}">
+            <form method="POST" action="{{ url('/finance/payroll/recalculate') }}">
                 @csrf
                 <input type="hidden" name="month" value="{{ $month }}">
                 <input type="hidden" name="year"  value="{{ $year }}">
@@ -195,7 +195,7 @@
         <h6 class="fw-bold mb-0"><i class="fa-solid fa-table-list text-primary me-2"></i>{{ $period }} Payroll Sheet</h6>
         <div class="d-flex gap-2 align-items-center">
             @if($payrolls->isNotEmpty() && !$batchApproved && !$batchSubmitted)
-            <form method="POST" action="{{ route('finance.payroll.recalculate') }}">
+            <form method="POST" action="{{ url('/finance/payroll/recalculate') }}">
                 @csrf
                 <input type="hidden" name="month" value="{{ $month }}">
                 <input type="hidden" name="year"  value="{{ $year }}">
