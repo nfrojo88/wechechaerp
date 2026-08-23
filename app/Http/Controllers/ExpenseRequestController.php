@@ -118,37 +118,20 @@ class ExpenseRequestController extends Controller
         $isFinanceHead = str_contains($userRoleNames, 'finance_head') || str_contains($userRoleNames, 'finance_manager') || $user->hasAnyRole(['finance_head', 'admin', 'global_admin']);
         $isFinanceStaff = str_contains($userRoleNames, 'finance') || str_contains($userRoleNames, 'cashier') || str_contains($userRoleNames, 'accountant') || $user->hasAnyRole(['admin', 'global_admin']);
 
-        // Smart default tab if tab query param not specified
-        if (!$request->has('tab')) {
-            if ($isHr && ExpenseRequest::where('status', ExpenseRequest::STATUS_PENDING_HR)->count() > 0) {
-                $tab = 'hr_queue';
-            } elseif ($isGm && ExpenseRequest::where('status', ExpenseRequest::STATUS_PENDING_GM)->count() > 0) {
-                $tab = 'gm_queue';
-            } elseif ($isFinanceHead && ExpenseRequest::whereIn('status', [ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED])->count() > 0) {
-                $tab = 'finance_queue';
-            } elseif ($isFinanceStaff && ExpenseRequest::assignedToUser($user->id)->count() > 0) {
-                $tab = 'my_assigned_payments';
-            } else {
-                $tab = 'my_requests';
-            }
-        } else {
-            $tab = $request->query('tab', 'my_requests');
+        // Tab selection (strictly personal requests for Ask Money portal)
+        $tab = $request->query('tab', 'my_requests');
+        if (!in_array($tab, ['my_requests', 'paid_history', 'rejected_history'])) {
+            $tab = 'my_requests';
         }
 
-        // Counters for queue badges
+        // Counters for personal badges
         $counters = [
-            'my_requests' => ExpenseRequest::where('user_id', $user->id)->count(),
-            'hr_queue' => ExpenseRequest::where('status', ExpenseRequest::STATUS_PENDING_HR)->count(),
-            'gm_queue' => ExpenseRequest::where('status', ExpenseRequest::STATUS_PENDING_GM)->count(),
-            'finance_queue' => ExpenseRequest::whereIn('status', [ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED])->count(),
-            'my_assigned_payments' => ExpenseRequest::assignedToUser($user->id)->count(),
-            'paid_history' => ExpenseRequest::paidHistoryForUser($user)->count(),
-            'rejected_history' => ($isHr || $isGm || $isFinanceHead || $user->hasRole('admin'))
-                ? ExpenseRequest::where('status', ExpenseRequest::STATUS_REJECTED)->count()
-                : ExpenseRequest::where('user_id', $user->id)->where('status', ExpenseRequest::STATUS_REJECTED)->count(),
+            'my_requests'      => ExpenseRequest::where('user_id', $user->id)->whereNotIn('status', [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED])->count(),
+            'paid_history'     => ExpenseRequest::where('user_id', $user->id)->where('status', ExpenseRequest::STATUS_PAID)->count(),
+            'rejected_history' => ExpenseRequest::where('user_id', $user->id)->where('status', ExpenseRequest::STATUS_REJECTED)->count(),
         ];
 
-        // Build query based on active tab
+        // Build query for logged-in user's own requests
         $query = ExpenseRequest::with([
             'user',
             'employee',
@@ -163,57 +146,20 @@ class ExpenseRequestController extends Controller
             'chartOfAccount',
             'coa.manager',
             'maintenanceRequest',
-        ]);
+        ])->where('user_id', $user->id);
 
         switch ($tab) {
-            case 'hr_queue':
-                if ($isHr) {
-                    $query->where('status', ExpenseRequest::STATUS_PENDING_HR);
-                } else {
-                    $tab = 'my_requests';
-                    $query->where('user_id', $user->id);
-                }
-                break;
-
-            case 'gm_queue':
-                if ($isGm) {
-                    $query->where('status', ExpenseRequest::STATUS_PENDING_GM);
-                } else {
-                    $tab = 'my_requests';
-                    $query->where('user_id', $user->id);
-                }
-                break;
-
-            case 'finance_queue':
-                if ($isFinanceHead) {
-                    $query->whereIn('status', [ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED]);
-                } else {
-                    $tab = 'my_requests';
-                    $query->where('user_id', $user->id);
-                }
-                break;
-
-            case 'my_assigned_payments':
-                $query->assignedToUser($user->id);
-                break;
-
             case 'paid_history':
-                // Enforce STRICT query-level scoping per Rule 3
-                $query->paidHistoryForUser($user);
+                $query->where('status', ExpenseRequest::STATUS_PAID);
                 break;
 
             case 'rejected_history':
-            case 'rejected':
-                if ($isHr || $isGm || $isFinanceHead || $user->hasRole('admin')) {
-                    $query->where('status', ExpenseRequest::STATUS_REJECTED);
-                } else {
-                    $query->where('user_id', $user->id)->where('status', ExpenseRequest::STATUS_REJECTED);
-                }
+                $query->where('status', ExpenseRequest::STATUS_REJECTED);
                 break;
 
             case 'my_requests':
             default:
-                $query->where('user_id', $user->id);
+                $query->whereNotIn('status', [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED]);
                 break;
         }
 

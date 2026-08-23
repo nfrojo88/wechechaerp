@@ -64,65 +64,18 @@
         <div class="card-header bg-white border-bottom-0 pt-3 px-3">
             <ul class="nav nav-tabs card-header-tabs gap-1">
                 <li class="nav-item">
-                    <a class="nav-link fw-semibold {{ $tab === 'my_requests' ? 'active text-success' : 'text-secondary' }}" 
+                    <a class="nav-link fw-semibold {{ $tab === 'my_requests' ? 'active text-primary fw-bold' : 'text-secondary' }}" 
                        href="{{ route('expense-requests.index', ['tab' => 'my_requests']) }}">
                         <i class="fa-solid fa-user me-1"></i> My Requests 
                         <span class="badge bg-secondary ms-1">{{ $counters['my_requests'] }}</span>
                     </a>
                 </li>
 
-                @if($isHrUser)
                 <li class="nav-item">
-                    <a class="nav-link fw-semibold {{ $tab === 'hr_queue' ? 'active text-warning fw-bold' : 'text-secondary' }}" 
-                       href="{{ route('expense-requests.index', ['tab' => 'hr_queue']) }}">
-                        <i class="fa-solid fa-user-tie me-1"></i> HR Review Queue
-                        @if($counters['hr_queue'] > 0)
-                            <span class="badge bg-warning text-dark ms-1">{{ $counters['hr_queue'] }}</span>
-                        @endif
-                    </a>
-                </li>
-                @endif
-
-                @if($isGmUser)
-                <li class="nav-item">
-                    <a class="nav-link fw-semibold {{ $tab === 'gm_queue' ? 'active text-info fw-bold' : 'text-secondary' }}" 
-                       href="{{ route('expense-requests.index', ['tab' => 'gm_queue']) }}">
-                        <i class="fa-solid fa-user-shield me-1"></i> GM Review Queue (&gt; 5k)
-                        @if($counters['gm_queue'] > 0)
-                            <span class="badge bg-info text-white ms-1">{{ $counters['gm_queue'] }}</span>
-                        @endif
-                    </a>
-                </li>
-                @endif
-
-                @if($isFinanceHeadUser)
-                <li class="nav-item">
-                    <a class="nav-link fw-semibold {{ $tab === 'finance_queue' ? 'active text-primary fw-bold' : 'text-secondary' }}" 
-                       href="{{ route('expense-requests.index', ['tab' => 'finance_queue']) }}">
-                        <i class="fa-solid fa-landmark me-1"></i> Finance Assignment
-                        @if($counters['finance_queue'] > 0)
-                            <span class="badge bg-primary ms-1">{{ $counters['finance_queue'] }}</span>
-                        @endif
-                    </a>
-                </li>
-                @endif
-
-                @if($isFinanceStaffUser || $counters['my_assigned_payments'] > 0)
-                <li class="nav-item">
-                    <a class="nav-link fw-semibold {{ $tab === 'my_assigned_payments' ? 'active text-purple fw-bold' : 'text-secondary' }}" 
-                       href="{{ route('expense-requests.index', ['tab' => 'my_assigned_payments']) }}">
-                        <i class="fa-solid fa-hand-holding-dollar me-1"></i> My Payments Queue
-                        @if($counters['my_assigned_payments'] > 0)
-                            <span class="badge bg-dark ms-1">{{ $counters['my_assigned_payments'] }}</span>
-                        @endif
-                    </a>
-                </li>
-                @endif
-
-                <li class="nav-item">
-                    <a class="nav-link fw-semibold {{ $tab === 'paid_history' ? 'active text-success' : 'text-secondary' }}" 
+                    <a class="nav-link fw-semibold {{ $tab === 'paid_history' ? 'active text-success fw-bold' : 'text-secondary' }}" 
                        href="{{ route('expense-requests.index', ['tab' => 'paid_history']) }}">
-                        <i class="fa-solid fa-receipt me-1"></i> Paid History
+                        <i class="fa-solid fa-circle-check me-1"></i> Paid History
+                        <span class="badge bg-success ms-1">{{ $counters['paid_history'] }}</span>
                     </a>
                 </li>
 
