@@ -102,7 +102,7 @@ class AssignedAccountController extends Controller
         if ($isFinanceHead) {
             $accounts = ChartOfAccount::whereNotNull('assigned_to')
                 ->orWhere('assigned_to', $authId)
-                ->orWhere('category', 'Cash and Bank')
+                ->orWhere('type', 'asset')
                 ->get();
         } else {
             $accounts = ChartOfAccount::where('assigned_to', $authId)->get();
@@ -150,8 +150,8 @@ class AssignedAccountController extends Controller
         $sourceAccounts = ChartOfAccount::where('is_active', true)
             ->where('id', '!=', $account->id)
             ->where(function ($q) {
-                $q->whereIn('type', ['asset', 'bank', 'cash'])
-                  ->orWhere('category', 'Cash and Bank');
+                $q->where('type', 'asset')
+                  ->orWhereIn('subtype', ['cash_and_bank', 'current_asset', 'bank', 'cash']);
             })
             ->orderBy('name')
             ->get();
