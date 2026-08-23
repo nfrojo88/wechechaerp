@@ -72,20 +72,20 @@
     <div class="row g-3 mb-4">
         <!-- 1. Current Balance Card -->
         <div class="col-md-4">
-            <div class="card shadow-sm border-0 rounded-4 h-100 bg-gradient text-white" style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);">
+            <div class="card shadow-sm border-0 rounded-4 h-100 bg-white">
                 <div class="card-body p-4 d-flex flex-column justify-content-between">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <span class="text-uppercase small fw-bold text-white-50 letter-spacing">Current Balance</span>
-                            <h2 class="fw-bold display-6 mb-0 mt-1">ETB {{ number_format($account->current_balance, 2) }}</h2>
+                            <span class="text-uppercase small fw-bold text-primary">Current Balance</span>
+                            <h2 class="fw-bold text-dark display-6 mb-0 mt-1">ETB {{ number_format($account->current_balance, 2) }}</h2>
                         </div>
-                        <div class="p-3 bg-white bg-opacity-20 rounded-circle text-white">
+                        <div class="rounded-circle shadow-sm" style="width: 56px; height: 56px; min-width: 56px; display: flex; align-items: center; justify-content: center; background-color: #e0f2fe; color: #0284c7;">
                             <i class="fas fa-vault fa-2x"></i>
                         </div>
                     </div>
-                    <div class="pt-3 mt-3 border-top border-white border-opacity-20 d-flex justify-content-between align-items-center text-white-50 small">
-                        <span>Account Type: <strong>{{ ucfirst($account->type) }}</strong></span>
-                        <span>{{ $account->code }}</span>
+                    <div class="pt-3 mt-3 border-top d-flex justify-content-between align-items-center small text-muted">
+                        <span>Account Type: <strong class="text-dark">{{ ucfirst($account->type) }}</strong></span>
+                        <span class="badge bg-secondary-subtle text-secondary border">Code: {{ $account->code }}</span>
                     </div>
                 </div>
             </div>
@@ -100,7 +100,7 @@
                             <span class="text-uppercase small fw-bold text-danger">Expenses Since Last Replenishment</span>
                             <h2 class="fw-bold text-danger display-6 mb-0 mt-1">ETB {{ number_format($unreplenishedExpensesTotal, 2) }}</h2>
                         </div>
-                        <div class="p-3 bg-danger bg-opacity-10 text-danger rounded-circle">
+                        <div class="rounded-circle shadow-sm" style="width: 56px; height: 56px; min-width: 56px; display: flex; align-items: center; justify-content: center; background-color: #fee2e2; color: #dc2626;">
                             <i class="fas fa-receipt fa-2x"></i>
                         </div>
                     </div>
@@ -133,14 +133,14 @@
                                 <p class="text-muted small mb-0">Tracking from fund initialization.</p>
                             @endif
                         </div>
-                        <div class="p-3 bg-success bg-opacity-10 text-success rounded-circle">
+                        <div class="rounded-circle shadow-sm" style="width: 56px; height: 56px; min-width: 56px; display: flex; align-items: center; justify-content: center; background-color: #dcfce7; color: #16a34a;">
                             <i class="fas fa-hand-holding-dollar fa-2x"></i>
                         </div>
                     </div>
                     <div class="pt-3 mt-3 border-top d-flex justify-content-between align-items-center small text-muted">
                         @if($lastFulfilled)
-                            <span>Source: <strong>{{ $lastFulfilled->sourceCoa->name ?? 'Bank/Cash' }}</strong></span>
-                            <span>#{{ $lastFulfilled->request_no }}</span>
+                            <span>Source: <strong class="text-dark">{{ $lastFulfilled->sourceCoa->name ?? 'Bank/Cash' }}</strong></span>
+                            <span class="badge bg-light text-dark border">#{{ $lastFulfilled->request_no }}</span>
                         @else
                             <span>Next ask will track all expenses to date</span>
                             <span class="badge bg-secondary-subtle text-secondary">Cycle 1</span>
@@ -167,7 +167,7 @@
                         <div class="row g-3">
                             <div class="col-md-6">
                                 <label class="form-label text-muted small fw-bold text-uppercase">Transaction Type</label>
-                                <select name="type" class="form-select bg-light border-0 py-2" required>
+                                <select name="type" class="form-select bg-light border-0 py-2 text-dark fw-semibold" required>
                                     <option value="payment" selected>Payment (Out / Expense)</option>
                                     <option value="receipt">Receipt (In / Cash In)</option>
                                 </select>
@@ -175,13 +175,13 @@
                             <div class="col-md-6">
                                 <label class="form-label text-muted small fw-bold text-uppercase">Amount (ETB)</label>
                                 <div class="input-group">
-                                    <span class="input-group-text bg-light border-0">ETB</span>
-                                    <input type="number" step="0.01" min="0.01" name="amount" class="form-control bg-light border-0 py-2 fw-bold" placeholder="0.00" required>
+                                    <span class="input-group-text bg-light border-0 fw-bold text-dark">ETB</span>
+                                    <input type="number" step="0.01" min="0.01" name="amount" class="form-control bg-light border-0 py-2 fw-bold text-dark" placeholder="0.00" required>
                                 </div>
                             </div>
                             <div class="col-md-12">
                                 <label class="form-label text-muted small fw-bold text-uppercase">Target Expense / Offsetting Account</label>
-                                <select name="target_account_id" class="form-select bg-light border-0 py-2" required>
+                                <select name="target_account_id" class="form-select bg-light border-0 py-2 text-dark" required>
                                     <option value="">Select target account (e.g. Office Supplies, Site Fuel, Repairs)...</option>
                                     @foreach($targetAccounts as $target)
                                         <option value="{{ $target->id }}">[{{ $target->code }}] {{ $target->name }} ({{ ucfirst($target->type) }})</option>
@@ -190,15 +190,15 @@
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label text-muted small fw-bold text-uppercase">Reference / Receipt No</label>
-                                <input type="text" name="reference" class="form-control bg-light border-0 py-2" placeholder="e.g. REC-9921, Cash Voucher #12">
+                                <input type="text" name="reference" class="form-control bg-light border-0 py-2 text-dark" placeholder="e.g. REC-9921, Cash Voucher #12">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label text-muted small fw-bold text-uppercase">Date</label>
-                                <input type="text" class="form-control bg-light border-0 py-2 text-muted" value="{{ now()->format('M d, Y') }}" readonly>
+                                <input type="text" class="form-control bg-light border-0 py-2 text-dark fw-semibold" value="{{ now()->format('M d, Y') }}" readonly>
                             </div>
                             <div class="col-md-12">
                                 <label class="form-label text-muted small fw-bold text-uppercase">Description / Purpose</label>
-                                <textarea name="description" class="form-control bg-light border-0" rows="3" placeholder="Explain the expense details (e.g., Purchased emergency plumbing fittings for block B, fuel for generator...)" required></textarea>
+                                <textarea name="description" class="form-control bg-light border-0 text-dark" rows="3" placeholder="Explain the expense details (e.g., Purchased emergency plumbing fittings for block B, fuel for generator...)" required></textarea>
                             </div>
                             <div class="col-md-12 text-end pt-2">
                                 <button type="submit" class="btn btn-success rounded-pill px-4 shadow-sm fw-bold">
