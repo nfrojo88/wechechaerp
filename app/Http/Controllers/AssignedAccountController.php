@@ -93,28 +93,30 @@ class AssignedAccountController extends Controller
         }
     }
 
-    public function index()
+    public function index(Request $request)
     {
         self::ensureSchema();
 
         $isFinanceHead = $this->isFinanceHeadUser();
         $authId = auth()->id();
         
-        if ($isFinanceHead) {
-            // Finance Head sees all accounts that have an assigned custodian
+        $viewAll = $isFinanceHead && $request->input('view') === 'all';
+
+        if ($viewAll) {
+            // Finance Head viewing all accounts assigned across company
             $accounts = ChartOfAccount::with('manager')
                 ->whereNotNull('assigned_to')
                 ->orderBy('code')
                 ->get();
         } else {
-            // Regular custodian only sees accounts assigned to them
+            // Strictly show ONLY the accounts assigned to the logged-in user
             $accounts = ChartOfAccount::with('manager')
                 ->where('assigned_to', $authId)
                 ->orderBy('code')
                 ->get();
         }
 
-        return view('finance.assigned_accounts.index', compact('accounts', 'isFinanceHead'));
+        return view('finance.assigned_accounts.index', compact('accounts', 'isFinanceHead', 'viewAll'));
     }
 
     public function show(int|string $id, Request $request)
