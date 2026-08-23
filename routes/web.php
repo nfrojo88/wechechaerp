@@ -1410,6 +1410,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('attendance/device-logs', [App\Http\Controllers\AttendanceController::class, 'deviceLogs'])->name('attendance.deviceLogs');
     Route::post('attendance/zkteco-sync', [App\Http\Controllers\AttendanceController::class, 'syncZkteco'])->name('attendance.zkteco-sync');
     Route::get('attendance/zkteco-status', [App\Http\Controllers\AttendanceController::class, 'zktecoStatus'])->name('attendance.zkteco-status');
+    Route::get('attendance/machine-test', [App\Http\Controllers\AttendanceController::class, 'machineTest'])->name('attendance.machine-test');
+    Route::post('attendance/simulate-punch', [App\Http\Controllers\AttendanceController::class, 'simulateTestPunch'])->name('attendance.simulate-punch');
+    Route::post('attendance/clear-test-logs', [App\Http\Controllers\AttendanceController::class, 'clearTestLogs'])->name('attendance.clear-test-logs');
 
     Route::get('employees/pending-approval', [App\Http\Controllers\EmployeeController::class, 'pendingApproval'])->name('employees.pending-approval');
     Route::post('employees/bulk-approve', [App\Http\Controllers\EmployeeController::class, 'bulkApprove'])->name('employees.bulk-approve');

@@ -11,8 +11,11 @@
             <p class="text-muted mt-1 mb-0">Live connection status and heartbeat monitoring</p>
         </div>
         <div class="d-flex gap-2">
+            <a href="{{ route('attendance.machine-test') }}" class="btn btn-primary">
+                <i class="fa-solid fa-satellite-dish me-1"></i>Machine Test Console
+            </a>
             <a href="/iclock/debug.php" target="_blank" class="btn btn-warning">
-                <i class="fa-solid fa-bug me-1"></i>Live Connection Debugger
+                <i class="fa-solid fa-bug me-1"></i>Live Debugger
             </a>
             <a href="{{ route('attendance.deviceLogs') }}" class="btn btn-outline-secondary">
                 <i class="fa-solid fa-list me-1"></i>Device Logs

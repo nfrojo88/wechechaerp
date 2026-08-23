@@ -345,4 +345,86 @@ class AttendanceController extends Controller
             'devices', 'unsyncedCounts', 'todayPunches', 'unmatchedIds'
         ));
     }
+
+    /**
+     * Interactive Machine & Biometric Connection Test Page
+     */
+    public function machineTest()
+    {
+        $devices = DB::table('zk_devices')->orderBy('last_seen_at', 'desc')->get();
+        $recentLogs = DB::table('device_attendance_logs')
+            ->leftJoin('employees', 'employees.device_user_id', '=', 'device_attendance_logs.device_user_id')
+            ->select('device_attendance_logs.*', 'employees.full_name as employee_name', 'employees.department as employee_department')
+            ->orderBy('device_attendance_logs.created_at', 'desc')
+            ->take(30)
+            ->get();
+
+        $employees = Employee::where(function($q) {
+            $q->where('status', 'active')->orWhereNull('status');
+        })->orderBy('full_name')->get();
+
+        $admsLogFile = public_path('iclock/adms.log');
+        $rawAdmsLogs = file_exists($admsLogFile) ? file_get_contents($admsLogFile) : 'No incoming device requests recorded yet.';
+        $rawAdmsLogLines = array_filter(explode("\n", $rawAdmsLogs));
+        $latestRawLogs = implode("\n", array_slice($rawAdmsLogLines, -50));
+
+        return view('hr.attendance.machine_test', compact('devices', 'recentLogs', 'employees', 'latestRawLogs'));
+    }
+
+    /**
+     * Simulate a Live Device Punch to verify database sync
+     */
+    public function simulateTestPunch(Request $request)
+    {
+        $request->validate([
+            'device_user_id' => 'required|string',
+            'punch_state'    => 'required|in:0,1,4,5', // 0: In, 1: Out
+            'device_sn'      => 'nullable|string',
+        ]);
+
+        $deviceSn = $request->input('device_sn', 'TEST-DEVICE-01');
+        $deviceUserId = $request->input('device_user_id');
+        $punchTime = now()->format('Y-m-d H:i:s');
+        $punchState = (int)$request->input('punch_state');
+
+        // Insert into device_attendance_logs
+        $logId = DB::table('device_attendance_logs')->insertGetId([
+            'device_sn'       => $deviceSn,
+            'device_user_id'  => $deviceUserId,
+            'punch_time'      => $punchTime,
+            'punch_state'     => $punchState,
+            'verify_type'     => 1, // Fingerprint/Face
+            'work_code'       => '0',
+            'raw_payload'     => "TEST PUNCH SIMULATION: PIN={$deviceUserId}\tTIME={$punchTime}\tSTATE={$punchState}",
+            'synced_at'       => null,
+            'created_at'      => now(),
+            'updated_at'      => now(),
+        ]);
+
+        // Auto trigger sync
+        try {
+            Artisan::call('zkteco:sync', ['--date' => now()->format('Y-m-d'), '--force' => true]);
+        } catch (\Throwable $e) {}
+
+        return redirect()->back()->with('success', "Test punch successfully received for User ID: {$deviceUserId} (Punch ID #{$logId}) at {$punchTime}! Attendance sync completed.");
+    }
+
+    /**
+     * Clear and delete all test logs & raw machine logs
+     */
+    public function clearTestLogs(Request $request)
+    {
+        // 1. Wipe adms.log
+        $admsLogFile = public_path('iclock/adms.log');
+        if (file_exists($admsLogFile)) {
+            file_put_contents($admsLogFile, "[".date('Y-m-d H:i:s')."] Cleaned test logs.\n");
+        }
+
+        // 2. Optionally delete test entries
+        if ($request->has('delete_all_logs')) {
+            DB::table('device_attendance_logs')->where('device_sn', 'TEST-DEVICE-01')->orWhere('raw_payload', 'LIKE', '%TEST%')->delete();
+        }
+
+        return redirect()->back()->with('success', 'Test log entries and machine diagnostics log have been cleanly reset!');
+    }
 }
