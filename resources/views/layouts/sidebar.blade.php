@@ -928,15 +928,7 @@
                 <span>Expenses</span>
             </a>
         </li>
-        <!-- Payroll (Finance Head) -->
-        @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
-        <li class="sidebar-nav-item">
-            <a href="{{ route('payroll.dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('payroll.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-money-bill-wave text-success"></i>
-                <span>Payroll</span>
-            </a>
-        </li>
-        @endif
+
         <!-- Reports -->
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
         <li class="sidebar-nav-item">
