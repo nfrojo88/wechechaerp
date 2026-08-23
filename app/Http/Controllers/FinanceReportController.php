@@ -228,7 +228,7 @@ class FinanceReportController extends Controller
 
         $query = JournalEntryLine::with(['journalEntry.creator', 'account'])
             ->join('journal_entries', 'journal_entry_lines.journal_entry_id', '=', 'journal_entries.id')
-            ->select('journal_entry_lines.*', 'journal_entries.entry_date', 'journal_entries.reference', 'journal_entries.description as je_description', 'journal_entries.created_by')
+            ->select('journal_entry_lines.*', 'journal_entries.entry_date', 'journal_entries.entry_no as reference', 'journal_entries.description as je_description', 'journal_entries.created_by')
             ->orderBy('journal_entries.entry_date', 'desc')
             ->orderBy('journal_entries.id', 'desc');
 
