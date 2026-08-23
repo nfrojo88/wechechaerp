@@ -307,7 +307,7 @@ class ApprovalHubController extends Controller
         $projects = Project::orderBy('name')->get();
 
         // Finance Accounts & Staff for action modals
-        $chartOfAccounts = ChartOfAccount::where('is_active', true)->orderBy('name')->get();
+        $chartOfAccounts = ChartOfAccount::with('manager')->where('is_active', true)->orderBy('name')->get();
         $bankAccounts = BankAccount::orderBy('bank_name')->get();
         $financeStaff = User::whereHas('roles', function($q) {
             $q->whereIn('name', ['Finance staff', 'finance_staff', 'Finance head', 'finance_head', 'cashier', 'accountant', 'admin', 'global_admin']);

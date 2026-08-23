@@ -91,7 +91,7 @@
                     <select name="project" class="form-select form-select-sm">
                         <option value="all">All Projects & Depts</option>
                         @foreach($projects as $p)
-                            <option value="{{ $p->name }}" @selected(request('project') == $p->name)>{{ $p->name }}</option>
+                            <option value="{{ $p->name }}" {{ request('project') == $p->name ? 'selected' : '' }}>{{ $p->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -101,7 +101,7 @@
                     <select name="category" class="form-select form-select-sm">
                         <option value="all">All Categories</option>
                         @foreach($categories as $cat)
-                            <option value="{{ $cat }}" @selected(request('category') == $cat)>{{ $cat }}</option>
+                            <option value="{{ $cat }}" {{ request('category') == $cat ? 'selected' : '' }}>{{ $cat }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -490,25 +490,40 @@
                                     @csrf
                                     <div class="mb-3">
                                         <label class="form-label small fw-bold text-dark">Chart of Account (COA) <span class="text-danger">*</span></label>
-                                        <select name="coa_id" class="form-select form-select-sm bg-white" required>
-                                            <option value="">Select COA Account...</option>
+                                        <select name="coa_id" 
+                                                id="coaSelect{{ $req->id }}"
+                                                class="form-select form-select-sm bg-white" 
+                                                onchange="autoSelectFinanceStaff(this, {{ $req->id }})"
+                                                required>
+                                            <option value="" data-staff-id="" data-staff-name="">-- Select COA Account --</option>
                                             @foreach($chartOfAccounts as $coa)
-                                                <option value="{{ $coa->id }}" @selected($req->coa_id == $coa->id || $req->chart_of_account_id == $coa->id)>
+                                                @php
+                                                    $isSelected = ($req->coa_id == $coa->id || $req->chart_of_account_id == $coa->id);
+                                                    $assignedStaffId = $coa->assigned_to ?? '';
+                                                    $assignedStaffName = $coa->manager->name ?? '';
+                                                @endphp
+                                                <option value="{{ $coa->id }}" 
+                                                        data-staff-id="{{ $assignedStaffId }}" 
+                                                        data-staff-name="{{ $assignedStaffName }}"
+                                                        {{ $isSelected ? 'selected' : '' }}>
                                                     {{ $coa->code }} - {{ $coa->name }}
                                                 </option>
                                             @endforeach
                                         </select>
                                     </div>
                                     <div class="mb-3">
-                                        <label class="form-label small fw-bold text-dark">Assign Finance Staff</label>
-                                        <select name="assigned_finance_staff_id" class="form-select form-select-sm bg-white">
-                                            <option value="">Auto-assign or Select Staff...</option>
+                                        <label class="form-label small fw-bold text-dark">Assigned Finance Staff</label>
+                                        <select name="assigned_finance_staff_id" 
+                                                id="financeStaffSelect{{ $req->id }}" 
+                                                class="form-select form-select-sm bg-white">
+                                            <option value="">Auto-assigned from COA or Select Staff...</option>
                                             @foreach($financeStaff as $st)
-                                                <option value="{{ $st->id }}" @selected($req->assigned_finance_staff_id == $st->id || $req->finance_staff_id == $st->id)>
+                                                <option value="{{ $st->id }}" {{ ($req->assigned_finance_staff_id == $st->id || $req->finance_staff_id == $st->id) ? 'selected' : '' }}>
                                                     {{ $st->name }}
                                                 </option>
                                             @endforeach
                                         </select>
+                                        <div id="autoStaffBadge{{ $req->id }}" class="mt-2" style="display: none;"></div>
                                     </div>
                                     <button type="submit" class="btn btn-outline-primary btn-sm w-100 rounded-3 py-2 fw-semibold">
                                         <i class="fa-solid fa-floppy-disk me-1"></i> Save Assignment
@@ -544,6 +559,48 @@
         </div>
     @endif
 @endforeach
+
+<script>
+/**
+ * Automatically select the assigned staff member custodian linked to the selected COA account
+ */
+function autoSelectFinanceStaff(selectEl, requestId) {
+    const selectedOption = selectEl.options[selectEl.selectedIndex];
+    if (!selectedOption) return;
+
+    const staffId = selectedOption.getAttribute('data-staff-id');
+    const staffName = selectedOption.getAttribute('data-staff-name');
+    const staffSelect = document.getElementById('financeStaffSelect' + requestId);
+    const badgeEl = document.getElementById('autoStaffBadge' + requestId);
+
+    if (staffSelect) {
+        if (staffId && staffId !== '') {
+            staffSelect.value = staffId;
+            if (badgeEl) {
+                badgeEl.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" style="font-size: .75rem;"><i class="fa-solid fa-link me-1"></i>Auto-assigned from COA: <strong>' + (staffName || 'Staff #' + staffId) + '</strong></span>';
+                badgeEl.style.display = 'block';
+            }
+        } else {
+            if (badgeEl) {
+                badgeEl.style.display = 'none';
+            }
+        }
+    }
+}
+
+// Auto-trigger on modal open to reflect current COA custodian
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[id^="financeAssignModal"]').forEach(function (modal) {
+        modal.addEventListener('shown.bs.modal', function () {
+            const coaSelect = modal.querySelector('select[name="coa_id"]');
+            if (coaSelect && coaSelect.selectedIndex > 0) {
+                const reqId = modal.id.replace('financeAssignModal', '');
+                autoSelectFinanceStaff(coaSelect, reqId);
+            }
+        });
+    });
+});
+</script>
 
 <style>
 /* Clean custom styles for Expense Track table */
