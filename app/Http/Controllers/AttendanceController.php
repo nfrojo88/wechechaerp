@@ -383,19 +383,29 @@ class AttendanceController extends Controller
         ]);
 
         $deviceSn = $request->input('device_sn', 'TEST-DEVICE-01');
-        $deviceUserId = $request->input('device_user_id');
+        $deviceUserId = (string)$request->input('device_user_id');
         $punchTime = now()->format('Y-m-d H:i:s');
-        $punchState = (int)$request->input('punch_state');
+        $punchState = (string)$request->input('punch_state', '0');
 
-        // Insert into device_attendance_logs
+        $emp = Employee::where('device_user_id', $deviceUserId)
+            ->orWhere('id', $deviceUserId)
+            ->first();
+
+        if ($emp && empty($emp->device_user_id)) {
+            $emp->device_user_id = $deviceUserId;
+            $emp->save();
+        }
+
+        $fullName = $emp ? $emp->full_name : null;
+
+        // Insert into device_attendance_logs matching exact schema
         $logId = DB::table('device_attendance_logs')->insertGetId([
             'device_sn'       => $deviceSn,
             'device_user_id'  => $deviceUserId,
             'punch_time'      => $punchTime,
-            'punch_state'     => $punchState,
-            'verify_type'     => 1, // Fingerprint/Face
-            'work_code'       => '0',
-            'raw_payload'     => "TEST PUNCH SIMULATION: PIN={$deviceUserId}\tTIME={$punchTime}\tSTATE={$punchState}",
+            'status'          => $punchState,
+            'verify_mode'     => '1',
+            'full_name'       => $fullName,
             'synced_at'       => null,
             'created_at'      => now(),
             'updated_at'      => now(),
@@ -406,7 +416,7 @@ class AttendanceController extends Controller
             Artisan::call('zkteco:sync', ['--date' => now()->format('Y-m-d'), '--force' => true]);
         } catch (\Throwable $e) {}
 
-        return redirect()->back()->with('success', "Test punch successfully received for User ID: {$deviceUserId} (Punch ID #{$logId}) at {$punchTime}! Attendance sync completed.");
+        return redirect()->back()->with('success', "Test punch successfully received for " . ($fullName ? "{$fullName} (PIN: {$deviceUserId})" : "User PIN #{$deviceUserId}") . " [Punch Log #{$logId}] at {$punchTime}! Attendance synced.");
     }
 
     /**
@@ -420,9 +430,9 @@ class AttendanceController extends Controller
             file_put_contents($admsLogFile, "[".date('Y-m-d H:i:s')."] Cleaned test logs.\n");
         }
 
-        // 2. Optionally delete test entries
+        // 2. Delete test entries
         if ($request->has('delete_all_logs')) {
-            DB::table('device_attendance_logs')->where('device_sn', 'TEST-DEVICE-01')->orWhere('raw_payload', 'LIKE', '%TEST%')->delete();
+            DB::table('device_attendance_logs')->where('device_sn', 'TEST-DEVICE-01')->delete();
         }
 
         return redirect()->back()->with('success', 'Test log entries and machine diagnostics log have been cleanly reset!');
