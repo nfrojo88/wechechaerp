@@ -117,32 +117,90 @@ class Payroll extends Model
     }
 
     /**
-     * Calculate unexcused absences (days absent without an approved leave request).
+     * Calculate unexcused absences (explicit absent days, half days, and unrecorded workdays without approved leave).
+     * Daily deduction rate = Basic Salary / 30 per missed day.
      */
     public static function calculateUnexcusedAbsences(int $employeeId, int $month, int $year): array
     {
-        $absentRecords = Attendance::where('employee_id', $employeeId)
+        $employee = Employee::find($employeeId);
+        if (!$employee) {
+            return ['days' => 0, 'dates' => []];
+        }
+
+        // Find all attendance records for this employee in this month/year
+        $attendances = Attendance::where('employee_id', $employeeId)
             ->whereYear('attendance_date', $year)
             ->whereMonth('attendance_date', $month)
-            ->where('status', 'absent')
-            ->get();
+            ->get()
+            ->keyBy(function($item) {
+                return \Carbon\Carbon::parse($item->attendance_date)->toDateString();
+            });
 
-        $unexcusedDays = 0;
-        foreach ($absentRecords as $att) {
-            $date = $att->attendance_date;
+        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+        $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
+        $cutoffDay = $isCurrentMonth ? (int)date('j') : $daysInMonth;
+
+        // Start day (if employee joined during this month)
+        $startDay = 1;
+        if ($employee->date_of_joining) {
+            $joinDate = \Carbon\Carbon::parse($employee->date_of_joining);
+            if ($joinDate->year == $year && $joinDate->month == $month) {
+                $startDay = (int) $joinDate->day;
+            } elseif ($joinDate->year > $year || ($joinDate->year == $year && $joinDate->month > $month)) {
+                // Employee hadn't joined yet in this period
+                return ['days' => 0, 'dates' => []];
+            }
+        }
+
+        $unexcusedDays = 0.0;
+        $absentDates = [];
+
+        for ($day = $startDay; $day <= $cutoffDay; $day++) {
+            $dateStr = sprintf('%04d-%02d-%02d', $year, $month, $day);
+            $carbonDate = \Carbon\Carbon::createFromDate($year, $month, $day);
+
+            // Skip Sundays (standard weekly rest day)
+            if ($carbonDate->isSunday()) {
+                continue;
+            }
+
+            // Check if there is an approved leave request covering this date
             $hasApprovedLeave = LeaveRequest::where('employee_id', $employeeId)
                 ->where('status', 'approved')
-                ->whereDate('start_date', '<=', $date)
-                ->whereDate('end_date', '>=', $date)
+                ->whereDate('start_date', '<=', $dateStr)
+                ->whereDate('end_date', '>=', $dateStr)
                 ->exists();
 
-            if (!$hasApprovedLeave) {
-                $unexcusedDays++;
+            if ($hasApprovedLeave) {
+                continue; // Excused by approved leave
+            }
+
+            if (isset($attendances[$dateStr])) {
+                $att = $attendances[$dateStr];
+                if ($att->status === 'absent') {
+                    $unexcusedDays += 1.0;
+                    $absentDates[] = $dateStr;
+                } elseif ($att->status === 'half_day') {
+                    $unexcusedDays += 0.5;
+                    $absentDates[] = $dateStr . ' (Half Day)';
+                } elseif (in_array($att->status, ['leave', 'holiday', 'weekend'])) {
+                    // Excused status
+                    continue;
+                } elseif ($att->status !== 'present' && empty($att->morning_in) && empty($att->check_in)) {
+                    // Missing attendance / clock-in
+                    $unexcusedDays += 1.0;
+                    $absentDates[] = $dateStr;
+                }
+            } else {
+                // NO attendance record at all on this workday and no approved leave
+                $unexcusedDays += 1.0;
+                $absentDates[] = $dateStr;
             }
         }
 
         return [
-            'days' => $unexcusedDays,
+            'days'  => round($unexcusedDays, 1),
+            'dates' => $absentDates,
         ];
     }
 
