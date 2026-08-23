@@ -16,6 +16,8 @@ class Payroll extends Model
         'allowances',      // total allowances (sum of transport+house+position)
         'overtime_pay',
         'pension',         // 7% of basic (employee contribution)
+        'company_pension', // 11% of basic (employer contribution)
+        'taxable_income',  // gross income WITHOUT deducting pension — used for income tax calculation
         'deductions',      // other deductions
         'tax',             // income tax
         'gross_salary',
@@ -43,6 +45,8 @@ class Payroll extends Model
         'allowances'          => 'decimal:2',
         'overtime_pay'        => 'decimal:2',
         'pension'             => 'decimal:2',
+        'company_pension'     => 'decimal:2',
+        'taxable_income'      => 'decimal:2',
         'deductions'          => 'decimal:2',
         'tax'                 => 'decimal:2',
         'net_salary'          => 'decimal:2',
@@ -56,20 +60,23 @@ class Payroll extends Model
     public function components() { return $this->hasMany(PayrollComponent::class); }
     public function adjustments(){ return $this->hasMany(PayrollAdjustment::class); }
 
-    /** Auto-calculate gross & net before every save */
+    /** Auto-calculate gross, net, taxable income & company pension before every save */
     protected static function booted()
     {
         static::saving(function (Payroll $p) {
             $hasTransport = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'transport_allowance');
-            
+
             if ($hasTransport) {
                 // Total allowances = individual parts if available
                 $p->allowances  = ($p->transport_allowance ?? 0)
                                 + ($p->house_allowance     ?? 0)
                                 + ($p->position_allowance  ?? 0);
 
-                // Pension = 7% of basic (employee portion)
+                // Employee Pension = 7% of basic
                 $p->pension     = round(($p->basic_salary ?? 0) * 0.07, 2);
+
+                // Company Pension = 11% of basic (employer contribution)
+                $p->company_pension = round(($p->basic_salary ?? 0) * 0.11, 2);
             }
 
             // Gross = basic + allowances + overtime
@@ -77,7 +84,20 @@ class Payroll extends Model
                              + ($p->allowances     ?? 0)
                              + ($p->overtime_pay   ?? 0);
 
-            // Net = gross − pension − tax − other deductions
+            // Taxable Income = Gross (does NOT deduct employee pension)
+            // Ethiopian tax law: taxable income = basic + house + position + max(0, transport-2200) + overtime
+            // i.e., pension 7% is NOT subtracted before calculating income tax
+            $transport       = $p->transport_allowance ?? 0;
+            $taxableTransport = max(0, $transport - 2200);
+            $p->taxable_income = round(
+                ($p->basic_salary       ?? 0)
+              + ($p->house_allowance    ?? 0)
+              + ($p->position_allowance ?? 0)
+              + $taxableTransport
+              + ($p->overtime_pay       ?? 0),
+            2);
+
+            // Net = gross − employee pension − tax − other deductions
             $p->net_salary  = $p->gross_salary
                             - ($p->pension     ?? 0)
                             - ($p->tax         ?? 0)
@@ -92,12 +112,16 @@ class Payroll extends Model
         return date('F Y', strtotime($this->year . '-' . $this->month . '-01'));
     }
 
-    /** Calculate taxable income: basic + house + position + max(0, transport - 2200) - pension */
-    public static function calculateTaxableIncome(float $basic, float $house, float $position, float $transport, float $pension = 0): float
+    /**
+     * Calculate taxable income (WITHOUT deducting 7% pension).
+     * Ethiopian rule: taxable = basic + house + position + max(0, transport-2200) + overtime
+     * Pension is NOT deducted before tax calculation.
+     */
+    public static function calculateTaxableIncome(float $basic, float $house, float $position, float $transport, float $overtime = 0): float
     {
         $taxableTransport = max(0, $transport - 2200);
-        $taxable = $basic + $house + $position + $taxableTransport - $pension;
-        return max(0, $taxable);
+        $taxable = $basic + $house + $position + $taxableTransport + $overtime;
+        return max(0, round($taxable, 2));
     }
 
     /** Ethiopian income tax calculation */

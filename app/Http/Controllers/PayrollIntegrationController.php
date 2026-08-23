@@ -51,7 +51,8 @@ class PayrollIntegrationController extends Controller
             $house     = $emp->house_allowance ?? 0;
             $position  = $emp->position_allowance ?? 0;
 
-            $taxable = Payroll::calculateTaxableIncome($base, $house, $position, $transport, $empPension);
+            // Taxable income (pension 7% is NOT deducted as per system rules)
+            $taxable = Payroll::calculateTaxableIncome($base, $house, $position, $transport, 0);
 
             // Tax calculation
             $tax = Payroll::calculateIncomeTax($taxable);

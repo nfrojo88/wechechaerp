@@ -35,17 +35,27 @@ class FinancePayrollController extends Controller
 
         // Summary totals
         $totals = [
-            'basic'     => $payrolls->sum('basic_salary'),
-            'transport' => $hasTransport ? $payrolls->sum('transport_allowance') : 0,
-            'house'     => $hasTransport ? $payrolls->sum('house_allowance') : 0,
-            'position'  => $hasTransport ? $payrolls->sum('position_allowance') : 0,
-            'overtime'  => $payrolls->sum('overtime_pay'),
-            'pension'   => $hasTransport ? $payrolls->sum('pension') : round($payrolls->sum('basic_salary') * 0.07, 2),
-            'tax'       => $payrolls->sum('tax'),
-            'deductions'=> $payrolls->sum('deductions'),
-            'gross'     => $payrolls->sum(function($p) { return $p->gross_salary ?? ($p->basic_salary + $p->allowances + $p->overtime_pay); }),
-            'net'       => $payrolls->sum('net_salary'),
-            'count'     => $payrolls->count(),
+            'basic'           => $payrolls->sum('basic_salary'),
+            'transport'       => $hasTransport ? $payrolls->sum('transport_allowance') : 0,
+            'house'           => $hasTransport ? $payrolls->sum('house_allowance') : 0,
+            'position'        => $hasTransport ? $payrolls->sum('position_allowance') : 0,
+            'overtime'        => $payrolls->sum('overtime_pay'),
+            'gross'           => $payrolls->sum(function($p) { return $p->gross_salary ?? ($p->basic_salary + $p->allowances + $p->overtime_pay); }),
+            'taxable_income'  => $payrolls->sum(function($p) {
+                return $p->taxable_income ?? Payroll::calculateTaxableIncome(
+                    (float) $p->basic_salary,
+                    (float) ($p->house_allowance ?? 0),
+                    (float) ($p->position_allowance ?? 0),
+                    (float) ($p->transport_allowance ?? 0),
+                    (float) ($p->overtime_pay ?? 0)
+                );
+            }),
+            'pension'         => $hasTransport ? $payrolls->sum('pension') : round($payrolls->sum('basic_salary') * 0.07, 2),
+            'company_pension' => $payrolls->sum(function($p) { return $p->company_pension ?? round($p->basic_salary * 0.11, 2); }),
+            'tax'             => $payrolls->sum('tax'),
+            'deductions'      => $payrolls->sum('deductions'),
+            'net'             => $payrolls->sum('net_salary'),
+            'count'           => $payrolls->count(),
         ];
 
         // GM status for this batch
@@ -103,11 +113,6 @@ class FinancePayrollController extends Controller
                 }
             }
 
-            // Taxable income = basic + house + position + max(0, transport - 2200) - pension(7%)
-            $pension  = round($basic * 0.07, 2);
-            $taxable  = Payroll::calculateTaxableIncome($basic, $house, $position, $transport, $pension);
-            $tax      = Payroll::calculateIncomeTax($taxable);
-
             // Sum overtime pay from approved attendance records for this month
             $overtimePay = \App\Models\Attendance::where('employee_id', $emp->id)
                 ->whereYear('attendance_date', $year)
@@ -116,17 +121,29 @@ class FinancePayrollController extends Controller
                 ->sum('overtime_pay');
             $overtimePay = round((float) $overtimePay, 2);
 
+            // Employee Pension (7% of basic) & Company Pension (11% of basic)
+            $pension        = round($basic * 0.07, 2);
+            $companyPension = round($basic * 0.11, 2);
+
+            // Taxable income = basic + house + position + max(0, transport - 2200) + overtime
+            // (pension 7% is NOT deducted for income tax calculation as requested)
+            $taxable  = Payroll::calculateTaxableIncome($basic, $house, $position, $transport, $overtimePay);
+            $tax      = Payroll::calculateIncomeTax($taxable);
+
             $payload = [
-                'employee_id'  => $emp->id,
-                'month'        => $month,
-                'year'         => $year,
-                'basic_salary' => $basic,
-                'allowances'   => $transport + $house + $position,
-                'overtime_pay' => $overtimePay,
-                'deductions'   => round($loanDeduction, 2),
-                'tax'          => round($tax, 2),
-                'status'       => 'draft',
-                'created_by'   => auth()->id(),
+                'employee_id'     => $emp->id,
+                'month'           => $month,
+                'year'            => $year,
+                'basic_salary'    => $basic,
+                'allowances'      => $transport + $house + $position,
+                'overtime_pay'    => $overtimePay,
+                'pension'         => $pension,
+                'company_pension' => $companyPension,
+                'taxable_income'  => $taxable,
+                'deductions'      => round($loanDeduction, 2),
+                'tax'             => round($tax, 2),
+                'status'          => 'draft',
+                'created_by'      => auth()->id(),
             ];
 
             if ($hasTransport) {
@@ -246,15 +263,25 @@ class FinancePayrollController extends Controller
         $hasTransport = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'transport_allowance');
 
         $totals = [
-            'basic'     => $payrolls->sum('basic_salary'),
-            'transport' => $hasTransport ? $payrolls->sum('transport_allowance') : 0,
-            'house'     => $hasTransport ? $payrolls->sum('house_allowance') : 0,
-            'position'  => $hasTransport ? $payrolls->sum('position_allowance') : 0,
-            'overtime'  => $payrolls->sum('overtime_pay'),
-            'pension'   => $hasTransport ? $payrolls->sum('pension') : round($payrolls->sum('basic_salary') * 0.07, 2),
-            'tax'       => $payrolls->sum('tax'),
-            'gross'     => $payrolls->sum(function($p) { return $p->gross_salary ?? ($p->basic_salary + $p->allowances + $p->overtime_pay); }),
-            'net'       => $payrolls->sum('net_salary'),
+            'basic'           => $payrolls->sum('basic_salary'),
+            'transport'       => $hasTransport ? $payrolls->sum('transport_allowance') : 0,
+            'house'           => $hasTransport ? $payrolls->sum('house_allowance') : 0,
+            'position'        => $hasTransport ? $payrolls->sum('position_allowance') : 0,
+            'overtime'        => $payrolls->sum('overtime_pay'),
+            'gross'           => $payrolls->sum(function($p) { return $p->gross_salary ?? ($p->basic_salary + $p->allowances + $p->overtime_pay); }),
+            'taxable_income'  => $payrolls->sum(function($p) {
+                return $p->taxable_income ?? Payroll::calculateTaxableIncome(
+                    (float) $p->basic_salary,
+                    (float) ($p->house_allowance ?? 0),
+                    (float) ($p->position_allowance ?? 0),
+                    (float) ($p->transport_allowance ?? 0),
+                    (float) ($p->overtime_pay ?? 0)
+                );
+            }),
+            'pension'         => $hasTransport ? $payrolls->sum('pension') : round($payrolls->sum('basic_salary') * 0.07, 2),
+            'company_pension' => $payrolls->sum(function($p) { return $p->company_pension ?? round($p->basic_salary * 0.11, 2); }),
+            'tax'             => $payrolls->sum('tax'),
+            'net'             => $payrolls->sum('net_salary'),
         ];
 
         return view('finance.payroll.gm-batch-detail', compact('payrolls', 'totals', 'month', 'year'));

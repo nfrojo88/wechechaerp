@@ -139,8 +139,24 @@
     <div class="col-6 col-md-3 col-xl">
         <div class="card border-0 shadow-sm rounded-3 h-100">
             <div class="card-body text-center py-3">
-                <div class="text-muted small mb-1">Total Pension (7%)</div>
+                <div class="text-muted small mb-1">Taxable Income</div>
+                <div class="fw-bold fs-5 text-dark" style="color:#0f5132!important;">{{ number_format($totals['taxable_income'],2) }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3 col-xl">
+        <div class="card border-0 shadow-sm rounded-3 h-100">
+            <div class="card-body text-center py-3">
+                <div class="text-muted small mb-1">Pension (Emp 7%)</div>
                 <div class="fw-bold fs-5 text-secondary">{{ number_format($totals['pension'],2) }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3 col-xl">
+        <div class="card border-0 shadow-sm rounded-3 h-100">
+            <div class="card-body text-center py-3">
+                <div class="text-muted small mb-1">Company Pension (11%)</div>
+                <div class="fw-bold fs-5 text-purple" style="color:#6f42c1!important;">{{ number_format($totals['company_pension'],2) }}</div>
             </div>
         </div>
     </div>
@@ -184,7 +200,9 @@
                     <th class="text-end text-info">House</th>
                     <th class="text-end text-info">Position</th>
                     <th class="text-end text-primary">Gross</th>
+                    <th class="text-end fw-semibold text-dark">Taxable Income</th>
                     <th class="text-end text-secondary">Pension (7%)</th>
+                    <th class="text-end text-purple" style="color:#6f42c1;">Co. Pension (11%)</th>
                     <th class="text-end text-warning">Income Tax</th>
                     <th class="text-end text-danger">Other Ded.</th>
                     <th class="text-end fw-bold text-success">Net Pay</th>
@@ -193,6 +211,16 @@
             </thead>
             <tbody>
                 @forelse($payrolls as $i => $p)
+                @php
+                    $calcTaxable = $p->taxable_income ?? \App\Models\Payroll::calculateTaxableIncome(
+                        (float) $p->basic_salary,
+                        (float) ($p->house_allowance ?? 0),
+                        (float) ($p->position_allowance ?? 0),
+                        (float) ($p->transport_allowance ?? 0),
+                        (float) ($p->overtime_pay ?? 0)
+                    );
+                    $calcCoPension = $p->company_pension ?? round($p->basic_salary * 0.11, 2);
+                @endphp
                 <tr>
                     <td class="ps-4 text-muted">{{ $i + 1 }}</td>
                     <td>
@@ -205,7 +233,9 @@
                     <td class="text-end text-info">{{ number_format($p->house_allowance ?? 0, 2) }}</td>
                     <td class="text-end text-info">{{ number_format($p->position_allowance ?? 0, 2) }}</td>
                     <td class="text-end fw-semibold text-primary">{{ number_format($p->gross_salary ?? ($p->basic_salary + $p->allowances + $p->overtime_pay), 2) }}</td>
+                    <td class="text-end fw-semibold text-dark">{{ number_format($calcTaxable, 2) }}</td>
                     <td class="text-end text-secondary">{{ number_format($p->pension ?? round($p->basic_salary * 0.07, 2), 2) }}</td>
+                    <td class="text-end" style="color:#6f42c1;">{{ number_format($calcCoPension, 2) }}</td>
                     <td class="text-end text-warning">{{ number_format($p->tax, 2) }}</td>
                     <td class="text-end text-danger">{{ number_format($p->deductions, 2) }}</td>
                     <td class="text-end fw-bold text-success">{{ number_format($p->net_salary, 2) }}</td>
@@ -225,7 +255,7 @@
                 </tr>
                 @empty
                 <tr>
-                    <td colspan="13" class="text-center py-5 text-muted">
+                    <td colspan="15" class="text-center py-5 text-muted">
                         <i class="fa-solid fa-file-circle-xmark fa-2x mb-2 d-block opacity-25"></i>
                         No payroll entries for {{ $period }}.<br>
                         <small>Click <strong>Auto-Generate Payroll</strong> to create entries from employee records.</small>
@@ -242,7 +272,9 @@
                     <td class="text-end text-info">{{ number_format($totals['house'],2) }}</td>
                     <td class="text-end text-info">{{ number_format($totals['position'],2) }}</td>
                     <td class="text-end text-primary">{{ number_format($totals['gross'],2) }}</td>
+                    <td class="text-end text-dark">{{ number_format($totals['taxable_income'],2) }}</td>
                     <td class="text-end text-secondary">{{ number_format($totals['pension'],2) }}</td>
+                    <td class="text-end" style="color:#6f42c1;">{{ number_format($totals['company_pension'],2) }}</td>
                     <td class="text-end text-warning">{{ number_format($totals['tax'],2) }}</td>
                     <td class="text-end text-danger">{{ number_format($totals['deductions'],2) }}</td>
                     <td class="text-end text-success">{{ number_format($totals['net'],2) }}</td>
