@@ -41,11 +41,18 @@ class PayrollController extends Controller
             'notes'        => 'nullable|string',
         ]);
 
-        $validated['created_by']  = auth()->id();
-        $validated['allowances']  = $validated['allowances']  ?? 0;
-        $validated['overtime_pay']= $validated['overtime_pay']?? 0;
-        $validated['deductions']  = $validated['deductions']  ?? 0;
-        $validated['tax']         = $validated['tax']         ?? 0;
+        $basic = (float) $validated['basic_salary'];
+        $allow = (float) ($validated['allowances'] ?? 0);
+        $ot    = (float) ($validated['overtime_pay'] ?? 0);
+
+        $validated['created_by']      = auth()->id();
+        $validated['allowances']      = $allow;
+        $validated['overtime_pay']    = $ot;
+        $validated['pension']         = round($basic * 0.07, 2);
+        $validated['company_pension'] = round($basic * 0.11, 2);
+        $validated['taxable_income']  = round($basic + $allow + $ot, 2);
+        $validated['deductions']      = $validated['deductions']  ?? 0;
+        $validated['tax']             = $validated['tax'] ?? Payroll::calculateIncomeTax($validated['taxable_income']);
 
         $payroll = Payroll::create($validated);
 

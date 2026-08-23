@@ -67,25 +67,47 @@
                         <h6 class="font-weight-bold text-danger mb-3">Deductions (-)</h6>
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label>Deductions (Loans, Absences)</label>
+                                <label>Other Deductions (Loans, Absences)</label>
                                 <input type="number" name="deductions" class="form-control amount-input text-danger" step="0.01" min="0" value="0">
                             </div>
                             <div class="col-md-6">
-                                <label>Tax</label>
+                                <label>Income Tax (Auto-calculated on Taxable Income)</label>
                                 <input type="number" name="tax" class="form-control amount-input text-danger" step="0.01" min="0" value="0">
                             </div>
                         </div>
                         
-                        <div class="alert alert-info border-left-info mt-4">
-                            <strong>Estimated Net Pay: </strong>$<span id="netPayDisplay">0.00</span>
+                        {{-- Live Summary Breakdown --}}
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-4">
+                                <div class="p-2 border rounded bg-light text-center">
+                                    <small class="text-muted d-block">Taxable Income</small>
+                                    <strong class="text-dark"><span id="taxableDisplay">0.00</span> ETB</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-2 border rounded bg-light text-center">
+                                    <small class="text-muted d-block">Emp. Pension (7%)</small>
+                                    <strong class="text-secondary"><span id="empPensionDisplay">0.00</span> ETB</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-2 border rounded bg-light text-center">
+                                    <small class="text-muted d-block">Co. Pension (11%)</small>
+                                    <strong style="color:#6f42c1;"><span id="compPensionDisplay">0.00</span> ETB</strong>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="form-group">
+                        <div class="alert alert-success border-left-success mt-3">
+                            <strong>Estimated Net Pay: </strong><span id="netPayDisplay" class="fw-bold fs-5">0.00</span> ETB
+                        </div>
+
+                        <div class="form-group mb-3">
                             <label>Notes / Remarks</label>
                             <textarea name="notes" class="form-control" rows="2"></textarea>
                         </div>
 
-                        <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-file-invoice-dollar"></i> Generate Payroll</button>
+                        <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-file-invoice-dollar me-1"></i> Generate Payroll</button>
                     </form>
                 </div>
             </div>
@@ -95,22 +117,62 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const inputs = document.querySelectorAll('.amount-input');
-        const netDisplay = document.getElementById('netPayDisplay');
+        const basicInput = document.querySelector('[name="basic_salary"]');
+        const allowInput = document.querySelector('[name="allowances"]');
+        const overInput  = document.querySelector('[name="overtime_pay"]');
+        const dedInput   = document.querySelector('[name="deductions"]');
+        const taxInput   = document.querySelector('[name="tax"]');
 
-        function calculateNet() {
-            const basic = parseFloat(document.querySelector('[name="basic_salary"]').value) || 0;
-            const allow = parseFloat(document.querySelector('[name="allowances"]').value) || 0;
-            const over  = parseFloat(document.querySelector('[name="overtime_pay"]').value) || 0;
-            const ded   = parseFloat(document.querySelector('[name="deductions"]').value) || 0;
-            const tax   = parseFloat(document.querySelector('[name="tax"]').value) || 0;
+        const taxableDisplay     = document.getElementById('taxableDisplay');
+        const empPensionDisplay  = document.getElementById('empPensionDisplay');
+        const compPensionDisplay = document.getElementById('compPensionDisplay');
+        const netDisplay         = document.getElementById('netPayDisplay');
 
-            const net = basic + allow + over - ded - tax;
-            netDisplay.textContent = net.toFixed(2);
+        function calculateTax(taxable) {
+            if (taxable <= 2000) return 0;
+            if (taxable <= 4000) return (taxable * 0.15) - 300;
+            if (taxable <= 7000) return (taxable * 0.20) - 500;
+            if (taxable <= 10000) return (taxable * 0.25) - 850;
+            if (taxable <= 14000) return (taxable * 0.30) - 1350;
+            return (taxable * 0.35) - 2050;
         }
 
-        inputs.forEach(input => {
-            input.addEventListener('input', calculateNet);
+        let userCustomizedTax = false;
+        taxInput.addEventListener('input', function() {
+            userCustomizedTax = true;
+            calculateNet();
+        });
+
+        function calculateNet() {
+            const basic = parseFloat(basicInput.value) || 0;
+            const allow = parseFloat(allowInput.value) || 0;
+            const over  = parseFloat(overInput.value) || 0;
+            const ded   = parseFloat(dedInput.value) || 0;
+
+            // Company Pension = 11% of basic salary
+            const compPension = basic * 0.11;
+            // Employee Pension = 7% of basic salary
+            const empPension = basic * 0.07;
+            // Taxable income (pension 7% is NOT subtracted)
+            const taxable = basic + allow + over;
+
+            if (!userCustomizedTax) {
+                const autoTax = Math.max(0, calculateTax(taxable));
+                taxInput.value = autoTax.toFixed(2);
+            }
+
+            const tax = parseFloat(taxInput.value) || 0;
+            const gross = basic + allow + over;
+            const net = gross - empPension - tax - ded;
+
+            taxableDisplay.textContent     = taxable.toFixed(2);
+            empPensionDisplay.textContent  = empPension.toFixed(2);
+            compPensionDisplay.textContent = compPension.toFixed(2);
+            netDisplay.textContent         = net.toFixed(2);
+        }
+
+        [basicInput, allowInput, overInput, dedInput].forEach(input => {
+            if (input) input.addEventListener('input', calculateNet);
         });
     });
 </script>
