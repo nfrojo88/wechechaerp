@@ -30,4 +30,9 @@ class ChartOfAccount extends Model
     {
         return $this->belongsTo(User::class, 'assigned_to');
     }
+
+    public function replenishments()
+    {
+        return $this->hasMany(PettyCashReplenishment::class, 'chart_of_account_id');
+    }
 }

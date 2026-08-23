@@ -774,7 +774,7 @@ Route::get('/debug-store-manager-error', function () {
         $results = [];
 
         // 1. Check DB connection
-        \Illuminate\Support\Facades\DB::connection()->getPdo();
+        \Illuminate\Support\Facades\DB::getPdo();
         $results[] = '✅ DB connected to: ' . \Illuminate\Support\Facades\DB::connection()->getDatabaseName();
 
         // 2. Check store_manager user
@@ -1567,6 +1567,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/assigned-accounts', [App\Http\Controllers\AssignedAccountController::class, 'index'])->name('assigned-accounts.index');
     Route::get('/assigned-accounts/{id}', [App\Http\Controllers\AssignedAccountController::class, 'show'])->name('assigned-accounts.show');
     Route::post('/assigned-accounts/{id}/pay', [App\Http\Controllers\AssignedAccountController::class, 'pay'])->name('assigned-accounts.pay');
+    Route::post('/assigned-accounts/{id}/request-replenishment', [App\Http\Controllers\AssignedAccountController::class, 'requestReplenishment'])->name('assigned-accounts.request-replenishment');
+    Route::post('/assigned-accounts/{id}/replenishments/{replenishmentId}/fulfill', [App\Http\Controllers\AssignedAccountController::class, 'fulfillReplenishment'])->name('assigned-accounts.fulfill-replenishment');
+    Route::post('/assigned-accounts/{id}/replenishments/{replenishmentId}/reject', [App\Http\Controllers\AssignedAccountController::class, 'rejectReplenishment'])->name('assigned-accounts.reject-replenishment');
+    Route::get('/assigned-accounts/{id}/replenishments/{replenishmentId}/details', [App\Http\Controllers\AssignedAccountController::class, 'getReplenishmentDetails'])->name('assigned-accounts.replenishment-details');
 
     Route::delete('manpower-assignment/{manpowerAssignment}', [App\Http\Controllers\ManpowerForecastController::class, 'removeAssignment'])->name('manpower-assignment.remove');
     Route::post('manpower-forecast/{manpowerForecast}/submit', [App\Http\Controllers\ManpowerForecastController::class, 'submit'])->name('manpower-forecast.submit');
