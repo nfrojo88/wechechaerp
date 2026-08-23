@@ -74,19 +74,46 @@ Route::get('/run-migrations', function () {
         \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
         $output = \Illuminate\Support\Facades\Artisan::output();
 
-        // Check current columns in employees table
+        // Direct guarantee for payrolls columns (company_pension, taxable_income, loan_deduction, absence_deduction, absent_days)
+        if (\Illuminate\Support\Facades\Schema::hasTable('payrolls')) {
+            \Illuminate\Support\Facades\Schema::table('payrolls', function (\Illuminate\Database\Schema\Blueprint $table) {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'company_pension')) {
+                    $table->decimal('company_pension', 15, 2)->default(0)->after('pension');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'taxable_income')) {
+                    $table->decimal('taxable_income', 15, 2)->default(0)->after('company_pension');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'loan_deduction')) {
+                    $table->decimal('loan_deduction', 15, 2)->default(0)->after('deductions');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'absence_deduction')) {
+                    $table->decimal('absence_deduction', 15, 2)->default(0)->after('loan_deduction');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'absent_days')) {
+                    $table->integer('absent_days')->default(0)->after('absence_deduction');
+                }
+            });
+        }
+
+        // Check current columns in employees & payrolls table
         $columns = \Illuminate\Support\Facades\Schema::getColumnListing('employees');
         $gmCols = array_filter($columns, fn($c) => str_contains($c, 'gm_'));
+        $payrollCols = \Illuminate\Support\Facades\Schema::getColumnListing('payrolls');
+        $pensionCols = array_intersect($payrollCols, ['company_pension', 'taxable_income', 'loan_deduction', 'absence_deduction', 'absent_days']);
 
         return "<div style='font-family:sans-serif;max-width:900px;margin:40px auto;padding:0;border-radius:14px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.12);'>"
              . "<div style='background:linear-gradient(135deg,#065f46,#10b981);padding:28px 32px;color:#fff;'>"
-             . "<h2 style='margin:0;font-size:22px;'>✅ Migrations Executed Successfully</h2>"
-             . "<p style='margin:6px 0 0;opacity:.85;'>All pending migrations have been applied to the live database.</p>"
+             . "<h2 style='margin:0;font-size:22px;'>✅ Migrations & Schema Check Executed Successfully</h2>"
+             . "<p style='margin:6px 0 0;opacity:.85;'>All pending migrations and payroll schema columns have been applied to the live database.</p>"
              . "</div>"
              . "<div style='padding:28px 32px;background:#fff;'>"
              . "<h3 style='color:#374151;font-size:15px;margin-top:0;'>📋 Migration Output:</h3>"
              . "<pre style='background:#f8fafc;border:1px solid #e2e8f0;padding:16px;border-radius:8px;overflow-x:auto;color:#1e293b;font-size:13px;line-height:1.6;'>"
              . (trim($output) !== '' ? htmlspecialchars($output) : '  Nothing to migrate — all migrations already applied.')
+             . "</pre>"
+             . "<h3 style='color:#374151;font-size:15px;'>🗄️ Payroll Deduction & Pension Columns in <code>payrolls</code> table:</h3>"
+             . "<pre style='background:#f0fdf4;border:1px solid #bbf7d0;padding:16px;border-radius:8px;color:#15803d;font-size:13px;'>"
+             . '  ✅ Found in payrolls: ' . implode(', ', $pensionCols)
              . "</pre>"
              . "<h3 style='color:#374151;font-size:15px;'>🗄️ GM Rejection Columns in <code>employees</code> table:</h3>"
              . "<pre style='background:#f0fdf4;border:1px solid #bbf7d0;padding:16px;border-radius:8px;color:#15803d;font-size:13px;'>"
@@ -95,7 +122,7 @@ Route::get('/run-migrations', function () {
                 : '  ❌ NOT FOUND — migration may not have run correctly. See error above.')
              . "</pre>"
              . "<div style='margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;'>"
-             . "<a href='/dashboard' style='background:#2563eb;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>🏠 Go to Dashboard</a>"
+             . "<a href='/finance/payroll' style='background:#2563eb;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>💵 Go to Finance Payroll</a>"
              . "<a href='/run-migrations' style='background:#10b981;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>🔄 Run Again</a>"
              . "<a href='/deploy-from-github' style='background:#7c3aed;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>🚀 Git Pull + Deploy</a>"
              . "</div>"
