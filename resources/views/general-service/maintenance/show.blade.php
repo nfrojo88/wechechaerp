@@ -221,9 +221,10 @@
                                 <label class="form-label fw-semibold text-secondary small text-uppercase" style="letter-spacing:0.5px;">
                                     Status <span class="text-danger">*</span>
                                 </label>
-                                <select name="status" class="form-select form-select-lg rounded-3" required>
+                                <select name="status" id="maintenance_status_select" class="form-select form-select-lg rounded-3" required onchange="toggleReplacementOptions(this)">
                                     <option value="pending" {{ $maintenanceRequest->status === 'pending' ? 'selected' : '' }}>⏳ Pending Review</option>
                                     <option value="in_progress" {{ $maintenanceRequest->status === 'in_progress' ? 'selected' : '' }}>🔧 In Progress / Under Repair</option>
+                                    <option value="sent_to_store_manager" {{ $maintenanceRequest->status === 'sent_to_store_manager' ? 'selected' : '' }}>📦 Send to Store Manager (Request Replacement)</option>
                                     <option value="resolved" {{ $maintenanceRequest->status === 'resolved' ? 'selected' : '' }}>✅ Resolved / Repaired</option>
                                     <option value="closed" {{ $maintenanceRequest->status === 'closed' ? 'selected' : '' }}>🔒 Closed</option>
                                 </select>
@@ -241,6 +242,32 @@
                                     @endforeach
                                 </select>
                             </div>
+
+                            {{-- Replacement Options when Sent to Store Manager --}}
+                            <div class="col-12" id="replacement_options_container" style="{{ $maintenanceRequest->status === 'sent_to_store_manager' ? '' : 'display: none;' }}">
+                                <div class="card border-info bg-info bg-opacity-10 p-3 rounded-3">
+                                    <label class="form-label fw-bold text-info-emphasis mb-2">
+                                        <i class="fa-solid fa-boxes-packing me-2"></i>Select Replacement Reason / Asset Condition for Store Manager:
+                                    </label>
+                                    <div class="d-flex flex-column flex-sm-row gap-3">
+                                        <div class="form-check bg-white p-3 rounded-3 border flex-fill shadow-xs">
+                                            <input class="form-check-input ms-0 me-2" type="radio" name="replacement_condition" id="cond_in_maintenance" value="in_maintenance" {{ old('replacement_condition', $maintenanceRequest->replacement_condition ?? 'in_maintenance') === 'in_maintenance' ? 'checked' : '' }}>
+                                            <label class="form-check-input-label fw-bold text-dark d-block" for="cond_in_maintenance">
+                                                🛠️ In Maintenance (Temporarily Needs Replacement)
+                                            </label>
+                                            <small class="text-muted d-block mt-1">Asset is under active repair; requesting temporary store unit allocation.</small>
+                                        </div>
+                                        <div class="form-check bg-white p-3 rounded-3 border flex-fill shadow-xs">
+                                            <input class="form-check-input ms-0 me-2" type="radio" name="replacement_condition" id="cond_unrepairable" value="unrepairable_damage" {{ old('replacement_condition', $maintenanceRequest->replacement_condition) === 'unrepairable_damage' ? 'checked' : '' }}>
+                                            <label class="form-check-input-label fw-bold text-danger d-block" for="cond_unrepairable">
+                                                💥 Complete Damage (Unrepairable / Total Loss)
+                                            </label>
+                                            <small class="text-muted d-block mt-1">Asset cannot be repaired; requesting permanent store replacement unit.</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="col-12">
                                 <label class="form-label fw-semibold text-secondary small text-uppercase" style="letter-spacing:0.5px;">
                                     Admin Notes / Feedback to Employee
@@ -435,4 +462,15 @@
         </div>
     </div>
 </div>
+
+@push('scripts')
+<script>
+function toggleReplacementOptions(selectEl) {
+    const container = document.getElementById('replacement_options_container');
+    if (container) {
+        container.style.display = (selectEl.value === 'sent_to_store_manager') ? 'block' : 'none';
+    }
+}
+</script>
+@endpush
 @endsection

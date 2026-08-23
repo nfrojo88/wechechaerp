@@ -23,6 +23,9 @@ class MaintenanceRequest extends Model
         'urgency',
         'status',
         'admin_notes',
+        'replacement_action',
+        'replacement_condition',
+        'sent_to_store_manager_at',
         'resolved_at',
         'reported_by_user_id',
         'assigned_to_user_id',
@@ -30,6 +33,7 @@ class MaintenanceRequest extends Model
 
     protected $casts = [
         'resolved_at' => 'datetime',
+        'sent_to_store_manager_at' => 'datetime',
     ];
 
     // ─── Boot ─────────────────────────────────────────────────────────────────
@@ -77,11 +81,12 @@ class MaintenanceRequest extends Model
     public function getStatusBadgeAttribute(): array
     {
         return match($this->status) {
-            'pending'     => ['class' => 'bg-warning text-dark', 'label' => 'Pending', 'icon' => 'fa-clock'],
-            'in_progress' => ['class' => 'bg-primary',           'label' => 'In Progress', 'icon' => 'fa-wrench'],
-            'resolved'    => ['class' => 'bg-success',           'label' => 'Resolved', 'icon' => 'fa-circle-check'],
-            'closed'      => ['class' => 'bg-secondary',         'label' => 'Closed', 'icon' => 'fa-xmark-circle'],
-            default       => ['class' => 'bg-light text-dark border', 'label' => ucfirst($this->status), 'icon' => 'fa-circle'],
+            'pending'                  => ['class' => 'bg-warning text-dark', 'label' => 'Pending', 'icon' => 'fa-clock'],
+            'in_progress'              => ['class' => 'bg-primary',           'label' => 'In Progress', 'icon' => 'fa-wrench'],
+            'sent_to_store_manager'    => ['class' => 'bg-info text-dark',    'label' => 'Sent to Store Manager', 'icon' => 'fa-paper-plane'],
+            'resolved'                 => ['class' => 'bg-success',           'label' => 'Resolved', 'icon' => 'fa-circle-check'],
+            'closed'                   => ['class' => 'bg-secondary',         'label' => 'Closed', 'icon' => 'fa-xmark-circle'],
+            default                    => ['class' => 'bg-light text-dark border', 'label' => ucfirst(str_replace('_', ' ', $this->status)), 'icon' => 'fa-circle'],
         };
     }
 

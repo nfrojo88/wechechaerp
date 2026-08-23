@@ -82,9 +82,11 @@ class GeneralServiceController extends Controller
     public function updateStatus(Request $request, MaintenanceRequest $maintenanceRequest)
     {
         $validated = $request->validate([
-            'status'               => 'required|in:pending,in_progress,resolved,closed',
-            'admin_notes'          => 'nullable|string|max:3000',
-            'assigned_to_user_id'  => 'nullable|exists:users,id',
+            'status'                => 'required|in:pending,in_progress,sent_to_store_manager,resolved,closed',
+            'admin_notes'           => 'nullable|string|max:3000',
+            'assigned_to_user_id'   => 'nullable|exists:users,id',
+            'replacement_action'    => 'nullable|string',
+            'replacement_condition' => 'nullable|in:in_maintenance,unrepairable_damage',
         ]);
 
         $data = [
@@ -93,15 +95,27 @@ class GeneralServiceController extends Controller
             'assigned_to_user_id' => $validated['assigned_to_user_id'] ?? $maintenanceRequest->assigned_to_user_id,
         ];
 
+        if ($validated['status'] === 'sent_to_store_manager') {
+            $data['replacement_action'] = 'sent_to_store_manager';
+            $data['replacement_condition'] = $validated['replacement_condition'] ?? 'in_maintenance';
+            $data['sent_to_store_manager_at'] = now();
+        }
+
         if ($validated['status'] === 'resolved' && !$maintenanceRequest->resolved_at) {
             $data['resolved_at'] = now();
         }
 
         $maintenanceRequest->update($data);
 
+        $statusLabel = str_replace('_', ' ', $validated['status']);
+        if (!empty($validated['replacement_condition'])) {
+            $condLabel = $validated['replacement_condition'] === 'in_maintenance' ? 'In Maintenance' : 'Complete Damage (Unrepairable)';
+            $statusLabel .= " ({$condLabel})";
+        }
+
         \App\Models\ActivityLog::log(
             'updated',
-            'Maintenance request ' . $maintenanceRequest->request_no . ' status updated to ' . $validated['status'],
+            'Maintenance request ' . $maintenanceRequest->request_no . ' status updated to ' . $statusLabel,
             'Maintenance Requests',
             $maintenanceRequest
         );
