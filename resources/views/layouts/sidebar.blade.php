@@ -409,12 +409,14 @@
         </li>
         @endcanany
         @canany(['material_damage_reports.view', 'material_damage_reports.create', 'material_damage_reports.*'])
+        @if(!auth()->user()->hasAnyRole(['general_service', 'general_services']))
         <li class="sidebar-nav-item">
             <a href="{{ route('material-damage-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-damage-reports.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-triangle-exclamation"></i>
                 <span>Damage Reports</span>
             </a>
         </li>
+        @endif
         @endcanany
         @canany(['tool_transactions.view', 'tool_transactions.create', 'tool_transactions.*'])
         <li class="sidebar-nav-item">
@@ -613,6 +615,12 @@
             <a href="{{ route('store-manager.fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.fixed-assets.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-truck-monster text-primary"></i>
                 <span>Workshop &amp; Fixed Assets</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('material-damage-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-damage-reports.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-triangle-exclamation text-warning"></i>
+                <span>Material Damage Reports</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
