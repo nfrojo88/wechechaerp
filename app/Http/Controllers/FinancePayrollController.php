@@ -143,14 +143,18 @@ class FinancePayrollController extends Controller
                 'pension'           => $pension,
                 'company_pension'   => $companyPension,
                 'taxable_income'    => $taxable,
-                'loan_deduction'    => $loanDeduction,
-                'absence_deduction' => $absenceDeduction,
-                'absent_days'       => $absentDays,
                 'deductions'        => $totalDeductions,
                 'tax'               => round($tax, 2),
                 'status'            => 'draft',
                 'created_by'        => auth()->id(),
             ];
+
+            $hasLoanDed = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'loan_deduction');
+            if ($hasLoanDed) {
+                $payload['loan_deduction']    = $loanDeduction;
+                $payload['absence_deduction'] = $absenceDeduction;
+                $payload['absent_days']       = $absentDays;
+            }
 
             if ($hasTransport) {
                 $payload['transport_allowance'] = $transport;
@@ -231,12 +235,16 @@ class FinancePayrollController extends Controller
                 'pension'           => $pension,
                 'company_pension'   => $companyPension,
                 'taxable_income'    => $taxable,
-                'loan_deduction'    => $loanDeduction,
-                'absence_deduction' => $absenceDeduction,
-                'absent_days'       => $absentDays,
                 'deductions'        => $totalDeductions,
                 'tax'               => round($tax, 2),
             ];
+
+            $hasLoanDed = \Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'loan_deduction');
+            if ($hasLoanDed) {
+                $payload['loan_deduction']    = $loanDeduction;
+                $payload['absence_deduction'] = $absenceDeduction;
+                $payload['absent_days']       = $absentDays;
+            }
 
             if ($hasTransport) {
                 $payload['transport_allowance'] = $transport;
