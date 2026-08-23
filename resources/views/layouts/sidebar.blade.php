@@ -791,6 +791,8 @@
             </a>
         </li>
         @endcanany
+        @endcanany
+        @if(!auth()->user()->hasAnyRole(['site_engineer', 'foreman']))
         @canany(['reports.daily.view', 'reports.daily.create'])
         <li class="sidebar-nav-item">
             <a href="{{ route('daily-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('daily-reports.*') ? 'active' : '' }}">
@@ -807,6 +809,7 @@
             </a>
         </li>
         @endcanany
+        @endif
         @endcanany
         @endif
 
