@@ -791,7 +791,6 @@
             </a>
         </li>
         @endcanany
-        @endcanany
         @if(!auth()->user()->hasAnyRole(['site_engineer', 'foreman']))
         @canany(['reports.daily.view', 'reports.daily.create'])
         <li class="sidebar-nav-item">
