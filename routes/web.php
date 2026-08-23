@@ -51,10 +51,33 @@ Route::get('/deploy-from-github', function () {
     exec('cd ' . base_path() . ' && git fetch origin main 2>&1 && git reset --hard origin/main 2>&1', $output, $return);
     $pullResult = implode("\n", $output);
 
-    // Clear caches
+    // Clear caches & run migrations
     $cacheOutput = [];
-    exec('cd ' . base_path() . ' && php artisan config:clear 2>&1 && php artisan route:clear 2>&1 && php artisan view:clear 2>&1', $cacheOutput);
+    exec('cd ' . base_path() . ' && php artisan config:clear 2>&1 && php artisan route:clear 2>&1 && php artisan view:clear 2>&1 && php artisan migrate --force 2>&1', $cacheOutput);
     $cacheResult = implode("\n", $cacheOutput);
+
+    // Ensure payrolls columns directly
+    try {
+        if (\Illuminate\Support\Facades\Schema::hasTable('payrolls')) {
+            \Illuminate\Support\Facades\Schema::table('payrolls', function (\Illuminate\Database\Schema\Blueprint $table) {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'company_pension')) {
+                    $table->decimal('company_pension', 15, 2)->default(0)->after('pension');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'taxable_income')) {
+                    $table->decimal('taxable_income', 15, 2)->default(0)->after('company_pension');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'loan_deduction')) {
+                    $table->decimal('loan_deduction', 15, 2)->default(0)->after('deductions');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'absence_deduction')) {
+                    $table->decimal('absence_deduction', 15, 2)->default(0)->after('loan_deduction');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'absent_days')) {
+                    $table->integer('absent_days')->default(0)->after('absence_deduction');
+                }
+            });
+        }
+    } catch (\Throwable $e) {}
 
     $color = ($return === 0) ? 'green' : 'red';
     $icon  = ($return === 0) ? '✅' : '❌';
