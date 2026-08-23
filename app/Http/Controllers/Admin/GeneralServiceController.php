@@ -40,7 +40,7 @@ class GeneralServiceController extends Controller
         $requests = $query->latest()->paginate(20)->withQueryString();
 
         $stats = [
-            'pending'     => MaintenanceRequest::where('status', 'pending')->count(),
+            'pending'     => MaintenanceRequest::whereIn('status', ['pending', 'sent_to_store_manager'])->count(),
             'in_progress' => MaintenanceRequest::where('status', 'in_progress')->count(),
             'resolved'    => MaintenanceRequest::where('status', 'resolved')
                 ->whereDate('resolved_at', today())->count(),

@@ -104,7 +104,17 @@
                             <i class="fa-solid fa-wrench fs-5"></i>
                         </div>
                     </div>
-                    <div class="small text-muted mt-2">Under repair or decommissioned</div>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <span class="small text-muted">Under repair / decommissioned</span>
+                        @php
+                            $activeMaintReqsCount = \App\Models\MaintenanceRequest::whereIn('status', ['pending', 'in_progress', 'sent_to_store_manager'])->count();
+                        @endphp
+                        @if($activeMaintReqsCount > 0)
+                            <a href="{{ route('general-service.maintenance.index') }}" class="badge bg-danger text-decoration-none rounded-pill" title="Click to view open tickets">
+                                <i class="fa-solid fa-bell me-1"></i>{{ $activeMaintReqsCount }} Maintenance Ticket{{ $activeMaintReqsCount > 1 ? 's' : '' }}
+                            </a>
+                        @endif
+                    </div>
                 </div>
             </div>
         </div>

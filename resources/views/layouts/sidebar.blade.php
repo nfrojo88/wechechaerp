@@ -612,7 +612,7 @@
                 @php
                     $pendingMaintCount = 0;
                     try {
-                        $pendingMaintCount = \App\Models\MaintenanceRequest::where('status', 'pending')->count();
+                        $pendingMaintCount = \App\Models\MaintenanceRequest::whereIn('status', ['pending', 'sent_to_store_manager'])->count();
                     } catch (\Exception $e) {}
                 @endphp
                 @if($pendingMaintCount > 0)
