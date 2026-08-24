@@ -1275,11 +1275,20 @@ function validateStep(step) {
         } else {
             input.classList.remove('is-invalid');
         }
+
+        if (!input.dataset.hasValidationListener) {
+            input.dataset.hasValidationListener = 'true';
+            input.addEventListener('input', () => input.classList.remove('is-invalid'));
+            input.addEventListener('change', () => input.classList.remove('is-invalid'));
+        }
     });
 
     if (!isValid) {
         const firstInvalid = panel.querySelector('.is-invalid');
-        if (firstInvalid) firstInvalid.focus();
+        if (firstInvalid) {
+            firstInvalid.focus();
+            firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
     }
     return isValid;
 }
@@ -1691,6 +1700,8 @@ function updateRemoveButtons() {
         const removeBtn = entry.querySelector('.remove-asset');
         if (removeBtn) removeBtn.style.display = assetEntries.length > 1 ? 'inline-block' : 'none';
     });
+}
+
 function toggleEditContractEndDate(val) {
     const wrapper = document.getElementById('edit_contract_end_wrapper');
     const input = document.getElementById('edit_contract_end_input');
@@ -1709,6 +1720,12 @@ function toggleEditContractEndDate(val) {
 
 document.addEventListener('DOMContentLoaded', function() {
     goToStep(1);
+    
+    const empTypeSelect = document.getElementById('edit_employment_type');
+    if (empTypeSelect) {
+        toggleEditContractEndDate(empTypeSelect.value);
+    }
+
     document.querySelectorAll('.asset-select').forEach(sel => {
         if (sel.value) onAssetUnitSelected(sel);
     });
