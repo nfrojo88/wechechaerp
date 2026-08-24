@@ -9,7 +9,7 @@
             <a href="{{ route('employees.index') }}" class="btn btn-sm btn-outline-secondary">
                 <i class="fa-solid fa-arrow-left"></i>
             </a>
-            <h1 class="h3 mb-0"><i class="fa-solid fa-user-clock text-danger me-2"></i>Employee History</h1>
+            <h1 class="h3 mb-0"><i class="fa-solid fa-clock-rotate-left text-danger me-2"></i>Employee History</h1>
         </div>
         <small class="text-muted">Archive of terminated, suspended, and locked employee accounts (including expired 45-day test periods)</small>
     </div>
@@ -139,72 +139,6 @@
                                 <i class="fa-solid fa-edit"></i>
                             </a>
                         </div>
-
-                        {{-- Renew Modal --}}
-                        <div class="modal fade text-start" id="renewModal{{ $emp->id }}" tabindex="-1" aria-labelledby="renewModalLabel{{ $emp->id }}" aria-hidden="true">
-                            <div class="modal-dialog modal-dialog-centered">
-                                <div class="modal-content border-0 shadow">
-                                    <form action="{{ route('employees.renew', $emp) }}" method="POST" enctype="multipart/form-data">
-                                        @csrf
-                                        <div class="modal-header bg-success text-white">
-                                            <h5 class="modal-title fs-6" id="renewModalLabel{{ $emp->id }}">
-                                                <i class="fa-solid fa-user-check me-2"></i>Renew / Activate Employee: {{ $emp->full_name }}
-                                            </h5>
-                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                        </div>
-                                        <div class="modal-body">
-                                            <p class="small text-muted mb-3">
-                                                Transition or renew this employee to Permanent or Contract, provide Guarantee Letter &amp; TIN information, and restore active account login status.
-                                            </p>
-
-                                            <div class="mb-3">
-                                                <label class="form-label fw-bold">Employment Type <span class="text-danger">*</span></label>
-                                                <select name="employment_type" id="renew_emp_type_{{ $emp->id }}" class="form-select" onchange="toggleRenewContractDate({{ $emp->id }})" required>
-                                                    <option value="permanent" {{ $emp->employment_type === 'permanent' ? 'selected' : '' }}>Permanent</option>
-                                                    <option value="contract" {{ $emp->employment_type === 'contract' ? 'selected' : '' }}>Contract (Specify End Date)</option>
-                                                    <option value="daily" {{ $emp->employment_type === 'daily' ? 'selected' : '' }}>Daily Labor</option>
-                                                </select>
-                                            </div>
-
-                                            <div class="mb-3 {{ $emp->employment_type === 'contract' ? '' : 'd-none' }}" id="renew_contract_end_div_{{ $emp->id }}">
-                                                <label class="form-label fw-bold">Contract End Date (Valid Upto) <span class="text-danger">*</span></label>
-                                                <input type="date" name="contract_end_date" class="form-control" value="{{ optional($emp->contract_end_date)->format('Y-m-d') }}">
-                                            </div>
-
-                                            <div class="mb-3">
-                                                <label class="form-label fw-bold">TIN Number <span class="text-danger">*</span></label>
-                                                <input type="text" name="tin_number" class="form-control font-monospace" placeholder="Enter Tax Identification Number" value="{{ $emp->tin_number }}" required>
-                                            </div>
-
-                                            <div class="mb-3">
-                                                <label class="form-label fw-bold">Guarantee Letter Document (PDF / Image)</label>
-                                                @if($emp->guarantee_letter)
-                                                    <div class="mb-2">
-                                                        <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Already On File</span>
-                                                        <a href="{{ $emp->guarantee_letter_url }}" target="_blank" class="small ms-2">View Document →</a>
-                                                    </div>
-                                                @endif
-                                                <input type="file" name="guarantee_letter" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg">
-                                                <small class="text-muted">Upload signed guarantee letter to complete renewal compliance.</small>
-                                            </div>
-
-                                            <div class="form-check form-switch mb-2">
-                                                <input class="form-check-input" type="checkbox" name="probation_completed" value="1" id="probation_completed_{{ $emp->id }}" checked>
-                                                <label class="form-check-label fw-semibold" for="probation_completed_{{ $emp->id }}">
-                                                    Mark 45-Day Test Period / Probation Completed
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer bg-light">
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-sm btn-success fw-bold">
-                                                <i class="fa-solid fa-check me-1"></i> Save Renewal &amp; Activate
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
                     </td>
                 </tr>
                 @empty
@@ -225,6 +159,77 @@
         </div>
     @endif
 </div>
+
+{{-- Renew Modals placed OUTSIDE the table-responsive to ensure clean rendering above backdrop --}}
+@foreach($employees as $emp)
+<div class="modal fade" id="renewModal{{ $emp->id }}" tabindex="-1" aria-labelledby="renewModalLabel{{ $emp->id }}" aria-hidden="true" data-bs-backdrop="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <form action="{{ route('employees.renew', $emp) }}" method="POST" enctype="multipart/form-data">
+                @csrf
+                <div class="modal-header bg-success text-white py-3 px-4">
+                    <h5 class="modal-title fs-6 fw-bold mb-0" id="renewModalLabel{{ $emp->id }}">
+                        <i class="fa-solid fa-user-check me-2"></i>Renew / Activate Employee: {{ $emp->full_name }}
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <p class="small text-muted mb-3">
+                        Transition or renew this employee to Permanent or Contract, provide Guarantee Letter &amp; TIN information, and restore active account login status.
+                    </p>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Employment Type <span class="text-danger">*</span></label>
+                        <select name="employment_type" id="renew_emp_type_{{ $emp->id }}" class="form-select" onchange="toggleRenewContractDate({{ $emp->id }})" required>
+                            <option value="permanent" {{ $emp->employment_type === 'permanent' ? 'selected' : '' }}>Permanent</option>
+                            <option value="contract" {{ $emp->employment_type === 'contract' ? 'selected' : '' }}>Contract (Specify End Date)</option>
+                            <option value="daily" {{ $emp->employment_type === 'daily' ? 'selected' : '' }}>Daily Labor</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3 {{ $emp->employment_type === 'contract' ? '' : 'd-none' }}" id="renew_contract_end_div_{{ $emp->id }}">
+                        <label class="form-label fw-bold text-dark">Contract End Date (Valid Upto) <span class="text-danger">*</span></label>
+                        <input type="date" name="contract_end_date" class="form-control" value="{{ optional($emp->contract_end_date)->format('Y-m-d') }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">TIN Number <span class="text-danger">*</span></label>
+                        <input type="text" name="tin_number" class="form-control font-monospace" placeholder="Enter Tax Identification Number" value="{{ $emp->tin_number }}" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Guarantee Letter Document (PDF / Image)</label>
+                        @if($emp->guarantee_letter)
+                            <div class="mb-2 p-2 rounded bg-light border d-flex align-items-center justify-content-between">
+                                <div>
+                                    <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Already On File</span>
+                                    <small class="text-muted ms-1">Guarantee Letter</small>
+                                </div>
+                                <a href="{{ $emp->guarantee_letter_url }}" target="_blank" class="btn btn-xs btn-outline-primary">View Document →</a>
+                            </div>
+                        @endif
+                        <input type="file" name="guarantee_letter" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg">
+                        <small class="text-muted">Upload signed guarantee letter to complete renewal compliance.</small>
+                    </div>
+
+                    <div class="form-check form-switch p-3 bg-light rounded border mb-2">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" name="probation_completed" value="1" id="probation_completed_{{ $emp->id }}" checked>
+                        <label class="form-check-label fw-semibold text-dark" for="probation_completed_{{ $emp->id }}">
+                            Mark 45-Day Test Period / Probation Completed
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4 border-top">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-success fw-bold px-3">
+                        <i class="fa-solid fa-check me-1"></i> Save Renewal &amp; Activate
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endforeach
 
 @push('scripts')
 <script>
