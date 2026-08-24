@@ -16,6 +16,7 @@ use App\Models\ChartOfAccount;
 use App\Models\Employee;
 use App\Models\User;
 use App\Models\Inventory;
+use App\Models\ProformaInvoice;
 use App\Services\ProcurementLifecycleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -575,8 +576,68 @@ class PurchaseRequestController extends Controller
     public function submitProformas(Request $request, PurchaseRequest $purchaseRequest)
     {
         $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer']);
+        if ($purchaseRequest->proformaInvoices()->count() === 0) {
+            return back()->with('error', 'Please attach at least one supplier proforma quote before submitting.');
+        }
         $this->lifecycle->submitProformas($purchaseRequest, $request->notes);
-        return back()->with('success', 'Proformas submitted to Procurement Manager.');
+        return back()->with('success', 'Proformas submitted to Procurement Manager for review and selection.');
+    }
+
+    public function attachProforma(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer', 'purchase_manager', 'procurement_manager']);
+
+        $request->validate([
+            'supplier_id'   => 'required|exists:suppliers,id',
+            'proforma_no'   => 'nullable|string|max:50',
+            'proforma_date' => 'required|date',
+            'valid_until'   => 'nullable|date',
+            'subtotal'      => 'nullable|numeric|min:0',
+            'tax_amount'    => 'nullable|numeric|min:0',
+            'grand_total'   => 'required|numeric|min:0.01',
+            'notes'         => 'nullable|string',
+            'proforma_file' => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+        ]);
+
+        $filePath = null;
+        if ($request->hasFile('proforma_file')) {
+            $filePath = \App\Services\FileUploadService::upload($request->file('proforma_file'), 'proformas');
+        }
+
+        $pNo = $request->proforma_no ?: ('PROF-' . date('Ymd') . '-' . str_pad(ProformaInvoice::count() + 1, 4, '0', STR_PAD_LEFT));
+
+        $proforma = ProformaInvoice::create([
+            'proforma_no'         => $pNo,
+            'purchase_request_id' => $purchaseRequest->id,
+            'supplier_id'         => $request->supplier_id,
+            'proforma_date'       => $request->proforma_date,
+            'valid_until'         => $request->valid_until,
+            'subtotal'            => $request->subtotal ?? $request->grand_total,
+            'tax_amount'          => $request->tax_amount ?? 0,
+            'grand_total'         => $request->grand_total,
+            'notes'               => $request->notes,
+            'file_path'           => $filePath,
+            'status'              => 'pending',
+            'gm_selected'         => false,
+        ]);
+
+        return back()->with('success', "Proforma #{$proforma->proforma_no} attached successfully.");
+    }
+
+    public function deleteProforma(PurchaseRequest $purchaseRequest, ProformaInvoice $proforma)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer', 'purchase_manager', 'procurement_manager']);
+
+        if ($proforma->purchase_request_id !== $purchaseRequest->id) {
+            abort(404);
+        }
+
+        if ($proforma->file_path) {
+            \App\Services\FileUploadService::delete($proforma->file_path);
+        }
+
+        $proforma->delete();
+        return back()->with('success', 'Proforma invoice removed.');
     }
 
     // ─── STAGE 5a: Marketing Variance ───────────────────────────────────────

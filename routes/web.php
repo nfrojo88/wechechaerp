@@ -1383,6 +1383,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/send-to-proc-team', [App\Http\Controllers\PurchaseRequestController::class, 'sendToProcurementTeam'])->name('purchase-requests.send-to-proc-team');
     Route::post('purchase-requests/{purchaseRequest}/submit-direct-buy', [App\Http\Controllers\PurchaseRequestController::class, 'submitDirectBuy'])->name('purchase-requests.submit-direct-buy');
     Route::post('purchase-requests/{purchaseRequest}/submit-proformas', [App\Http\Controllers\PurchaseRequestController::class, 'submitProformas'])->name('purchase-requests.submit-proformas');
+    Route::post('purchase-requests/{purchaseRequest}/attach-proforma', [App\Http\Controllers\PurchaseRequestController::class, 'attachProforma'])->name('purchase-requests.attach-proforma');
+    Route::delete('purchase-requests/{purchaseRequest}/proformas/{proforma}', [App\Http\Controllers\PurchaseRequestController::class, 'deleteProforma'])->name('purchase-requests.delete-proforma');
     Route::post('purchase-requests/{purchaseRequest}/add-marketing-variance', [App\Http\Controllers\PurchaseRequestController::class, 'addMarketingVariance'])->name('purchase-requests.add-marketing-variance');
     Route::post('purchase-requests/{purchaseRequest}/select-proformas', [App\Http\Controllers\PurchaseRequestController::class, 'selectProformas'])->name('purchase-requests.select-proformas');
     Route::post('purchase-requests/{purchaseRequest}/gm-decide', [App\Http\Controllers\PurchaseRequestController::class, 'gmDecide'])->name('purchase-requests.gm-decide');

@@ -248,22 +248,63 @@
                                 </button>
                             </form>
                         @else
-                            <h6 class="font-weight-bold text-primary mb-2">
-                                <i class="fas fa-file-invoice-dollar me-1"></i>Proforma Sourcing
-                            </h6>
-                            <form action="{{ route('purchase-requests.submit-proformas', $purchaseRequest) }}" method="POST">
-                                @csrf
-                                <div class="alert alert-info py-2 px-3 small mb-3">
-                                    <i class="fas fa-info-circle me-1"></i> Attach/upload proforma quotes in the <strong>Proforma Invoices</strong> tab on the right, then submit them for Purchase Manager verification and selection.
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-uppercase">Procurement Notes</label>
-                                    <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional notes regarding attached proformas..."></textarea>
-                                </div>
-                                <button class="btn btn-primary btn-sm w-100 fw-bold">
-                                    <i class="fas fa-paper-plane me-1"></i> Submit Proformas to PM for Selection
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="font-weight-bold text-primary mb-0">
+                                    <i class="fas fa-file-invoice-dollar me-1"></i>Proforma Sourcing
+                                </h6>
+                                <button type="button" class="btn btn-primary btn-sm py-1 px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#attachProformaModal">
+                                    <i class="fas fa-plus me-1"></i> Attach Quote
                                 </button>
-                            </form>
+                            </div>
+
+                            @if($purchaseRequest->proformaInvoices->count() > 0)
+                                <div class="bg-light p-2 rounded border mb-3 small">
+                                    <div class="fw-bold text-dark mb-2 pb-1 border-bottom d-flex justify-content-between align-items-center">
+                                        <span>Attached Quotes ({{ $purchaseRequest->proformaInvoices->count() }}):</span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" data-bs-toggle="modal" data-bs-target="#attachProformaModal">+ Add Another</button>
+                                    </div>
+                                    @foreach($purchaseRequest->proformaInvoices as $prof)
+                                        <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                                            <div>
+                                                <strong>{{ $prof->supplier?->name ?? 'Supplier' }}</strong>
+                                                <div class="text-muted" style="font-size: 11px;">#{{ $prof->proforma_no }} &bull; <strong class="text-primary">{{ number_format($prof->grand_total, 2) }} ETB</strong></div>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-1">
+                                                @if($prof->file_path)
+                                                    <a href="{{ \App\Services\FileUploadService::url($prof->file_path) }}" target="_blank" class="btn btn-outline-primary btn-sm py-0 px-1" title="View Document">
+                                                        <i class="fas fa-file"></i>
+                                                    </a>
+                                                @endif
+                                                <form action="{{ route('purchase-requests.delete-proforma', [$purchaseRequest, $prof]) }}" method="POST" onsubmit="return confirm('Remove this proforma quote?');" class="d-inline">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1" title="Delete">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+
+                                <form action="{{ route('purchase-requests.submit-proformas', $purchaseRequest) }}" method="POST">
+                                    @csrf
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase">Procurement Team Notes</label>
+                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional notes regarding attached proformas..."></textarea>
+                                    </div>
+                                    <button class="btn btn-primary btn-sm w-100 fw-bold">
+                                        <i class="fas fa-paper-plane me-1"></i> Submit {{ $purchaseRequest->proformaInvoices->count() }} Proforma(s) to PM
+                                    </button>
+                                </form>
+                            @else
+                                <div class="alert alert-warning py-2 px-3 small mb-3">
+                                    <i class="fas fa-exclamation-circle me-1"></i> No proformas attached yet. Click <strong>Attach Quote</strong> below to upload supplier quotation(s).
+                                </div>
+                                <button type="button" class="btn btn-primary btn-sm w-100 fw-bold py-2 mb-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#attachProformaModal">
+                                    <i class="fas fa-plus-circle me-1"></i> Attach First Proforma Quote
+                                </button>
+                            @endif
                         @endif
 
                     <!-- STAGE 5a: Marketing Review -->
@@ -287,10 +328,32 @@
 
                     <!-- STAGE 5b: PM Proforma Selection -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION)
+                        <h6 class="font-weight-bold text-primary mb-2">
+                            <i class="fas fa-check-double me-1"></i>Select Proforma(s) for GM
+                        </h6>
                         <form action="{{ route('purchase-requests.select-proformas', $purchaseRequest) }}" method="POST">
                             @csrf
-                            <p class="small text-muted mb-2">Select proformas from the table on the right to forward to GM.</p>
-                            <button class="btn btn-primary btn-sm w-100">Send Selected Proformas to GM</button>
+                            <p class="small text-muted mb-2">Select which supplier quotation(s) to forward to General Manager:</p>
+                            <div class="bg-light p-2 rounded border mb-3 small">
+                                @forelse($purchaseRequest->proformaInvoices as $prof)
+                                    <div class="form-check py-1 border-bottom">
+                                        <input class="form-check-input" type="checkbox" name="proforma_ids[]" value="{{ $prof->id }}" id="profSel{{ $prof->id }}" {{ $loop->first ? 'checked' : '' }}>
+                                        <label class="form-check-label d-flex justify-content-between align-items-center" for="profSel{{ $prof->id }}">
+                                            <span><strong>{{ $prof->supplier?->name }}</strong> (#{{ $prof->proforma_no }})</span>
+                                            <span class="text-primary fw-bold">{{ number_format($prof->grand_total, 2) }} ETB</span>
+                                        </label>
+                                    </div>
+                                @empty
+                                    <div class="text-muted italic">No attached proformas found.</div>
+                                @endforelse
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase">PM Notes for GM</label>
+                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Remarks or recommendation for GM..."></textarea>
+                            </div>
+                            <button class="btn btn-primary btn-sm w-100 fw-bold" {{ $purchaseRequest->proformaInvoices->count() === 0 ? 'disabled' : '' }}>
+                                <i class="fas fa-paper-plane me-1"></i> Send Selected Proformas to GM
+                            </button>
                         </form>
 
                     <!-- STAGE 6: GM Decision -->
@@ -602,6 +665,108 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Proforma Invoices / Supplier Quotations Section -->
+            @if($purchaseRequest->sourcing_method === 'proforma' || $purchaseRequest->proformaInvoices->count() > 0 || in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM, \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION, \App\Models\PurchaseRequest::STATUS_PENDING_GM]))
+            <div class="card border-0 shadow-sm mb-4 border-start border-4 border-primary">
+                <div class="card-header bg-white font-weight-bold py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fw-bold fs-6"><i class="fas fa-file-invoice-dollar text-primary me-2"></i>Vendor Proforma Invoices & Quotes</span>
+                        <span class="badge bg-primary rounded-pill">{{ $purchaseRequest->proformaInvoices->count() }} Attached</span>
+                    </div>
+                    @if($canActOnCurrentStage && in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM, \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER, \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION]))
+                    <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#attachProformaModal">
+                        <i class="fas fa-plus me-1"></i> Attach Proforma Quote
+                    </button>
+                    @endif
+                </div>
+                <div class="card-body p-0">
+                    @if($purchaseRequest->proformaInvoices->count() > 0)
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Supplier</th>
+                                    <th>Proforma #</th>
+                                    <th>Date / Validity</th>
+                                    <th>Grand Total (ETB)</th>
+                                    <th>Document</th>
+                                    <th>Status</th>
+                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM)
+                                    <th class="pe-3 text-end">Action</th>
+                                    @endif
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($purchaseRequest->proformaInvoices as $prof)
+                                @php
+                                    $profUrl = \App\Services\FileUploadService::url($prof->file_path);
+                                    $pExt = strtolower(pathinfo($prof->file_path ?? '', PATHINFO_EXTENSION));
+                                    $isPdf = $pExt === 'pdf';
+                                @endphp
+                                <tr>
+                                    <td>
+                                        <strong class="text-dark">{{ $prof->supplier?->name ?? 'N/A' }}</strong>
+                                        @if($prof->supplier?->phone)
+                                            <div class="small text-muted"><i class="fas fa-phone me-1"></i>{{ $prof->supplier->phone }}</div>
+                                        @endif
+                                    </td>
+                                    <td><code>{{ $prof->proforma_no }}</code></td>
+                                    <td>
+                                        <div class="small">{{ optional($prof->proforma_date)->format('M d, Y') ?? '-' }}</div>
+                                        @if($prof->valid_until)
+                                            <div class="text-muted" style="font-size: 11px;">Valid till: {{ $prof->valid_until->format('M d, Y') }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="fw-bold text-primary fs-6">{{ number_format($prof->grand_total, 2) }} ETB</td>
+                                    <td>
+                                        @if($profUrl)
+                                            <a href="{{ $profUrl }}" target="_blank" class="btn btn-sm btn-outline-primary py-1 px-2 shadow-sm" title="View attached proforma document">
+                                                <i class="fas {{ $isPdf ? 'fa-file-pdf text-danger' : 'fa-file-image text-info' }} me-1"></i> View File
+                                            </a>
+                                        @else
+                                            <span class="text-muted small italic">No file</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if($prof->gm_selected)
+                                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Selected for GM</span>
+                                        @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION)
+                                            <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending PM Selection</span>
+                                        @else
+                                            <span class="badge bg-secondary">Attached</span>
+                                        @endif
+                                    </td>
+                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM)
+                                    <td class="pe-3 text-end">
+                                        <form action="{{ route('purchase-requests.delete-proforma', [$purchaseRequest, $prof]) }}" method="POST" onsubmit="return confirm('Delete this proforma quote?');" class="d-inline">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="btn btn-outline-danger btn-sm py-1 px-2" title="Delete Proforma">
+                                                <i class="fas fa-trash me-1"></i> Delete
+                                            </button>
+                                        </form>
+                                    </td>
+                                    @endif
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    @else
+                    <div class="p-4 text-center text-muted">
+                        <i class="fas fa-file-invoice-dollar fa-3x text-secondary mb-2 opacity-50"></i>
+                        <p class="mb-2">No vendor proformas have been attached yet.</p>
+                        @if($canActOnCurrentStage && in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM, \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER]))
+                        <button type="button" class="btn btn-sm btn-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#attachProformaModal">
+                            <i class="fas fa-plus me-1"></i> Attach First Proforma Quote
+                        </button>
+                        @endif
+                    </div>
+                    @endif
+                </div>
+            </div>
+            @endif
 
             <!-- Uploaded Purchase Receipt (Visible to Requester & All Hierarchy Roles) -->
             @if($purchaseRequest->receipt)
@@ -992,6 +1157,71 @@
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-success btn-sm fw-bold px-4">
                         <i class="fas fa-paper-plane me-1"></i> Send to Procurement Manager
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+{{-- MODAL 4: ATTACH PROFORMA INVOICE QUOTE                                    --}}
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="attachProformaModal" tabindex="-1" aria-labelledby="attachProformaModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.attach-proforma', $purchaseRequest) }}" method="POST" enctype="multipart/form-data">
+                @csrf
+                <div class="modal-header bg-primary text-white py-3">
+                    <h5 class="modal-title fw-bold" id="attachProformaModalLabel">
+                        <i class="fas fa-file-invoice-dollar me-2"></i>Attach Supplier Proforma Quote
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-uppercase">Select Supplier / Vendor <span class="text-danger">*</span></label>
+                            <select name="supplier_id" class="form-select form-select-sm" required>
+                                <option value="">-- Choose Supplier --</option>
+                                @foreach($suppliers as $sup)
+                                    <option value="{{ $sup->id }}">{{ $sup->name }} @if($sup->phone) ({{ $sup->phone }}) @endif</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-uppercase">Proforma / Quote Ref No.</label>
+                            <input type="text" name="proforma_no" class="form-control form-control-sm" placeholder="e.g. PI-2026-088 (auto-generated if blank)">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-uppercase">Proforma Date <span class="text-danger">*</span></label>
+                            <input type="date" name="proforma_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-uppercase">Quote Validity Until</label>
+                            <input type="date" name="valid_until" class="form-control form-control-sm" value="{{ date('Y-m-d', strtotime('+15 days')) }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-uppercase">Grand Total Amount (ETB) <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <input type="number" step="0.01" min="0.01" name="grand_total" class="form-control form-control-sm fw-bold" required placeholder="0.00">
+                                <span class="input-group-text">ETB</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-uppercase">Proforma Document (PDF / Image) <span class="text-danger">*</span></label>
+                            <input type="file" name="proforma_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold small text-uppercase">Notes / Terms (Optional)</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Payment terms, delivery timeframe, warranty or quotation notes..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm">
+                        <i class="fas fa-check-circle me-1"></i> Attach Proforma Quote
                     </button>
                 </div>
             </form>
