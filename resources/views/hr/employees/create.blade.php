@@ -339,52 +339,89 @@
                         <input type="text" name="account_number" class="form-control" value="{{ old('account_number') }}" placeholder="1000123456789">
                     </div>
 
-                    {{-- Guarantee & Guarantor Person Details --}}
+                    {{-- Guarantee & Guarantor Person Details (Accepts Two Guarantors) --}}
                     <div class="col-12">
-                        <div class="card border-warning bg-light">
-                            <div class="card-header bg-warning bg-opacity-10 border-warning-subtle py-2 px-3">
+                        <div class="card border-warning bg-light shadow-sm">
+                            <div class="card-header bg-warning bg-opacity-10 border-warning-subtle py-2 px-3 d-flex justify-content-between align-items-center">
                                 <h6 class="fw-bold mb-0 text-dark">
-                                    <i class="fa-solid fa-shield-halved text-warning me-2"></i>Guarantee & Guarantor Person Information (Optional)
+                                    <i class="fa-solid fa-shield-halved text-warning me-2"></i>Guarantee & Guarantor Person Information (Accepts 2 Guarantors)
                                 </h6>
+                                <span class="badge bg-warning text-dark"><i class="fa-solid fa-users me-1"></i>2 Guarantor Profiles</span>
                             </div>
                             <div class="card-body p-3">
-                                <div class="row g-3">
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-semibold">Guarantor / Guarantee Person Name</label>
-                                        <input type="text" name="guarantor_name" class="form-control" value="{{ old('guarantor_name') }}" placeholder="e.g. Abebe Kebede">
+                                {{-- ── GUARANTOR 1 ────────────────────────────── --}}
+                                <div class="p-3 bg-white border rounded mb-3">
+                                    <div class="d-flex align-items-center mb-2 pb-1 border-bottom">
+                                        <span class="badge bg-primary me-2">Guarantor #1</span>
+                                        <h6 class="fw-bold mb-0 text-dark">Primary Guarantor Details</h6>
                                     </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-semibold">Guarantor National ID / ID Number</label>
-                                        <input type="text" name="guarantor_id_number" class="form-control" value="{{ old('guarantor_id_number') }}" placeholder="e.g. ET-NAT-987654">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-semibold">Guarantor Phone Number</label>
-                                        <input type="text" name="guarantor_phone" class="form-control" value="{{ old('guarantor_phone') }}" placeholder="e.g. +251 91 123 4567">
-                                    </div>
-
-                                    {{-- Guarantor ID Document Upload --}}
-                                    <div class="col-md-6">
-                                        <div class="p-3 bg-white border rounded">
-                                            <label class="form-label fw-semibold mb-1 d-block">
-                                                <i class="fa-solid fa-id-card text-primary me-1"></i>Guarantor National ID Document / Photo
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 1 Full Name</label>
+                                            <input type="text" name="guarantor_name" class="form-control form-control-sm" value="{{ old('guarantor_name') }}" placeholder="e.g. Abebe Kebede">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 1 National / Kebele ID</label>
+                                            <input type="text" name="guarantor_id_number" class="form-control form-control-sm" value="{{ old('guarantor_id_number') }}" placeholder="e.g. ET-NAT-987654">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 1 Phone Number</label>
+                                            <input type="text" name="guarantor_phone" class="form-control form-control-sm" value="{{ old('guarantor_phone') }}" placeholder="e.g. +251 91 123 4567">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold small mb-1">
+                                                <i class="fa-solid fa-id-card text-primary me-1"></i>Guarantor 1 ID Document / Photo
                                             </label>
-                                            <small class="text-muted d-block mb-2">Upload photo of guarantor ID or Kebele ID (PDF, PNG, JPG - Max 15MB).</small>
                                             <input type="file" name="guarantor_id_card" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
                                         </div>
-                                    </div>
-
-                                    {{-- Guarantee Letter Upload --}}
-                                    <div class="col-md-6">
-                                        <div class="p-3 bg-white border rounded">
-                                            <label class="form-label fw-semibold mb-1 d-block">
-                                                <i class="fa-solid fa-file-shield text-warning me-1"></i>Signed Guarantee Letter Document
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold small mb-1">
+                                                <i class="fa-solid fa-file-shield text-warning me-1"></i>Signed Guarantee Letter #1
                                             </label>
-                                            <small class="text-muted d-block mb-2">Upload official signed guarantee document (PDF, PNG, JPG - Max 15MB).</small>
                                             <input type="file" name="guarantee_letter" id="guarantee_letter_input" class="form-control form-control-sm" 
                                                    accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
                                                    onchange="previewSingleFile(this, 'guarantee_preview')">
                                             <div id="guarantee_preview" class="mt-2 d-none">
-                                                <img src="" alt="Guarantee Preview" class="img-preview-box" style="max-height:80px;">
+                                                <img src="" alt="Guarantee 1 Preview" class="img-preview-box" style="max-height:80px;">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- ── GUARANTOR 2 ────────────────────────────── --}}
+                                <div class="p-3 bg-white border rounded">
+                                    <div class="d-flex align-items-center mb-2 pb-1 border-bottom">
+                                        <span class="badge bg-secondary me-2">Guarantor #2</span>
+                                        <h6 class="fw-bold mb-0 text-dark">Second Guarantor Details (Optional)</h6>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 2 Full Name</label>
+                                            <input type="text" name="guarantor_2_name" class="form-control form-control-sm" value="{{ old('guarantor_2_name') }}" placeholder="e.g. Almaz Tesfaye">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 2 National / Kebele ID</label>
+                                            <input type="text" name="guarantor_2_id_number" class="form-control form-control-sm" value="{{ old('guarantor_2_id_number') }}" placeholder="e.g. ET-NAT-123456">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 2 Phone Number</label>
+                                            <input type="text" name="guarantor_2_phone" class="form-control form-control-sm" value="{{ old('guarantor_2_phone') }}" placeholder="e.g. +251 92 987 6543">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold small mb-1">
+                                                <i class="fa-solid fa-id-card text-primary me-1"></i>Guarantor 2 ID Document / Photo
+                                            </label>
+                                            <input type="file" name="guarantor_2_id_card" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold small mb-1">
+                                                <i class="fa-solid fa-file-shield text-warning me-1"></i>Signed Guarantee Letter #2
+                                            </label>
+                                            <input type="file" name="guarantee_letter_2" id="guarantee_letter_2_input" class="form-control form-control-sm" 
+                                                   accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
+                                                   onchange="previewSingleFile(this, 'guarantee_2_preview')">
+                                            <div id="guarantee_2_preview" class="mt-2 d-none">
+                                                <img src="" alt="Guarantee 2 Preview" class="img-preview-box" style="max-height:80px;">
                                             </div>
                                         </div>
                                     </div>
@@ -796,38 +833,49 @@
                         </div>
                     </div>
 
-                    {{-- Registration / Employment Letter --}}
+                    {{-- Registration / Employment Letter (Multiple Photos/Pages Allowed) --}}
                     <div class="col-md-4">
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body">
-                                <h6 class="fw-bold mb-1"><i class="fa-solid fa-file-contract text-success me-1"></i>Employment / Registration Letter</h6>
-                                <p class="text-muted small mb-3">Upload the signed employment contract or official registration letter. PDF, PNG, JPG, WEBP — Max 15MB.</p>
-                                <input type="file" name="registration_letter" id="registration_letter_input"
-                                       class="form-control @error('registration_letter') is-invalid @enderror"
+                                <h6 class="fw-bold mb-1"><i class="fa-solid fa-file-contract text-success me-1"></i>Employment & Registration Documents</h6>
+                                <p class="text-muted small mb-2">Upload pictures/pages of the registration letter or employment contract (Multiple pictures allowed, PDF/PNG/JPG - Max 15MB each).</p>
+                                <input type="file" name="registration_letters[]" id="registration_letters_input" multiple
+                                       class="form-control form-control-sm @error('registration_letters') is-invalid @enderror @error('registration_letter') is-invalid @enderror"
                                        accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
-                                       onchange="previewSingleFile(this, 'reg_letter_preview')">
+                                       onchange="previewMultiFiles(this, 'reg_letters_preview')">
+                                @error('registration_letters')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 @error('registration_letter')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                <div id="reg_letter_preview" class="mt-2 d-none">
-                                    <img src="" alt="Letter Preview" class="img-preview-box" style="max-height:100px;">
-                                </div>
+                                <div id="reg_letters_preview" class="mt-2 d-flex flex-wrap gap-2"></div>
                             </div>
                         </div>
                     </div>
 
-                    {{-- Guarantee & Guarantor Documents --}}
+                    {{-- Guarantee & Guarantor Documents (Guarantor 1 & Guarantor 2) --}}
                     <div class="col-md-4">
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body">
                                 <h6 class="fw-bold mb-1"><i class="fa-solid fa-shield-halved text-warning me-1"></i>Guarantee & Guarantor Documents</h6>
-                                <p class="text-muted small mb-2">Upload guarantee letter and guarantor ID document (if not uploaded in Step 3).</p>
+                                <p class="text-muted small mb-2">Upload guarantee letter & ID documents for Guarantor 1 and Guarantor 2 (if not uploaded in Step 3).</p>
 
-                                <label class="form-label small fw-semibold">Guarantee Letter Document:</label>
-                                <input type="file" name="guarantee_letter" class="form-control form-control-sm mb-2"
-                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                <div class="p-2 border rounded bg-light mb-2">
+                                    <div class="small fw-bold text-primary mb-1"><i class="fa-solid fa-user-shield me-1"></i>Guarantor #1 Documents</div>
+                                    <label class="form-label small mb-0">Signed Guarantee Letter #1:</label>
+                                    <input type="file" name="guarantee_letter" class="form-control form-control-sm mb-1"
+                                           accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                    <label class="form-label small mb-0">Guarantor 1 ID Card / Photo:</label>
+                                    <input type="file" name="guarantor_id_card" class="form-control form-control-sm"
+                                           accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                </div>
 
-                                <label class="form-label small fw-semibold">Guarantor National ID Document:</label>
-                                <input type="file" name="guarantor_id_card" class="form-control form-control-sm"
-                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                <div class="p-2 border rounded bg-light">
+                                    <div class="small fw-bold text-secondary mb-1"><i class="fa-solid fa-user-shield me-1"></i>Guarantor #2 Documents (Optional)</div>
+                                    <label class="form-label small mb-0">Signed Guarantee Letter #2:</label>
+                                    <input type="file" name="guarantee_letter_2" class="form-control form-control-sm mb-1"
+                                           accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                    <label class="form-label small mb-0">Guarantor 2 ID Card / Photo:</label>
+                                    <input type="file" name="guarantor_2_id_card" class="form-control form-control-sm"
+                                           accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -961,11 +1009,15 @@ function previewSingleFile(input, previewTargetId) {
         if (file.type.startsWith('image/')) {
             const reader = new FileReader();
             reader.onload = function(e) {
-                const img = target.querySelector('img');
-                if (img) {
-                    img.src = e.target.result;
-                    target.classList.remove('d-none');
+                let img = target.querySelector('img');
+                if (!img) {
+                    img = document.createElement('img');
+                    img.className = 'img-preview-box';
+                    img.style.maxHeight = '80px';
+                    target.appendChild(img);
                 }
+                img.src = e.target.result;
+                target.classList.remove('d-none');
             };
             reader.readAsDataURL(file);
         } else {
@@ -973,6 +1025,41 @@ function previewSingleFile(input, previewTargetId) {
         }
     } else {
         target.classList.add('d-none');
+    }
+}
+
+// Multiple files preview (e.g. Registration / Contract Letter Photos)
+function previewMultiFiles(input, previewTargetId) {
+    const target = document.getElementById(previewTargetId);
+    if (!target) return;
+    target.innerHTML = '';
+
+    if (input.files && input.files.length > 0) {
+        Array.from(input.files).forEach((file, idx) => {
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const card = document.createElement('div');
+                    card.className = 'border rounded p-1 text-center bg-white shadow-xs position-relative';
+                    card.style.width = '85px';
+                    card.innerHTML = `
+                        <img src="${e.target.result}" class="rounded" style="width:75px;height:75px;object-fit:cover;" alt="Photo ${idx+1}">
+                        <div class="small text-truncate text-muted mt-1" style="font-size:0.65rem;">Page ${idx+1}</div>
+                    `;
+                    target.appendChild(card);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                const card = document.createElement('div');
+                card.className = 'border rounded p-2 text-center bg-light shadow-xs';
+                card.style.width = '85px';
+                card.innerHTML = `
+                    <i class="fa-solid fa-file-pdf text-danger fa-2x"></i>
+                    <div class="small text-truncate text-muted mt-1" style="font-size:0.65rem;">${file.name}</div>
+                `;
+                target.appendChild(card);
+            }
+        });
     }
 }
 

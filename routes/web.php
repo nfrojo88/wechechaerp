@@ -1474,11 +1474,13 @@ Route::middleware(['auth'])->group(function () {
     Route::get('employees/experience/{experience}/license', [App\Http\Controllers\FileStreamController::class, 'viewLicense'])->name('employees.experience.license');
     Route::get('employees/experience/{experience}/letter', [App\Http\Controllers\FileStreamController::class, 'viewExperienceLetter'])->name('employees.experience.letter');
     Route::get('employees/{employee}/guarantee-letter-file', [App\Http\Controllers\FileStreamController::class, 'viewGuaranteeLetter'])->name('employees.guarantee-letter.view');
+    Route::get('employees/{employee}/guarantee-letter-2-file', [App\Http\Controllers\FileStreamController::class, 'viewGuaranteeLetter2'])->name('employees.guarantee-letter-2.view');
     Route::get('employees/{employee}/profile-picture', [App\Http\Controllers\FileStreamController::class, 'viewProfilePicture'])->name('employees.profile-picture');
     Route::get('employees/{employee}/national-id', [App\Http\Controllers\FileStreamController::class, 'viewNationalIdCard'])->name('employees.national-id');
     Route::get('employees/{employee}/asset-handover', [App\Http\Controllers\FileStreamController::class, 'viewAssetHandoverDocument'])->name('employees.asset-handover');
     Route::get('employees/{employee}/registration-letter', [App\Http\Controllers\FileStreamController::class, 'viewRegistrationLetter'])->name('employees.registration-letter');
     Route::get('employees/{employee}/guarantor-id', [App\Http\Controllers\FileStreamController::class, 'viewGuarantorId'])->name('employees.guarantor-id');
+    Route::get('employees/{employee}/guarantor-2-id', [App\Http\Controllers\FileStreamController::class, 'viewGuarantor2Id'])->name('employees.guarantor-2-id');
     Route::post('employees/{employee}/upload-guarantee', [App\Http\Controllers\EmployeeController::class, 'uploadGuaranteeLetter'])->name('employees.upload-guarantee');
     Route::post('employees/{employee}/initialize-leave-balance', [App\Http\Controllers\EmployeeController::class, 'initializeLeaveBalance'])->name('employees.initialize-leave-balance');
     Route::post('employees/{employee}/record-leave-deduction', [App\Http\Controllers\EmployeeController::class, 'recordLeaveDeduction'])->name('employees.record-leave-deduction');

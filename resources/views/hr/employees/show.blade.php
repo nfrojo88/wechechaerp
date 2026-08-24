@@ -198,8 +198,17 @@
                     <div class="col-md-4">
                         <div class="border rounded p-3 text-center bg-light h-100">
                             <i class="fa-solid fa-file-contract fa-2x text-primary mb-2"></i>
-                            <h6 class="fw-bold mb-1 small">Registration / Contract</h6>
-                            @if($employee->registration_letter)
+                            <h6 class="fw-bold mb-1 small">Registration / Contract Docs</h6>
+                            @php $regDocUrls = $employee->registration_letter_urls; @endphp
+                            @if(!empty($regDocUrls))
+                                <div class="d-flex flex-wrap justify-content-center gap-1 mt-2">
+                                    @foreach($regDocUrls as $idx => $docUrl)
+                                        <a href="{{ $docUrl }}" target="_blank" class="btn btn-xs btn-primary">
+                                            <i class="fa-solid fa-eye me-1"></i>Doc #{{ $idx + 1 }}
+                                        </a>
+                                    @endforeach
+                                </div>
+                            @elseif($employee->registration_letter)
                                 <a href="{{ $employee->registration_letter_url }}" target="_blank" class="btn btn-sm btn-primary mt-2">
                                     <i class="fa-solid fa-eye me-1"></i>View Contract
                                 </a>
@@ -361,80 +370,118 @@
                             <button type="submit" class="btn btn-primary">
                                 <i class="fa-solid fa-upload me-2"></i>Submit Early
                             </button>
-                        </form>
-                    @endif
-                @endif
-            </div>
-        </div>
-
-        {{-- ── Card 2: Guarantor Person Information ─────────────────────────── --}}
+                        </form>        {{-- ── Card 2: Guarantor Person Information (Guarantor 1 & Guarantor 2) ─────────────────────────── --}}
         <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-light">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
                     <i class="fa-solid fa-user-shield me-2 text-primary"></i>Guarantor Person Information
                 </h5>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                    <i class="fa-solid fa-users me-1"></i>2 Guarantor Capacity
+                </span>
             </div>
             <div class="card-body">
-                {{-- Person Details Row --}}
-                <div class="row g-3 mb-4">
-                    <div class="col-md-4">
-                        <div class="p-3 bg-light rounded border h-100">
-                            <small class="text-muted d-block mb-1 fw-semibold" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:.04em;">
-                                <i class="fa-solid fa-user-tie text-primary me-1"></i>Guarantor Full Name
-                            </small>
-                            <h6 class="mb-0 fw-bold text-dark">{{ $employee->guarantor_name ?: '—' }}</h6>
+                <div class="row g-4">
+                    {{-- ── Guarantor 1 Column ─────────────────────────── --}}
+                    <div class="col-lg-6">
+                        <div class="p-3 border rounded bg-light h-100">
+                            <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+                                <h6 class="fw-bold mb-0 text-dark">
+                                    <span class="badge bg-primary me-2">#1</span>Primary Guarantor
+                                </h6>
+                                @if($employee->guarantor_name || $employee->guarantor_id_number || $employee->guarantor_id_card)
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-check me-1"></i>Recorded</span>
+                                @else
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Not Provided</span>
+                                @endif
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-12">
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">FULL NAME</small>
+                                    <div class="fw-bold text-dark">{{ $employee->guarantor_name ?: '—' }}</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">NATIONAL / KEBELE ID</small>
+                                    <div class="fw-bold text-dark font-monospace">{{ $employee->guarantor_id_number ?: '—' }}</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">PHONE NUMBER</small>
+                                    <div class="fw-bold text-dark">{{ $employee->guarantor_phone ?: '—' }}</div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2 pt-2 border-top">
+                                @if($employee->guarantor_id_card)
+                                    <a href="{{ $employee->guarantor_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary">
+                                        <i class="fa-solid fa-id-card me-1"></i>View ID Document
+                                    </a>
+                                @endif
+                                @if($employee->guarantee_letter)
+                                    <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-xs btn-outline-warning">
+                                        <i class="fa-solid fa-file-shield me-1"></i>View Guarantee Letter #1
+                                    </a>
+                                @endif
+                                @if(!$employee->guarantor_id_card && !$employee->guarantee_letter)
+                                    <small class="text-muted fst-italic">No files attached for Guarantor 1.</small>
+                                @endif
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="p-3 bg-light rounded border h-100">
-                            <small class="text-muted d-block mb-1 fw-semibold" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:.04em;">
-                                <i class="fa-solid fa-id-card text-success me-1"></i>National ID Number
-                            </small>
-                            <h6 class="mb-0 fw-bold text-dark font-monospace">{{ $employee->guarantor_id_number ?: '—' }}</h6>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="p-3 bg-light rounded border h-100">
-                            <small class="text-muted d-block mb-1 fw-semibold" style="font-size:0.75rem; text-transform:uppercase; letter-spacing:.04em;">
-                                <i class="fa-solid fa-phone text-info me-1"></i>Phone Number
-                            </small>
-                            <h6 class="mb-0 fw-bold text-dark">{{ $employee->guarantor_phone ?: '—' }}</h6>
+
+                    {{-- ── Guarantor 2 Column ─────────────────────────── --}}
+                    <div class="col-lg-6">
+                        <div class="p-3 border rounded bg-light h-100">
+                            <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+                                <h6 class="fw-bold mb-0 text-dark">
+                                    <span class="badge bg-secondary me-2">#2</span>Second Guarantor
+                                </h6>
+                                @if($employee->guarantor_2_name || $employee->guarantor_2_id_number || $employee->guarantor_2_id_card)
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fa-solid fa-check me-1"></i>Recorded</span>
+                                @else
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Optional / Not Provided</span>
+                                @endif
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-12">
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">FULL NAME</small>
+                                    <div class="fw-bold text-dark">{{ $employee->guarantor_2_name ?: '—' }}</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">NATIONAL / KEBELE ID</small>
+                                    <div class="fw-bold text-dark font-monospace">{{ $employee->guarantor_2_id_number ?: '—' }}</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">PHONE NUMBER</small>
+                                    <div class="fw-bold text-dark">{{ $employee->guarantor_2_phone ?: '—' }}</div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2 pt-2 border-top">
+                                @if($employee->guarantor_2_id_card)
+                                    <a href="{{ $employee->guarantor_2_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary">
+                                        <i class="fa-solid fa-id-card me-1"></i>View ID Document
+                                    </a>
+                                @endif
+                                @if($employee->guarantee_letter_2)
+                                    <a href="{{ $employee->guarantee_letter_2_url }}" target="_blank" class="btn btn-xs btn-outline-warning">
+                                        <i class="fa-solid fa-file-shield me-1"></i>View Guarantee Letter #2
+                                    </a>
+                                @endif
+                                @if(!$employee->guarantor_2_id_card && !$employee->guarantee_letter_2)
+                                    <small class="text-muted fst-italic">No files attached for Guarantor 2.</small>
+                                @endif
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {{-- Guarantor ID Card Document --}}
-                @if($employee->guarantor_id_card)
-                    <div class="d-flex align-items-center gap-4 p-3 border rounded bg-white shadow-xs">
-                        <div class="text-center" style="min-width:80px;">
-                            <i class="fa-solid fa-id-card fa-3x text-primary"></i>
-                        </div>
-                        <div class="flex-grow-1">
-                            <h6 class="fw-bold mb-1 text-dark">Guarantor National ID Document</h6>
-                            <small class="text-muted d-block" style="font-size:0.78rem;">
-                                ID card / photo uploaded for verification
-                            </small>
-                            <span class="badge bg-success mt-1"><i class="fa-solid fa-check me-1"></i>On File</span>
-                        </div>
-                        <div>
-                            <a href="{{ $employee->guarantor_id_card_url }}" target="_blank"
-                               class="btn btn-outline-primary btn-sm px-3">
-                                <i class="fa-solid fa-eye me-1"></i>View Guarantor ID
-                            </a>
-                        </div>
-                    </div>
-                @else
-                    <div class="text-center py-3 text-muted border rounded bg-light">
-                        <i class="fa-solid fa-id-card fa-2x mb-2 opacity-25 d-block"></i>
-                        <small>No Guarantor ID document uploaded yet.</small>
-                    </div>
-                @endif
-
-                @if(!$employee->guarantor_name && !$employee->guarantor_id_number && !$employee->guarantor_phone && !$employee->guarantor_id_card)
+                @if(!$employee->guarantor_name && !$employee->guarantor_2_name && !$employee->guarantee_letter && !$employee->guarantee_letter_2)
                     <div class="alert alert-secondary mt-3 mb-0">
                         <i class="fa-solid fa-circle-info me-2"></i>
                         No guarantor person information has been recorded for this employee.
-                        <a href="{{ route('employees.edit', $employee) }}" class="alert-link ms-1">Add Guarantor →</a>
+                        <a href="{{ route('employees.edit', $employee) }}" class="alert-link ms-1">Add Guarantor Information →</a>
                     </div>
                 @endif
             </div>

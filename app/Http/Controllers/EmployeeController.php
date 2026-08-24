@@ -260,7 +260,19 @@ class EmployeeController extends Controller
             'guarantor_id_number'           => 'nullable|string|max:100',
             'guarantor_id_card'             => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
             'guarantor_phone'               => 'nullable|string|max:50',
+            'guarantee_letter'              => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'guarantor_2_name'              => 'nullable|string|max:255',
+            'guarantor_2_id_number'         => 'nullable|string|max:100',
+            'guarantor_2_id_card'           => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'guarantor_2_phone'             => 'nullable|string|max:50',
+            'guarantee_letter_2'            => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'registration_letter'           => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'registration_letters'          => 'nullable|array',
+            'registration_letters.*'        => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
         ]);
+
+        // Auto-heal missing database columns if necessary
+        $this->ensureGuarantorAndRegistrationColumnsExist();
 
         // Apply defaults
         $validated['employment_type']     = $validated['employment_type'] ?? 'permanent';
@@ -270,16 +282,27 @@ class EmployeeController extends Controller
         $validated['house_allowance']     = $validated['house_allowance'] ?? 0;
         $validated['position_allowance']  = $validated['position_allowance'] ?? 0;
 
-        // Handle guarantee letter upload
+        // Handle guarantee letter upload (Guarantor 1)
         if ($request->hasFile('guarantee_letter')) {
             $letterPath = \App\Services\FileUploadService::upload($request->file('guarantee_letter'), 'guarantee_letters');
             $validated['guarantee_letter'] = $letterPath;
             $validated['guarantee_letter_submitted_at'] = now();
         }
 
-        // Handle Guarantor National ID card upload
+        // Handle second guarantee letter upload (Guarantor 2)
+        if ($request->hasFile('guarantee_letter_2')) {
+            $letter2Path = \App\Services\FileUploadService::upload($request->file('guarantee_letter_2'), 'guarantee_letters');
+            $validated['guarantee_letter_2'] = $letter2Path;
+        }
+
+        // Handle Guarantor 1 National ID card upload
         if ($request->hasFile('guarantor_id_card')) {
             $validated['guarantor_id_card'] = \App\Services\FileUploadService::upload($request->file('guarantor_id_card'), 'employee_guarantor_ids');
+        }
+
+        // Handle Guarantor 2 National ID card upload
+        if ($request->hasFile('guarantor_2_id_card')) {
+            $validated['guarantor_2_id_card'] = \App\Services\FileUploadService::upload($request->file('guarantor_2_id_card'), 'employee_guarantor_ids');
         }
 
         // Handle National ID card upload
@@ -297,9 +320,24 @@ class EmployeeController extends Controller
             $validated['profile_picture'] = \App\Services\FileUploadService::upload($request->file('profile_picture'), 'employee_profile_pictures');
         }
 
-        // Handle Registration Letter upload
+        // Handle Registration Letter(s) upload (Multiple pictures / files support)
+        $regLetterPaths = [];
+        if ($request->hasFile('registration_letters')) {
+            foreach ($request->file('registration_letters') as $regFile) {
+                if ($regFile) {
+                    $regLetterPaths[] = \App\Services\FileUploadService::upload($regFile, 'employee_registration_letters');
+                }
+            }
+        }
         if ($request->hasFile('registration_letter')) {
-            $validated['registration_letter'] = \App\Services\FileUploadService::upload($request->file('registration_letter'), 'employee_registration_letters');
+            $singlePath = \App\Services\FileUploadService::upload($request->file('registration_letter'), 'employee_registration_letters');
+            if (empty($regLetterPaths)) {
+                $regLetterPaths[] = $singlePath;
+            }
+        }
+        if (!empty($regLetterPaths)) {
+            $validated['registration_letters'] = $regLetterPaths;
+            $validated['registration_letter'] = $regLetterPaths[0];
         }
 
         // Create or find User account
@@ -644,27 +682,48 @@ class EmployeeController extends Controller
             'guarantor_id_number'  => 'nullable|string|max:100',
             'guarantor_id_card'    => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
             'guarantor_phone'      => 'nullable|string|max:50',
+            'guarantee_letter_2'   => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'guarantor_2_name'     => 'nullable|string|max:255',
+            'guarantor_2_id_number'=> 'nullable|string|max:100',
+            'guarantor_2_id_card'  => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'guarantor_2_phone'    => 'nullable|string|max:50',
             'national_id_number'   => 'nullable|string|max:100',
             'national_id_card'     => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:10240',
             'asset_handover_document' => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:10240',
             'profile_picture'      => 'nullable|file|mimes:jpeg,png,jpg,webp|max:5120',
             'registration_letter'  => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'registration_letters' => 'nullable|array',
+            'registration_letters.*' => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
             'fixed_asset_units'    => 'nullable|array',
             'education'            => 'nullable|array',
             'experience'           => 'nullable|array',
             'licenses'             => 'nullable|array',
         ]);
 
-        // Handle guarantee letter upload if provided
+        // Auto-heal missing database columns if necessary
+        $this->ensureGuarantorAndRegistrationColumnsExist();
+
+        // Handle guarantee letter upload if provided (Guarantor 1)
         if ($request->hasFile('guarantee_letter')) {
             $letterPath = \App\Services\FileUploadService::upload($request->file('guarantee_letter'), 'guarantee_letters');
             $validated['guarantee_letter'] = $letterPath;
             $validated['guarantee_letter_submitted_at'] = now();
         }
 
-        // Handle Guarantor National ID card upload (replace if new)
+        // Handle second guarantee letter upload if provided (Guarantor 2)
+        if ($request->hasFile('guarantee_letter_2')) {
+            $letter2Path = \App\Services\FileUploadService::upload($request->file('guarantee_letter_2'), 'guarantee_letters');
+            $validated['guarantee_letter_2'] = $letter2Path;
+        }
+
+        // Handle Guarantor 1 National ID card upload (replace if new)
         if ($request->hasFile('guarantor_id_card')) {
             $validated['guarantor_id_card'] = \App\Services\FileUploadService::upload($request->file('guarantor_id_card'), 'employee_guarantor_ids');
+        }
+
+        // Handle Guarantor 2 National ID card upload (replace if new)
+        if ($request->hasFile('guarantor_2_id_card')) {
+            $validated['guarantor_2_id_card'] = \App\Services\FileUploadService::upload($request->file('guarantor_2_id_card'), 'employee_guarantor_ids');
         }
 
         // Handle National ID card upload (replace if new)
@@ -682,9 +741,22 @@ class EmployeeController extends Controller
             $validated['profile_picture'] = \App\Services\FileUploadService::upload($request->file('profile_picture'), 'employee_profile_pictures');
         }
 
-        // Handle Registration Letter upload (replace if new)
-        if ($request->hasFile('registration_letter')) {
-            $validated['registration_letter'] = \App\Services\FileUploadService::upload($request->file('registration_letter'), 'employee_registration_letters');
+        // Handle Registration Letter(s) upload (Multiple pictures / files support)
+        if ($request->hasFile('registration_letters')) {
+            $newRegPaths = [];
+            foreach ($request->file('registration_letters') as $regFile) {
+                if ($regFile) {
+                    $newRegPaths[] = \App\Services\FileUploadService::upload($regFile, 'employee_registration_letters');
+                }
+            }
+            if (!empty($newRegPaths)) {
+                $validated['registration_letters'] = $newRegPaths;
+                $validated['registration_letter'] = $newRegPaths[0];
+            }
+        } elseif ($request->hasFile('registration_letter')) {
+            $singlePath = \App\Services\FileUploadService::upload($request->file('registration_letter'), 'employee_registration_letters');
+            $validated['registration_letter'] = $singlePath;
+            $validated['registration_letters'] = [$singlePath];
         }
 
         // If employee was rejected by GM, resubmitting clears rejection and queues for GM review
@@ -1167,5 +1239,38 @@ class EmployeeController extends Controller
         return redirect()->route('employees.index')
             ->with('success', "Employee {$name} ({$code}) has been deleted successfully. If this employee is registered or added again later, fresh GM approval will be strictly required.");
     }
+    /**
+     * Ensure second guarantor and registration letters columns exist in employees table.
+     */
+    private function ensureGuarantorAndRegistrationColumnsExist()
+    {
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('employees')) {
+                \Illuminate\Support\Facades\Schema::table('employees', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'guarantee_letter_2')) {
+                        $table->string('guarantee_letter_2')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'guarantor_2_name')) {
+                        $table->string('guarantor_2_name')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'guarantor_2_id_number')) {
+                        $table->string('guarantor_2_id_number')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'guarantor_2_id_card')) {
+                        $table->string('guarantor_2_id_card')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'guarantor_2_phone')) {
+                        $table->string('guarantor_2_phone')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'registration_letters')) {
+                        $table->text('registration_letters')->nullable();
+                    }
+                });
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Employee table columns auto-heal error: ' . $e->getMessage());
+        }
+    }
 }
+
 

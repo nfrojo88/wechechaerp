@@ -16,9 +16,10 @@ class Employee extends Model
         'employment_type', 'contract_type', 'date_of_joining', 'basic_salary',
         'transport_allowance', 'house_allowance', 'position_allowance',
         'status', 'notes', 'bank_name', 'account_number',
-        'guarantee_letter', 'guarantee_letter_submitted_at', 'guarantee_letter_required',
+        'guarantee_letter', 'guarantee_letter_2', 'guarantee_letter_submitted_at', 'guarantee_letter_required',
         'guarantor_name', 'guarantor_id_number', 'guarantor_id_card', 'guarantor_phone',
-        'device_user_id', 'asset_handover_document', 'profile_picture', 'registration_letter',
+        'guarantor_2_name', 'guarantor_2_id_number', 'guarantor_2_id_card', 'guarantor_2_phone',
+        'device_user_id', 'asset_handover_document', 'profile_picture', 'registration_letter', 'registration_letters',
         'is_approved_by_gm', 'gm_approved_at', 'gm_approved_by',
         'gm_approval_status', 'gm_rejection_reason', 'gm_rejected_at', 'gm_rejected_by',
     ];
@@ -28,6 +29,7 @@ class Employee extends Model
         'basic_salary'    => 'decimal:2',
         'guarantee_letter_submitted_at' => 'date',
         'guarantee_letter_required' => 'boolean',
+        'registration_letters' => 'array',
         'is_approved_by_gm' => 'boolean',
         'gm_approved_at' => 'datetime',
         'gm_rejected_at' => 'datetime',
@@ -323,10 +325,14 @@ class Employee extends Model
     }
 
     /**
-     * Get registration letter URL
+     * Get registration letter URL (first or single document)
      */
     public function getRegistrationLetterUrlAttribute()
     {
+        $urls = $this->registration_letter_urls;
+        if (!empty($urls)) {
+            return $urls[0];
+        }
         if ($this->registration_letter) {
             return route('employees.registration-letter', $this->id);
         }
@@ -334,12 +340,60 @@ class Employee extends Model
     }
 
     /**
-     * Get guarantor ID card document/photo URL
+     * Get all registration letter / contract document URLs
+     */
+    public function getRegistrationLetterUrlsAttribute()
+    {
+        $urls = [];
+        $letters = $this->registration_letters;
+
+        if (is_array($letters) && count($letters) > 0) {
+            foreach ($letters as $idx => $path) {
+                $urls[] = route('employees.registration-letter', ['employee' => $this->id, 'index' => $idx]);
+            }
+        } elseif (!empty($this->registration_letter)) {
+            $decoded = json_decode($this->registration_letter, true);
+            if (is_array($decoded) && count($decoded) > 0) {
+                foreach ($decoded as $idx => $path) {
+                    $urls[] = route('employees.registration-letter', ['employee' => $this->id, 'index' => $idx]);
+                }
+            } else {
+                $urls[] = route('employees.registration-letter', $this->id);
+            }
+        }
+
+        return $urls;
+    }
+
+    /**
+     * Get guarantor 1 ID card document/photo URL
      */
     public function getGuarantorIdCardUrlAttribute()
     {
         if ($this->guarantor_id_card) {
             return route('employees.guarantor-id', $this->id);
+        }
+        return null;
+    }
+
+    /**
+     * Get guarantor 2 ID card document/photo URL
+     */
+    public function getGuarantor2IdCardUrlAttribute()
+    {
+        if ($this->guarantor_2_id_card) {
+            return route('employees.guarantor-2-id', $this->id);
+        }
+        return null;
+    }
+
+    /**
+     * Get second guarantee letter URL
+     */
+    public function getGuaranteeLetter2UrlAttribute()
+    {
+        if ($this->guarantee_letter_2) {
+            return route('employees.guarantee-letter-2.view', $this->id);
         }
         return null;
     }

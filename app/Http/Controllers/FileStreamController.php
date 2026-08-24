@@ -227,39 +227,96 @@ class FileStreamController extends Controller
     }
 
     /**
-     * Dedicated route to view an employee registration letter / contract.
+     * Dedicated route to view an employee registration letter / contract (single or multi-page).
      */
-    public function viewRegistrationLetter($id)
+    public function viewRegistrationLetter($id, Request $request = null)
     {
         $emp = Employee::find($id);
 
-        if (!$emp || empty($emp->registration_letter)) {
+        if (!$emp) {
+            return $this->renderMissingDocument('Registration Letter', 'Employee not found.');
+        }
+
+        $index = $request ? (int) $request->query('index', 0) : 0;
+        $file = null;
+
+        // If stored as JSON array in registration_letters or registration_letter
+        $letters = $emp->registration_letters;
+        if (is_array($letters) && count($letters) > 0) {
+            $file = $letters[$index] ?? $letters[0];
+        } elseif (!empty($emp->registration_letter)) {
+            $decoded = json_decode($emp->registration_letter, true);
+            if (is_array($decoded) && count($decoded) > 0) {
+                $file = $decoded[$index] ?? $decoded[0];
+            } else {
+                $file = $emp->registration_letter;
+            }
+        }
+
+        if (empty($file)) {
             return $this->renderMissingDocument('Registration Letter', 'No registration letter or employment contract document is on file for this employee.');
         }
 
-        if (Str::startsWith($emp->registration_letter, ['http://', 'https://'])) {
-            return redirect()->away($emp->registration_letter);
+        if (Str::startsWith($file, ['http://', 'https://'])) {
+            return redirect()->away($file);
         }
 
-        return $this->respondWithFile($emp->registration_letter, 'uploads', 'Registration Letter - ' . $emp->full_name);
+        $suffix = $index > 0 ? ' (Page ' . ($index + 1) . ')' : '';
+        return $this->respondWithFile($file, 'uploads', 'Registration Letter' . $suffix . ' - ' . $emp->full_name);
     }
 
     /**
-     * Dedicated route to view an employee guarantor ID card / document.
+     * Dedicated route to view an employee primary guarantor ID card / document.
      */
     public function viewGuarantorId($id)
     {
         $emp = Employee::find($id);
 
         if (!$emp || empty($emp->guarantor_id_card)) {
-            return $this->renderMissingDocument('Guarantor National ID Document', 'No guarantor ID card or document is on file for this employee.');
+            return $this->renderMissingDocument('Guarantor 1 National ID Document', 'No primary guarantor ID card or document is on file for this employee.');
         }
 
         if (Str::startsWith($emp->guarantor_id_card, ['http://', 'https://'])) {
             return redirect()->away($emp->guarantor_id_card);
         }
 
-        return $this->respondWithFile($emp->guarantor_id_card, 'uploads', 'Guarantor ID - ' . ($emp->guarantor_name ?: $emp->full_name));
+        return $this->respondWithFile($emp->guarantor_id_card, 'uploads', 'Guarantor 1 ID - ' . ($emp->guarantor_name ?: $emp->full_name));
+    }
+
+    /**
+     * Dedicated route to view an employee second guarantor ID card / document.
+     */
+    public function viewGuarantor2Id($id)
+    {
+        $emp = Employee::find($id);
+
+        if (!$emp || empty($emp->guarantor_2_id_card)) {
+            return $this->renderMissingDocument('Guarantor 2 National ID Document', 'No second guarantor ID card or document is on file for this employee.');
+        }
+
+        if (Str::startsWith($emp->guarantor_2_id_card, ['http://', 'https://'])) {
+            return redirect()->away($emp->guarantor_2_id_card);
+        }
+
+        return $this->respondWithFile($emp->guarantor_2_id_card, 'uploads', 'Guarantor 2 ID - ' . ($emp->guarantor_2_name ?: $emp->full_name));
+    }
+
+    /**
+     * Dedicated route to view an employee second guarantee letter.
+     */
+    public function viewGuaranteeLetter2($id)
+    {
+        $emp = Employee::find($id);
+
+        if (!$emp || empty($emp->guarantee_letter_2)) {
+            return $this->renderMissingDocument('Second Guarantee Letter', 'No second guarantee letter has been uploaded for this employee.');
+        }
+
+        if (Str::startsWith($emp->guarantee_letter_2, ['http://', 'https://'])) {
+            return redirect()->away($emp->guarantee_letter_2);
+        }
+
+        return $this->respondWithFile($emp->guarantee_letter_2, 'uploads', 'Second Guarantee Letter - ' . $emp->full_name);
     }
 
     /**

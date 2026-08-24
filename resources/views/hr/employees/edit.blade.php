@@ -367,72 +367,148 @@
                         </div>
                     </div>
 
-                    {{-- Guarantee & Guarantor Person Details --}}
+                    {{-- Guarantee & Guarantor Person Details (Accepts Two Guarantors) --}}
                     <div class="col-12">
-                        <div class="card border border-warning bg-light">
-                            <div class="card-header bg-warning bg-opacity-10 border-warning-subtle py-2 px-3">
+                        <div class="card border border-warning bg-light shadow-sm">
+                            <div class="card-header bg-warning bg-opacity-10 border-warning-subtle py-2 px-3 d-flex justify-content-between align-items-center">
                                 <h6 class="fw-bold mb-0 text-dark">
-                                    <i class="fa-solid fa-shield-halved text-warning me-2"></i>Guarantee & Guarantor Person Information
+                                    <i class="fa-solid fa-shield-halved text-warning me-2"></i>Guarantee & Guarantor Person Information (Accepts 2 Guarantors)
                                 </h6>
+                                <span class="badge bg-warning text-dark"><i class="fa-solid fa-users me-1"></i>2 Guarantor Profiles</span>
                             </div>
                             <div class="card-body p-3">
-                                <div class="row g-3">
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-semibold">Guarantor / Guarantee Person Name</label>
-                                        <input type="text" name="guarantor_name" class="form-control"
-                                               value="{{ old('guarantor_name', $employee->guarantor_name ?? '') }}" placeholder="e.g. Abebe Kebede">
+                                {{-- ── GUARANTOR 1 ────────────────────────────── --}}
+                                <div class="p-3 bg-white border rounded mb-3">
+                                    <div class="d-flex align-items-center mb-2 pb-1 border-bottom">
+                                        <span class="badge bg-primary me-2">Guarantor #1</span>
+                                        <h6 class="fw-bold mb-0 text-dark">Primary Guarantor Details</h6>
                                     </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-semibold">Guarantor National ID / ID Number</label>
-                                        <input type="text" name="guarantor_id_number" class="form-control"
-                                               value="{{ old('guarantor_id_number', $employee->guarantor_id_number ?? '') }}" placeholder="e.g. ET-NAT-987654">
-                                    </div>
-                                    <div class="col-md-4">
-                                        <label class="form-label fw-semibold">Guarantor Phone Number</label>
-                                        <input type="text" name="guarantor_phone" class="form-control"
-                                               value="{{ old('guarantor_phone', $employee->guarantor_phone ?? '') }}" placeholder="e.g. +251 91 123 4567">
-                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 1 Full Name</label>
+                                            <input type="text" name="guarantor_name" class="form-control form-control-sm"
+                                                   value="{{ old('guarantor_name', $employee->guarantor_name ?? '') }}" placeholder="e.g. Abebe Kebede">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 1 National / Kebele ID</label>
+                                            <input type="text" name="guarantor_id_number" class="form-control form-control-sm"
+                                                   value="{{ old('guarantor_id_number', $employee->guarantor_id_number ?? '') }}" placeholder="e.g. ET-NAT-987654">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 1 Phone Number</label>
+                                            <input type="text" name="guarantor_phone" class="form-control form-control-sm"
+                                                   value="{{ old('guarantor_phone', $employee->guarantor_phone ?? '') }}" placeholder="e.g. +251 91 123 4567">
+                                        </div>
 
-                                    {{-- Guarantor National ID Card Upload --}}
-                                    <div class="col-md-6">
-                                        <div class="p-3 bg-white border rounded">
-                                            <label class="form-label fw-semibold mb-1 d-block">
-                                                <i class="fa-solid fa-id-card text-primary me-1"></i>Guarantor National ID Document / Photo
-                                            </label>
-                                            @if($employee->guarantor_id_card)
-                                                <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-light rounded border">
-                                                    <i class="fa-solid fa-file-image text-primary"></i>
-                                                    <small class="text-muted text-truncate">Guarantor ID on file</small>
-                                                    <a href="{{ $employee->guarantor_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary ms-auto">
-                                                        <i class="fa-solid fa-eye me-1"></i>View Current ID
-                                                    </a>
-                                                </div>
-                                            @endif
-                                            <small class="text-muted d-block mb-1">{{ $employee->guarantor_id_card ? 'Upload New ID to Replace Existing:' : 'Upload Guarantor ID (PDF, PNG, JPG - Max 15MB):' }}</small>
-                                            <input type="file" name="guarantor_id_card" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                        {{-- Guarantor 1 National ID Card Upload --}}
+                                        <div class="col-md-6">
+                                            <div class="p-2 bg-light border rounded">
+                                                <label class="form-label fw-semibold mb-1 d-block small">
+                                                    <i class="fa-solid fa-id-card text-primary me-1"></i>Guarantor 1 ID Document / Photo
+                                                </label>
+                                                @if($employee->guarantor_id_card)
+                                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
+                                                        <i class="fa-solid fa-file-image text-primary"></i>
+                                                        <small class="text-muted text-truncate">Guarantor 1 ID on file</small>
+                                                        <a href="{{ $employee->guarantor_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary ms-auto">
+                                                            <i class="fa-solid fa-eye me-1"></i>View Current
+                                                        </a>
+                                                    </div>
+                                                @endif
+                                                <small class="text-muted d-block mb-1" style="font-size:0.75rem;">{{ $employee->guarantor_id_card ? 'Upload New to Replace Existing:' : 'Upload Guarantor 1 ID (PDF, PNG, JPG - Max 15MB):' }}</small>
+                                                <input type="file" name="guarantor_id_card" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                            </div>
+                                        </div>
+
+                                        {{-- Guarantee Letter 1 Upload --}}
+                                        <div class="col-md-6">
+                                            <div class="p-2 bg-light border rounded">
+                                                <label class="form-label fw-semibold mb-1 d-block small">
+                                                    <i class="fa-solid fa-file-shield text-warning me-1"></i>Official Guarantee Letter #1
+                                                </label>
+                                                @if($employee->guarantee_letter)
+                                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
+                                                        <i class="fa-solid fa-file-pdf text-danger"></i>
+                                                        <div>
+                                                            <small class="fw-bold d-block">Guarantee Letter #1 on file</small>
+                                                            <small class="text-muted" style="font-size:0.72rem;">Submitted: {{ $employee->guarantee_letter_submitted_at ? $employee->guarantee_letter_submitted_at->format('d M Y') : 'Active' }}</small>
+                                                        </div>
+                                                        <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-xs btn-outline-warning ms-auto">
+                                                            <i class="fa-solid fa-external-link me-1"></i>View
+                                                        </a>
+                                                    </div>
+                                                @endif
+                                                <small class="text-muted d-block mb-1" style="font-size:0.75rem;">{{ $employee->guarantee_letter ? 'Upload New to Replace Existing:' : 'Upload Guarantee Letter #1 (PDF, PNG, JPG - Max 15MB):' }}</small>
+                                                <input type="file" name="guarantee_letter" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                            </div>
                                         </div>
                                     </div>
+                                </div>
 
-                                    {{-- Guarantee Letter Upload --}}
-                                    <div class="col-md-6">
-                                        <div class="p-3 bg-white border rounded">
-                                            <label class="form-label fw-semibold mb-1 d-block">
-                                                <i class="fa-solid fa-file-shield text-warning me-1"></i>Official Guarantee Letter Document
-                                            </label>
-                                            @if($employee->guarantee_letter)
-                                                <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-light rounded border">
-                                                    <i class="fa-solid fa-file-pdf text-danger"></i>
-                                                    <div>
-                                                        <small class="fw-bold d-block">Guarantee Letter on file</small>
-                                                        <small class="text-muted" style="font-size:0.75rem;">Submitted: {{ $employee->guarantee_letter_submitted_at ? $employee->guarantee_letter_submitted_at->format('d M Y') : 'Active' }}</small>
+                                {{-- ── GUARANTOR 2 ────────────────────────────── --}}
+                                <div class="p-3 bg-white border rounded">
+                                    <div class="d-flex align-items-center mb-2 pb-1 border-bottom">
+                                        <span class="badge bg-secondary me-2">Guarantor #2</span>
+                                        <h6 class="fw-bold mb-0 text-dark">Second Guarantor Details (Optional)</h6>
+                                    </div>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 2 Full Name</label>
+                                            <input type="text" name="guarantor_2_name" class="form-control form-control-sm"
+                                                   value="{{ old('guarantor_2_name', $employee->guarantor_2_name ?? '') }}" placeholder="e.g. Almaz Tesfaye">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 2 National / Kebele ID</label>
+                                            <input type="text" name="guarantor_2_id_number" class="form-control form-control-sm"
+                                                   value="{{ old('guarantor_2_id_number', $employee->guarantor_2_id_number ?? '') }}" placeholder="e.g. ET-NAT-123456">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-semibold small">Guarantor 2 Phone Number</label>
+                                            <input type="text" name="guarantor_2_phone" class="form-control form-control-sm"
+                                                   value="{{ old('guarantor_2_phone', $employee->guarantor_2_phone ?? '') }}" placeholder="e.g. +251 92 987 6543">
+                                        </div>
+
+                                        {{-- Guarantor 2 National ID Card Upload --}}
+                                        <div class="col-md-6">
+                                            <div class="p-2 bg-light border rounded">
+                                                <label class="form-label fw-semibold mb-1 d-block small">
+                                                    <i class="fa-solid fa-id-card text-primary me-1"></i>Guarantor 2 ID Document / Photo
+                                                </label>
+                                                @if($employee->guarantor_2_id_card)
+                                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
+                                                        <i class="fa-solid fa-file-image text-primary"></i>
+                                                        <small class="text-muted text-truncate">Guarantor 2 ID on file</small>
+                                                        <a href="{{ $employee->guarantor_2_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary ms-auto">
+                                                            <i class="fa-solid fa-eye me-1"></i>View Current
+                                                        </a>
                                                     </div>
-                                                    <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-xs btn-outline-warning ms-auto">
-                                                        <i class="fa-solid fa-external-link me-1"></i>View Current Letter
-                                                    </a>
-                                                </div>
-                                            @endif
-                                            <small class="text-muted d-block mb-1">{{ $employee->guarantee_letter ? 'Upload New Letter to Replace Existing:' : 'Upload Guarantee Letter (PDF, PNG, JPG - Max 15MB):' }}</small>
-                                            <input type="file" name="guarantee_letter" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                                @endif
+                                                <small class="text-muted d-block mb-1" style="font-size:0.75rem;">{{ $employee->guarantor_2_id_card ? 'Upload New to Replace Existing:' : 'Upload Guarantor 2 ID (PDF, PNG, JPG - Max 15MB):' }}</small>
+                                                <input type="file" name="guarantor_2_id_card" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                            </div>
+                                        </div>
+
+                                        {{-- Guarantee Letter 2 Upload --}}
+                                        <div class="col-md-6">
+                                            <div class="p-2 bg-light border rounded">
+                                                <label class="form-label fw-semibold mb-1 d-block small">
+                                                    <i class="fa-solid fa-file-shield text-warning me-1"></i>Official Guarantee Letter #2
+                                                </label>
+                                                @if($employee->guarantee_letter_2)
+                                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white rounded border">
+                                                        <i class="fa-solid fa-file-pdf text-danger"></i>
+                                                        <div>
+                                                            <small class="fw-bold d-block">Guarantee Letter #2 on file</small>
+                                                            <small class="text-muted" style="font-size:0.72rem;">Uploaded Document</small>
+                                                        </div>
+                                                        <a href="{{ $employee->guarantee_letter_2_url }}" target="_blank" class="btn btn-xs btn-outline-warning ms-auto">
+                                                            <i class="fa-solid fa-external-link me-1"></i>View
+                                                        </a>
+                                                    </div>
+                                                @endif
+                                                <small class="text-muted d-block mb-1" style="font-size:0.75rem;">{{ $employee->guarantee_letter_2 ? 'Upload New to Replace Existing:' : 'Upload Guarantee Letter #2 (PDF, PNG, JPG - Max 15MB):' }}</small>
+                                                <input type="file" name="guarantee_letter_2" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -907,62 +983,96 @@
                         </div>
                     </div>
 
-                    {{-- Registration / Employment Letter --}}
+                    {{-- Registration / Employment Letter (Multiple Photos/Pages Allowed) --}}
                     <div class="col-md-4">
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body">
-                                <h6 class="fw-bold mb-1"><i class="fa-solid fa-file-contract text-success me-1"></i>Employment / Registration Letter</h6>
-                                <p class="text-muted small mb-3">Official signed employment contract or registration letter. PDF, PNG, JPG, WEBP — Max 15MB.</p>
-                                @if($employee->registration_letter)
-                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-light rounded border">
-                                        <i class="fa-solid fa-file-pdf text-success"></i>
-                                        <small class="text-muted text-truncate">Registration Letter on file</small>
-                                        <a href="{{ $employee->registration_letter_url }}" target="_blank" class="btn btn-xs btn-outline-success ms-auto">
-                                            <i class="fa-solid fa-eye me-1"></i>View
-                                        </a>
+                                <h6 class="fw-bold mb-1"><i class="fa-solid fa-file-contract text-success me-1"></i>Employment & Registration Documents</h6>
+                                <p class="text-muted small mb-2">Upload pictures/pages of the registration letter or employment contract (Multiple pictures allowed, PDF/PNG/JPG - Max 15MB each).</p>
+                                
+                                {{-- Display Existing Documents --}}
+                                @php $regUrls = $employee->registration_letter_urls; @endphp
+                                @if(!empty($regUrls))
+                                    <div class="mb-2 p-2 bg-light rounded border">
+                                        <div class="small fw-bold text-success mb-1"><i class="fa-solid fa-folder-open me-1"></i>Current Documents ({{ count($regUrls) }} on file):</div>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            @foreach($regUrls as $idx => $url)
+                                                <a href="{{ $url }}" target="_blank" class="btn btn-xs btn-outline-success">
+                                                    <i class="fa-solid fa-eye me-1"></i>Doc #{{ $idx + 1 }}
+                                                </a>
+                                            @endforeach
+                                        </div>
                                     </div>
                                 @endif
-                                <label class="form-label small fw-semibold">{{ $employee->registration_letter ? 'Upload New to Replace:' : 'Upload Registration Letter:' }}</label>
-                                <input type="file" name="registration_letter" class="form-control @error('registration_letter') is-invalid @enderror"
-                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+
+                                <label class="form-label small fw-semibold">{{ !empty($regUrls) ? 'Upload New to Replace / Add More:' : 'Upload Registration Documents:' }}</label>
+                                <input type="file" name="registration_letters[]" id="registration_letters_edit_input" multiple
+                                       class="form-control form-control-sm @error('registration_letters') is-invalid @enderror @error('registration_letter') is-invalid @enderror"
+                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp"
+                                       onchange="previewMultiFilesEdit(this, 'reg_letters_edit_preview')">
+                                @error('registration_letters')<div class="invalid-feedback">{{ $message }}</div>@enderror
                                 @error('registration_letter')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                <div id="reg_letters_edit_preview" class="mt-2 d-flex flex-wrap gap-2"></div>
                             </div>
                         </div>
                     </div>
 
-                    {{-- Guarantee Letter & Guarantor ID --}}
+                    {{-- Guarantee Letter & Guarantor Documents (Guarantor 1 & Guarantor 2) --}}
                     <div class="col-md-4">
                         <div class="card border-0 shadow-sm h-100">
                             <div class="card-body">
                                 <h6 class="fw-bold mb-1"><i class="fa-solid fa-shield-halved text-warning me-1"></i>Guarantee & Guarantor Documents</h6>
-                                <p class="text-muted small mb-2">Guarantee letter and guarantor ID document.</p>
+                                <p class="text-muted small mb-2">Guarantee letters and guarantor ID documents for both Guarantor 1 & 2.</p>
 
-                                @if($employee->guarantor_id_card)
-                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-light rounded border">
-                                        <i class="fa-solid fa-id-card text-primary"></i>
-                                        <small class="text-muted text-truncate">Guarantor ID on file</small>
-                                        <a href="{{ $employee->guarantor_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary ms-auto">
-                                            <i class="fa-solid fa-eye me-1"></i>View ID
-                                        </a>
+                                {{-- Guarantor 1 Documents --}}
+                                <div class="p-2 border rounded bg-light mb-2">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="small fw-bold text-primary"><i class="fa-solid fa-user-shield me-1"></i>Guarantor #1</span>
+                                        @if($employee->guarantee_letter || $employee->guarantor_id_card)
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.65rem;">On File</span>
+                                        @endif
                                     </div>
-                                @endif
+                                    @if($employee->guarantee_letter)
+                                        <div class="d-flex align-items-center gap-1 mb-1">
+                                            <small class="text-truncate text-muted" style="font-size:0.75rem;">Guarantee Letter #1:</small>
+                                            <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-xs btn-outline-warning ms-auto"><i class="fa-solid fa-eye me-1"></i>View</a>
+                                        </div>
+                                    @endif
+                                    <input type="file" name="guarantee_letter" class="form-control form-control-sm mb-2" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                    
+                                    @if($employee->guarantor_id_card)
+                                        <div class="d-flex align-items-center gap-1 mb-1">
+                                            <small class="text-truncate text-muted" style="font-size:0.75rem;">Guarantor 1 ID:</small>
+                                            <a href="{{ $employee->guarantor_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary ms-auto"><i class="fa-solid fa-eye me-1"></i>View</a>
+                                        </div>
+                                    @endif
+                                    <input type="file" name="guarantor_id_card" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                </div>
 
-                                @if($employee->guarantee_letter)
-                                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-light rounded border">
-                                        <i class="fa-solid fa-file-shield text-warning"></i>
-                                        <small class="text-muted text-truncate">Guarantee Letter on file</small>
-                                        <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-xs btn-outline-warning ms-auto">
-                                            <i class="fa-solid fa-eye me-1"></i>View Letter
-                                        </a>
+                                {{-- Guarantor 2 Documents --}}
+                                <div class="p-2 border rounded bg-light">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="small fw-bold text-secondary"><i class="fa-solid fa-user-shield me-1"></i>Guarantor #2</span>
+                                        @if($employee->guarantee_letter_2 || $employee->guarantor_2_id_card)
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.65rem;">On File</span>
+                                        @endif
                                     </div>
-                                @endif
-                                <label class="form-label small fw-semibold">{{ $employee->guarantee_letter ? 'Upload New Guarantee Letter to Replace:' : 'Upload Guarantee Letter:' }}</label>
-                                <input type="file" name="guarantee_letter" class="form-control form-control-sm mb-2"
-                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
-
-                                <label class="form-label small fw-semibold">{{ $employee->guarantor_id_card ? 'Upload New Guarantor ID to Replace:' : 'Upload Guarantor ID Document:' }}</label>
-                                <input type="file" name="guarantor_id_card" class="form-control form-control-sm"
-                                       accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                    @if($employee->guarantee_letter_2)
+                                        <div class="d-flex align-items-center gap-1 mb-1">
+                                            <small class="text-truncate text-muted" style="font-size:0.75rem;">Guarantee Letter #2:</small>
+                                            <a href="{{ $employee->guarantee_letter_2_url }}" target="_blank" class="btn btn-xs btn-outline-warning ms-auto"><i class="fa-solid fa-eye me-1"></i>View</a>
+                                        </div>
+                                    @endif
+                                    <input type="file" name="guarantee_letter_2" class="form-control form-control-sm mb-2" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                    
+                                    @if($employee->guarantor_2_id_card)
+                                        <div class="d-flex align-items-center gap-1 mb-1">
+                                            <small class="text-truncate text-muted" style="font-size:0.75rem;">Guarantor 2 ID:</small>
+                                            <a href="{{ $employee->guarantor_2_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary ms-auto"><i class="fa-solid fa-eye me-1"></i>View</a>
+                                        </div>
+                                    @endif
+                                    <input type="file" name="guarantor_2_id_card" class="form-control form-control-sm" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1009,6 +1119,40 @@ function previewProfilePicEdit(input) {
             };
             reader.readAsDataURL(file);
         }
+    }
+}
+
+function previewMultiFilesEdit(input, previewTargetId) {
+    const target = document.getElementById(previewTargetId);
+    if (!target) return;
+    target.innerHTML = '';
+
+    if (input.files && input.files.length > 0) {
+        Array.from(input.files).forEach((file, idx) => {
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const card = document.createElement('div');
+                    card.className = 'border rounded p-1 text-center bg-white shadow-xs position-relative';
+                    card.style.width = '85px';
+                    card.innerHTML = `
+                        <img src="${e.target.result}" class="rounded" style="width:75px;height:75px;object-fit:cover;" alt="Photo ${idx+1}">
+                        <div class="small text-truncate text-muted mt-1" style="font-size:0.65rem;">New #${idx+1}</div>
+                    `;
+                    target.appendChild(card);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                const card = document.createElement('div');
+                card.className = 'border rounded p-2 text-center bg-light shadow-xs';
+                card.style.width = '85px';
+                card.innerHTML = `
+                    <i class="fa-solid fa-file-pdf text-danger fa-2x"></i>
+                    <div class="small text-truncate text-muted mt-1" style="font-size:0.65rem;">${file.name}</div>
+                `;
+                target.appendChild(card);
+            }
+        });
     }
 }
 
