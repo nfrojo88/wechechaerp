@@ -370,7 +370,13 @@
                             <button type="submit" class="btn btn-primary">
                                 <i class="fa-solid fa-upload me-2"></i>Submit Early
                             </button>
-                        </form>        {{-- ── Card 2: Guarantor Person Information (Guarantor 1 & Guarantor 2) ─────────────────────────── --}}
+                        </form>
+                    @endif
+                @endif
+            </div>
+        </div>
+
+        {{-- ── Card 2: Guarantor Person Information (Guarantor 1 & Guarantor 2) ─────────────────────────── --}}
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
