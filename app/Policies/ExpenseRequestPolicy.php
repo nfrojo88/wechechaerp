@@ -47,14 +47,17 @@ class ExpenseRequestPolicy
     }
 
     /**
-     * Determine whether the user can perform HR Review (Approve/Reject).
+     * Determine whether the user can perform HR / Coordinator Review (Approve/Reject).
      */
     public function hrReview(User $user, ExpenseRequest $expenseRequest): bool
     {
         $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
-        $isHr = $user->can('hr.view') || str_contains($roleNames, 'hr');
+        $isHrOrCoordinator = $user->can('hr.view') 
+            || str_contains($roleNames, 'hr') 
+            || str_contains($roleNames, 'coordinator') 
+            || $user->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']);
 
-        return $isHr && $expenseRequest->status === 'Pending (HR Review)';
+        return $isHrOrCoordinator && $expenseRequest->status === 'Pending (HR Review)';
     }
 
     /**

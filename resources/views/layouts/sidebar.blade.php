@@ -93,7 +93,7 @@
                         $pendingExpenseCount = \App\Models\ExpenseRequest::where('status', 'like', 'Pending%')->count();
                     } catch (\Exception $e) {}
                 @endphp
-                @if($pendingExpenseCount > 0 && auth()->check() && auth()->user()->hasAnyRole(['admin', 'global_admin', 'hr_manager', 'hr_officer', 'gm', 'finance_head']))
+                @if($pendingExpenseCount > 0 && auth()->check() && (auth()->user()->hasAnyRole(['admin', 'global_admin', 'hr_manager', 'hr_officer', 'gm', 'finance_head', 'coordinator', 'Coordinator']) || in_array('coordinator', $rawUserRoles)))
                     <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingExpenseCount }}</span>
                 @endif
             </a>
@@ -596,7 +596,7 @@
         @endif
 
         {{-- Coordinator Tools --}}
-        @if(auth()->check() && auth()->user()->hasAnyRole(['Coordinator', 'coordinator', 'admin', 'global_admin']))
+        @if(auth()->check() && (auth()->user()->hasAnyRole(['Coordinator', 'coordinator', 'admin', 'global_admin']) || in_array('coordinator', $rawUserRoles)))
         @if(!$isCoordinator)
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.coordinator') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.coordinator') ? 'active' : '' }}">
@@ -605,6 +605,21 @@
             </a>
         </li>
         @endif
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expenses.index') }}?tab=pending_hr" class="sidebar-nav-link {{ (request()->routeIs('expenses.*') || request()->is('expenses*') || request()->routeIs('approvals.*')) && request('tab') === 'pending_hr' ? 'active' : '' }}">
+                <i class="fa-solid fa-file-invoice-dollar text-warning"></i>
+                <span>Expense Approvals</span>
+                @php
+                    $pendingCoordExpCount = 0;
+                    try {
+                        $pendingCoordExpCount = \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PENDING_HR)->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingCoordExpCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingCoordExpCount }}</span>
+                @endif
+            </a>
+        </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('coordinator.forecast') }}" class="sidebar-nav-link {{ request()->routeIs('coordinator.forecast') ? 'active' : '' }}">
                 <i class="fa-solid fa-chart-pie text-danger"></i>

@@ -231,7 +231,7 @@ class ApprovalHubController extends Controller
         $user = Auth::user();
         $rolesStr = strtolower(implode(' ', $user ? $user->getRoleNames()->toArray() : []));
         $isAdmin = $user && ($user->hasAnyRole(['admin', 'global_admin']) || str_contains($rolesStr, 'admin'));
-        $isHR = $user && ($user->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'hr']) || str_contains($rolesStr, 'hr') || $user->can('hr.view'));
+        $isHR = $user && ($user->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'hr', 'Coordinator', 'coordinator']) || str_contains($rolesStr, 'hr') || str_contains($rolesStr, 'coordinator') || $user->can('hr.view'));
         $isGM = $user && ($user->hasAnyRole(['General Manager', 'general_manager', 'gm']) || str_contains($rolesStr, 'gm'));
         $isFinance = $user && ($user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance staff', 'finance_staff', 'finance', 'cashier', 'accountant']) || str_contains($rolesStr, 'finance') || str_contains($rolesStr, 'cashier') || str_contains($rolesStr, 'accountant'));
 
@@ -242,7 +242,7 @@ class ApprovalHubController extends Controller
                 return in_array($item->status_key, ['finance_queue', 'paid', 'rejected']);
             });
         } elseif ($isHR && !$isAdmin && !$isGM) {
-            // HR only sees pending HR reviews and approved/rejected history
+            // HR & Coordinator see pending HR reviews and approved/rejected history
             $items = $items->filter(function ($item) {
                 return in_array($item->status_key, ['pending_hr', 'paid', 'rejected', 'finance_queue']);
             });

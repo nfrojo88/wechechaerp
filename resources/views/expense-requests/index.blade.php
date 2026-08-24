@@ -6,7 +6,7 @@
 @php
     $user = auth()->user();
     $userRoleStr = $user ? strtolower(implode(' ', $user->getRoleNames()->toArray())) : '';
-    $isHrUser = $user && ($user->can('hr.view') || str_contains($userRoleStr, 'hr') || $user->hasAnyRole(['admin', 'global_admin']));
+    $isHrUser = $user && ($user->can('hr.view') || str_contains($userRoleStr, 'hr') || str_contains($userRoleStr, 'coordinator') || $user->hasAnyRole(['admin', 'global_admin', 'coordinator', 'Coordinator']));
     $isGmUser = $user && (str_contains($userRoleStr, 'gm') || $user->hasAnyRole(['admin', 'global_admin']));
     $isFinanceHeadUser = $user && (str_contains($userRoleStr, 'finance_head') || str_contains($userRoleStr, 'finance_manager') || $user->hasAnyRole(['finance_head', 'admin', 'global_admin']));
     $isFinanceStaffUser = $user && (str_contains($userRoleStr, 'finance') || str_contains($userRoleStr, 'cashier') || str_contains($userRoleStr, 'accountant') || $user->hasAnyRole(['admin', 'global_admin']));

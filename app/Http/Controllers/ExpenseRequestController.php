@@ -113,7 +113,7 @@ class ExpenseRequestController extends Controller
         }
 
         $userRoleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
-        $isHr = $user->can('hr.view') || str_contains($userRoleNames, 'hr') || $user->hasAnyRole(['admin', 'global_admin']);
+        $isHr = $user->can('hr.view') || str_contains($userRoleNames, 'hr') || str_contains($userRoleNames, 'coordinator') || $user->hasAnyRole(['admin', 'global_admin', 'coordinator', 'Coordinator']);
         $isGm = str_contains($userRoleNames, 'gm') || $user->hasAnyRole(['gm', 'admin', 'global_admin']);
         $isFinanceHead = str_contains($userRoleNames, 'finance_head') || str_contains($userRoleNames, 'finance_manager') || $user->hasAnyRole(['finance_head', 'admin', 'global_admin']);
         $isFinanceStaff = str_contains($userRoleNames, 'finance') || str_contains($userRoleNames, 'cashier') || str_contains($userRoleNames, 'accountant') || $user->hasAnyRole(['admin', 'global_admin']);

@@ -12,7 +12,7 @@ class ExpensePolicy
 
     public function before(User $user, $ability)
     {
-        if ($user->hasAnyRole(['global_admin', 'admin', 'gm', 'general_manager'])) {
+        if ($user->hasAnyRole(['global_admin', 'admin', 'gm', 'general_manager', 'coordinator', 'Coordinator'])) {
             return true;
         }
     }
@@ -20,13 +20,13 @@ class ExpensePolicy
     public function viewAny(User $user)
     {
         $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
-        return $user->can('finance.view') || $user->can('finance.approve') || str_contains($roleNames, 'hr') || str_contains($roleNames, 'gm') || $user->can('hr.view');
+        return $user->can('finance.view') || $user->can('finance.approve') || str_contains($roleNames, 'hr') || str_contains($roleNames, 'gm') || str_contains($roleNames, 'coordinator') || $user->can('hr.view');
     }
 
     public function view(User $user, Expense $e)
     {
         $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
-        return $user->can('finance.view') || $user->can('finance.approve') || str_contains($roleNames, 'hr') || str_contains($roleNames, 'gm') || $user->can('hr.view');
+        return $user->can('finance.view') || $user->can('finance.approve') || str_contains($roleNames, 'hr') || str_contains($roleNames, 'gm') || str_contains($roleNames, 'coordinator') || $user->can('hr.view');
     }
 
     public function create(User $user)
@@ -42,6 +42,6 @@ class ExpensePolicy
     public function approve(User $user, Expense $e)
     {
         $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
-        return $user->can('finance.approve') || str_contains($roleNames, 'gm') || $user->hasAnyRole(['gm', 'general_manager', 'admin', 'global_admin']);
+        return $user->can('finance.approve') || str_contains($roleNames, 'gm') || str_contains($roleNames, 'coordinator') || $user->hasAnyRole(['gm', 'general_manager', 'coordinator', 'Coordinator', 'admin', 'global_admin']);
     }
 }

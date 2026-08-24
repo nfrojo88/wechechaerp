@@ -206,13 +206,13 @@
                                         @if($item->type === 'expense_request')
                                             @php $req = $item->raw_model; @endphp
                                             
-                                            <!-- HR Review Action Button -->
-                                            @if($req->status === \App\Models\ExpenseRequest::STATUS_PENDING_HR && (auth()->user()->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'admin', 'global_admin']) || auth()->user()->can('hr.view')))
+                                            <!-- HR / Coordinator Review Action Button -->
+                                            @if($req->status === \App\Models\ExpenseRequest::STATUS_PENDING_HR && (auth()->user()->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'Coordinator', 'coordinator', 'admin', 'global_admin']) || auth()->user()->can('hr.view')))
                                                 <button type="button" class="btn btn-warning btn-sm text-dark fw-semibold" 
                                                         data-bs-toggle="modal" 
                                                         data-bs-target="#hrReviewModal{{ $req->id }}"
-                                                        title="HR Review">
-                                                    <i class="fa-solid fa-user-check me-1"></i> HR Review
+                                                        title="Review & Approve">
+                                                    <i class="fa-solid fa-user-check me-1"></i> HR/Coordinator Review
                                                 </button>
                                             @endif
 
