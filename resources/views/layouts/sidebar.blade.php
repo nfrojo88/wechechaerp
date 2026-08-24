@@ -321,6 +321,21 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.my-queue') ? 'active' : '' }}">
+                <i class="fa-solid fa-tasks text-warning"></i>
+                <span>Procurement My Queue</span>
+                @php
+                    $smQueueCount = 0;
+                    try {
+                        $smQueueCount = \App\Models\PurchaseRequest::where('current_owner_role', 'store_manager')->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($smQueueCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $smQueueCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.issued.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.issued.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding text-warning"></i>
                 <span>Issued Materials</span>
