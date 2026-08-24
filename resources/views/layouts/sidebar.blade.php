@@ -126,12 +126,27 @@
         @endif
 
         {{-- General Manager Section --}}
-        @role('gm')
+        @if(auth()->check() && (auth()->user()->hasAnyRole(['gm', 'general_manager', 'General Manager', 'GM']) || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles)))
 
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.gm') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.gm') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high text-primary"></i>
                 <span>GM Dashboard</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expenses.index') }}?tab=pending_gm" class="sidebar-nav-link {{ (request()->routeIs('expenses.*') || request()->is('expenses*') || request()->routeIs('approvals.*')) && request('tab') === 'pending_gm' ? 'active' : '' }}">
+                <i class="fa-solid fa-file-invoice-dollar text-warning"></i>
+                <span>Expense Approvals</span>
+                @php
+                    $pendingGmExpCount = 0;
+                    try {
+                        $pendingGmExpCount = \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PENDING_GM)->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingGmExpCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingGmExpCount }}</span>
+                @endif
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -154,6 +169,7 @@
                     <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingLoansCount }}</span>
                 @endif
             </a>
+        </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('employees.pending-approval') }}" class="sidebar-nav-link {{ request()->routeIs('employees.pending-approval') ? 'active' : '' }}">
                 <i class="fa-solid fa-user-clock text-warning"></i>
@@ -171,7 +187,7 @@
                 @endif
             </a>
         </li>
-        @endrole
+        @endif
         {{-- Masters --}}
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isStoreKeeper && !$isStoreManager))
@@ -996,6 +1012,21 @@
             <a href="{{ route('daily-reports.approval') }}" class="sidebar-nav-link {{ request()->routeIs('daily-reports.approval') ? 'active' : '' }}">
                 <i class="fa-solid fa-file-check text-success"></i>
                 <span>Approve Daily Reports</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expenses.index') }}?tab=pending_hr" class="sidebar-nav-link {{ (request()->routeIs('expenses.*') || request()->is('expenses*') || request()->routeIs('approvals.*')) && request('tab') === 'pending_hr' ? 'active' : '' }}">
+                <i class="fa-solid fa-file-invoice-dollar text-warning"></i>
+                <span>Approve Expenses</span>
+                @php
+                    $pendingHrExpCount = 0;
+                    try {
+                        $pendingHrExpCount = \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PENDING_HR)->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingHrExpCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingHrExpCount }}</span>
+                @endif
             </a>
         </li>
         <li class="sidebar-nav-item">

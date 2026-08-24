@@ -10,9 +10,38 @@ class ExpensePolicy
 {
     use HandlesAuthorization;
 
-    public function viewAny(User $user) { return $user->can('finance.view') || $user->can('finance.approve'); }
-    public function view(User $user, Expense $e) { return $user->can('finance.view') || $user->can('finance.approve'); }
-    public function create(User $user) { return $user->can('finance.view') || $user->can('finance.approve'); }
-    public function update(User $user, Expense $e) { return $user->can('finance.view') && $e->status === 'pending'; }
-    public function approve(User $user, Expense $e) { return $user->can('finance.approve'); }
+    public function before(User $user, $ability)
+    {
+        if ($user->hasAnyRole(['global_admin', 'admin', 'gm', 'general_manager'])) {
+            return true;
+        }
+    }
+
+    public function viewAny(User $user)
+    {
+        $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        return $user->can('finance.view') || $user->can('finance.approve') || str_contains($roleNames, 'hr') || str_contains($roleNames, 'gm') || $user->can('hr.view');
+    }
+
+    public function view(User $user, Expense $e)
+    {
+        $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        return $user->can('finance.view') || $user->can('finance.approve') || str_contains($roleNames, 'hr') || str_contains($roleNames, 'gm') || $user->can('hr.view');
+    }
+
+    public function create(User $user)
+    {
+        return $user->can('finance.view') || $user->can('finance.approve') || $user->can('finance.create');
+    }
+
+    public function update(User $user, Expense $e)
+    {
+        return ($user->can('finance.view') || $user->can('finance.approve')) && $e->status === 'pending';
+    }
+
+    public function approve(User $user, Expense $e)
+    {
+        $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        return $user->can('finance.approve') || str_contains($roleNames, 'gm') || $user->hasAnyRole(['gm', 'general_manager', 'admin', 'global_admin']);
+    }
 }
