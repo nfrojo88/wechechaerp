@@ -146,13 +146,54 @@
                             </form>
                         </div>
 
-                    <!-- STAGE 3: Procurement Manager Triage -->
+                    <!-- STAGE 3: Procurement Manager Triage & Sourcing Decision -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER)
-                        <div class="d-grid gap-2">
-                            <form action="{{ route('purchase-requests.send-to-proc-team', $purchaseRequest) }}" method="POST">
-                                @csrf
-                                <button class="btn btn-primary btn-sm w-100 mb-2"><i class="fas fa-user-check me-1"></i> Send to Procurement Team for Sourcing</button>
-                            </form>
+                        <h6 class="font-weight-bold mb-2"><i class="fas fa-route me-1"></i>Select Sourcing Path:</h6>
+                        <ul class="nav nav-pills nav-justified mb-3" id="sourcingTab" role="tablist">
+                            <li class="nav-item">
+                                <button class="nav-link active btn-sm" data-bs-toggle="tab" data-bs-target="#tabDirect">
+                                    <i class="fas fa-bolt me-1"></i> Direct Buy
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link btn-sm" data-bs-toggle="tab" data-bs-target="#tabProforma">
+                                    <i class="fas fa-file-invoice-dollar me-1"></i> Proforma
+                                </button>
+                            </li>
+                        </ul>
+                        <div class="tab-content mb-3" id="sourcingTabContent">
+                            <div class="tab-pane fade show active" id="tabDirect">
+                                <form action="{{ route('purchase-requests.submit-direct-buy', $purchaseRequest) }}" method="POST">
+                                    @csrf
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-bold text-uppercase">Direct Purchase Amount (ETB) <span class="text-danger">*</span></label>
+                                        <input type="number" step="0.01" name="amount" class="form-control form-control-sm" required placeholder="0.00">
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-bold text-uppercase">Notes</label>
+                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Add justification or direct buy remarks..."></textarea>
+                                    </div>
+                                    <button class="btn btn-success btn-sm w-100 fw-bold">
+                                        <i class="fas fa-check-circle me-1"></i> Submit Direct Buy
+                                    </button>
+                                </form>
+                            </div>
+                            <div class="tab-pane fade" id="tabProforma">
+                                <form action="{{ route('purchase-requests.send-to-proc-team', $purchaseRequest) }}" method="POST">
+                                    @csrf
+                                    <p class="small text-muted mb-2">Assign this request to the Procurement Team to collect and upload vendor proforma quotes.</p>
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-bold text-uppercase">Instructions for Purchase Team</label>
+                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Specific procurement instructions or guidelines..."></textarea>
+                                    </div>
+                                    <button class="btn btn-primary btn-sm w-100 fw-bold">
+                                        <i class="fas fa-user-check me-1"></i> Send to Procurement Team for Sourcing
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="border-top pt-2 mt-2">
                             <button class="btn btn-outline-danger btn-sm w-100" data-bs-toggle="collapse" data-bs-target="#sendBackStoreForm">
                                 <i class="fas fa-undo me-1"></i> Send Back to Store Manager
                             </button>
@@ -165,36 +206,21 @@
                             </div>
                         </div>
 
-                    <!-- STAGE 4: Procurement Team Sourcing (Direct Buy vs Proforma) -->
+                    <!-- STAGE 4: Procurement Team Sourcing & Proforma Collection -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM)
-                        <h6 class="font-weight-bold">Select Sourcing Path:</h6>
-                        <ul class="nav nav-pills nav-justified mb-3" id="sourcingTab" role="tablist">
-                            <li class="nav-item"><button class="nav-link active btn-sm" data-bs-toggle="tab" data-bs-target="#tabDirect">Direct Buy</button></li>
-                            <li class="nav-item"><button class="nav-link btn-sm" data-bs-toggle="tab" data-bs-target="#tabProforma">Proforma</button></li>
-                        </ul>
-                        <div class="tab-content" id="sourcingTabContent">
-                            <div class="tab-pane fade show active" id="tabDirect">
-                                <form action="{{ route('purchase-requests.submit-direct-buy', $purchaseRequest) }}" method="POST">
-                                    @csrf
-                                    <div class="mb-2">
-                                        <label class="form-label small">Direct Purchase Amount (ETB)</label>
-                                        <input type="number" step="0.01" name="amount" class="form-control form-control-sm" required>
-                                    </div>
-                                    <div class="mb-2">
-                                        <label class="form-label small">Notes</label>
-                                        <textarea name="notes" class="form-control form-control-sm" rows="2"></textarea>
-                                    </div>
-                                    <button class="btn btn-success btn-sm w-100">Submit Direct Buy</button>
-                                </form>
+                        <form action="{{ route('purchase-requests.submit-proformas', $purchaseRequest) }}" method="POST">
+                            @csrf
+                            <div class="alert alert-info py-2 px-3 small mb-3">
+                                <i class="fas fa-info-circle me-1"></i> Please upload proforma invoice quotes on the right panel, then click below to submit to Purchase Manager.
                             </div>
-                            <div class="tab-pane fade" id="tabProforma">
-                                <form action="{{ route('purchase-requests.submit-proformas', $purchaseRequest) }}" method="POST">
-                                    @csrf
-                                    <p class="small text-muted mb-2">Upload quotes in the Proforma Invoices tab on the right, then click submit.</p>
-                                    <button class="btn btn-primary btn-sm w-100">Submit Proformas to PM</button>
-                                </form>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold text-uppercase">Procurement Notes</label>
+                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional notes regarding collected proformas..."></textarea>
                             </div>
-                        </div>
+                            <button class="btn btn-primary btn-sm w-100 fw-bold">
+                                <i class="fas fa-paper-plane me-1"></i> Submit Proformas to PM
+                            </button>
+                        </form>
 
                     <!-- STAGE 5a: Marketing Review -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING)

@@ -549,10 +549,10 @@ class PurchaseRequestController extends Controller
         return back()->with('success', 'Routed to Procurement Team.');
     }
 
-    // ─── STAGE 4: Procurement Team Sourcing ─────────────────────────────────
+    // ─── STAGE 3 Sourcing Decision: Submit Direct Buy (Purchase Manager) ─────
     public function submitDirectBuy(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer']);
+        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
         $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'notes'  => 'nullable|string',

@@ -90,7 +90,7 @@ class ProcurementLifecycleService
             'status'                => PurchaseRequest::STATUS_PENDING_MARKETING,
             'current_owner_role'    => 'market_research',
         ]);
-        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_MARKETING, 'submit_direct_buy', 'purchase', $notes);
+        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_MARKETING, 'submit_direct_buy', 'purchase_manager', $notes);
         $this->sms->notifyRole($pr->id, 'market_research',
             "ConstructPro: PR #{$pr->pr_no} needs marketing price variance. Amount: " . number_format($amount, 2) . " ETB. Open: " . url("/purchase-requests/{$pr->id}"));
     }
