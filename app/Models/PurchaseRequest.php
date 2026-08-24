@@ -25,6 +25,7 @@ class PurchaseRequest extends Model
     const STATUS_PENDING_RECEIPT_VERIFY     = 'pending_receipt_verification';
     const STATUS_PENDING_DRIVER             = 'pending_driver_booking';
     const STATUS_INTAKE_COMPLETE            = 'intake_complete';
+    const STATUS_COMPLETED                  = 'completed';
     const STATUS_REJECTED                   = 'rejected';
     const STATUS_CANCELLED                  = 'cancelled';
 
@@ -46,6 +47,7 @@ class PurchaseRequest extends Model
             self::STATUS_PENDING_RECEIPT_VERIFY,
             self::STATUS_PENDING_DRIVER,
             self::STATUS_INTAKE_COMPLETE,
+            self::STATUS_COMPLETED,
             self::STATUS_REJECTED,
             self::STATUS_CANCELLED,
         ];
@@ -69,6 +71,7 @@ class PurchaseRequest extends Model
             self::STATUS_PENDING_RECEIPT_VERIFY     => 'Pending Receipt Verification',
             self::STATUS_PENDING_DRIVER             => 'Pending Driver Booking',
             self::STATUS_INTAKE_COMPLETE            => 'Intake Complete',
+            self::STATUS_COMPLETED                  => 'Completed',
             self::STATUS_REJECTED                   => 'Rejected',
             self::STATUS_CANCELLED                  => 'Cancelled',
         ];
@@ -97,6 +100,7 @@ class PurchaseRequest extends Model
             self::STATUS_PENDING_RECEIPT_VERIFY     => 'primary',
             self::STATUS_PENDING_DRIVER             => 'info',
             self::STATUS_INTAKE_COMPLETE            => 'success',
+            self::STATUS_COMPLETED                  => 'success',
             self::STATUS_REJECTED                   => 'danger',
             self::STATUS_CANCELLED                  => 'dark',
             default                                 => 'secondary',

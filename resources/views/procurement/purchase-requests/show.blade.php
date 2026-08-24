@@ -389,7 +389,7 @@
                             <i class="fas fa-lock fa-2x text-muted"></i>
                         </span>
                     </div>
-                    @if(in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_TRANSFERRED]))
+                    @if(in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_INTAKE_COMPLETE, \App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_TRANSFERRED]))
                         <h6 class="fw-bold text-success mb-1"><i class="fas fa-check-circle me-1"></i>Lifecycle Completed</h6>
                         <p class="small text-muted mb-0">This purchase request has completed all workflow stages.</p>
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_REJECTED)
