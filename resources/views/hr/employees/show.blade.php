@@ -43,11 +43,6 @@
         <a href="{{ route('employees.index') }}" class="btn btn-sm btn-outline-secondary me-3">
             <i class="fa-solid fa-arrow-left"></i>
         </a>
-        <div class="me-3">
-            <img src="{{ $employee->profile_picture_url }}" alt="{{ $employee->full_name }}"
-                 style="width:58px;height:58px;border-radius:50%;object-fit:cover;border:2px solid #0d6efd;"
-                 class="shadow-sm">
-        </div>
         <div>
             <h1 class="h3 mb-0">{{ $employee->full_name }}</h1>
             <div class="d-flex align-items-center gap-2 mt-1">
@@ -1035,16 +1030,9 @@
             <div style="background: linear-gradient(135deg, #1e40af 0%, #0ea5e9 100%); height: 80px;"></div>
             <div class="card-body pt-0 text-center">
                 <div class="mb-2" style="margin-top:-45px;">
-                    @if($employee->photo)
-                        <img src="{{ uploaded_asset($employee->photo) }}" alt="{{ $employee->full_name }}"
-                             class="rounded-circle border border-4 border-white shadow"
-                             style="width:90px;height:90px;object-fit:cover;">
-                    @else
-                        <div class="rounded-circle border border-4 border-white shadow d-inline-flex align-items-center justify-content-center bg-primary text-white fw-bold"
-                             style="width:90px;height:90px;font-size:2rem;">
-                            {{ strtoupper(substr($employee->first_name, 0, 1)) }}{{ strtoupper(substr($employee->last_name ?? '', 0, 1)) }}
-                        </div>
-                    @endif
+                    <img src="{{ $employee->profile_picture_url }}" alt="{{ $employee->full_name }}"
+                         class="rounded-circle border border-4 border-white shadow"
+                         style="width:90px;height:90px;object-fit:cover;">
                 </div>
                 <h6 class="mb-0 fw-bold">{{ $employee->full_name }}</h6>
                 <small class="text-muted">{{ $employee->role_title }}</small>
