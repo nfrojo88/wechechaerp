@@ -275,7 +275,7 @@
                                                         <i class="fas fa-file"></i>
                                                     </a>
                                                 @endif
-                                                <form action="{{ route('purchase-requests.delete-proforma', [$purchaseRequest, $prof]) }}" method="POST" onsubmit="return confirm('Remove this proforma quote?');" class="d-inline">
+                                                <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.delete-proforma') ? route('purchase-requests.delete-proforma', [$purchaseRequest, $prof]) : url('/purchase-requests/' . $purchaseRequest->id . '/proformas/' . $prof->id) }}" method="POST" onsubmit="return confirm('Remove this proforma quote?');" class="d-inline">
                                                     @csrf
                                                     @method('DELETE')
                                                     <button type="submit" class="btn btn-outline-danger btn-sm py-0 px-1" title="Delete">
@@ -739,7 +739,7 @@
                                     </td>
                                     @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM)
                                     <td class="pe-3 text-end">
-                                        <form action="{{ route('purchase-requests.delete-proforma', [$purchaseRequest, $prof]) }}" method="POST" onsubmit="return confirm('Delete this proforma quote?');" class="d-inline">
+                                        <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.delete-proforma') ? route('purchase-requests.delete-proforma', [$purchaseRequest, $prof]) : url('/purchase-requests/' . $purchaseRequest->id . '/proformas/' . $prof->id) }}" method="POST" onsubmit="return confirm('Delete this proforma quote?');" class="d-inline">
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="btn btn-outline-danger btn-sm py-1 px-2" title="Delete Proforma">
@@ -1170,7 +1170,7 @@
 <div class="modal fade" id="attachProformaModal" tabindex="-1" aria-labelledby="attachProformaModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="{{ route('purchase-requests.attach-proforma', $purchaseRequest) }}" method="POST" enctype="multipart/form-data">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.attach-proforma') ? route('purchase-requests.attach-proforma', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/attach-proforma') }}" method="POST" enctype="multipart/form-data">
                 @csrf
                 <div class="modal-header bg-primary text-white py-3">
                     <h5 class="modal-title fw-bold" id="attachProformaModalLabel">
