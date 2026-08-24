@@ -72,4 +72,63 @@ class SupplierController extends Controller
         $supplier->delete();
         return redirect()->route('suppliers.index')->with('success', 'Supplier deleted.');
     }
+
+    public function quickStore(Request $request)
+    {
+        $code = $request->code ?: ('SUP-' . date('Ymd') . '-' . str_pad(Supplier::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT));
+
+        $data = $request->validate([
+            'name'           => 'required|string|max:255',
+            'code'           => 'nullable|string|max:50|unique:suppliers,code',
+            'tax_id'         => 'nullable|string|max:100',
+            'phone'          => 'nullable|string|max:50',
+            'email'          => 'nullable|email|max:255',
+            'contact_person' => 'nullable|string|max:255',
+            'address'        => 'nullable|string',
+            'notes'          => 'nullable|string',
+        ]);
+
+        $data['code']   = $data['code'] ?? $code;
+        $data['status'] = $data['status'] ?? 'active';
+
+        $supplier = Supplier::create($data);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Supplier added successfully.',
+            'supplier' => $supplier,
+        ]);
+    }
+
+    public function quickUpdate(Request $request, Supplier $supplier)
+    {
+        $data = $request->validate([
+            'name'           => 'required|string|max:255',
+            'code'           => 'nullable|string|max:50|unique:suppliers,code,' . $supplier->id,
+            'tax_id'         => 'nullable|string|max:100',
+            'phone'          => 'nullable|string|max:50',
+            'email'          => 'nullable|email|max:255',
+            'contact_person' => 'nullable|string|max:255',
+            'address'        => 'nullable|string',
+            'notes'          => 'nullable|string',
+        ]);
+
+        $supplier->update($data);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Supplier updated successfully.',
+            'supplier' => $supplier,
+        ]);
+    }
+
+    public function apiAll()
+    {
+        $suppliers = Supplier::where('status', 'active')
+            ->orWhereNull('status')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json($suppliers);
+    }
 }

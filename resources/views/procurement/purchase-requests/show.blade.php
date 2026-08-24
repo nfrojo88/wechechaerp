@@ -1179,15 +1179,82 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
+                    {{-- Quick Supplier Add / Edit Panel --}}
+                    <div id="supplierQuickPanel" class="card border border-primary border-opacity-25 bg-light mb-3 shadow-sm" style="display: none;">
+                        <div class="card-header bg-primary bg-opacity-10 py-2 px-3 d-flex justify-content-between align-items-center">
+                            <span class="fw-bold small text-primary" id="supplierQuickPanelTitle">
+                                <i class="fas fa-building-circle-check me-1"></i> Add New Supplier / Vendor
+                            </span>
+                            <button type="button" class="btn-close btn-sm" onclick="toggleSupplierQuickForm(false)" aria-label="Close"></button>
+                        </div>
+                        <div class="card-body p-3">
+                            <input type="hidden" id="quickSupId" value="">
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold mb-1">Company / Supplier Name <span class="text-danger">*</span></label>
+                                    <input type="text" id="quickSupName" class="form-control form-control-sm" placeholder="e.g. ABC Building Materials Ltd.">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold mb-1">TIN / Tax Identification No.</label>
+                                    <input type="text" id="quickSupTaxId" class="form-control form-control-sm" placeholder="e.g. 0012345678">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold mb-1">Phone Number</label>
+                                    <input type="text" id="quickSupPhone" class="form-control form-control-sm" placeholder="e.g. +251 911 000 000">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold mb-1">Email Address</label>
+                                    <input type="email" id="quickSupEmail" class="form-control form-control-sm" placeholder="supplier@example.com">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold mb-1">Contact Person</label>
+                                    <input type="text" id="quickSupContact" class="form-control form-control-sm" placeholder="Representative name">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small fw-bold mb-1">Address / Location</label>
+                                    <input type="text" id="quickSupAddress" class="form-control form-control-sm" placeholder="City, Subcity, Street / Warehouse location">
+                                </div>
+                            </div>
+                            <div class="mt-3 d-flex justify-content-between align-items-center">
+                                <div id="quickSupErrorMsg" class="text-danger small fw-bold"></div>
+                                <div class="d-flex gap-2">
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="toggleSupplierQuickForm(false)">Cancel</button>
+                                    <button type="button" class="btn btn-sm btn-success fw-bold shadow-sm" id="btnSaveQuickSupplier" onclick="submitQuickSupplier()">
+                                        <i class="fas fa-check me-1"></i> Save & Select Supplier
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small text-uppercase">Select Supplier / Vendor <span class="text-danger">*</span></label>
-                            <select name="supplier_id" class="form-select form-select-sm" required>
+                        <div class="col-12">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold small text-uppercase mb-0">
+                                    Select Supplier / Vendor <span class="text-danger">*</span>
+                                </label>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-bold" onclick="toggleSupplierQuickForm('create')">
+                                        <i class="fas fa-plus-circle me-1"></i> + New Supplier
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="btnEditSelectedSupplier" style="display: none;" onclick="toggleSupplierQuickForm('edit')">
+                                        <i class="fas fa-pen me-1"></i> Edit Supplier
+                                    </button>
+                                </div>
+                            </div>
+                            <select name="supplier_id" id="proformaSupplierSelect" class="form-select form-select-sm" required onchange="handleSupplierSelectChange(this)">
                                 <option value="">-- Choose Supplier --</option>
                                 @foreach($suppliers as $sup)
-                                    <option value="{{ $sup->id }}">{{ $sup->name }} @if($sup->phone) ({{ $sup->phone }}) @endif</option>
+                                    <option value="{{ $sup->id }}"
+                                            data-name="{{ $sup->name }}"
+                                            data-tax-id="{{ $sup->tax_id }}"
+                                            data-phone="{{ $sup->phone }}"
+                                            data-email="{{ $sup->email }}"
+                                            data-contact="{{ $sup->contact_person }}"
+                                            data-address="{{ $sup->address }}">{{ $sup->name }} @if($sup->tax_id) (TIN: {{ $sup->tax_id }}) @elseif($sup->phone) (Tel: {{ $sup->phone }}) @endif</option>
                                 @endforeach
                             </select>
+                            <div id="supplierInfoPreview" class="small text-muted mt-1" style="display: none;"></div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-uppercase">Proforma / Quote Ref No.</label>
@@ -1208,7 +1275,7 @@
                                 <span class="input-group-text">ETB</span>
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-12">
                             <label class="form-label fw-bold small text-uppercase">Proforma Document (PDF / Image) <span class="text-danger">*</span></label>
                             <input type="file" name="proforma_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
                         </div>
@@ -1405,6 +1472,163 @@ function recalculateDirectTotal() {
     if (totalInput && total > 0) {
         totalInput.value = total.toFixed(2);
     }
+}
+
+// ── Quick Supplier Management (Add & Edit within Proforma Modal) ──
+function toggleSupplierQuickForm(mode) {
+    const panel = document.getElementById('supplierQuickPanel');
+    const title = document.getElementById('supplierQuickPanelTitle');
+    const errorDiv = document.getElementById('quickSupErrorMsg');
+    const btnSave = document.getElementById('btnSaveQuickSupplier');
+    if (errorDiv) errorDiv.innerText = '';
+
+    if (!mode || mode === false) {
+        if (panel) panel.style.display = 'none';
+        return;
+    }
+
+    if (mode === 'create') {
+        document.getElementById('quickSupId').value = '';
+        document.getElementById('quickSupName').value = '';
+        document.getElementById('quickSupTaxId').value = '';
+        document.getElementById('quickSupPhone').value = '';
+        document.getElementById('quickSupEmail').value = '';
+        document.getElementById('quickSupContact').value = '';
+        document.getElementById('quickSupAddress').value = '';
+        title.innerHTML = '<i class="fas fa-building-circle-check me-1"></i> Add New Supplier / Vendor';
+        btnSave.innerHTML = '<i class="fas fa-check me-1"></i> Save & Select Supplier';
+        panel.style.display = '';
+        document.getElementById('quickSupName').focus();
+    } else if (mode === 'edit') {
+        const select = document.getElementById('proformaSupplierSelect');
+        const selectedOpt = select.options[select.selectedIndex];
+        if (!selectedOpt || !selectedOpt.value) return;
+
+        document.getElementById('quickSupId').value = selectedOpt.value;
+        document.getElementById('quickSupName').value = selectedOpt.dataset.name || '';
+        document.getElementById('quickSupTaxId').value = selectedOpt.dataset.taxId || '';
+        document.getElementById('quickSupPhone').value = selectedOpt.dataset.phone || '';
+        document.getElementById('quickSupEmail').value = selectedOpt.dataset.email || '';
+        document.getElementById('quickSupContact').value = selectedOpt.dataset.contact || '';
+        document.getElementById('quickSupAddress').value = selectedOpt.dataset.address || '';
+        title.innerHTML = `<i class="fas fa-pen-to-square me-1"></i> Edit Supplier: <strong>${selectedOpt.dataset.name}</strong>`;
+        btnSave.innerHTML = '<i class="fas fa-save me-1"></i> Update Supplier Info';
+        panel.style.display = '';
+        document.getElementById('quickSupName').focus();
+    }
+}
+
+function handleSupplierSelectChange(select) {
+    const editBtn = document.getElementById('btnEditSelectedSupplier');
+    const preview = document.getElementById('supplierInfoPreview');
+    const opt = select.options[select.selectedIndex];
+
+    if (opt && opt.value) {
+        if (editBtn) editBtn.style.display = '';
+        let info = [];
+        if (opt.dataset.taxId) info.push(`<strong>TIN:</strong> ${opt.dataset.taxId}`);
+        if (opt.dataset.phone) info.push(`<strong>Phone:</strong> ${opt.dataset.phone}`);
+        if (opt.dataset.contact) info.push(`<strong>Contact:</strong> ${opt.dataset.contact}`);
+        if (opt.dataset.address) info.push(`<strong>Address:</strong> ${opt.dataset.address}`);
+        if (preview) {
+            preview.innerHTML = info.join(' &bull; ') || '<span class="text-muted">No additional contact details registered. Click "Edit Supplier" to add TIN/Phone.</span>';
+            preview.style.display = '';
+        }
+    } else {
+        if (editBtn) editBtn.style.display = 'none';
+        if (preview) preview.style.display = 'none';
+    }
+}
+
+function submitQuickSupplier() {
+    const id = document.getElementById('quickSupId').value;
+    const name = document.getElementById('quickSupName').value.trim();
+    const taxId = document.getElementById('quickSupTaxId').value.trim();
+    const phone = document.getElementById('quickSupPhone').value.trim();
+    const email = document.getElementById('quickSupEmail').value.trim();
+    const contact = document.getElementById('quickSupContact').value.trim();
+    const address = document.getElementById('quickSupAddress').value.trim();
+    const errorDiv = document.getElementById('quickSupErrorMsg');
+    const btnSave = document.getElementById('btnSaveQuickSupplier');
+
+    if (errorDiv) errorDiv.innerText = '';
+    if (!name) {
+        if (errorDiv) errorDiv.innerText = 'Supplier Name is required.';
+        return;
+    }
+
+    btnSave.disabled = true;
+    btnSave.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving...';
+
+    const baseUrl = "{{ url('suppliers') }}";
+    const url = id 
+        ? (baseUrl + "/" + id + "/quick-update")
+        : (baseUrl + "/quick-store");
+
+    const payload = {
+        name: name,
+        tax_id: taxId,
+        phone: phone,
+        email: email,
+        contact_person: contact,
+        address: address,
+        _token: '{{ csrf_token() }}'
+    };
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(res => {
+        btnSave.disabled = false;
+        if (res.success && res.supplier) {
+            const s = res.supplier;
+            const select = document.getElementById('proformaSupplierSelect');
+            const displayText = `${s.name}` + (s.tax_id ? ` (TIN: ${s.tax_id})` : (s.phone ? ` (Tel: ${s.phone})` : ''));
+
+            if (id) {
+                const opt = select.querySelector(`option[value="${id}"]`);
+                if (opt) {
+                    opt.text = displayText;
+                    opt.dataset.name = s.name;
+                    opt.dataset.taxId = s.tax_id || '';
+                    opt.dataset.phone = s.phone || '';
+                    opt.dataset.email = s.email || '';
+                    opt.dataset.contact = s.contact_person || '';
+                    opt.dataset.address = s.address || '';
+                }
+            } else {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.text = displayText;
+                opt.dataset.name = s.name;
+                opt.dataset.taxId = s.tax_id || '';
+                opt.dataset.phone = s.phone || '';
+                opt.dataset.email = s.email || '';
+                opt.dataset.contact = s.contact_person || '';
+                opt.dataset.address = s.address || '';
+                select.appendChild(opt);
+                select.value = s.id;
+            }
+
+            handleSupplierSelectChange(select);
+            toggleSupplierQuickForm(false);
+        } else {
+            if (errorDiv) errorDiv.innerText = res.message || 'Error saving supplier.';
+            btnSave.innerHTML = '<i class="fas fa-check me-1"></i> Save & Select Supplier';
+        }
+    })
+    .catch(err => {
+        btnSave.disabled = false;
+        btnSave.innerHTML = '<i class="fas fa-check me-1"></i> Save & Select Supplier';
+        if (errorDiv) errorDiv.innerText = 'Failed to save supplier. Please check fields and try again.';
+    });
 }
 </script>
 @endsection

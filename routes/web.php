@@ -1358,6 +1358,9 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('weekly-dispatches', App\Http\Controllers\WeeklyDispatchController::class)->only(['index', 'show']);
     // ─── Phase 4 Procurement ────────────────────────────────────────────────
 
+    Route::post('suppliers/quick-store', [App\Http\Controllers\SupplierController::class, 'quickStore'])->name('suppliers.quick-store');
+    Route::post('suppliers/{supplier}/quick-update', [App\Http\Controllers\SupplierController::class, 'quickUpdate'])->name('suppliers.quick-update');
+    Route::get('suppliers/api/all', [App\Http\Controllers\SupplierController::class, 'apiAll'])->name('suppliers.api-all');
     Route::resource('suppliers', App\Http\Controllers\SupplierController::class);
     
     Route::resource('transfers', App\Http\Controllers\TransferController::class)->except(['edit', 'update', 'destroy']);
