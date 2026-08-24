@@ -163,31 +163,30 @@
                         </ul>
                         <div class="tab-content mb-3" id="sourcingTabContent">
                             <div class="tab-pane fade show active" id="tabDirect">
-                                <form action="{{ route('purchase-requests.submit-direct-buy', $purchaseRequest) }}" method="POST">
+                                <form action="{{ route('purchase-requests.send-to-proc-team', $purchaseRequest) }}" method="POST">
                                     @csrf
+                                    <input type="hidden" name="sourcing_method" value="direct_buy">
+                                    <p class="small text-muted mb-2">Send this request to the Purchase Team for <strong>Direct Buy</strong> to add purchase prices for all materials.</p>
                                     <div class="mb-2">
-                                        <label class="form-label small fw-bold text-uppercase">Direct Purchase Amount (ETB) <span class="text-danger">*</span></label>
-                                        <input type="number" step="0.01" name="amount" class="form-control form-control-sm" required placeholder="0.00">
-                                    </div>
-                                    <div class="mb-2">
-                                        <label class="form-label small fw-bold text-uppercase">Notes</label>
-                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Add justification or direct buy remarks..."></textarea>
+                                        <label class="form-label small fw-bold text-uppercase">Instructions / Notes for Purchase Team</label>
+                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Instructions for Purchase Team to add prices..."></textarea>
                                     </div>
                                     <button class="btn btn-success btn-sm w-100 fw-bold">
-                                        <i class="fas fa-check-circle me-1"></i> Submit Direct Buy
+                                        <i class="fas fa-paper-plane me-1"></i> Send to Purchase Team (Direct Buy)
                                     </button>
                                 </form>
                             </div>
                             <div class="tab-pane fade" id="tabProforma">
                                 <form action="{{ route('purchase-requests.send-to-proc-team', $purchaseRequest) }}" method="POST">
                                     @csrf
-                                    <p class="small text-muted mb-2">Assign this request to the Procurement Team to collect and upload vendor proforma quotes.</p>
+                                    <input type="hidden" name="sourcing_method" value="proforma">
+                                    <p class="small text-muted mb-2">Assign this request to the Purchase Team to <strong>attach and collect proforma quotes</strong> from suppliers.</p>
                                     <div class="mb-2">
-                                        <label class="form-label small fw-bold text-uppercase">Instructions for Purchase Team</label>
-                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Specific procurement instructions or guidelines..."></textarea>
+                                        <label class="form-label small fw-bold text-uppercase">Instructions / Notes for Purchase Team</label>
+                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Specific vendor or quote requirements..."></textarea>
                                     </div>
                                     <button class="btn btn-primary btn-sm w-100 fw-bold">
-                                        <i class="fas fa-user-check me-1"></i> Send to Procurement Team for Sourcing
+                                        <i class="fas fa-paper-plane me-1"></i> Send to Purchase Team (Proforma)
                                     </button>
                                 </form>
                             </div>
@@ -206,21 +205,66 @@
                             </div>
                         </div>
 
-                    <!-- STAGE 4: Procurement Team Sourcing & Proforma Collection -->
+                    <!-- STAGE 4: Procurement Team Stage (Pricing for Direct Buy or Attaching Proformas) -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM)
-                        <form action="{{ route('purchase-requests.submit-proformas', $purchaseRequest) }}" method="POST">
-                            @csrf
-                            <div class="alert alert-info py-2 px-3 small mb-3">
-                                <i class="fas fa-info-circle me-1"></i> Please upload proforma invoice quotes on the right panel, then click below to submit to Purchase Manager.
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label small fw-bold text-uppercase">Procurement Notes</label>
-                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional notes regarding collected proformas..."></textarea>
-                            </div>
-                            <button class="btn btn-primary btn-sm w-100 fw-bold">
-                                <i class="fas fa-paper-plane me-1"></i> Submit Proformas to PM
-                            </button>
-                        </form>
+                        @if($purchaseRequest->sourcing_method === 'direct_buy')
+                            <h6 class="font-weight-bold text-success mb-2">
+                                <i class="fas fa-bolt me-1"></i>Direct Buy: Add Material Prices
+                            </h6>
+                            <p class="small text-muted mb-2">Enter the direct purchase unit price for each requested material below.</p>
+                            <form action="{{ route('purchase-requests.submit-direct-buy', $purchaseRequest) }}" method="POST">
+                                @csrf
+                                <div class="bg-light p-2 rounded border mb-3" style="max-height: 250px; overflow-y: auto;">
+                                    @foreach($purchaseRequest->items as $itm)
+                                    <div class="mb-2 pb-2 border-bottom">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="small fw-bold text-dark">{{ $itm->product?->name ?? 'Item #' . $itm->product_id }}</span>
+                                            <span class="badge bg-secondary">{{ (float)$itm->quantity }} {{ $itm->unit }}</span>
+                                        </div>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Unit Price (ETB)</span>
+                                            <input type="number" step="0.01" min="0" 
+                                                   name="item_prices[{{ $itm->id }}]" 
+                                                   value="{{ $itm->estimated_unit_cost > 0 ? (float)$itm->estimated_unit_cost : '' }}" 
+                                                   class="form-control form-control-sm direct-item-cost" 
+                                                   data-qty="{{ (float)$itm->quantity }}"
+                                                   oninput="recalculateDirectTotal()"
+                                                   placeholder="0.00" required>
+                                        </div>
+                                    </div>
+                                    @endforeach
+                                </div>
+
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold text-uppercase">Total Direct Purchase Amount (ETB)</label>
+                                    <input type="number" step="0.01" name="amount" id="directTotalAmountInput" class="form-control form-control-sm fw-bold bg-white" required placeholder="0.00" value="{{ $purchaseRequest->direct_buy_amount > 0 ? (float)$purchaseRequest->direct_buy_amount : (float)$purchaseRequest->estimated_total }}">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-uppercase">Procurement Notes</label>
+                                    <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Add pricing notes or remarks..."></textarea>
+                                </div>
+                                <button class="btn btn-success btn-sm w-100 fw-bold">
+                                    <i class="fas fa-check-circle me-1"></i> Submit Material Prices
+                                </button>
+                            </form>
+                        @else
+                            <h6 class="font-weight-bold text-primary mb-2">
+                                <i class="fas fa-file-invoice-dollar me-1"></i>Proforma Sourcing
+                            </h6>
+                            <form action="{{ route('purchase-requests.submit-proformas', $purchaseRequest) }}" method="POST">
+                                @csrf
+                                <div class="alert alert-info py-2 px-3 small mb-3">
+                                    <i class="fas fa-info-circle me-1"></i> Attach/upload proforma quotes in the <strong>Proforma Invoices</strong> tab on the right, then submit them for Purchase Manager verification and selection.
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-uppercase">Procurement Notes</label>
+                                    <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional notes regarding attached proformas..."></textarea>
+                                </div>
+                                <button class="btn btn-primary btn-sm w-100 fw-bold">
+                                    <i class="fas fa-paper-plane me-1"></i> Submit Proformas to PM for Selection
+                                </button>
+                            </form>
+                        @endif
 
                     <!-- STAGE 5a: Marketing Review -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING)
@@ -1117,6 +1161,19 @@ function toggleSplitRowFields(selectEl, index) {
         if (transferNotice) transferNotice.style.display = '';
         if (purchaseGroup) purchaseGroup.style.display = 'none';
         if (purchaseNotice) purchaseNotice.style.display = '';
+    }
+}
+
+function recalculateDirectTotal() {
+    let total = 0;
+    document.querySelectorAll('.direct-item-cost').forEach(input => {
+        const val = parseFloat(input.value) || 0;
+        const qty = parseFloat(input.dataset.qty) || 0;
+        total += (val * qty);
+    });
+    const totalInput = document.getElementById('directTotalAmountInput');
+    if (totalInput && total > 0) {
+        totalInput.value = total.toFixed(2);
     }
 }
 </script>

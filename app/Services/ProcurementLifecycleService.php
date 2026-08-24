@@ -63,25 +63,49 @@ class ProcurementLifecycleService
             "ConstructPro: PR #{$pr->pr_no} returned to you. Reason: {$reason}. Open: " . url("/purchase-requests/{$pr->id}"));
     }
 
-    public function sendToProcurementTeam(PurchaseRequest $pr, string $notes = null): void
+    public function sendToProcurementTeam(PurchaseRequest $pr, string $sourcingMethod = 'proforma', string $notes = null): void
     {
         $from = $pr->status;
         $pr->update([
+            'sourcing_method'    => $sourcingMethod,
             'status'             => PurchaseRequest::STATUS_PENDING_PROC_TEAM,
             'current_owner_role' => 'purchase',
         ]);
-        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_PROC_TEAM, 'send_to_procurement_team', 'purchase_manager', $notes);
+        $actionName = $sourcingMethod === 'direct_buy' ? 'send_to_proc_team_direct_buy' : 'send_to_proc_team_proforma';
+        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_PROC_TEAM, $actionName, 'purchase_manager', $notes);
+        
+        $methodLabel = $sourcingMethod === 'direct_buy' ? 'Direct Buy (add material prices)' : 'Proforma Sourcing (collect quotes)';
         $this->sms->notifyRole($pr->id, 'purchase',
-            "ConstructPro: PR #{$pr->pr_no} assigned to Procurement Team for sourcing. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} assigned to Procurement Team for {$methodLabel}. Open: " . url("/purchase-requests/{$pr->id}"));
     }
 
     // ═══════════════════════════════════════════════════════════════════
     // STAGE 4 — Procurement Team Sourcing
     // ═══════════════════════════════════════════════════════════════════
 
-    public function submitDirectBuy(PurchaseRequest $pr, float $amount, string $notes = null): void
+    public function submitDirectBuy(PurchaseRequest $pr, float $amount, string $notes = null, array $itemPrices = []): void
     {
         $from = $pr->status;
+
+        // If individual item prices are supplied, update each PR item and calculate total
+        if (!empty($itemPrices)) {
+            $totalCalculated = 0;
+            foreach ($itemPrices as $itemId => $unitCost) {
+                $item = $pr->items()->find($itemId);
+                if ($item) {
+                    $cost = (float)$unitCost;
+                    $item->update([
+                        'estimated_unit_cost' => $cost,
+                        'estimated_total'     => round($cost * (float)$item->quantity, 2),
+                    ]);
+                    $totalCalculated += ($cost * (float)$item->quantity);
+                }
+            }
+            if ($amount <= 0 && $totalCalculated > 0) {
+                $amount = round($totalCalculated, 2);
+            }
+        }
+
         $pr->update([
             'sourcing_method'       => 'direct_buy',
             'direct_buy_amount'     => $amount,
@@ -90,7 +114,7 @@ class ProcurementLifecycleService
             'status'                => PurchaseRequest::STATUS_PENDING_MARKETING,
             'current_owner_role'    => 'market_research',
         ]);
-        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_MARKETING, 'submit_direct_buy', 'purchase_manager', $notes);
+        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_MARKETING, 'submit_direct_buy_pricing', 'purchase', $notes);
         $this->sms->notifyRole($pr->id, 'market_research',
             "ConstructPro: PR #{$pr->pr_no} needs marketing price variance. Amount: " . number_format($amount, 2) . " ETB. Open: " . url("/purchase-requests/{$pr->id}"));
     }

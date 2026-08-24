@@ -545,20 +545,31 @@ class PurchaseRequestController extends Controller
     public function sendToProcurementTeam(Request $request, PurchaseRequest $purchaseRequest)
     {
         $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
-        $this->lifecycle->sendToProcurementTeam($purchaseRequest, $request->notes);
-        return back()->with('success', 'Routed to Procurement Team.');
+        $request->validate([
+            'sourcing_method' => 'nullable|in:direct_buy,proforma',
+            'notes'           => 'nullable|string',
+        ]);
+        $method = $request->input('sourcing_method', 'proforma');
+        $this->lifecycle->sendToProcurementTeam($purchaseRequest, $method, $request->notes);
+        return back()->with('success', 'Routed to Procurement Team for ' . ($method === 'direct_buy' ? 'Direct Buy material pricing.' : 'Proforma quotes collection.'));
     }
 
-    // ─── STAGE 3 Sourcing Decision: Submit Direct Buy (Purchase Manager) ─────
+    // ─── STAGE 4: Procurement Team Submits Direct Buy Material Pricing ───────
     public function submitDirectBuy(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
+        $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer']);
         $request->validate([
-            'amount' => 'required|numeric|min:0.01',
-            'notes'  => 'nullable|string',
+            'item_prices'   => 'nullable|array',
+            'item_prices.*' => 'nullable|numeric|min:0',
+            'amount'        => 'nullable|numeric|min:0',
+            'notes'         => 'nullable|string',
         ]);
-        $this->lifecycle->submitDirectBuy($purchaseRequest, (float)$request->amount, $request->notes);
-        return back()->with('success', 'Direct buy submitted. Awaiting marketing review.');
+
+        $itemPrices = $request->input('item_prices', []);
+        $amount = (float)($request->input('amount', 0));
+
+        $this->lifecycle->submitDirectBuy($purchaseRequest, $amount, $request->notes, $itemPrices);
+        return back()->with('success', 'Direct buy material pricing submitted. Awaiting marketing review.');
     }
 
     public function submitProformas(Request $request, PurchaseRequest $purchaseRequest)
