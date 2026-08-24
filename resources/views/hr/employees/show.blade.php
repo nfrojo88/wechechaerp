@@ -334,7 +334,7 @@
                     @if($employee->is_guarantee_overdue)
                         <div class="alert alert-danger mb-3">
                             <i class="fa-solid fa-exclamation-circle me-2"></i>
-                            <strong>45-DAY TEST PERIOD EXPIRED &amp; ACCOUNT LOCKED!</strong> The 45-day test period has elapsed without renewal or Guarantee Letter &amp; TIN submission.
+                            <strong>45-DAY TEST PERIOD EXPIRED &amp; ACCOUNT LOCKED!</strong> The 45-day test period has elapsed without renewal or Guarantee Letter submission.
                             <br><small>Login access is locked. Submit document or renew below to restore access.</small>
                         </div>
                         <p class="text-muted mb-3">
@@ -358,7 +358,7 @@
                     @elseif($employee->show_guarantee_warning)
                         <div class="alert alert-warning mb-3">
                             <i class="fa-solid fa-exclamation-triangle me-2"></i>
-                            <strong>Test Period Notice (Day {{ $employee->days_since_joining }} of 45):</strong> Guarantee letter and TIN must be submitted within {{ $employee->days_until_probation_end }} days.
+                            <strong>Test Period Notice (Day {{ $employee->days_since_joining }} of 45):</strong> Guarantee letter must be submitted within {{ $employee->days_until_probation_end }} days.
                             <br><small>Account will be locked after {{ $employee->probation_end_date ? $employee->probation_end_date->format('d M Y') : 'N/A' }} if not submitted or renewed.</small>
                         </div>
                         <p class="text-muted mb-3">

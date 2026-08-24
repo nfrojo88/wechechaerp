@@ -175,7 +175,7 @@
                 </div>
                 <div class="modal-body p-4 bg-white">
                     <p class="small text-muted mb-3">
-                        Transition or renew this employee to Permanent or Contract, provide Guarantee Letter &amp; TIN information, and restore active account login status.
+                        Transition or renew this employee to Permanent or Contract, provide Guarantee Letter, and restore active account login status.
                     </p>
 
                     <div class="mb-3">
@@ -193,12 +193,12 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold text-dark">TIN Number <span class="text-danger">*</span></label>
-                        <input type="text" name="tin_number" class="form-control font-monospace" placeholder="Enter Tax Identification Number" value="{{ $emp->tin_number }}" required>
+                        <label class="form-label fw-bold text-dark">TIN Number <span class="text-muted fw-normal small">(Optional)</span></label>
+                        <input type="text" name="tin_number" class="form-control font-monospace" placeholder="Enter Tax Identification Number (optional)" value="{{ $emp->tin_number }}">
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold text-dark">Guarantee Letter Document (PDF / Image)</label>
+                        <label class="form-label fw-bold text-dark">Guarantee Letter Document (PDF / Image) <span class="text-danger">*</span></label>
                         @if($emp->guarantee_letter)
                             <div class="mb-2 p-2 rounded bg-light border d-flex align-items-center justify-content-between">
                                 <div>
@@ -208,8 +208,8 @@
                                 <a href="{{ $emp->guarantee_letter_url }}" target="_blank" class="btn btn-xs btn-outline-primary">View Document →</a>
                             </div>
                         @endif
-                        <input type="file" name="guarantee_letter" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg">
-                        <small class="text-muted">Upload signed guarantee letter to complete renewal compliance.</small>
+                        <input type="file" name="guarantee_letter" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg,image/webp" {{ $emp->guarantee_letter ? '' : 'required' }}>
+                        <small class="text-muted">{{ $emp->guarantee_letter ? 'Upload new file if you wish to replace the existing Guarantee Letter.' : 'Upload signed guarantee letter to complete renewal compliance.' }}</small>
                     </div>
 
                     <div class="form-check form-switch p-3 bg-light rounded border mb-2">

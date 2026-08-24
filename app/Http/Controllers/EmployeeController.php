@@ -1319,7 +1319,7 @@ class EmployeeController extends Controller
             'employment_type'   => 'required|in:permanent,contract,daily',
             'contract_end_date' => 'nullable|date',
             'tin_number'        => 'nullable|string|max:50',
-            'guarantee_letter'  => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'guarantee_letter'  => $employee->guarantee_letter ? 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360' : 'required|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
             'probation_completed' => 'nullable|boolean',
         ]);
 
@@ -1355,7 +1355,7 @@ class EmployeeController extends Controller
                 if ($emp->is_test_period_expired) {
                     $emp->update([
                         'status'      => 'terminated',
-                        'lock_reason' => '45-Day Test Period Expired: Missing Guarantee Letter or TIN Number',
+                        'lock_reason' => '45-Day Test Period Expired: Missing Guarantee Letter',
                     ]);
                 }
             }

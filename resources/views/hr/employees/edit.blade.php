@@ -268,11 +268,11 @@
                                 </strong>
                                 <small class="text-muted">
                                     @if($employee->probation_completed)
-                                        This employee has completed their probation/renewal. Guarantee letter and TIN compliance active.
+                                        This employee has completed their probation/renewal. Guarantee letter compliance active.
                                     @elseif($employee->is_test_period_expired)
-                                        The 45-day test period has elapsed without renewal or submission of Guarantee Letter / TIN. Account will be locked and sent to Employee History.
+                                        The 45-day test period has elapsed without renewal or submission of Guarantee Letter. Account will be locked and sent to Employee History.
                                     @else
-                                        Guarantee letters are waived during the 45-day test period. Before Day 45 ends, submit Guarantee Letter &amp; TIN or check the renewal box below.
+                                        Guarantee letters are waived during the 45-day test period. Before Day 45 ends, submit Guarantee Letter or check the renewal box below.
                                     @endif
                                 </small>
                             </div>

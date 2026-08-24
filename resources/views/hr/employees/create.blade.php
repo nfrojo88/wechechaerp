@@ -251,7 +251,7 @@
                         <div>
                             <strong class="d-block text-dark">45-Day Test Period (Probation) Policy</strong>
                             <small class="text-muted">
-                                Both Permanent and Contract employees start with a standard <strong>45-day test period</strong> from the joining date. Guarantee letters are <strong>waived</strong> during this test period. Between Day 20 and Day 45, alerts will appear for HR &amp; GM. After Day 45, if not renewed to Permanent/Contract with Guarantee Letter and TIN, the employee account will be automatically locked and moved to Employee History.
+                                Both Permanent and Contract employees start with a standard <strong>45-day test period</strong> from the joining date. Guarantee letters are <strong>waived</strong> during this test period. Between Day 20 and Day 45, alerts will appear for HR &amp; GM. After Day 45, if not renewed to Permanent/Contract with Guarantee Letter, the employee account will be automatically locked and moved to Employee History.
                             </small>
                         </div>
                     </div>

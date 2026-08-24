@@ -39,7 +39,7 @@ class LockExpiredProbations extends Command
             if ($emp->is_test_period_expired) {
                 $emp->update([
                     'status'      => 'terminated',
-                    'lock_reason' => '45-Day Test Period Expired: Missing Guarantee Letter or TIN Number',
+                    'lock_reason' => '45-Day Test Period Expired: Missing Guarantee Letter',
                 ]);
                 $this->warn("Locked Employee #{$emp->employee_code} ({$emp->full_name}) - 45-day test period expired.");
                 $lockedCount++;

@@ -265,7 +265,7 @@ class Employee extends Model
     }
 
     /**
-     * Whether the 45-day test period has expired without renewal / guarantee letter & TIN
+     * Whether the 45-day test period has expired without renewal / guarantee letter
      */
     public function getIsTestPeriodExpiredAttribute()
     {
@@ -276,8 +276,8 @@ class Employee extends Model
         if (!$endDate || now()->lte($endDate)) {
             return false;
         }
-        // If 45 days passed, and guarantee letter OR tin_number is missing, it is expired/lockable
-        return empty($this->guarantee_letter) || empty($this->tin_number);
+        // If 45 days passed, and guarantee letter is missing, it is expired/lockable
+        return empty($this->guarantee_letter);
     }
 
     /**
@@ -292,8 +292,8 @@ class Employee extends Model
             return false;
         }
         $daysSinceJoining = $this->days_since_joining;
-        // Trigger alert between Day 20 and Day 45 (or when overdue), if guarantee letter or TIN is missing
-        if ($daysSinceJoining >= 20 && (empty($this->guarantee_letter) || empty($this->tin_number))) {
+        // Trigger alert between Day 20 and Day 45 (or when overdue), if guarantee letter is missing
+        if ($daysSinceJoining >= 20 && empty($this->guarantee_letter)) {
             return true;
         }
         return false;
