@@ -204,8 +204,8 @@
                                value="{{ old('role_title') }}" placeholder="e.g. Site Engineer">
                     </div>
 
-                    {{-- National ID Fields --}}
-                    <div class="col-12"><hr class="my-2"><small class="text-muted fw-bold"><i class="fa-solid fa-id-card me-1"></i>National / Government ID</small></div>
+                    {{-- National ID & TIN Fields --}}
+                    <div class="col-12"><hr class="my-2"><small class="text-muted fw-bold"><i class="fa-solid fa-id-card me-1"></i>National ID &amp; Tax Information</small></div>
                     <div class="col-md-6">
                         <label class="form-label">National ID Number <small class="text-muted">(Kebele ID / Fayda ID / Passport)</small></label>
                         <input type="text" name="national_id_number" class="form-control @error('national_id_number') is-invalid @enderror"
@@ -213,6 +213,14 @@
                         @error('national_id_number')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label">
+                            <i class="fa-solid fa-file-invoice-dollar text-primary me-1"></i>TIN Number (Tax Identification No.)
+                        </label>
+                        <input type="text" name="tin_number" class="form-control font-monospace @error('tin_number') is-invalid @enderror"
+                               value="{{ old('tin_number') }}" placeholder="e.g. 0012345678">
+                        @error('tin_number')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="col-md-12">
                         <label class="form-label">
                             <i class="fa-solid fa-camera text-primary me-1"></i>Upload National ID Card / Scan / Photo
                             <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP – Max 10MB)</small>
@@ -235,18 +243,37 @@
                     <h5 class="mb-0"><i class="fa-solid fa-briefcase text-success me-2"></i>Step 2: Employment Details</h5>
                     <span class="badge bg-success">Step 2 of 8</span>
                 </div>
+
+                {{-- 45-Day Test Period Notice --}}
+                <div class="alert alert-info border-start border-4 border-info shadow-xs p-3 mb-3">
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="fa-solid fa-clock-rotate-left fa-lg text-info mt-1"></i>
+                        <div>
+                            <strong class="d-block text-dark">45-Day Test Period (Probation) Policy</strong>
+                            <small class="text-muted">
+                                Both Permanent and Contract employees start with a standard <strong>45-day test period</strong> from the joining date. Guarantee letters are <strong>waived</strong> during this test period. Between Day 20 and Day 45, alerts will appear for HR &amp; GM. After Day 45, if not renewed to Permanent/Contract with Guarantee Letter and TIN, the employee account will be automatically locked and moved to Employee History.
+                            </small>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Employment Type <span class="text-danger">*</span></label>
-                        <select name="employment_type" class="form-select" required>
+                        <select name="employment_type" id="create_employment_type" class="form-select" onchange="toggleContractEndDate(this.value)" required>
                             <option value="permanent" {{ old('employment_type', 'permanent') == 'permanent' ? 'selected' : '' }}>Permanent</option>
                             <option value="contract"  {{ old('employment_type') == 'contract' ? 'selected' : '' }}>Contract</option>
                             <option value="daily"     {{ old('employment_type') == 'daily' ? 'selected' : '' }}>Daily Labor</option>
                         </select>
                     </div>
+                    <div class="col-md-6" id="contract_end_date_wrapper" style="{{ old('employment_type') == 'contract' ? '' : 'display:none;' }}">
+                        <label class="form-label">Contract End Date (Valid Upto) <span class="text-danger">*</span></label>
+                        <input type="date" name="contract_end_date" id="contract_end_date_input" class="form-control @error('contract_end_date') is-invalid @enderror"
+                               value="{{ old('contract_end_date') }}">
+                        @error('contract_end_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
                     <div class="col-md-6">
-                        <label class="form-label">Contract Start Date <span class="text-danger">*</span></label>
+                        <label class="form-label">Start Date / Joining Date <span class="text-danger">*</span></label>
                         <input type="date" name="date_of_joining" class="form-control @error('date_of_joining') is-invalid @enderror"
                                value="{{ old('date_of_joining', date('Y-m-d')) }}" required>
                         @error('date_of_joining')<div class="invalid-feedback">{{ $message }}</div>@enderror
@@ -1586,6 +1613,22 @@ function toggleRemoteNotice(selectEl) {
     const badge = document.getElementById('remote-attendance-badge');
     if (badge) {
         badge.style.display = (selectEl.value === 'Remote') ? 'inline-block' : 'none';
+    }
+}
+
+function toggleContractEndDate(val) {
+    const wrapper = document.getElementById('contract_end_date_wrapper');
+    const input = document.getElementById('contract_end_date_input');
+    if (!wrapper) return;
+    if (val === 'contract') {
+        wrapper.style.display = 'block';
+        if (input) input.required = true;
+    } else {
+        wrapper.style.display = 'none';
+        if (input) {
+            input.required = false;
+            input.value = '';
+        }
     }
 }
 

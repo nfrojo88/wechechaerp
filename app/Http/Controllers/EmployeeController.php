@@ -39,18 +39,41 @@ class EmployeeController extends Controller
                   });
         } elseif ($statusFilter === 'rejected') {
             $query->where('gm_approval_status', 'rejected');
+        } elseif ($request->get('probation_alert') == '1' || $statusFilter === 'probation_alert') {
+            $query->where('status', 'active')
+                  ->where('probation_completed', false)
+                  ->whereNotNull('date_of_joining')
+                  ->where(function($q) {
+                      $q->whereNull('guarantee_letter')
+                        ->orWhere('guarantee_letter', '')
+                        ->orWhereNull('tin_number')
+                        ->orWhere('tin_number', '');
+                  })
+                  ->where('date_of_joining', '<=', now()->subDays(20));
         }
 
         $employees = $query->paginate(20)->withQueryString();
 
         // Counts for tabs/badges
         $counts = [
-            'all'      => Employee::count(),
-            'approved' => Employee::where('is_approved_by_gm', true)->count(),
-            'pending'  => Employee::where('is_approved_by_gm', false)->where(function($q) {
-                            $q->whereNull('gm_approval_status')->orWhere('gm_approval_status', '!=', 'rejected');
-                          })->count(),
-            'rejected' => Employee::where('gm_approval_status', 'rejected')->count(),
+            'all'             => Employee::count(),
+            'approved'        => Employee::where('is_approved_by_gm', true)->count(),
+            'pending'         => Employee::where('is_approved_by_gm', false)->where(function($q) {
+                                  $q->whereNull('gm_approval_status')->orWhere('gm_approval_status', '!=', 'rejected');
+                                })->count(),
+            'rejected'        => Employee::where('gm_approval_status', 'rejected')->count(),
+            'probation_alert' => Employee::where('status', 'active')
+                                  ->where('probation_completed', false)
+                                  ->whereNotNull('date_of_joining')
+                                  ->where(function($q) {
+                                      $q->whereNull('guarantee_letter')
+                                        ->orWhere('guarantee_letter', '')
+                                        ->orWhereNull('tin_number')
+                                        ->orWhere('tin_number', '');
+                                  })
+                                  ->where('date_of_joining', '<=', now()->subDays(20))
+                                  ->count(),
+            'history'         => Employee::whereIn('status', ['terminated', 'suspended'])->orWhereNotNull('lock_reason')->count(),
         ];
 
         $departments = \App\Models\Department::where('is_active', true)->pluck('name');
@@ -220,12 +243,15 @@ class EmployeeController extends Controller
             'project_id'                    => 'nullable|exists:projects,id',
             'site_assignment'               => 'nullable|string|max:100',
             'employment_type'               => 'required|in:permanent,contract,daily',
+            'contract_type'                 => 'nullable|string',
+            'contract_end_date'             => 'nullable|date',
+            'tin_number'                    => 'nullable|string|max:50',
+            'probation_completed'           => 'nullable|boolean',
             'date_of_joining'               => 'required|date',
             'basic_salary'                  => 'required|numeric|min:0',
             'transport_allowance'           => 'nullable|numeric|min:0',
             'house_allowance'               => 'nullable|numeric|min:0',
             'position_allowance'            => 'nullable|numeric|min:0',
-            'contract_type'                 => 'nullable|string',
             'status'                        => 'required|in:active,suspended,terminated',
             'bank_name'                     => 'nullable|string|max:255',
             'account_number'                => 'nullable|string|max:50',
@@ -667,6 +693,9 @@ class EmployeeController extends Controller
             'site_assignment'      => 'nullable|string|max:100',
             'employment_type'      => 'required|in:permanent,contract,daily',
             'contract_type'        => 'nullable|string',
+            'contract_end_date'    => 'nullable|date',
+            'tin_number'           => 'nullable|string|max:50',
+            'probation_completed'  => 'nullable|boolean',
             'date_of_joining'      => 'required|date',
             'basic_salary'         => 'required|numeric|min:0',
             'transport_allowance'  => 'nullable|numeric|min:0',
@@ -1240,7 +1269,103 @@ class EmployeeController extends Controller
             ->with('success', "Employee {$name} ({$code}) has been deleted successfully. If this employee is registered or added again later, fresh GM approval will be strictly required.");
     }
     /**
-     * Ensure second guarantor and registration letters columns exist in employees table.
+     * Display terminated / locked employee history.
+     */
+    public function history(Request $request)
+    {
+        Gate::authorize('viewAny', Employee::class);
+        $this->ensureGuarantorAndRegistrationColumnsExist();
+        $this->lockExpiredProbations();
+
+        $query = Employee::with(['project', 'user'])
+            ->where(function ($q) {
+                $q->whereIn('status', ['terminated', 'suspended'])
+                  ->orWhereNotNull('lock_reason');
+            });
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('full_name', 'like', "%{$search}%")
+                  ->orWhere('employee_code', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%")
+                  ->orWhere('department', 'like', "%{$search}%")
+                  ->orWhere('tin_number', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('department')) {
+            $query->where('department', $request->input('department'));
+        }
+
+        if ($request->filled('employment_type')) {
+            $query->where('employment_type', $request->input('employment_type'));
+        }
+
+        $employees = $query->latest('updated_at')->paginate(20)->withQueryString();
+        $departments = Employee::distinct()->whereNotNull('department')->pluck('department');
+
+        return view('hr.employees.history', compact('employees', 'departments'));
+    }
+
+    /**
+     * Renew or reactivate employee transition to Permanent or Contract.
+     */
+    public function renew(Request $request, Employee $employee)
+    {
+        Gate::authorize('update', $employee);
+
+        $validated = $request->validate([
+            'employment_type'   => 'required|in:permanent,contract,daily',
+            'contract_end_date' => 'nullable|date',
+            'tin_number'        => 'nullable|string|max:50',
+            'guarantee_letter'  => 'nullable|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'probation_completed' => 'nullable|boolean',
+        ]);
+
+        if ($request->hasFile('guarantee_letter')) {
+            $validated['guarantee_letter'] = \App\Services\FileUploadService::upload($request->file('guarantee_letter'), 'guarantee_letters');
+            $validated['guarantee_letter_submitted_at'] = now();
+        }
+
+        $validated['status'] = 'active';
+        $validated['lock_reason'] = null;
+        $validated['probation_completed'] = true; // explicitly marked completed/renewed
+
+        $employee->update($validated);
+
+        return redirect()->route('employees.show', $employee)
+            ->with('success', "Employee {$employee->full_name} has been successfully renewed / activated!");
+    }
+
+    /**
+     * System auto-lock routine for expired 45-day test periods.
+     */
+    public function lockExpiredProbations()
+    {
+        try {
+            $now = now();
+            // Find active employees whose 45 days test period has passed without guarantee letter or TIN
+            $expiredEmployees = Employee::where('status', 'active')
+                ->where('probation_completed', false)
+                ->whereNotNull('date_of_joining')
+                ->get();
+
+            foreach ($expiredEmployees as $emp) {
+                if ($emp->is_test_period_expired) {
+                    $emp->update([
+                        'status'      => 'terminated',
+                        'lock_reason' => '45-Day Test Period Expired: Missing Guarantee Letter or TIN Number',
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Lock expired probations error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Ensure second guarantor, registration letters, probation, and contract columns exist in employees table.
      */
     private function ensureGuarantorAndRegistrationColumnsExist()
     {
@@ -1265,6 +1390,21 @@ class EmployeeController extends Controller
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'registration_letters')) {
                         $table->text('registration_letters')->nullable();
                     }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'contract_end_date')) {
+                        $table->date('contract_end_date')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'tin_number')) {
+                        $table->string('tin_number', 50)->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'probation_ends_at')) {
+                        $table->date('probation_ends_at')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'probation_completed')) {
+                        $table->boolean('probation_completed')->default(false);
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'lock_reason')) {
+                        $table->string('lock_reason')->nullable();
+                    }
                 });
             }
         } catch (\Throwable $e) {
@@ -1272,5 +1412,6 @@ class EmployeeController extends Controller
         }
     }
 }
+
 
 

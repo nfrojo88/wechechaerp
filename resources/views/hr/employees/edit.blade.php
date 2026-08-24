@@ -204,8 +204,8 @@
                                value="{{ old('role_title', $employee->role_title) }}" placeholder="e.g. Site Engineer">
                     </div>
 
-                    {{-- National ID Fields --}}
-                    <div class="col-12"><hr class="my-2"><small class="text-muted fw-bold"><i class="fa-solid fa-id-card me-1"></i>National / Government ID</small></div>
+                    {{-- National ID & TIN Fields --}}
+                    <div class="col-12"><hr class="my-2"><small class="text-muted fw-bold"><i class="fa-solid fa-id-card me-1"></i>National ID &amp; Tax Information</small></div>
                     <div class="col-md-6">
                         <label class="form-label">National ID Number <small class="text-muted">(Kebele ID / Fayda ID / Passport)</small></label>
                         <input type="text" name="national_id_number" class="form-control @error('national_id_number') is-invalid @enderror"
@@ -213,6 +213,14 @@
                         @error('national_id_number')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
                     <div class="col-md-6">
+                        <label class="form-label">
+                            <i class="fa-solid fa-file-invoice-dollar text-primary me-1"></i>TIN Number (Tax Identification No.)
+                        </label>
+                        <input type="text" name="tin_number" class="form-control font-monospace @error('tin_number') is-invalid @enderror"
+                               value="{{ old('tin_number', $employee->tin_number) }}" placeholder="e.g. 0012345678">
+                        @error('tin_number')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="col-md-12">
                         <label class="form-label">
                             <i class="fa-solid fa-camera text-primary me-1"></i>National ID Card / Scan / Photo
                             <small class="text-muted fw-normal d-block">(PDF, PNG, JPG, WEBP – Max 10MB)</small>
@@ -240,24 +248,67 @@
                     <h5 class="mb-0"><i class="fa-solid fa-briefcase text-success me-2"></i>Step 2: Employment Details</h5>
                     <span class="badge bg-success">Step 2 of 8</span>
                 </div>
+
+                {{-- 45-Day Test Period Compliance Card --}}
+                <div class="alert @if($employee->is_test_period_expired) alert-danger @elseif($employee->show_probation_alert) alert-warning @else alert-info @endif border-start border-4 shadow-xs p-3 mb-3">
+                    <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+                        <div class="d-flex align-items-start gap-2">
+                            <i class="fa-solid @if($employee->is_test_period_expired) fa-triangle-exclamation text-danger @elseif($employee->show_probation_alert) fa-clock-rotate-left text-warning @else fa-shield-halved text-info @endif fa-lg mt-1"></i>
+                            <div>
+                                <strong class="d-block">
+                                    @if($employee->probation_completed)
+                                        <i class="fa-solid fa-circle-check text-success me-1"></i>45-Day Test Period Completed / Renewed
+                                    @elseif($employee->is_test_period_expired)
+                                        ⚠️ 45-Day Test Period Expired &amp; Account Lockable
+                                    @elseif($employee->show_probation_alert)
+                                        ⏳ Test Period Alert (Day {{ $employee->days_since_joining }} of 45) — {{ $employee->days_until_probation_end }} Days Remaining
+                                    @else
+                                        45-Day Test Period Active (Day {{ $employee->days_since_joining }} of 45)
+                                    @endif
+                                </strong>
+                                <small class="text-muted">
+                                    @if($employee->probation_completed)
+                                        This employee has completed their probation/renewal. Guarantee letter and TIN compliance active.
+                                    @elseif($employee->is_test_period_expired)
+                                        The 45-day test period has elapsed without renewal or submission of Guarantee Letter / TIN. Account will be locked and sent to Employee History.
+                                    @else
+                                        Guarantee letters are waived during the 45-day test period. Before Day 45 ends, submit Guarantee Letter &amp; TIN or check the renewal box below.
+                                    @endif
+                                </small>
+                            </div>
+                        </div>
+                        <div class="form-check form-switch mt-1">
+                            <input class="form-check-input" type="checkbox" name="probation_completed" value="1" id="probation_completed_check" {{ old('probation_completed', $employee->probation_completed) ? 'checked' : '' }}>
+                            <label class="form-check-label fw-bold text-dark small" for="probation_completed_check">
+                                Mark Test Period Completed / Renewed
+                            </label>
+                        </div>
+                    </div>
+                </div>
                 
                 <div class="row g-3">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Employment Type <span class="text-danger">*</span></label>
                         @php $empType = old('employment_type', $employee->employment_type); @endphp
-                        <select name="employment_type" class="form-select" required>
+                        <select name="employment_type" id="edit_employment_type" class="form-select" onchange="toggleEditContractEndDate(this.value)" required>
                             <option value="permanent" {{ $empType == 'permanent' ? 'selected' : '' }}>Permanent</option>
                             <option value="contract"  {{ $empType == 'contract'  ? 'selected' : '' }}>Contract</option>
                             <option value="daily"     {{ $empType == 'daily'     ? 'selected' : '' }}>Daily Worker</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
-                        <label class="form-label">Contract Start Date <span class="text-danger">*</span></label>
+                    <div class="col-md-3" id="edit_contract_end_wrapper" style="{{ $empType == 'contract' ? '' : 'display:none;' }}">
+                        <label class="form-label">Contract End Date (Valid Upto) <span class="text-danger">*</span></label>
+                        <input type="date" name="contract_end_date" id="edit_contract_end_input" class="form-control @error('contract_end_date') is-invalid @enderror"
+                               value="{{ old('contract_end_date', $employee->contract_end_date ? $employee->contract_end_date->format('Y-m-d') : '') }}">
+                        @error('contract_end_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Start Date / Joining Date <span class="text-danger">*</span></label>
                         <input type="date" name="date_of_joining" class="form-control @error('date_of_joining') is-invalid @enderror"
                                value="{{ old('date_of_joining', $employee->date_of_joining ? $employee->date_of_joining->format('Y-m-d') : '') }}" required>
                         @error('date_of_joining')<div class="invalid-feedback">{{ $message }}</div>@enderror
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Status <span class="text-danger">*</span></label>
                         @php $empStatus = old('status', $employee->status); @endphp
                         <select name="status" class="form-select" required>
@@ -1640,6 +1691,20 @@ function updateRemoveButtons() {
         const removeBtn = entry.querySelector('.remove-asset');
         if (removeBtn) removeBtn.style.display = assetEntries.length > 1 ? 'inline-block' : 'none';
     });
+function toggleEditContractEndDate(val) {
+    const wrapper = document.getElementById('edit_contract_end_wrapper');
+    const input = document.getElementById('edit_contract_end_input');
+    if (!wrapper) return;
+    if (val === 'contract') {
+        wrapper.style.display = 'block';
+        if (input) input.required = true;
+    } else {
+        wrapper.style.display = 'none';
+        if (input) {
+            input.required = false;
+            input.value = '';
+        }
+    }
 }
 
 document.addEventListener('DOMContentLoaded', function() {

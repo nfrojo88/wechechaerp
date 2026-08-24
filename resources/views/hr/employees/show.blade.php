@@ -110,6 +110,11 @@
                                 $types = ['permanent' => 'Permanent', 'contract' => 'Contract', 'daily' => 'Daily Worker'];
                             @endphp
                             {{ $types[$employee->employment_type] ?? $employee->employment_type }}
+                            @if($employee->contract_end_date)
+                                <span class="badge bg-info-subtle text-info border border-info-subtle ms-1">
+                                    Valid Upto: {{ $employee->contract_end_date->format('d M Y') }}
+                                </span>
+                            @endif
                         </h6>
                     </div>
                     <div class="col-md-6">
@@ -117,14 +122,28 @@
                         <h6 class="mb-0">{{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}</h6>
                     </div>
                     <div class="col-md-6">
+                        <small class="text-muted d-block mb-1">45-Day Test Period (Probation)</small>
+                        <h6 class="mb-0">
+                            @if($employee->probation_completed)
+                                <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>Completed / Renewed</span>
+                            @elseif($employee->is_test_period_expired)
+                                <span class="badge bg-danger"><i class="fa-solid fa-lock me-1"></i>Expired (Lockable)</span>
+                            @elseif($employee->show_probation_alert)
+                                <span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>Day {{ $employee->days_since_joining }} of 45 ({{ $employee->days_until_probation_end }}d left)</span>
+                            @else
+                                <span class="badge bg-info text-dark"><i class="fa-solid fa-shield-halved me-1"></i>Day {{ $employee->days_since_joining }} of 45 (Active)</span>
+                            @endif
+                        </h6>
+                    </div>
+                    <div class="col-md-6">
                         <small class="text-muted d-block mb-1">Status</small>
                         <h6 class="mb-0">
                             @if($employee->status === 'active')
                                 <span class="badge bg-success">Active</span>
                             @elseif($employee->status === 'suspended')
-                                <span class="badge bg-warning">Suspended</span>
+                                <span class="badge bg-warning text-dark">Suspended</span>
                             @else
-                                <span class="badge bg-danger">Terminated</span>
+                                <span class="badge bg-danger">Terminated / Locked</span>
                             @endif
 
                             @if($employee->is_approved_by_gm)
@@ -134,6 +153,13 @@
                             @endif
                         </h6>
                     </div>
+                    @if($employee->lock_reason)
+                    <div class="col-12">
+                        <div class="alert alert-danger py-2 px-3 mb-0 small">
+                            <i class="fa-solid fa-lock me-1"></i><strong>Account Lock Reason:</strong> {{ $employee->lock_reason }}
+                        </div>
+                    </div>
+                    @endif
                     @if($employee->project)
                     <div class="col-md-6">
                         <small class="text-muted d-block mb-1">Assigned Project</small>
@@ -153,7 +179,7 @@
         {{-- Contact & Identity Information Card --}}
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="fa-solid fa-id-card text-primary me-2"></i>Contact & Identity Information</h5>
+                <h5 class="mb-0"><i class="fa-solid fa-id-card text-primary me-2"></i>Contact &amp; Identity Information</h5>
                 @if($employee->national_id_card)
                     <a href="{{ $employee->national_id_card_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
                         <i class="fa-solid fa-eye me-1"></i>View National ID Card
@@ -169,6 +195,16 @@
                     <div class="col-md-4">
                         <small class="text-muted d-block mb-1">Email</small>
                         <h6 class="mb-0">{{ $employee->email ?? 'N/A' }}</h6>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block mb-1">TIN Number</small>
+                        <h6 class="mb-0 font-monospace">
+                            @if($employee->tin_number)
+                                {{ $employee->tin_number }}
+                            @else
+                                <span class="text-danger small fst-italic"><i class="fa-solid fa-xmark me-1"></i>Not Provided</span>
+                            @endif
+                        </h6>
                     </div>
                     <div class="col-md-4">
                         <small class="text-muted d-block mb-1">National ID / Fayda No.</small>
@@ -298,15 +334,15 @@
                     @if($employee->is_guarantee_overdue)
                         <div class="alert alert-danger mb-3">
                             <i class="fa-solid fa-exclamation-circle me-2"></i>
-                            <strong>OVERDUE!</strong> Guarantee letter was due {{ abs($employee->days_until_guarantee_deadline) }} days ago.
-                            <br><small>Login access has been blocked until submission.</small>
+                            <strong>45-DAY TEST PERIOD EXPIRED &amp; ACCOUNT LOCKED!</strong> The 45-day test period has elapsed without renewal or Guarantee Letter &amp; TIN submission.
+                            <br><small>Login access is locked. Submit document or renew below to restore access.</small>
                         </div>
                         <p class="text-muted mb-3">
                             <i class="fa-solid fa-calendar me-2"></i>
                             Joined: {{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}
                             <br>
                             <i class="fa-solid fa-clock me-2"></i>
-                            Deadline was: {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}
+                            45-Day Deadline was: {{ $employee->probation_end_date ? $employee->probation_end_date->format('d M Y') : 'N/A' }}
                         </p>
                         <form action="{{ route('employees.upload-guarantee', $employee) }}" method="POST" enctype="multipart/form-data">
                             @csrf
@@ -316,21 +352,21 @@
                                 <small class="text-muted">PDF or Image (Max 10MB)</small>
                             </div>
                             <button type="submit" class="btn btn-danger">
-                                <i class="fa-solid fa-upload me-2"></i>Submit Now to Restore Access
+                                <i class="fa-solid fa-upload me-2"></i>Submit Document to Restore Access
                             </button>
                         </form>
                     @elseif($employee->show_guarantee_warning)
                         <div class="alert alert-warning mb-3">
                             <i class="fa-solid fa-exclamation-triangle me-2"></i>
-                            <strong>Warning!</strong> Guarantee letter must be submitted within {{ $employee->days_until_guarantee_deadline }} days.
-                            <br><small>Login will be blocked after {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}</small>
+                            <strong>Test Period Notice (Day {{ $employee->days_since_joining }} of 45):</strong> Guarantee letter and TIN must be submitted within {{ $employee->days_until_probation_end }} days.
+                            <br><small>Account will be locked after {{ $employee->probation_end_date ? $employee->probation_end_date->format('d M Y') : 'N/A' }} if not submitted or renewed.</small>
                         </div>
                         <p class="text-muted mb-3">
                             <i class="fa-solid fa-calendar me-2"></i>
                             Joined: {{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}
                             <br>
                             <i class="fa-solid fa-clock me-2"></i>
-                            Deadline: {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}
+                            45-Day Deadline: {{ $employee->probation_end_date ? $employee->probation_end_date->format('d M Y') : 'N/A' }}
                         </p>
                         <form action="{{ route('employees.upload-guarantee', $employee) }}" method="POST" enctype="multipart/form-data">
                             @csrf
@@ -346,19 +382,20 @@
                     @else
                         <div class="alert alert-info mb-3">
                             <i class="fa-solid fa-info-circle me-2"></i>
-                            Guarantee letter due in {{ $employee->days_until_guarantee_deadline }} days.
+                            <strong>45-Day Test Period Active (Day {{ $employee->days_since_joining }} of 45):</strong> Guarantee letter is waived during this test period.
+                            <br><small>Due date: {{ $employee->probation_end_date ? $employee->probation_end_date->format('d M Y') : 'N/A' }} ({{ $employee->days_until_probation_end }} days remaining)</small>
                         </div>
                         <p class="text-muted mb-3">
                             <i class="fa-solid fa-calendar me-2"></i>
                             Joined: {{ optional($employee->date_of_joining)->format('d M Y') ?? 'N/A' }}
                             <br>
                             <i class="fa-solid fa-clock me-2"></i>
-                            Deadline: {{ $employee->date_of_joining ? $employee->date_of_joining->addDays(30)->format('d M Y') : 'N/A' }}
+                            Test Period Ends: {{ $employee->probation_end_date ? $employee->probation_end_date->format('d M Y') : 'N/A' }}
                         </p>
                         <form action="{{ route('employees.upload-guarantee', $employee) }}" method="POST" enctype="multipart/form-data">
                             @csrf
                             <div class="mb-3">
-                                <label class="form-label">Upload Guarantee Letter (Optional - can submit anytime)</label>
+                                <label class="form-label">Upload Guarantee Letter (Optional during test period — can submit anytime)</label>
                                 <input type="file" name="guarantee_letter" class="form-control" accept="application/pdf,image/jpeg,image/png,image/jpg">
                                 <small class="text-muted">PDF or Image (Max 10MB)</small>
                             </div>

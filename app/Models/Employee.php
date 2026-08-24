@@ -11,10 +11,11 @@ class Employee extends Model
 
     protected $fillable = [
         'user_id', 'project_id', 'employee_code', 'full_name',
-        'national_id_number', 'national_id_card',
+        'national_id_number', 'national_id_card', 'tin_number',
         'phone', 'email', 'role_title', 'department',
-        'employment_type', 'contract_type', 'date_of_joining', 'basic_salary',
-        'transport_allowance', 'house_allowance', 'position_allowance',
+        'employment_type', 'contract_type', 'contract_end_date', 'date_of_joining',
+        'probation_ends_at', 'probation_completed', 'lock_reason',
+        'basic_salary', 'transport_allowance', 'house_allowance', 'position_allowance',
         'status', 'notes', 'bank_name', 'account_number',
         'guarantee_letter', 'guarantee_letter_2', 'guarantee_letter_submitted_at', 'guarantee_letter_required',
         'guarantor_name', 'guarantor_id_number', 'guarantor_id_card', 'guarantor_phone',
@@ -26,6 +27,9 @@ class Employee extends Model
 
     protected $casts = [
         'date_of_joining' => 'date',
+        'contract_end_date' => 'date',
+        'probation_ends_at' => 'date',
+        'probation_completed' => 'boolean',
         'basic_salary'    => 'decimal:2',
         'guarantee_letter_submitted_at' => 'date',
         'guarantee_letter_required' => 'boolean',
@@ -50,6 +54,16 @@ class Employee extends Model
             $employee->gm_rejection_reason = null;
             $employee->gm_rejected_at = null;
             $employee->gm_rejected_by = null;
+
+            if ($employee->date_of_joining && !$employee->probation_ends_at) {
+                $employee->probation_ends_at = \Carbon\Carbon::parse($employee->date_of_joining)->addDays(45);
+            }
+        });
+
+        static::saving(function ($employee) {
+            if ($employee->date_of_joining && !$employee->probation_ends_at) {
+                $employee->probation_ends_at = \Carbon\Carbon::parse($employee->date_of_joining)->addDays(45);
+            }
         });
 
         static::deleting(function ($employee) {
@@ -202,15 +216,95 @@ class Employee extends Model
     }
 
     /**
-     * Check if guarantee letter is overdue and account should be blocked (30+ days)
+     * Get effective probation end date (45 days from date_of_joining by default)
+     */
+    public function getProbationEndDateAttribute()
+    {
+        if ($this->probation_ends_at) {
+            return $this->probation_ends_at;
+        }
+        if ($this->date_of_joining) {
+            return $this->date_of_joining->copy()->addDays(45);
+        }
+        return null;
+    }
+
+    /**
+     * Get days passed since employee joining date
+     */
+    public function getDaysSinceJoiningAttribute()
+    {
+        if (!$this->date_of_joining) {
+            return 0;
+        }
+        return (int) $this->date_of_joining->diffInDays(now(), false);
+    }
+
+    /**
+     * Get days remaining in 45-day test / probation period (negative if overdue)
+     */
+    public function getDaysUntilProbationEndAttribute()
+    {
+        $endDate = $this->probation_end_date;
+        if (!$endDate) {
+            return null;
+        }
+        return (int) now()->diffInDays($endDate, false);
+    }
+
+    /**
+     * Whether the employee is currently within the 45-day test period
+     */
+    public function getIsInProbationAttribute()
+    {
+        if ($this->probation_completed) {
+            return false;
+        }
+        $endDate = $this->probation_end_date;
+        return $endDate ? now()->lte($endDate) : false;
+    }
+
+    /**
+     * Whether the 45-day test period has expired without renewal / guarantee letter & TIN
+     */
+    public function getIsTestPeriodExpiredAttribute()
+    {
+        if ($this->probation_completed) {
+            return false;
+        }
+        $endDate = $this->probation_end_date;
+        if (!$endDate || now()->lte($endDate)) {
+            return false;
+        }
+        // If 45 days passed, and guarantee letter OR tin_number is missing, it is expired/lockable
+        return empty($this->guarantee_letter) || empty($this->tin_number);
+    }
+
+    /**
+     * Whether to show warning alert (from day 20 up to day 45 of test period)
+     */
+    public function getShowProbationAlertAttribute()
+    {
+        if ($this->status !== 'active' || $this->probation_completed) {
+            return false;
+        }
+        if (!$this->date_of_joining) {
+            return false;
+        }
+        $daysSinceJoining = $this->days_since_joining;
+        // Trigger alert between Day 20 and Day 45 (or when overdue), if guarantee letter or TIN is missing
+        if ($daysSinceJoining >= 20 && (empty($this->guarantee_letter) || empty($this->tin_number))) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Check if guarantee letter / test period is expired and account should be blocked
      */
     public function isGuaranteeLetterExpired()
     {
-        if (!$this->guarantee_letter_required || $this->guarantee_letter || !$this->date_of_joining) {
-            return false;
-        }
-        
-        return $this->date_of_joining->addDays(30)->isPast();
+        return $this->is_test_period_expired;
     }
 
     /**
@@ -236,40 +330,27 @@ class Employee extends Model
     }
 
     /**
-     * Check if guarantee letter is overdue (30+ days without submission)
+     * Check if guarantee letter is overdue (45+ days without submission/renewal)
      */
     public function getIsGuaranteeOverdueAttribute()
     {
-        if (!$this->guarantee_letter_required || $this->guarantee_letter || !$this->date_of_joining) {
-            return false;
-        }
-        
-        return $this->date_of_joining->addDays(30)->isPast();
+        return $this->is_test_period_expired;
     }
 
     /**
-     * Check if guarantee letter warning should show (20+ days without submission)
+     * Check if warning should show (20+ days into test period without submission)
      */
     public function getShowGuaranteeWarningAttribute()
     {
-        if (!$this->guarantee_letter_required || $this->guarantee_letter || !$this->date_of_joining) {
-            return false;
-        }
-        
-        return $this->date_of_joining->addDays(20)->isPast();
+        return $this->show_probation_alert;
     }
 
     /**
-     * Get days until guarantee letter deadline
+     * Get days until guarantee deadline / probation end
      */
     public function getDaysUntilGuaranteeDeadlineAttribute()
     {
-        if (!$this->guarantee_letter_required || $this->guarantee_letter || !$this->date_of_joining) {
-            return null;
-        }
-        
-        $deadline = $this->date_of_joining->addDays(30);
-        return now()->diffInDays($deadline, false); // negative if overdue
+        return $this->days_until_probation_end;
     }
 
     public function getCurrentMonthlyDeductionAttribute()

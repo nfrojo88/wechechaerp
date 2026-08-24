@@ -1000,9 +1000,15 @@
         @if(!$isContractAdmin && !$isSecretary && !$isStoreKeeper && (auth()->check() && (auth()->user()->hasAnyRole(['hr_officer', 'hr_manager', 'hr', 'admin', 'global_admin', 'gm', 'general_manager']) || auth()->user()->hasAnyPermission(['hr.departments.view', 'hr.employees.view', 'hr.employees.create', 'hr.employees.edit', 'hr.attendance.view', 'hr.attendance.manage', 'finance.payroll.process', 'hr.payroll.view', 'hr.*']))))
 
         <li class="sidebar-nav-item">
-            <a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') ? 'active' : '' }}">
+            <a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') && !request()->routeIs('employees.history') ? 'active' : '' }}">
                 <i class="fa-solid fa-users text-primary"></i>
                 <span>Employees</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('employees.history') }}" class="sidebar-nav-link {{ request()->routeIs('employees.history') ? 'active' : '' }}">
+                <i class="fa-solid fa-user-clock text-danger"></i>
+                <span>Employee History</span>
             </a>
         </li>
         <li class="sidebar-nav-item">

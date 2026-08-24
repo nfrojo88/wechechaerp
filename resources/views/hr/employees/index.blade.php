@@ -73,12 +73,31 @@
         </li>
         <li class="nav-item">
             <a class="nav-link {{ request('approval_status') === 'rejected' ? 'active bg-danger text-white' : 'text-dark' }} py-2 px-3 fw-semibold" 
-               href="{{ route('employees.index', array_merge(request()->except('approval_status', 'page'), ['approval_status' => 'rejected'])) }}">
+               href="{{ route('employees.index', array_merge(request()->except('approval_status', 'page', 'probation_alert'), ['approval_status' => 'rejected'])) }}">
                 <i class="fa-solid fa-rotate-left me-1"></i> Rejected by GM
                 @if(!empty($counts['rejected']) && $counts['rejected'] > 0)
                 <span class="badge bg-danger text-white ms-1">{{ $counts['rejected'] }}</span>
                 @else
                 <span class="badge bg-secondary ms-1">0</span>
+                @endif
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {{ request('probation_alert') == '1' || request('approval_status') === 'probation_alert' ? 'active bg-warning text-dark' : 'text-dark' }} py-2 px-3 fw-semibold" 
+               href="{{ route('employees.index', array_merge(request()->except('approval_status', 'page'), ['probation_alert' => '1', 'approval_status' => 'probation_alert'])) }}">
+                <i class="fa-solid fa-clock-rotate-left text-danger me-1"></i> Test Period Alert (Day 20–45)
+                @if(!empty($counts['probation_alert']) && $counts['probation_alert'] > 0)
+                    <span class="badge bg-danger text-white ms-1">{{ $counts['probation_alert'] }}</span>
+                @else
+                    <span class="badge bg-secondary ms-1">0</span>
+                @endif
+            </a>
+        </li>
+        <li class="nav-item ms-auto">
+            <a class="nav-link text-danger py-2 px-3 fw-semibold" href="{{ route('employees.history') }}">
+                <i class="fa-solid fa-user-clock me-1"></i> Employee History (Locked/Terminated)
+                @if(!empty($counts['history']) && $counts['history'] > 0)
+                    <span class="badge bg-secondary text-white ms-1">{{ $counts['history'] }}</span>
                 @endif
             </a>
         </li>

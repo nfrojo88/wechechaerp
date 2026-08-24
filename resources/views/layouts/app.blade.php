@@ -439,18 +439,71 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                 </div>
                 
                 <div class="header-actions">
+                    @php
+                        $probationAlertEmployees = collect();
+                        $probationAlertCount = 0;
+                        $isHrOrGm = auth()->check() && (auth()->user()->hasAnyRole(['hr_officer', 'hr_manager', 'hr', 'gm', 'general_manager', 'admin', 'global_admin']));
+                        if ($isHrOrGm) {
+                            try {
+                                $probationAlertEmployees = \App\Models\Employee::where('status', 'active')
+                                    ->where('probation_completed', false)
+                                    ->whereNotNull('date_of_joining')
+                                    ->where(function($q) {
+                                        $q->whereNull('guarantee_letter')
+                                          ->orWhere('guarantee_letter', '')
+                                          ->orWhereNull('tin_number')
+                                          ->orWhere('tin_number', '');
+                                    })
+                                    ->get()
+                                    ->filter(fn($e) => $e->days_since_joining >= 20);
+                                $probationAlertCount = $probationAlertEmployees->count();
+                            } catch (\Throwable $e) {}
+                        }
+                    @endphp
+
+                    @if($isHrOrGm && $probationAlertCount > 0)
+                        <a href="{{ route('employees.index') }}?probation_alert=1" class="btn btn-sm btn-outline-warning d-flex align-items-center gap-2 fw-bold text-dark px-2.5 py-1 rounded-3 shadow-xs me-2 border-warning" title="{{ $probationAlertCount }} Employee(s) on Day 20–45 of Test Period requiring Guarantee Letter / TIN">
+                            <i class="fa-solid fa-clock-rotate-left text-danger animate-pulse"></i>
+                            <span class="d-none d-xl-inline">Test Period Alert</span>
+                            <span class="badge bg-danger rounded-pill">{{ $probationAlertCount }}</span>
+                        </a>
+                    @endif
+
                     @if(auth()->user() && auth()->user()->hasRole(['store_keeper', 'site_engineer']))
                         <span class="badge bg-secondary me-2">Store: {{ auth()->user()->store_id ?? 'None' }}</span>
                     @endif
                     
                     <div class="dropdown">
-                        <a href="#" class="header-icon-btn" data-bs-toggle="dropdown">
+                        <a href="#" class="header-icon-btn position-relative" data-bs-toggle="dropdown">
                             <i class="fa-regular fa-bell"></i>
-                            <span class="header-badge"></span>
+                            @if($isHrOrGm && $probationAlertCount > 0)
+                                <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle"></span>
+                            @else
+                                <span class="header-badge"></span>
+                            @endif
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><h6 class="dropdown-header">Notifications</h6></li>
-                            <li><a class="dropdown-item" href="#">No new notifications</a></li>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 300px;">
+                            <li><h6 class="dropdown-header d-flex justify-content-between align-items-center">
+                                Notifications
+                                @if($isHrOrGm && $probationAlertCount > 0)
+                                    <span class="badge bg-warning text-dark">{{ $probationAlertCount }} Urgent</span>
+                                @endif
+                            </h6></li>
+                            @if($isHrOrGm && $probationAlertCount > 0)
+                                <li>
+                                    <a class="dropdown-item py-2 bg-warning-subtle" href="{{ route('employees.index') }}?probation_alert=1">
+                                        <div class="d-flex align-items-start gap-2">
+                                            <i class="fa-solid fa-triangle-exclamation text-danger mt-1"></i>
+                                            <div>
+                                                <strong class="d-block text-dark font-size-13">{{ $probationAlertCount }} Employee(s) in Test Period Alert</strong>
+                                                <small class="text-muted">Day 20–45 window: Guarantee Letter & TIN / Renewal needed before account lockout.</small>
+                                            </div>
+                                        </div>
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider my-1"></li>
+                            @endif
+                            <li><a class="dropdown-item text-muted small" href="{{ route('employees.index') }}">View All Employees</a></li>
                         </ul>
                     </div>
                     
@@ -477,6 +530,31 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             </header>
 
             <main class="content-wrapper">
+                @if($isHrOrGm && $probationAlertCount > 0)
+                    <div class="alert alert-warning border-start border-4 border-warning shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3" role="alert">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="rounded-circle bg-warning bg-opacity-25 p-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+                                <i class="fa-solid fa-triangle-exclamation text-dark fa-lg"></i>
+                            </div>
+                            <div>
+                                <strong class="d-block text-dark fs-6">
+                                    ⏳ 45-Day Test Period Compliance Alert ({{ $probationAlertCount }} Employee{{ $probationAlertCount > 1 ? 's' : '' }} on Day 20–45)
+                                </strong>
+                                <span class="text-dark small">
+                                    These employees are currently in their 20 to 45 day test/probation period. Guarantee Letter & TIN information or Renewal must be completed before the 45-day deadline to prevent automatic account lockout.
+                                </span>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                            <a href="{{ route('employees.index') }}?probation_alert=1" class="btn btn-sm btn-warning text-dark fw-bold shadow-xs">
+                                <i class="fa-solid fa-users me-1"></i> Review {{ $probationAlertCount }} Employee(s)
+                            </a>
+                            <a href="{{ route('employees.history') }}" class="btn btn-sm btn-outline-dark">
+                                <i class="fa-solid fa-clock-rotate-left me-1"></i> Employee History
+                            </a>
+                        </div>
+                    </div>
+                @endif
                 @if(session('success'))
                     <div class="flash-container">
                         <div class="alert alert-success alert-dismissible fade show" role="alert">
