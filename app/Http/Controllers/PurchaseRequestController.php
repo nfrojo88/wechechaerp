@@ -204,9 +204,39 @@ class PurchaseRequestController extends Controller
         ));
     }
 
+    /**
+     * Check whether the authenticated user has permission to act on the given PR stage.
+     */
+    private function authorizeStageRole(PurchaseRequest $pr, array $allowedRoles): void
+    {
+        $user = Auth::user();
+        if (!$user) {
+            abort(401, 'Unauthenticated');
+        }
+
+        $userRoles = $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray();
+        if (in_array('global_admin', $userRoles) || in_array('admin', $userRoles)) {
+            return;
+        }
+
+        if ($pr->requested_by && $pr->requested_by === $user->id && in_array('requester', $allowedRoles)) {
+            return;
+        }
+
+        foreach ($allowedRoles as $role) {
+            $normalized = strtolower(str_replace([' ', '-'], '_', trim($role)));
+            if (in_array($normalized, $userRoles)) {
+                return;
+            }
+        }
+
+        abort(403, 'Unauthorized: Your role does not own the current stage of this Purchase Request.');
+    }
+
     // ─── Submit (Coordinator submits draft to Store Manager) ────────────────
     public function submit(PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['coordinator', 'site_engineer', 'requester', 'store_manager']);
         $purchaseRequest->update([
             'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
             'current_owner_role' => 'store_manager',
@@ -217,6 +247,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 2 / STORE REVIEW: Selective Store Transfer ───────────────────
     public function selectiveTransfer(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['store_manager']);
         $request->validate([
             'from_store_id'     => 'required|exists:stores,id',
             'to_store_id'       => 'required|exists:stores,id|different:from_store_id',
@@ -321,6 +352,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 2 / STORE REVIEW: Selective Send to Procurement Manager ──────
     public function selectiveSendToPm(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['store_manager']);
         $request->validate([
             'item_ids'   => 'nullable|array',
             'item_ids.*' => 'exists:purchase_request_items,id',
@@ -381,6 +413,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 2 / STORE REVIEW: Unified Split & Process (Transfer + Buy) ───
     public function splitAndProcess(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['store_manager']);
         $request->validate([
             'allocations'               => 'required|array|min:1',
             'allocations.*.item_id'     => 'required|exists:purchase_request_items,id',
@@ -496,12 +529,14 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 3: Procurement Manager Triage ────────────────────────────────
     public function sendToProcurementManager(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['store_manager', 'purchase_manager', 'procurement_manager']);
         $this->lifecycle->sendToProcurementManager($purchaseRequest, $request->notes);
         return back()->with('success', 'Routed to Procurement Manager.');
     }
 
     public function sendBackToStoreManager(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
         $request->validate(['reason' => 'required|string']);
         $this->lifecycle->sendBackToStoreManager($purchaseRequest, $request->reason);
         return back()->with('success', 'Sent back to Store Manager.');
@@ -509,6 +544,7 @@ class PurchaseRequestController extends Controller
 
     public function sendToProcurementTeam(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
         $this->lifecycle->sendToProcurementTeam($purchaseRequest, $request->notes);
         return back()->with('success', 'Routed to Procurement Team.');
     }
@@ -516,6 +552,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 4: Procurement Team Sourcing ─────────────────────────────────
     public function submitDirectBuy(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer']);
         $request->validate([
             'amount' => 'required|numeric|min:0.01',
             'notes'  => 'nullable|string',
@@ -526,6 +563,7 @@ class PurchaseRequestController extends Controller
 
     public function submitProformas(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer']);
         $this->lifecycle->submitProformas($purchaseRequest, $request->notes);
         return back()->with('success', 'Proformas submitted to Procurement Manager.');
     }
@@ -533,6 +571,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 5a: Marketing Variance ───────────────────────────────────────
     public function addMarketingVariance(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['marketing', 'market_research']);
         $request->validate([
             'market_price'       => 'required|numeric|min:0',
             'variance_notes'     => 'nullable|string',
@@ -554,6 +593,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 5b: Select Proformas and send to GM ──────────────────────────
     public function selectProformas(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
         $request->validate(['proforma_ids' => 'required|array|min:1']);
         $this->lifecycle->sendProformasToGm($purchaseRequest, $request->proforma_ids, $request->notes);
         return back()->with('success', 'Selected proformas sent to GM.');
@@ -562,6 +602,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 6: GM Decision ────────────────────────────────────────────────
     public function gmDecide(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['gm', 'general_manager']);
         $request->validate([
             'decision'       => 'required|in:approve,reject,send_back',
             'payment_method' => 'required_if:decision,approve|in:pay_and_buy,buy_by_credit',
@@ -579,6 +620,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 7a: Finance Head — Credit Path ───────────────────────────────
     public function financeCreditApprove(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['finance_head', 'finance_manager']);
         $request->validate([
             'coa_account_id' => 'required|exists:chart_of_accounts,id',
             'amount'         => 'required|numeric|min:0.01',
@@ -596,6 +638,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 7b: Finance Head — Cash Path, Assign Staff ───────────────────
     public function assignPayment(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['finance_head', 'finance_manager']);
         $request->validate([
             'coa_account_id'  => 'required|exists:chart_of_accounts,id',
             'amount'          => 'required|numeric|min:0.01',
@@ -615,6 +658,16 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 7b: Finance Staff — Execute Payment ──────────────────────────
     public function executePayment(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $user = Auth::user();
+        $userRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isGlobalAdmin = in_array('global_admin', $userRoles) || in_array('admin', $userRoles);
+        $isFinanceHead = in_array('finance_head', $userRoles) || in_array('finance_manager', $userRoles);
+        $isAssigned = $purchaseRequest->payment && $purchaseRequest->payment->assigned_finance_staff_id === $user->id;
+
+        if (!$isGlobalAdmin && !$isFinanceHead && !$isAssigned) {
+            abort(403, 'Unauthorized: You are not assigned to execute this payment.');
+        }
+
         $this->lifecycle->financeStaffPay($purchaseRequest, $request->notes);
         return back()->with('success', 'Payment executed. COA balance updated. Procurement Team notified to upload receipt.');
     }
@@ -622,6 +675,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 8: Upload Receipt ─────────────────────────────────────────────
     public function uploadReceipt(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer']);
         $request->validate(['receipt_file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120']);
 
         $file     = $request->file('receipt_file');
@@ -635,6 +689,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 8: Verify Receipt ─────────────────────────────────────────────
     public function verifyReceipt(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['finance_head', 'finance_manager', 'finance']);
         $request->validate([
             'verification_status' => 'required|in:verified,rejected',
             'verification_notes'  => 'nullable|string',
@@ -646,6 +701,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 9: Book Driver ────────────────────────────────────────────────
     public function bookDriver(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['general_service', 'general_services']);
         $request->validate([
             'driver_employee_id'  => 'required|exists:employees,id',
             'vehicle_number'      => 'nullable|string|max:50',
@@ -667,6 +723,7 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 9 Final: Store Intake ─────────────────────────────────────────
     public function storeIntake(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $this->authorizeStageRole($purchaseRequest, ['store_manager']);
         $this->lifecycle->storeIntake($purchaseRequest, $request->notes);
         return back()->with('success', 'Intake complete. Procurement lifecycle closed.');
     }

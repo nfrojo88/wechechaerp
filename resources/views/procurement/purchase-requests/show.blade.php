@@ -22,6 +22,74 @@
         <div class="alert alert-danger alert-dismissible fade show shadow-sm">{{ session('error') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
     @endif
 
+@php
+    $authUser = auth()->user();
+    $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+    $isGlobalAdmin = in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles);
+    
+    // Check whether the logged-in user can execute action controls for the current stage
+    $canActOnCurrentStage = false;
+    $currentRoleName = $purchaseRequest->current_owner_role;
+
+    switch ($purchaseRequest->status) {
+        case \App\Models\PurchaseRequest::STATUS_DRAFT:
+            $canActOnCurrentStage = $isGlobalAdmin || ($authUser && $purchaseRequest->requested_by === $authUser->id) || in_array('coordinator', $rawUserRoles) || in_array('site_engineer', $rawUserRoles);
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW:
+            $canActOnCurrentStage = $isGlobalAdmin || in_array('store_manager', $rawUserRoles);
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER:
+            $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase_manager', $rawUserRoles) || in_array('procurement_manager', $rawUserRoles);
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM:
+            $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase', $rawUserRoles) || in_array('procurement_team', $rawUserRoles) || in_array('purchaser', $rawUserRoles) || in_array('buyer', $rawUserRoles);
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING:
+            $canActOnCurrentStage = $isGlobalAdmin || in_array('marketing', $rawUserRoles) || in_array('market_research', $rawUserRoles);
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION:
+            $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase_manager', $rawUserRoles) || in_array('procurement_manager', $rawUserRoles);
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_GM:
+            $canActOnCurrentStage = $isGlobalAdmin || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles);
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_FINANCE:
+            $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles);
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT:
+            if (!$purchaseRequest->payment?->assigned_finance_staff_id) {
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles);
+            } else {
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || ($authUser && $purchaseRequest->payment->assigned_finance_staff_id === $authUser->id);
+            }
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD:
+            $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase', $rawUserRoles) || in_array('procurement_team', $rawUserRoles) || in_array('purchaser', $rawUserRoles) || in_array('buyer', $rawUserRoles);
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY:
+            $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles);
+            break;
+
+        case \App\Models\PurchaseRequest::STATUS_PENDING_DRIVER:
+            $canActOnCurrentStage = $isGlobalAdmin || in_array('general_service', $rawUserRoles) || in_array('general_services', $rawUserRoles);
+            break;
+
+        default:
+            $canActOnCurrentStage = false;
+            break;
+    }
+@endphp
+
     <div class="row g-4">
         <!-- Left Panel: Summary & Details -->
         <div class="col-lg-4">
@@ -42,10 +110,12 @@
                 </div>
             </div>
 
-            <!-- Lifecycle Action Box (Interactive per Stage) -->
+            <!-- Lifecycle Action Box (Interactive per Stage when Owned, otherwise Locked Mode) -->
+            @if($canActOnCurrentStage)
             <div class="card border-primary shadow-sm mb-4">
-                <div class="card-header bg-primary text-white font-weight-bold py-3">
-                    <i class="fas fa-cogs me-2"></i>Stage Action Controls
+                <div class="card-header bg-primary text-white font-weight-bold py-3 d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-cogs me-2"></i>Stage Action Controls</span>
+                    <span class="badge bg-light text-primary fw-bold"><i class="fas fa-bolt me-1"></i>Action Required</span>
                 </div>
                 <div class="card-body">
                     <!-- STAGE 1 / DRAFT: Submit to Store Manager -->
@@ -57,7 +127,7 @@
                         </form>
 
                     <!-- STAGE 2: Store Manager Review (Transfer vs Send to PR) -->
-                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && !$purchaseRequest->driverBooking)
                         <div class="d-grid gap-2">
                             <button type="button" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm py-2" data-bs-toggle="modal" data-bs-target="#splitAndProcessModal">
                                 <i class="fas fa-random me-1"></i> Smart Split: Transfer + Buy
@@ -306,6 +376,45 @@
                     @endif
                 </div>
             </div>
+            @else
+            <!-- Stage Action Controls: Locked Mode for non-owners -->
+            <div class="card border-secondary border-opacity-25 shadow-sm mb-4">
+                <div class="card-header bg-secondary bg-opacity-75 text-white font-weight-bold py-3 d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-lock me-2"></i>Stage Action Controls</span>
+                    <span class="badge bg-dark text-white"><i class="fas fa-shield-alt me-1"></i>Locked</span>
+                </div>
+                <div class="card-body p-4 text-center">
+                    <div class="mb-3">
+                        <span class="d-inline-flex align-items-center justify-content-center bg-secondary bg-opacity-10 text-secondary rounded-circle" style="width: 56px; height: 56px;">
+                            <i class="fas fa-lock fa-2x text-muted"></i>
+                        </span>
+                    </div>
+                    @if(in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_TRANSFERRED]))
+                        <h6 class="fw-bold text-success mb-1"><i class="fas fa-check-circle me-1"></i>Lifecycle Completed</h6>
+                        <p class="small text-muted mb-0">This purchase request has completed all workflow stages.</p>
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_REJECTED)
+                        <h6 class="fw-bold text-danger mb-1"><i class="fas fa-times-circle me-1"></i>Request Rejected</h6>
+                        <p class="small text-muted mb-0">This purchase request was rejected during the review cycle.</p>
+                    @else
+                        <h6 class="fw-bold text-dark mb-1">Stage Controls Locked (Sent)</h6>
+                        <p class="small text-muted mb-3">
+                            This request has been forwarded and is currently awaiting action from 
+                            <strong class="text-primary">{{ ucfirst(str_replace('_', ' ', $purchaseRequest->current_owner_role ?? 'Assigned Role')) }}</strong>.
+                        </p>
+                        <div class="p-3 bg-light rounded border text-start small">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                <span class="text-muted">Current Workflow Status:</span>
+                                <span class="badge bg-{{ \App\Models\PurchaseRequest::statusBadgeClass($purchaseRequest->status) }}">{{ $purchaseRequest->status_label }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Stage Assigned To:</span>
+                                <span class="fw-bold text-dark"><i class="fas fa-user-tag text-primary me-1"></i>{{ ucfirst(str_replace('_', ' ', $purchaseRequest->current_owner_role ?? 'None')) }}</span>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            </div>
+            @endif
         </div>
 
         <!-- Right Panel: Items, Stock, Proformas, Audit Trail -->
@@ -318,7 +427,7 @@
                         <span class="badge bg-secondary rounded-pill">{{ $purchaseRequest->items->count() }} items</span>
                     </div>
 
-                    @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                         <span class="small text-muted me-1"><span class="selected-items-count fw-bold text-primary">0</span> selected</span>
                         <button type="button" class="btn btn-sm btn-outline-info shadow-sm" onclick="openSelectiveTransferModal()">
@@ -338,7 +447,7 @@
                         <table class="table align-middle mb-0" id="requestedItemsTable">
                             <thead class="table-light">
                                 <tr>
-                                    @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                                     <th width="40" class="ps-3 text-center">
                                         <input type="checkbox" id="selectAllItems" class="form-check-input" title="Select All Items">
                                     </th>
@@ -349,7 +458,7 @@
                                     <th>Unit</th>
                                     <th>Est. Unit Cost</th>
                                     <th>Est. Total</th>
-                                    @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                                     <th class="pe-3 text-end">Quick Action</th>
                                     @endif
                                 </tr>
@@ -362,7 +471,7 @@
                                     $hasStock = $totalStock > 0;
                                 @endphp
                                 <tr id="itemRow{{ $item->id }}">
-                                    @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                                     <td class="ps-3 text-center">
                                         <input type="checkbox" class="form-check-input pr-item-checkbox" 
                                                value="{{ $item->id }}"
@@ -402,7 +511,7 @@
                                     <td><span class="badge bg-light text-dark border">{{ $item->unit }}</span></td>
                                     <td>{{ number_format($item->estimated_unit_cost ?? 0, 2) }} ETB</td>
                                     <td class="fw-bold text-primary">{{ number_format($item->estimated_total ?? 0, 2) }} ETB</td>
-                                    @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                                     <td class="pe-3 text-end">
                                         <div class="btn-group btn-group-sm">
                                             @if($hasStock)
