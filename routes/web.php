@@ -1095,14 +1095,26 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/maintenance-requests', [MaintenanceRequestController::class, 'store'])->name('maintenance.store');
     Route::get('/maintenance-requests/{maintenanceRequest}', [MaintenanceRequestController::class, 'show'])->name('maintenance.show');
 
-    // General Service — Maintenance Management (Admin / Store Manager)
-    Route::prefix('general-service')->name('general-service.')->group(function () {
-        Route::get('/maintenance', [GeneralServiceController::class, 'index'])->name('maintenance.index');
-        Route::get('/maintenance/{maintenanceRequest}', [GeneralServiceController::class, 'show'])->name('maintenance.show');
-        Route::post('/maintenance/{maintenanceRequest}/status', [GeneralServiceController::class, 'updateStatus'])->name('maintenance.update-status');
-    });
     // ------------------------------------
     // System Actions – GET so we can trigger it directly from a sidebar link
+    Route::get('/system/clear-cache', function () {
+        try {
+            \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+            return response('App, route, and view caches cleared successfully!', 200);
+        } catch (\Throwable $e) {
+            return response('Error clearing cache: ' . $e->getMessage(), 500);
+        }
+    });
+
+    Route::get('/clear-cache', function () {
+        try {
+            \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+            return response('App, route, and view caches cleared successfully!', 200);
+        } catch (\Throwable $e) {
+            return response('Error clearing cache: ' . $e->getMessage(), 500);
+        }
+    });
+
     Route::get('/system/run-migrations', function () {
         try {
             \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
@@ -1223,12 +1235,13 @@ Route::middleware(['auth'])->group(function () {
 
     // ─── General Service Routes ────────────────────────────────────────────────
     Route::prefix('general-service')->name('general-service.')->group(function () {
-        Route::get('/',                     [App\Http\Controllers\DashboardController::class, 'generalService'])->name('dashboard');
-        Route::get('/maintenance',          [App\Http\Controllers\Admin\GeneralServiceController::class, 'index'])->name('maintenance.index');
-        Route::get('/maintenance/{maintenanceRequest}', [App\Http\Controllers\Admin\GeneralServiceController::class, 'show'])->name('maintenance.show');
-        Route::put('/maintenance/{maintenanceRequest}/status', [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.status');
-        Route::post('/maintenance/{maintenanceRequest}/ask-money', [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMoney'])->name('maintenance.ask-money');
-        Route::post('/maintenance/{maintenanceRequest}/ask-material', [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMaterial'])->name('maintenance.ask-material');
+        Route::get('/',                                                 [App\Http\Controllers\DashboardController::class, 'generalService'])->name('dashboard');
+        Route::get('/maintenance',                                      [App\Http\Controllers\Admin\GeneralServiceController::class, 'index'])->name('maintenance.index');
+        Route::get('/maintenance/{maintenanceRequest}',                 [App\Http\Controllers\Admin\GeneralServiceController::class, 'show'])->name('maintenance.show');
+        Route::match(['put', 'post'], '/maintenance/{maintenanceRequest}/status', [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.status');
+        Route::post('/maintenance/{maintenanceRequest}/update-status',  [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.update-status');
+        Route::post('/maintenance/{maintenanceRequest}/ask-money',      [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMoney'])->name('maintenance.ask-money');
+        Route::post('/maintenance/{maintenanceRequest}/ask-material',   [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMaterial'])->name('maintenance.ask-material');
     });
 
     // ─── Fixed Assets Route Alias ──────────────────────────────────────────────
