@@ -8,7 +8,7 @@ class ProformaInvoice extends Model
 {
     protected $fillable = [
         'proforma_no', 'purchase_request_id', 'supplier_id', 'proforma_date',
-        'valid_until', 'subtotal', 'tax_amount', 'grand_total', 'status',
+        'valid_until', 'subtotal', 'tax_amount', 'grand_total', 'item_prices', 'status',
         'gm_selected', 'notes', 'file_path',
     ];
 
@@ -16,6 +16,7 @@ class ProformaInvoice extends Model
         'proforma_date' => 'date',
         'valid_until'   => 'date',
         'gm_selected'   => 'boolean',
+        'item_prices'   => 'array',
     ];
 
     public function purchaseRequest() { return $this->belongsTo(PurchaseRequest::class); }

@@ -746,6 +746,8 @@ class PurchaseRequestController extends Controller
             'proforma_no'   => 'nullable|string|max:50',
             'proforma_date' => 'required|date',
             'valid_until'   => 'nullable|date',
+            'item_prices'   => 'nullable|array',
+            'item_prices.*' => 'nullable|numeric|min:0',
             'subtotal'      => 'nullable|numeric|min:0',
             'tax_amount'    => 'nullable|numeric|min:0',
             'grand_total'   => 'required|numeric|min:0.01',
@@ -760,22 +762,59 @@ class PurchaseRequestController extends Controller
 
         $pNo = $request->proforma_no ?: ('PROF-' . date('Ymd') . '-' . str_pad(ProformaInvoice::count() + 1, 4, '0', STR_PAD_LEFT));
 
+        // Process item prices breakdown
+        $itemPricesInput = $request->input('item_prices', []);
+        $structuredItemPrices = [];
+        $calculatedSubtotal = 0;
+        if (is_array($itemPricesInput) && !empty($itemPricesInput)) {
+            foreach ($purchaseRequest->items as $prItm) {
+                if (isset($itemPricesInput[$prItm->id])) {
+                    $unitCost = (float)$itemPricesInput[$prItm->id];
+                    $lineTotal = round($unitCost * (float)$prItm->quantity, 2);
+                    $calculatedSubtotal += $lineTotal;
+                    $structuredItemPrices[$prItm->id] = [
+                        'product_id'   => $prItm->product_id,
+                        'product_name' => $prItm->product?->name ?? ('Item #' . $prItm->product_id),
+                        'product_code' => $prItm->product?->code,
+                        'quantity'     => (float)$prItm->quantity,
+                        'unit'         => $prItm->unit,
+                        'unit_price'   => $unitCost,
+                        'total'        => $lineTotal,
+                    ];
+                }
+            }
+        }
+
+        // Auto-ensure schema column if not migrated yet
+        if (!\Illuminate\Support\Facades\Schema::hasColumn('proforma_invoices', 'item_prices')) {
+            try {
+                \Illuminate\Support\Facades\Schema::table('proforma_invoices', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->json('item_prices')->nullable()->after('grand_total');
+                });
+            } catch (\Throwable $e) {}
+        }
+
+        $subtotal = $request->subtotal ?: ($calculatedSubtotal > 0 ? $calculatedSubtotal : $request->grand_total);
+        $taxAmount = (float)($request->tax_amount ?? 0);
+        $grandTotal = (float)$request->grand_total;
+
         $proforma = ProformaInvoice::create([
             'proforma_no'         => $pNo,
             'purchase_request_id' => $purchaseRequest->id,
             'supplier_id'         => $request->supplier_id,
             'proforma_date'       => $request->proforma_date,
             'valid_until'         => $request->valid_until,
-            'subtotal'            => $request->subtotal ?? $request->grand_total,
-            'tax_amount'          => $request->tax_amount ?? 0,
-            'grand_total'         => $request->grand_total,
+            'subtotal'            => $subtotal,
+            'tax_amount'          => $taxAmount,
+            'grand_total'         => $grandTotal,
+            'item_prices'         => !empty($structuredItemPrices) ? $structuredItemPrices : null,
             'notes'               => $request->notes,
             'file_path'           => $filePath,
             'status'              => 'pending',
             'gm_selected'         => false,
         ]);
 
-        return back()->with('success', "Proforma #{$proforma->proforma_no} attached successfully.");
+        return back()->with('success', "Proforma #{$proforma->proforma_no} attached successfully with itemized pricing.");
     }
 
     public function deleteProforma(PurchaseRequest $purchaseRequest, ProformaInvoice $proforma)

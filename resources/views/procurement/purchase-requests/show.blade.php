@@ -782,7 +782,15 @@
                                             <div class="text-muted" style="font-size: 11px;">Valid till: {{ $prof->valid_until->format('M d, Y') }}</div>
                                         @endif
                                     </td>
-                                    <td class="fw-bold text-primary fs-6">{{ number_format($prof->grand_total, 2) }} ETB</td>
+                                    <td class="fw-bold text-primary fs-6">
+                                        {{ number_format($prof->grand_total, 2) }} ETB
+                                        @if(!empty($prof->item_prices))
+                                            <br>
+                                            <button class="btn btn-link btn-xs p-0 text-decoration-none small text-muted" type="button" data-bs-toggle="collapse" data-bs-target="#profItems_{{ $prof->id }}" aria-expanded="false">
+                                                <i class="fas fa-list-check me-1 text-primary"></i> {{ count($prof->item_prices) }} items
+                                            </button>
+                                        @endif
+                                    </td>
                                     <td>
                                         @if($profUrl)
                                             <a href="{{ $profUrl }}" target="_blank" class="btn btn-sm btn-outline-primary py-1 px-2 shadow-sm" title="View attached proforma document">
@@ -813,6 +821,47 @@
                                     </td>
                                     @endif
                                 </tr>
+                                @if(!empty($prof->item_prices))
+                                <tr class="collapse bg-light" id="profItems_{{ $prof->id }}">
+                                    <td colspan="7" class="p-3">
+                                        <div class="card card-body bg-white border shadow-sm p-3">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <h6 class="fw-bold small text-dark mb-0">
+                                                    <i class="fas fa-file-invoice me-1 text-primary"></i> Item Price Breakdown: <strong>{{ $prof->supplier?->name }}</strong> (Quote #{{ $prof->proforma_no }})
+                                                </h6>
+                                                <span class="badge bg-light text-dark border">Grand Total: {{ number_format($prof->grand_total, 2) }} ETB</span>
+                                            </div>
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-hover align-middle mb-0 small">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th>Material / Product</th>
+                                                            <th>Quantity</th>
+                                                            <th>Quoted Unit Price (ETB)</th>
+                                                            <th class="text-end">Line Total (ETB)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach($prof->item_prices as $itmData)
+                                                        <tr>
+                                                            <td>
+                                                                <strong class="text-dark">{{ $itmData['product_name'] ?? 'Item' }}</strong>
+                                                                @if(!empty($itmData['product_code']))
+                                                                    <code class="small text-muted ms-1">{{ $itmData['product_code'] }}</code>
+                                                                @endif
+                                                            </td>
+                                                            <td><span class="badge bg-secondary">{{ $itmData['quantity'] ?? '-' }} {{ $itmData['unit'] ?? '' }}</span></td>
+                                                            <td class="fw-semibold text-dark">{{ number_format($itmData['unit_price'] ?? 0, 2) }} ETB</td>
+                                                            <td class="text-end fw-bold text-primary">{{ number_format($itmData['total'] ?? 0, 2) }} ETB</td>
+                                                        </tr>
+                                                        @endforeach
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @endif
                                 @endforeach
                             </tbody>
                         </table>
@@ -1462,11 +1511,93 @@
                             <label class="form-label fw-bold small text-uppercase">Quote Validity Until</label>
                             <input type="date" name="valid_until" class="form-control form-control-sm" value="{{ date('Y-m-d', strtotime('+15 days')) }}">
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small text-uppercase">Grand Total Amount (ETB) <span class="text-danger">*</span></label>
-                            <div class="input-group input-group-sm">
-                                <input type="number" step="0.01" min="0.01" name="grand_total" class="form-control form-control-sm fw-bold" required placeholder="0.00">
-                                <span class="input-group-text">ETB</span>
+
+                        {{-- Item-by-item material price inputs --}}
+                        <div class="col-12">
+                            <div class="card border border-primary border-opacity-25 bg-light shadow-sm">
+                                <div class="card-header bg-primary bg-opacity-10 py-2 px-3 d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold small text-primary">
+                                        <i class="fas fa-boxes-stacked me-1"></i> Quoted Material Prices (Item-by-Item Breakdown)
+                                    </span>
+                                    <span class="badge bg-primary rounded-pill">{{ $purchaseRequest->items->count() }} items</span>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+                                        <table class="table table-sm align-middle mb-0" style="font-size: 0.86rem;">
+                                            <thead class="table-light sticky-top">
+                                                <tr>
+                                                    <th class="ps-3">Material / Product</th>
+                                                    <th width="18%">Quantity</th>
+                                                    <th width="30%">Quoted Unit Price (ETB)</th>
+                                                    <th width="24%" class="pe-3 text-end">Line Total (ETB)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($purchaseRequest->items as $itm)
+                                                @php
+                                                    $initPrice = $itm->estimated_unit_cost > 0 ? (float)$itm->estimated_unit_cost : 0;
+                                                    $initTotal = $initPrice * (float)$itm->quantity;
+                                                @endphp
+                                                <tr>
+                                                    <td class="ps-3">
+                                                        <div class="fw-bold text-dark">{{ $itm->product?->name ?? ('Item #' . $itm->product_id) }}</div>
+                                                        @if($itm->product?->code)
+                                                            <code class="small text-muted" style="font-size: 11px;">{{ $itm->product->code }}</code>
+                                                        @endif
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-secondary">{{ number_format($itm->quantity, 2) }} {{ $itm->unit }}</span>
+                                                    </td>
+                                                    <td>
+                                                        <div class="input-group input-group-sm">
+                                                            <input type="number" step="0.01" min="0" 
+                                                                   name="item_prices[{{ $itm->id }}]" 
+                                                                   class="form-control form-control-sm proforma-line-price" 
+                                                                   data-qty="{{ (float)$itm->quantity }}" 
+                                                                   data-item-id="{{ $itm->id }}" 
+                                                                   value="{{ $initPrice > 0 ? $initPrice : '' }}"
+                                                                   oninput="recalculateProformaModalTotal()" 
+                                                                   placeholder="0.00">
+                                                            <span class="input-group-text py-0">ETB</span>
+                                                        </div>
+                                                    </td>
+                                                    <td class="pe-3 text-end">
+                                                        <span class="fw-bold text-primary proforma-line-total" id="profLineTotal_{{ $itm->id }}">
+                                                            {{ number_format($initTotal, 2) }} ETB
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="p-3 bg-white border-top">
+                                        <div class="row g-2 align-items-center">
+                                            <div class="col-md-4">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="small text-muted text-uppercase fw-semibold">Materials Subtotal:</span>
+                                                    <input type="hidden" name="subtotal" id="profModalSubtotalInput" value="0.00">
+                                                    <span id="profModalSubtotal" class="fw-bold text-dark">0.00 ETB</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text">VAT / Tax</span>
+                                                    <input type="number" step="0.01" min="0" name="tax_amount" id="profModalTaxAmount" class="form-control form-control-sm text-end" value="0.00" oninput="recalculateProformaModalTotal()">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyProformaVat(15)" title="Apply 15% VAT">+15%</button>
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyProformaVat(0)" title="0% / No VAT">0%</button>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text fw-bold bg-primary text-white">Grand Total</span>
+                                                    <input type="number" step="0.01" min="0.01" name="grand_total" id="profModalGrandTotal" class="form-control form-control-sm fw-bold text-primary bg-white text-end fs-6" required placeholder="0.00">
+                                                    <span class="input-group-text">ETB</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="col-12">
@@ -1780,6 +1911,46 @@ function recalculateDirectTotal() {
     const totalInput = document.getElementById('directTotalAmountInput');
     if (totalInput && total > 0) {
         totalInput.value = total.toFixed(2);
+    }
+}
+
+function recalculateProformaModalTotal() {
+    let subtotal = 0;
+    document.querySelectorAll('.proforma-line-price').forEach(input => {
+        const price = parseFloat(input.value) || 0;
+        const qty = parseFloat(input.dataset.qty) || 0;
+        const lineTotal = price * qty;
+        subtotal += lineTotal;
+        
+        const lineTotalSpan = document.getElementById('profLineTotal_' + input.dataset.itemId);
+        if (lineTotalSpan) {
+            lineTotalSpan.textContent = lineTotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+        }
+    });
+
+    const subtotalSpan = document.getElementById('profModalSubtotal');
+    const subtotalInput = document.getElementById('profModalSubtotalInput');
+    if (subtotalSpan) subtotalSpan.textContent = subtotal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+    if (subtotalInput) subtotalInput.value = subtotal.toFixed(2);
+
+    const taxInput = document.getElementById('profModalTaxAmount');
+    const tax = taxInput ? (parseFloat(taxInput.value) || 0) : 0;
+
+    const grandTotal = subtotal + tax;
+    const grandTotalInput = document.getElementById('profModalGrandTotal');
+    if (grandTotalInput && (subtotal > 0 || tax > 0)) {
+        grandTotalInput.value = grandTotal.toFixed(2);
+    }
+}
+
+function applyProformaVat(percentage) {
+    const subtotalInput = document.getElementById('profModalSubtotalInput');
+    const subtotal = subtotalInput ? (parseFloat(subtotalInput.value) || 0) : 0;
+    const taxInput = document.getElementById('profModalTaxAmount');
+    if (taxInput) {
+        const tax = (subtotal * percentage) / 100;
+        taxInput.value = tax.toFixed(2);
+        recalculateProformaModalTotal();
     }
 }
 
