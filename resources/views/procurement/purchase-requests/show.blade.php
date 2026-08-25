@@ -332,21 +332,155 @@
 
                     <!-- STAGE 5a: Marketing Review -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING)
-                        <form action="{{ route('purchase-requests.add-marketing-variance', $purchaseRequest) }}" method="POST">
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-dark mb-1">
+                                <i class="fas fa-chart-line text-primary me-1"></i> Market Price Intelligence Review
+                            </h6>
+                            <p class="small text-muted mb-2">Compare Direct Buy pricing against Monthly Marketing Surveys and historical purchase prices to establish the benchmark for GM approval.</p>
+                        </div>
+
+                        <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.add-marketing-variance') ? route('purchase-requests.add-marketing-variance', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/add-marketing-variance') }}" method="POST">
                             @csrf
-                            <div class="mb-2">
-                                <label class="form-label small">Direct Amount Submitted</label>
-                                <input type="text" class="form-control form-control-sm bg-light" value="{{ number_format($purchaseRequest->direct_buy_amount, 2) }} ETB" readonly>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-muted">Direct Amount Submitted</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control form-control-sm bg-light fw-bold text-dark fs-6" id="mktDirectAmountDisplay" value="{{ number_format($purchaseRequest->direct_buy_amount, 2) }}" readonly>
+                                    <span class="input-group-text fw-bold">ETB</span>
+                                </div>
                             </div>
-                            <div class="mb-2">
-                                <label class="form-label small">Current Market Price Benchmark (ETB)</label>
-                                <input type="number" step="0.01" name="market_price" class="form-control form-control-sm" required>
+
+                            {{-- Benchmark Sources Quick Picker --}}
+                            <div class="card border border-primary border-opacity-25 bg-light mb-3 shadow-xs">
+                                <div class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center">
+                                    <span class="small fw-bold text-dark">
+                                        <i class="fas fa-scale-balanced text-primary me-1"></i> Price Sources Comparison
+                                    </span>
+                                    <button class="btn btn-link btn-xs p-0 text-decoration-none text-primary" type="button" data-bs-toggle="collapse" data-bs-target="#marketingBenchmarkDetails" aria-expanded="false">
+                                        <i class="fas fa-list-ul me-1"></i> Item Breakdown
+                                    </button>
+                                </div>
+                                <div class="card-body p-2">
+                                    <div class="d-grid gap-1 mb-2">
+                                        {{-- Latest Benchmark Option --}}
+                                        <button type="button" class="btn btn-sm btn-outline-primary d-flex justify-content-between align-items-center py-1 px-2 text-start {{ ($pricingBenchmarks['total_latest_benchmark'] > 0) ? 'active' : '' }}" 
+                                                id="btnBenchmarkLatest"
+                                                onclick="selectBenchmarkAmount({{ (float)$pricingBenchmarks['total_latest_benchmark'] }}, 'latest')">
+                                            <span>
+                                                <i class="fas fa-star text-warning me-1"></i>
+                                                <strong>Latest Benchmark (Auto):</strong>
+                                            </span>
+                                            <span class="fw-bold">{{ number_format($pricingBenchmarks['total_latest_benchmark'], 2) }} ETB</span>
+                                        </button>
+
+                                        {{-- Monthly Survey Option --}}
+                                        @if($pricingBenchmarks['has_monthly_data'])
+                                        <button type="button" class="btn btn-sm btn-outline-secondary d-flex justify-content-between align-items-center py-1 px-2 text-start" 
+                                                id="btnBenchmarkMonthly"
+                                                onclick="selectBenchmarkAmount({{ (float)$pricingBenchmarks['total_monthly_market'] }}, 'monthly')">
+                                            <span>
+                                                <i class="fas fa-calendar-alt text-info me-1"></i>
+                                                <strong>Monthly Market Survey:</strong>
+                                            </span>
+                                            <span class="fw-bold">{{ number_format($pricingBenchmarks['total_monthly_market'], 2) }} ETB</span>
+                                        </button>
+                                        @endif
+
+                                        {{-- Last Purchase Option --}}
+                                        @if($pricingBenchmarks['has_purchase_data'])
+                                        <button type="button" class="btn btn-sm btn-outline-secondary d-flex justify-content-between align-items-center py-1 px-2 text-start" 
+                                                id="btnBenchmarkPurchase"
+                                                onclick="selectBenchmarkAmount({{ (float)$pricingBenchmarks['total_last_purchase'] }}, 'purchase')">
+                                            <span>
+                                                <i class="fas fa-receipt text-success me-1"></i>
+                                                <strong>Last Purchase Price:</strong>
+                                            </span>
+                                            <span class="fw-bold">{{ number_format($pricingBenchmarks['total_last_purchase'], 2) }} ETB</span>
+                                        </button>
+                                        @endif
+                                    </div>
+
+                                    {{-- Collapsible item-by-item breakdown --}}
+                                    <div class="collapse mt-2" id="marketingBenchmarkDetails">
+                                        <div class="table-responsive bg-white rounded border" style="max-height: 200px; overflow-y: auto;">
+                                            <table class="table table-sm table-hover mb-0" style="font-size: 0.78rem;">
+                                                <thead class="table-light sticky-top">
+                                                    <tr>
+                                                        <th>Item</th>
+                                                        <th>Qty</th>
+                                                        <th>Monthly Price</th>
+                                                        <th>Last Purchase</th>
+                                                        <th class="text-end">Latest Benchmark</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach($pricingBenchmarks['items'] as $bmItem)
+                                                    <tr>
+                                                        <td><strong>{{ $bmItem['product_name'] }}</strong></td>
+                                                        <td>{{ $bmItem['quantity'] }} {{ $bmItem['unit'] }}</td>
+                                                        <td>
+                                                            @if($bmItem['monthly_price'] !== null)
+                                                                <div>{{ number_format($bmItem['monthly_price'], 2) }} ETB</div>
+                                                                <span class="text-muted" style="font-size: 10px;">{{ optional($bmItem['monthly_date'])->format('M d, Y') ?? '' }}</span>
+                                                                @if($bmItem['chosen_type'] === 'monthly_market')
+                                                                    <span class="badge bg-success-subtle text-success ms-1" style="font-size: 9px;">Latest</span>
+                                                                @endif
+                                                            @else
+                                                                <span class="text-muted italic">-</span>
+                                                            @endif
+                                                        </td>
+                                                        <td>
+                                                            @if($bmItem['purchase_price'] !== null)
+                                                                <div>{{ number_format($bmItem['purchase_price'], 2) }} ETB</div>
+                                                                <span class="text-muted" style="font-size: 10px;">{{ $bmItem['purchase_source'] }}</span>
+                                                                @if($bmItem['chosen_type'] === 'last_purchase')
+                                                                    <span class="badge bg-success-subtle text-success ms-1" style="font-size: 9px;">Latest</span>
+                                                                @endif
+                                                            @else
+                                                                <span class="text-muted italic">-</span>
+                                                            @endif
+                                                        </td>
+                                                        <td class="text-end fw-bold text-primary">
+                                                            {{ number_format($bmItem['chosen_total'], 2) }} ETB
+                                                        </td>
+                                                    </tr>
+                                                    @endforeach
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="mb-2">
-                                <label class="form-label small">Variance Notes</label>
-                                <textarea name="variance_notes" class="form-control form-control-sm" rows="2"></textarea>
+
+                            {{-- Current Market Benchmark Input --}}
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-dark">
+                                    Current Market Price Benchmark (ETB) <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" step="0.01" min="0" name="market_price" id="mktBenchmarkInput" 
+                                           class="form-control form-control-sm fw-bold bg-white text-primary fs-6" 
+                                           value="{{ $pricingBenchmarks['total_latest_benchmark'] > 0 ? (float)$pricingBenchmarks['total_latest_benchmark'] : '' }}" 
+                                           oninput="recalculateMarketingVariance()" required placeholder="0.00">
+                                    <span class="input-group-text fw-bold">ETB</span>
+                                </div>
+                                <div id="mktVarianceBadge" class="mt-2 small p-2 rounded border" style="display: none;">
+                                    {{-- Populated dynamically via JS --}}
+                                </div>
                             </div>
-                            <button class="btn btn-primary btn-sm w-100">Record Variance & Send to GM</button>
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label small fw-bold text-uppercase mb-0">Variance Notes</label>
+                                    <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none" onclick="generateMarketingVarianceNote()">
+                                        <i class="fas fa-magic me-1"></i> Auto-Generate Note
+                                    </button>
+                                </div>
+                                <textarea name="variance_notes" id="mktVarianceNotes" class="form-control form-control-sm" rows="2" placeholder="Explain price variance, inflation notes, market conditions, or supplier quotes comparison..."></textarea>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm py-2">
+                                <i class="fas fa-check-circle me-1"></i> Record Variance & Send to GM
+                            </button>
                         </form>
 
                     <!-- STAGE 5b: PM Proforma Selection -->
@@ -1953,6 +2087,89 @@ function applyProformaVat(percentage) {
         recalculateProformaModalTotal();
     }
 }
+
+// ── Marketing Price Benchmark Intelligence ──
+const directBuySubmittedAmount = {{ (float)$purchaseRequest->direct_buy_amount }};
+
+function selectBenchmarkAmount(amount, type) {
+    const input = document.getElementById('mktBenchmarkInput');
+    if (input) {
+        input.value = parseFloat(amount).toFixed(2);
+        recalculateMarketingVariance();
+    }
+    const btnL = document.getElementById('btnBenchmarkLatest');
+    const btnM = document.getElementById('btnBenchmarkMonthly');
+    const btnP = document.getElementById('btnBenchmarkPurchase');
+    [btnL, btnM, btnP].forEach(btn => {
+        if (btn) {
+            btn.classList.remove('btn-outline-primary', 'active');
+            btn.classList.add('btn-outline-secondary');
+        }
+    });
+
+    if (type === 'latest' && btnL) {
+        btnL.classList.remove('btn-outline-secondary');
+        btnL.classList.add('btn-outline-primary', 'active');
+    } else if (type === 'monthly' && btnM) {
+        btnM.classList.remove('btn-outline-secondary');
+        btnM.classList.add('btn-outline-primary', 'active');
+    } else if (type === 'purchase' && btnP) {
+        btnP.classList.remove('btn-outline-secondary');
+        btnP.classList.add('btn-outline-primary', 'active');
+    }
+}
+
+function recalculateMarketingVariance() {
+    const input = document.getElementById('mktBenchmarkInput');
+    const badge = document.getElementById('mktVarianceBadge');
+    if (!input || !badge) return;
+
+    const benchmark = parseFloat(input.value) || 0;
+    if (benchmark <= 0 || directBuySubmittedAmount <= 0) {
+        badge.style.display = 'none';
+        return;
+    }
+
+    const diff = directBuySubmittedAmount - benchmark;
+    const diffAbs = Math.abs(diff).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    const pct = ((diff / benchmark) * 100).toFixed(2);
+
+    badge.style.display = 'block';
+    if (diff > 0) {
+        badge.className = 'mt-2 small p-2 rounded border bg-warning bg-opacity-10 border-warning text-dark';
+        badge.innerHTML = `<i class="fas fa-arrow-trend-up text-warning me-1"></i> Direct buy is <strong>${diffAbs} ETB (+${pct}%)</strong> higher than market benchmark.`;
+    } else if (diff < 0) {
+        badge.className = 'mt-2 small p-2 rounded border bg-success bg-opacity-10 border-success text-success';
+        badge.innerHTML = `<i class="fas fa-arrow-trend-down text-success me-1"></i> Direct buy is <strong>${diffAbs} ETB (${pct}%)</strong> lower than market benchmark (Savings).`;
+    } else {
+        badge.className = 'mt-2 small p-2 rounded border bg-info bg-opacity-10 border-info text-info';
+        badge.innerHTML = `<i class="fas fa-equals text-info me-1"></i> Direct buy exactly matches the market benchmark.`;
+    }
+}
+
+function generateMarketingVarianceNote() {
+    const input = document.getElementById('mktBenchmarkInput');
+    const notes = document.getElementById('mktVarianceNotes');
+    if (!input || !notes) return;
+
+    const benchmark = parseFloat(input.value) || 0;
+    const diff = directBuySubmittedAmount - benchmark;
+    const diffStr = Math.abs(diff).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    const pct = benchmark > 0 ? ((diff / benchmark) * 100).toFixed(2) : '0';
+
+    if (diff > 0) {
+        notes.value = `Market Benchmark evaluated at ${benchmark.toLocaleString('en-US', {minimumFractionDigits: 2})} ETB based on latest monthly market prices and purchase records. Direct buy price is higher by ${diffStr} ETB (+${pct}%). Recommended for GM review.`;
+    } else if (diff < 0) {
+        notes.value = `Market Benchmark evaluated at ${benchmark.toLocaleString('en-US', {minimumFractionDigits: 2})} ETB. Direct buy is favorable by ${diffStr} ETB (${pct}% savings). Recommended for GM approval.`;
+    } else {
+        notes.value = `Market Benchmark evaluated at ${benchmark.toLocaleString('en-US', {minimumFractionDigits: 2})} ETB. Direct buy matches prevailing market benchmark.`;
+    }
+}
+
+// Auto-run variance calculation on page load if on marketing stage
+document.addEventListener('DOMContentLoaded', function() {
+    recalculateMarketingVariance();
+});
 
 // ── Quick Supplier Management (Add & Edit within Proforma Modal) ──
 function toggleSupplierQuickForm(mode) {

@@ -199,9 +199,155 @@ class PurchaseRequestController extends Controller
 
         $stores = Store::where('is_active', true)->orderBy('name')->get();
 
+        // Material Pricing Benchmarks (Monthly Marketing Survey vs Last Purchase Price)
+        $pricingBenchmarks = [
+            'items'                  => [],
+            'total_monthly_market'   => 0,
+            'total_last_purchase'    => 0,
+            'total_latest_benchmark' => 0,
+            'has_monthly_data'       => false,
+            'has_purchase_data'      => false,
+        ];
+
+        foreach ($purchaseRequest->items as $item) {
+            $monthlyPriceRec = null;
+            $lastPurchaseRec = null;
+
+            if ($item->product_id) {
+                // 1. Monthly Market Price (Marketing Team Price List)
+                try {
+                    $monthlyPriceRec = \App\Models\MaterialPrice::where('product_id', $item->product_id)
+                        ->orderBy('effective_date', 'desc')
+                        ->orderBy('id', 'desc')
+                        ->first();
+                } catch (\Throwable $e) {}
+
+                // 2. Last Purchase Price (from Purchase Orders, past PR items, or Product catalog)
+                try {
+                    $lastPoItem = \App\Models\PurchaseOrderItem::where('product_id', $item->product_id)
+                        ->where('unit_price', '>', 0)
+                        ->with('purchaseOrder')
+                        ->orderBy('created_at', 'desc')
+                        ->first();
+
+                    if ($lastPoItem) {
+                        $lastPurchaseRec = [
+                            'price'  => (float)$lastPoItem->unit_price,
+                            'date'   => $lastPoItem->created_at,
+                            'source' => 'PO #' . ($lastPoItem->purchaseOrder?->po_number ?? $lastPoItem->purchase_order_id),
+                        ];
+                    } else {
+                        $pastPrItem = \App\Models\PurchaseRequestItem::where('product_id', $item->product_id)
+                            ->where('purchase_request_id', '!=', $purchaseRequest->id)
+                            ->where('estimated_unit_cost', '>', 0)
+                            ->with('purchaseRequest')
+                            ->orderBy('created_at', 'desc')
+                            ->first();
+
+                        if ($pastPrItem) {
+                            $lastPurchaseRec = [
+                                'price'  => (float)$pastPrItem->estimated_unit_cost,
+                                'date'   => $pastPrItem->created_at,
+                                'source' => 'PR #' . ($pastPrItem->purchaseRequest?->pr_no ?? $pastPrItem->purchase_request_id),
+                            ];
+                        } elseif ($item->product && (float)$item->product->unit_price > 0) {
+                            $lastPurchaseRec = [
+                                'price'  => (float)$item->product->unit_price,
+                                'date'   => $item->product->updated_at ?? $item->product->created_at,
+                                'source' => 'Product Catalog Price',
+                            ];
+                        }
+                    }
+                } catch (\Throwable $e) {}
+            }
+
+            $monthlyPrice = $monthlyPriceRec ? (float)$monthlyPriceRec->price : null;
+            $monthlyDate = $monthlyPriceRec ? $monthlyPriceRec->effective_date : null;
+            $monthlySource = $monthlyPriceRec ? ($monthlyPriceRec->source ?: 'Marketing Monthly Price') : null;
+            if ($monthlyPrice !== null) {
+                $pricingBenchmarks['has_monthly_data'] = true;
+            }
+
+            $purchasePrice = $lastPurchaseRec ? (float)$lastPurchaseRec['price'] : null;
+            $purchaseDate = $lastPurchaseRec ? $lastPurchaseRec['date'] : null;
+            $purchaseSource = $lastPurchaseRec ? $lastPurchaseRec['source'] : null;
+            if ($purchasePrice !== null) {
+                $pricingBenchmarks['has_purchase_data'] = true;
+            }
+
+            // Determine latest benchmark
+            $chosenPrice = null;
+            $chosenSource = null;
+            $chosenType = null;
+            $chosenDate = null;
+
+            if ($monthlyPrice !== null && $purchasePrice !== null) {
+                $mTime = $monthlyDate ? \Carbon\Carbon::parse($monthlyDate)->timestamp : 0;
+                $pTime = $purchaseDate ? \Carbon\Carbon::parse($purchaseDate)->timestamp : 0;
+
+                if ($mTime >= $pTime) {
+                    $chosenPrice = $monthlyPrice;
+                    $chosenSource = $monthlySource ?: 'Monthly Marketing Survey';
+                    $chosenType = 'monthly_market';
+                    $chosenDate = $monthlyDate;
+                } else {
+                    $chosenPrice = $purchasePrice;
+                    $chosenSource = $purchaseSource ?: 'Last Purchase Order';
+                    $chosenType = 'last_purchase';
+                    $chosenDate = $purchaseDate;
+                }
+            } elseif ($monthlyPrice !== null) {
+                $chosenPrice = $monthlyPrice;
+                $chosenSource = $monthlySource ?: 'Monthly Marketing Survey';
+                $chosenType = 'monthly_market';
+                $chosenDate = $monthlyDate;
+            } elseif ($purchasePrice !== null) {
+                $chosenPrice = $purchasePrice;
+                $chosenSource = $purchaseSource ?: 'Last Purchase Price';
+                $chosenType = 'last_purchase';
+                $chosenDate = $purchaseDate;
+            } else {
+                $chosenPrice = (float)($item->estimated_unit_cost ?? 0);
+                $chosenSource = 'Requested Unit Cost';
+                $chosenType = 'estimated';
+            }
+
+            $qty = (float)$item->quantity;
+            $monthlyTotal = ($monthlyPrice !== null) ? round($monthlyPrice * $qty, 2) : 0;
+            $purchaseTotal = ($purchasePrice !== null) ? round($purchasePrice * $qty, 2) : 0;
+            $chosenTotal = ($chosenPrice !== null) ? round($chosenPrice * $qty, 2) : 0;
+
+            $pricingBenchmarks['total_monthly_market'] += $monthlyTotal;
+            $pricingBenchmarks['total_last_purchase'] += $purchaseTotal;
+            $pricingBenchmarks['total_latest_benchmark'] += $chosenTotal;
+
+            $pricingBenchmarks['items'][$item->id] = [
+                'item_id'          => $item->id,
+                'product_id'       => $item->product_id,
+                'product_name'     => $item->product?->name ?? ('Item #' . $item->product_id),
+                'quantity'         => $qty,
+                'unit'             => $item->unit,
+                'direct_unit_cost' => (float)$item->estimated_unit_cost,
+                'direct_total'     => round((float)$item->estimated_unit_cost * $qty, 2),
+                'monthly_price'    => $monthlyPrice,
+                'monthly_date'     => $monthlyDate,
+                'monthly_source'   => $monthlySource,
+                'monthly_total'    => $monthlyTotal,
+                'purchase_price'   => $purchasePrice,
+                'purchase_date'    => $purchaseDate,
+                'purchase_source'  => $purchaseSource,
+                'purchase_total'   => $purchaseTotal,
+                'chosen_price'     => $chosenPrice,
+                'chosen_source'    => $chosenSource,
+                'chosen_type'      => $chosenType,
+                'chosen_date'      => $chosenDate,
+                'chosen_total'     => $chosenTotal,
+            ];
+        }
+
         return view('procurement.purchase-requests.show', compact(
             'purchaseRequest', 'stockAvailability', 'coaAccounts',
-            'financeStaff', 'drivers', 'suppliers', 'stores'
+            'financeStaff', 'drivers', 'suppliers', 'stores', 'pricingBenchmarks'
         ));
     }
 
