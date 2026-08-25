@@ -1143,13 +1143,20 @@ class PurchaseRequestController extends Controller
         }
 
         $request->validate([
-            'notes' => 'required|string|min:2',
-        ], [
-            'notes.required' => 'Payment Reference / Transaction ID is required to execute payment.',
+            'transaction_reference' => 'nullable|string|max:100',
+            'notes'                 => 'nullable|string|max:500',
         ]);
 
-        $this->lifecycle->financeStaffPay($purchaseRequest, $request->notes);
-        return back()->with('success', 'Payment executed. COA balance updated. Procurement Team notified to upload receipt.');
+        $ref = trim((string)($request->input('transaction_reference') ?: $request->input('notes')));
+        if (empty($ref)) {
+            return back()->withErrors(['transaction_reference' => 'Bank Transaction No. or Cheque Reference No. is required.']);
+        }
+
+        $extraNotes = trim((string)$request->input('notes'));
+        $combinedNotes = 'Ref: ' . $ref . ($extraNotes && $extraNotes !== $ref ? ' | ' . $extraNotes : '');
+
+        $this->lifecycle->financeStaffPay($purchaseRequest, $combinedNotes);
+        return back()->with('success', 'Payment executed. Transaction ref: ' . $ref . '. COA balance updated.');
     }
 
     // ─── STAGE 8: Upload Receipt ─────────────────────────────────────────────

@@ -749,8 +749,12 @@
                                 <form action="{{ route('purchase-requests.execute-payment', $purchaseRequest) }}" method="POST">
                                     @csrf
                                     <div class="mb-2">
-                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Reference / Transaction ID <span class="text-danger">*</span></label>
-                                        <input type="text" name="notes" class="form-control form-control-sm" placeholder="e.g. TXN-9847294, Cheque #4521, or Bank Ref" required>
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Bank Transaction No. / Cheque Reference No. <span class="text-danger">*</span></label>
+                                        <input type="text" name="transaction_reference" class="form-control form-control-sm" placeholder="e.g. TXN-10928374 or CHQ-004921" required>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Remarks / Notes (Optional)</label>
+                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional notes, comments..."></textarea>
                                     </div>
                                     <button class="btn btn-success btn-sm w-100 fw-bold py-2 shadow-sm">
                                         <i class="fas fa-check-double me-1"></i> Confirm & Execute Payment
