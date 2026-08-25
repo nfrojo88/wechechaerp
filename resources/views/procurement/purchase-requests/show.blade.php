@@ -603,8 +603,8 @@
                             @php
                                 $creditVal = (float)($purchaseRequest->direct_buy_amount ?? 0);
                                 if ($creditVal <= 0) {
-                                    $selProf = $purchaseRequest->proformaInvoices()->where('is_selected', true)->first() ?? $purchaseRequest->proformaInvoices()->latest()->first();
-                                    $creditVal = $selProf && (float)$selProf->total_amount > 0 ? (float)$selProf->total_amount : (float)$purchaseRequest->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0));
+                                    $selProf = $purchaseRequest->proformaInvoices()->where('gm_selected', true)->first() ?? $purchaseRequest->proformaInvoices()->latest()->first();
+                                    $creditVal = $selProf && (float)$selProf->grand_total > 0 ? (float)$selProf->grand_total : (float)$purchaseRequest->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0));
                                 }
                             @endphp
 

@@ -229,10 +229,10 @@ class ProcurementLifecycleService
                 // 2. Compute Credit Total Amount
                 $creditAmount = (float)($pr->direct_buy_amount ?? 0);
                 if ($creditAmount <= 0) {
-                    $selectedProforma = $pr->proformaInvoices()->where('is_selected', true)->first() 
+                    $selectedProforma = $pr->proformaInvoices()->where('gm_selected', true)->first() 
                         ?? $pr->proformaInvoices()->latest()->first();
-                    if ($selectedProforma && (float)$selectedProforma->total_amount > 0) {
-                        $creditAmount = (float)$selectedProforma->total_amount;
+                    if ($selectedProforma && (float)$selectedProforma->grand_total > 0) {
+                        $creditAmount = (float)$selectedProforma->grand_total;
                     } else {
                         $creditAmount = (float)$pr->items->sum(function($item) {
                             $p = $item->estimated_unit_price ?? $item->unit_price ?? 0;
@@ -243,7 +243,7 @@ class ProcurementLifecycleService
 
                 // Determine Supplier
                 $supplierName = null;
-                $selectedProforma = $pr->proformaInvoices()->where('is_selected', true)->first() 
+                $selectedProforma = $pr->proformaInvoices()->where('gm_selected', true)->first() 
                     ?? $pr->proformaInvoices()->latest()->first();
                 if ($selectedProforma) {
                     $supplierName = $selectedProforma->supplier?->name ?? $selectedProforma->supplier_name;
@@ -334,7 +334,7 @@ class ProcurementLifecycleService
             ]
         );
 
-        $selectedProforma = $pr->proformaInvoices()->where('is_selected', true)->first() 
+        $selectedProforma = $pr->proformaInvoices()->where('gm_selected', true)->first() 
             ?? $pr->proformaInvoices()->latest()->first();
         $supplierName = $selectedProforma ? ($selectedProforma->supplier?->name ?? $selectedProforma->supplier_name) : null;
 
