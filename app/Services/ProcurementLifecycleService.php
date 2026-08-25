@@ -289,10 +289,10 @@ class ProcurementLifecycleService
                 ProcurementPayment::updateOrCreate(
                     ['purchase_request_id' => $pr->id],
                     [
-                        'method'         => 'bank',
+                        'method'         => 'cash',
                         'amount'         => $finalAmount,
                         'notes'          => $notes,
-                        'status'         => 'pending',
+                        'status'         => 'pending_assignment',
                         'created_by'     => Auth::id(),
                     ]
                 );
@@ -407,16 +407,18 @@ class ProcurementLifecycleService
     {
         $from = $pr->status;
 
-        ProcurementPayment::create([
-            'purchase_request_id'      => $pr->id,
-            'method'                   => 'cash',
-            'coa_account_id'           => $coaAccountId,
-            'amount'                   => $amount,
-            'assigned_finance_staff_id'=> $staffUserId,
-            'notes'                    => $notes,
-            'status'                   => 'pending_payment',
-            'created_by'               => Auth::id(),
-        ]);
+        ProcurementPayment::updateOrCreate(
+            ['purchase_request_id' => $pr->id],
+            [
+                'method'                    => 'cash',
+                'coa_account_id'            => $coaAccountId,
+                'amount'                    => $amount,
+                'assigned_finance_staff_id' => $staffUserId,
+                'notes'                     => $notes,
+                'status'                    => 'pending_payment',
+                'created_by'                => Auth::id(),
+            ]
+        );
 
         $pr->update([
             'status'             => PurchaseRequest::STATUS_PENDING_PAYMENT,
