@@ -769,7 +769,7 @@
                                                 <i class="fas fa-triangle-exclamation text-warning me-1"></i>
                                                 No active receiving slip book sequence configured for this store.
                                             </div>
-                                            <a href="{{ route('slip-sequences.create') }}?store_id={{ $purchaseRequest->store_id }}&slip_type=receive" target="_blank" class="btn btn-xs btn-outline-primary py-0 text-decoration-none">
+                                            <a href="{{ Route::has('store-manager.slip-sequences.create') ? route('store-manager.slip-sequences.create') : (Route::has('slip-sequences.create') ? route('slip-sequences.create') : url('/store-manager/slip-sequences/create')) }}?store_id={{ $purchaseRequest->store_id }}&slip_type=receive" target="_blank" class="btn btn-xs btn-outline-primary py-0 text-decoration-none">
                                                 <i class="fas fa-plus"></i> Configure Book
                                             </a>
                                         </div>
@@ -2012,7 +2012,7 @@ function fetchStoreSlipSequence(storeId) {
                         <i class="fas fa-triangle-exclamation text-warning me-1"></i>
                         No active receiving slip book sequence configured for this store.
                     </div>
-                    <a href="/slip-sequences/create?store_id=${storeId}&slip_type=receive" target="_blank" class="btn btn-xs btn-outline-primary py-0 text-decoration-none">
+                    <a href="/store-manager/slip-sequences/create?store_id=${storeId}&slip_type=receive" target="_blank" class="btn btn-xs btn-outline-primary py-0 text-decoration-none">
                         <i class="fas fa-plus"></i> Configure Book
                     </a>
                 </div>
