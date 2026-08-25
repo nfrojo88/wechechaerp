@@ -515,29 +515,79 @@
 
                     <!-- STAGE 6: GM Decision -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
-                        <form action="{{ route('purchase-requests.gm-decide', $purchaseRequest) }}" method="POST">
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-dark mb-1">
+                                <i class="fas fa-gavel text-danger me-1"></i> General Manager Decision
+                            </h6>
+                            <p class="small text-muted mb-2">Select approval type (Pay & Buy or Buy with Credit), send back for revision, or reject this Purchase Request.</p>
+                        </div>
+
+                        <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.gm-decide') ? route('purchase-requests.gm-decide', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/gm-decide') }}" method="POST">
                             @csrf
-                            <div class="mb-2">
-                                <label class="form-label small font-weight-bold">Decision</label>
-                                <select name="decision" class="form-select form-select-sm" id="gmDecisionSelect" required>
+                            <input type="hidden" name="payment_method" id="gmPaymentMethodHidden" value="pay_and_buy">
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-dark">
+                                    Select Decision / Approval Type <span class="text-danger">*</span>
+                                </label>
+                                <select name="decision" class="form-select form-select-sm fw-semibold" id="gmDecisionSelect" required onchange="handleGmDecisionChange(this)">
                                     <option value="">-- Choose Decision --</option>
-                                    <option value="approve">Approve</option>
-                                    <option value="reject">Reject</option>
-                                    <option value="send_back">Send Back to PM</option>
+                                    <option value="pay_and_buy" class="text-success fw-bold">✓ Approve: Pay & Buy (Cash / Bank Disbursement)</option>
+                                    <option value="buy_by_credit" class="text-primary fw-bold">💳 Approve: Buy with Credit (Supplier Credit Line)</option>
+                                    <option value="send_back" class="text-warning">↩ Send Back to PM (Need Revision)</option>
+                                    <option value="reject" class="text-danger">✗ Reject Purchase Request</option>
                                 </select>
                             </div>
-                            <div class="mb-2 d-none" id="paymentMethodDiv">
-                                <label class="form-label small font-weight-bold">Payment Route</label>
-                                <select name="payment_method" class="form-select form-select-sm">
-                                    <option value="pay_and_buy">Pay & Buy (Cash/Bank)</option>
-                                    <option value="buy_by_credit">Buy by Credit</option>
-                                </select>
+
+                            {{-- Dynamic Explanatory Alerts --}}
+                            <div id="gmDecisionHelpPayBuy" class="alert alert-success py-2 px-3 small border-0 shadow-xs mb-3" style="display: none;">
+                                <div class="d-flex">
+                                    <i class="fas fa-money-bill-wave fa-lg me-2 mt-1 text-success"></i>
+                                    <div>
+                                        <strong>Approve (Pay & Buy):</strong>
+                                        <div class="text-muted" style="font-size: 11px;">Routes to <strong>Finance</strong> for payment disbursement and assigning staff to execute payment.</div>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="mb-2">
-                                <label class="form-label small">Notes / Reason</label>
-                                <textarea name="notes" class="form-control form-control-sm" rows="2"></textarea>
+
+                            <div id="gmDecisionHelpCredit" class="alert alert-info py-2 px-3 small border-0 shadow-xs mb-3" style="display: none;">
+                                <div class="d-flex">
+                                    <i class="fas fa-credit-card fa-lg me-2 mt-1 text-info"></i>
+                                    <div>
+                                        <strong>Approve (Buy with Credit):</strong>
+                                        <div class="text-muted" style="font-size: 11px;">Routes to <strong>Finance Head</strong> to authorize the Supplier Credit Line and select the Chart of Account (COA).</div>
+                                    </div>
+                                </div>
                             </div>
-                            <button class="btn btn-danger btn-sm w-100">Submit GM Decision</button>
+
+                            <div id="gmDecisionHelpSendBack" class="alert alert-warning py-2 px-3 small border-0 shadow-xs mb-3" style="display: none;">
+                                <div class="d-flex">
+                                    <i class="fas fa-undo fa-lg me-2 mt-1 text-warning"></i>
+                                    <div>
+                                        <strong>Send Back to PM:</strong>
+                                        <div class="text-muted" style="font-size: 11px;">Returns the PR to the Procurement Manager for renegotiating supplier quotes or updating material pricing.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="gmDecisionHelpReject" class="alert alert-danger py-2 px-3 small border-0 shadow-xs mb-3" style="display: none;">
+                                <div class="d-flex">
+                                    <i class="fas fa-ban fa-lg me-2 mt-1 text-danger"></i>
+                                    <div>
+                                        <strong>Reject Purchase Request:</strong>
+                                        <div class="text-muted" style="font-size: 11px;">Closes this Purchase Request and notifies the procurement team of the rejection.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-muted">GM Notes / Instructions / Reason</label>
+                                <textarea name="notes" id="gmNotes" class="form-control form-control-sm" rows="2" placeholder="Add specific approval conditions, credit terms, or remarks..."></textarea>
+                            </div>
+
+                            <button type="submit" id="btnSubmitGmDecision" class="btn btn-secondary btn-sm w-100 fw-bold shadow-sm py-2">
+                                <i class="fas fa-paper-plane me-1"></i> Submit GM Decision
+                            </button>
                         </form>
 
                     <!-- STAGE 7a: Finance Credit Authorization -->
@@ -1756,18 +1806,62 @@
 </div>
 
 <script>
+function handleGmDecisionChange(select) {
+    if (!select) return;
+    const val = select.value;
+    const hiddenPay = document.getElementById('gmPaymentMethodHidden');
+    const helpPay = document.getElementById('gmDecisionHelpPayBuy');
+    const helpCredit = document.getElementById('gmDecisionHelpCredit');
+    const helpSendBack = document.getElementById('gmDecisionHelpSendBack');
+    const helpReject = document.getElementById('gmDecisionHelpReject');
+    const btn = document.getElementById('btnSubmitGmDecision');
+
+    // Hide all help alerts
+    if (helpPay) helpPay.style.display = 'none';
+    if (helpCredit) helpCredit.style.display = 'none';
+    if (helpSendBack) helpSendBack.style.display = 'none';
+    if (helpReject) helpReject.style.display = 'none';
+
+    if (val === 'buy_by_credit' || val === 'approve_credit') {
+        if (hiddenPay) hiddenPay.value = 'buy_by_credit';
+        if (helpCredit) helpCredit.style.display = 'block';
+        if (btn) {
+            btn.className = 'btn btn-info text-white btn-sm w-100 fw-bold shadow-sm py-2';
+            btn.innerHTML = '<i class="fas fa-credit-card me-1"></i> Approve (Buy with Credit)';
+        }
+    } else if (val === 'pay_and_buy' || val === 'approve') {
+        if (hiddenPay) hiddenPay.value = 'pay_and_buy';
+        if (helpPay) helpPay.style.display = 'block';
+        if (btn) {
+            btn.className = 'btn btn-success btn-sm w-100 fw-bold shadow-sm py-2';
+            btn.innerHTML = '<i class="fas fa-check-circle me-1"></i> Approve (Pay & Buy)';
+        }
+    } else if (val === 'send_back') {
+        if (hiddenPay) hiddenPay.value = '';
+        if (helpSendBack) helpSendBack.style.display = 'block';
+        if (btn) {
+            btn.className = 'btn btn-warning text-dark btn-sm w-100 fw-bold shadow-sm py-2';
+            btn.innerHTML = '<i class="fas fa-undo me-1"></i> Send Back to PM';
+        }
+    } else if (val === 'reject') {
+        if (hiddenPay) hiddenPay.value = '';
+        if (helpReject) helpReject.style.display = 'block';
+        if (btn) {
+            btn.className = 'btn btn-danger btn-sm w-100 fw-bold shadow-sm py-2';
+            btn.innerHTML = '<i class="fas fa-ban me-1"></i> Reject Purchase Request';
+        }
+    } else {
+        if (btn) {
+            btn.className = 'btn btn-secondary btn-sm w-100 fw-bold shadow-sm py-2';
+            btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Submit GM Decision';
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    // GM Decision script
     const gmSelect = document.getElementById('gmDecisionSelect');
-    const payDiv   = document.getElementById('paymentMethodDiv');
-    if (gmSelect && payDiv) {
-        gmSelect.addEventListener('change', function() {
-            if (this.value === 'approve') {
-                payDiv.classList.remove('d-none');
-            } else {
-                payDiv.classList.add('d-none');
-            }
-        });
+    if (gmSelect) {
+        handleGmDecisionChange(gmSelect);
     }
 
     // Select All Items Checkbox

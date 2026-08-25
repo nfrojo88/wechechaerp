@@ -1014,18 +1014,42 @@ class PurchaseRequestController extends Controller
     public function gmDecide(Request $request, PurchaseRequest $purchaseRequest)
     {
         $this->authorizeStageRole($purchaseRequest, ['gm', 'general_manager']);
-        $request->validate([
-            'decision'       => 'required|in:approve,reject,send_back',
-            'payment_method' => 'required_if:decision,approve|in:pay_and_buy,buy_by_credit',
-            'notes'          => 'nullable|string',
-        ]);
+
+        $decisionInput = $request->input('decision');
+        $paymentMethodInput = $request->input('payment_method');
+
+        // Normalize composite decisions
+        if (in_array($decisionInput, ['buy_by_credit', 'approve_credit', 'credit'])) {
+            $decision = 'approve';
+            $paymentMethod = 'buy_by_credit';
+        } elseif (in_array($decisionInput, ['pay_and_buy', 'approve_pay', 'cash', 'bank'])) {
+            $decision = 'approve';
+            $paymentMethod = 'pay_and_buy';
+        } else {
+            $decision = $decisionInput;
+            $paymentMethod = $paymentMethodInput ?: ($decision === 'approve' ? 'pay_and_buy' : null);
+        }
+
+        if (!in_array($decision, ['approve', 'reject', 'send_back'])) {
+            return back()->withErrors(['decision' => 'Invalid GM decision selected.']);
+        }
+
+        if ($decision === 'approve' && !in_array($paymentMethod, ['pay_and_buy', 'buy_by_credit'])) {
+            $paymentMethod = 'pay_and_buy';
+        }
+
         $this->lifecycle->gmDecide(
             $purchaseRequest,
-            $request->decision,
-            $request->payment_method,
+            $decision,
+            $paymentMethod,
             $request->notes
         );
-        return back()->with('success', 'GM decision recorded.');
+
+        $decisionLabel = ($decision === 'approve') 
+            ? ('Approved with ' . ($paymentMethod === 'buy_by_credit' ? 'Buy with Credit' : 'Pay & Buy')) 
+            : ucfirst(str_replace('_', ' ', $decision));
+
+        return back()->with('success', "GM decision recorded: {$decisionLabel}.");
     }
 
     // ─── STAGE 7a: Finance Head — Credit Path ───────────────────────────────
