@@ -962,7 +962,7 @@
         <!-- Credit Store Ledger (Credit Purchases) -->
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'admin', 'global_admin', 'gm', 'general_manager']))
         <li class="sidebar-nav-item">
-            <a href="{{ route('finance.credit-store.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.credit-store.*') ? 'active' : '' }}">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('finance.credit-store.index') ? route('finance.credit-store.index') : url('/finance/credit-store') }}" class="sidebar-nav-link {{ request()->is('finance/credit-store*') || request()->routeIs('finance.credit-store.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-credit-card text-info"></i>
                 <span>Credit Store Ledger</span>
             </a>
