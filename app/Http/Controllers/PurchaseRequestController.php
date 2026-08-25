@@ -1107,21 +1107,26 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 7b: Finance Head — Cash Path, Assign Staff ───────────────────
     public function assignPayment(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['finance_head', 'finance_manager']);
         $request->validate([
             'coa_account_id'  => 'required|exists:chart_of_accounts,id',
             'amount'          => 'required|numeric|min:0.01',
-            'staff_user_id'   => 'required|exists:users,id',
+            'staff_user_id'   => 'nullable|exists:users,id',
             'notes'           => 'nullable|string',
         ]);
+
+        $coa = \App\Models\ChartOfAccount::find($request->coa_account_id);
+        $staffUserId = $request->filled('staff_user_id') 
+            ? (int)$request->staff_user_id 
+            : ($coa?->assigned_to ?: Auth::id());
+
         $this->lifecycle->financeHeadAssignPayment(
             $purchaseRequest,
             (int)$request->coa_account_id,
             (float)$request->amount,
-            (int)$request->staff_user_id,
+            $staffUserId,
             $request->notes
         );
-        return back()->with('success', 'Payment assigned to finance staff.');
+        return back()->with('success', 'Payment authorized and expense logged.');
     }
 
     // ─── STAGE 7b: Finance Staff — Execute Payment ──────────────────────────

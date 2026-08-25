@@ -692,21 +692,7 @@
                                 <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
                                 <input type="number" step="0.01" name="amount" id="fundingPaymentAmountInput" class="form-control form-control-sm fw-bold" value="{{ (float)($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount ?? 0) }}" required>
                             </div>
-                            <div class="mb-2">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Assign Finance Staff <span class="text-danger">*</span></label>
-                                <select name="staff_user_id" id="assignFinanceStaffSelect" class="form-select form-select-sm" required onchange="handleStaffSelectionChange(this)">
-                                    <option value="">-- Select Staff Member --</option>
-                                    @foreach($financeStaff as $st)
-                                        @php
-                                            $stCoa = $coaAccounts->where('assigned_to', $st->id)->first();
-                                        @endphp
-                                        <option value="{{ $st->id }}" data-default-coa="{{ $stCoa?->id ?? '' }}">
-                                            {{ $st->name }} ({{ $st->email }}) {{ $stCoa ? ' — Account: ' . $stCoa->name : '' }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                <div id="staffAutoAssignedBadge" class="form-text text-primary small mt-1 d-none"></div>
-                            </div>
+                            <input type="hidden" name="staff_user_id" id="assignFinanceStaffHidden" value="">
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Payment Instructions / Notes</label>
                                 <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Cheque number, transfer instructions, or remarks..."></textarea>
@@ -2098,48 +2084,34 @@ function syncGmProformaSelect(profId) {
 function handleCoaSelectionChange(selectEl) {
     if (!selectEl) return;
     const selectedOpt = selectEl.options[selectEl.selectedIndex];
-    const staffSelect = document.getElementById('assignFinanceStaffSelect');
+    const staffHidden = document.getElementById('assignFinanceStaffHidden');
     const badgeEl = document.getElementById('coaAutoAssignedBadge');
     
     if (!selectedOpt || !selectedOpt.value) {
         if (badgeEl) badgeEl.classList.add('d-none');
+        if (staffHidden) staffHidden.value = '';
         return;
     }
 
     const assignedUserId = selectedOpt.dataset.assignedUser;
-    if (assignedUserId && staffSelect) {
-        staffSelect.value = assignedUserId;
-        const staffOpt = staffSelect.options[staffSelect.selectedIndex];
-        if (badgeEl) {
-            badgeEl.classList.remove('d-none');
-            badgeEl.innerHTML = `<i class="fas fa-magic me-1"></i> Auto-selected Account Holder: <strong>${staffOpt ? staffOpt.text.split('(')[0].trim() : 'Assigned Staff'}</strong>`;
-        }
-    } else {
-        if (badgeEl) badgeEl.classList.add('d-none');
-    }
-}
-
-function handleStaffSelectionChange(selectEl) {
-    if (!selectEl) return;
-    const selectedOpt = selectEl.options[selectEl.selectedIndex];
-    const coaSelect = document.getElementById('fundingCoaSelect');
-    const badgeEl = document.getElementById('staffAutoAssignedBadge');
-
-    if (!selectedOpt || !selectedOpt.value) {
-        if (badgeEl) badgeEl.classList.add('d-none');
-        return;
+    if (staffHidden) {
+        staffHidden.value = assignedUserId || '';
     }
 
-    const defaultCoaId = selectedOpt.dataset.defaultCoa;
-    if (defaultCoaId && coaSelect) {
-        coaSelect.value = defaultCoaId;
-        const coaOpt = coaSelect.options[coaSelect.selectedIndex];
+    const assignedName = selectedOpt.text.includes('— Assigned:') 
+        ? selectedOpt.text.split('— Assigned:')[1].trim() 
+        : '';
+
+    if (assignedUserId && assignedName) {
         if (badgeEl) {
             badgeEl.classList.remove('d-none');
-            badgeEl.innerHTML = `<i class="fas fa-magic me-1"></i> Auto-selected Staff Account: <strong>${coaOpt ? coaOpt.text.split('(')[0].trim() : 'Assigned COA'}</strong>`;
+            badgeEl.innerHTML = `<i class="fas fa-user-check text-success me-1"></i> Account Holder: <strong>${assignedName}</strong> (Auto-assigned)`;
         }
     } else {
-        if (badgeEl) badgeEl.classList.add('d-none');
+        if (badgeEl) {
+            badgeEl.classList.remove('d-none');
+            badgeEl.innerHTML = `<span class="text-muted"><i class="fas fa-info-circle me-1"></i> Payment managed by Finance.</span>`;
+        }
     }
 }
 
