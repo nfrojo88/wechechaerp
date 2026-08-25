@@ -345,9 +345,38 @@ class PurchaseRequestController extends Controller
             ];
         }
 
+        // Determine if PR is at Final Store Intake stage (after credit approval, payment, or driver booking)
+        $isFinalIntake = ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_STORE_REVIEW) && (
+            $purchaseRequest->payment !== null || 
+            $purchaseRequest->creditLedger !== null || 
+            $purchaseRequest->driverBooking !== null || 
+            $purchaseRequest->receipt !== null || 
+            $purchaseRequest->gmDecisions()->where('decision', 'approve')->exists() ||
+            $purchaseRequest->workflowLogs()->whereIn('action', [
+                'gm_approve_buy_by_credit',
+                'gm_approve_credit_direct_store',
+                'finance_credit_approved',
+                'finance_credit_approved_direct_intake',
+                'driver_booked',
+                'receipt_verified'
+            ])->exists()
+        );
+
+        $targetStoreId = $purchaseRequest->store_id ?? ($stores->first()?->id ?? null);
+        $receiveSlipSequence = null;
+        $nextReceiveSlipNo = null;
+        if ($targetStoreId) {
+            $receiveSlipSequence = \App\Models\SlipSequence::where('store_id', $targetStoreId)
+                ->where('slip_type', 'receive')
+                ->where('status', 'active')
+                ->first();
+            $nextReceiveSlipNo = $receiveSlipSequence ? $receiveSlipSequence->formatSlipNumber($receiveSlipSequence->current_slip_no) : null;
+        }
+
         return view('procurement.purchase-requests.show', compact(
             'purchaseRequest', 'stockAvailability', 'coaAccounts',
-            'financeStaff', 'drivers', 'suppliers', 'stores', 'pricingBenchmarks'
+            'financeStaff', 'drivers', 'suppliers', 'stores', 'pricingBenchmarks',
+            'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo'
         ));
     }
 
@@ -1158,9 +1187,26 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 9 Final: Store Intake ─────────────────────────────────────────
     public function storeIntake(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['store_manager']);
-        $this->lifecycle->storeIntake($purchaseRequest, $request->notes);
-        return back()->with('success', 'Intake complete. Procurement lifecycle closed.');
+        $this->authorizeStageRole($purchaseRequest, ['store_manager', 'store_keeper', 'store', 'admin', 'global_admin']);
+        
+        $request->validate([
+            'store_id'      => 'nullable|exists:stores,id',
+            'slip_no'       => 'nullable|string|max:100',
+            'received_date' => 'nullable|date',
+            'items'         => 'nullable|array',
+            'notes'         => 'nullable|string',
+        ]);
+
+        $this->lifecycle->storeIntake(
+            $purchaseRequest,
+            $request->filled('store_id') ? (int)$request->store_id : null,
+            $request->input('slip_no'),
+            $request->input('received_date'),
+            $request->input('items', []),
+            $request->input('notes')
+        );
+
+        return back()->with('success', 'Material intake complete! Items received into store inventory and slip sequence updated.');
     }
 
     // ─── Legacy: approve/reject (kept for backward compat) ──────────────────

@@ -127,7 +127,7 @@
                         </form>
 
                     <!-- STAGE 2: Store Manager Review (Transfer vs Send to PR) -->
-                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && !$purchaseRequest->driverBooking)
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && !($isFinalIntake ?? false))
                         <div class="d-grid gap-2">
                             <button type="button" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm py-2" data-bs-toggle="modal" data-bs-target="#splitAndProcessModal">
                                 <i class="fas fa-random me-1"></i> Smart Split: Transfer + Buy
@@ -716,12 +716,92 @@
                             <button class="btn btn-info text-white btn-sm w-100"><i class="fas fa-truck me-1"></i> Book Driver</button>
                         </form>
 
-                    <!-- STAGE 9 Final: Store Manager Final Intake -->
-                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && $purchaseRequest->driverBooking)
+                    <!-- STAGE 9 Final: Store Manager Final Intake & Stock In -->
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && ($isFinalIntake ?? false))
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-success mb-1">
+                                <i class="fas fa-boxes-packing text-success me-1"></i> Receive Products & Stock In
+                            </h6>
+                            <p class="small text-muted mb-0">
+                                Verify received quantities, assign the receiving slip (GRN / Model 19), and intake products directly into store inventory.
+                            </p>
+                        </div>
+
                         <form action="{{ route('purchase-requests.store-intake', $purchaseRequest) }}" method="POST">
                             @csrf
-                            <p class="small text-muted mb-2">Driver <strong>{{ $purchaseRequest->driverBooking->driver?->full_name }}</strong> has arrived. Perform final intake.</p>
-                            <button class="btn btn-success btn-sm w-100"><i class="fas fa-box-open me-1"></i> Complete Final Intake</button>
+
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold text-uppercase text-muted">Receiving Store <span class="text-danger">*</span></label>
+                                <select name="store_id" class="form-select form-select-sm" required>
+                                    @foreach($stores as $st)
+                                        <option value="{{ $st->id }}" {{ ($purchaseRequest->store_id == $st->id) ? 'selected' : '' }}>
+                                            {{ $st->name }} ({{ $st->location ?? 'Store' }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold text-uppercase text-muted">Receiving Slip Number (Model 19 / GRN) <span class="text-danger">*</span></label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
+                                    <input type="text" name="slip_no" class="form-control form-control-sm font-monospace fw-bold" 
+                                           value="{{ $nextReceiveSlipNo ?? ('REC-' . date('Ymd') . '-' . str_pad($purchaseRequest->id, 4, '0', STR_PAD_LEFT)) }}" required>
+                                </div>
+                                @if($receiveSlipSequence)
+                                    <div class="form-text small text-success mt-1" style="font-size: 11px;">
+                                        <i class="fas fa-check-circle me-1"></i> Next in sequence from <strong>{{ $receiveSlipSequence->label ?: 'Receive Sequence' }}</strong>
+                                    </div>
+                                @else
+                                    <div class="form-text small text-muted mt-1" style="font-size: 11px;">
+                                        <i class="fas fa-info-circle me-1"></i> Auto-generated format. You can customize the slip number if needed.
+                                    </div>
+                                @endif
+                            </div>
+
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold text-uppercase text-muted">Receiving Date</label>
+                                <input type="date" name="received_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-muted mb-1">Item Quantities To Receive</label>
+                                <div class="bg-light p-2 rounded border" style="max-height: 220px; overflow-y: auto;">
+                                    @foreach($purchaseRequest->items as $itm)
+                                        <div class="mb-2 pb-2 border-bottom">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="small fw-bold text-dark">{{ $itm->product?->name ?? 'Material #' . $itm->product_id }}</span>
+                                                <span class="badge bg-primary text-white">{{ (float)$itm->quantity }} {{ $itm->unit ?? ($itm->product?->unit ?? 'pcs') }}</span>
+                                            </div>
+                                            <div class="row g-1">
+                                                <div class="col-6">
+                                                    <label class="text-muted" style="font-size: 10px;">Qty Received</label>
+                                                    <input type="number" step="0.01" min="0" 
+                                                           name="items[{{ $itm->id }}][quantity]" 
+                                                           value="{{ (float)$itm->quantity }}" 
+                                                           class="form-control form-control-sm" required>
+                                                </div>
+                                                <div class="col-6">
+                                                    <label class="text-muted" style="font-size: 10px;">Accepted Qty</label>
+                                                    <input type="number" step="0.01" min="0" 
+                                                           name="items[{{ $itm->id }}][accepted_quantity]" 
+                                                           value="{{ (float)$itm->quantity }}" 
+                                                           class="form-control form-control-sm" required>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-muted">Intake Notes / Remarks</label>
+                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Package condition, delivery verification notes..."></textarea>
+                            </div>
+
+                            <button type="submit" class="btn btn-success btn-sm w-100 fw-bold shadow-sm py-2">
+                                <i class="fas fa-check-double me-1"></i> Confirm Intake & Add to Inventory
+                            </button>
                         </form>
 
                     @else

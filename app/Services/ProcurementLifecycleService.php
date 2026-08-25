@@ -15,6 +15,13 @@ use App\Models\ChartOfAccount;
 use App\Models\CreditStoreLedger;
 use App\Models\CreditStorePayment;
 use App\Models\User;
+use App\Models\Inventory;
+use App\Models\InventoryMovement;
+use App\Models\DeliveryReceipt;
+use App\Models\DeliveryReceiptItem;
+use App\Models\SlipSequence;
+use App\Models\Store;
+use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -536,23 +543,161 @@ class ProcurementLifecycleService
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // STAGE 9 Final — Store Intake
+    // STAGE 9 Final — Store Intake (Slip Sequence & Inventory Increment)
     // ═══════════════════════════════════════════════════════════════════
 
-    public function storeIntake(PurchaseRequest $pr, string $notes = null): void
-    {
+    public function storeIntake(
+        PurchaseRequest $pr,
+        ?int $storeId = null,
+        ?string $slipNo = null,
+        ?string $receivedDate = null,
+        array $receivedItems = [],
+        ?string $notes = null
+    ): void {
         $from = $pr->status;
-        $pr->update([
-            'status'             => PurchaseRequest::STATUS_INTAKE_COMPLETE,
-            'current_owner_role' => null,
-        ]);
-        $this->log($pr, $from, PurchaseRequest::STATUS_INTAKE_COMPLETE, 'store_intake_complete', 'store_manager', $notes);
-        // Notify coordinator who originally requested
+        $storeId = $storeId ?: ($pr->store_id ?: Store::where('is_active', true)->first()?->id ?: 1);
+        $receivedDate = $receivedDate ?: now()->toDateString();
+
+        DB::transaction(function () use ($pr, $storeId, $slipNo, $receivedDate, $receivedItems, $notes, $from) {
+            // 1. Determine or auto-generate Slip Number if empty
+            if (empty($slipNo)) {
+                $sequence = SlipSequence::where('store_id', $storeId)
+                    ->where('slip_type', 'receive')
+                    ->where('status', 'active')
+                    ->first();
+                if ($sequence) {
+                    $slipNo = $sequence->generateSlipNumber();
+                } else {
+                    $slipNo = 'REC-' . date('Ymd') . '-' . str_pad($pr->id, 4, '0', STR_PAD_LEFT);
+                }
+            } else {
+                // If manual/given slip number, increment sequence counter if matched
+                try {
+                    $numericPart = (int)preg_replace('/[^0-9]/', '', $slipNo);
+                    $seq = SlipSequence::where('store_id', $storeId)
+                        ->where('slip_type', 'receive')
+                        ->where('status', 'active')
+                        ->first();
+                    if ($seq && $numericPart >= $seq->current_slip_no) {
+                        $seq->update([
+                            'current_slip_no' => $numericPart + 1,
+                            'used_count'      => $seq->used_count + 1,
+                        ]);
+                    }
+                } catch (\Throwable $e) {}
+            }
+
+            // 2. Create or find dummy PO if required for DeliveryReceipt foreign key
+            $poId = $pr->purchaseOrders()->first()?->id;
+            if (!$poId) {
+                try {
+                    $dummyPo = \App\Models\PurchaseOrder::firstOrCreate(
+                        ['po_no' => 'PR-INTAKE-' . $pr->pr_no],
+                        [
+                            'project_id'          => $pr->project_id,
+                            'supplier_id'         => 1,
+                            'purchase_request_id' => $pr->id,
+                            'order_date'          => now()->toDateString(),
+                            'status'              => 'delivered',
+                            'total_amount'        => (float)($pr->direct_buy_amount ?? 0),
+                            'created_by'          => Auth::id(),
+                        ]
+                    );
+                    $poId = $dummyPo->id;
+                } catch (\Throwable $e) {}
+            }
+
+            // 3. Create DeliveryReceipt record
+            $receipt = DeliveryReceipt::create([
+                'dr_no'             => $slipNo,
+                'purchase_order_id' => $poId,
+                'store_id'          => $storeId,
+                'received_date'     => $receivedDate,
+                'received_by'       => Auth::id(),
+                'status'            => 'received',
+                'notes'             => $notes ?: "Intake for PR #{$pr->pr_no} (Slip #{$slipNo})",
+            ]);
+
+            // 4. Process items and increment Inventory
+            $prItems = $pr->items()->with('product')->get();
+            foreach ($prItems as $item) {
+                $itemInput = $receivedItems[$item->id] ?? [];
+                $qty = isset($itemInput['quantity']) && is_numeric($itemInput['quantity']) 
+                    ? (float)$itemInput['quantity'] 
+                    : (float)$item->quantity;
+                $acceptedQty = isset($itemInput['accepted_quantity']) && is_numeric($itemInput['accepted_quantity']) 
+                    ? (float)$itemInput['accepted_quantity'] 
+                    : $qty;
+
+                if ($qty <= 0 && $acceptedQty <= 0) {
+                    continue;
+                }
+
+                // Create DeliveryReceiptItem
+                DeliveryReceiptItem::create([
+                    'delivery_receipt_id' => $receipt->id,
+                    'product_id'          => $item->product_id,
+                    'quantity_received'   => $qty,
+                    'accepted_quantity'   => $acceptedQty,
+                    'rejected_quantity'   => max(0, $qty - $acceptedQty),
+                    'unit'                => $item->unit ?? ($item->product?->unit ?? 'pcs'),
+                    'rejection_reason'    => $itemInput['notes'] ?? null,
+                ]);
+
+                // Increment Inventory in selected Store
+                if ($item->product_id && $acceptedQty > 0) {
+                    $unitPrice = (float)($item->estimated_unit_cost ?? $item->unit_price ?? 0);
+                    $inventory = Inventory::firstOrCreate(
+                        [
+                            'store_id'   => $storeId,
+                            'product_id' => $item->product_id,
+                        ],
+                        [
+                            'quantity_on_hand'  => 0,
+                            'quantity_reserved' => 0,
+                            'unit_cost'         => $unitPrice,
+                            'min_stock'         => 0,
+                        ]
+                    );
+
+                    $inventory->increment('quantity_on_hand', $acceptedQty);
+                    $inventory->update([
+                        'last_movement_at' => now(),
+                        'unit_cost'        => $unitPrice > 0 ? $unitPrice : $inventory->unit_cost,
+                    ]);
+
+                    // Record Inventory Movement (Audit Log)
+                    try {
+                        InventoryMovement::create([
+                            'inventory_id'   => $inventory->id,
+                            'type'           => 'in',
+                            'quantity'       => $acceptedQty,
+                            'reference_type' => PurchaseRequest::class,
+                            'reference_id'   => $pr->id,
+                            'performed_by'   => Auth::id(),
+                            'remarks'        => "Stock In from PR #{$pr->pr_no} (Receipt Slip #{$slipNo})",
+                        ]);
+                    } catch (\Throwable $e) {}
+                }
+            }
+
+            // 5. Update PR status
+            $pr->update([
+                'status'             => PurchaseRequest::STATUS_INTAKE_COMPLETE,
+                'store_id'           => $storeId,
+                'current_owner_role' => null,
+            ]);
+
+            $this->log($pr, $from, PurchaseRequest::STATUS_INTAKE_COMPLETE, 'store_intake_complete', 'store_manager', 
+                "Received into store (Slip #{$slipNo}). " . ($notes ?? ''));
+        });
+
+        // 6. Notify Requester / Coordinator
         $requester = $pr->requestedBy;
         $phone = $requester?->employee?->phone;
         if ($phone) {
             $this->sms->send($pr->id, $phone, 'coordinator',
-                "ConstructPro: Your PR #{$pr->pr_no} has been received and intake is complete. Project: {$pr->project?->name}.");
+                "ConstructPro: Your PR #{$pr->pr_no} items have been received and added to store inventory. Project: {$pr->project?->name}.");
         }
     }
 
