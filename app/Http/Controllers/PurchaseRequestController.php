@@ -1055,19 +1055,19 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 7a: Finance Head — Credit Path ───────────────────────────────
     public function financeCreditApprove(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['finance_head', 'finance_manager']);
+        $this->authorizeStageRole($purchaseRequest, ['finance_head', 'finance_manager', 'admin', 'global_admin']);
         $request->validate([
-            'coa_account_id' => 'required|exists:chart_of_accounts,id',
-            'amount'         => 'required|numeric|min:0.01',
+            'coa_account_id' => 'nullable|exists:chart_of_accounts,id',
+            'amount'         => 'nullable|numeric|min:0.01',
             'notes'          => 'nullable|string',
         ]);
         $this->lifecycle->financeCreditApprove(
             $purchaseRequest,
-            (int)$request->coa_account_id,
-            (float)$request->amount,
+            $request->filled('coa_account_id') ? (int)$request->coa_account_id : null,
+            $request->filled('amount') ? (float)$request->amount : null,
             $request->notes
         );
-        return back()->with('success', 'Credit authorized. Driver booking notified.');
+        return back()->with('success', 'Credit authorized (COA 5110). Sent directly to Store Manager for material intake.');
     }
 
     // ─── STAGE 7b: Finance Head — Cash Path, Assign Staff ───────────────────

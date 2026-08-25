@@ -219,14 +219,74 @@ class ProcurementLifecycleService
 
         } elseif ($decision === 'approve') {
             if ($paymentMethod === 'buy_by_credit') {
-                $nextStatus   = PurchaseRequest::STATUS_PENDING_FINANCE;
-                $nextRole     = 'finance_head';
-                $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Credit) — please authorize the credit account. Open: " . url("/purchase-requests/{$pr->id}");
+                // 1. Ensure COA 5110 "Cost Of Material By Credit 5110"
+                $coa5110 = $this->ensureCreditCoaAccount();
+
+                // 2. Compute Credit Total Amount
+                $creditAmount = (float)($pr->direct_buy_amount ?? 0);
+                if ($creditAmount <= 0) {
+                    $selectedProforma = $pr->proformaInvoices()->where('is_selected', true)->first() 
+                        ?? $pr->proformaInvoices()->latest()->first();
+                    if ($selectedProforma && (float)$selectedProforma->total_amount > 0) {
+                        $creditAmount = (float)$selectedProforma->total_amount;
+                    } else {
+                        $creditAmount = (float)$pr->items->sum(function($item) {
+                            $p = $item->estimated_unit_price ?? $item->unit_price ?? 0;
+                            return (float)$item->quantity * (float)$p;
+                        });
+                    }
+                }
+
+                // Determine Supplier
+                $supplierName = null;
+                $selectedProforma = $pr->proformaInvoices()->where('is_selected', true)->first() 
+                    ?? $pr->proformaInvoices()->latest()->first();
+                if ($selectedProforma) {
+                    $supplierName = $selectedProforma->supplier?->name ?? $selectedProforma->supplier_name;
+                }
+
+                // 3. Auto-book ProcurementPayment
+                ProcurementPayment::updateOrCreate(
+                    ['purchase_request_id' => $pr->id],
+                    [
+                        'method'         => 'credit',
+                        'coa_account_id' => $coa5110->id,
+                        'amount'         => $creditAmount,
+                        'notes'          => $notes ?: 'GM Approved Buy with Credit (Auto-booked COA 5110)',
+                        'status'         => 'paid',
+                        'created_by'     => Auth::id(),
+                        'paid_by'        => Auth::id(),
+                        'paid_at'        => now(),
+                    ]
+                );
+
+                // 4. Create or update CreditStoreLedger
+                \App\Models\CreditStoreLedger::updateOrCreate(
+                    ['purchase_request_id' => $pr->id],
+                    [
+                        'pr_no'          => $pr->pr_no,
+                        'project_id'     => $pr->project_id,
+                        'supplier_name'  => $supplierName,
+                        'credit_amount'  => $creditAmount,
+                        'coa_account_id' => $coa5110->id,
+                        'status'         => 'outstanding',
+                        'authorized_by'  => Auth::id(),
+                        'authorized_at'  => now(),
+                        'notes'          => $notes,
+                        'created_by'     => Auth::id(),
+                    ]
+                );
+
+                // 5. Route directly to Store Manager for material intake
+                $nextStatus   = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
+                $nextRole     = 'store_manager';
+                $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Credit — COA 5110) — ready for material intake. Open: " . url("/purchase-requests/{$pr->id}");
             } else { // pay_and_buy
                 $nextStatus   = PurchaseRequest::STATUS_PENDING_PAYMENT;
                 $nextRole     = 'finance_head';
                 $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Pay & Buy) — please select payment account and assign staff. Open: " . url("/purchase-requests/{$pr->id}");
             }
+
             $pr->update([
                 'status'             => $nextStatus,
                 'gm_loop_count'      => $round,
@@ -238,35 +298,90 @@ class ProcurementLifecycleService
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // STAGE 7a — Finance Head: Credit Path
+    // STAGE 7a — Finance Head: Credit Path (Direct fallback & authorization)
     // ═══════════════════════════════════════════════════════════════════
 
-    public function financeCreditApprove(PurchaseRequest $pr, int $coaAccountId, float $amount, string $notes = null): void
+    public function financeCreditApprove(PurchaseRequest $pr, ?int $coaAccountId = null, ?float $amount = null, string $notes = null): void
     {
         $from = $pr->status;
+        $coa5110 = $coaAccountId ? ChartOfAccount::find($coaAccountId) : $this->ensureCreditCoaAccount();
+        if (!$coa5110) {
+            $coa5110 = $this->ensureCreditCoaAccount();
+        }
 
-        ProcurementPayment::create([
-            'purchase_request_id' => $pr->id,
-            'method'              => 'credit',
-            'coa_account_id'      => $coaAccountId,
-            'amount'              => $amount,
-            'notes'               => $notes,
-            'status'              => 'paid', // credit is authorized immediately
-            'created_by'          => Auth::id(),
-            'paid_by'             => Auth::id(),
-            'paid_at'             => now(),
-        ]);
+        if (!$amount || $amount <= 0) {
+            $amount = (float)($pr->direct_buy_amount ?? 0);
+            if ($amount <= 0) {
+                $amount = (float)$pr->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0));
+            }
+        }
 
-        // Create journal entry: Debit → Procurement Expense COA; Credit → Liability/Payable COA
-        $this->createJournalEntry($pr, $coaAccountId, $amount, 'credit');
+        ProcurementPayment::updateOrCreate(
+            ['purchase_request_id' => $pr->id],
+            [
+                'method'         => 'credit',
+                'coa_account_id' => $coa5110->id,
+                'amount'         => $amount,
+                'notes'          => $notes,
+                'status'         => 'paid',
+                'created_by'     => Auth::id(),
+                'paid_by'        => Auth::id(),
+                'paid_at'        => now(),
+            ]
+        );
 
+        $selectedProforma = $pr->proformaInvoices()->where('is_selected', true)->first() 
+            ?? $pr->proformaInvoices()->latest()->first();
+        $supplierName = $selectedProforma ? ($selectedProforma->supplier?->name ?? $selectedProforma->supplier_name) : null;
+
+        \App\Models\CreditStoreLedger::updateOrCreate(
+            ['purchase_request_id' => $pr->id],
+            [
+                'pr_no'          => $pr->pr_no,
+                'project_id'     => $pr->project_id,
+                'supplier_name'  => $supplierName,
+                'credit_amount'  => $amount,
+                'coa_account_id' => $coa5110->id,
+                'status'         => 'outstanding',
+                'authorized_by'  => Auth::id(),
+                'authorized_at'  => now(),
+                'notes'          => $notes,
+                'created_by'     => Auth::id(),
+            ]
+        );
+
+        // Advance directly to Store Manager for material intake
         $pr->update([
-            'status'             => PurchaseRequest::STATUS_PENDING_DRIVER,
-            'current_owner_role' => 'general_service',
+            'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+            'current_owner_role' => 'store_manager',
         ]);
-        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_DRIVER, 'finance_credit_approved', 'finance_head', $notes);
-        $this->sms->notifyRole($pr->id, 'general_service',
-            "ConstructPro: PR #{$pr->pr_no} ready for delivery — please book a driver. Open: " . url("/purchase-requests/{$pr->id}"));
+        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'finance_credit_approved_direct_intake', 'finance_head', $notes);
+        $this->sms->notifyRole($pr->id, 'store_manager',
+            "ConstructPro: PR #{$pr->pr_no} credit authorized (COA 5110) — ready for material intake. Open: " . url("/purchase-requests/{$pr->id}"));
+    }
+
+    /**
+     * Ensure Chart of Account 5110 (Cost Of Material By Credit 5110) exists
+     */
+    public function ensureCreditCoaAccount(): ChartOfAccount
+    {
+        $coa = ChartOfAccount::where('code', '5110')->first();
+        if (!$coa) {
+            $coa = ChartOfAccount::where('name', 'like', '%Cost Of Material By Credit%')->first();
+        }
+        if (!$coa) {
+            $coa = ChartOfAccount::create([
+                'code'            => '5110',
+                'name'            => 'Cost Of Material By Credit 5110',
+                'type'            => 'expense',
+                'subtype'         => 'direct_expense',
+                'is_active'       => true,
+                'is_system'       => true,
+                'current_balance' => 0,
+                'description'     => 'Direct credit purchases for materials and site procurement',
+            ]);
+        }
+        return $coa;
     }
 
     // ═══════════════════════════════════════════════════════════════════

@@ -590,24 +590,37 @@
                             </button>
                         </form>
 
-                    <!-- STAGE 7a: Finance Credit Authorization -->
+                    <!-- STAGE 7a: Finance Credit Authorization (Auto-COA 5110) -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_FINANCE)
                         <form action="{{ route('purchase-requests.finance-credit-approve', $purchaseRequest) }}" method="POST">
                             @csrf
-                            <div class="mb-2">
-                                <label class="form-label small font-weight-bold">Select Chart of Account (COA)</label>
-                                <select name="coa_account_id" class="form-select form-select-sm" required>
-                                    <option value="">-- Select COA --</option>
-                                    @foreach($coaAccounts as $coa)
-                                        <option value="{{ $coa->id }}">{{ $coa->code }} - {{ $coa->name }} (Bal: {{ number_format($coa->current_balance, 2) }})</option>
-                                    @endforeach
-                                </select>
+                            <div class="alert alert-info py-2 px-3 small mb-3 border-start border-4 border-info">
+                                <div class="fw-bold mb-1"><i class="fas fa-credit-card me-1"></i> Credit Purchase (COA 5110)</div>
+                                <div class="text-muted">Account: <strong class="text-dark">Cost Of Material By Credit 5110</strong></div>
+                                <div class="text-muted mt-1">This request will be routed directly to the <strong>Store Manager</strong> for material intake and tracked in the <strong>Credit Store Ledger</strong>.</div>
                             </div>
-                            <div class="mb-2">
-                                <label class="form-label small font-weight-bold">Credit Amount</label>
-                                <input type="number" step="0.01" name="amount" class="form-control form-control-sm" value="{{ $purchaseRequest->direct_buy_amount }}" required>
+
+                            @php
+                                $creditVal = (float)($purchaseRequest->direct_buy_amount ?? 0);
+                                if ($creditVal <= 0) {
+                                    $selProf = $purchaseRequest->proformaInvoices()->where('is_selected', true)->first() ?? $purchaseRequest->proformaInvoices()->latest()->first();
+                                    $creditVal = $selProf && (float)$selProf->total_amount > 0 ? (float)$selProf->total_amount : (float)$purchaseRequest->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0));
+                                }
+                            @endphp
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-muted">Credit Amount (ETB)</label>
+                                <input type="number" step="0.01" name="amount" class="form-control form-control-sm fw-bold bg-light" value="{{ number_format($creditVal, 2, '.', '') }}" readonly>
                             </div>
-                            <button class="btn btn-info text-white btn-sm w-100">Authorize Credit Line</button>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-uppercase text-muted">Notes / Credit Terms</label>
+                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional notes..."></textarea>
+                            </div>
+
+                            <button class="btn btn-info text-white btn-sm w-100 fw-bold shadow-sm py-2">
+                                <i class="fas fa-check-circle me-1"></i> Authorize & Send to Store Manager
+                            </button>
                         </form>
 
                     <!-- STAGE 7b: Finance Head Payment Assignment -->

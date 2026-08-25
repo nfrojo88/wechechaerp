@@ -1415,6 +1415,11 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/book-driver', [App\Http\Controllers\PurchaseRequestController::class, 'bookDriver'])->name('purchase-requests.book-driver');
     Route::post('purchase-requests/{purchaseRequest}/store-intake', [App\Http\Controllers\PurchaseRequestController::class, 'storeIntake'])->name('purchase-requests.store-intake');
 
+    // Credit Store Ledger (Finance Head / Credit Purchases & Payment Tracking)
+    Route::get('finance/credit-store', [App\Http\Controllers\Finance\CreditStoreController::class, 'index'])->name('finance.credit-store.index');
+    Route::get('finance/credit-store/{creditStore}', [App\Http\Controllers\Finance\CreditStoreController::class, 'show'])->name('finance.credit-store.show');
+    Route::post('finance/credit-store/{creditStore}/record-payment', [App\Http\Controllers\Finance\CreditStoreController::class, 'recordPayment'])->name('finance.credit-store.record-payment');
+
     // Emergency & Standard MR Planning Approvals & Dispatch
     Route::post('material-requests/{materialRequest}/planning-approve', [App\Http\Controllers\MaterialRequestController::class, 'planningApprove'])->name('material-requests.planning-approve');
     Route::post('material-requests/{materialRequest}/planning-reject', [App\Http\Controllers\MaterialRequestController::class, 'planningReject'])->name('material-requests.planning-reject');

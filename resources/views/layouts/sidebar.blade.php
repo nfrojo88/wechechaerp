@@ -959,6 +959,16 @@
             </a>
         </li>
 
+        <!-- Credit Store Ledger (Credit Purchases) -->
+        @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'admin', 'global_admin', 'gm', 'general_manager']))
+        <li class="sidebar-nav-item">
+            <a href="{{ route('finance.credit-store.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.credit-store.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-credit-card text-info"></i>
+                <span>Credit Store Ledger</span>
+            </a>
+        </li>
+        @endif
+
         <!-- Receipts & Verification -->
         <li class="sidebar-nav-item">
             <a href="{{ route('delivery-receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('delivery-receipts.*') ? 'active' : '' }}">
