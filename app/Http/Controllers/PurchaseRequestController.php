@@ -1144,15 +1144,15 @@ class PurchaseRequestController extends Controller
     // ─── STAGE 8: Upload Receipt ─────────────────────────────────────────────
     public function uploadReceipt(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer']);
-        $request->validate(['receipt_file' => 'required|file|mimes:pdf,jpg,jpeg,png|max:5120']);
+        $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer', 'purchase_manager']);
+        $request->validate(['receipt_file' => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:5120']);
 
         $file     = $request->file('receipt_file');
         $path     = \App\Services\FileUploadService::upload($file, 'procurement_receipts');
         $original = $file->getClientOriginalName();
 
-        $this->lifecycle->uploadReceipt($purchaseRequest, $path, $original, $request->notes);
-        return back()->with('success', 'Receipt uploaded. Finance Staff notified to verify.');
+        $this->lifecycle->uploadReceipt($purchaseRequest, $path, $original, $request->notes, true);
+        return back()->with('success', 'Vendor purchase receipt uploaded. Request routed directly to Store Manager for material intake.');
     }
 
     // ─── STAGE 8: Verify Receipt ─────────────────────────────────────────────

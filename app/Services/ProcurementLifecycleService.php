@@ -420,6 +420,25 @@ class ProcurementLifecycleService
             ]
         );
 
+        // Pre-create/update Expense record assigned to that person
+        try {
+            $coa = ChartOfAccount::find($coaAccountId);
+            \App\Models\Expense::updateOrCreate(
+                [
+                    'project_id'  => $pr->project_id,
+                    'description' => "Material Purchase for PR #{$pr->pr_no}",
+                ],
+                [
+                    'category'     => 'material',
+                    'amount'       => $amount,
+                    'expense_date' => now()->toDateString(),
+                    'status'       => 'pending',
+                    'created_by'   => $staffUserId,
+                    'notes'        => "Assigned by Finance Head. Funding: " . ($coa?->name ?? 'COA #' . $coaAccountId),
+                ]
+            );
+        } catch (\Throwable $e) {}
+
         $pr->update([
             'status'             => PurchaseRequest::STATUS_PENDING_PAYMENT,
             'current_owner_role' => 'finance',
@@ -454,20 +473,40 @@ class ProcurementLifecycleService
         // Create journal entry: Debit → Procurement Expense; Credit → Cash/Bank COA
         $this->createJournalEntry($pr, $payment->coa_account_id, $payment->amount, 'cash');
 
+        // Update Expense record to approved
+        try {
+            \App\Models\Expense::updateOrCreate(
+                [
+                    'project_id'  => $pr->project_id,
+                    'description' => "Material Purchase for PR #{$pr->pr_no}",
+                ],
+                [
+                    'category'     => 'material',
+                    'amount'       => $payment->amount,
+                    'expense_date' => now()->toDateString(),
+                    'status'       => 'approved',
+                    'created_by'   => $payment->assigned_finance_staff_id ?: Auth::id(),
+                    'approved_by'  => Auth::id(),
+                    'approved_at'  => now(),
+                    'notes'        => "Payment executed by Finance Staff. PR #{$pr->pr_no}",
+                ]
+            );
+        } catch (\Throwable $e) {}
+
         $pr->update([
             'status'             => PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
             'current_owner_role' => 'purchase',
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD, 'finance_staff_paid', 'finance', $notes);
         $this->sms->notifyRole($pr->id, 'purchase',
-            "ConstructPro: PR #{$pr->pr_no} payment done — please upload the purchase receipt. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} payment completed (" . number_format($payment->amount, 2) . " ETB) — please upload vendor purchase receipt. Open: " . url("/purchase-requests/{$pr->id}"));
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // STAGE 8 — Receipt Upload & Verification
+    // STAGE 8 — Receipt Upload & Direct Store Routing
     // ═══════════════════════════════════════════════════════════════════
 
-    public function uploadReceipt(PurchaseRequest $pr, string $filePath, string $originalFilename, string $notes = null): void
+    public function uploadReceipt(PurchaseRequest $pr, string $filePath, string $originalFilename, string $notes = null, bool $sendToStore = true): void
     {
         $from = $pr->status;
 
@@ -477,16 +516,28 @@ class ProcurementLifecycleService
             'original_filename'   => $originalFilename,
             'notes'               => $notes,
             'uploaded_by'         => Auth::id(),
-            'verification_status' => 'pending',
+            'verification_status' => 'verified',
+            'verified_by'         => Auth::id(),
+            'verified_at'         => now(),
         ]);
 
-        $pr->update([
-            'status'             => PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY,
-            'current_owner_role' => 'finance',
-        ]);
-        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY, 'receipt_uploaded', 'purchase', $notes);
-        $this->sms->notifyRole($pr->id, 'finance',
-            "ConstructPro: PR #{$pr->pr_no} receipt uploaded — please verify. Open: " . url("/purchase-requests/{$pr->id}"));
+        if ($sendToStore) {
+            $pr->update([
+                'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                'current_owner_role' => 'store_manager',
+            ]);
+            $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'receipt_uploaded_sent_to_store', 'purchase', $notes);
+            $this->sms->notifyRole($pr->id, 'store_manager',
+                "ConstructPro: PR #{$pr->pr_no} receipt uploaded — please perform material receiving and store intake. Open: " . url("/purchase-requests/{$pr->id}"));
+        } else {
+            $pr->update([
+                'status'             => PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY,
+                'current_owner_role' => 'finance',
+            ]);
+            $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY, 'receipt_uploaded', 'purchase', $notes);
+            $this->sms->notifyRole($pr->id, 'finance',
+                "ConstructPro: PR #{$pr->pr_no} receipt uploaded — please verify. Open: " . url("/purchase-requests/{$pr->id}"));
+        }
     }
 
     public function verifyReceipt(PurchaseRequest $pr, string $verificationStatus, string $verificationNotes = null): void
