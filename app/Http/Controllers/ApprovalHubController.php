@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Expense;
 use App\Models\ExpenseRequest;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseRequest;
 use App\Models\EmergencyFund;
 use App\Models\Project;
 use App\Models\ChartOfAccount;
@@ -227,6 +228,76 @@ class ApprovalHubController extends Controller
             });
             $items = $items->concat($efs);
         }
+
+        // 5. Fetch Purchase Requests with Procurement Payments
+        try {
+            $prs = PurchaseRequest::with(['project', 'requestedBy', 'payment.coaAccount', 'payment.assignedStaff'])
+                ->whereNotNull('status')
+                ->whereIn('status', [
+                    PurchaseRequest::STATUS_PENDING_PAYMENT,
+                    PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
+                    PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY,
+                    PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                    PurchaseRequest::STATUS_INTAKE_COMPLETE,
+                    PurchaseRequest::STATUS_COMPLETED,
+                ])
+                ->latest()
+                ->get()
+                ->map(function ($pr) {
+                    $payment = $pr->payment;
+                    $statusRaw = strtolower($pr->status ?? 'pending');
+                    $isPaid = in_array($statusRaw, [
+                        PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
+                        PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY,
+                        PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                        PurchaseRequest::STATUS_INTAKE_COMPLETE,
+                        PurchaseRequest::STATUS_COMPLETED,
+                    ]) || ($payment && $payment->status === 'paid');
+
+                    $statusKey = $isPaid ? 'paid' : ($statusRaw === PurchaseRequest::STATUS_PENDING_PAYMENT ? 'finance_queue' : 'pending_gm');
+                    $badgeColor = match($statusKey) {
+                        'paid'          => 'success',
+                        'rejected'      => 'danger',
+                        'finance_queue' => 'primary',
+                        default         => 'warning',
+                    };
+
+                    $amount = (float)($payment?->amount ?? $pr->direct_buy_amount ?? 0);
+
+                    return (object) [
+                        'id_raw'           => $pr->id,
+                        'id_formatted'     => 'PR-' . ($pr->pr_no ?? $pr->id),
+                        'type'             => 'purchase_request',
+                        'date'             => $payment?->paid_at ?? $pr->created_at,
+                        'project'          => $pr->project ? $pr->project->name : 'Procurement',
+                        'category'         => 'Material Purchase',
+                        'description'      => 'Purchase Request #' . $pr->pr_no . ($pr->justification ? ' - ' . $pr->justification : ''),
+                        'applicant_name'   => $pr->requestedBy?->name ?? 'Procurement',
+                        'base_amount'      => $amount,
+                        'vat_amount'       => 0,
+                        'net_amount'       => $amount,
+                        'status'           => $isPaid ? 'Paid (Pending Intake)' : 'Payment Queue',
+                        'status_raw'       => $pr->status,
+                        'status_key'       => $statusKey,
+                        'color'            => $badgeColor,
+                        'attachment'       => null,
+                        'attachment_url'   => null,
+                        'rejection_reason' => null,
+                        'paid_at'          => $payment?->paid_at,
+                        'paid_by_name'     => $payment?->paidBy?->name ?? null,
+                        'payment_reference'=> $payment?->notes,
+                        'coa_name'         => $payment?->coaAccount?->name ?? null,
+                        'bank_name'        => null,
+                        'assigned_staff_id'=> $payment?->assigned_finance_staff_id ?? null,
+                        'assigned_staff_name'=> $payment?->assignedStaff?->name ?? null,
+                        'route_show'       => route('purchase-requests.show', $pr->id),
+                        'route_approve'    => route('purchase-requests.execute-payment', $pr->id),
+                        'route_reject'     => '#',
+                        'raw_model'        => $pr,
+                    ];
+                });
+            $items = $items->concat($prs);
+        } catch (\Throwable $e) {}
 
         $user = Auth::user();
         $rolesStr = strtolower(implode(' ', $user ? $user->getRoleNames()->toArray() : []));

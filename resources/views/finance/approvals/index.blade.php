@@ -277,6 +277,31 @@
                                                     <button type="submit" class="btn btn-success btn-sm"><i class="fa-solid fa-check"></i> Approve</button>
                                                 </form>
                                             @endif
+
+                                        @elseif($item->type === 'purchase_request')
+                                            @if($item->status_key === 'finance_queue')
+                                                @php
+                                                    $prPayment = $item->raw_model->payment;
+                                                    $isAssignedToMe = $prPayment && (int)$prPayment->assigned_finance_staff_id === (int)auth()->id();
+                                                    $isFinHeadOrAdmin = !empty($isAdmin) || (!empty($isFinance) && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager']) || str_contains(strtolower(auth()->user()->roles->pluck('name')->implode(' ')), 'head')));
+                                                @endphp
+
+                                                @if($isFinHeadOrAdmin || $isAssignedToMe)
+                                                    <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#payPrModal{{ $item->id_raw }}"
+                                                            title="Disburse payment for this Purchase Request">
+                                                        <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
+                                                    </button>
+                                                @endif
+                                                <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Purchase Request details">
+                                                    <i class="fa-solid fa-eye me-1"></i> PR
+                                                </a>
+                                            @elseif($item->status_key === 'paid')
+                                                <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed PR">
+                                                    <i class="fa-solid fa-check-circle me-1"></i> Paid
+                                                </a>
+                                            @endif
                                         @endif
                                     </div>
                                 </td>
@@ -646,6 +671,58 @@
                 </div>
             </div>
         </div>
+    @endif
+
+    @if($item->type === 'purchase_request' && $item->status_key === 'finance_queue')
+    <div class="modal fade" id="payPrModal{{ $item->id_raw }}" tabindex="-1" aria-labelledby="payPrModalLabel{{ $item->id_raw }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <form method="POST" action="{{ route('purchase-requests.execute-payment', $item->id_raw) }}">
+                    @csrf
+                    <div class="modal-header bg-success text-white py-3 px-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-money-bill-transfer fs-5"></i>
+                            <h5 class="modal-title fw-bold mb-0" id="payPrModalLabel{{ $item->id_raw }}">
+                                Disburse Payment: {{ $item->id_formatted }}
+                            </h5>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <div class="alert alert-info py-2 px-3 small mb-3 border-start border-4 border-info">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Payment Amount:</span>
+                                <strong class="text-success fs-5">ETB {{ number_format($item->net_amount, 2) }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="text-muted">Funding Account:</span>
+                                <strong class="text-dark">{{ $item->coa_name ?? 'COA Assigned' }}</strong>
+                            </div>
+                            @if($item->assigned_staff_name)
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Assigned Staff:</span>
+                                <strong class="text-dark">{{ $item->assigned_staff_name }}</strong>
+                            </div>
+                            @endif
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted text-uppercase">Payment Reference / Transaction Notes</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Cheque #, Bank transfer ref, or cash voucher #..."></textarea>
+                        </div>
+                        <div class="p-2 bg-light rounded small text-muted">
+                            <i class="fa-solid fa-circle-info text-primary me-1"></i> Once disbursed, the double-entry journal will post automatically, and the Procurement Team will be prompted to upload the vendor receipt.
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 py-3 px-4">
+                        <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-check-double me-1"></i> Confirm & Execute Payment (ETB {{ number_format($item->net_amount, 2) }})
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
     @endif
 @endforeach
 

@@ -706,36 +706,59 @@
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT && $purchaseRequest->payment?->assigned_finance_staff_id)
                         <div class="mb-3">
                             <h6 class="fw-bold text-success mb-1">
-                                <i class="fas fa-hand-holding-dollar text-success me-1"></i> Execute Payment Disbursement
+                                <i class="fas fa-hand-holding-dollar text-success me-1"></i> Payment In Expense Hub
                             </h6>
-                            <p class="small text-muted mb-0">Assigned finance staff confirms disbursement of funds to vendor.</p>
+                            <p class="small text-muted mb-0">Assigned to finance staff to disburse via <strong>Expense Track & Approve</strong>.</p>
                         </div>
-                        <form action="{{ route('purchase-requests.execute-payment', $purchaseRequest) }}" method="POST">
-                            @csrf
-                            <div class="alert alert-info py-2 px-3 small mb-3 border-start border-4 border-info">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <span class="text-muted">Payment Amount:</span>
-                                    <strong class="text-primary fs-6">{{ number_format($purchaseRequest->payment->amount, 2) }} ETB</strong>
-                                </div>
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <span class="text-muted">Funding Account:</span>
-                                    <strong class="text-dark">{{ $purchaseRequest->payment->coaAccount?->name }} ({{ $purchaseRequest->payment->coaAccount?->code }})</strong>
-                                </div>
-                                @if($purchaseRequest->payment->assignedStaff)
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted">Assigned To:</span>
-                                    <strong class="text-dark">{{ $purchaseRequest->payment->assignedStaff->name }}</strong>
-                                </div>
-                                @endif
+
+                        <div class="alert alert-info py-2 px-3 small mb-3 border-start border-4 border-info">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="text-muted">Payment Amount:</span>
+                                <strong class="text-primary fs-6">{{ number_format($purchaseRequest->payment->amount, 2) }} ETB</strong>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Disbursement Reference / Transaction Notes</label>
-                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Cheque #, Bank transfer reference, or cash voucher #..."></textarea>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="text-muted">Funding Account:</span>
+                                <strong class="text-dark">{{ $purchaseRequest->payment->coaAccount?->name }} ({{ $purchaseRequest->payment->coaAccount?->code }})</strong>
                             </div>
-                            <button class="btn btn-success btn-sm w-100 fw-bold py-2 shadow-sm">
-                                <i class="fas fa-check-double me-1"></i> Confirm & Execute Payment
+                            @if($purchaseRequest->payment->assignedStaff)
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Assigned Person:</span>
+                                <strong class="text-dark">{{ $purchaseRequest->payment->assignedStaff->name }}</strong>
+                            </div>
+                            @endif
+                        </div>
+
+                        <a href="{{ url('/expenses?tab=finance_queue&search=' . urlencode($purchaseRequest->pr_no)) }}" class="btn btn-primary btn-sm w-100 fw-bold py-2 shadow-sm mb-2">
+                            <i class="fa-solid fa-file-invoice-dollar me-1"></i> Open in Expense Track & Approve
+                        </a>
+
+                        @php
+                            $user = auth()->user();
+                            $canPayHere = $user && (
+                                (int)$purchaseRequest->payment->assigned_finance_staff_id === (int)$user->id ||
+                                $user->hasAnyRole(['admin', 'global_admin', 'Finance head', 'finance_head', 'finance_manager'])
+                            );
+                        @endphp
+
+                        @if($canPayHere)
+                        <div class="mt-2 pt-2 border-top text-center">
+                            <button type="button" class="btn btn-link btn-sm text-muted text-decoration-none p-0" data-bs-toggle="collapse" data-bs-target="#quickPayCollapse">
+                                <small><i class="fas fa-bolt me-1"></i> Quick Pay from this page <i class="fas fa-chevron-down ms-1"></i></small>
                             </button>
-                        </form>
+                            <div class="collapse mt-2 text-start" id="quickPayCollapse">
+                                <form action="{{ route('purchase-requests.execute-payment', $purchaseRequest) }}" method="POST">
+                                    @csrf
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Disbursement Reference / Notes</label>
+                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Cheque #, Bank transfer reference, or cash voucher #..."></textarea>
+                                    </div>
+                                    <button class="btn btn-success btn-sm w-100 fw-bold py-2 shadow-sm">
+                                        <i class="fas fa-check-double me-1"></i> Confirm & Execute Payment
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        @endif
 
                     <!-- STAGE 8: Upload Receipt (Procurement Team) -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD)
