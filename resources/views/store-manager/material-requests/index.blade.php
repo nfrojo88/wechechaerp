@@ -90,6 +90,13 @@
                                 <strong class="font-monospace text-primary">
                                     {{ $req->reference_number ?? '#MR-'.$req->id }}
                                 </strong>
+                                @if($req->maintenance_request_id && $req->maintenanceRequest)
+                                    <div>
+                                        <a href="{{ route('general-service.maintenance.show', $req->maintenanceRequest) }}" class="badge bg-warning text-dark text-decoration-none border shadow-xs" title="View linked maintenance ticket">
+                                            <i class="fa-solid fa-screwdriver-wrench me-1"></i>{{ $req->maintenanceRequest->request_no }}
+                                        </a>
+                                    </div>
+                                @endif
                             </td>
                             <td><span class="fw-semibold text-dark small">{{ $req->project->name ?? 'N/A' }}</span></td>
                             <td>
@@ -103,7 +110,8 @@
                             <td>
                                 @switch($req->status)
                                     @case('pending')
-                                        <span class="badge bg-warning text-dark">Pending</span>
+                                    @case('sent_to_store_manager')
+                                        <span class="badge bg-warning text-dark">Pending Review</span>
                                         @break
                                     @case('issued')
                                         <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Issued</span>
@@ -112,10 +120,11 @@
                                         <span class="badge bg-info text-dark">Processed</span>
                                         @break
                                     @case('needs_purchase')
+                                    @case('sent_to_pr')
                                         <span class="badge bg-secondary">Sent to Purchase</span>
                                         @break
                                     @default
-                                        <span class="badge bg-secondary">{{ ucfirst($req->status) }}</span>
+                                        <span class="badge bg-secondary">{{ ucfirst(str_replace('_', ' ', $req->status)) }}</span>
                                 @endswitch
                             </td>
                             <td class="text-end pe-3">
@@ -123,13 +132,13 @@
                                     <i class="fas fa-eye me-1"></i>Items
                                 </button>
 
-                                @if($req->status == 'pending')
+                                @if(in_array($req->status, ['pending', 'sent_to_store_manager']))
                                     {{-- Store Keeper Direct Issue Action --}}
                                     @if($isStoreKeeper)
-                                    <form action="{{ route('store-manager.material-requests.issue', $req) }}" method="POST" class="d-inline" onsubmit="return confirm('Confirm issuing materials to the Site Engineer? Stock will be deducted from your store.');">
+                                    <form action="{{ route('store-manager.material-requests.issue', $req) }}" method="POST" class="d-inline" onsubmit="return confirm('Confirm issuing materials to the Site Engineer / Technician? Stock will be deducted from your store.');">
                                         @csrf
                                         <button type="submit" class="btn btn-sm btn-success shadow-sm">
-                                            <i class="fa-solid fa-hand-holding-box me-1"></i> Issue to Engineer
+                                            <i class="fa-solid fa-hand-holding-box me-1"></i> Issue Material
                                         </button>
                                     </form>
                                     @else

@@ -1228,6 +1228,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/maintenance/{maintenanceRequest}', [App\Http\Controllers\Admin\GeneralServiceController::class, 'show'])->name('maintenance.show');
         Route::put('/maintenance/{maintenanceRequest}/status', [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.status');
         Route::post('/maintenance/{maintenanceRequest}/ask-money', [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMoney'])->name('maintenance.ask-money');
+        Route::post('/maintenance/{maintenanceRequest}/ask-material', [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMaterial'])->name('maintenance.ask-material');
     });
 
     // ─── Fixed Assets Route Alias ──────────────────────────────────────────────

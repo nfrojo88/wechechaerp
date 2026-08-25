@@ -76,6 +76,11 @@ class MaintenanceRequest extends Model
         return $this->hasMany(ExpenseRequest::class, 'maintenance_request_id');
     }
 
+    public function materialRequests()
+    {
+        return $this->hasMany(MaterialRequest::class, 'maintenance_request_id');
+    }
+
     // ─── Accessors ────────────────────────────────────────────────────────────
 
     public function getStatusBadgeAttribute(): array

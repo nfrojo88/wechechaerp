@@ -22,6 +22,7 @@
             $sb = $maintenanceRequest->status_badge; 
             $ub = $maintenanceRequest->urgency_badge; 
             $expenses = $maintenanceRequest->expenseRequests;
+            $materialRequests = $maintenanceRequest->materialRequests;
             $totalExpenseRequested = $expenses->sum('amount');
             $totalExpensePaid = $expenses->where('status', \App\Models\ExpenseRequest::STATUS_PAID)->sum('amount');
         @endphp
@@ -31,6 +32,9 @@
             <span class="badge {{ $sb['class'] }} rounded-pill px-3 fs-6">
                 <i class="fa-solid {{ $sb['icon'] }} me-1"></i>{{ $sb['label'] }}
             </span>
+            <button type="button" class="btn btn-primary fw-bold rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#askMaterialModal">
+                <i class="fa-solid fa-boxes-stacked me-1"></i>Ask Material / Purchase
+            </button>
             <button type="button" class="btn btn-success fw-bold rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#askMoneyModal">
                 <i class="fa-solid fa-hand-holding-dollar me-1"></i>Ask Money for Repair
             </button>
@@ -59,7 +63,7 @@
 
     <div class="row g-4">
 
-        {{-- Left Column: Request Details & Ask Money & Update Form --}}
+        {{-- Left Column: Request Details & Ask Money & Ask Material & Update Form --}}
         <div class="col-lg-8">
 
             {{-- 1. Request Details Card --}}
@@ -115,7 +119,116 @@
                 </div>
             </div>
 
-            {{-- 2. Linked Expense Requests (Ask Money for Maintenance) --}}
+            {{-- 2. Linked Material Requests (Ask Material / Procurement from Store Manager) --}}
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-header bg-white border-0 py-3 px-4 rounded-top-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="p-2 rounded-3 bg-primary bg-opacity-10 text-primary">
+                            <i class="fa-solid fa-boxes-stacked fs-5"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-0 fw-bold text-dark">Linked Material Requests (Store & Procurement)</h5>
+                            <small class="text-muted">Spare parts & materials requested from Store Manager or Procurement.</small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary fw-semibold rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#askMaterialModal">
+                        <i class="fa-solid fa-plus me-1"></i>Ask Material
+                    </button>
+                </div>
+                <div class="card-body p-4 pt-2">
+                    @if($materialRequests->isNotEmpty())
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light text-secondary small text-uppercase" style="font-size:0.78rem;">
+                                    <tr>
+                                        <th>Request #</th>
+                                        <th>Destination Store</th>
+                                        <th>Requested Items</th>
+                                        <th>Status</th>
+                                        <th>Required Date</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($materialRequests as $mr)
+                                    <tr>
+                                        <td>
+                                            <strong class="font-monospace text-primary">{{ $mr->reference_number }}</strong>
+                                            <small class="text-muted d-block">{{ $mr->created_at->format('d M Y, H:i') }}</small>
+                                        </td>
+                                        <td>
+                                            <span class="fw-semibold text-dark">{{ $mr->store->name ?? 'General Store' }}</span>
+                                            @if($mr->store && $mr->store->code)
+                                                <span class="badge bg-light text-muted border small">{{ $mr->store->code }}</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <div class="d-flex flex-column gap-1">
+                                                @foreach($mr->items as $item)
+                                                    <div class="small">
+                                                        <span class="fw-semibold text-dark">{{ $item->product->name ?? 'Item' }}</span>:
+                                                        <span class="badge bg-secondary bg-opacity-10 text-dark fw-bold font-monospace">{{ (float)$item->quantity_requested }} {{ $item->product->unit ?? '' }}</span>
+                                                        @if($item->notes)
+                                                            <span class="text-muted" style="font-size: 0.76rem;">({{ $item->notes }})</span>
+                                                        @endif
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        </td>
+                                        <td>
+                                            @php
+                                                $mrBadge = match($mr->status) {
+                                                    'sent_to_store_manager' => ['class' => 'bg-warning text-dark', 'label' => 'Sent to Store Manager'],
+                                                    'pending', 'pending_planning' => ['class' => 'bg-warning text-dark', 'label' => 'Pending'],
+                                                    'planning_approved'     => ['class' => 'bg-info text-dark',    'label' => 'Planning Approved'],
+                                                    'issued'                => ['class' => 'bg-success',           'label' => 'Issued from Store'],
+                                                    'processed'             => ['class' => 'bg-info text-dark',    'label' => 'Processed by Store'],
+                                                    'needs_purchase', 'sent_to_pr' => ['class' => 'bg-primary',   'label' => 'In Procurement (PR)'],
+                                                    'rejected'              => ['class' => 'bg-danger',            'label' => 'Rejected'],
+                                                    default                 => ['class' => 'bg-secondary',         'label' => ucfirst(str_replace('_', ' ', $mr->status))],
+                                                };
+                                            @endphp
+                                            <span class="badge {{ $mrBadge['class'] }} rounded-pill px-2 py-1">
+                                                {{ $mrBadge['label'] }}
+                                            </span>
+
+                                            @if($mr->purchaseRequests && $mr->purchaseRequests->isNotEmpty())
+                                                <div class="mt-1">
+                                                    @foreach($mr->purchaseRequests as $linkedPr)
+                                                        <a href="{{ route('purchase-requests.show', $linkedPr) }}" class="badge bg-primary text-decoration-none border shadow-xs" title="Linked Purchase Request">
+                                                            <i class="fa-solid fa-file-invoice me-1"></i>{{ $linkedPr->pr_no }} ({{ $linkedPr->status_label }})
+                                                        </a>
+                                                    @endforeach
+                                                </div>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <span class="small text-muted">{{ optional($mr->required_date)->format('d M Y') ?? '—' }}</span>
+                                        </td>
+                                        <td class="text-end">
+                                            <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                                                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="p-4 bg-light rounded-4 text-center">
+                            <i class="fa-solid fa-boxes-packing text-muted mb-2 fs-3"></i>
+                            <h6 class="fw-bold text-dark mb-1">No Material Requests Created Yet</h6>
+                            <p class="text-muted small mb-3">If you need spare parts, consumables, or replacement components from the store or procurement, request materials directly linked to this ticket.</p>
+                            <button type="button" class="btn btn-sm btn-primary fw-bold rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#askMaterialModal">
+                                <i class="fa-solid fa-boxes-stacked me-1"></i>Ask Material from Store Manager
+                            </button>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            {{-- 3. Linked Expense Requests (Ask Money for Maintenance) --}}
             <div class="card border-0 shadow-sm rounded-4 mb-4">
                 <div class="card-header bg-white border-0 py-3 px-4 rounded-top-4 d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-2">
@@ -124,7 +237,7 @@
                         </div>
                         <div>
                             <h5 class="mb-0 fw-bold text-dark">Linked Expense Requests (Ask Money)</h5>
-                            <small class="text-muted">Funding requested for spare parts, service fees, or repairs for this ticket.</small>
+                            <small class="text-muted">Funding requested for service fees, contractor labour, or direct local purchases.</small>
                         </div>
                     </div>
                     <button type="button" class="btn btn-sm btn-outline-success fw-semibold rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#askMoneyModal">
@@ -198,7 +311,7 @@
                         <div class="p-4 bg-light rounded-4 text-center">
                             <i class="fa-solid fa-receipt text-muted mb-2 fs-3"></i>
                             <h6 class="fw-bold text-dark mb-1">No Expense Requests Created Yet</h6>
-                            <p class="text-muted small mb-3">If you need budget to purchase replacement parts or hire external technicians, request money directly linked to this ticket.</p>
+                            <p class="text-muted small mb-3">If you need budget to hire external technicians or pay service fees, request money directly linked to this ticket.</p>
                             <button type="button" class="btn btn-sm btn-success fw-bold rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#askMoneyModal">
                                 <i class="fa-solid fa-hand-holding-dollar me-1"></i>Ask Money for this Maintenance
                             </button>
@@ -207,7 +320,7 @@
                 </div>
             </div>
 
-            {{-- 3. Update Status Card --}}
+            {{-- 4. Update Status Card --}}
             <div class="card border-0 shadow-sm rounded-4">
                 <div class="card-header bg-white border-0 py-3 px-4 rounded-top-4">
                     <h5 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-pen-to-square me-2 text-primary"></i>Update Request Status & Response</h5>
@@ -291,7 +404,7 @@
         {{-- Right Column: Financial & Progress Overview --}}
         <div class="col-lg-4">
 
-            {{-- Financial Summary Card --}}
+            {{-- Financial & Material Summary Card --}}
             <div class="card border-0 shadow-sm rounded-4 mb-4 bg-light bg-opacity-75">
                 <div class="card-body p-4">
                     <h6 class="fw-bold mb-3 text-dark"><i class="fa-solid fa-coins me-2 text-warning"></i>Maintenance Financials</h6>
@@ -299,13 +412,22 @@
                         <span class="text-muted small">Total Expense Asked:</span>
                         <strong class="text-dark fs-6">{{ number_format($totalExpenseRequested, 2) }} ETB</strong>
                     </div>
-                    <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
                         <span class="text-muted small">Paid / Disbursed:</span>
                         <strong class="text-success fs-6">{{ number_format($totalExpensePaid, 2) }} ETB</strong>
                     </div>
-                    <button type="button" class="btn btn-warning btn-sm w-100 fw-bold rounded-pill text-dark" data-bs-toggle="modal" data-bs-target="#askMoneyModal">
-                        <i class="fa-solid fa-plus-circle me-1"></i>New Expense Request
-                    </button>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="text-muted small">Material Requests:</span>
+                        <strong class="text-primary fs-6">{{ $materialRequests->count() }} request{{ $materialRequests->count() == 1 ? '' : 's' }}</strong>
+                    </div>
+                    <div class="d-flex flex-column gap-2">
+                        <button type="button" class="btn btn-primary btn-sm w-100 fw-bold rounded-pill" data-bs-toggle="modal" data-bs-target="#askMaterialModal">
+                            <i class="fa-solid fa-boxes-stacked me-1"></i>New Material Request
+                        </button>
+                        <button type="button" class="btn btn-warning btn-sm w-100 fw-bold rounded-pill text-dark" data-bs-toggle="modal" data-bs-target="#askMoneyModal">
+                            <i class="fa-solid fa-plus-circle me-1"></i>New Expense Request
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -376,6 +498,140 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+</div>
+
+{{-- 📦 Ask Material / Purchase Modal for this Maintenance Request --}}
+<div class="modal fade" id="askMaterialModal" tabindex="-1" aria-labelledby="askMaterialModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <div class="modal-header bg-primary text-white py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-boxes-stacked fs-4"></i>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="askMaterialModalLabel">Ask Material / Spare Parts Purchase</h5>
+                        <small class="text-white-50">Ticket {{ $maintenanceRequest->request_no }} — {{ $maintenanceRequest->asset_name }} ({{ $maintenanceRequest->asset_code ?? 'Asset' }})</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form action="{{ route('general-service.maintenance.ask-material', $maintenanceRequest) }}" method="POST">
+                @csrf
+                <div class="modal-body p-4">
+
+                    <div class="alert alert-light border border-start border-4 border-primary p-3 rounded-3 mb-4">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-link text-primary fs-5"></i>
+                            <div>
+                                <strong class="text-dark">Auto-Routed to Store Manager & Procurement:</strong>
+                                <span class="text-muted small d-block">This material request is linked to <span class="badge bg-warning text-dark font-monospace">{{ $maintenanceRequest->request_no }}</span> for {{ $maintenanceRequest->asset_name }}. The Store Manager can issue items from existing store stock or route directly to Procurement / Purchase Request.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-secondary small text-uppercase" style="letter-spacing:0.5px;">
+                                Destination Store <span class="text-danger">*</span>
+                            </label>
+                            <select name="destination_store_id" class="form-select rounded-3" required>
+                                @foreach($stores as $st)
+                                    <option value="{{ $st->id }}" {{ $loop->first ? 'selected' : '' }}>
+                                        {{ $st->name }} ({{ $st->code ?? 'Store' }})
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="text-muted">Select the store where materials will be collected or issued.</small>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-secondary small text-uppercase" style="letter-spacing:0.5px;">
+                                Required By Date <span class="text-danger">*</span>
+                            </label>
+                            <input type="date" name="required_date" class="form-control rounded-3" value="{{ now()->addDays(2)->format('Y-m-d') }}" required>
+                            <small class="text-muted">Target date when materials/spare parts are needed.</small>
+                        </div>
+                    </div>
+
+                    {{-- Dynamic Material Items Table --}}
+                    <div class="card border rounded-3 mb-4 shadow-xs">
+                        <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center">
+                            <strong class="text-dark small text-uppercase"><i class="fa-solid fa-list-check me-1 text-primary"></i>Needed Materials & Spare Parts List</strong>
+                            <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" onclick="addMaterialRow()">
+                                <i class="fa-solid fa-plus me-1"></i>Add Material Item
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table align-middle mb-0" id="material_items_table">
+                                    <thead class="table-light text-secondary small text-uppercase" style="font-size:0.75rem;">
+                                        <tr>
+                                            <th style="min-width: 260px;">Product / Material <span class="text-danger">*</span></th>
+                                            <th style="width: 140px;">Quantity <span class="text-danger">*</span></th>
+                                            <th style="width: 120px;">Unit</th>
+                                            <th>Specifications / Remarks</th>
+                                            <th style="width: 45px;"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="material_items_tbody">
+                                        {{-- Row 0 --}}
+                                        <tr class="material-row" data-index="0">
+                                            <td>
+                                                <select name="items[0][product_id]" class="form-select form-select-sm product-select mb-1" onchange="handleProductChange(this, 0)">
+                                                    <option value="">— Select Catalog Product —</option>
+                                                    <option value="custom">✏️ + Custom / Unlisted Spare Part</option>
+                                                    @foreach($products as $p)
+                                                        <option value="{{ $p->id }}" data-unit="{{ $p->unit ?? 'pcs' }}">
+                                                            {{ $p->name }} {{ $p->sku ? "({$p->sku})" : '' }} [{{ $p->category ?? 'General' }}]
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                <input type="text" name="items[0][custom_name]" class="form-control form-control-sm custom-name-input mt-1 d-none" placeholder="Enter custom spare part / material name...">
+                                            </td>
+                                            <td>
+                                                <input type="number" step="0.01" min="0.01" name="items[0][quantity]" class="form-control form-control-sm fw-bold" placeholder="1.00" value="1" required>
+                                            </td>
+                                            <td>
+                                                <input type="text" name="items[0][unit]" class="form-control form-control-sm unit-input" placeholder="pcs" value="pcs">
+                                            </td>
+                                            <td>
+                                                <input type="text" name="items[0][notes]" class="form-control form-control-sm" placeholder="e.g. Size, model, brand, repair position...">
+                                            </td>
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-sm btn-outline-danger border-0 remove-row-btn" onclick="removeMaterialRow(this)" title="Remove item">
+                                                    <i class="fa-solid fa-trash-can"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-bold text-secondary small text-uppercase" style="letter-spacing:0.5px;">
+                                Purpose & Maintenance Requirements
+                            </label>
+                            @php
+                                $defaultMatNotes = "Materials required for maintenance ticket #" . $maintenanceRequest->request_no . " — " . $maintenanceRequest->asset_name . ($maintenanceRequest->asset_code ? " (" . $maintenanceRequest->asset_code . ")" : "") . ".\nIssue: " . $maintenanceRequest->description . "\nTechnician Notes: ";
+                            @endphp
+                            <textarea name="notes" class="form-control rounded-3" rows="3" placeholder="Provide additional details or specifications for the Store Manager / Procurement team...">{{ old('notes', $defaultMatNotes) }}</textarea>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer bg-light border-top-0 py-3 px-4">
+                    <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary fw-bold rounded-pill px-4 shadow-sm">
+                        <i class="fa-solid fa-paper-plane me-1"></i>Send to Store Manager
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -471,6 +727,80 @@ function toggleReplacementOptions(selectEl) {
         container.style.display = (selectEl.value === 'sent_to_store_manager') ? 'block' : 'none';
     }
 }
+
+let materialRowIndex = 1;
+
+function handleProductChange(selectEl, idx) {
+    const row = selectEl.closest('tr');
+    const customInput = row.querySelector('.custom-name-input');
+    const unitInput = row.querySelector('.unit-input');
+
+    if (selectEl.value === 'custom') {
+        customInput.classList.remove('d-none');
+        customInput.required = true;
+        customInput.focus();
+    } else {
+        customInput.classList.add('d-none');
+        customInput.required = false;
+        
+        const selectedOption = selectEl.options[selectEl.selectedIndex];
+        const unit = selectedOption.getAttribute('data-unit');
+        if (unit && unitInput) {
+            unitInput.value = unit;
+        }
+    }
+}
+
+function addMaterialRow() {
+    const tbody = document.getElementById('material_items_tbody');
+    const idx = materialRowIndex++;
+
+    const tr = document.createElement('tr');
+    tr.className = 'material-row';
+    tr.setAttribute('data-index', idx);
+
+    tr.innerHTML = `
+        <td>
+            <select name="items[${idx}][product_id]" class="form-select form-select-sm product-select mb-1" onchange="handleProductChange(this, ${idx})">
+                <option value="">— Select Catalog Product —</option>
+                <option value="custom">✏️ + Custom / Unlisted Spare Part</option>
+                @foreach($products as $p)
+                    <option value="{{ $p->id }}" data-unit="{{ $p->unit ?? 'pcs' }}">
+                        {{ $p->name }} {{ $p->sku ? "({$p->sku})" : '' }} [{{ $p->category ?? 'General' }}]
+                    </option>
+                @endforeach
+            </select>
+            <input type="text" name="items[${idx}][custom_name]" class="form-control form-control-sm custom-name-input mt-1 d-none" placeholder="Enter custom spare part / material name...">
+        </td>
+        <td>
+            <input type="number" step="0.01" min="0.01" name="items[${idx}][quantity]" class="form-control form-control-sm fw-bold" placeholder="1.00" value="1" required>
+        </td>
+        <td>
+            <input type="text" name="items[${idx}][unit]" class="form-control form-control-sm unit-input" placeholder="pcs" value="pcs">
+        </td>
+        <td>
+            <input type="text" name="items[${idx}][notes]" class="form-control form-control-sm" placeholder="e.g. Size, model, brand, repair position...">
+        </td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-danger border-0 remove-row-btn" onclick="removeMaterialRow(this)" title="Remove item">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        </td>
+    `;
+
+    tbody.appendChild(tr);
+}
+
+function removeMaterialRow(buttonEl) {
+    const tbody = document.getElementById('material_items_tbody');
+    const rows = tbody.querySelectorAll('.material-row');
+    if (rows.length > 1) {
+        buttonEl.closest('tr').remove();
+    } else {
+        alert('At least one material item is required.');
+    }
+}
 </script>
 @endpush
 @endsection
+

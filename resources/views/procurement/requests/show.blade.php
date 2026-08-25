@@ -126,7 +126,17 @@
             <div class="card-body">
                 <h5 class="card-title text-muted mb-4">Request Details</h5>
                 <table class="table table-borderless table-sm mb-0">
-                    <tr><td class="text-muted w-25">Source</td><td><span class="badge bg-light text-dark border fw-bold"><i class="fa-solid fa-code-branch text-primary me-1"></i>{{ $materialRequest->source ?? 'Manual Creation' }}</span></td></tr>
+                    <tr>
+                        <td class="text-muted w-25">Source</td>
+                        <td>
+                            <span class="badge bg-light text-dark border fw-bold"><i class="fa-solid fa-code-branch text-primary me-1"></i>{{ $materialRequest->source ?? 'Manual Creation' }}</span>
+                            @if($materialRequest->maintenance_request_id && $materialRequest->maintenanceRequest)
+                                <a href="{{ route('general-service.maintenance.show', $materialRequest->maintenanceRequest) }}" class="badge bg-warning text-dark text-decoration-none border ms-1" title="View linked maintenance ticket">
+                                    <i class="fa-solid fa-screwdriver-wrench me-1"></i>{{ $materialRequest->maintenanceRequest->request_no }}
+                                </a>
+                            @endif
+                        </td>
+                    </tr>
                     <tr><td class="text-muted">Project</td><td class="fw-semibold">{{ $materialRequest->project?->name ?? 'Central / HQ' }}</td></tr>
                     <tr><td class="text-muted">Deliver To</td><td class="fw-semibold">{{ $materialRequest->store?->name ?? 'General Store' }} ({{ $materialRequest->store?->code ?? '-' }})</td></tr>
                     <tr><td class="text-muted">Required By</td><td class="fw-semibold {{ optional($materialRequest->required_date)->isPast() ? 'text-danger' : '' }}">{{ optional($materialRequest->required_date)->format('d M Y') ?? '-' }}</td></tr>

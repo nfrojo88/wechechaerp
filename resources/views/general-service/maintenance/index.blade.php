@@ -143,6 +143,16 @@
                         <tr class="{{ $req->urgency === 'critical' ? 'table-danger' : ($req->urgency === 'urgent' ? 'table-warning' : '') }}">
                             <td class="ps-4 py-3">
                                 <span class="font-monospace fw-semibold text-primary">{{ $req->request_no }}</span>
+                                @if($req->expenseRequests->count() > 0)
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success ms-1" style="font-size:0.68rem;" title="{{ $req->expenseRequests->count() }} expense request(s)">
+                                        <i class="fa-solid fa-hand-holding-dollar"></i> {{ $req->expenseRequests->count() }}
+                                    </span>
+                                @endif
+                                @if($req->materialRequests->count() > 0)
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary ms-1" style="font-size:0.68rem;" title="{{ $req->materialRequests->count() }} material request(s)">
+                                        <i class="fa-solid fa-boxes-stacked"></i> {{ $req->materialRequests->count() }}
+                                    </span>
+                                @endif
                             </td>
                             <td class="py-3">
                                 <div class="fw-semibold text-dark">{{ $req->employee->full_name ?? 'N/A' }}</div>

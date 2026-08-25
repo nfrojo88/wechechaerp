@@ -519,7 +519,7 @@ class StoreManagerController extends Controller
         $isStoreKeeper = $user && $user->hasRole('store_keeper');
         $assignedStore = null;
 
-        $query = MaterialRequest::with(['project', 'requestedBy', 'items.product']);
+        $query = MaterialRequest::with(['project', 'requestedBy', 'items.product', 'maintenanceRequest']);
 
         if ($isStoreKeeper) {
             $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();

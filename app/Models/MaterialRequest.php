@@ -12,6 +12,7 @@ class MaterialRequest extends Model
     protected $fillable = [
         'project_id',
         'destination_store_id',
+        'maintenance_request_id',
         'reference_number',
         'source',
         'status',
@@ -60,5 +61,10 @@ class MaterialRequest extends Model
     public function purchaseRequests()
     {
         return $this->hasMany(PurchaseRequest::class);
+    }
+
+    public function maintenanceRequest()
+    {
+        return $this->belongsTo(MaintenanceRequest::class, 'maintenance_request_id');
     }
 }
