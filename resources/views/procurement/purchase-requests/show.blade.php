@@ -678,25 +678,34 @@
                             @csrf
                             <div class="mb-2">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Funding Account (COA) <span class="text-danger">*</span></label>
-                                <select name="coa_account_id" class="form-select form-select-sm" required>
+                                <select name="coa_account_id" id="fundingCoaSelect" class="form-select form-select-sm" required onchange="handleCoaSelectionChange(this)">
                                     <option value="">-- Select Funding COA --</option>
                                     @foreach($coaAccounts as $coa)
-                                        <option value="{{ $coa->id }}">{{ $coa->code }} - {{ $coa->name }} (Bal: {{ number_format($coa->current_balance, 2) }} ETB)</option>
+                                        <option value="{{ $coa->id }}" data-assigned-user="{{ $coa->assigned_to ?? '' }}" data-balance="{{ (float)$coa->current_balance }}">
+                                            {{ $coa->code }} - {{ $coa->name }} (Bal: {{ number_format($coa->current_balance, 2) }} ETB) {{ $coa->manager ? ' — Assigned: ' . $coa->manager->name : '' }}
+                                        </option>
                                     @endforeach
                                 </select>
+                                <div id="coaAutoAssignedBadge" class="form-text text-success small mt-1 d-none"></div>
                             </div>
                             <div class="mb-2">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
-                                <input type="number" step="0.01" name="amount" class="form-control form-control-sm fw-bold" value="{{ (float)($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount ?? 0) }}" required>
+                                <input type="number" step="0.01" name="amount" id="fundingPaymentAmountInput" class="form-control form-control-sm fw-bold" value="{{ (float)($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount ?? 0) }}" required>
                             </div>
                             <div class="mb-2">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Assign Finance Staff <span class="text-danger">*</span></label>
-                                <select name="staff_user_id" class="form-select form-select-sm" required>
+                                <select name="staff_user_id" id="assignFinanceStaffSelect" class="form-select form-select-sm" required onchange="handleStaffSelectionChange(this)">
                                     <option value="">-- Select Staff Member --</option>
                                     @foreach($financeStaff as $st)
-                                        <option value="{{ $st->id }}">{{ $st->name }} ({{ $st->email }})</option>
+                                        @php
+                                            $stCoa = $coaAccounts->where('assigned_to', $st->id)->first();
+                                        @endphp
+                                        <option value="{{ $st->id }}" data-default-coa="{{ $stCoa?->id ?? '' }}">
+                                            {{ $st->name }} ({{ $st->email }}) {{ $stCoa ? ' — Account: ' . $stCoa->name : '' }}
+                                        </option>
                                     @endforeach
                                 </select>
+                                <div id="staffAutoAssignedBadge" class="form-text text-primary small mt-1 d-none"></div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Payment Instructions / Notes</label>
@@ -2083,6 +2092,54 @@ function syncGmProformaSelect(profId) {
     const label = document.getElementById('gmProfItemLabel_' + profId);
     if (label) {
         label.classList.add('bg-light', 'border-primary');
+    }
+}
+
+function handleCoaSelectionChange(selectEl) {
+    if (!selectEl) return;
+    const selectedOpt = selectEl.options[selectEl.selectedIndex];
+    const staffSelect = document.getElementById('assignFinanceStaffSelect');
+    const badgeEl = document.getElementById('coaAutoAssignedBadge');
+    
+    if (!selectedOpt || !selectedOpt.value) {
+        if (badgeEl) badgeEl.classList.add('d-none');
+        return;
+    }
+
+    const assignedUserId = selectedOpt.dataset.assignedUser;
+    if (assignedUserId && staffSelect) {
+        staffSelect.value = assignedUserId;
+        const staffOpt = staffSelect.options[staffSelect.selectedIndex];
+        if (badgeEl) {
+            badgeEl.classList.remove('d-none');
+            badgeEl.innerHTML = `<i class="fas fa-magic me-1"></i> Auto-selected Account Holder: <strong>${staffOpt ? staffOpt.text.split('(')[0].trim() : 'Assigned Staff'}</strong>`;
+        }
+    } else {
+        if (badgeEl) badgeEl.classList.add('d-none');
+    }
+}
+
+function handleStaffSelectionChange(selectEl) {
+    if (!selectEl) return;
+    const selectedOpt = selectEl.options[selectEl.selectedIndex];
+    const coaSelect = document.getElementById('fundingCoaSelect');
+    const badgeEl = document.getElementById('staffAutoAssignedBadge');
+
+    if (!selectedOpt || !selectedOpt.value) {
+        if (badgeEl) badgeEl.classList.add('d-none');
+        return;
+    }
+
+    const defaultCoaId = selectedOpt.dataset.defaultCoa;
+    if (defaultCoaId && coaSelect) {
+        coaSelect.value = defaultCoaId;
+        const coaOpt = coaSelect.options[coaSelect.selectedIndex];
+        if (badgeEl) {
+            badgeEl.classList.remove('d-none');
+            badgeEl.innerHTML = `<i class="fas fa-magic me-1"></i> Auto-selected Staff Account: <strong>${coaOpt ? coaOpt.text.split('(')[0].trim() : 'Assigned COA'}</strong>`;
+        }
+    } else {
+        if (badgeEl) badgeEl.classList.add('d-none');
     }
 }
 
