@@ -1122,7 +1122,7 @@
 <div class="modal fade" id="selectiveTransferModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="{{ route('purchase-requests.selective-transfer', $purchaseRequest) }}" method="POST">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.selective-transfer') ? route('purchase-requests.selective-transfer', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/selective-transfer') }}" method="POST">
                 @csrf
                 <div class="modal-header bg-info text-white py-3">
                     <h5 class="modal-title fw-bold">
@@ -1194,7 +1194,7 @@
 <div class="modal fade" id="selectiveSendPmModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-md modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="{{ route('purchase-requests.selective-send-to-pm', $purchaseRequest) }}" method="POST">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.selective-send-to-pm') ? route('purchase-requests.selective-send-to-pm', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/selective-send-to-pm') }}" method="POST">
                 @csrf
                 <div class="modal-header bg-success text-white py-3">
                     <h5 class="modal-title fw-bold">
@@ -1234,7 +1234,7 @@
 <div class="modal fade" id="pmSendBackStoreModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="{{ route('purchase-requests.selective-send-back-to-store', $purchaseRequest) }}" method="POST">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.selective-send-back-to-store') ? route('purchase-requests.selective-send-back-to-store', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/selective-send-back-to-store') }}" method="POST">
                 @csrf
                 <div class="modal-header bg-warning text-dark py-3">
                     <h5 class="modal-title fw-bold">
@@ -1282,7 +1282,7 @@
 <div class="modal fade" id="pmSelectiveDirectBuyModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-md modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="{{ route('purchase-requests.selective-send-to-proc-team', $purchaseRequest) }}" method="POST">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.selective-send-to-proc-team') ? route('purchase-requests.selective-send-to-proc-team', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/selective-send-to-proc-team') }}" method="POST">
                 @csrf
                 <input type="hidden" name="sourcing_method" value="direct_buy">
                 <div class="modal-header bg-success text-white py-3">
@@ -1323,7 +1323,7 @@
 <div class="modal fade" id="pmSelectiveProformaModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-md modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="{{ route('purchase-requests.selective-send-to-proc-team', $purchaseRequest) }}" method="POST">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.selective-send-to-proc-team') ? route('purchase-requests.selective-send-to-proc-team', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/selective-send-to-proc-team') }}" method="POST">
                 @csrf
                 <input type="hidden" name="sourcing_method" value="proforma">
                 <div class="modal-header bg-primary text-white py-3">
