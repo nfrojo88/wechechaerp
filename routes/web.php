@@ -1420,6 +1420,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('finance/credit-store/{creditStore}', [App\Http\Controllers\Finance\CreditStoreController::class, 'show'])->name('finance.credit-store.show');
     Route::post('finance/credit-store/{creditStore}/record-payment', [App\Http\Controllers\Finance\CreditStoreController::class, 'recordPayment'])->name('finance.credit-store.record-payment');
 
+    // Global Slip Sequence API for dynamically fetching next slip number by store & type
+    Route::get('api/slip-sequences/{storeId}/{slipType}', [App\Http\Controllers\SlipSequenceController::class, 'getNextSlip'])->name('api.slip-sequences.next');
+
     // Emergency & Standard MR Planning Approvals & Dispatch
     Route::post('material-requests/{materialRequest}/planning-approve', [App\Http\Controllers\MaterialRequestController::class, 'planningApprove'])->name('material-requests.planning-approve');
     Route::post('material-requests/{materialRequest}/planning-reject', [App\Http\Controllers\MaterialRequestController::class, 'planningReject'])->name('material-requests.planning-reject');

@@ -732,7 +732,7 @@
 
                             <div class="mb-2">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Receiving Store <span class="text-danger">*</span></label>
-                                <select name="store_id" class="form-select form-select-sm" required>
+                                <select name="store_id" id="intakeStoreSelect" class="form-select form-select-sm" required onchange="fetchStoreSlipSequence(this.value)">
                                     @foreach($stores as $st)
                                         <option value="{{ $st->id }}" {{ ($purchaseRequest->store_id == $st->id) ? 'selected' : '' }}>
                                             {{ $st->name }} ({{ $st->location ?? 'Store' }})
@@ -745,18 +745,37 @@
                                 <label class="form-label small fw-bold text-uppercase text-muted">Receiving Slip Number (Model 19 / GRN) <span class="text-danger">*</span></label>
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-light"><i class="fas fa-hashtag text-muted"></i></span>
-                                    <input type="text" name="slip_no" class="form-control form-control-sm font-monospace fw-bold" 
+                                    <input type="text" name="slip_no" id="intakeSlipNoInput" 
+                                           class="form-control form-control-sm font-monospace fw-bold" 
+                                           data-start="{{ $receiveSlipSequence?->book_start_no ?? '' }}"
+                                           data-end="{{ $receiveSlipSequence?->book_end_no ?? '' }}"
+                                           data-prefix="{{ $receiveSlipSequence?->prefix ?? '' }}"
+                                           oninput="validateIntakeSlipRange()"
                                            value="{{ $nextReceiveSlipNo ?? ('REC-' . date('Ymd') . '-' . str_pad($purchaseRequest->id, 4, '0', STR_PAD_LEFT)) }}" required>
                                 </div>
-                                @if($receiveSlipSequence)
-                                    <div class="form-text small text-success mt-1" style="font-size: 11px;">
-                                        <i class="fas fa-check-circle me-1"></i> Next in sequence from <strong>{{ $receiveSlipSequence->label ?: 'Receive Sequence' }}</strong>
-                                    </div>
-                                @else
-                                    <div class="form-text small text-muted mt-1" style="font-size: 11px;">
-                                        <i class="fas fa-info-circle me-1"></i> Auto-generated format. You can customize the slip number if needed.
-                                    </div>
-                                @endif
+                                <div id="intakeSlipSequenceBadge">
+                                    @if($receiveSlipSequence)
+                                        <div class="alert alert-success py-1 px-2 small mb-0 mt-1 d-flex justify-content-between align-items-center border-success">
+                                            <div>
+                                                <i class="fas fa-book-bookmark text-success me-1"></i>
+                                                Active Book: <strong>{{ $receiveSlipSequence->label ?: 'Receiving (GRN)' }}</strong> 
+                                                <span class="text-muted">(Range: {{ $receiveSlipSequence->book_start_no }} - {{ $receiveSlipSequence->book_end_no }})</span>
+                                            </div>
+                                            <span class="badge bg-success">{{ $receiveSlipSequence->getRemainingSlips() }} slips left</span>
+                                        </div>
+                                    @else
+                                        <div class="alert alert-warning py-1 px-2 small mb-0 mt-1 d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <i class="fas fa-triangle-exclamation text-warning me-1"></i>
+                                                No active receiving slip book sequence configured for this store.
+                                            </div>
+                                            <a href="{{ route('slip-sequences.create') }}?store_id={{ $purchaseRequest->store_id }}&slip_type=receive" target="_blank" class="btn btn-xs btn-outline-primary py-0 text-decoration-none">
+                                                <i class="fas fa-plus"></i> Configure Book
+                                            </a>
+                                        </div>
+                                    @endif
+                                </div>
+                                <div id="intakeSlipRangeWarning" class="alert alert-danger py-1 px-2 small mt-1 d-none"></div>
                             </div>
 
                             <div class="mb-2">
@@ -1951,10 +1970,92 @@ function handleGmDecisionChange(select) {
     }
 }
 
+function fetchStoreSlipSequence(storeId) {
+    if (!storeId) return;
+    const slipInput = document.getElementById('intakeSlipNoInput');
+    const badgeContainer = document.getElementById('intakeSlipSequenceBadge');
+    if (!slipInput || !badgeContainer) return;
+
+    badgeContainer.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i> Checking slip sequence for selected store...</span>';
+
+    fetch('/api/slip-sequences/' + storeId + '/receive', {
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.has_sequence && data.formatted_slip) {
+            slipInput.value = data.formatted_slip;
+            slipInput.dataset.start = data.book_start_no || '';
+            slipInput.dataset.end = data.book_end_no || '';
+            slipInput.dataset.prefix = data.prefix || '';
+
+            badgeContainer.innerHTML = `
+                <div class="alert alert-success py-1 px-2 small mb-0 mt-1 d-flex justify-content-between align-items-center border-success">
+                    <div>
+                        <i class="fas fa-book-bookmark text-success me-1"></i>
+                        Active Book: <strong>${data.label || 'Receiving (GRN)'}</strong> 
+                        <span class="text-muted">(Range: ${data.book_start_no} - ${data.book_end_no})</span>
+                    </div>
+                    <span class="badge bg-success">${data.remaining} slips left</span>
+                </div>
+            `;
+            validateIntakeSlipRange();
+        } else {
+            slipInput.dataset.start = '';
+            slipInput.dataset.end = '';
+            badgeContainer.innerHTML = `
+                <div class="alert alert-warning py-1 px-2 small mb-0 mt-1 d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-triangle-exclamation text-warning me-1"></i>
+                        No active receiving slip book sequence configured for this store.
+                    </div>
+                    <a href="/slip-sequences/create?store_id=${storeId}&slip_type=receive" target="_blank" class="btn btn-xs btn-outline-primary py-0 text-decoration-none">
+                        <i class="fas fa-plus"></i> Configure Book
+                    </a>
+                </div>
+            `;
+        }
+    })
+    .catch(err => {
+        console.error('Slip sequence check error:', err);
+    });
+}
+
+function validateIntakeSlipRange() {
+    const slipInput = document.getElementById('intakeSlipNoInput');
+    const warningEl = document.getElementById('intakeSlipRangeWarning');
+    if (!slipInput || !warningEl) return;
+
+    const start = parseInt(slipInput.dataset.start);
+    const end = parseInt(slipInput.dataset.end);
+    if (!start || !end) {
+        warningEl.classList.add('d-none');
+        return;
+    }
+
+    const val = slipInput.value.replace(/\D/g, '');
+    const num = parseInt(val);
+
+    if (num && (num < start || num > end)) {
+        warningEl.classList.remove('d-none');
+        warningEl.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i> Warning: Slip #${slipInput.value} is outside active book range (${start} - ${end}).`;
+    } else {
+        warningEl.classList.add('d-none');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const gmSelect = document.getElementById('gmDecisionSelect');
     if (gmSelect) {
         handleGmDecisionChange(gmSelect);
+    }
+
+    const intakeStoreSelect = document.getElementById('intakeStoreSelect');
+    if (intakeStoreSelect && intakeStoreSelect.value) {
+        fetchStoreSlipSequence(intakeStoreSelect.value);
     }
 
     // Select All Items Checkbox

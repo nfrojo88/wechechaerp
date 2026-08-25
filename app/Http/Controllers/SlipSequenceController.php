@@ -154,14 +154,24 @@ class SlipSequenceController extends Controller
             ->first();
 
         if (!$sequence) {
-            return response()->json(['error' => 'No active slip sequence configured'], 404);
+            return response()->json([
+                'has_sequence' => false,
+                'error'        => 'No active slip sequence configured for this store.',
+            ], 200);
         }
 
         return response()->json([
-            'next_slip_no' => $sequence->getNextSlipNumber(),
-            'prefix' => $sequence->prefix,
-            'label' => $sequence->label,
-            'remaining' => $sequence->getRemainingSlips(),
+            'has_sequence'    => true,
+            'id'              => $sequence->id,
+            'next_slip_no'    => $sequence->getNextSlipNumber(),
+            'formatted_slip'  => $sequence->formatSlipNumber($sequence->current_slip_no),
+            'prefix'          => $sequence->prefix,
+            'label'           => $sequence->label,
+            'book_start_no'   => $sequence->book_start_no,
+            'book_end_no'     => $sequence->book_end_no,
+            'current_slip_no' => $sequence->current_slip_no,
+            'used_count'      => $sequence->used_count,
+            'remaining'       => $sequence->getRemainingSlips(),
             'percentage_used' => $sequence->getPercentageUsed(),
         ]);
     }
