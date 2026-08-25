@@ -539,6 +539,49 @@
                                 </select>
                             </div>
 
+                            @if($purchaseRequest->proformaInvoices->count() > 0)
+                            <div class="mb-3" id="gmProformaSelectionCard">
+                                <label class="form-label small fw-bold text-uppercase text-dark d-flex justify-content-between align-items-center mb-1">
+                                    <span><i class="fas fa-file-invoice-dollar text-primary me-1"></i> Select Winning Proforma / Quote <span class="text-danger">*</span></span>
+                                    <span class="badge bg-primary rounded-pill">{{ $purchaseRequest->proformaInvoices->count() }} Available</span>
+                                </label>
+                                <p class="text-muted small mb-2" style="font-size: 11px;">
+                                    Choose which supplier quotation to approve and pay for:
+                                </p>
+                                <div class="list-group list-group-flush border rounded overflow-hidden shadow-xs">
+                                    @php
+                                        $minGrandTotal = $purchaseRequest->proformaInvoices->min('grand_total');
+                                    @endphp
+                                    @foreach($purchaseRequest->proformaInvoices as $pIdx => $prof)
+                                        @php
+                                            $isLowest = ((float)$prof->grand_total == (float)$minGrandTotal && (float)$minGrandTotal > 0);
+                                            $isProfSelected = $prof->gm_selected || ($pIdx === 0 && !$purchaseRequest->proformaInvoices->where('gm_selected', true)->count());
+                                        @endphp
+                                        <label class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-2 cursor-pointer gm-prof-item {{ $isProfSelected ? 'bg-light border-primary' : '' }}" 
+                                               id="gmProfItemLabel_{{ $prof->id }}"
+                                               style="cursor: pointer;" onclick="syncGmProformaSelect({{ $prof->id }})">
+                                            <div class="d-flex align-items-center">
+                                                <input class="form-check-input me-2 mt-0 gm-proforma-radio" type="radio" name="proforma_invoice_id" value="{{ $prof->id }}" id="gmProfRadio_{{ $prof->id }}" {{ $isProfSelected ? 'checked' : '' }}>
+                                                <div>
+                                                    <div class="fw-bold small text-dark">{{ $prof->supplier?->name ?? ($prof->supplier_name ?: 'Vendor #' . $prof->supplier_id) }}</div>
+                                                    <div class="text-muted font-monospace" style="font-size: 11px;">
+                                                        <code>{{ $prof->proforma_no }}</code>
+                                                        @if($isLowest)
+                                                            <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 9px;"><i class="fas fa-arrow-down me-1"></i>Lowest Price</span>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="text-end">
+                                                <div class="fw-bold text-primary small">{{ number_format($prof->grand_total, 2) }} ETB</div>
+                                                <div class="text-muted" style="font-size: 10px;">{{ count($prof->item_prices ?? []) }} items</div>
+                                            </div>
+                                        </label>
+                                    @endforeach
+                                </div>
+                            </div>
+                            @endif
+
                             {{-- Dynamic Explanatory Alerts --}}
                             <div id="gmDecisionHelpPayBuy" class="alert alert-success py-2 px-3 small border-0 shadow-xs mb-3" style="display: none;">
                                 <div class="d-flex">
@@ -1054,6 +1097,8 @@
                                     <th>Status</th>
                                     @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM)
                                     <th class="pe-3 text-end">Action</th>
+                                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
+                                    <th class="pe-3 text-end">GM Selection</th>
                                     @endif
                                 </tr>
                             </thead>
@@ -1098,7 +1143,7 @@
                                     </td>
                                     <td>
                                         @if($prof->gm_selected)
-                                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Selected for GM</span>
+                                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Selected Choice</span>
                                         @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION)
                                             <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending PM Selection</span>
                                         @else
@@ -1114,6 +1159,12 @@
                                                 <i class="fas fa-trash me-1"></i> Delete
                                             </button>
                                         </form>
+                                    </td>
+                                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
+                                    <td class="pe-3 text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2 fw-semibold shadow-xs" onclick="syncGmProformaSelect({{ $prof->id }})" title="Select this vendor quote for GM approval">
+                                            <i class="fas fa-hand-pointer me-1"></i> Choose This Quote
+                                        </button>
                                     </td>
                                     @endif
                                 </tr>
@@ -1967,6 +2018,21 @@ function handleGmDecisionChange(select) {
             btn.className = 'btn btn-secondary btn-sm w-100 fw-bold shadow-sm py-2';
             btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Submit GM Decision';
         }
+    }
+}
+
+function syncGmProformaSelect(profId) {
+    if (!profId) return;
+    const radio = document.getElementById('gmProfRadio_' + profId);
+    if (radio) {
+        radio.checked = true;
+    }
+    document.querySelectorAll('.gm-prof-item').forEach(el => {
+        el.classList.remove('bg-light', 'border-primary');
+    });
+    const label = document.getElementById('gmProfItemLabel_' + profId);
+    if (label) {
+        label.classList.add('bg-light', 'border-primary');
     }
 }
 

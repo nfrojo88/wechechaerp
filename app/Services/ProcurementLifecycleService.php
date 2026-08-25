@@ -172,30 +172,15 @@ class ProcurementLifecycleService
     // STAGE 5b — Proforma Selection
     // ═══════════════════════════════════════════════════════════════════
 
-    public function sendProformasToGm(PurchaseRequest $pr, array $selectedProformaIds, string $notes = null): void
-    {
-        // Mark selected proformas
-        $pr->proformaInvoices()->whereIn('id', $selectedProformaIds)->update(['gm_selected' => true]);
-        $pr->proformaInvoices()->whereNotIn('id', $selectedProformaIds)->update(['gm_selected' => false]);
-
+    public function gmDecide(
+        PurchaseRequest $pr,
+        string $decision,
+        ?string $paymentMethod = 'pay_and_buy',
+        string $notes = null,
+        ?int $selectedProformaId = null
+    ): void {
         $from = $pr->status;
-        $pr->update([
-            'status'             => PurchaseRequest::STATUS_PENDING_GM,
-            'current_owner_role' => 'gm',
-        ]);
-        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_GM, 'send_proformas_to_gm', 'purchase_manager', $notes);
-        $this->sms->notifyRole($pr->id, 'gm',
-            "ConstructPro: PR #{$pr->pr_no} proformas ready for your decision. Open: " . url("/purchase-requests/{$pr->id}"));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    // STAGE 6 — GM Decision
-    // ═══════════════════════════════════════════════════════════════════
-
-    public function gmDecide(PurchaseRequest $pr, string $decision, string $paymentMethod = null, string $notes = null): void
-    {
         $round = ($pr->gm_loop_count ?? 0) + 1;
-        $from  = $pr->status;
 
         PrGmDecision::create([
             'purchase_request_id' => $pr->id,
@@ -209,9 +194,9 @@ class ProcurementLifecycleService
 
         if ($decision === 'reject') {
             $pr->update([
-                'status'          => PurchaseRequest::STATUS_REJECTED,
-                'gm_loop_count'   => $round,
-                'rejection_reason'=> $notes,
+                'status'             => PurchaseRequest::STATUS_REJECTED,
+                'gm_loop_count'      => $round,
+                'rejection_reason'   => $notes,
                 'current_owner_role' => null,
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_REJECTED, 'gm_reject', 'gm', $notes);
@@ -220,8 +205,8 @@ class ProcurementLifecycleService
 
         } elseif ($decision === 'send_back') {
             $pr->update([
-                'status'        => PurchaseRequest::STATUS_PENDING_PROC_MANAGER,
-                'gm_loop_count' => $round,
+                'status'             => PurchaseRequest::STATUS_PENDING_PROC_MANAGER,
+                'gm_loop_count'      => $round,
                 'current_owner_role' => 'purchase_manager',
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_PROC_MANAGER, 'gm_send_back', 'gm', $notes);
@@ -229,40 +214,47 @@ class ProcurementLifecycleService
                 "ConstructPro: PR #{$pr->pr_no} returned by GM for revision. Notes: {$notes}. Open: " . url("/purchase-requests/{$pr->id}"));
 
         } elseif ($decision === 'approve') {
+            // 1. Handle Selected Proforma Quote
+            $chosenProforma = null;
+            if ($selectedProformaId) {
+                $chosenProforma = $pr->proformaInvoices()->find($selectedProformaId);
+            }
+            if (!$chosenProforma) {
+                $chosenProforma = $pr->proformaInvoices()->where('gm_selected', true)->first()
+                    ?? $pr->proformaInvoices()->orderBy('grand_total', 'asc')->first();
+            }
+
+            if ($chosenProforma) {
+                $pr->proformaInvoices()->update(['gm_selected' => false]);
+                $chosenProforma->update(['gm_selected' => true]);
+                $finalAmount = (float)$chosenProforma->grand_total;
+                $supplierId = $chosenProforma->supplier_id;
+                $supplierName = $chosenProforma->supplier?->name ?? $chosenProforma->supplier_name;
+            } else {
+                $finalAmount = (float)($pr->direct_buy_amount ?? 0);
+                if ($finalAmount <= 0) {
+                    $finalAmount = (float)$pr->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0));
+                }
+                $supplierId = $pr->supplier_id;
+                $supplierName = $pr->supplier?->name;
+            }
+
+            $pr->update([
+                'direct_buy_amount' => $finalAmount,
+                'supplier_id'       => $supplierId ?: $pr->supplier_id,
+            ]);
+
             if ($paymentMethod === 'buy_by_credit') {
                 // 1. Ensure COA 5110 "Cost Of Material By Credit 5110"
                 $coa5110 = $this->ensureCreditCoaAccount();
 
-                // 2. Compute Credit Total Amount
-                $creditAmount = (float)($pr->direct_buy_amount ?? 0);
-                if ($creditAmount <= 0) {
-                    $selectedProforma = $pr->proformaInvoices()->where('gm_selected', true)->first() 
-                        ?? $pr->proformaInvoices()->latest()->first();
-                    if ($selectedProforma && (float)$selectedProforma->grand_total > 0) {
-                        $creditAmount = (float)$selectedProforma->grand_total;
-                    } else {
-                        $creditAmount = (float)$pr->items->sum(function($item) {
-                            $p = $item->estimated_unit_price ?? $item->unit_price ?? 0;
-                            return (float)$item->quantity * (float)$p;
-                        });
-                    }
-                }
-
-                // Determine Supplier
-                $supplierName = null;
-                $selectedProforma = $pr->proformaInvoices()->where('gm_selected', true)->first() 
-                    ?? $pr->proformaInvoices()->latest()->first();
-                if ($selectedProforma) {
-                    $supplierName = $selectedProforma->supplier?->name ?? $selectedProforma->supplier_name;
-                }
-
-                // 3. Auto-book ProcurementPayment
+                // 2. Auto-book ProcurementPayment
                 ProcurementPayment::updateOrCreate(
                     ['purchase_request_id' => $pr->id],
                     [
                         'method'         => 'credit',
                         'coa_account_id' => $coa5110->id,
-                        'amount'         => $creditAmount,
+                        'amount'         => $finalAmount,
                         'notes'          => $notes ?: 'GM Approved Buy with Credit (Auto-booked COA 5110)',
                         'status'         => 'paid',
                         'created_by'     => Auth::id(),
@@ -271,14 +263,14 @@ class ProcurementLifecycleService
                     ]
                 );
 
-                // 4. Create or update CreditStoreLedger
+                // 3. Create or update CreditStoreLedger
                 \App\Models\CreditStoreLedger::updateOrCreate(
                     ['purchase_request_id' => $pr->id],
                     [
                         'pr_no'          => $pr->pr_no,
                         'project_id'     => $pr->project_id,
                         'supplier_name'  => $supplierName,
-                        'credit_amount'  => $creditAmount,
+                        'credit_amount'  => $finalAmount,
                         'coa_account_id' => $coa5110->id,
                         'status'         => 'outstanding',
                         'authorized_by'  => Auth::id(),
@@ -293,9 +285,21 @@ class ProcurementLifecycleService
                 $nextRole     = 'store_manager';
                 $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Credit — COA 5110) — ready for material intake. Open: " . url("/purchase-requests/{$pr->id}");
             } else { // pay_and_buy
+                // Pre-create/update ProcurementPayment with the chosen proforma amount
+                ProcurementPayment::updateOrCreate(
+                    ['purchase_request_id' => $pr->id],
+                    [
+                        'method'         => 'bank',
+                        'amount'         => $finalAmount,
+                        'notes'          => $notes,
+                        'status'         => 'pending',
+                        'created_by'     => Auth::id(),
+                    ]
+                );
+
                 $nextStatus   = PurchaseRequest::STATUS_PENDING_PAYMENT;
                 $nextRole     = 'finance_head';
-                $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Pay & Buy) — please select payment account and assign staff. Open: " . url("/purchase-requests/{$pr->id}");
+                $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Pay & Buy — " . number_format($finalAmount, 2) . " ETB from " . ($supplierName ?: 'Vendor') . ") — please select funding account and assign staff. Open: " . url("/purchase-requests/{$pr->id}");
             }
 
             $pr->update([

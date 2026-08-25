@@ -1067,11 +1067,16 @@ class PurchaseRequestController extends Controller
             $paymentMethod = 'pay_and_buy';
         }
 
+        $selectedProformaId = $request->filled('proforma_invoice_id') 
+            ? (int)$request->proforma_invoice_id 
+            : ($request->filled('selected_proforma_id') ? (int)$request->selected_proforma_id : null);
+
         $this->lifecycle->gmDecide(
             $purchaseRequest,
             $decision,
             $paymentMethod,
-            $request->notes
+            $request->notes,
+            $selectedProformaId
         );
 
         $decisionLabel = ($decision === 'approve') 
