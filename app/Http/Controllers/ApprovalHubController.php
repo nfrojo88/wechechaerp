@@ -266,7 +266,7 @@ class ApprovalHubController extends Controller
 
                     return (object) [
                         'id_raw'           => $pr->id,
-                        'id_formatted'     => 'PR-' . ($pr->pr_no ?? $pr->id),
+                        'id_formatted'     => str_starts_with((string)$pr->pr_no, 'PR-') ? $pr->pr_no : ('PR-' . ($pr->pr_no ?? $pr->id)),
                         'type'             => 'purchase_request',
                         'date'             => $payment?->paid_at ?? $pr->created_at,
                         'project'          => $pr->project ? $pr->project->name : 'Procurement',

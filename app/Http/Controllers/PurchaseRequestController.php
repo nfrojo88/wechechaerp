@@ -1142,6 +1142,12 @@ class PurchaseRequestController extends Controller
             abort(403, 'Unauthorized: You are not assigned to execute this payment.');
         }
 
+        $request->validate([
+            'notes' => 'required|string|min:2',
+        ], [
+            'notes.required' => 'Payment Reference / Transaction ID is required to execute payment.',
+        ]);
+
         $this->lifecycle->financeStaffPay($purchaseRequest, $request->notes);
         return back()->with('success', 'Payment executed. COA balance updated. Procurement Team notified to upload receipt.');
     }

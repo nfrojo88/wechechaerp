@@ -706,8 +706,9 @@
                             @endif
                         </div>
                         <div class="mb-3">
-                            <label class="form-label small fw-bold text-muted text-uppercase">Payment Reference / Transaction Notes</label>
-                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Cheque #, Bank transfer ref, or cash voucher #..."></textarea>
+                            <label class="form-label small fw-bold text-dark text-uppercase">Payment Reference / Transaction ID <span class="text-danger">*</span></label>
+                            <input type="text" name="notes" class="form-control form-control-sm" placeholder="e.g. TXN-9847294, Cheque #4521, or Bank Ref" required>
+                            <div class="form-text small text-muted">A valid transaction ID or payment reference number is required to confirm disbursement.</div>
                         </div>
                         <div class="p-2 bg-light rounded small text-muted">
                             <i class="fa-solid fa-circle-info text-primary me-1"></i> Once disbursed, the double-entry journal will post automatically, and the Procurement Team will be prompted to upload the vendor receipt.
