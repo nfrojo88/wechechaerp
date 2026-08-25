@@ -148,7 +148,20 @@
 
                     <!-- STAGE 3: Procurement Manager Triage & Sourcing Decision -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER)
-                        <h6 class="font-weight-bold mb-2"><i class="fas fa-route me-1"></i>Select Sourcing Path:</h6>
+                        <div class="mb-3 p-2 bg-light rounded border">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-bold text-dark"><i class="fas fa-boxes-stacked text-warning me-1"></i>Cross-Store Sourcing</span>
+                                <span class="badge bg-primary rounded-pill"><span class="selected-items-count fw-bold">0</span> Selected</span>
+                            </div>
+                            <p class="small text-muted mb-2" style="font-size: 11px;">
+                                Check items available in store inventory to return them to Store Manager to fulfill or decide how to buy.
+                            </p>
+                            <button type="button" class="btn btn-warning text-dark btn-sm w-100 fw-bold shadow-sm" onclick="openPmSendBackStoreModal()">
+                                <i class="fas fa-undo me-1"></i> Send Selected to Store Manager (<span class="selected-items-count fw-bold">0</span>)
+                            </button>
+                        </div>
+
+                        <h6 class="font-weight-bold mb-2"><i class="fas fa-route me-1"></i>Procurement Sourcing Path:</h6>
                         <ul class="nav nav-pills nav-justified mb-3" id="sourcingTab" role="tablist">
                             <li class="nav-item">
                                 <button class="nav-link active btn-sm" data-bs-toggle="tab" data-bs-target="#tabDirect">
@@ -166,41 +179,51 @@
                                 <form action="{{ route('purchase-requests.send-to-proc-team', $purchaseRequest) }}" method="POST">
                                     @csrf
                                     <input type="hidden" name="sourcing_method" value="direct_buy">
-                                    <p class="small text-muted mb-2">Send this request to the Purchase Team for <strong>Direct Buy</strong> to add purchase prices for all materials.</p>
+                                    <p class="small text-muted mb-2">Send request to Purchase Team for <strong>Direct Buy</strong> to add purchase prices.</p>
                                     <div class="mb-2">
                                         <label class="form-label small fw-bold text-uppercase">Instructions / Notes for Purchase Team</label>
                                         <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Instructions for Purchase Team to add prices..."></textarea>
                                     </div>
-                                    <button class="btn btn-success btn-sm w-100 fw-bold">
-                                        <i class="fas fa-paper-plane me-1"></i> Send to Purchase Team (Direct Buy)
-                                    </button>
+                                    <div class="d-grid gap-1">
+                                        <button class="btn btn-success btn-sm w-100 fw-bold">
+                                            <i class="fas fa-paper-plane me-1"></i> Send Entire PR (Direct Buy)
+                                        </button>
+                                        <button type="button" class="btn btn-outline-success btn-sm w-100" onclick="openPmDirectBuyModal()">
+                                            <i class="fas fa-bolt me-1"></i> Direct Buy Selected (<span class="selected-items-count fw-bold">0</span>)
+                                        </button>
+                                    </div>
                                 </form>
                             </div>
                             <div class="tab-pane fade" id="tabProforma">
                                 <form action="{{ route('purchase-requests.send-to-proc-team', $purchaseRequest) }}" method="POST">
                                     @csrf
                                     <input type="hidden" name="sourcing_method" value="proforma">
-                                    <p class="small text-muted mb-2">Assign this request to the Purchase Team to <strong>attach and collect proforma quotes</strong> from suppliers.</p>
+                                    <p class="small text-muted mb-2">Assign to Purchase Team to <strong>attach & collect proforma quotes</strong> from suppliers.</p>
                                     <div class="mb-2">
                                         <label class="form-label small fw-bold text-uppercase">Instructions / Notes for Purchase Team</label>
                                         <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Specific vendor or quote requirements..."></textarea>
                                     </div>
-                                    <button class="btn btn-primary btn-sm w-100 fw-bold">
-                                        <i class="fas fa-paper-plane me-1"></i> Send to Purchase Team (Proforma)
-                                    </button>
+                                    <div class="d-grid gap-1">
+                                        <button class="btn btn-primary btn-sm w-100 fw-bold">
+                                            <i class="fas fa-paper-plane me-1"></i> Send Entire PR (Proforma)
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary btn-sm w-100" onclick="openPmProformaModal()">
+                                            <i class="fas fa-file-invoice-dollar me-1"></i> Proforma Selected (<span class="selected-items-count fw-bold">0</span>)
+                                        </button>
+                                    </div>
                                 </form>
                             </div>
                         </div>
 
                         <div class="border-top pt-2 mt-2">
-                            <button class="btn btn-outline-danger btn-sm w-100" data-bs-toggle="collapse" data-bs-target="#sendBackStoreForm">
-                                <i class="fas fa-undo me-1"></i> Send Back to Store Manager
+                            <button class="btn btn-outline-secondary btn-sm w-100" data-bs-toggle="collapse" data-bs-target="#sendBackStoreForm">
+                                <i class="fas fa-undo me-1"></i> Send Entire PR Back to Store
                             </button>
                             <div class="collapse mt-2" id="sendBackStoreForm">
                                 <form action="{{ route('purchase-requests.send-back-to-store', $purchaseRequest) }}" method="POST">
                                     @csrf
-                                    <textarea name="reason" class="form-control form-control-sm mb-2" placeholder="Reason for sending back..." required></textarea>
-                                    <button class="btn btn-danger btn-sm w-100">Confirm Send Back</button>
+                                    <textarea name="reason" class="form-control form-control-sm mb-2" placeholder="Reason for sending back entire PR..." required></textarea>
+                                    <button class="btn btn-danger btn-sm w-100">Confirm Send Back Entire PR</button>
                                 </form>
                             </div>
                         </div>
@@ -553,6 +576,12 @@
         <!-- Right Panel: Items, Stock, Proformas, Audit Trail -->
         <div class="col-lg-8">
             <!-- Items Table with Selective Routing Controls -->
+            @php
+                $isSelectableStage = $canActOnCurrentStage && in_array($purchaseRequest->status, [
+                    \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                    \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER
+                ]);
+            @endphp
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-header bg-white font-weight-bold py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div class="d-flex align-items-center gap-2">
@@ -560,19 +589,34 @@
                         <span class="badge bg-secondary rounded-pill">{{ $purchaseRequest->items->count() }} items</span>
                     </div>
 
-                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
-                    <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <span class="small text-muted me-1"><span class="selected-items-count fw-bold text-primary">0</span> selected</span>
-                        <button type="button" class="btn btn-sm btn-outline-info shadow-sm" onclick="openSelectiveTransferModal()">
-                            <i class="fas fa-truck-ramp-box me-1"></i> Transfer Selected
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-success shadow-sm" onclick="openSelectiveSendPmModal()">
-                            <i class="fas fa-cart-shopping me-1"></i> Send to Purchase
-                        </button>
-                        <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#splitAndProcessModal">
-                            <i class="fas fa-random me-1"></i> Smart Split All
-                        </button>
-                    </div>
+                    @if($isSelectableStage)
+                        @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="small text-muted me-1"><span class="selected-items-count fw-bold text-primary">0</span> selected</span>
+                            <button type="button" class="btn btn-sm btn-outline-info shadow-sm" onclick="openSelectiveTransferModal()">
+                                <i class="fas fa-truck-ramp-box me-1"></i> Transfer Selected
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-success shadow-sm" onclick="openSelectiveSendPmModal()">
+                                <i class="fas fa-cart-shopping me-1"></i> Send to Purchase
+                            </button>
+                            <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#splitAndProcessModal">
+                                <i class="fas fa-random me-1"></i> Smart Split All
+                            </button>
+                        </div>
+                        @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER)
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="small text-muted me-1"><span class="selected-items-count fw-bold text-primary">0</span> selected</span>
+                            <button type="button" class="btn btn-sm btn-warning text-dark shadow-sm fw-bold" onclick="openPmSendBackStoreModal()">
+                                <i class="fas fa-undo me-1"></i> Send to Store Manager (<span class="selected-items-count fw-bold">0</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm btn-success shadow-sm fw-bold" onclick="openPmDirectBuyModal()">
+                                <i class="fas fa-bolt me-1"></i> Direct Buy Selected
+                            </button>
+                            <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" onclick="openPmProformaModal()">
+                                <i class="fas fa-file-invoice-dollar me-1"></i> Proforma Selected
+                            </button>
+                        </div>
+                        @endif
                     @endif
                 </div>
                 <div class="card-body p-0">
@@ -580,7 +624,7 @@
                         <table class="table align-middle mb-0" id="requestedItemsTable">
                             <thead class="table-light">
                                 <tr>
-                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                    @if($isSelectableStage)
                                     <th width="40" class="ps-3 text-center">
                                         <input type="checkbox" id="selectAllItems" class="form-check-input" title="Select All Items">
                                     </th>
@@ -591,7 +635,7 @@
                                     <th>Unit</th>
                                     <th>Est. Unit Cost</th>
                                     <th>Est. Total</th>
-                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                    @if($isSelectableStage)
                                     <th class="pe-3 text-end">Quick Action</th>
                                     @endif
                                 </tr>
@@ -604,7 +648,7 @@
                                     $hasStock = $totalStock > 0;
                                 @endphp
                                 <tr id="itemRow{{ $item->id }}">
-                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                    @if($isSelectableStage)
                                     <td class="ps-3 text-center">
                                         <input type="checkbox" class="form-check-input pr-item-checkbox" 
                                                value="{{ $item->id }}"
@@ -644,8 +688,9 @@
                                     <td><span class="badge bg-light text-dark border">{{ $item->unit }}</span></td>
                                     <td>{{ number_format($item->estimated_unit_cost ?? 0, 2) }} ETB</td>
                                     <td class="fw-bold text-primary">{{ number_format($item->estimated_total ?? 0, 2) }} ETB</td>
-                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                    @if($isSelectableStage)
                                     <td class="pe-3 text-end">
+                                        @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                                         <div class="btn-group btn-group-sm">
                                             @if($hasStock)
                                             <button type="button" class="btn btn-outline-info" title="Quick Transfer this Item" onclick="quickTransferSingleItem({{ $item->id }})">
@@ -656,6 +701,25 @@
                                                 <i class="fas fa-cart-shopping"></i> Purchase
                                             </button>
                                         </div>
+                                        @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER)
+                                        <div class="btn-group btn-group-sm">
+                                            @if($hasStock)
+                                            <button type="button" class="btn btn-warning text-dark fw-semibold" title="Send to Store Manager (Stock Available in other stores)" onclick="quickPmSendBackSingleItem({{ $item->id }})">
+                                                <i class="fas fa-undo me-1"></i>To Store
+                                            </button>
+                                            @else
+                                            <button type="button" class="btn btn-outline-secondary" title="Send back to Store Manager" onclick="quickPmSendBackSingleItem({{ $item->id }})">
+                                                <i class="fas fa-undo me-1"></i>To Store
+                                            </button>
+                                            @endif
+                                            <button type="button" class="btn btn-outline-success" title="Direct Buy this item" onclick="quickPmDirectBuySingleItem({{ $item->id }})">
+                                                <i class="fas fa-bolt"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-outline-primary" title="Proforma quote for this item" onclick="quickPmProformaSingleItem({{ $item->id }})">
+                                                <i class="fas fa-file-invoice-dollar"></i>
+                                            </button>
+                                        </div>
+                                        @endif
                                     </td>
                                     @endif
                                 </tr>
@@ -1165,6 +1229,136 @@
 </div>
 
 {{-- ═════════════════════════════════════════════════════════════════════════ --}}
+{{-- MODAL 3B: PM SEND SELECTED ITEMS BACK TO STORE MANAGER                     --}}
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="pmSendBackStoreModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.selective-send-back-to-store', $purchaseRequest) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-warning text-dark py-3">
+                    <h5 class="modal-title fw-bold">
+                        <i class="fas fa-undo me-2"></i>Send Selected Items to Store Manager
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-info border-0 shadow-sm d-flex align-items-center mb-3">
+                        <i class="fas fa-info-circle fa-2x me-3 flex-shrink-0 text-info"></i>
+                        <div class="small">
+                            The selected items will be forwarded/returned to the <strong>Store Manager</strong> with status <strong>Pending Store Review</strong>. 
+                            The Store Manager will review cross-store inventory to issue Store Transfers or decide how to fulfill/purchase these items.
+                            <em>Unselected items will remain with you in PR #{{ $purchaseRequest->pr_no }}.</em>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold border-bottom pb-2 mb-2">Selected Items:</h6>
+                    <div id="pmSendBackItemsList" class="bg-light p-2 rounded border mb-3 small" style="max-height: 200px; overflow-y: auto;">
+                        {{-- Dynamically populated via JS --}}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-uppercase">
+                            Reason / Instructions for Store Manager <span class="text-danger">*</span>
+                        </label>
+                        <textarea name="reason" class="form-control form-control-sm" rows="3" 
+                                  placeholder="e.g. Items are available in Chafe / Main Store. Please fulfill via Store Transfer or review stock..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning text-dark btn-sm fw-bold px-4 shadow-sm">
+                        <i class="fas fa-paper-plane me-1"></i> Confirm & Send to Store Manager
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+{{-- MODAL 3C: PM SEND SELECTED ITEMS FOR DIRECT BUY                            --}}
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="pmSelectiveDirectBuyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.selective-send-to-proc-team', $purchaseRequest) }}" method="POST">
+                @csrf
+                <input type="hidden" name="sourcing_method" value="direct_buy">
+                <div class="modal-header bg-success text-white py-3">
+                    <h5 class="modal-title fw-bold">
+                        <i class="fas fa-bolt me-2"></i>Send Selected Items for Direct Buy
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="small text-muted mb-3">
+                        The selected items will be assigned to the Purchase Team for <strong>Direct Buy</strong> to input immediate material prices.
+                    </p>
+
+                    <h6 class="fw-bold border-bottom pb-2 mb-2">Selected Items:</h6>
+                    <div id="pmDirectBuyItemsList" class="bg-light p-2 rounded border mb-3 small" style="max-height: 180px; overflow-y: auto;">
+                        {{-- Dynamically populated via JS --}}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-uppercase">Instructions / Notes for Purchase Team</label>
+                        <textarea name="notes" class="form-control form-control-sm" rows="3" placeholder="Add specific procurement instructions, urgency, or supplier notes..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success btn-sm fw-bold px-4 shadow-sm">
+                        <i class="fas fa-paper-plane me-1"></i> Send for Direct Buy
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+{{-- MODAL 3D: PM SEND SELECTED ITEMS FOR PROFORMA SOURCING                    --}}
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="pmSelectiveProformaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.selective-send-to-proc-team', $purchaseRequest) }}" method="POST">
+                @csrf
+                <input type="hidden" name="sourcing_method" value="proforma">
+                <div class="modal-header bg-primary text-white py-3">
+                    <h5 class="modal-title fw-bold">
+                        <i class="fas fa-file-invoice-dollar me-2"></i>Send Selected Items for Proforma Quotes
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="small text-muted mb-3">
+                        The selected items will be assigned to the Purchase Team to collect and attach formal <strong>Proforma Invoices / Quotes</strong> from vendors.
+                    </p>
+
+                    <h6 class="fw-bold border-bottom pb-2 mb-2">Selected Items:</h6>
+                    <div id="pmProformaItemsList" class="bg-light p-2 rounded border mb-3 small" style="max-height: 180px; overflow-y: auto;">
+                        {{-- Dynamically populated via JS --}}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-uppercase">Instructions / Notes for Purchase Team</label>
+                        <textarea name="notes" class="form-control form-control-sm" rows="3" placeholder="Add specific requirements, minimum quotes needed, etc..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm">
+                        <i class="fas fa-paper-plane me-1"></i> Send for Proforma Sourcing
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
 {{-- MODAL 4: ATTACH PROFORMA INVOICE QUOTE                                    --}}
 {{-- ═════════════════════════════════════════════════════════════════════════ --}}
 <div class="modal fade" id="attachProformaModal" tabindex="-1" aria-labelledby="attachProformaModalLabel" aria-hidden="true">
@@ -1434,6 +1628,121 @@ function quickPurchaseSingleItem(itemId) {
     }
     updateSelectionToolbar();
     openSelectiveSendPmModal();
+}
+
+// ── PM Selective Actions ──
+function openPmSendBackStoreModal() {
+    let items = getSelectedPrItems();
+    if (items.length === 0) {
+        document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = true);
+        updateSelectionToolbar();
+        items = getSelectedPrItems();
+    }
+
+    const container = document.getElementById('pmSendBackItemsList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'd-flex justify-content-between align-items-center py-2 border-bottom';
+        div.innerHTML = `
+            <input type="hidden" name="item_ids[]" value="${item.id}">
+            <div>
+                <strong>${item.name}</strong>
+                ${item.hasStock ? '<span class="badge bg-success bg-opacity-10 text-success border border-success ms-2 small"><i class="fas fa-warehouse me-1"></i>In Stock (' + item.stockQty + ' ' + item.unit + ')</span>' : '<span class="badge bg-light text-muted border ms-2 small">Out of Stock</span>'}
+            </div>
+            <span class="badge bg-primary fs-6">${item.quantity} ${item.unit}</span>
+        `;
+        container.appendChild(div);
+    });
+
+    const modal = new bootstrap.Modal(document.getElementById('pmSendBackStoreModal'));
+    modal.show();
+}
+
+function openPmDirectBuyModal() {
+    let items = getSelectedPrItems();
+    if (items.length === 0) {
+        document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = true);
+        updateSelectionToolbar();
+        items = getSelectedPrItems();
+    }
+
+    const container = document.getElementById('pmDirectBuyItemsList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'd-flex justify-content-between align-items-center py-2 border-bottom';
+        div.innerHTML = `
+            <input type="hidden" name="item_ids[]" value="${item.id}">
+            <span><strong>${item.name}</strong></span>
+            <span class="badge bg-success">${item.quantity} ${item.unit}</span>
+        `;
+        container.appendChild(div);
+    });
+
+    const modal = new bootstrap.Modal(document.getElementById('pmSelectiveDirectBuyModal'));
+    modal.show();
+}
+
+function openPmProformaModal() {
+    let items = getSelectedPrItems();
+    if (items.length === 0) {
+        document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = true);
+        updateSelectionToolbar();
+        items = getSelectedPrItems();
+    }
+
+    const container = document.getElementById('pmProformaItemsList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'd-flex justify-content-between align-items-center py-2 border-bottom';
+        div.innerHTML = `
+            <input type="hidden" name="item_ids[]" value="${item.id}">
+            <span><strong>${item.name}</strong></span>
+            <span class="badge bg-primary">${item.quantity} ${item.unit}</span>
+        `;
+        container.appendChild(div);
+    });
+
+    const modal = new bootstrap.Modal(document.getElementById('pmSelectiveProformaModal'));
+    modal.show();
+}
+
+function quickPmSendBackSingleItem(itemId) {
+    document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = false);
+    const targetCb = document.querySelector(`.pr-item-checkbox[data-item-id="${itemId}"]`);
+    if (targetCb) {
+        targetCb.checked = true;
+    }
+    updateSelectionToolbar();
+    openPmSendBackStoreModal();
+}
+
+function quickPmDirectBuySingleItem(itemId) {
+    document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = false);
+    const targetCb = document.querySelector(`.pr-item-checkbox[data-item-id="${itemId}"]`);
+    if (targetCb) {
+        targetCb.checked = true;
+    }
+    updateSelectionToolbar();
+    openPmDirectBuyModal();
+}
+
+function quickPmProformaSingleItem(itemId) {
+    document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = false);
+    const targetCb = document.querySelector(`.pr-item-checkbox[data-item-id="${itemId}"]`);
+    if (targetCb) {
+        targetCb.checked = true;
+    }
+    updateSelectionToolbar();
+    openPmProformaModal();
 }
 
 function toggleSplitRowFields(selectEl, index) {

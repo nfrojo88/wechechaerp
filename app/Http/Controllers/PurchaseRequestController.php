@@ -543,6 +543,82 @@ class PurchaseRequestController extends Controller
         return back()->with('success', 'Sent back to Store Manager.');
     }
 
+    public function selectiveSendBackToStoreManager(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
+        $request->validate([
+            'item_ids'   => 'nullable|array',
+            'item_ids.*' => 'exists:purchase_request_items,id',
+            'reason'     => 'required|string',
+        ]);
+
+        $itemIds = $request->input('item_ids', []);
+        $allItemsCount = $purchaseRequest->items()->count();
+
+        if (empty($itemIds) || count($itemIds) >= $allItemsCount) {
+            // Send entire PR back to Store Manager
+            $this->lifecycle->sendBackToStoreManager($purchaseRequest, $request->reason);
+            return back()->with('success', "All items on PR #{$purchaseRequest->pr_no} returned to Store Manager for stock review / fulfillment decision.");
+        }
+
+        // Partial selection: split selected items into a new PR returned to Store Manager
+        $newPr = null;
+        DB::transaction(function () use ($purchaseRequest, $itemIds, $request, &$newPr) {
+            $newPrNo = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
+
+            $newPr = PurchaseRequest::create([
+                'pr_no'               => $newPrNo,
+                'project_id'          => $purchaseRequest->project_id,
+                'store_id'            => $purchaseRequest->store_id,
+                'requested_by'        => $purchaseRequest->requested_by ?? Auth::id(),
+                'material_request_id' => $purchaseRequest->material_request_id,
+                'priority'            => $purchaseRequest->priority,
+                'type'                => $purchaseRequest->type,
+                'required_date'       => $purchaseRequest->required_date,
+                'justification'       => "Returned to Store Manager from PR #{$purchaseRequest->pr_no}: " . ($request->reason ?: $purchaseRequest->justification),
+                'pm_sendback_reason'  => $request->reason,
+                'status'              => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                'current_owner_role'  => 'store_manager',
+            ]);
+
+            // Move selected items to new PR
+            PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
+                ->whereIn('id', $itemIds)
+                ->update(['purchase_request_id' => $newPr->id]);
+
+            // Recalculate totals
+            $newPrTotal = $newPr->items()->sum('estimated_total');
+            $newPr->update(['estimated_total' => $newPrTotal]);
+
+            $remainingPrTotal = $purchaseRequest->items()->sum('estimated_total');
+            $purchaseRequest->update(['estimated_total' => $remainingPrTotal]);
+
+            PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_stage'          => $purchaseRequest->status,
+                'to_stage'            => $purchaseRequest->status,
+                'action'              => 'selective_items_returned_to_store_manager',
+                'actor_role'          => 'purchase_manager',
+                'notes'               => "Returned " . count($itemIds) . " item(s) to Store Manager in new PR #{$newPr->pr_no}. Reason: " . $request->reason,
+                'actor_id'            => Auth::id(),
+                'created_at'          => now(),
+            ]);
+
+            PrWorkflowLog::create([
+                'purchase_request_id' => $newPr->id,
+                'from_stage'          => PurchaseRequest::STATUS_PENDING_PROC_MANAGER,
+                'to_stage'            => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                'action'              => 'created_from_pm_sendback',
+                'actor_role'          => 'purchase_manager',
+                'notes'               => "Created with " . count($itemIds) . " item(s) returned by Procurement Manager from PR #{$purchaseRequest->pr_no}. Reason: " . $request->reason,
+                'actor_id'            => Auth::id(),
+                'created_at'          => now(),
+            ]);
+        });
+
+        return back()->with('success', "Selected " . count($itemIds) . " item(s) split into PR #{$newPr->pr_no} and returned to Store Manager to decide fulfillment/purchase! Remaining items stay on PR #{$purchaseRequest->pr_no}.");
+    }
+
     public function sendToProcurementTeam(Request $request, PurchaseRequest $purchaseRequest)
     {
         $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
@@ -553,6 +629,84 @@ class PurchaseRequestController extends Controller
         $method = $request->input('sourcing_method', 'proforma');
         $this->lifecycle->sendToProcurementTeam($purchaseRequest, $method, $request->notes);
         return back()->with('success', 'Routed to Procurement Team for ' . ($method === 'direct_buy' ? 'Direct Buy material pricing.' : 'Proforma quotes collection.'));
+    }
+
+    public function selectiveSendToProcTeam(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
+        $request->validate([
+            'item_ids'        => 'nullable|array',
+            'item_ids.*'      => 'exists:purchase_request_items,id',
+            'sourcing_method' => 'nullable|in:direct_buy,proforma',
+            'notes'           => 'nullable|string',
+        ]);
+
+        $method = $request->input('sourcing_method', 'proforma');
+        $itemIds = $request->input('item_ids', []);
+        $allItemsCount = $purchaseRequest->items()->count();
+
+        if (empty($itemIds) || count($itemIds) >= $allItemsCount) {
+            // Send entire PR to Procurement Team
+            $this->lifecycle->sendToProcurementTeam($purchaseRequest, $method, $request->notes);
+            return back()->with('success', 'Routed to Procurement Team for ' . ($method === 'direct_buy' ? 'Direct Buy material pricing.' : 'Proforma quotes collection.'));
+        }
+
+        // Partial selection: split selected items into a new PR sent to Procurement Team
+        $newPr = null;
+        DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request, &$newPr) {
+            $newPrNo = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
+
+            $newPr = PurchaseRequest::create([
+                'pr_no'               => $newPrNo,
+                'project_id'          => $purchaseRequest->project_id,
+                'store_id'            => $purchaseRequest->store_id,
+                'requested_by'        => $purchaseRequest->requested_by ?? Auth::id(),
+                'material_request_id' => $purchaseRequest->material_request_id,
+                'priority'            => $purchaseRequest->priority,
+                'type'                => $purchaseRequest->type,
+                'required_date'       => $purchaseRequest->required_date,
+                'justification'       => "Split for {$method} from PR #{$purchaseRequest->pr_no}: " . ($purchaseRequest->justification ?? ''),
+                'sourcing_method'     => $method,
+                'status'              => PurchaseRequest::STATUS_PENDING_PROC_TEAM,
+                'current_owner_role'  => 'purchase',
+            ]);
+
+            // Move selected items to new PR
+            PurchaseRequestItem::where('purchase_request_id', $purchaseRequest->id)
+                ->whereIn('id', $itemIds)
+                ->update(['purchase_request_id' => $newPr->id]);
+
+            // Recalculate totals
+            $newPrTotal = $newPr->items()->sum('estimated_total');
+            $newPr->update(['estimated_total' => $newPrTotal]);
+
+            $remainingPrTotal = $purchaseRequest->items()->sum('estimated_total');
+            $purchaseRequest->update(['estimated_total' => $remainingPrTotal]);
+
+            PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_stage'          => $purchaseRequest->status,
+                'to_stage'            => $purchaseRequest->status,
+                'action'              => 'selective_items_sent_to_proc_team',
+                'actor_role'          => 'purchase_manager',
+                'notes'               => "Split " . count($itemIds) . " item(s) into PR #{$newPr->pr_no} for {$method}.",
+                'actor_id'            => Auth::id(),
+                'created_at'          => now(),
+            ]);
+
+            PrWorkflowLog::create([
+                'purchase_request_id' => $newPr->id,
+                'from_stage'          => PurchaseRequest::STATUS_PENDING_PROC_MANAGER,
+                'to_stage'            => PurchaseRequest::STATUS_PENDING_PROC_TEAM,
+                'action'              => $method === 'direct_buy' ? 'send_to_proc_team_direct_buy' : 'send_to_proc_team_proforma',
+                'actor_role'          => 'purchase_manager',
+                'notes'               => "Created with " . count($itemIds) . " item(s) from PR #{$purchaseRequest->pr_no}. " . ($request->notes ?? ''),
+                'actor_id'            => Auth::id(),
+                'created_at'          => now(),
+            ]);
+        });
+
+        return back()->with('success', "Selected " . count($itemIds) . " item(s) split into PR #{$newPr->pr_no} and routed to Purchase Team ({$method})! Remaining items stay on PR #{$purchaseRequest->pr_no}.");
     }
 
     // ─── STAGE 4: Procurement Team Submits Direct Buy Material Pricing ───────

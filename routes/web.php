@@ -1397,7 +1397,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/selective-send-to-pm', [App\Http\Controllers\PurchaseRequestController::class, 'selectiveSendToPm'])->name('purchase-requests.selective-send-to-pm');
     Route::post('purchase-requests/{purchaseRequest}/split-and-process', [App\Http\Controllers\PurchaseRequestController::class, 'splitAndProcess'])->name('purchase-requests.split-and-process');
     Route::post('purchase-requests/{purchaseRequest}/send-back-to-store', [App\Http\Controllers\PurchaseRequestController::class, 'sendBackToStoreManager'])->name('purchase-requests.send-back-to-store');
+    Route::post('purchase-requests/{purchaseRequest}/selective-send-back-to-store', [App\Http\Controllers\PurchaseRequestController::class, 'selectiveSendBackToStoreManager'])->name('purchase-requests.selective-send-back-to-store');
     Route::post('purchase-requests/{purchaseRequest}/send-to-proc-team', [App\Http\Controllers\PurchaseRequestController::class, 'sendToProcurementTeam'])->name('purchase-requests.send-to-proc-team');
+    Route::post('purchase-requests/{purchaseRequest}/selective-send-to-proc-team', [App\Http\Controllers\PurchaseRequestController::class, 'selectiveSendToProcTeam'])->name('purchase-requests.selective-send-to-proc-team');
     Route::post('purchase-requests/{purchaseRequest}/submit-direct-buy', [App\Http\Controllers\PurchaseRequestController::class, 'submitDirectBuy'])->name('purchase-requests.submit-direct-buy');
     Route::post('purchase-requests/{purchaseRequest}/submit-proformas', [App\Http\Controllers\PurchaseRequestController::class, 'submitProformas'])->name('purchase-requests.submit-proformas');
     Route::post('purchase-requests/{purchaseRequest}/attach-proforma', [App\Http\Controllers\PurchaseRequestController::class, 'attachProforma'])->name('purchase-requests.attach-proforma');
