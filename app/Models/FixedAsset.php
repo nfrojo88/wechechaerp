@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Log;
 
 class FixedAsset extends Model
 {
@@ -33,6 +34,30 @@ class FixedAsset extends Model
         'updated_at'     => 'datetime',
         'deleted_at'     => 'datetime',
     ];
+
+    protected static function booted()
+    {
+        static::saved(function (FixedAsset $fixedAsset) {
+            $fixedAsset->syncWithCatalogAndInventory();
+        });
+
+        static::deleted(function (FixedAsset $fixedAsset) {
+            try {
+                $prefix = strtoupper(trim($fixedAsset->code_prefix ?: 'AST'));
+                $sku = 'FA-' . $prefix;
+                $product = Product::where('sku', $sku)->orWhere(function($q) use ($fixedAsset) {
+                    $q->where('name', $fixedAsset->name)->where('category', 'Fixed Asset');
+                })->first();
+
+                if ($product) {
+                    Inventory::where('product_id', $product->id)->delete();
+                    $product->delete();
+                }
+            } catch (\Throwable $e) {
+                Log::warning("FixedAsset delete sync failed: " . $e->getMessage());
+            }
+        });
+    }
 
     // ─── Relationships ────────────────────────────────────────────────────────
 
@@ -157,5 +182,80 @@ class FixedAsset extends Model
         }
 
         return $created;
+    }
+
+    /**
+     * Synchronize this Fixed Asset with Material Catalog (products) and Store Inventory (inventory).
+     */
+    public function syncWithCatalogAndInventory(): ?Product
+    {
+        try {
+            $prefix = strtoupper(trim($this->code_prefix ?: 'AST'));
+            $sku = 'FA-' . $prefix;
+
+            // 1. Sync Material Catalog (Product)
+            $product = Product::withTrashed()->where('sku', $sku)
+                ->orWhere(function($q) {
+                    $q->where('name', $this->name)->where('category', 'Fixed Asset');
+                })->first();
+
+            $storeName = $this->store ? $this->store->name : 'Main Store';
+            $inStoreCount = $this->units()->where('status', FixedAssetUnit::STATUS_IN_STORE)->count();
+            $assignedCount = $this->units()->where('status', FixedAssetUnit::STATUS_ASSIGNED)->count();
+            $totalCount = max((int) $this->total_quantity, $inStoreCount + $assignedCount);
+
+            $productData = [
+                'name'                => $this->name,
+                'sku'                 => $sku,
+                'category'            => 'Fixed Asset',
+                'sub_category'        => $this->category ?? 'Equipment',
+                'unit'                => 'Pcs',
+                'unit_price'          => $this->unit_cost ?? 0.00,
+                'selling_price'       => $this->unit_cost ?? 0.00,
+                'max_stock'           => $totalCount,
+                'reorder_level'       => 1,
+                'equipment_condition' => 'Good',
+                'assigned_to'         => $assignedCount > 0 ? ($assignedCount . ' Assigned to Staff') : 'Unassigned',
+                'current_location'    => $storeName,
+                'asset_status'        => $inStoreCount > 0 ? 'Available' : 'Assigned',
+            ];
+
+            if ($product) {
+                if ($product->trashed()) {
+                    $product->restore();
+                }
+                $product->update($productData);
+            } else {
+                $product = Product::create($productData);
+            }
+
+            // 2. Sync Store Inventory (Inventory)
+            $storeId = $this->store_id;
+            if (!$storeId) {
+                $defaultStore = Store::where('is_active', true)->first();
+                $storeId = $defaultStore ? $defaultStore->id : 1;
+            }
+
+            if ($storeId && $product) {
+                Inventory::updateOrCreate(
+                    [
+                        'store_id'   => $storeId,
+                        'product_id' => $product->id,
+                    ],
+                    [
+                        'quantity_on_hand'  => $inStoreCount + $assignedCount,
+                        'quantity_reserved' => $assignedCount,
+                        'unit_cost'         => $this->unit_cost ?? 0.00,
+                        'min_stock'         => 1,
+                        'last_movement_at'  => now(),
+                    ]
+                );
+            }
+
+            return $product;
+        } catch (\Throwable $e) {
+            Log::warning("Failed to sync FixedAsset #{$this->id} ({$this->name}) to Catalog/Inventory: " . $e->getMessage());
+            return null;
+        }
     }
 }

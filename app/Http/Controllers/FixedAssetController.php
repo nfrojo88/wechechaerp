@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\FixedAsset;
 use App\Models\FixedAssetUnit;
 use App\Models\FixedAssetAssignment;
-use App\Models\Store;
 use App\Models\Employee;
+use App\Models\Store;
+use App\Models\Product;
+use App\Models\Inventory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -52,6 +54,19 @@ class FixedAssetController extends Controller
         ];
 
         $effectiveStatus = $status ?: ($tab !== 'all' ? $tab : null);
+
+        // Auto-sync existing Fixed Assets to Material Catalog & Store Inventory if needed
+        try {
+            $faProductCount = Product::where('category', 'Fixed Asset')->count();
+            $faCount = FixedAsset::count();
+            if ($faProductCount < $faCount) {
+                FixedAsset::with(['store', 'units'])->chunk(50, function($assets) {
+                    foreach ($assets as $asset) {
+                        $asset->syncWithCatalogAndInventory();
+                    }
+                });
+            }
+        } catch (\Throwable $e) {}
 
         // Query for parent assets with eager-loaded units matching selected status
         $query = FixedAsset::with(['store', 'units' => function($q) use ($effectiveStatus, $search) {
@@ -183,8 +198,10 @@ class FixedAssetController extends Controller
 
             DB::commit();
 
+            $fixedAsset->syncWithCatalogAndInventory();
+
             return redirect()->route('store-manager.fixed-assets.index')
-                ->with('success', "Fixed Asset \"{$fixedAsset->name}\" created successfully with {$qty} unit codes ({$prefix}-1 to {$prefix}-{$qty})!");
+                ->with('success', "Fixed Asset \"{$fixedAsset->name}\" created successfully with {$qty} unit codes ({$prefix}-1 to {$prefix}-{$qty}), and synced to Material Catalog & Store Inventory!");
 
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -307,6 +324,8 @@ class FixedAssetController extends Controller
             ]);
 
             DB::commit();
+
+            $fixedAsset->syncWithCatalogAndInventory();
 
             return redirect()->route('store-manager.fixed-assets.show', $fixedAsset->id)
                 ->with('success', "Fixed Asset \"{$fixedAsset->name}\" updated successfully! Quantity synced to {$newQty}.");

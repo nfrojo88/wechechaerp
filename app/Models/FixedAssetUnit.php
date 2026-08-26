@@ -53,6 +53,17 @@ class FixedAssetUnit extends Model
         'deleted_at'        => 'datetime',
     ];
 
+    protected static function booted()
+    {
+        static::saved(function (FixedAssetUnit $unit) {
+            $unit->parentAsset?->syncWithCatalogAndInventory();
+        });
+
+        static::deleted(function (FixedAssetUnit $unit) {
+            $unit->parentAsset?->syncWithCatalogAndInventory();
+        });
+    }
+
     // ─── Relationships ────────────────────────────────────────────────────────
 
     public function parentAsset()
