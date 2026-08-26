@@ -73,15 +73,43 @@ class ProfileController extends Controller
                 ->get();
         }
 
-        // Load assigned Petty Cash accounts only
-        $assignedPettyCash = \App\Models\ChartOfAccount::where('assigned_to', $user->id)
-            ->where(function($q) {
-                $q->where('code', '1110')
-                  ->orWhere('code', 'like', '1110%')
-                  ->orWhere('name', 'like', '%petty cash%')
-                  ->orWhere('subtype', 'cash');
-            })
-            ->get();
+        // Target IDs for finding assigned petty cash (User ID, Employee ID, or email match)
+        $targetUserIds = array_filter([
+            $user->id,
+            $employee?->id,
+            $employee?->user_id,
+        ]);
+        if ($employee?->email) {
+            $matchedUId = \App\Models\User::where('email', $employee->email)->value('id');
+            if ($matchedUId) $targetUserIds[] = $matchedUId;
+        }
+        $targetUserIds = array_unique($targetUserIds);
+
+        // Load all assigned accounts for this user/employee
+        $allAssignedCoas = \App\Models\ChartOfAccount::whereIn('assigned_to', $targetUserIds)->get();
+
+        // Strictly match Petty Cash / Cash accounts
+        $assignedPettyCash = $allAssignedCoas->filter(function ($coa) {
+            $code = (string) ($coa->code ?? '');
+            $name = strtolower($coa->name ?? '');
+            $subtype = strtolower($coa->subtype ?? '');
+            $type = strtolower($coa->type ?? '');
+
+            return str_starts_with($code, '111')
+                || str_starts_with($code, '110')
+                || str_contains($name, 'petty')
+                || str_contains($name, 'cash')
+                || str_contains($name, 'fund')
+                || str_contains($name, 'ፔቲ')
+                || in_array($subtype, ['cash', 'petty_cash', 'cash_equivalent'])
+                || ($type === 'asset' && in_array($subtype, ['cash', 'current_asset', 'asset']));
+        });
+
+        // Fallback: if no specific 111x match, but person has assigned asset/cash accounts
+        if ($assignedPettyCash->isEmpty() && $allAssignedCoas->isNotEmpty()) {
+            $assignedPettyCash = $allAssignedCoas->filter(fn($c) => in_array(strtolower($c->type ?? ''), ['asset', 'expense']));
+        }
+
         $pettyCashBalance = (float) $assignedPettyCash->sum('current_balance');
 
         return view('profile.edit', compact(

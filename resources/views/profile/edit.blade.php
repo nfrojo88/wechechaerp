@@ -79,9 +79,21 @@
                         @else
                             <span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>Awaiting GM Approval</span>
                         @endif
+                        @if(isset($assignedPettyCash) && $assignedPettyCash->isNotEmpty())
+                            <span class="badge bg-success bg-gradient"><i class="fa-solid fa-wallet me-1"></i>Petty Cash Custodian</span>
+                        @endif
                     </div>
                 </div>
             </div>
+            @if(isset($assignedPettyCash) && $assignedPettyCash->isNotEmpty())
+            <div class="d-flex align-items-center gap-2">
+                <div class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2 rounded-pill font-monospace fs-6">
+                    <i class="fa-solid fa-wallet me-1"></i> Available: <strong>ETB {{ number_format($pettyCashBalance, 2) }}</strong>
+                </div>
+            </div>
+            @endif
+        </div>
+
         @if(isset($assignedPettyCash) && $assignedPettyCash->isNotEmpty())
         <!-- Assigned Petty Cash Available Amount Card (Only for Petty Cash) -->
         <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden" style="background: linear-gradient(135deg, #065f46 0%, #047857 50%, #059669 100%);">
@@ -676,7 +688,26 @@
                             </li>
                         </ul>
                     </div>
+                @if(isset($assignedPettyCash) && $assignedPettyCash->isNotEmpty())
+                {{-- Petty Cash Sidebar Widget (Only for Petty Cash) --}}
+                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden border-start border-4 border-success">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="rounded-circle bg-success bg-opacity-10 p-2 text-success">
+                                    <i class="fa-solid fa-wallet fa-lg"></i>
+                                </div>
+                                <span class="fw-bold text-dark small">Petty Cash Available</span>
+                            </div>
+                            <span class="badge bg-success bg-opacity-10 text-success rounded-pill font-monospace" style="font-size: 0.72rem;">Assigned</span>
+                        </div>
+                        <h4 class="fw-bold text-success font-monospace mb-1">ETB {{ number_format($pettyCashBalance, 2) }}</h4>
+                        <div class="text-muted small" style="font-size: 0.75rem;">
+                            {{ $assignedPettyCash->pluck('name')->implode(', ') }}
+                        </div>
+                    </div>
                 </div>
+                @endif
 
                 {{-- 4 Stat Cards in 2x2 Grid --}}
                 <div class="row g-3 mb-4">

@@ -509,13 +509,29 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                     
                     @auth
                         @php
-                            $authPettyCash = \App\Models\ChartOfAccount::where('assigned_to', auth()->id())
-                                ->where(function($q) {
-                                    $q->where('code', '1110')
-                                      ->orWhere('code', 'like', '1110%')
-                                      ->orWhere('name', 'like', '%petty cash%')
-                                      ->orWhere('subtype', 'cash');
-                                })->get();
+                            $authTargetIds = array_filter([
+                                auth()->id(),
+                                auth()->user()->employee?->id,
+                            ]);
+                            $allAuthCoas = \App\Models\ChartOfAccount::whereIn('assigned_to', $authTargetIds)->get();
+                            $authPettyCash = $allAuthCoas->filter(function ($coa) {
+                                $code = (string) ($coa->code ?? '');
+                                $name = strtolower($coa->name ?? '');
+                                $subtype = strtolower($coa->subtype ?? '');
+                                $type = strtolower($coa->type ?? '');
+
+                                return str_starts_with($code, '111')
+                                    || str_starts_with($code, '110')
+                                    || str_contains($name, 'petty')
+                                    || str_contains($name, 'cash')
+                                    || str_contains($name, 'fund')
+                                    || str_contains($name, 'ፔቲ')
+                                    || in_array($subtype, ['cash', 'petty_cash', 'cash_equivalent'])
+                                    || ($type === 'asset' && in_array($subtype, ['cash', 'current_asset', 'asset']));
+                            });
+                            if ($authPettyCash->isEmpty() && $allAuthCoas->isNotEmpty()) {
+                                $authPettyCash = $allAuthCoas->filter(fn($c) => in_array(strtolower($c->type ?? ''), ['asset', 'expense']));
+                            }
                             $authPettyCashBal = (float) $authPettyCash->sum('current_balance');
                         @endphp
                         @if($authPettyCash->isNotEmpty())

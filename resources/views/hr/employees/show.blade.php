@@ -87,14 +87,41 @@
             <i class="fa-solid fa-edit me-2"></i>Edit
         </a>
     </div>
+</div>
+
 @php
-    $empPettyCash = $employee->user_id ? \App\Models\ChartOfAccount::where('assigned_to', $employee->user_id)
-        ->where(function($q) {
-            $q->where('code', '1110')
-              ->orWhere('code', 'like', '1110%')
-              ->orWhere('name', 'like', '%petty cash%')
-              ->orWhere('subtype', 'cash');
-        })->get() : collect();
+    $empTargetUserIds = array_filter([
+        $employee->user_id,
+        $employee->id,
+    ]);
+    if ($employee->email) {
+        $foundUId = \App\Models\User::where('email', $employee->email)->value('id');
+        if ($foundUId) $empTargetUserIds[] = $foundUId;
+    }
+    $empTargetUserIds = array_unique($empTargetUserIds);
+
+    $allEmpCoas = \App\Models\ChartOfAccount::whereIn('assigned_to', $empTargetUserIds)->get();
+
+    $empPettyCash = $allEmpCoas->filter(function ($coa) {
+        $code = (string) ($coa->code ?? '');
+        $name = strtolower($coa->name ?? '');
+        $subtype = strtolower($coa->subtype ?? '');
+        $type = strtolower($coa->type ?? '');
+
+        return str_starts_with($code, '111')
+            || str_starts_with($code, '110')
+            || str_contains($name, 'petty')
+            || str_contains($name, 'cash')
+            || str_contains($name, 'fund')
+            || str_contains($name, 'ፔቲ')
+            || in_array($subtype, ['cash', 'petty_cash', 'cash_equivalent'])
+            || ($type === 'asset' && in_array($subtype, ['cash', 'current_asset', 'asset']));
+    });
+
+    if ($empPettyCash->isEmpty() && $allEmpCoas->isNotEmpty()) {
+        $empPettyCash = $allEmpCoas->filter(fn($c) => in_array(strtolower($c->type ?? ''), ['asset', 'expense']));
+    }
+
     $empPettyCashBal = (float) $empPettyCash->sum('current_balance');
 @endphp
 
