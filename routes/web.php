@@ -167,6 +167,170 @@ Route::get('/migrate', function() {
     return redirect('/run-migrations');
 });
 
+// Temporary one-time cleanup route to erase PR-20260825-0007 up to PR-20260825-0009 and all linked data
+Route::get('/erase-prs-7-8-9', function () {
+    $report = [];
+    
+    try {
+        \Illuminate\Support\Facades\DB::beginTransaction();
+
+        $targetPrNos = ['PR-20260825-0007', 'PR-20260825-0008', 'PR-20260825-0009', 'PR-7', 'PR-8', 'PR-9', 'PR-0007', 'PR-0008', 'PR-0009'];
+        $prs = \App\Models\PurchaseRequest::withTrashed()
+            ->whereIn('pr_no', $targetPrNos)
+            ->orWhereIn('id', [7, 8, 9])
+            ->orWhere('pr_no', 'like', '%20260825-0007%')
+            ->orWhere('pr_no', 'like', '%20260825-0008%')
+            ->orWhere('pr_no', 'like', '%20260825-0009%')
+            ->get();
+
+        $prIds = $prs->pluck('id')->toArray();
+        $prNumbers = $prs->pluck('pr_no')->unique()->toArray();
+
+        foreach ([7, 8, 9] as $num) {
+            $prNumbers[] = "PR-20260825-000{$num}";
+            $prNumbers[] = "PR-{$num}";
+            $prNumbers[] = (string)$num;
+        }
+        $prNumbers = array_unique(array_filter($prNumbers));
+
+        if (empty($prIds)) {
+            $prIds = [7, 8, 9];
+        }
+
+        // 1. Delete linked Procurement Payments
+        if (\Illuminate\Support\Facades\Schema::hasTable('procurement_payments')) {
+            $deletedPayments = \Illuminate\Support\Facades\DB::table('procurement_payments')->whereIn('purchase_request_id', $prIds)->delete();
+            $report[] = "Deleted {$deletedPayments} record(s) from procurement_payments";
+        }
+
+        // 2. Delete linked Procurement Receipts
+        if (\Illuminate\Support\Facades\Schema::hasTable('procurement_receipts')) {
+            $deletedReceipts = \Illuminate\Support\Facades\DB::table('procurement_receipts')->whereIn('purchase_request_id', $prIds)->delete();
+            $report[] = "Deleted {$deletedReceipts} record(s) from procurement_receipts";
+        }
+
+        // 3. Delete linked GM Decisions
+        if (\Illuminate\Support\Facades\Schema::hasTable('pr_gm_decisions')) {
+            $deletedGm = \Illuminate\Support\Facades\DB::table('pr_gm_decisions')->whereIn('purchase_request_id', $prIds)->delete();
+            $report[] = "Deleted {$deletedGm} record(s) from pr_gm_decisions";
+        }
+
+        // 4. Delete linked Marketing Variances
+        if (\Illuminate\Support\Facades\Schema::hasTable('pr_marketing_variances')) {
+            $deletedVar = \Illuminate\Support\Facades\DB::table('pr_marketing_variances')->whereIn('purchase_request_id', $prIds)->delete();
+            $report[] = "Deleted {$deletedVar} record(s) from pr_marketing_variances";
+        }
+
+        // 5. Delete linked Workflow Logs
+        if (\Illuminate\Support\Facades\Schema::hasTable('pr_workflow_logs')) {
+            $deletedLogs = \Illuminate\Support\Facades\DB::table('pr_workflow_logs')->whereIn('purchase_request_id', $prIds)->delete();
+            $report[] = "Deleted {$deletedLogs} record(s) from pr_workflow_logs";
+        }
+
+        // 6. Delete linked Credit Store Ledgers & Payments
+        if (\Illuminate\Support\Facades\Schema::hasTable('credit_store_ledgers')) {
+            $creditLedgerIds = \Illuminate\Support\Facades\DB::table('credit_store_ledgers')->whereIn('purchase_request_id', $prIds)->pluck('id')->toArray();
+            if (!empty($creditLedgerIds) && \Illuminate\Support\Facades\Schema::hasTable('credit_store_payments')) {
+                $deletedCreditPay = \Illuminate\Support\Facades\DB::table('credit_store_payments')->whereIn('credit_store_ledger_id', $creditLedgerIds)->delete();
+                $report[] = "Deleted {$deletedCreditPay} record(s) from credit_store_payments";
+            }
+            $deletedLedgers = \Illuminate\Support\Facades\DB::table('credit_store_ledgers')->whereIn('purchase_request_id', $prIds)->delete();
+            $report[] = "Deleted {$deletedLedgers} record(s) from credit_store_ledgers";
+        }
+
+        // 7. Delete linked Proforma Invoices & Items
+        if (\Illuminate\Support\Facades\Schema::hasTable('proforma_invoices')) {
+            $proformaIds = \Illuminate\Support\Facades\DB::table('proforma_invoices')->whereIn('purchase_request_id', $prIds)->pluck('id')->toArray();
+            if (!empty($proformaIds) && \Illuminate\Support\Facades\Schema::hasTable('proforma_invoice_items')) {
+                $deletedProfItems = \Illuminate\Support\Facades\DB::table('proforma_invoice_items')->whereIn('proforma_invoice_id', $proformaIds)->delete();
+                $report[] = "Deleted {$deletedProfItems} record(s) from proforma_invoice_items";
+            }
+            $deletedProformas = \Illuminate\Support\Facades\DB::table('proforma_invoices')->whereIn('purchase_request_id', $prIds)->delete();
+            $report[] = "Deleted {$deletedProformas} record(s) from proforma_invoices";
+        }
+
+        // 8. Delete Market Research & Items
+        if (\Illuminate\Support\Facades\Schema::hasTable('market_research')) {
+            $mrIds = \Illuminate\Support\Facades\DB::table('market_research')->whereIn('purchase_request_id', $prIds)->pluck('id')->toArray();
+            if (!empty($mrIds) && \Illuminate\Support\Facades\Schema::hasTable('market_research_items')) {
+                \Illuminate\Support\Facades\DB::table('market_research_items')->whereIn('market_research_id', $mrIds)->delete();
+            }
+            \Illuminate\Support\Facades\DB::table('market_research')->whereIn('purchase_request_id', $prIds)->delete();
+        }
+
+        // 9. Delete Purchase Request Items
+        if (\Illuminate\Support\Facades\Schema::hasTable('purchase_request_items')) {
+            $deletedPrItems = \Illuminate\Support\Facades\DB::table('purchase_request_items')->whereIn('purchase_request_id', $prIds)->delete();
+            $report[] = "Deleted {$deletedPrItems} record(s) from purchase_request_items";
+        }
+
+        // 10. Delete linked Expenses created for these PRs
+        if (\Illuminate\Support\Facades\Schema::hasTable('expenses')) {
+            $deletedExpenses = \Illuminate\Support\Facades\DB::table('expenses')->where(function($q) use ($prNumbers, $prIds) {
+                foreach ($prNumbers as $prn) {
+                    $q->orWhere('description', 'like', "%{$prn}%")
+                      ->orWhere('notes', 'like', "%{$prn}%");
+                }
+                foreach ($prIds as $pid) {
+                    $q->orWhere('description', 'like', "%PR #{$pid}%")
+                      ->orWhere('notes', 'like', "%PR #{$pid}%");
+                }
+            })->delete();
+            $report[] = "Deleted {$deletedExpenses} linked Expense record(s)";
+        }
+
+        // 11. Delete linked Journal Entries / Lines if any
+        if (\Illuminate\Support\Facades\Schema::hasTable('journal_entries')) {
+            $jeQuery = \Illuminate\Support\Facades\DB::table('journal_entries')->where(function($q) use ($prNumbers, $prIds) {
+                foreach ($prNumbers as $prn) {
+                    $q->orWhere('reference', 'like', "%{$prn}%")
+                      ->orWhere('description', 'like', "%{$prn}%");
+                }
+                foreach ($prIds as $pid) {
+                    $q->orWhere('reference', 'like', "%PR #{$pid}%")
+                      ->orWhere('description', 'like', "%PR #{$pid}%");
+                }
+            });
+            $jeIds = $jeQuery->pluck('id')->toArray();
+            if (!empty($jeIds) && \Illuminate\Support\Facades\Schema::hasTable('journal_entry_lines')) {
+                \Illuminate\Support\Facades\DB::table('journal_entry_lines')->whereIn('journal_entry_id', $jeIds)->delete();
+            }
+            $deletedJe = $jeQuery->delete();
+            $report[] = "Deleted {$deletedJe} linked Journal Entry record(s)";
+        }
+
+        // 12. Delete the PurchaseRequest records permanently
+        $deletedPrs = \Illuminate\Support\Facades\DB::table('purchase_requests')->whereIn('id', $prIds)->orWhereIn('pr_no', $prNumbers)->delete();
+        $report[] = "Deleted {$deletedPrs} Purchase Request record(s) (PR #7, #8, #9 / PR-20260825-0007..0009)";
+
+        \Illuminate\Support\Facades\DB::commit();
+
+        $htmlReport = implode('<br>✅ ', $report);
+
+        return "<div style='font-family:Segoe UI, sans-serif;max-width:800px;margin:40px auto;border-radius:16px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,0.1);background:#fff;'>"
+            . "<div style='background:linear-gradient(135deg,#059669,#10b981);padding:30px;color:#fff;'>"
+            . "<h2 style='margin:0;font-size:24px;'>🧹 Successfully Erased PR-20260825-0007 up to PR-20260825-0009</h2>"
+            . "<p style='margin:8px 0 0;opacity:0.9;'>All linked expenses, decisions, payments, proformas, items, and receipts have been completely wiped.</p>"
+            . "</div>"
+            . "<div style='padding:30px;'>"
+            . "<div style='background:#f0fdf4;border:1px solid #bbf7d0;padding:20px;border-radius:12px;color:#166534;font-size:14px;line-height:1.8;'>"
+            . "✅ " . $htmlReport
+            . "</div>"
+            . "<div style='margin-top:25px;display:flex;gap:12px;'>"
+            . "<a href='/purchase-requests' style='background:#2563eb;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;'>📋 View Purchase Requests</a>"
+            . "<a href='/expenses' style='background:#059669;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;'>💰 Expense Track & Approve</a>"
+            . "</div>"
+            . "</div></div>";
+
+    } catch (\Throwable $e) {
+        \Illuminate\Support\Facades\DB::rollBack();
+        return "<div style='font-family:sans-serif;max-width:800px;margin:40px auto;padding:30px;background:#fef2f2;border-radius:12px;border:1px solid #fecaca;color:#991b1b;'>"
+            . "<h2>❌ Error During Cleanup</h2>"
+            . "<p>" . htmlspecialchars($e->getMessage()) . "</p>"
+            . "</div>";
+    }
+});
+
 // Restore employee credentials & lock for GM approval
 Route::get('/reset-employees-for-gm-approval', function () {
     try {
