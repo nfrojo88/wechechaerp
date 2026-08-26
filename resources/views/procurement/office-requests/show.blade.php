@@ -155,8 +155,10 @@
                             <div class="fw-bold text-dark mt-1">{{ $office_request->required_date ? $office_request->required_date->format('M d, Y') : 'Immediate / As Soon As Possible' }}</div>
                         </div>
                         <div class="col-sm-6 col-md-4">
-                            <div class="text-muted small text-uppercase">Target Department / Project</div>
-                            <div class="fw-bold text-dark mt-1">{{ $office_request->project?->name ?? 'Head Office (General)' }}</div>
+                            <div class="text-muted small text-uppercase">Target Location / Department</div>
+                            <div class="fw-bold text-dark mt-1">
+                                <i class="fa-solid fa-building me-1 text-primary"></i> Head Office (ዋና ቢሮ)
+                            </div>
                         </div>
                         <div class="col-sm-6 col-md-4">
                             <div class="text-muted small text-uppercase">Store (Optional)</div>

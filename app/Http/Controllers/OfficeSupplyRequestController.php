@@ -161,15 +161,27 @@ class OfficeSupplyRequestController extends Controller
             'items.*.specifications' => 'nullable|string|max:500',
         ]);
 
-        // Default project fallback if none chosen
-        $projectId = $request->project_id;
-        if (!$projectId) {
-            $defaultProject = Project::where('name', 'like', '%Office%')
-                ->orWhere('name', 'like', '%Head%')
-                ->orWhere('name', 'like', '%General%')
-                ->first() ?? Project::first();
-            $projectId = $defaultProject ? $defaultProject->id : 1;
+        // Strict association: Office Requests belong exclusively to Head Office
+        $headOfficeProject = Project::where('name', 'like', '%Head Office%')
+            ->orWhere('name', 'like', '%Main Office%')
+            ->first();
+
+        if (!$headOfficeProject) {
+            try {
+                $headOfficeProject = Project::firstOrCreate(
+                    ['name' => 'Head Office (ዋና ቢሮ)'],
+                    [
+                        'code'        => 'HO-ADM',
+                        'status'      => 'active',
+                        'client_name' => 'Internal Administration',
+                        'start_date'  => now(),
+                    ]
+                );
+            } catch (\Throwable $e) {
+                $headOfficeProject = Project::first();
+            }
         }
+        $projectId = $headOfficeProject ? $headOfficeProject->id : 1;
 
         $pr = DB::transaction(function () use ($request, $projectId) {
             $no = 'PR-OFF-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);

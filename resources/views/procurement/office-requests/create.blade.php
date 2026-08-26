@@ -83,17 +83,14 @@
                             @enderror
                         </div>
 
-                        <!-- Target Project (Optional / Defaults to Head Office) -->
+                        <!-- Target Location (Strictly Head Office) -->
                         <div class="mb-3">
-                            <label class="form-label fw-semibold text-dark">Department / Project (አማራጭ)</label>
-                            <select name="project_id" class="form-select">
-                                <option value="">-- Head Office / General Office Use --</option>
-                                @foreach($projects as $proj)
-                                    <option value="{{ $proj->id }}" {{ old('project_id') == $proj->id ? 'selected' : '' }}>
-                                        {{ $proj->name }}
-                                    </option>
-                                @endforeach
-                            </select>
+                            <label class="form-label fw-semibold text-dark">Target Location / Department (ቦታ)</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-primary"><i class="fa-solid fa-building"></i></span>
+                                <input type="text" class="form-control bg-light fw-bold text-dark" value="Head Office (ዋና ቢሮ)" readonly>
+                            </div>
+                            <div class="form-text small">All office material requests are designated exclusively for Head Office.</div>
                         </div>
 
                         <!-- Justification / Note -->
