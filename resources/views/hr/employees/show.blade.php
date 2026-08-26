@@ -485,15 +485,24 @@
         </div>
 
         {{-- ── Card 2: Guarantor Person Information (Guarantor 1 & Guarantor 2) ─────────────────────────── --}}
+        @php
+            $hasGuarantor2 = !empty($employee->guarantor_2_name) || !empty($employee->guarantor_2_id_number) || !empty($employee->guarantor_2_phone) || !empty($employee->guarantor_2_id_card) || !empty($employee->guarantee_letter_2);
+        @endphp
         <div class="card border-0 shadow-sm mb-3">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
                 <h5 class="mb-0">
                     <i class="fa-solid fa-user-shield me-2 text-primary"></i>Guarantor Person Information
                 </h5>
                 <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                        <i class="fa-solid fa-users me-1"></i>2 Guarantor Capacity
-                    </span>
+                    @if($hasGuarantor2)
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                            <i class="fa-solid fa-users me-1"></i>2 Guarantors Recorded
+                        </span>
+                    @else
+                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                            <i class="fa-solid fa-user-shield me-1"></i>Primary Guarantor
+                        </span>
+                    @endif
                     <a href="{{ route('employees.edit', $employee) }}" class="btn btn-xs btn-outline-secondary">
                         <i class="fa-solid fa-pen-to-square me-1"></i>Edit Guarantor Info
                     </a>
@@ -502,7 +511,7 @@
             <div class="card-body">
                 <div class="row g-4">
                     {{-- ── Guarantor 1 Column ─────────────────────────── --}}
-                    <div class="col-lg-6">
+                    <div class="{{ $hasGuarantor2 ? 'col-lg-6' : 'col-12' }}">
                         <div class="p-3 border rounded-3 bg-white shadow-xs h-100 position-relative">
                             <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
                                 <h6 class="fw-bold mb-0 text-dark">
@@ -516,15 +525,15 @@
                             </div>
 
                             <div class="row g-2 mb-3">
-                                <div class="col-12">
+                                <div class="{{ $hasGuarantor2 ? 'col-12' : 'col-md-4 col-12' }}">
                                     <small class="text-muted d-block fw-semibold" style="font-size:0.72rem; letter-spacing:0.04em;">FULL NAME</small>
                                     <div class="fw-bold text-dark fs-6">{{ $employee->guarantor_name ?: '—' }}</div>
                                 </div>
-                                <div class="col-sm-6">
+                                <div class="{{ $hasGuarantor2 ? 'col-sm-6' : 'col-md-4 col-sm-6' }}">
                                     <small class="text-muted d-block fw-semibold" style="font-size:0.72rem; letter-spacing:0.04em;">NATIONAL / KEBELE ID</small>
                                     <div class="fw-bold text-dark font-monospace">{{ $employee->guarantor_id_number ?: '—' }}</div>
                                 </div>
-                                <div class="col-sm-6">
+                                <div class="{{ $hasGuarantor2 ? 'col-sm-6' : 'col-md-4 col-sm-6' }}">
                                     <small class="text-muted d-block fw-semibold" style="font-size:0.72rem; letter-spacing:0.04em;">PHONE NUMBER</small>
                                     <div class="fw-bold text-dark">{{ $employee->guarantor_phone ?: '—' }}</div>
                                 </div>
@@ -602,7 +611,8 @@
                         </div>
                     </div>
 
-                    {{-- ── Guarantor 2 Column ─────────────────────────── --}}
+                    @if($hasGuarantor2)
+                    {{-- ── Guarantor 2 Column (Only shown if second guarantor added) ─────────────────────────── --}}
                     <div class="col-lg-6">
                         <div class="p-3 border rounded-3 bg-white shadow-xs h-100 position-relative">
                             <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
@@ -702,6 +712,7 @@
                             </div>
                         </div>
                     </div>
+                    @endif
                 </div>
 
                 @if(!$employee->guarantor_name && !$employee->guarantor_2_name && !$employee->guarantee_letter && !$employee->guarantee_letter_2)
