@@ -12,6 +12,8 @@ class PurchaseRequest extends Model
     // ── Status State Machine Constants ─────────────────────────────────────
     const STATUS_DRAFT                      = 'draft';
     const STATUS_PENDING_PLANNING           = 'pending_planning_approval';
+    const STATUS_PENDING_HR_APPROVAL        = 'pending_hr_approval';
+    const STATUS_APPROVED                   = 'approved';
     const STATUS_PENDING_STORE_REVIEW       = 'pending_store_review';
     const STATUS_TRANSFERRED                = 'transferred';
     const STATUS_PENDING_PROC_MANAGER       = 'pending_procurement_manager';
@@ -34,6 +36,8 @@ class PurchaseRequest extends Model
         return [
             self::STATUS_DRAFT,
             self::STATUS_PENDING_PLANNING,
+            self::STATUS_PENDING_HR_APPROVAL,
+            self::STATUS_APPROVED,
             self::STATUS_PENDING_STORE_REVIEW,
             self::STATUS_TRANSFERRED,
             self::STATUS_PENDING_PROC_MANAGER,
@@ -58,6 +62,8 @@ class PurchaseRequest extends Model
         return [
             self::STATUS_DRAFT                      => 'Draft',
             self::STATUS_PENDING_PLANNING           => 'Pending Planning Approval',
+            self::STATUS_PENDING_HR_APPROVAL        => 'Pending HR / Coordinator Approval',
+            self::STATUS_APPROVED                   => 'Approved',
             self::STATUS_PENDING_STORE_REVIEW       => 'Pending Store Review',
             self::STATUS_TRANSFERRED                => 'Transferred',
             self::STATUS_PENDING_PROC_MANAGER       => 'Pending Procurement Manager',
@@ -87,6 +93,8 @@ class PurchaseRequest extends Model
         return match ($status) {
             self::STATUS_DRAFT                      => 'secondary',
             self::STATUS_PENDING_PLANNING           => 'warning',
+            self::STATUS_PENDING_HR_APPROVAL        => 'warning',
+            self::STATUS_APPROVED                   => 'success',
             self::STATUS_PENDING_STORE_REVIEW       => 'info',
             self::STATUS_TRANSFERRED                => 'primary',
             self::STATUS_PENDING_PROC_MANAGER       => 'warning',
@@ -109,17 +117,20 @@ class PurchaseRequest extends Model
 
     protected $fillable = [
         'pr_no', 'project_id', 'store_id', 'requested_by', 'material_request_id',
-        'priority', 'type', 'required_date', 'justification', 'status',
+        'priority', 'type', 'is_office_request', 'office_purpose', 'required_date', 'justification', 'status',
         'merged_into_pr_id', 'approved_by', 'approved_at', 'rejection_reason',
+        'hr_coordinator_notes', 'hr_coordinator_approved_by', 'hr_coordinator_approved_at',
         'sourcing_method', 'direct_buy_amount', 'direct_buy_added_by',
         'procurement_team_notes', 'pm_sendback_reason',
         'gm_loop_count', 'current_owner_role',
     ];
 
     protected $casts = [
-        'required_date'     => 'date',
-        'approved_at'       => 'datetime',
-        'direct_buy_amount' => 'decimal:2',
+        'is_office_request'          => 'boolean',
+        'required_date'              => 'date',
+        'approved_at'                => 'datetime',
+        'hr_coordinator_approved_at' => 'datetime',
+        'direct_buy_amount'          => 'decimal:2',
     ];
 
     // ── Core Relations ─────────────────────────────────────────────────────
@@ -128,6 +139,7 @@ class PurchaseRequest extends Model
     public function supplier()       { return $this->belongsTo(Supplier::class, 'supplier_id'); }
     public function requestedBy()    { return $this->belongsTo(User::class, 'requested_by'); }
     public function approvedBy()     { return $this->belongsTo(User::class, 'approved_by'); }
+    public function hrCoordinatorApprovedBy() { return $this->belongsTo(User::class, 'hr_coordinator_approved_by'); }
     public function materialRequest(){ return $this->belongsTo(MaterialRequest::class); }
     public function mergedInto()     { return $this->belongsTo(PurchaseRequest::class, 'merged_into_pr_id'); }
     public function directBuyBy()    { return $this->belongsTo(User::class, 'direct_buy_added_by'); }

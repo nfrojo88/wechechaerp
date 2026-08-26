@@ -1599,6 +1599,14 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/book-driver', [App\Http\Controllers\PurchaseRequestController::class, 'bookDriver'])->name('purchase-requests.book-driver');
     Route::post('purchase-requests/{purchaseRequest}/store-intake', [App\Http\Controllers\PurchaseRequestController::class, 'storeIntake'])->name('purchase-requests.store-intake');
 
+    // ── Office Supply Requests (Secretary -> HR / Coordinator Approval) ──────
+    Route::get('office-requests', [App\Http\Controllers\OfficeSupplyRequestController::class, 'index'])->name('office-requests.index');
+    Route::get('office-requests/create', [App\Http\Controllers\OfficeSupplyRequestController::class, 'create'])->name('office-requests.create');
+    Route::post('office-requests', [App\Http\Controllers\OfficeSupplyRequestController::class, 'store'])->name('office-requests.store');
+    Route::get('office-requests/{office_request}', [App\Http\Controllers\OfficeSupplyRequestController::class, 'show'])->name('office-requests.show');
+    Route::post('office-requests/{office_request}/approve', [App\Http\Controllers\OfficeSupplyRequestController::class, 'approve'])->name('office-requests.approve');
+    Route::post('office-requests/{office_request}/reject', [App\Http\Controllers\OfficeSupplyRequestController::class, 'reject'])->name('office-requests.reject');
+
     // Credit Store Ledger (Finance Head / Credit Purchases & Payment Tracking)
     Route::get('finance/credit-store', [App\Http\Controllers\Finance\CreditStoreController::class, 'index'])->name('finance.credit-store.index');
     Route::get('finance/credit-store/{creditStore}', [App\Http\Controllers\Finance\CreditStoreController::class, 'show'])->name('finance.credit-store.show');

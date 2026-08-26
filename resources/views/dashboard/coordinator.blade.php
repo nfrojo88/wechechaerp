@@ -196,6 +196,18 @@
                                 <small class="text-muted">Analyze Material, Equipment, Manpower</small>
                             </div>
                         </a>
+                        <a href="{{ route('office-requests.index') }}" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-boxes-stacked text-warning me-3"></i>
+                                <div>
+                                    <h6 class="mb-0 fw-bold">Office Supply Requisitions</h6>
+                                    <small class="text-muted">Secretary requests for HR & Coordinator review</small>
+                                </div>
+                            </div>
+                            @if(($kpi['pending_office_reqs'] ?? 0) > 0)
+                                <span class="badge bg-warning text-dark rounded-pill">{{ $kpi['pending_office_reqs'] }}</span>
+                            @endif
+                        </a>
                     </div>
                 </div>
             </div>

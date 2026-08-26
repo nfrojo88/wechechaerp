@@ -207,9 +207,34 @@ class DashboardController extends Controller
         $myExpenseRequests   = $this->safe(fn() => \App\Models\ExpenseRequest::where('requested_by', $user->id)->latest()->take(6)->get(), collect());
         $myExpenseCount      = $this->safe(fn() => \App\Models\ExpenseRequest::where('requested_by', $user->id)->count(), 0);
 
+        // Office Material Requisitions (PR)
+        $myOfficeRequests    = $this->safe(fn() => \App\Models\PurchaseRequest::with(['items.product', 'hrCoordinatorApprovedBy'])
+            ->where(function($q) use ($user) {
+                $q->where('is_office_request', true)
+                  ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+            })
+            ->where('requested_by', $user->id)
+            ->latest()
+            ->take(6)
+            ->get(), collect());
+        $myOfficeRequestsCount = $this->safe(fn() => \App\Models\PurchaseRequest::where(function($q) use ($user) {
+                $q->where('is_office_request', true)
+                  ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+            })
+            ->where('requested_by', $user->id)
+            ->count(), 0);
+        $pendingOfficeRequestsCount = $this->safe(fn() => \App\Models\PurchaseRequest::where(function($q) use ($user) {
+                $q->where('is_office_request', true)
+                  ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+            })
+            ->where('requested_by', $user->id)
+            ->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
+            ->count(), 0);
+
         return view('dashboard.secretary', compact(
             'totalLetters', 'pendingLetters', 'closedLetters', 'myLettersCount',
-            'myLetters', 'recentLetters', 'myExpenseRequests', 'myExpenseCount'
+            'myLetters', 'recentLetters', 'myExpenseRequests', 'myExpenseCount',
+            'myOfficeRequests', 'myOfficeRequestsCount', 'pendingOfficeRequestsCount'
         ));
     }
 
@@ -222,6 +247,10 @@ class DashboardController extends Controller
             'daily_reports_today'   => $this->safe(fn() => \App\Models\DailyReport::whereDate('report_date', now())->count()),
             'material_requests'     => $this->safe(fn() => \App\Models\MaterialRequest::where('status', 'pending')->count()),
             'pending_plans'         => $this->safe(fn() => \App\Models\ProjectPlanWorkflow::where('status', 'planning_manager_approved')->count()),
+            'pending_office_reqs'   => $this->safe(fn() => \App\Models\PurchaseRequest::where(function($q) {
+                $q->where('is_office_request', true)
+                  ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+            })->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)->count(), 0),
         ];
 
         $recentSchedules = $this->safe(fn() => \App\Models\Schedule::with('project')->latest()->take(5)->get(), collect());
@@ -232,8 +261,17 @@ class DashboardController extends Controller
             ->take(10)
             ->get(), collect());
         $erpPlans = $this->safe(fn() => \App\Models\ErpPlanHeader::with('project', 'creator')->latest()->take(5)->get(), collect());
+        $pendingOfficeRequests = $this->safe(fn() => \App\Models\PurchaseRequest::with(['items.product', 'requestedBy'])
+            ->where(function($q) {
+                $q->where('is_office_request', true)
+                  ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+            })
+            ->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
+            ->latest()
+            ->take(5)
+            ->get(), collect());
 
-        return view('dashboard.coordinator', compact('kpi', 'recentSchedules', 'recentDailyReports', 'pendingPlansFromPlanning', 'erpPlans'));
+        return view('dashboard.coordinator', compact('kpi', 'recentSchedules', 'recentDailyReports', 'pendingPlansFromPlanning', 'erpPlans', 'pendingOfficeRequests'));
     }
 
     // ─── General Service Hub ───────────────────────────────────────────────────

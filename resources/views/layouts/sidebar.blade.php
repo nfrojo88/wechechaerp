@@ -80,6 +80,32 @@
                 <span>New Letter</span>
             </a>
         </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('office-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('office-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-boxes-stacked text-warning"></i>
+                <span>Office Supply Request</span>
+                @php
+                    $secOfficeReqCount = 0;
+                    try {
+                        $secOfficeReqCount = \App\Models\PurchaseRequest::where(function($q) {
+                            $q->where('is_office_request', true)
+                              ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+                        })->where('requested_by', auth()->id())
+                          ->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
+                          ->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($secOfficeReqCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $secOfficeReqCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('office-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('office-requests.create') ? 'active' : '' }}">
+                <i class="fa-solid fa-plus-circle text-info"></i>
+                <span>New Office Request</span>
+            </a>
+        </li>
         @endif
 
         @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser)
@@ -1058,6 +1084,24 @@
             <a href="{{ route('daily-reports.approval') }}" class="sidebar-nav-link {{ request()->routeIs('daily-reports.approval') ? 'active' : '' }}">
                 <i class="fa-solid fa-file-check text-success"></i>
                 <span>Approve Daily Reports</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('office-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('office-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-boxes-stacked text-warning"></i>
+                <span>Office Material Requests</span>
+                @php
+                    $pendingHrOfficeReqCount = 0;
+                    try {
+                        $pendingHrOfficeReqCount = \App\Models\PurchaseRequest::where(function($q) {
+                            $q->where('is_office_request', true)
+                              ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+                        })->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingHrOfficeReqCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingHrOfficeReqCount }}</span>
+                @endif
             </a>
         </li>
         <li class="sidebar-nav-item">
