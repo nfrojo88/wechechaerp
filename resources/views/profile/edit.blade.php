@@ -95,32 +95,41 @@
         </div>
 
         @if(isset($assignedPettyCash) && $assignedPettyCash->isNotEmpty())
-        <!-- Assigned Petty Cash Available Amount Card (Only for Petty Cash) -->
-        <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden" style="background: linear-gradient(135deg, #065f46 0%, #047857 50%, #059669 100%);">
-            <div class="card-body p-4 text-white">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <!-- Assigned Petty Cash Balance Card -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white border border-success-subtle overflow-hidden">
+            <div class="card-body p-3 p-md-4">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                     <div class="d-flex align-items-center gap-3">
-                        <div class="rounded-circle bg-white bg-opacity-20 p-3 d-flex align-items-center justify-content-center shadow-sm" style="width: 60px; height: 60px;">
-                            <i class="fa-solid fa-wallet fa-2xl text-warning"></i>
+                        <div class="rounded-4 bg-success bg-opacity-10 p-3 d-flex align-items-center justify-content-center text-success flex-shrink-0" style="width: 54px; height: 54px;">
+                            <i class="fa-solid fa-wallet fa-xl"></i>
                         </div>
                         <div>
-                            <div class="text-white-50 small fw-bold text-uppercase tracking-wider">
-                                <i class="fa-solid fa-shield-halved me-1"></i> Assigned Petty Cash Custodian
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="text-muted small fw-bold text-uppercase tracking-wider" style="font-size: 0.72rem;">Assigned Petty Cash Custodian</span>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style="font-size: 0.7rem;">
+                                    <i class="fa-solid fa-shield-halved me-1"></i>Active Petty Cash Fund
+                                </span>
                             </div>
-                            <h2 class="fw-bold mb-0 text-white font-monospace">ETB {{ number_format($pettyCashBalance, 2) }}</h2>
-                            <div class="text-white small mt-1 opacity-90">
-                                <i class="fa-solid fa-circle-check text-warning me-1"></i> Available Petty Cash Balance allocated to your profile
+                            <div class="d-flex align-items-baseline gap-2 mt-1">
+                                <h3 class="fw-bold mb-0 text-dark font-monospace">ETB {{ number_format($pettyCashBalance, 2) }}</h3>
+                                <small class="text-success fw-semibold"><i class="fa-solid fa-circle-check me-1"></i>Available Balance</small>
                             </div>
                         </div>
                     </div>
-                    <div class="d-flex flex-column align-items-md-end gap-2">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
                         @foreach($assignedPettyCash as $coa)
-                            <span class="badge bg-white bg-opacity-20 text-white border border-white border-opacity-25 px-3 py-2 rounded-pill font-monospace shadow-xs">
-                                <i class="fa-solid fa-vault me-1 text-warning"></i> {{ $coa->name }} ({{ $coa->code }}): <strong>ETB {{ number_format($coa->current_balance, 2) }}</strong>
-                            </span>
+                            <div class="d-inline-flex align-items-center gap-2 bg-light border border-secondary-subtle px-3 py-2 rounded-3 shadow-xs">
+                                <div class="rounded-circle bg-success bg-opacity-10 p-1.5 d-flex align-items-center justify-content-center text-success" style="width: 28px; height: 28px;">
+                                    <i class="fa-solid fa-vault small"></i>
+                                </div>
+                                <div>
+                                    <div class="text-secondary fw-semibold" style="font-size: 0.75rem; line-height: 1.2;">{{ $coa->name }} <span class="text-muted font-monospace">({{ $coa->code }})</span></div>
+                                    <div class="fw-bold text-dark font-monospace" style="font-size: 0.88rem;">ETB {{ number_format($coa->current_balance, 2) }}</div>
+                                </div>
+                            </div>
                         @endforeach
-                        <a href="{{ url('/expenses') }}" class="btn btn-sm btn-light rounded-pill px-3 fw-bold text-success mt-1 shadow-sm">
-                            <i class="fa-solid fa-receipt me-1"></i> View Petty Cash Expenses
+                        <a href="{{ url('/expenses') }}" class="btn btn-sm btn-outline-success rounded-3 px-3 py-2 fw-semibold shadow-xs">
+                            <i class="fa-solid fa-receipt me-1"></i> View Expenses
                         </a>
                     </div>
                 </div>
