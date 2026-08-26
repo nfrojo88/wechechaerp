@@ -215,6 +215,21 @@ class Employee extends Model
         return $this->hasMany(EmployeeLicense::class)->orderBy('expiry_date', 'desc');
     }
 
+    public function getPettyCashBalanceAttribute(): float
+    {
+        if (!$this->user_id) {
+            return 0.00;
+        }
+        return (float) ChartOfAccount::where('assigned_to', $this->user_id)
+            ->where(function($q) {
+                $q->where('code', '1110')
+                  ->orWhere('code', 'like', '1110%')
+                  ->orWhere('name', 'like', '%petty cash%')
+                  ->orWhere('subtype', 'cash');
+            })
+            ->sum('current_balance');
+    }
+
     /**
      * Get effective probation end date (45 days from date_of_joining by default)
      */

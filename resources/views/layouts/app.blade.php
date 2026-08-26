@@ -507,6 +507,25 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                         </ul>
                     </div>
                     
+                    @auth
+                        @php
+                            $authPettyCash = \App\Models\ChartOfAccount::where('assigned_to', auth()->id())
+                                ->where(function($q) {
+                                    $q->where('code', '1110')
+                                      ->orWhere('code', 'like', '1110%')
+                                      ->orWhere('name', 'like', '%petty cash%')
+                                      ->orWhere('subtype', 'cash');
+                                })->get();
+                            $authPettyCashBal = (float) $authPettyCash->sum('current_balance');
+                        @endphp
+                        @if($authPettyCash->isNotEmpty())
+                            <a href="{{ route('profile.edit') }}" class="btn btn-sm btn-outline-success rounded-pill px-3 d-none d-sm-inline-flex align-items-center gap-1 shadow-xs fw-bold me-2" title="Your Assigned Petty Cash Available Balance">
+                                <i class="fa-solid fa-wallet text-success"></i>
+                                <span class="font-monospace">Petty Cash: ETB {{ number_format($authPettyCashBal, 2) }}</span>
+                            </a>
+                        @endif
+                    @endauth
+
                     <div class="dropdown">
                         <a href="#" class="header-user-btn" data-bs-toggle="dropdown">
                             <div class="header-user-avatar">
@@ -515,7 +534,16 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                             <span class="header-user-name d-none d-md-block">{{ auth()->user()->name ?? 'User' }}</span>
                             <i class="fa-solid fa-chevron-down ms-1 small text-muted d-none d-md-block"></i>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 rounded-3">
+                            @if(isset($authPettyCash) && $authPettyCash->isNotEmpty())
+                                <li class="px-3 py-2 bg-success bg-opacity-10 border-bottom mb-1">
+                                    <div class="small text-muted fw-bold text-uppercase" style="font-size: 0.68rem;">
+                                        <i class="fa-solid fa-wallet text-success me-1"></i> Assigned Petty Cash
+                                    </div>
+                                    <div class="fw-bold text-success font-monospace fs-6">ETB {{ number_format($authPettyCashBal, 2) }}</div>
+                                    <div class="small text-muted text-truncate" style="font-size: 0.72rem; max-width: 200px;">{{ $authPettyCash->pluck('name')->implode(', ') }}</div>
+                                </li>
+                            @endif
                             <li><a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="fa-solid fa-user me-2"></i> My Profile</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li>

@@ -82,7 +82,39 @@
                     </div>
                 </div>
             </div>
+        @if(isset($assignedPettyCash) && $assignedPettyCash->isNotEmpty())
+        <!-- Assigned Petty Cash Available Amount Card (Only for Petty Cash) -->
+        <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden" style="background: linear-gradient(135deg, #065f46 0%, #047857 50%, #059669 100%);">
+            <div class="card-body p-4 text-white">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-circle bg-white bg-opacity-20 p-3 d-flex align-items-center justify-content-center shadow-sm" style="width: 60px; height: 60px;">
+                            <i class="fa-solid fa-wallet fa-2xl text-warning"></i>
+                        </div>
+                        <div>
+                            <div class="text-white-50 small fw-bold text-uppercase tracking-wider">
+                                <i class="fa-solid fa-shield-halved me-1"></i> Assigned Petty Cash Custodian
+                            </div>
+                            <h2 class="fw-bold mb-0 text-white font-monospace">ETB {{ number_format($pettyCashBalance, 2) }}</h2>
+                            <div class="text-white small mt-1 opacity-90">
+                                <i class="fa-solid fa-circle-check text-warning me-1"></i> Available Petty Cash Balance allocated to your profile
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-column align-items-md-end gap-2">
+                        @foreach($assignedPettyCash as $coa)
+                            <span class="badge bg-white bg-opacity-20 text-white border border-white border-opacity-25 px-3 py-2 rounded-pill font-monospace shadow-xs">
+                                <i class="fa-solid fa-vault me-1 text-warning"></i> {{ $coa->name }} ({{ $coa->code }}): <strong>ETB {{ number_format($coa->current_balance, 2) }}</strong>
+                            </span>
+                        @endforeach
+                        <a href="{{ url('/expenses') }}" class="btn btn-sm btn-light rounded-pill px-3 fw-bold text-success mt-1 shadow-sm">
+                            <i class="fa-solid fa-receipt me-1"></i> View Petty Cash Expenses
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
+        @endif
 
         <div class="row g-4">
             {{-- Left Column: Detailed Employee Information (Read-Only) --}}

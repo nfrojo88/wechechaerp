@@ -73,11 +73,23 @@ class ProfileController extends Controller
                 ->get();
         }
 
+        // Load assigned Petty Cash accounts only
+        $assignedPettyCash = \App\Models\ChartOfAccount::where('assigned_to', $user->id)
+            ->where(function($q) {
+                $q->where('code', '1110')
+                  ->orWhere('code', 'like', '1110%')
+                  ->orWhere('name', 'like', '%petty cash%')
+                  ->orWhere('subtype', 'cash');
+            })
+            ->get();
+        $pettyCashBalance = (float) $assignedPettyCash->sum('current_balance');
+
         return view('profile.edit', compact(
             'user', 'employee',
             'totalExperienceYears', 'totalExperienceMonths',
             'companyTenureYears', 'companyTenureRem',
-            'maintenanceRequests'
+            'maintenanceRequests',
+            'assignedPettyCash', 'pettyCashBalance'
         ));
     }
 

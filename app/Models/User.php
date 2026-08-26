@@ -50,4 +50,25 @@ class User extends Authenticatable
     {
         return $this->hasOne(Employee::class);
     }
+
+    public function assignedAccounts()
+    {
+        return $this->hasMany(ChartOfAccount::class, 'assigned_to');
+    }
+
+    public function assignedPettyCashAccounts()
+    {
+        return $this->hasMany(ChartOfAccount::class, 'assigned_to')
+            ->where(function($q) {
+                $q->where('code', '1110')
+                  ->orWhere('code', 'like', '1110%')
+                  ->orWhere('name', 'like', '%petty cash%')
+                  ->orWhere('subtype', 'cash');
+            });
+    }
+
+    public function getPettyCashBalanceAttribute(): float
+    {
+        return (float) $this->assignedPettyCashAccounts()->sum('current_balance');
+    }
 }
