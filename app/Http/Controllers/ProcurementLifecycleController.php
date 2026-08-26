@@ -104,7 +104,7 @@ class ProcurementLifecycleController extends Controller
                 ->get();
         }
 
-        // 4. Pending Office Requests specifically for HR / Coordinator
+        // 4. Pending Office Requests specifically for HR / Coordinator & Store Manager
         $pendingOfficeCount = 0;
         if ($isHr || $isCoordinator || $isAdmin || $isGm) {
             try {
@@ -115,12 +115,22 @@ class ProcurementLifecycleController extends Controller
             } catch (\Throwable $e) {}
         }
 
+        $pendingStoreOfficeCount = 0;
+        if ($isStoreManager || $isAdmin) {
+            try {
+                $pendingStoreOfficeCount = PurchaseRequest::where('is_office_request', true)
+                    ->whereIn('status', [PurchaseRequest::STATUS_APPROVED, PurchaseRequest::STATUS_PENDING_STORE_REVIEW])
+                    ->count();
+            } catch (\Throwable $e) {}
+        }
+
         // 5. Summary Counters
         $kpi = [
-            'my_pending'             => $myPrs->total(),
-            'emergency_mrs'          => $emergencyMrs->count(),
-            'pending_office_requests'=> $pendingOfficeCount,
-            'completed'              => PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(),
+            'my_pending'                   => $myPrs->total(),
+            'emergency_mrs'                => $emergencyMrs->count(),
+            'pending_office_requests'      => $pendingOfficeCount,
+            'pending_store_office_requests'=> $pendingStoreOfficeCount,
+            'completed'                    => PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(),
         ];
 
         $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
@@ -128,6 +138,6 @@ class ProcurementLifecycleController extends Controller
             $projects = Project::orderBy('name')->get();
         }
 
-        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'kpi', 'projects', 'isHr', 'isCoordinator'));
+        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'kpi', 'projects', 'isHr', 'isCoordinator', 'isStoreManager', 'isPurchaseManager'));
     }
 }

@@ -35,8 +35,24 @@
                 <div class="card border-0 shadow-sm bg-warning text-dark h-100">
                     <div class="card-body p-3 d-flex align-items-center justify-content-between">
                         <div>
-                            <div class="text-dark small font-weight-bold">Office Supplies (Pending Decision)</div>
+                            <div class="text-dark small font-weight-bold">Office Requisitions (HR Review)</div>
                             <div class="h2 mb-0 font-weight-bold text-dark">{{ $kpi['pending_office_requests'] ?? 0 }}</div>
+                        </div>
+                        <i class="fas fa-user-shield fa-2x text-dark opacity-50"></i>
+                    </div>
+                </div>
+            </a>
+        </div>
+        @endif
+
+        @if(($kpi['pending_store_office_requests'] ?? 0) > 0 || !empty($isStoreManager))
+        <div class="col-12 col-sm-6 col-xl">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index', ['status' => 'pending_store_review']) : url('/office-requests?status=pending_store_review') }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm bg-info text-dark h-100">
+                    <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="text-dark small font-weight-bold">Office Supplies (Store Action)</div>
+                            <div class="h2 mb-0 font-weight-bold text-dark">{{ $kpi['pending_store_office_requests'] ?? 0 }}</div>
                         </div>
                         <i class="fas fa-boxes-stacked fa-2x text-dark opacity-50"></i>
                     </div>
@@ -231,9 +247,17 @@
                                 </span>
                             </td>
                             <td>
-                                @if($pr->status === 'pending_hr_approval')
+                                @if($pr->is_office_request && $pr->status === 'pending_hr_approval')
                                     <span class="badge bg-warning text-dark border border-warning">
                                         <i class="fa-solid fa-hourglass-half me-1"></i> Pending HR / Coordinator
+                                    </span>
+                                @elseif($pr->is_office_request && in_array($pr->status, ['approved', 'pending_store_review']))
+                                    <span class="badge bg-info text-dark border border-info">
+                                        <i class="fa-solid fa-boxes-stacked me-1"></i> Store Review &amp; Dispatch
+                                    </span>
+                                @elseif($pr->is_office_request && in_array($pr->status, ['pending_pm_review', 'pending_proc_team']))
+                                    <span class="badge bg-primary text-white">
+                                        <i class="fa-solid fa-cart-shopping me-1"></i> Pending PM / Buying
                                     </span>
                                 @else
                                     <span class="badge bg-{{ \App\Models\PurchaseRequest::statusBadgeClass($pr->status) }}">
@@ -242,9 +266,17 @@
                                 @endif
                             </td>
                             <td>
-                                @if($pr->status === 'pending_hr_approval')
+                                @if($pr->is_office_request && $pr->status === 'pending_hr_approval')
                                     <span class="badge bg-warning text-dark">
                                         <i class="fas fa-user-shield me-1"></i> HR / Coordinator
+                                    </span>
+                                @elseif($pr->is_office_request && in_array($pr->status, ['approved', 'pending_store_review']))
+                                    <span class="badge bg-info text-dark">
+                                        <i class="fas fa-warehouse me-1"></i> Store Manager
+                                    </span>
+                                @elseif($pr->is_office_request && in_array($pr->status, ['pending_pm_review', 'pending_proc_team']))
+                                    <span class="badge bg-primary text-white">
+                                        <i class="fas fa-user-tie me-1"></i> Purchase Manager
                                     </span>
                                 @else
                                     <span class="badge bg-secondary bg-opacity-10 text-dark">
@@ -265,6 +297,9 @@
                                                 <i class="fas fa-gavel me-1"></i> Decide
                                             </a>
                                         @elseif(in_array($pr->status, ['approved', 'pending_store_review']))
+                                            <button type="button" class="btn btn-sm btn-success fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#dispatchModal{{ $pr->id }}" title="Issue / Dispatch from Store">
+                                                <i class="fas fa-boxes-packing me-1"></i> Dispatch
+                                            </button>
                                             <button type="button" class="btn btn-sm btn-info text-dark fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#sendToPmModal{{ $pr->id }}" title="Send to Purchase Manager (PM)">
                                                 <i class="fas fa-paper-plane me-1"></i> Send to PM
                                             </button>
@@ -284,7 +319,7 @@
                                             @csrf
                                             <div class="modal-header bg-primary text-white">
                                                 <h5 class="modal-title fw-bold">
-                                                    <i class="fas fa-paper-plane me-2"></i>Send Office Request to Purchase Manager (PM)
+                                                    <i class="fas fa-paper-plane me-2"></i>Send to Purchase Manager (PM)
                                                 </h5>
                                                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                             </div>
@@ -301,6 +336,36 @@
                                                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                                                 <button type="submit" class="btn btn-primary px-4">
                                                     <i class="fas fa-paper-plane me-1"></i> Confirm & Send to PM
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+
+                                <!-- Store Dispatch Modal -->
+                                <div class="modal fade" id="dispatchModal{{ $pr->id }}" tabindex="-1" aria-hidden="true" style="text-align: left;">
+                                    <div class="modal-dialog">
+                                        <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('office-requests.store-dispatch') ? route('office-requests.store-dispatch', $pr) : url('/office-requests/' . $pr->id . '/store-dispatch') }}" class="modal-content border-0 shadow">
+                                            @csrf
+                                            <div class="modal-header bg-success text-white">
+                                                <h5 class="modal-title fw-bold">
+                                                    <i class="fas fa-boxes-packing me-2"></i>Issue / Dispatch from Store
+                                                </h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body p-4">
+                                                <p class="text-muted small mb-3">
+                                                    Confirm that <strong>{{ $pr->pr_no }}</strong> items are available and being issued from store inventory directly to the Secretary / Office.
+                                                </p>
+                                                <div class="mb-0">
+                                                    <label class="form-label fw-semibold text-dark">Dispatch Remarks</label>
+                                                    <textarea name="notes" class="form-control" rows="3" placeholder="e.g. All requested office items issued to office secretary..."></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer bg-light">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-success px-4">
+                                                    <i class="fas fa-check me-1"></i> Confirm Dispatch
                                                 </button>
                                             </div>
                                         </form>
