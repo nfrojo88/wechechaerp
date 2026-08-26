@@ -63,7 +63,7 @@ class ProcurementLifecycleController extends Controller
             ->latest();
 
         if (!$isAdmin) {
-            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm, $isStoreManager, $isPurchaseManager) {
+            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm, $isStoreManager, $isPurchaseManager, $isFinanceHead) {
                 $q->whereIn('current_owner_role', $targetRoles);
                 if ($isHr || $isCoordinator || $isGm) {
                     $q->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
