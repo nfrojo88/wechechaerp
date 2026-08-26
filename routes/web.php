@@ -1436,6 +1436,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('material-demand', [App\Http\Controllers\ProcurementController::class, 'materialDemand'])->name('material-demand.index');
 
     Route::resource('delivery-receipts', App\Http\Controllers\DeliveryReceiptController::class)->only(['index', 'create', 'store', 'show']);
+    Route::post('procurement-receipts/{procurementReceipt}/verify', [App\Http\Controllers\DeliveryReceiptController::class, 'verifyProcurementReceipt'])->name('procurement-receipts.verify');
+    Route::post('delivery-receipts/{deliveryReceipt}/verify', [App\Http\Controllers\DeliveryReceiptController::class, 'verifyDeliveryReceipt'])->name('delivery-receipts.verify');
     
     Route::resource('subcon-agreements', App\Http\Controllers\SubconAgreementController::class)->only(['index', 'create', 'store', 'show']);
     Route::post('subcon-agreements/{subconAgreement}/approve', [App\Http\Controllers\SubconAgreementController::class, 'approve'])->name('subcon-agreements.approve');
