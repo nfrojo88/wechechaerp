@@ -283,12 +283,14 @@ Route::get('/erase-prs-7-8-9', function () {
         if (\Illuminate\Support\Facades\Schema::hasTable('journal_entries')) {
             $jeQuery = \Illuminate\Support\Facades\DB::table('journal_entries')->where(function($q) use ($prNumbers, $prIds) {
                 foreach ($prNumbers as $prn) {
-                    $q->orWhere('reference', 'like', "%{$prn}%")
-                      ->orWhere('description', 'like', "%{$prn}%");
+                    $q->orWhere('description', 'like', "%{$prn}%");
                 }
                 foreach ($prIds as $pid) {
-                    $q->orWhere('reference', 'like', "%PR #{$pid}%")
-                      ->orWhere('description', 'like', "%PR #{$pid}%");
+                    $q->orWhere('description', 'like', "%PR #{$pid}%")
+                      ->orWhere(function($subQ) use ($pid) {
+                          $subQ->where('reference_id', $pid)
+                               ->whereIn('reference_type', ['purchase_request', 'purchase_requests', 'PurchaseRequest', 'procurement']);
+                      });
                 }
             });
             $jeIds = $jeQuery->pluck('id')->toArray();
