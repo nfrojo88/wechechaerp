@@ -1608,6 +1608,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('office-requests/{office_request}/reject', [App\Http\Controllers\OfficeSupplyRequestController::class, 'reject'])->name('office-requests.reject');
     Route::post('office-requests/{office_request}/send-to-pm', [App\Http\Controllers\OfficeSupplyRequestController::class, 'sendToPm'])->name('office-requests.send-to-pm');
     Route::post('office-requests/{office_request}/store-dispatch', [App\Http\Controllers\OfficeSupplyRequestController::class, 'storeDispatch'])->name('office-requests.store-dispatch');
+    Route::post('office-requests/{office_request}/finance-confirm', [App\Http\Controllers\OfficeSupplyRequestController::class, 'financeConfirm'])->name('office-requests.finance-confirm');
+
 
     // Credit Store Ledger (Finance Head / Credit Purchases & Payment Tracking)
     Route::get('finance/credit-store', [App\Http\Controllers\Finance\CreditStoreController::class, 'index'])->name('finance.credit-store.index');

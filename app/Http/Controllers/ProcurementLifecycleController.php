@@ -56,6 +56,7 @@ class ProcurementLifecycleController extends Controller
 
         $isStoreManager = $user->hasRole('store_manager');
         $isPurchaseManager = $user->hasRole('purchase_manager');
+        $isFinanceHead = $user->hasRole('finance_head') || $user->hasRole('finance_manager') || $user->hasRole('finance') || $user->hasRole('accountant');
 
         // 2. Fetch PRs awaiting action by this user's role(s)
         $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'materialRequest', 'items'])
@@ -81,6 +82,12 @@ class ProcurementLifecycleController extends Controller
                     $q->orWhere(function ($sub) {
                         $sub->where('is_office_request', true)
                             ->whereIn('status', [PurchaseRequest::STATUS_PENDING_PM_REVIEW, PurchaseRequest::STATUS_PENDING_PROC_TEAM]);
+                    });
+                }
+                if ($isFinanceHead) {
+                    $q->orWhere(function ($sub) {
+                        $sub->where('is_office_request', true)
+                            ->where('status', PurchaseRequest::STATUS_PENDING_FINANCE);
                     });
                 }
             });
@@ -124,12 +131,22 @@ class ProcurementLifecycleController extends Controller
             } catch (\Throwable $e) {}
         }
 
+        $pendingFinanceOfficeCount = 0;
+        if ($isFinanceHead || $isAdmin || $isGm) {
+            try {
+                $pendingFinanceOfficeCount = PurchaseRequest::where('is_office_request', true)
+                    ->where('status', PurchaseRequest::STATUS_PENDING_FINANCE)
+                    ->count();
+            } catch (\Throwable $e) {}
+        }
+
         // 5. Summary Counters
         $kpi = [
             'my_pending'                   => $myPrs->total(),
             'emergency_mrs'                => $emergencyMrs->count(),
             'pending_office_requests'      => $pendingOfficeCount,
             'pending_store_office_requests'=> $pendingStoreOfficeCount,
+            'pending_finance_office_requests' => $pendingFinanceOfficeCount,
             'completed'                    => PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(),
         ];
 
@@ -138,6 +155,6 @@ class ProcurementLifecycleController extends Controller
             $projects = Project::orderBy('name')->get();
         }
 
-        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'kpi', 'projects', 'isHr', 'isCoordinator', 'isStoreManager', 'isPurchaseManager'));
+        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'kpi', 'projects', 'isHr', 'isCoordinator', 'isStoreManager', 'isPurchaseManager', 'isFinanceHead'));
     }
 }

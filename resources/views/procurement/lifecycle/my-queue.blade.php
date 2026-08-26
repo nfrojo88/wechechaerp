@@ -61,6 +61,22 @@
         </div>
         @endif
 
+        @if(($kpi['pending_finance_office_requests'] ?? 0) > 0 || !empty($isFinanceHead))
+        <div class="col-12 col-sm-6 col-xl">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index', ['status' => 'pending_finance']) : url('/office-requests?status=pending_finance') }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm text-white h-100" style="background: linear-gradient(135deg,#7c3aed,#5b21b6);">
+                    <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="text-white-50 small font-weight-bold">Office Supplies (Finance Action)</div>
+                            <div class="h2 mb-0 font-weight-bold">{{ $kpi['pending_finance_office_requests'] ?? 0 }}</div>
+                        </div>
+                        <i class="fas fa-file-invoice-dollar fa-2x text-white-50"></i>
+                    </div>
+                </div>
+            </a>
+        </div>
+        @endif
+
         <div class="col-12 col-sm-6 col-xl">
             <div class="card border-0 shadow-sm bg-danger text-white h-100">
                 <div class="card-body p-3 d-flex align-items-center justify-content-between">
@@ -278,6 +294,10 @@
                                     <span class="badge bg-primary text-white">
                                         <i class="fas fa-user-tie me-1"></i> Purchase Manager
                                     </span>
+                                @elseif($pr->is_office_request && $pr->status === 'pending_finance')
+                                    <span class="badge text-white" style="background:#7c3aed;">
+                                        <i class="fas fa-coins me-1"></i> Finance Head
+                                    </span>
                                 @else
                                     <span class="badge bg-secondary bg-opacity-10 text-dark">
                                         <i class="fas fa-user-tag me-1"></i> {{ ucfirst(str_replace('_', ' ', $pr->current_owner_role ?? 'None')) }}
@@ -303,6 +323,10 @@
                                             <button type="button" class="btn btn-sm btn-info text-dark fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#sendToPmModal{{ $pr->id }}" title="Send to Purchase Manager (PM)">
                                                 <i class="fas fa-paper-plane me-1"></i> Send to PM
                                             </button>
+                                        @elseif($pr->status === 'pending_finance')
+                                            <button type="button" class="btn btn-sm fw-bold shadow-sm text-white" style="background:#7c3aed;" data-bs-toggle="modal" data-bs-target="#financeConfirmModal{{ $pr->id }}" title="Confirm Expense & Mark as Paid">
+                                                <i class="fas fa-file-invoice-dollar me-1"></i> Confirm Expense
+                                            </button>
                                         @endif
                                     @else
                                         <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-primary">
@@ -311,7 +335,7 @@
                                     @endif
                                 </div>
 
-                                @if($pr->is_office_request && in_array($pr->status, ['approved', 'pending_store_review']))
+                                @if($pr->is_office_request && in_array($pr->status, ['approved', 'pending_store_review', 'pending_finance']))
                                 <!-- Send to PM Modal -->
                                 <div class="modal fade" id="sendToPmModal{{ $pr->id }}" tabindex="-1" aria-hidden="true" style="text-align: left;">
                                     <div class="modal-dialog">
@@ -371,6 +395,46 @@
                                         </form>
                                     </div>
                                 </div>
+                                <!-- Finance Head: Confirm Expense Modal -->
+                                @if($pr->is_office_request && $pr->status === 'pending_finance')
+                                <div class="modal fade" id="financeConfirmModal{{ $pr->id }}" tabindex="-1" aria-hidden="true" style="text-align: left;">
+                                    <div class="modal-dialog">
+                                        <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('office-requests.finance-confirm') ? route('office-requests.finance-confirm', $pr) : url('/office-requests/' . $pr->id . '/finance-confirm') }}" class="modal-content border-0 shadow">
+                                            @csrf
+                                            <div class="modal-header text-white" style="background:#7c3aed;">
+                                                <h5 class="modal-title fw-bold">
+                                                    <i class="fas fa-file-invoice-dollar me-2"></i>Confirm Office Expense & Mark Paid
+                                                </h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body p-4">
+                                                <div class="alert" style="background:#ede9fe; border:1px solid #7c3aed; color:#5b21b6;">
+                                                    <i class="fas fa-info-circle me-2"></i>
+                                                    <strong>{{ $pr->pr_no }}</strong> — Office supplies have been issued from Store. As Finance Head, record the expense and confirm payment.
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-semibold text-dark">Amount Paid / Assigned (ETB) <span class="text-muted fw-normal small">(optional)</span></label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text">ETB</span>
+                                                        <input type="number" name="payment_amount" class="form-control" min="0" step="0.01" placeholder="e.g. 4500.00">
+                                                    </div>
+                                                </div>
+                                                <div class="mb-0">
+                                                    <label class="form-label fw-semibold text-dark">Finance Notes / Remarks (ማስታወሻ)</label>
+                                                    <textarea name="payment_notes" class="form-control" rows="3" placeholder="e.g. Charged to office petty cash. Voucher #VC-2026-08-001 issued..."></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer bg-light">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn text-white px-4 fw-bold" style="background:#7c3aed;">
+                                                    <i class="fas fa-check-double me-1"></i> Confirm & Close Request
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                                @endif
+
                                 @endif
                             </td>
                         </tr>

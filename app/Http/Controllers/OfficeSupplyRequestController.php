@@ -375,7 +375,7 @@ class OfficeSupplyRequestController extends Controller
         return back()->with('success', "Office Request #{$office_request->pr_no} successfully sent to Purchase Manager (PM) for procurement.");
     }
 
-    // ─── Store Manager Dispatches / Fulfills from Store ──────────────────────
+    // ─── Store Manager Dispatches / Fulfills from Store (routes to Finance for expense tracking) ─
     public function storeDispatch(Request $request, PurchaseRequest $office_request)
     {
         $user = Auth::user();
@@ -384,12 +384,13 @@ class OfficeSupplyRequestController extends Controller
         }
 
         $fromStatus = $office_request->status;
-        $newStatus  = PurchaseRequest::STATUS_INTAKE_COMPLETE;
+        // Route to Finance Head for expense assignment & payment tracking
+        $newStatus = PurchaseRequest::STATUS_PENDING_FINANCE;
 
         DB::transaction(function () use ($office_request, $fromStatus, $newStatus, $request) {
             $office_request->update([
                 'status'             => $newStatus,
-                'current_owner_role' => 'secretary',
+                'current_owner_role' => 'finance_head',
             ]);
 
             try {
@@ -397,17 +398,62 @@ class OfficeSupplyRequestController extends Controller
                     'purchase_request_id' => $office_request->id,
                     'from_stage'          => $fromStatus,
                     'to_stage'            => $newStatus,
-                    'action'              => 'store_dispatched',
+                    'action'              => 'store_dispatched_to_finance',
                     'actor_role'          => 'store_manager',
                     'actor_id'            => Auth::id(),
-                    'notes'               => 'Office supplies fulfilled and issued from store to Secretary / Office. ' . $request->input('notes', ''),
+                    'notes'               => 'Office supplies issued from store. Forwarded to Finance Head for expense tracking & payment assignment. ' . $request->input('notes', ''),
                     'created_at'          => now(),
                 ]);
             } catch (\Throwable $e) {}
         });
 
-        return back()->with('success', "Office Request #{$office_request->pr_no} materials issued & dispatched successfully.");
+        return back()->with('success', "Office Request #{$office_request->pr_no} dispatched from store and sent to Finance Head for expense tracking.");
     }
+
+    // ─── Finance Head Confirms Expense & Marks Complete ─────────────────────
+    public function financeConfirm(Request $request, PurchaseRequest $office_request)
+    {
+        $user = Auth::user();
+        $userRoles = $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray();
+        $allowedFinance = ['finance_head', 'finance_manager', 'finance', 'accountant', 'admin', 'global_admin', 'gm', 'general_manager'];
+        $canFinance = count(array_intersect($allowedFinance, $userRoles)) > 0;
+
+        if (!$canFinance) {
+            abort(403, 'Unauthorized: Only Finance Head or Admin can confirm expense payment.');
+        }
+
+        $request->validate([
+            'payment_notes'  => 'nullable|string|max:1000',
+            'payment_amount' => 'nullable|numeric|min:0',
+        ]);
+
+        $fromStatus = $office_request->status;
+        $newStatus  = PurchaseRequest::STATUS_COMPLETED;
+
+        DB::transaction(function () use ($office_request, $fromStatus, $newStatus, $request, $user) {
+            $office_request->update([
+                'status'             => $newStatus,
+                'current_owner_role' => null,
+                'approved_by'        => $office_request->approved_by ?? Auth::id(),
+            ]);
+
+            try {
+                PrWorkflowLog::create([
+                    'purchase_request_id' => $office_request->id,
+                    'from_stage'          => $fromStatus,
+                    'to_stage'            => $newStatus,
+                    'action'              => 'finance_confirmed_expense',
+                    'actor_role'          => 'finance_head',
+                    'actor_id'            => Auth::id(),
+                    'notes'               => 'Expense confirmed & tracked by Finance Head (' . $user->name . ').' . ($request->filled('payment_notes') ? ' Notes: ' . $request->payment_notes : '') . ($request->filled('payment_amount') ? ' Amount paid: ETB ' . number_format((float)$request->payment_amount, 2) : ''),
+                    'created_at'          => now(),
+                ]);
+            } catch (\Throwable $e) {}
+        });
+
+        return back()->with('success', "Office Request #{$office_request->pr_no} expense confirmed by Finance. Request is now COMPLETED.");
+    }
+
 
     // ─── Reject (HR / Coordinator) ──────────────────────────────────────────
     public function reject(Request $request, PurchaseRequest $office_request)
