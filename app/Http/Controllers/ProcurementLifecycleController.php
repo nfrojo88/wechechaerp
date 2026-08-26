@@ -24,17 +24,30 @@ class ProcurementLifecycleController extends Controller
         $user = Auth::user();
         $roles = $user->getRoleNames()->toArray();
 
+        $isHr = $user->hasRole('hr_manager') || $user->hasRole('hr_officer') || $user->hasRole('hr');
+        $isCoordinator = $user->hasRole('coordinator');
+        $isAdmin = $user->hasRole('global_admin') || $user->hasRole('admin');
+        $isGm = $user->hasRole('gm') || $user->hasRole('general_manager');
+
         // 1. Identify owner roles to query
         $targetRoles = [];
-        if ($user->hasRole('global_admin') || $user->hasRole('admin')) {
+        if ($isAdmin) {
             $targetRoles = PurchaseRequest::allStatuses();
         } else {
-            if ($user->hasRole('coordinator'))        $targetRoles[] = 'coordinator';
+            if ($isCoordinator) {
+                $targetRoles[] = 'coordinator';
+                $targetRoles[] = 'hr_manager';
+            }
+            if ($isHr) {
+                $targetRoles[] = 'hr_manager';
+                $targetRoles[] = 'hr';
+                $targetRoles[] = 'coordinator';
+            }
             if ($user->hasRole('store_manager'))      $targetRoles[] = 'store_manager';
             if ($user->hasRole('purchase_manager'))   $targetRoles[] = 'purchase_manager';
             if ($user->hasRole('purchase'))           $targetRoles[] = 'purchase';
             if ($user->hasRole('market_research'))    $targetRoles[] = 'market_research';
-            if ($user->hasRole('gm'))                  $targetRoles[] = 'gm';
+            if ($isGm)                                $targetRoles[] = 'gm';
             if ($user->hasRole('finance_head'))       $targetRoles[] = 'finance_head';
             if ($user->hasRole('finance'))            $targetRoles[] = 'finance';
             if ($user->hasRole('general_service'))    $targetRoles[] = 'general_service';
@@ -42,11 +55,20 @@ class ProcurementLifecycleController extends Controller
         }
 
         // 2. Fetch PRs awaiting action by this user's role(s)
-        $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'materialRequest'])
+        $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'materialRequest', 'items'])
             ->latest();
 
-        if (!$user->hasRole('global_admin') && !$user->hasRole('admin')) {
-            $prQuery->whereIn('current_owner_role', $targetRoles);
+        if (!$isAdmin) {
+            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm) {
+                $q->whereIn('current_owner_role', $targetRoles);
+                if ($isHr || $isCoordinator || $isGm) {
+                    $q->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
+                      ->orWhere(function ($sub) {
+                          $sub->where('is_office_request', true)
+                              ->where('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+                      });
+                }
+            });
         }
 
         if ($request->filled('project_id')) {
@@ -60,18 +82,30 @@ class ProcurementLifecycleController extends Controller
 
         // 3. Emergency / Pending MR approval queue for Planning Team
         $emergencyMrs = collect();
-        if ($user->hasRole('planning') || $user->hasRole('planning_manager') || $user->hasRole('admin') || $user->hasRole('global_admin')) {
+        if ($user->hasRole('planning') || $user->hasRole('planning_manager') || $isAdmin) {
             $emergencyMrs = MaterialRequest::with(['project', 'creator', 'requestedBy'])
                 ->where('planning_approval_status', 'pending')
                 ->latest()
                 ->get();
         }
 
-        // 4. Summary Counters
+        // 4. Pending Office Requests specifically for HR / Coordinator
+        $pendingOfficeCount = 0;
+        if ($isHr || $isCoordinator || $isAdmin || $isGm) {
+            try {
+                $pendingOfficeCount = PurchaseRequest::where(function($q) {
+                    $q->where('is_office_request', true)
+                      ->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+                })->where('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL)->count();
+            } catch (\Throwable $e) {}
+        }
+
+        // 5. Summary Counters
         $kpi = [
-            'my_pending'    => $myPrs->total(),
-            'emergency_mrs' => $emergencyMrs->count(),
-            'completed'     => PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(),
+            'my_pending'             => $myPrs->total(),
+            'emergency_mrs'          => $emergencyMrs->count(),
+            'pending_office_requests'=> $pendingOfficeCount,
+            'completed'              => PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(),
         ];
 
         $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
@@ -79,6 +113,6 @@ class ProcurementLifecycleController extends Controller
             $projects = Project::orderBy('name')->get();
         }
 
-        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'kpi', 'projects'));
+        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'kpi', 'projects', 'isHr', 'isCoordinator'));
     }
 }
