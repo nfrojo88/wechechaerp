@@ -111,8 +111,8 @@
                             <i class="fa-solid fa-paper-plane me-1"></i> Send to PM (ለግዢ ክፍል ላክ)
                         </button>
                         <!-- Store Dispatch Button -->
-                        <button type="button" class="btn btn-outline-success px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#storeDispatchModal">
-                            <i class="fa-solid fa-boxes-packing me-1"></i> Issue / Dispatch from Store
+                        <button type="button" class="btn btn-success px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#storeDispatchModal">
+                            <i class="fa-solid fa-boxes-packing me-1"></i> Dispatch &rarr; Send to Finance
                         </button>
                     @endif
                     <a href="{{ route('purchase-requests.show', $office_request) }}" class="btn btn-sm btn-outline-secondary">
@@ -426,7 +426,7 @@
     </div>
 </div>
 
-<!-- STORE DISPATCH MODAL -->
+<!-- STORE DISPATCH MODAL (routes to Finance Head) -->
 <div class="modal fade" id="storeDispatchModal" tabindex="-1" aria-labelledby="storeDispatchModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <form action="{{ \Illuminate\Support\Facades\Route::has('office-requests.store-dispatch') ? route('office-requests.store-dispatch', $office_request) : url('/office-requests/' . $office_request->id . '/store-dispatch') }}" method="POST">
@@ -434,23 +434,24 @@
             <div class="modal-content border-0 shadow">
                 <div class="modal-header bg-success text-white">
                     <h5 class="modal-title fw-bold" id="storeDispatchModalLabel">
-                        <i class="fa-solid fa-boxes-packing me-2"></i>Issue / Dispatch from Store
+                        <i class="fa-solid fa-boxes-packing me-2"></i>Dispatch from Store &amp; Send to Finance Head
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
-                    <p class="text-muted small mb-3">
-                        Confirm that requested materials are issued from store inventory and handed over to Secretary / Office.
-                    </p>
+                    <div class="alert alert-success border-success mb-3 py-2">
+                        <i class="fas fa-arrow-right me-1"></i>
+                        After confirming, <strong>{{ $office_request->pr_no }}</strong> will be marked as <strong>issued from store</strong> and automatically forwarded to <strong>Finance Head</strong> for expense recording &amp; payment tracking.
+                    </div>
                     <div class="mb-0">
-                        <label class="form-label fw-semibold text-dark">Dispatch Notes</label>
-                        <textarea name="notes" rows="3" class="form-control" placeholder="e.g. All 3 items issued from central office inventory..."></textarea>
+                        <label class="form-label fw-semibold text-dark">Store Manager Dispatch Note (የመዝገብ ማስታወሻ)</label>
+                        <textarea name="notes" rows="3" class="form-control" placeholder="e.g. All 3 items issued from Main Store to Office Secretary on Aug 26..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success px-4">
-                        <i class="fa-solid fa-check me-1"></i> Confirm Dispatch
+                    <button type="submit" class="btn btn-success px-4 fw-bold">
+                        <i class="fa-solid fa-check me-1"></i> Confirm Dispatch &amp; Send to Finance
                     </button>
                 </div>
             </div>
