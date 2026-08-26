@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PurchaseRequest;
 use App\Models\PurchaseRequestItem;
 use App\Models\PrWorkflowLog;
+use App\Models\ExpenseRequest;
 use App\Models\Project;
 use App\Models\Store;
 use App\Models\Product;
@@ -384,10 +385,10 @@ class OfficeSupplyRequestController extends Controller
         }
 
         $fromStatus = $office_request->status;
-        // Route to Finance Head for expense assignment & payment tracking
         $newStatus = PurchaseRequest::STATUS_PENDING_FINANCE;
+        $dispatchNote = $request->input('notes', '');
 
-        DB::transaction(function () use ($office_request, $fromStatus, $newStatus, $request) {
+        DB::transaction(function () use ($office_request, $fromStatus, $newStatus, $request, $dispatchNote, $user) {
             $office_request->update([
                 'status'             => $newStatus,
                 'current_owner_role' => 'finance_head',
@@ -401,13 +402,33 @@ class OfficeSupplyRequestController extends Controller
                     'action'              => 'store_dispatched_to_finance',
                     'actor_role'          => 'store_manager',
                     'actor_id'            => Auth::id(),
-                    'notes'               => 'Office supplies issued from store. Forwarded to Finance Head for expense tracking & payment assignment. ' . $request->input('notes', ''),
+                    'notes'               => 'Office supplies issued from store. Forwarded to Finance Head for expense tracking & payment assignment. ' . $dispatchNote,
                     'created_at'          => now(),
+                ]);
+            } catch (\Throwable $e) {}
+
+            // Auto-create an ExpenseRequest entry in the Finance Expense Hub
+            try {
+                $totalEstimated = $office_request->items->sum(function ($item) {
+                    return (float)$item->quantity * (float)($item->estimated_unit_cost ?? 0);
+                });
+
+                $reqNo = 'EXP-OFF-' . date('Ymd') . '-' . str_pad(ExpenseRequest::count() + 1, 4, '0', STR_PAD_LEFT);
+
+                ExpenseRequest::create([
+                    'request_number' => $reqNo,
+                    'user_id'        => $office_request->requested_by,
+                    'category'       => ExpenseRequest::CATEGORY_OFFICE_MATERIAL,
+                    'amount'         => $totalEstimated > 0 ? $totalEstimated : null,
+                    'description'    => 'Office Supply Request: ' . ($office_request->office_purpose ?? 'Office Materials') .
+                                        ' | PR: ' . $office_request->pr_no .
+                                        ($dispatchNote ? ' | Store Note: ' . $dispatchNote : ''),
+                    'status'         => ExpenseRequest::STATUS_APPROVED_ASSIGNED,
                 ]);
             } catch (\Throwable $e) {}
         });
 
-        return back()->with('success', "Office Request #{$office_request->pr_no} dispatched from store and sent to Finance Head for expense tracking.");
+        return back()->with('success', "Office Request #{$office_request->pr_no} dispatched from store. Expense entry created in Finance Hub and sent to Finance Head for payment tracking.");
     }
 
     // ─── Finance Head Confirms Expense & Marks Complete ─────────────────────

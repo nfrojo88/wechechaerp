@@ -378,9 +378,9 @@
                                                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                             </div>
                                             <div class="modal-body p-4">
-                                                <div class="alert alert-success border-success mb-3 py-2">
-                                                    <i class="fas fa-arrow-right me-1"></i>
-                                                    After confirming, <strong>{{ $pr->pr_no }}</strong> will be marked as <strong>issued from store</strong> and automatically forwarded to <strong>Finance Head</strong> for expense recording &amp; payment tracking.
+                                                <div style="background:#d1fae5; border:1px solid #34d399; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:0.88rem; color:#065f46; line-height:1.5;">
+                                                    <i class="fas fa-arrow-right" style="margin-right:6px;"></i>
+                                                    After confirming, <strong>{{ $pr->pr_no }}</strong> will be marked as <strong>issued from store</strong> and automatically forwarded to <strong>Finance Head</strong> for expense recording &amp; payment tracking. A Finance expense entry will be created automatically.
                                                 </div>
                                                 <div class="mb-0">
                                                     <label class="form-label fw-semibold text-dark">Store Manager Dispatch Note (የመዝገብ ማስታወሻ)</label>
