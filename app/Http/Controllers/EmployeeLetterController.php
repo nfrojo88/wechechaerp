@@ -127,6 +127,7 @@ class EmployeeLetterController extends Controller
         if (empty($validated['reference_number'])) {
             $prefix = match ($validated['letter_type']) {
                 'thanks_letter', 'appreciation' => 'LTR-APPR',
+                'power_of_attorney'             => 'LTR-POA',
                 'first_warning'                 => 'LTR-WARN1',
                 'second_warning'                => 'LTR-WARN2',
                 'final_warning'                 => 'LTR-FWN',
@@ -140,10 +141,10 @@ class EmployeeLetterController extends Controller
 
         // Determine severity automatically
         $validated['severity'] = match ($validated['letter_type']) {
-            'thanks_letter', 'appreciation', 'promotion' => 'positive',
-            'first_warning', 'show_cause'               => 'warning',
-            'second_warning', 'final_warning', 'suspension', 'termination' => 'critical',
-            default                                     => 'info',
+            'thanks_letter', 'appreciation', 'promotion', 'power_of_attorney' => 'positive',
+            'first_warning', 'show_cause'                                    => 'warning',
+            'second_warning', 'final_warning', 'suspension', 'termination'   => 'critical',
+            default                                                          => 'info',
         };
 
         if ($request->hasFile('attachment')) {

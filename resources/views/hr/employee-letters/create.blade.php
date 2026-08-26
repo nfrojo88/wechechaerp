@@ -69,6 +69,12 @@
                                         <i class="fa-solid fa-arrow-up-right-dots me-1"></i><strong>Promotion Letter</strong>
                                     </label>
                                 </div>
+                                <div class="col-md-4 col-6">
+                                    <input type="radio" class="btn-check" name="letter_type" id="type_poa" value="power_of_attorney" autocomplete="off" {{ old('letter_type', $defaultType) == 'power_of_attorney' ? 'checked' : '' }} onchange="loadTemplate('power_of_attorney')">
+                                    <label class="btn btn-outline-primary text-dark w-100 text-start py-2 px-3 rounded-3 border-2" for="type_poa" style="border-color:#4f46e5 !important; background-color: #eef2ff;">
+                                        <i class="fa-solid fa-stamp me-1 text-primary"></i><strong class="text-primary">Power of Attorney / Representation (ውክልና)</strong>
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
@@ -200,19 +206,33 @@ const templates = {
         title: "Official Letter of Promotion & Role Advancement",
         content: `Dear [EMPLOYEE_NAME],\n\nIn recognition of your exceptional performance, demonstrated leadership, and continuous contribution to Wechecha Construction, management is pleased to officially promote you to the position of [NEW_POSITION].\n\nEffective Date: [EFFECTIVE_DATE]\nNew Department / Project: [DEPARTMENT]\n\nWe congratulate you on this well-deserved career advancement and trust you will continue to achieve great success in your new role.\n\nSincerely,\nHuman Resources Department\nWechecha Construction`,
         action: "HR update employee title, salary grading, and job contract."
+    },
+    power_of_attorney: {
+        title: "Power of Attorney & Official Representation Letter (የውክልና ማስረጃ / መስጫ ደብዳቤ)",
+        content: `ለሚመለከተው ሁሉ / To Whom It May Concern:\n\nጉዳዩ፡- የውክልና ስልጣን መስጠትን ይመለከታል (Official Power of Attorney & Corporate Representation)\n\nድርጅታችን ወጨጫ ኮንስትራክሽን (Wechecha Construction PLC) ሰራተኛችን የሆኑትን አቶ/ወ/ሮ/ወ/ሪት [EMPLOYEE_NAME] (መለያ ቁጥር: [EMPLOYEE_CODE]፤ የሥራ መደብ: [EMPLOYEE_ROLE]) ድርጅታችንን በመወከል ከዚህ በታች የተዘረዘሩትን ተግባራት በህጋዊ መንገድ እንዲያከናውኑ ሙሉ ውክልና የሰጠናቸው መሆኑን እናረጋግጣለን።\n\nየውክልናው ስልጣን ወሰንና ተግባራት / Scope of Authority & Representation:\n1. ድርጅታችንን በመወከል በማናቸውም የመንግስት እና የግል መስሪያ ቤቶች፣ ፍርድ ቤቶች፣ ባንኮች፣ ጉምሩክ፣ ማዘጋጃ ቤት፣ የኤሌክትሪክ እና የውሃ አገልግሎት መስሪያ ቤቶች፣ እንዲሁም ሌሎች አጋር ድርጅቶች ቀርበው ጉዳዮችን ለመከታተልና ለማስፈጸም።\n2. ከድርጅቱ የስራ እንቅስቃሴ ጋር የተያያዙ ሰነዶችን፣ ደብዳቤዎችን፣ ፈቃዶችን እና የፍተሻ ማረጋገጫዎችን ለማስገባት፣ ለመፈረም እንዲሁም ለመረከብ።\n3. ለግንባታ ፕሮጀክቶች የሚያስፈልጉ ግብዓቶችን፣ እቃዎችን እና ማሽነሪዎችን ከማናቸውም አቅራቢዎች እና መጋዘኖች ተረክቦ የርክክብ ሰነድ ለመፈረም።\n4. በድርጅቱ የበላይ አመራር የሚሰጡ ማናቸውንም ህጋዊ እና አስተዳደራዊ የስራ ውክልናዎችን በታማኝነት ለማከናወን።\n\nይህ የውክልና ስልጣን ደብዳቤ በይፋ በጽሁፍ እስካልተሻረ ወይም የተሰጣቸው ስራ እስኪጠናቀቅ ድረስ በህግ ፊት የጸና እና ሙሉ ተፈጻሚነት ያለው ነው።\n\nከአክብሮት ሰላምታ ጋር / Authorized Signatory:\n\n___________________________________\nዋና ስራ አስኪያጅ / General Manager\nወጨጫ ኮንስትራክሽን (Wechecha Construction PLC)`,
+        action: "Official Power of Attorney registered in corporate registry and permanent employee archive."
     }
 };
+
+function formatTemplateText(templateText) {
+    const empSelect = document.getElementById('employee_id');
+    const selectedOption = empSelect ? empSelect.options[empSelect.selectedIndex] : null;
+    const empName = selectedOption ? (selectedOption.getAttribute('data-name') || '[EMPLOYEE_NAME]') : '[EMPLOYEE_NAME]';
+    const empCode = selectedOption ? (selectedOption.getAttribute('data-code') || 'EMP-ID') : 'EMP-ID';
+    const empRole = selectedOption ? (selectedOption.getAttribute('data-role') || 'Authorized Staff') : 'Authorized Staff';
+
+    return templateText
+        .replace(/\[EMPLOYEE_NAME\]/g, empName)
+        .replace(/\[EMPLOYEE_CODE\]/g, empCode)
+        .replace(/\[EMPLOYEE_ROLE\]/g, empRole);
+}
 
 function loadTemplate(type) {
     const t = templates[type];
     if (!t) return;
 
-    const empSelect = document.getElementById('employee_id');
-    const selectedOption = empSelect.options[empSelect.selectedIndex];
-    const empName = selectedOption ? (selectedOption.getAttribute('data-name') || '[EMPLOYEE_NAME]') : '[EMPLOYEE_NAME]';
-
     document.getElementById('letter_title').value = t.title;
-    document.getElementById('letter_content').value = t.content.replace(/\[EMPLOYEE_NAME\]/g, empName);
+    document.getElementById('letter_content').value = formatTemplateText(t.content);
     document.getElementById('letter_action').value = t.action || '';
 }
 
@@ -234,11 +254,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const empSelect = document.getElementById('employee_id');
     if (empSelect) {
         empSelect.addEventListener('change', function() {
-            const currentContent = document.getElementById('letter_content').value;
-            if (currentContent.includes('[EMPLOYEE_NAME]')) {
-                const selectedOption = this.options[this.selectedIndex];
-                const empName = selectedOption ? selectedOption.getAttribute('data-name') : '[EMPLOYEE_NAME]';
-                document.getElementById('letter_content').value = currentContent.replace(/\[EMPLOYEE_NAME\]/g, empName);
+            const checkedType = document.querySelector('input[name="letter_type"]:checked');
+            if (checkedType && templates[checkedType.value]) {
+                document.getElementById('letter_content').value = formatTemplateText(templates[checkedType.value].content);
             }
         });
     }
