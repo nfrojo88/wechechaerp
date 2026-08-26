@@ -430,13 +430,9 @@
                     </thead>
                     <tbody>
                         @forelse($creditReceipts as $cRec)
-                            @php
-                                $cUrl = \App\Services\FileUploadService::url($cRec->receipt_attachment_path);
-                                $isPdf = strtolower(pathinfo($cRec->receipt_attachment_path, PATHINFO_EXTENSION)) === 'pdf';
-                            @endphp
                             <tr>
                                 <td class="px-4">
-                                    <span class="fw-bold text-dark font-monospace">{{ $cRec->invoice_reference ?? 'CR-' . $cRec->id }}</span>
+                                    <span class="fw-bold text-dark font-monospace">{{ $cRec->pr_no ?? 'CR-' . $cRec->id }}</span>
                                     @if($cRec->purchaseRequest)
                                         <div>
                                             <a href="{{ route('purchase-requests.show', $cRec->purchaseRequest->id) }}" class="small text-primary text-decoration-none">
@@ -446,27 +442,43 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $cRec->supplier_name ?? $cRec->supplier?->name ?? 'Supplier' }}</div>
-                                    <small class="text-muted">{{ $cRec->purchaseRequest?->project?->name ?? 'General' }}</small>
+                                    <div class="fw-semibold text-dark">{{ $cRec->supplier_name ?? 'Supplier' }}</div>
+                                    <small class="text-muted">{{ $cRec->project?->name ?? $cRec->purchaseRequest?->project?->name ?? 'General' }}</small>
                                 </td>
                                 <td>
-                                    <div class="fw-bold text-dark">ETB {{ number_format($cRec->amount, 2) }}</div>
+                                    <div class="fw-bold text-dark">ETB {{ number_format($cRec->credit_amount, 2) }}</div>
+                                    <small class="text-muted">Settled: ETB {{ number_format($cRec->paid_amount, 2) }}</small>
                                 </td>
                                 <td>
-                                    @if($cUrl)
-                                        <a href="{{ $cUrl }}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-sm">
-                                            <i class="fas {{ $isPdf ? 'fa-file-pdf text-danger' : 'fa-file-invoice text-info' }} me-1"></i> View Invoice
-                                        </a>
+                                    @php
+                                        $paidPayments = $cRec->payments->filter(fn($p) => !empty($p->receipt_path));
+                                    @endphp
+                                    @if($paidPayments->count() > 0)
+                                        @foreach($paidPayments as $pay)
+                                            @php
+                                                $pUrl = \App\Services\FileUploadService::url($pay->receipt_path);
+                                                $isPdf = strtolower(pathinfo($pay->receipt_path, PATHINFO_EXTENSION)) === 'pdf';
+                                            @endphp
+                                            <a href="{{ $pUrl }}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-2 py-1 mb-1 me-1 shadow-sm" style="font-size: 0.75rem;">
+                                                <i class="fas {{ $isPdf ? 'fa-file-pdf text-danger' : 'fa-file-invoice text-info' }} me-1"></i> Receipt (ETB {{ number_format($pay->amount, 2) }})
+                                            </a>
+                                        @endforeach
+                                    @else
+                                        <span class="text-muted small">No payment receipt yet</span>
                                     @endif
                                 </td>
                                 <td class="text-center">
-                                    @if($cRec->status === 'cleared')
+                                    @if($cRec->status === 'fully_paid')
                                         <span class="badge bg-success-subtle text-success border border-success px-3 py-2 rounded-pill">
                                             <i class="fas fa-check-circle me-1"></i> Paid & Settled
                                         </span>
-                                    @else
+                                    @elseif($cRec->status === 'partially_paid')
                                         <span class="badge bg-warning-subtle text-warning-emphasis border border-warning px-3 py-2 rounded-pill">
-                                            <i class="fas fa-clock me-1"></i> {{ ucfirst($cRec->status ?? 'Outstanding') }}
+                                            <i class="fas fa-clock me-1"></i> Partially Paid
+                                        </span>
+                                    @else
+                                        <span class="badge bg-danger-subtle text-danger border border-danger px-3 py-2 rounded-pill">
+                                            <i class="fas fa-exclamation-circle me-1"></i> Outstanding
                                         </span>
                                     @endif
                                 </td>

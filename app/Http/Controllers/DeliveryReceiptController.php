@@ -70,12 +70,11 @@ class DeliveryReceiptController extends Controller
         }
         $deliveryReceipts = $drQuery->latest()->paginate(15, ['*'], 'dr_page')->withQueryString();
 
-        // 3. Credit Store Receipts (COA 5110)
-        $creditReceiptQuery = CreditStoreLedger::with(['purchaseRequest.project', 'supplier', 'authorizedBy', 'clearedBy'])
-            ->whereNotNull('receipt_attachment_path');
+        // 3. Credit Store Purchases & Invoices (COA 5110)
+        $creditReceiptQuery = CreditStoreLedger::with(['purchaseRequest.project', 'project', 'payments', 'coaAccount']);
         if ($search) {
             $creditReceiptQuery->where(function($q) use ($search) {
-                $q->where('invoice_reference', 'like', "%{$search}%")
+                $q->where('pr_no', 'like', "%{$search}%")
                   ->orWhere('supplier_name', 'like', "%{$search}%")
                   ->orWhere('notes', 'like', "%{$search}%");
             });
