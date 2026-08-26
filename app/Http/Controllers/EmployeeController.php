@@ -989,6 +989,49 @@ class EmployeeController extends Controller
     }
 
     /**
+     * Quick direct upload for Guarantor ID Cards, Guarantee Letters, and National ID
+     */
+    public function uploadGuarantorDocument(Request $request, Employee $employee)
+    {
+        Gate::authorize('update', $employee);
+        $this->ensureGuarantorAndRegistrationColumnsExist();
+
+        $validated = $request->validate([
+            'doc_type'              => 'required|in:guarantor_id_card,guarantee_letter,guarantor_2_id_card,guarantee_letter_2,national_id_card',
+            'document'              => 'required|file|mimes:pdf,jpeg,png,jpg,webp|max:15360',
+            'guarantor_name'        => 'nullable|string|max:255',
+            'guarantor_id_number'   => 'nullable|string|max:100',
+            'guarantor_phone'       => 'nullable|string|max:50',
+            'guarantor_2_name'      => 'nullable|string|max:255',
+            'guarantor_2_id_number' => 'nullable|string|max:100',
+            'guarantor_2_phone'     => 'nullable|string|max:50',
+        ]);
+
+        $folder = match ($validated['doc_type']) {
+            'guarantor_id_card', 'guarantor_2_id_card' => 'employee_guarantor_ids',
+            'guarantee_letter', 'guarantee_letter_2'   => 'guarantee_letters',
+            'national_id_card'                         => 'employee_national_ids',
+        };
+
+        $path = \App\Services\FileUploadService::upload($request->file('document'), $folder);
+        $updateData = [$validated['doc_type'] => $path];
+
+        if ($validated['doc_type'] === 'guarantee_letter') {
+            $updateData['guarantee_letter_submitted_at'] = now();
+        }
+
+        foreach (['guarantor_name', 'guarantor_id_number', 'guarantor_phone', 'guarantor_2_name', 'guarantor_2_id_number', 'guarantor_2_phone'] as $field) {
+            if ($request->filled($field)) {
+                $updateData[$field] = $request->input($field);
+            }
+        }
+
+        $employee->update($updateData);
+
+        return back()->with('success', 'Guarantor document uploaded and recorded successfully!');
+    }
+
+    /**
      * Upload guarantee letter for employee
      */
     public function uploadGuaranteeLetter(Request $request, Employee $employee)

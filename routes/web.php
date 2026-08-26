@@ -1700,6 +1700,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('employees/{employee}/guarantor-id', [App\Http\Controllers\FileStreamController::class, 'viewGuarantorId'])->name('employees.guarantor-id');
     Route::get('employees/{employee}/guarantor-2-id', [App\Http\Controllers\FileStreamController::class, 'viewGuarantor2Id'])->name('employees.guarantor-2-id');
     Route::post('employees/{employee}/upload-guarantee', [App\Http\Controllers\EmployeeController::class, 'uploadGuaranteeLetter'])->name('employees.upload-guarantee');
+    Route::post('employees/{employee}/upload-guarantor-document', [App\Http\Controllers\EmployeeController::class, 'uploadGuarantorDocument'])->name('employees.upload-guarantor-doc');
     Route::post('employees/{employee}/initialize-leave-balance', [App\Http\Controllers\EmployeeController::class, 'initializeLeaveBalance'])->name('employees.initialize-leave-balance');
     Route::post('employees/{employee}/record-leave-deduction', [App\Http\Controllers\EmployeeController::class, 'recordLeaveDeduction'])->name('employees.record-leave-deduction');
     Route::post('employees/{employee}/update-device-id', [App\Http\Controllers\EmployeeController::class, 'updateDeviceId'])->name('employees.update-device-id');

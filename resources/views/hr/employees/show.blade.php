@@ -490,15 +490,20 @@
                 <h5 class="mb-0">
                     <i class="fa-solid fa-user-shield me-2 text-primary"></i>Guarantor Person Information
                 </h5>
-                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
-                    <i class="fa-solid fa-users me-1"></i>2 Guarantor Capacity
-                </span>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                        <i class="fa-solid fa-users me-1"></i>2 Guarantor Capacity
+                    </span>
+                    <a href="{{ route('employees.edit', $employee) }}" class="btn btn-xs btn-outline-secondary">
+                        <i class="fa-solid fa-pen-to-square me-1"></i>Edit Guarantor Info
+                    </a>
+                </div>
             </div>
             <div class="card-body">
                 <div class="row g-4">
                     {{-- ── Guarantor 1 Column ─────────────────────────── --}}
                     <div class="col-lg-6">
-                        <div class="p-3 border rounded bg-light h-100">
+                        <div class="p-3 border rounded-3 bg-white shadow-xs h-100 position-relative">
                             <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
                                 <h6 class="fw-bold mb-0 text-dark">
                                     <span class="badge bg-primary me-2">#1</span>Primary Guarantor
@@ -512,40 +517,94 @@
 
                             <div class="row g-2 mb-3">
                                 <div class="col-12">
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">FULL NAME</small>
-                                    <div class="fw-bold text-dark">{{ $employee->guarantor_name ?: '—' }}</div>
+                                    <small class="text-muted d-block fw-semibold" style="font-size:0.72rem; letter-spacing:0.04em;">FULL NAME</small>
+                                    <div class="fw-bold text-dark fs-6">{{ $employee->guarantor_name ?: '—' }}</div>
                                 </div>
                                 <div class="col-sm-6">
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">NATIONAL / KEBELE ID</small>
+                                    <small class="text-muted d-block fw-semibold" style="font-size:0.72rem; letter-spacing:0.04em;">NATIONAL / KEBELE ID</small>
                                     <div class="fw-bold text-dark font-monospace">{{ $employee->guarantor_id_number ?: '—' }}</div>
                                 </div>
                                 <div class="col-sm-6">
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">PHONE NUMBER</small>
+                                    <small class="text-muted d-block fw-semibold" style="font-size:0.72rem; letter-spacing:0.04em;">PHONE NUMBER</small>
                                     <div class="fw-bold text-dark">{{ $employee->guarantor_phone ?: '—' }}</div>
                                 </div>
                             </div>
 
-                            <div class="d-flex flex-wrap gap-2 pt-2 border-top">
-                                @if($employee->guarantor_id_card)
-                                    <a href="{{ $employee->guarantor_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary">
-                                        <i class="fa-solid fa-id-card me-1"></i>View ID Document
-                                    </a>
-                                @endif
-                                @if($employee->guarantee_letter)
-                                    <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-xs btn-outline-warning">
-                                        <i class="fa-solid fa-file-shield me-1"></i>View Guarantee Letter #1
-                                    </a>
-                                @endif
-                                @if(!$employee->guarantor_id_card && !$employee->guarantee_letter)
-                                    <small class="text-muted fst-italic">No files attached for Guarantor 1.</small>
-                                @endif
+                            {{-- Attached Documents Grid for Guarantor 1 --}}
+                            <div class="p-2 rounded-3 bg-light border">
+                                <small class="text-muted fw-bold d-block mb-2" style="font-size:0.73rem; text-transform:uppercase; letter-spacing:0.05em;">
+                                    <i class="fa-solid fa-paperclip me-1 text-primary"></i>Guarantor #1 Documents
+                                </small>
+                                <div class="d-flex flex-column gap-2">
+                                    {{-- Guarantor 1 ID Card --}}
+                                    <div class="d-flex justify-content-between align-items-center p-2 rounded bg-white border">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="p-1 rounded bg-primary bg-opacity-10 text-primary">
+                                                <i class="fa-solid fa-id-card fa-sm"></i>
+                                            </div>
+                                            <div>
+                                                <span class="d-block fw-bold text-dark small">National / Kebele ID Card</span>
+                                                @if($employee->guarantor_id_card)
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle py-0" style="font-size:0.68rem;">Uploaded &amp; Available</span>
+                                                @else
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle py-0" style="font-size:0.68rem;">ID Not Uploaded</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-1">
+                                            @if($employee->guarantor_id_card)
+                                                <a href="{{ $employee->guarantor_id_card_url }}" target="_blank" class="btn btn-xs btn-primary shadow-xs">
+                                                    <i class="fa-solid fa-eye me-1"></i>View ID
+                                                </a>
+                                                <button type="button" class="btn btn-xs btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#uploadGuarantorIdModal1">
+                                                    <i class="fa-solid fa-arrows-rotate"></i>
+                                                </button>
+                                            @else
+                                                <button type="button" class="btn btn-xs btn-outline-primary fw-bold" data-bs-toggle="modal" data-bs-target="#uploadGuarantorIdModal1">
+                                                    <i class="fa-solid fa-cloud-arrow-up me-1"></i>Upload ID
+                                                </button>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    {{-- Guarantee Letter 1 --}}
+                                    <div class="d-flex justify-content-between align-items-center p-2 rounded bg-white border">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="p-1 rounded bg-warning bg-opacity-10 text-warning">
+                                                <i class="fa-solid fa-file-shield fa-sm"></i>
+                                            </div>
+                                            <div>
+                                                <span class="d-block fw-bold text-dark small">Guarantee Letter #1</span>
+                                                @if($employee->guarantee_letter)
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle py-0" style="font-size:0.68rem;">Uploaded &amp; On File</span>
+                                                @else
+                                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle py-0" style="font-size:0.68rem;">Letter Not Uploaded</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-1">
+                                            @if($employee->guarantee_letter)
+                                                <a href="{{ $employee->guarantee_letter_url }}" target="_blank" class="btn btn-xs btn-warning text-dark fw-bold shadow-xs">
+                                                    <i class="fa-solid fa-file-shield me-1"></i>View Letter
+                                                </a>
+                                                <button type="button" class="btn btn-xs btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#uploadGuaranteeLetterModal1">
+                                                    <i class="fa-solid fa-arrows-rotate"></i>
+                                                </button>
+                                            @else
+                                                <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#uploadGuaranteeLetterModal1">
+                                                    <i class="fa-solid fa-cloud-arrow-up me-1"></i>Upload Letter
+                                                </button>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     {{-- ── Guarantor 2 Column ─────────────────────────── --}}
                     <div class="col-lg-6">
-                        <div class="p-3 border rounded bg-light h-100">
+                        <div class="p-3 border rounded-3 bg-white shadow-xs h-100 position-relative">
                             <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
                                 <h6 class="fw-bold mb-0 text-dark">
                                     <span class="badge bg-secondary me-2">#2</span>Second Guarantor
@@ -559,33 +618,87 @@
 
                             <div class="row g-2 mb-3">
                                 <div class="col-12">
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">FULL NAME</small>
-                                    <div class="fw-bold text-dark">{{ $employee->guarantor_2_name ?: '—' }}</div>
+                                    <small class="text-muted d-block fw-semibold" style="font-size:0.72rem; letter-spacing:0.04em;">FULL NAME</small>
+                                    <div class="fw-bold text-dark fs-6">{{ $employee->guarantor_2_name ?: '—' }}</div>
                                 </div>
                                 <div class="col-sm-6">
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">NATIONAL / KEBELE ID</small>
+                                    <small class="text-muted d-block fw-semibold" style="font-size:0.72rem; letter-spacing:0.04em;">NATIONAL / KEBELE ID</small>
                                     <div class="fw-bold text-dark font-monospace">{{ $employee->guarantor_2_id_number ?: '—' }}</div>
                                 </div>
                                 <div class="col-sm-6">
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">PHONE NUMBER</small>
+                                    <small class="text-muted d-block fw-semibold" style="font-size:0.72rem; letter-spacing:0.04em;">PHONE NUMBER</small>
                                     <div class="fw-bold text-dark">{{ $employee->guarantor_2_phone ?: '—' }}</div>
                                 </div>
                             </div>
 
-                            <div class="d-flex flex-wrap gap-2 pt-2 border-top">
-                                @if($employee->guarantor_2_id_card)
-                                    <a href="{{ $employee->guarantor_2_id_card_url }}" target="_blank" class="btn btn-xs btn-outline-primary">
-                                        <i class="fa-solid fa-id-card me-1"></i>View ID Document
-                                    </a>
-                                @endif
-                                @if($employee->guarantee_letter_2)
-                                    <a href="{{ $employee->guarantee_letter_2_url }}" target="_blank" class="btn btn-xs btn-outline-warning">
-                                        <i class="fa-solid fa-file-shield me-1"></i>View Guarantee Letter #2
-                                    </a>
-                                @endif
-                                @if(!$employee->guarantor_2_id_card && !$employee->guarantee_letter_2)
-                                    <small class="text-muted fst-italic">No files attached for Guarantor 2.</small>
-                                @endif
+                            {{-- Attached Documents Grid for Guarantor 2 --}}
+                            <div class="p-2 rounded-3 bg-light border">
+                                <small class="text-muted fw-bold d-block mb-2" style="font-size:0.73rem; text-transform:uppercase; letter-spacing:0.05em;">
+                                    <i class="fa-solid fa-paperclip me-1 text-secondary"></i>Guarantor #2 Documents
+                                </small>
+                                <div class="d-flex flex-column gap-2">
+                                    {{-- Guarantor 2 ID Card --}}
+                                    <div class="d-flex justify-content-between align-items-center p-2 rounded bg-white border">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="p-1 rounded bg-primary bg-opacity-10 text-primary">
+                                                <i class="fa-solid fa-id-card fa-sm"></i>
+                                            </div>
+                                            <div>
+                                                <span class="d-block fw-bold text-dark small">National / Kebele ID Card</span>
+                                                @if($employee->guarantor_2_id_card)
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle py-0" style="font-size:0.68rem;">Uploaded &amp; Available</span>
+                                                @else
+                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle py-0" style="font-size:0.68rem;">Not Uploaded</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-1">
+                                            @if($employee->guarantor_2_id_card)
+                                                <a href="{{ $employee->guarantor_2_id_card_url }}" target="_blank" class="btn btn-xs btn-primary shadow-xs">
+                                                    <i class="fa-solid fa-eye me-1"></i>View ID
+                                                </a>
+                                                <button type="button" class="btn btn-xs btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#uploadGuarantorIdModal2">
+                                                    <i class="fa-solid fa-arrows-rotate"></i>
+                                                </button>
+                                            @else
+                                                <button type="button" class="btn btn-xs btn-outline-primary fw-bold" data-bs-toggle="modal" data-bs-target="#uploadGuarantorIdModal2">
+                                                    <i class="fa-solid fa-cloud-arrow-up me-1"></i>Upload ID
+                                                </button>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    {{-- Guarantee Letter 2 --}}
+                                    <div class="d-flex justify-content-between align-items-center p-2 rounded bg-white border">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="p-1 rounded bg-warning bg-opacity-10 text-warning">
+                                                <i class="fa-solid fa-file-shield fa-sm"></i>
+                                            </div>
+                                            <div>
+                                                <span class="d-block fw-bold text-dark small">Guarantee Letter #2</span>
+                                                @if($employee->guarantee_letter_2)
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle py-0" style="font-size:0.68rem;">Uploaded &amp; On File</span>
+                                                @else
+                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle py-0" style="font-size:0.68rem;">Not Uploaded</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-1">
+                                            @if($employee->guarantee_letter_2)
+                                                <a href="{{ $employee->guarantee_letter_2_url }}" target="_blank" class="btn btn-xs btn-warning text-dark fw-bold shadow-xs">
+                                                    <i class="fa-solid fa-file-shield me-1"></i>View Letter
+                                                </a>
+                                                <button type="button" class="btn btn-xs btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#uploadGuaranteeLetterModal2">
+                                                    <i class="fa-solid fa-arrows-rotate"></i>
+                                                </button>
+                                            @else
+                                                <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#uploadGuaranteeLetterModal2">
+                                                    <i class="fa-solid fa-cloud-arrow-up me-1"></i>Upload Letter
+                                                </button>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2086,6 +2199,166 @@
                     <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-success btn-sm px-4 fw-bold shadow-sm">
                         <i class="fa-solid fa-check me-1"></i> Save &amp; Auto-Sync Punches
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ── Modal: Upload Guarantor #1 ID Card ────────────────────────────── --}}
+<div class="modal fade" id="uploadGuarantorIdModal1" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <form action="{{ route('employees.upload-guarantor-doc', $employee) }}" method="POST" enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="doc_type" value="guarantor_id_card">
+                <div class="modal-header py-3 px-4 bg-primary text-white">
+                    <h5 class="modal-title fs-6 fw-bold mb-0">
+                        <i class="fa-solid fa-id-card me-2"></i>Upload Guarantor #1 National / Kebele ID Card
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">Guarantor #1 Full Name</label>
+                        <input type="text" name="guarantor_name" class="form-control" value="{{ old('guarantor_name', $employee->guarantor_name) }}" placeholder="Full legal name of guarantor">
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-bold small text-dark">National / Kebele ID No.</label>
+                            <input type="text" name="guarantor_id_number" class="form-control font-monospace" value="{{ old('guarantor_id_number', $employee->guarantor_id_number) }}" placeholder="e.g. AA/12345/2016">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold small text-dark">Phone Number</label>
+                            <input type="text" name="guarantor_phone" class="form-control" value="{{ old('guarantor_phone', $employee->guarantor_phone) }}" placeholder="09xxxxxxxx">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">Select ID Card File (Image or PDF) <span class="text-danger">*</span></label>
+                        <input type="file" name="document" class="form-control" accept="image/*,application/pdf" required>
+                        <small class="text-muted">Accepts PDF, JPG, PNG, WEBP (Max 15MB)</small>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4 border-top">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">
+                        <i class="fa-solid fa-cloud-arrow-up me-1"></i> Upload ID Card
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ── Modal: Upload Guarantee Letter #1 ──────────────────────────────── --}}
+<div class="modal fade" id="uploadGuaranteeLetterModal1" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <form action="{{ route('employees.upload-guarantor-doc', $employee) }}" method="POST" enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="doc_type" value="guarantee_letter">
+                <div class="modal-header py-3 px-4 bg-warning text-dark">
+                    <h5 class="modal-title fs-6 fw-bold mb-0">
+                        <i class="fa-solid fa-file-shield me-2"></i>Upload Guarantee Letter #1 (የዋስትና ደብዳቤ)
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">Guarantor #1 Full Name</label>
+                        <input type="text" name="guarantor_name" class="form-control" value="{{ old('guarantor_name', $employee->guarantor_name) }}" placeholder="Full legal name of guarantor">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">Select Signed Guarantee Letter Document <span class="text-danger">*</span></label>
+                        <input type="file" name="document" class="form-control" accept="image/*,application/pdf" required>
+                        <small class="text-muted">Upload stamped/signed guarantee letter (PDF, JPG, PNG - Max 15MB)</small>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4 border-top">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning text-dark btn-sm px-4 fw-bold">
+                        <i class="fa-solid fa-cloud-arrow-up me-1"></i> Upload Guarantee Letter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ── Modal: Upload Guarantor #2 ID Card ────────────────────────────── --}}
+<div class="modal fade" id="uploadGuarantorIdModal2" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <form action="{{ route('employees.upload-guarantor-doc', $employee) }}" method="POST" enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="doc_type" value="guarantor_2_id_card">
+                <div class="modal-header py-3 px-4 bg-secondary text-white">
+                    <h5 class="modal-title fs-6 fw-bold mb-0">
+                        <i class="fa-solid fa-id-card me-2"></i>Upload Guarantor #2 National / Kebele ID Card
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">Guarantor #2 Full Name</label>
+                        <input type="text" name="guarantor_2_name" class="form-control" value="{{ old('guarantor_2_name', $employee->guarantor_2_name) }}" placeholder="Full legal name of second guarantor">
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-bold small text-dark">National / Kebele ID No.</label>
+                            <input type="text" name="guarantor_2_id_number" class="form-control font-monospace" value="{{ old('guarantor_2_id_number', $employee->guarantor_2_id_number) }}" placeholder="e.g. AA/54321/2016">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold small text-dark">Phone Number</label>
+                            <input type="text" name="guarantor_2_phone" class="form-control" value="{{ old('guarantor_2_phone', $employee->guarantor_2_phone) }}" placeholder="09xxxxxxxx">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">Select ID Card File (Image or PDF) <span class="text-danger">*</span></label>
+                        <input type="file" name="document" class="form-control" accept="image/*,application/pdf" required>
+                        <small class="text-muted">Accepts PDF, JPG, PNG, WEBP (Max 15MB)</small>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4 border-top">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-secondary btn-sm px-4 fw-bold">
+                        <i class="fa-solid fa-cloud-arrow-up me-1"></i> Upload ID Card
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ── Modal: Upload Guarantee Letter #2 ──────────────────────────────── --}}
+<div class="modal fade" id="uploadGuaranteeLetterModal2" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
+            <form action="{{ route('employees.upload-guarantor-doc', $employee) }}" method="POST" enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="doc_type" value="guarantee_letter_2">
+                <div class="modal-header py-3 px-4 bg-warning text-dark">
+                    <h5 class="modal-title fs-6 fw-bold mb-0">
+                        <i class="fa-solid fa-file-shield me-2"></i>Upload Guarantee Letter #2
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">Guarantor #2 Full Name</label>
+                        <input type="text" name="guarantor_2_name" class="form-control" value="{{ old('guarantor_2_name', $employee->guarantor_2_name) }}" placeholder="Full legal name of second guarantor">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-dark">Select Signed Guarantee Letter Document <span class="text-danger">*</span></label>
+                        <input type="file" name="document" class="form-control" accept="image/*,application/pdf" required>
+                        <small class="text-muted">Upload stamped/signed guarantee letter (PDF, JPG, PNG - Max 15MB)</small>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4 border-top">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning text-dark btn-sm px-4 fw-bold">
+                        <i class="fa-solid fa-cloud-arrow-up me-1"></i> Upload Guarantee Letter
                     </button>
                 </div>
             </form>
