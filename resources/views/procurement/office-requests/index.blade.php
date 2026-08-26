@@ -15,7 +15,7 @@
             </p>
         </div>
         <div class="d-flex gap-2">
-            <a href="{{ route('office-requests.create') }}" class="btn btn-primary shadow-sm px-3">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-primary shadow-sm px-3">
                 <i class="fa-solid fa-plus me-1"></i> New Office Request (አዲስ ጥያቄ)
             </a>
         </div>
@@ -91,29 +91,29 @@
             <!-- Filter Pills -->
             <ul class="nav nav-pills card-header-pills small">
                 <li class="nav-item">
-                    <a class="nav-link {{ !request('status') ? 'active' : '' }}" href="{{ route('office-requests.index') }}">
+                    <a class="nav-link {{ !request('status') ? 'active' : '' }}" href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}">
                         All ({{ $stats['total'] }})
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {{ request('status') === 'pending_hr_approval' ? 'active' : '' }}" href="{{ route('office-requests.index', ['status' => 'pending_hr_approval']) }}">
+                    <a class="nav-link {{ request('status') === 'pending_hr_approval' ? 'active' : '' }}" href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index', ['status' => 'pending_hr_approval']) : url('/office-requests?status=pending_hr_approval') }}">
                         Pending Approval <span class="badge bg-warning text-dark ms-1">{{ $stats['pending'] }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {{ request('status') === 'approved' ? 'active' : '' }}" href="{{ route('office-requests.index', ['status' => 'approved']) }}">
+                    <a class="nav-link {{ request('status') === 'approved' ? 'active' : '' }}" href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index', ['status' => 'approved']) : url('/office-requests?status=approved') }}">
                         Approved ({{ $stats['approved'] }})
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {{ request('status') === 'rejected' ? 'active' : '' }}" href="{{ route('office-requests.index', ['status' => 'rejected']) }}">
+                    <a class="nav-link {{ request('status') === 'rejected' ? 'active' : '' }}" href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index', ['status' => 'rejected']) : url('/office-requests?status=rejected') }}">
                         Rejected ({{ $stats['rejected'] }})
                     </a>
                 </li>
             </ul>
 
             <!-- Search Form -->
-            <form action="{{ route('office-requests.index') }}" method="GET" class="d-flex gap-2" style="max-width: 320px;">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" method="GET" class="d-flex gap-2" style="max-width: 320px;">
                 @if(request('status'))
                     <input type="hidden" name="status" value="{{ request('status') }}">
                 @endif
@@ -121,7 +121,7 @@
                     <input type="text" name="search" class="form-control" placeholder="Search PR / purpose..." value="{{ request('search') }}">
                     <button class="btn btn-outline-secondary" type="submit"><i class="fa-solid fa-magnifying-glass"></i></button>
                     @if(request('search'))
-                        <a href="{{ route('office-requests.index', request()->only('status')) }}" class="btn btn-outline-secondary"><i class="fa-solid fa-xmark"></i></a>
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index', request()->only('status')) : url('/office-requests') }}" class="btn btn-outline-secondary"><i class="fa-solid fa-xmark"></i></a>
                     @endif
                 </div>
             </form>
@@ -147,7 +147,7 @@
                         @forelse($requests as $req)
                         <tr>
                             <td class="ps-3">
-                                <a href="{{ route('office-requests.show', $req) }}" class="fw-bold text-decoration-none text-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $req) : url('/office-requests/' . $req->id) }}" class="fw-bold text-decoration-none text-primary">
                                     {{ $req->pr_no }}
                                 </a>
                                 <div class="text-muted" style="font-size: 0.75rem;">
@@ -237,7 +237,7 @@
                                 @endif
                             </td>
                             <td class="text-end pe-3">
-                                <a href="{{ route('office-requests.show', $req) }}" class="btn btn-sm btn-outline-primary px-2 py-1">
+                                <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $req) : url('/office-requests/' . $req->id) }}" class="btn btn-sm btn-outline-primary px-2 py-1">
                                     <i class="fa-solid fa-arrow-right me-1"></i> View
                                 </a>
                             </td>
@@ -250,7 +250,7 @@
                                 </div>
                                 <h6 class="text-dark fw-bold mb-1">No Office Supply Requests Found</h6>
                                 <p class="text-muted small mb-3">There are no material requests matching your current filter.</p>
-                                <a href="{{ route('office-requests.create') }}" class="btn btn-sm btn-primary">
+                                <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-sm btn-primary">
                                     <i class="fa-solid fa-plus me-1"></i> Create Office Request
                                 </a>
                             </td>

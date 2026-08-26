@@ -196,7 +196,7 @@
                                 <small class="text-muted">Analyze Material, Equipment, Manpower</small>
                             </div>
                         </a>
-                        <a href="{{ route('office-requests.index') }}" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between">
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="list-group-item list-group-item-action d-flex align-items-center justify-content-between">
                             <div class="d-flex align-items-center">
                                 <i class="fas fa-boxes-stacked text-warning me-3"></i>
                                 <div>

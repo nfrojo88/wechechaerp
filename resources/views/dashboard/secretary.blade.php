@@ -15,7 +15,7 @@
             </p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ route('office-requests.create') }}" class="btn btn-warning shadow-sm text-dark fw-bold">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-warning shadow-sm text-dark fw-bold">
                 <i class="fa-solid fa-boxes-stacked me-1"></i> New Office Request (የቢሮ እቃ መጠየቅ)
             </a>
             <a href="{{ route('letters.create') }}" class="btn btn-primary shadow-sm">
@@ -67,7 +67,7 @@
 
         {{-- Office Supply Requests --}}
         <div class="col-6 col-md-4 col-xl">
-            <a href="{{ route('office-requests.index') }}" class="text-decoration-none">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="text-decoration-none">
                 <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #f97316 !important;">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-start">
@@ -147,10 +147,10 @@
                         <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="btn btn-outline-dark btn-sm px-3">
                             <i class="fa-solid fa-list me-1"></i> All Correspondence
                         </a>
-                        <a href="{{ route('office-requests.create') }}" class="btn btn-warning btn-sm px-3 text-dark fw-semibold">
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-warning btn-sm px-3 text-dark fw-semibold">
                             <i class="fa-solid fa-boxes-stacked me-1"></i> Request Office Supplies (የቢሮ እቃ መጠየቅ)
                         </a>
-                        <a href="{{ route('office-requests.index') }}" class="btn btn-outline-warning btn-sm px-3 text-dark">
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="btn btn-outline-warning btn-sm px-3 text-dark">
                             <i class="fa-solid fa-clipboard-list me-1"></i> My Office Requests ({{ $myOfficeRequestsCount ?? 0 }})
                         </a>
                         <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-success btn-sm px-3">
@@ -249,10 +249,10 @@
                         <i class="fa-solid fa-boxes-stacked text-warning me-2"></i>My Office Supply Requests (የቢሮ እቃዎች ጥያቄዎች)
                     </h6>
                     <div class="d-flex gap-2">
-                        <a href="{{ route('office-requests.create') }}" class="btn btn-sm btn-primary">
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-sm btn-primary">
                             <i class="fa-solid fa-plus me-1"></i> New Request
                         </a>
-                        <a href="{{ route('office-requests.index') }}" class="btn btn-sm btn-outline-secondary">View All</a>
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="btn btn-sm btn-outline-secondary">View All</a>
                     </div>
                 </div>
                 <div class="table-responsive">
@@ -294,7 +294,7 @@
                                     <small class="text-muted">{{ optional($offReq->created_at)->format('d M Y') }}</small>
                                 </td>
                                 <td>
-                                    <a href="{{ route('office-requests.show', $offReq) }}" class="btn btn-sm btn-outline-secondary">
+                                    <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $offReq) : url('/office-requests/' . $offReq->id) }}" class="btn btn-sm btn-outline-secondary">
                                         <i class="fa-solid fa-eye"></i>
                                     </a>
                                 </td>
@@ -304,7 +304,7 @@
                                 <td colspan="6" class="text-center py-4 text-muted">
                                     <i class="fa-solid fa-boxes-stacked fa-2x mb-2 d-block opacity-25"></i>
                                     No office supply requests yet.
-                                    <a href="{{ route('office-requests.create') }}" class="d-block mt-1 small">Ask for office materials / stationery →</a>
+                                    <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="d-block mt-1 small">Ask for office materials / stationery →</a>
                                 </td>
                             </tr>
                             @endforelse

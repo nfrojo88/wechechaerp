@@ -8,7 +8,7 @@
         <div>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-1">
-                    <li class="breadcrumb-item"><a href="{{ route('office-requests.index') }}" class="text-decoration-none">Office Requests</a></li>
+                    <li class="breadcrumb-item"><a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="text-decoration-none">Office Requests</a></li>
                     <li class="breadcrumb-item active" aria-current="page">{{ $office_request->pr_no }}</li>
                 </ol>
             </nav>
@@ -43,7 +43,7 @@
         </div>
 
         <div class="d-flex gap-2">
-            <a href="{{ route('office-requests.index') }}" class="btn btn-outline-secondary">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="btn btn-outline-secondary">
                 <i class="fa-solid fa-arrow-left me-1"></i> Back to List
             </a>
             <button onclick="window.print()" class="btn btn-outline-dark">
@@ -328,7 +328,7 @@
 @if($canApprove)
 <div class="modal fade" id="approveModal" tabindex="-1" aria-labelledby="approveModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <form action="{{ route('office-requests.approve', $office_request) }}" method="POST">
+        <form action="{{ \Illuminate\Support\Facades\Route::has('office-requests.approve') ? route('office-requests.approve', $office_request) : url('/office-requests/' . $office_request->id . '/approve') }}" method="POST">
             @csrf
             <div class="modal-content border-0 shadow">
                 <div class="modal-header bg-success text-white">
@@ -367,7 +367,7 @@
 <!-- REJECTION MODAL -->
 <div class="modal fade" id="rejectModal" tabindex="-1" aria-labelledby="rejectModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <form action="{{ route('office-requests.reject', $office_request) }}" method="POST">
+        <form action="{{ \Illuminate\Support\Facades\Route::has('office-requests.reject') ? route('office-requests.reject', $office_request) : url('/office-requests/' . $office_request->id . '/reject') }}" method="POST">
             @csrf
             <div class="modal-content border-0 shadow">
                 <div class="modal-header bg-danger text-white">

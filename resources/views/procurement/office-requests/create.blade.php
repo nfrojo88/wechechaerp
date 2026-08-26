@@ -8,7 +8,7 @@
         <div>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-1">
-                    <li class="breadcrumb-item"><a href="{{ route('office-requests.index') }}" class="text-decoration-none">Office Requests</a></li>
+                    <li class="breadcrumb-item"><a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="text-decoration-none">Office Requests</a></li>
                     <li class="breadcrumb-item active" aria-current="page">New Request</li>
                 </ol>
             </nav>
@@ -17,7 +17,7 @@
                 <span class="fs-6 fw-normal text-muted ms-2">(የቢሮ እቃ መጠየቂያ ቅጽ)</span>
             </h1>
         </div>
-        <a href="{{ route('office-requests.index') }}" class="btn btn-outline-secondary">
+        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="btn btn-outline-secondary">
             <i class="fa-solid fa-arrow-left me-1"></i> Back to List
         </a>
     </div>
@@ -34,7 +34,7 @@
         </div>
     </div>
 
-    <form action="{{ route('office-requests.store') }}" method="POST" id="officeRequestForm">
+    <form action="{{ \Illuminate\Support\Facades\Route::has('office-requests.store') ? route('office-requests.store') : url('/office-requests') }}" method="POST" id="officeRequestForm">
         @csrf
 
         <div class="row g-4">
@@ -166,7 +166,7 @@
                             <i class="fa-solid fa-plus me-1"></i> Add Another Row
                         </button>
                         <div class="d-flex gap-2">
-                            <a href="{{ route('office-requests.index') }}" class="btn btn-light border px-3">Cancel</a>
+                            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="btn btn-light border px-3">Cancel</a>
                             <button type="submit" class="btn btn-primary px-4 shadow-sm" id="submitBtn">
                                 <i class="fa-solid fa-paper-plane me-1"></i> Submit to HR & Coordinator
                             </button>

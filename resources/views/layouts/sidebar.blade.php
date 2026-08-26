@@ -81,7 +81,7 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('office-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('office-requests.*') ? 'active' : '' }}">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="sidebar-nav-link {{ request()->is('office-requests*') || request()->routeIs('office-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-boxes-stacked text-warning"></i>
                 <span>Office Supply Request</span>
                 @php
@@ -89,9 +89,9 @@
                     try {
                         $secOfficeReqCount = \App\Models\PurchaseRequest::where(function($q) {
                             $q->where('is_office_request', true)
-                              ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+                              ->orWhere('status', 'pending_hr_approval');
                         })->where('requested_by', auth()->id())
-                          ->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
+                          ->where('status', 'pending_hr_approval')
                           ->count();
                     } catch (\Exception $e) {}
                 @endphp
@@ -101,7 +101,7 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('office-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('office-requests.create') ? 'active' : '' }}">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="sidebar-nav-link {{ request()->is('office-requests/create') || request()->routeIs('office-requests.create') ? 'active' : '' }}">
                 <i class="fa-solid fa-plus-circle text-info"></i>
                 <span>New Office Request</span>
             </a>
@@ -1087,7 +1087,7 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('office-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('office-requests.*') ? 'active' : '' }}">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="sidebar-nav-link {{ request()->is('office-requests*') || request()->routeIs('office-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-boxes-stacked text-warning"></i>
                 <span>Office Material Requests</span>
                 @php
@@ -1095,8 +1095,8 @@
                     try {
                         $pendingHrOfficeReqCount = \App\Models\PurchaseRequest::where(function($q) {
                             $q->where('is_office_request', true)
-                              ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
-                        })->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)->count();
+                              ->orWhere('status', 'pending_hr_approval');
+                        })->where('status', 'pending_hr_approval')->count();
                     } catch (\Exception $e) {}
                 @endphp
                 @if($pendingHrOfficeReqCount > 0)
