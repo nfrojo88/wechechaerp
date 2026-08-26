@@ -44,17 +44,18 @@ class EmployeeLetter extends Model
     public function getTypeLabelAttribute(): string
     {
         return match ($this->letter_type) {
-            'thanks_letter'     => 'Thanks / Appreciation Letter',
-            'appreciation'      => 'Letter of Recognition',
-            'power_of_attorney' => 'Power of Attorney / Representation',
-            'first_warning'     => 'First Written Warning',
-            'second_warning'    => 'Second Written Warning',
-            'final_warning'     => 'Final Warning Letter',
-            'show_cause'        => 'Show Cause / Query Letter',
-            'suspension'        => 'Suspension Letter',
-            'termination'       => 'Termination Letter',
-            'promotion'         => 'Promotion Letter',
-            default             => ucfirst(str_replace('_', ' ', $this->letter_type)),
+            'thanks_letter'      => 'Thanks / Appreciation Letter',
+            'appreciation'       => 'Letter of Recognition',
+            'power_of_attorney'  => 'Power of Attorney / Representation (ውክልና)',
+            'application_letter' => 'Application Letter / Request (ማመልከቻ)',
+            'first_warning'      => 'First Written Warning',
+            'second_warning'     => 'Second Written Warning',
+            'final_warning'      => 'Final Warning Letter',
+            'show_cause'         => 'Show Cause / Query Letter',
+            'suspension'         => 'Suspension Letter',
+            'termination'        => 'Termination Letter',
+            'promotion'          => 'Promotion Letter',
+            default              => ucfirst(str_replace('_', ' ', $this->letter_type)),
         };
     }
 
@@ -62,14 +63,15 @@ class EmployeeLetter extends Model
     {
         return match ($this->letter_type) {
             'thanks_letter', 'appreciation', 'promotion' => 'bg-success text-white',
-            'power_of_attorney' => 'bg-primary text-white',
-            'first_warning'     => 'bg-warning text-dark',
-            'second_warning'    => 'bg-orange text-white',
-            'final_warning'     => 'bg-danger text-white',
-            'show_cause'        => 'bg-info text-dark',
-            'suspension'        => 'bg-purple text-white',
-            'termination'       => 'bg-dark text-white',
-            default             => 'bg-secondary text-white',
+            'power_of_attorney'  => 'bg-primary text-white',
+            'application_letter' => 'bg-indigo text-white',
+            'first_warning'      => 'bg-warning text-dark',
+            'second_warning'     => 'bg-orange text-white',
+            'final_warning'      => 'bg-danger text-white',
+            'show_cause'         => 'bg-info text-dark',
+            'suspension'         => 'bg-purple text-white',
+            'termination'        => 'bg-dark text-white',
+            default              => 'bg-secondary text-white',
         };
     }
 
@@ -77,12 +79,13 @@ class EmployeeLetter extends Model
     {
         return match ($this->letter_type) {
             'thanks_letter', 'appreciation', 'promotion' => 'fa-solid fa-award',
-            'power_of_attorney' => 'fa-solid fa-stamp',
+            'power_of_attorney'  => 'fa-solid fa-stamp',
+            'application_letter' => 'fa-solid fa-file-pen',
             'first_warning', 'second_warning' => 'fa-solid fa-triangle-exclamation',
-            'final_warning'     => 'fa-solid fa-circle-exclamation',
-            'show_cause'        => 'fa-solid fa-circle-question',
+            'final_warning'      => 'fa-solid fa-circle-exclamation',
+            'show_cause'         => 'fa-solid fa-circle-question',
             'suspension', 'termination' => 'fa-solid fa-user-slash',
-            default             => 'fa-solid fa-envelope-open-text',
+            default              => 'fa-solid fa-envelope-open-text',
         };
     }
 }

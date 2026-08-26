@@ -75,6 +75,12 @@
                                         <i class="fa-solid fa-stamp me-1 text-primary"></i><strong class="text-primary">Power of Attorney / Representation (ውክልና)</strong>
                                     </label>
                                 </div>
+                                <div class="col-md-4 col-6">
+                                    <input type="radio" class="btn-check" name="letter_type" id="type_application" value="application_letter" autocomplete="off" {{ old('letter_type', $defaultType) == 'application_letter' ? 'checked' : '' }} onchange="loadTemplate('application_letter')">
+                                    <label class="btn btn-outline-secondary text-dark w-100 text-start py-2 px-3 rounded-3 border-2" for="type_application" style="background-color: #f8fafc;">
+                                        <i class="fa-solid fa-file-signature me-1 text-dark"></i><strong>Application Letter (የማመልከቻ ደብዳቤ)</strong>
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
@@ -211,6 +217,11 @@ const templates = {
         title: "Power of Attorney & Official Representation Letter (የውክልና ማስረጃ / መስጫ ደብዳቤ)",
         content: `ለሚመለከተው ሁሉ / To Whom It May Concern:\n\nጉዳዩ፡- የውክልና ስልጣን መስጠትን ይመለከታል (Official Power of Attorney & Corporate Representation)\n\nድርጅታችን ወጨጫ ኮንስትራክሽን (Wechecha Construction PLC) ሰራተኛችን የሆኑትን አቶ/ወ/ሮ/ወ/ሪት [EMPLOYEE_NAME] (መለያ ቁጥር: [EMPLOYEE_CODE]፤ የሥራ መደብ: [EMPLOYEE_ROLE]) ድርጅታችንን በመወከል ከዚህ በታች የተዘረዘሩትን ተግባራት በህጋዊ መንገድ እንዲያከናውኑ ሙሉ ውክልና የሰጠናቸው መሆኑን እናረጋግጣለን።\n\nየውክልናው ስልጣን ወሰንና ተግባራት / Scope of Authority & Representation:\n1. ድርጅታችንን በመወከል በማናቸውም የመንግስት እና የግል መስሪያ ቤቶች፣ ፍርድ ቤቶች፣ ባንኮች፣ ጉምሩክ፣ ማዘጋጃ ቤት፣ የኤሌክትሪክ እና የውሃ አገልግሎት መስሪያ ቤቶች፣ እንዲሁም ሌሎች አጋር ድርጅቶች ቀርበው ጉዳዮችን ለመከታተልና ለማስፈጸም።\n2. ከድርጅቱ የስራ እንቅስቃሴ ጋር የተያያዙ ሰነዶችን፣ ደብዳቤዎችን፣ ፈቃዶችን እና የፍተሻ ማረጋገጫዎችን ለማስገባት፣ ለመፈረም እንዲሁም ለመረከብ።\n3. ለግንባታ ፕሮጀክቶች የሚያስፈልጉ ግብዓቶችን፣ እቃዎችን እና ማሽነሪዎችን ከማናቸውም አቅራቢዎች እና መጋዘኖች ተረክቦ የርክክብ ሰነድ ለመፈረም።\n4. በድርጅቱ የበላይ አመራር የሚሰጡ ማናቸውንም ህጋዊ እና አስተዳደራዊ የስራ ውክልናዎችን በታማኝነት ለማከናወን።\n\nይህ የውክልና ስልጣን ደብዳቤ በይፋ በጽሁፍ እስካልተሻረ ወይም የተሰጣቸው ስራ እስኪጠናቀቅ ድረስ በህግ ፊት የጸና እና ሙሉ ተፈጻሚነት ያለው ነው።\n\nከአክብሮት ሰላምታ ጋር / Authorized Signatory:\n\n___________________________________\nዋና ስራ አስኪያጅ / General Manager\nወጨጫ ኮንስትራክሽን (Wechecha Construction PLC)`,
         action: "Official Power of Attorney registered in corporate registry and permanent employee archive."
+    },
+    application_letter: {
+        title: "Official Employee Application & Request Letter (የሰራተኛ ማመልከቻ / ጥያቄ ደብዳቤ)",
+        content: `ለ፡ ወጨጫ ኮንስትራክሽን የሰው ሀብት አስተዳደር ክፍል / To: Human Resources Department\nወጨጫ ኮንስትራክሽን (Wechecha Construction PLC)\n\nአመልካች / Applicant: [EMPLOYEE_NAME]\nመለያ ቁጥር / ID No: [EMPLOYEE_CODE]\nየሥራ መደብ / Position: [EMPLOYEE_ROLE]\n\nጉዳዩ፡- የማመልከቻ / የጥያቄ ደብዳቤ ማቅረብን ይመለከታል (Official Employee Request / Application)\n\nክቡር/ት ኃላፊ፤\n\nእኔ ስሜና የስራ መደቤ ከላይ የተገለጸው የድርጅታችን ሰራተኛ ስሆን ይህንን ማመልከቻ ያቀረብኩበት ዋና ምክንያት፡\n\n[የማመልከቻው/የጥያቄው ዝርዝር ምክንያት እዚህ ይጻፍ / Detail reason for application, transfer, leave, role adjustment or administrative request here]\n\nስለሆነም ጉዳዩን ተመልክተው አስፈላጊውን አስተዳደራዊ ውሳኔ እና ትብብር እንዲያደርጉልኝ በአክብሮት አመለክታለሁ።\n\nከአክብሮት ሰላምታ ጋር፤\n\nአመልካች (Applicant):\nስም (Name): [EMPLOYEE_NAME]\nፊርማ (Signature): _____________________\nቀን (Date): _____________________`,
+        action: "HR review application and record official management decision."
     }
 };
 

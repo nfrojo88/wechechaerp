@@ -110,6 +110,7 @@
                         <option value="thanks_letter" {{ request('letter_type') == 'thanks_letter' ? 'selected' : '' }}>Thanks / Appreciation Letter</option>
                         <option value="appreciation" {{ request('letter_type') == 'appreciation' ? 'selected' : '' }}>Letter of Recognition</option>
                         <option value="power_of_attorney" {{ request('letter_type') == 'power_of_attorney' ? 'selected' : '' }}>Power of Attorney / Representation (ውክልና)</option>
+                        <option value="application_letter" {{ request('letter_type') == 'application_letter' ? 'selected' : '' }}>Application Letter / Request (ማመልከቻ)</option>
                         <option value="first_warning" {{ request('letter_type') == 'first_warning' ? 'selected' : '' }}>First Written Warning</option>
                         <option value="second_warning" {{ request('letter_type') == 'second_warning' ? 'selected' : '' }}>Second Written Warning</option>
                         <option value="final_warning" {{ request('letter_type') == 'final_warning' ? 'selected' : '' }}>Final Warning Letter</option>

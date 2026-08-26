@@ -128,6 +128,7 @@ class EmployeeLetterController extends Controller
             $prefix = match ($validated['letter_type']) {
                 'thanks_letter', 'appreciation' => 'LTR-APPR',
                 'power_of_attorney'             => 'LTR-POA',
+                'application_letter'            => 'LTR-APPL',
                 'first_warning'                 => 'LTR-WARN1',
                 'second_warning'                => 'LTR-WARN2',
                 'final_warning'                 => 'LTR-FWN',
