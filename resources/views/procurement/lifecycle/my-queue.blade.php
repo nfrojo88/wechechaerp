@@ -254,19 +254,22 @@
                             </td>
                             <td>{{ $pr->created_at->format('M d, Y') }}</td>
                             <td class="text-end">
-                                @if($pr->is_office_request && $pr->status === 'pending_hr_approval')
-                                    <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-warning text-dark fw-bold shadow-sm">
-                                        <i class="fas fa-gavel me-1"></i> Decide / Approve
-                                    </a>
-                                @elseif($pr->is_office_request)
-                                    <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-outline-primary">
-                                        <i class="fas fa-eye me-1"></i> View Details
-                                    </a>
-                                @else
-                                    <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-eye me-1"></i> Review & Action
-                                    </a>
-                                @endif
+                                <div class="d-flex justify-content-end align-items-center gap-1">
+                                    @if($pr->is_office_request)
+                                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-outline-primary" title="View Request Details">
+                                            <i class="fas fa-eye me-1"></i> View
+                                        </a>
+                                        @if($pr->status === 'pending_hr_approval')
+                                            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-warning text-dark fw-bold shadow-sm" title="Approve or Reject">
+                                                <i class="fas fa-gavel me-1"></i> Decide
+                                            </a>
+                                        @endif
+                                    @else
+                                        <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-eye me-1"></i> View & Review
+                                        </a>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                         @empty
