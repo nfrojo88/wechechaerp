@@ -284,26 +284,28 @@ class OfficeSupplyRequestController extends Controller
 
         $request->validate([
             'notes'       => 'nullable|string|max:1000',
-            'next_action' => 'required|in:approved_direct,send_to_procurement,send_to_store',
+            'next_action' => 'required|in:approved_direct,send_to_procurement,send_to_store,send_to_pm',
         ]);
 
         $actorRole = $this->getUserRoleSlug();
         $fromStatus = $office_request->status;
 
-        $newStatus = PurchaseRequest::STATUS_APPROVED;
-        $ownerRole = 'secretary';
+        $newStatus = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
+        $ownerRole = 'store_manager';
         $actionNote = "Approved by {$actorRole} (" . Auth::user()->name . ")";
 
-        if ($request->next_action === 'send_to_procurement') {
-            $newStatus = PurchaseRequest::STATUS_PENDING_PROC_TEAM;
-            $ownerRole = 'procurement_team';
-            $actionNote .= " and forwarded to Procurement Team for purchasing.";
+        if ($request->next_action === 'send_to_pm' || $request->next_action === 'send_to_procurement') {
+            $newStatus = PurchaseRequest::STATUS_PENDING_PM_REVIEW;
+            $ownerRole = 'purchase_manager';
+            $actionNote .= " and forwarded to Purchase Manager (PM) for procurement.";
         } elseif ($request->next_action === 'send_to_store') {
             $newStatus = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
             $ownerRole = 'store_manager';
-            $actionNote .= " and routed to Store for material dispatch.";
+            $actionNote .= " and routed to Store Manager to check stock & issue or send to PM.";
         } else {
-            $actionNote .= " for direct fulfillment.";
+            $newStatus = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
+            $ownerRole = 'store_manager';
+            $actionNote .= " and routed to Store Manager for fulfillment.";
         }
 
         if ($request->filled('notes')) {
@@ -335,7 +337,76 @@ class OfficeSupplyRequestController extends Controller
             } catch (\Throwable $e) {}
         });
 
-        return back()->with('success', "Office Supply Request #{$office_request->pr_no} approved successfully.");
+        return back()->with('success', "Office Supply Request #{$office_request->pr_no} approved and routed to Store Manager.");
+    }
+
+    // ─── Store Manager sends to PM (Purchase Manager) ────────────────────────
+    public function sendToPm(Request $request, PurchaseRequest $office_request)
+    {
+        $user = Auth::user();
+        if (!$user->hasRole('store_manager') && !$user->hasRole('admin') && !$user->hasRole('global_admin') && !$user->hasRole('coordinator') && !$user->hasRole('gm')) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $fromStatus = $office_request->status;
+        $newStatus  = PurchaseRequest::STATUS_PENDING_PM_REVIEW;
+        $note = $request->input('notes', 'Out of stock at Store. Forwarded by Store Manager to Purchase Manager (PM) for purchasing.');
+
+        DB::transaction(function () use ($office_request, $fromStatus, $newStatus, $note) {
+            $office_request->update([
+                'status'             => $newStatus,
+                'current_owner_role' => 'purchase_manager',
+            ]);
+
+            try {
+                PrWorkflowLog::create([
+                    'purchase_request_id' => $office_request->id,
+                    'from_stage'          => $fromStatus,
+                    'to_stage'            => $newStatus,
+                    'action'              => 'sent_to_purchase_manager',
+                    'actor_role'          => 'store_manager',
+                    'actor_id'            => Auth::id(),
+                    'notes'               => $note,
+                    'created_at'          => now(),
+                ]);
+            } catch (\Throwable $e) {}
+        });
+
+        return back()->with('success', "Office Request #{$office_request->pr_no} successfully sent to Purchase Manager (PM) for procurement.");
+    }
+
+    // ─── Store Manager Dispatches / Fulfills from Store ──────────────────────
+    public function storeDispatch(Request $request, PurchaseRequest $office_request)
+    {
+        $user = Auth::user();
+        if (!$user->hasRole('store_manager') && !$user->hasRole('admin') && !$user->hasRole('global_admin')) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $fromStatus = $office_request->status;
+        $newStatus  = PurchaseRequest::STATUS_INTAKE_COMPLETE;
+
+        DB::transaction(function () use ($office_request, $fromStatus, $newStatus, $request) {
+            $office_request->update([
+                'status'             => $newStatus,
+                'current_owner_role' => 'secretary',
+            ]);
+
+            try {
+                PrWorkflowLog::create([
+                    'purchase_request_id' => $office_request->id,
+                    'from_stage'          => $fromStatus,
+                    'to_stage'            => $newStatus,
+                    'action'              => 'store_dispatched',
+                    'actor_role'          => 'store_manager',
+                    'actor_id'            => Auth::id(),
+                    'notes'               => 'Office supplies fulfilled and issued from store to Secretary / Office. ' . $request->input('notes', ''),
+                    'created_at'          => now(),
+                ]);
+            } catch (\Throwable $e) {}
+        });
+
+        return back()->with('success', "Office Request #{$office_request->pr_no} materials issued & dispatched successfully.");
     }
 
     // ─── Reject (HR / Coordinator) ──────────────────────────────────────────

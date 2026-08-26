@@ -54,12 +54,15 @@ class ProcurementLifecycleController extends Controller
             if ($user->hasRole('planning'))           $targetRoles[] = 'planning';
         }
 
+        $isStoreManager = $user->hasRole('store_manager');
+        $isPurchaseManager = $user->hasRole('purchase_manager');
+
         // 2. Fetch PRs awaiting action by this user's role(s)
         $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'materialRequest', 'items'])
             ->latest();
 
         if (!$isAdmin) {
-            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm) {
+            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm, $isStoreManager, $isPurchaseManager) {
                 $q->whereIn('current_owner_role', $targetRoles);
                 if ($isHr || $isCoordinator || $isGm) {
                     $q->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
@@ -67,6 +70,18 @@ class ProcurementLifecycleController extends Controller
                           $sub->where('is_office_request', true)
                               ->where('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
                       });
+                }
+                if ($isStoreManager) {
+                    $q->orWhere(function ($sub) {
+                        $sub->where('is_office_request', true)
+                            ->whereIn('status', [PurchaseRequest::STATUS_APPROVED, PurchaseRequest::STATUS_PENDING_STORE_REVIEW]);
+                    });
+                }
+                if ($isPurchaseManager) {
+                    $q->orWhere(function ($sub) {
+                        $sub->where('is_office_request', true)
+                            ->whereIn('status', [PurchaseRequest::STATUS_PENDING_PM_REVIEW, PurchaseRequest::STATUS_PENDING_PROC_TEAM]);
+                    });
                 }
             });
         }

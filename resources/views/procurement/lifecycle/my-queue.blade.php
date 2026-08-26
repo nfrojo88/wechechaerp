@@ -254,15 +254,20 @@
                             </td>
                             <td>{{ $pr->created_at->format('M d, Y') }}</td>
                             <td class="text-end">
-                                <div class="d-flex justify-content-end align-items-center gap-1">
+                                <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                     @if($pr->is_office_request)
                                         <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-outline-primary" title="View Request Details">
                                             <i class="fas fa-eye me-1"></i> View
                                         </a>
+
                                         @if($pr->status === 'pending_hr_approval')
                                             <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-warning text-dark fw-bold shadow-sm" title="Approve or Reject">
                                                 <i class="fas fa-gavel me-1"></i> Decide
                                             </a>
+                                        @elseif(in_array($pr->status, ['approved', 'pending_store_review']))
+                                            <button type="button" class="btn btn-sm btn-info text-dark fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#sendToPmModal{{ $pr->id }}" title="Send to Purchase Manager (PM)">
+                                                <i class="fas fa-paper-plane me-1"></i> Send to PM
+                                            </button>
                                         @endif
                                     @else
                                         <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-primary">
@@ -270,6 +275,38 @@
                                         </a>
                                     @endif
                                 </div>
+
+                                @if($pr->is_office_request && in_array($pr->status, ['approved', 'pending_store_review']))
+                                <!-- Send to PM Modal -->
+                                <div class="modal fade" id="sendToPmModal{{ $pr->id }}" tabindex="-1" aria-hidden="true" style="text-align: left;">
+                                    <div class="modal-dialog">
+                                        <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('office-requests.send-to-pm') ? route('office-requests.send-to-pm', $pr) : url('/office-requests/' . $pr->id . '/send-to-pm') }}" class="modal-content border-0 shadow">
+                                            @csrf
+                                            <div class="modal-header bg-primary text-white">
+                                                <h5 class="modal-title fw-bold">
+                                                    <i class="fas fa-paper-plane me-2"></i>Send Office Request to Purchase Manager (PM)
+                                                </h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body p-4">
+                                                <p class="text-muted small mb-3">
+                                                    Forward <strong>{{ $pr->pr_no }}</strong> ({{ $pr->office_purpose ?: 'Office Supplies' }}) to Purchase Manager (PM) for procurement sourcing & buying.
+                                                </p>
+                                                <div class="mb-0">
+                                                    <label class="form-label fw-semibold text-dark">Store Manager Note / Remarks (አስተያየት)</label>
+                                                    <textarea name="notes" class="form-control" rows="3" placeholder="e.g. Items out of stock in central store. Please source from suppliers..."></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer bg-light">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <button type="submit" class="btn btn-primary px-4">
+                                                    <i class="fas fa-paper-plane me-1"></i> Confirm & Send to PM
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                                @endif
                             </td>
                         </tr>
                         @empty

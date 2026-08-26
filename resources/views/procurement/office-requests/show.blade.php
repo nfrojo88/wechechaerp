@@ -86,7 +86,7 @@
                 </div>
             </div>
         </div>
-    @elseif($office_request->status === 'approved')
+    @elseif(in_array($office_request->status, ['approved', 'pending_store_review']))
         <div class="card border-0 shadow-sm rounded-3 border-start border-success border-4 mb-4 bg-white">
             <div class="card-body p-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
                 <div class="d-flex align-items-center gap-3">
@@ -94,7 +94,7 @@
                         <i class="fa-solid fa-check-double fa-lg"></i>
                     </div>
                     <div>
-                        <div class="fw-bold text-dark">Approved by HR / Coordinator</div>
+                        <div class="fw-bold text-dark">Approved by HR / Coordinator &mdash; <span class="badge bg-warning text-dark">Awaiting Store / PM Action</span></div>
                         <div class="small text-muted">
                             Approved by <strong>{{ $office_request->hrCoordinatorApprovedBy?->name ?? 'HR/Coordinator' }}</strong>
                             on {{ $office_request->hr_coordinator_approved_at ? $office_request->hr_coordinator_approved_at->format('M d, Y h:i A') : $office_request->updated_at->format('M d, Y') }}.
@@ -104,11 +104,21 @@
                         </div>
                     </div>
                 </div>
-                @if($canApprove)
-                    <a href="{{ route('purchase-requests.show', $office_request) }}" class="btn btn-sm btn-outline-primary">
+                <div class="d-flex gap-2 flex-wrap">
+                    @if(auth()->user()->hasRole('store_manager') || auth()->user()->hasRole('admin') || auth()->user()->hasRole('global_admin') || auth()->user()->hasRole('coordinator'))
+                        <!-- Send to PM Button -->
+                        <button type="button" class="btn btn-primary px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#sendToPmModal">
+                            <i class="fa-solid fa-paper-plane me-1"></i> Send to PM (ለግዢ ክፍል ላክ)
+                        </button>
+                        <!-- Store Dispatch Button -->
+                        <button type="button" class="btn btn-outline-success px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#storeDispatchModal">
+                            <i class="fa-solid fa-boxes-packing me-1"></i> Issue / Dispatch from Store
+                        </button>
+                    @endif
+                    <a href="{{ route('purchase-requests.show', $office_request) }}" class="btn btn-sm btn-outline-secondary">
                         <i class="fa-solid fa-sitemap me-1"></i> Full Procurement View
                     </a>
-                @endif
+                </div>
             </div>
         </div>
     @elseif($office_request->status === 'rejected')
@@ -343,9 +353,9 @@
                     <div class="mb-3">
                         <label class="form-label fw-semibold text-dark">Next Action / Fulfillment Route <span class="text-danger">*</span></label>
                         <select name="next_action" class="form-select" required>
-                            <option value="approved_direct">Direct Approval (ጸድቋል - Secretary/Office buys or fulfills)</option>
-                            <option value="send_to_procurement">Forward to Procurement Team (ለግዢ ክፍል ይተላለፍ - Sourcing & Buying)</option>
-                            <option value="send_to_store">Route to Store Manager (ከመጋዘን እንዲወጣ - Store Dispatch)</option>
+                            <option value="send_to_store" selected>Route to Store Manager (ወደ መጋዘን ይተላለፍ - Store checks stock & dispatches or sends to PM)</option>
+                            <option value="send_to_pm">Forward directly to PM (Purchase Manager) for Buying (ለግዢ ኃላፊ ይተላለፍ)</option>
+                            <option value="approved_direct">Direct Office Fulfillment (ቀጥታ ተፈቅዷል - Secretary/Office buys)</option>
                         </select>
                         <div class="form-text small">Choose how the approved materials should be fulfilled.</div>
                     </div>
@@ -384,10 +394,63 @@
                         <textarea name="rejection_reason" rows="3" class="form-control" placeholder="Explain why this office supply request is rejected..." required></textarea>
                     </div>
                 </div>
+<!-- SEND TO PM MODAL -->
+<div class="modal fade" id="sendToPmModal" tabindex="-1" aria-labelledby="sendToPmModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form action="{{ \Illuminate\Support\Facades\Route::has('office-requests.send-to-pm') ? route('office-requests.send-to-pm', $office_request) : url('/office-requests/' . $office_request->id . '/send-to-pm') }}" method="POST">
+            @csrf
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="sendToPmModalLabel">
+                        <i class="fa-solid fa-paper-plane me-2"></i>Send to PM (Purchase Manager)
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-muted small mb-3">
+                        Forward <strong>{{ $office_request->pr_no }}</strong> to the Purchase Manager (PM) for supplier price sourcing & purchasing.
+                    </p>
+                    <div class="mb-0">
+                        <label class="form-label fw-semibold text-dark">Store Manager Remarks / Notes (አስተያየት)</label>
+                        <textarea name="notes" rows="3" class="form-control" placeholder="e.g. Items are out of stock in office store. Forwarding to PM to purchase..."></textarea>
+                    </div>
+                </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger px-4">
-                        <i class="fa-solid fa-ban me-1"></i> Confirm Rejection
+                    <button type="submit" class="btn btn-primary px-4">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Confirm & Send to PM
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- STORE DISPATCH MODAL -->
+<div class="modal fade" id="storeDispatchModal" tabindex="-1" aria-labelledby="storeDispatchModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form action="{{ \Illuminate\Support\Facades\Route::has('office-requests.store-dispatch') ? route('office-requests.store-dispatch', $office_request) : url('/office-requests/' . $office_request->id . '/store-dispatch') }}" method="POST">
+            @csrf
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold" id="storeDispatchModalLabel">
+                        <i class="fa-solid fa-boxes-packing me-2"></i>Issue / Dispatch from Store
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-muted small mb-3">
+                        Confirm that requested materials are issued from store inventory and handed over to Secretary / Office.
+                    </p>
+                    <div class="mb-0">
+                        <label class="form-label fw-semibold text-dark">Dispatch Notes</label>
+                        <textarea name="notes" rows="3" class="form-control" placeholder="e.g. All 3 items issued from central office inventory..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success px-4">
+                        <i class="fa-solid fa-check me-1"></i> Confirm Dispatch
                     </button>
                 </div>
             </div>
