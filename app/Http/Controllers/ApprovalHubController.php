@@ -369,14 +369,18 @@ class ApprovalHubController extends Controller
         $user = Auth::user();
         $rolesStr = strtolower(implode(' ', $user ? $user->getRoleNames()->toArray() : []));
         $isAdmin = $user && ($user->hasAnyRole(['admin', 'global_admin', 'super_admin']) || str_contains($rolesStr, 'admin'));
+        $isAuditor = $user && ($user->hasAnyRole(['auditor', 'Auditor', 'audit_team', 'audit']) || str_contains($rolesStr, 'audit'));
         $isHR = $user && ($user->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'hr', 'Coordinator', 'coordinator']) || str_contains($rolesStr, 'hr') || str_contains($rolesStr, 'coordinator') || $user->can('hr.view'));
         $isGM = $user && ($user->hasAnyRole(['General Manager', 'general_manager', 'gm']) || str_contains($rolesStr, 'gm'));
         $isFinanceHead = $user && ($user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance Manager', 'Finance Head']) || str_contains($rolesStr, 'finance_head') || str_contains($rolesStr, 'finance_manager') || (str_contains($rolesStr, 'head') && str_contains($rolesStr, 'finance')));
         $isFinance = $user && ($user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance staff', 'finance_staff', 'finance', 'cashier', 'accountant']) || str_contains($rolesStr, 'finance') || str_contains($rolesStr, 'cashier') || str_contains($rolesStr, 'accountant'));
 
         // Role-based visibility scoping
-        if ($isFinance && !$isFinanceHead && !$isAdmin && !$isGM) {
+        if ($isAuditor || $isAdmin) {
+            // Auditor and Admin see all items across all stages for audit and oversight
+        } elseif ($isFinance && !$isFinanceHead && !$isHR && !$isGM) {
             // STRICT LAW: Regular Finance Staff ONLY see expenses assigned to their staff ID or their assigned COA/Bank account
+
             $userId = (int) $user->id;
             $items = $items->filter(function ($item) use ($userId) {
                 if (!in_array($item->status_key, ['finance_queue', 'paid', 'rejected'])) {

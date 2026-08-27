@@ -1270,14 +1270,15 @@
             </a>
         </li>
         @endcanany
-        @canany(['admin.audit.view', 'finance.audit.view'])
+        @canany(['admin.audit.view', 'finance.audit.view', 'audit.view', 'audit.*'])
         <li class="sidebar-nav-item">
             <a href="{{ route('audit.index') }}" class="sidebar-nav-link {{ request()->routeIs('audit.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-clipboard-list"></i>
+                <i class="fa-solid fa-clipboard-list text-info"></i>
                 <span>Audit Logs</span>
             </a>
         </li>
         @endcanany
+
         @endcanany
 
         @role('global_admin')
