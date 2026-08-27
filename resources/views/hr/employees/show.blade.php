@@ -1165,97 +1165,221 @@
             </div>
         </div>
         @endif
-        {{-- ============================
-             Official Letters & Disciplinary / Recognition History
+        {{-- =============================
+        13. OFFICIAL LETTERS & WARNINGS (CARD GRID VIEW)
         ============================= --}}
         <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
-                    <h5 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-envelope-open-text text-primary me-2"></i>Official Letters &amp; Recognition / Warning History</h5>
-                    <small class="text-muted">Archived appreciation letters, written warnings, and disciplinary notices for this employee</small>
+                    <h5 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-envelope-open-text text-primary me-2"></i>Official Letters &amp; Letter History</h5>
+                    <small class="text-muted">Guarantee letters, appreciation, written warnings, power of attorney, and official employee records</small>
                 </div>
-                <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.create') ? route('employee-letters.create', ['employee_id' => $employee->id]) : url('/employee-letters/create?employee_id='.$employee->id) }}" class="btn btn-sm btn-primary shadow-sm">
-                    <i class="fa-solid fa-plus me-1"></i> Issue Official Letter
-                </a>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.create') ? route('employee-letters.create', ['employee_id' => $employee->id]) : url('/employee-letters/create?employee_id='.$employee->id) }}" class="btn btn-sm btn-primary shadow-sm">
+                        <i class="fa-solid fa-plus me-1"></i> Issue Official Letter
+                    </a>
+                </div>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body p-3">
                 @php
                     $empLetters = $employee->letters ?? collect();
                 @endphp
                 @if($empLetters->count() > 0)
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th class="ps-3">Ref #</th>
-                                <th>Letter Type</th>
-                                <th>Subject / Title</th>
-                                <th>Issued Date</th>
-                                <th>Status</th>
-                                <th class="text-end pe-3">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($empLetters as $ltr)
-                            <tr>
-                                <td class="ps-3">
-                                    <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.show') ? route('employee-letters.show', $ltr) : url('/employee-letters/'.$ltr->id) }}" class="fw-bold font-monospace text-primary text-decoration-none">
-                                        {{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }}
-                                    </a>
-                                </td>
-                                <td>
-                                    <span class="badge {{ $ltr->badge_class }} px-2 py-1">
-                                        <i class="{{ $ltr->icon }} me-1"></i>{{ $ltr->type_label }}
-                                    </span>
-                                </td>
-                                <td>
-                                    <strong class="text-dark small d-block">{{ $ltr->title }}</strong>
-                                    <small class="text-muted">{{ Str::limit(strip_tags($ltr->content), 60) }}</small>
-                                </td>
-                                <td>
-                                    <small class="text-dark">{{ optional($ltr->issued_date)->format('d M Y') }}</small>
-                                </td>
-                                <td>
-                                    @if($ltr->acknowledgement_status === 'acknowledged')
-                                        <span class="badge bg-success small"><i class="fa-solid fa-check me-1"></i>Signed</span>
-                                    @elseif($ltr->acknowledgement_status === 'pending')
-                                        <span class="badge bg-warning text-dark small">Pending</span>
-                                    @else
-                                        <span class="badge bg-danger small">Refused</span>
-                                    @endif
-                                </td>
-                                <td class="text-end pe-3">
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.show') ? route('employee-letters.show', $ltr) : url('/employee-letters/'.$ltr->id) }}" class="btn btn-outline-primary" title="View">
-                                            <i class="fa-solid fa-eye"></i>
+                <div class="row g-3">
+                    @foreach($empLetters as $ltr)
+                    @php
+                        $borderAccent = match($ltr->letter_type) {
+                            'guarantee_letter'   => '#0d9488',
+                            'power_of_attorney'  => '#4f46e5',
+                            'application_letter' => '#6366f1',
+                            'thanks_letter', 'appreciation', 'promotion' => '#10b981',
+                            'first_warning'      => '#f59e0b',
+                            'second_warning'     => '#f97316',
+                            'final_warning', 'termination' => '#ef4444',
+                            'show_cause'         => '#06b6d4',
+                            'suspension'         => '#8b5cf6',
+                            default              => '#64748b'
+                        };
+                    @endphp
+                    <div class="col-md-6 col-12">
+                        <div class="card border h-100 shadow-sm rounded-3 overflow-hidden position-relative" style="border-left: 5px solid {{ $borderAccent }} !important; background: #ffffff;">
+                            <div class="card-body p-3 d-flex flex-column justify-content-between">
+                                <div>
+                                    {{-- Header: Type Badge & Reference Number --}}
+                                    <div class="d-flex justify-content-between align-items-start mb-2 gap-2 flex-wrap">
+                                        <span class="badge {{ $ltr->badge_class }} py-1 px-2.5 rounded-pill shadow-xs" style="font-size: 0.78rem;">
+                                            <i class="{{ $ltr->icon }} me-1"></i>{{ $ltr->type_label }}
+                                        </span>
+                                        <span class="badge bg-light text-dark font-monospace border px-2 py-1" style="font-size: 0.75rem;">
+                                            {{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }}
+                                        </span>
+                                    </div>
+
+                                    {{-- Subject / Title --}}
+                                    <h6 class="fw-bold text-dark mb-1" style="line-height: 1.35;">
+                                        {{ $ltr->title }}
+                                    </h6>
+
+                                    {{-- Content Snippet --}}
+                                    <div class="p-2 rounded-2 bg-light border border-light-subtle my-2" style="font-size: 0.82rem; color: #475569; max-height: 72px; overflow: hidden; line-height: 1.45;">
+                                        {{ Str::limit(strip_tags($ltr->content), 120) }}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    {{-- Meta row: Issued Date & Acknowledgement --}}
+                                    <div class="d-flex justify-content-between align-items-center pt-2 mb-3 border-top" style="font-size: 0.78rem;">
+                                        <span class="text-muted">
+                                            <i class="fa-regular fa-calendar me-1 text-primary"></i><strong>{{ optional($ltr->issued_date)->format('d M Y') }}</strong>
+                                        </span>
+                                        <div>
+                                            @if($ltr->acknowledgement_status === 'acknowledged')
+                                                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-0.5">
+                                                    <i class="fa-solid fa-check me-1"></i>Signed / Acknowledged
+                                                </span>
+                                            @elseif($ltr->acknowledgement_status === 'pending')
+                                                <span class="badge bg-warning bg-opacity-10 text-dark border border-warning-subtle px-2 py-0.5">
+                                                    <i class="fa-solid fa-clock me-1"></i>Pending Signature
+                                                </span>
+                                            @else
+                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5">
+                                                    <i class="fa-solid fa-ban me-1"></i>Refused
+                                                </span>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    {{-- Action Buttons --}}
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1 fw-semibold py-1.5 shadow-xs" data-bs-toggle="modal" data-bs-target="#empLetterModal{{ $ltr->id }}">
+                                            <i class="fa-solid fa-eye me-1"></i> View Letter Details
+                                        </button>
+                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.print') ? route('employee-letters.print', $ltr) : url('/employee-letters/'.$ltr->id.'/print') }}" target="_blank" class="btn btn-sm btn-light border py-1.5 px-2.5" title="Print Letterhead">
+                                            <i class="fa-solid fa-print text-secondary"></i>
                                         </a>
-                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.print') ? route('employee-letters.print', $ltr) : url('/employee-letters/'.$ltr->id.'/print') }}" target="_blank" class="btn btn-outline-secondary" title="Print Letterhead">
-                                            <i class="fa-solid fa-print"></i>
+                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.edit') ? route('employee-letters.edit', $ltr) : url('/employee-letters/'.$ltr->id.'/edit') }}" class="btn btn-sm btn-light border py-1.5 px-2.5" title="Edit Letter">
+                                            <i class="fa-solid fa-pen-to-square text-warning"></i>
                                         </a>
                                         @if($ltr->attachment_path)
-                                        <a href="{{ asset('storage/' . $ltr->attachment_path) }}" target="_blank" class="btn btn-outline-success" title="Attachment">
-                                            <i class="fa-solid fa-paperclip"></i>
+                                        <a href="{{ asset('storage/' . $ltr->attachment_path) }}" target="_blank" class="btn btn-sm btn-light border py-1.5 px-2.5" title="View Signed Attachment">
+                                            <i class="fa-solid fa-paperclip text-success"></i>
                                         </a>
                                         @endif
                                     </div>
-                                </td>
-                            </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- DETAIL MODAL FOR THIS LETTER --}}
+                    <div class="modal fade" id="empLetterModal{{ $ltr->id }}" tabindex="-1" aria-labelledby="empLetterModalLabel{{ $ltr->id }}" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered modal-lg">
+                            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                                {{-- Modal Header --}}
+                                <div class="modal-header text-white py-3 px-4" style="background: {{ $borderAccent }};">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-white bg-opacity-20 text-white p-2 rounded-3 fs-6">
+                                            <i class="{{ $ltr->icon }}"></i>
+                                        </span>
+                                        <div>
+                                            <h5 class="modal-title fw-bold mb-0 text-white" id="empLetterModalLabel{{ $ltr->id }}">
+                                                {{ $ltr->type_label }}
+                                            </h5>
+                                            <span class="text-white-50 small font-monospace">Ref: {{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }} &bull; Issued: {{ optional($ltr->issued_date)->format('d M Y') }}</span>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+
+                                {{-- Modal Body: Form / Letterhead Preview --}}
+                                <div class="modal-body p-4 bg-white">
+                                    {{-- Mini Letterhead Header --}}
+                                    <div class="text-center border-bottom pb-3 mb-3">
+                                        <h5 class="fw-bold text-dark text-uppercase mb-0" style="letter-spacing: 1px;">Wechecha Construction PLC</h5>
+                                        <div class="text-muted small text-uppercase">Human Resources &amp; Personnel Administration</div>
+                                    </div>
+
+                                    {{-- Reference & Date Bar --}}
+                                    <div class="d-flex justify-content-between align-items-center p-2 rounded bg-light border mb-3 small">
+                                        <div><strong>Reference:</strong> <span class="font-monospace text-primary">{{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }}</span></div>
+                                        <div><strong>Date:</strong> {{ optional($ltr->issued_date)->format('d F Y') }}</div>
+                                    </div>
+
+                                    {{-- Employee Info Summary --}}
+                                    <div class="row g-2 p-3 bg-light rounded-3 border mb-3 small">
+                                        <div class="col-md-6">
+                                            <span class="text-muted d-block">Employee Name:</span>
+                                            <strong class="text-dark">{{ $employee->full_name }}</strong> ({{ $employee->employee_code }})
+                                        </div>
+                                        <div class="col-md-6">
+                                            <span class="text-muted d-block">Department &amp; Role:</span>
+                                            <strong>{{ $employee->department }} &bull; {{ $employee->role_title ?? 'Employee' }}</strong>
+                                        </div>
+                                    </div>
+
+                                    {{-- Subject --}}
+                                    <div class="mb-3">
+                                        <div class="small fw-bold text-uppercase text-muted">Subject:</div>
+                                        <h6 class="fw-bold text-dark border-bottom pb-1 mb-0">{{ $ltr->title }}</h6>
+                                    </div>
+
+                                    {{-- Full Letter Content --}}
+                                    <div class="mb-3">
+                                        <div class="small fw-bold text-uppercase text-muted mb-1">Letter Body / Content:</div>
+                                        <div class="p-3 bg-light rounded-3 border font-monospace text-dark" style="white-space: pre-wrap; font-size: 0.88rem; line-height: 1.6; max-height: 320px; overflow-y: auto;">{{ $ltr->content }}</div>
+                                    </div>
+
+                                    {{-- Action Required / Notes --}}
+                                    @if($ltr->action_required)
+                                    <div class="p-3 rounded-3 border-start border-4 border-warning bg-warning bg-opacity-10 mb-3 small">
+                                        <strong class="text-dark d-block mb-1"><i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Follow-up / Action Required:</strong>
+                                        <div>{{ $ltr->action_required }}</div>
+                                    </div>
+                                    @endif
+
+                                    {{-- Attachment Info --}}
+                                    @if($ltr->attachment_path)
+                                    <div class="p-2.5 rounded bg-success bg-opacity-10 border border-success-subtle d-flex align-items-center justify-content-between">
+                                        <div class="small">
+                                            <i class="fa-solid fa-file-pdf text-success me-1"></i> <strong>Signed Copy Attached:</strong> {{ basename($ltr->attachment_path) }}
+                                        </div>
+                                        <a href="{{ asset('storage/' . $ltr->attachment_path) }}" target="_blank" class="btn btn-sm btn-success py-1 px-3">
+                                            <i class="fa-solid fa-download me-1"></i> View / Download Attachment
+                                        </a>
+                                    </div>
+                                    @endif
+                                </div>
+
+                                {{-- Modal Footer --}}
+                                <div class="modal-footer bg-light border-0 py-3 px-4 justify-content-between">
+                                    <button type="button" class="btn btn-light border rounded-pill px-3" data-bs-dismiss="modal">Close</button>
+                                    <div class="d-flex gap-2">
+                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.edit') ? route('employee-letters.edit', $ltr) : url('/employee-letters/'.$ltr->id.'/edit') }}" class="btn btn-outline-warning rounded-pill px-3 fw-semibold">
+                                            <i class="fa-solid fa-pen-to-square me-1"></i> Edit Letter
+                                        </a>
+                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.print') ? route('employee-letters.print', $ltr) : url('/employee-letters/'.$ltr->id.'/print') }}" target="_blank" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
+                                            <i class="fa-solid fa-print me-1"></i> Print Letterhead
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    @endforeach
                 </div>
                 @else
                 <div class="text-center py-4 text-muted">
                     <i class="fa-solid fa-envelope-open-text fa-2x mb-2 d-block opacity-25"></i>
                     <p class="small mb-2">No official letters or warning notices issued to this employee yet.</p>
                     <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.create') ? route('employee-letters.create', ['employee_id' => $employee->id]) : url('/employee-letters/create?employee_id='.$employee->id) }}" class="btn btn-sm btn-outline-primary">
-                        <i class="fa-solid fa-plus me-1"></i> Issue Thanks / Warning Letter
+                        <i class="fa-solid fa-plus me-1"></i> Issue Thanks / Guarantee / Warning Letter
                     </a>
                 </div>
                 @endif
             </div>
         </div>
     </div>
+
 
     {{-- ============================
          Right Column: Profile Sidebar
