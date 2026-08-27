@@ -985,6 +985,27 @@
             </a>
         </li>
 
+        <!-- Office Material Requests (Finance Head / Payment Tracking) -->
+        @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_manager', 'admin', 'global_admin']))
+        <li class="sidebar-nav-item">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" class="sidebar-nav-link {{ request()->is('office-requests*') || request()->routeIs('office-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-boxes-stacked" style="color: #7c3aed;"></i>
+                <span>Office Material Requests</span>
+                @php
+                    $pendingFinOfficeReqCount = 0;
+                    try {
+                        $pendingFinOfficeReqCount = \App\Models\PurchaseRequest::where('is_office_request', true)
+                            ->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_FINANCE)
+                            ->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingFinOfficeReqCount > 0)
+                    <span class="badge text-white rounded-pill ms-auto" style="background:#7c3aed;">{{ $pendingFinOfficeReqCount }}</span>
+                @endif
+            </a>
+        </li>
+        @endif
+
         <!-- Credit Store Ledger (Credit Purchases) -->
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'admin', 'global_admin', 'gm', 'general_manager']))
         <li class="sidebar-nav-item">
