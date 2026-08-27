@@ -368,14 +368,75 @@ class ApprovalHubController extends Controller
 
         $user = Auth::user();
         $rolesStr = strtolower(implode(' ', $user ? $user->getRoleNames()->toArray() : []));
-        $isAdmin = $user && ($user->hasAnyRole(['admin', 'global_admin']) || str_contains($rolesStr, 'admin'));
+        $isAdmin = $user && ($user->hasAnyRole(['admin', 'global_admin', 'super_admin']) || str_contains($rolesStr, 'admin'));
         $isHR = $user && ($user->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'hr', 'Coordinator', 'coordinator']) || str_contains($rolesStr, 'hr') || str_contains($rolesStr, 'coordinator') || $user->can('hr.view'));
         $isGM = $user && ($user->hasAnyRole(['General Manager', 'general_manager', 'gm']) || str_contains($rolesStr, 'gm'));
+        $isFinanceHead = $user && ($user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance Manager', 'Finance Head']) || str_contains($rolesStr, 'finance_head') || str_contains($rolesStr, 'finance_manager') || (str_contains($rolesStr, 'head') && str_contains($rolesStr, 'finance')));
         $isFinance = $user && ($user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'Finance staff', 'finance_staff', 'finance', 'cashier', 'accountant']) || str_contains($rolesStr, 'finance') || str_contains($rolesStr, 'cashier') || str_contains($rolesStr, 'accountant'));
 
         // Role-based visibility scoping
-        if ($isFinance && !$isAdmin && !$isHR && !$isGM) {
-            // Finance only sees requests approved for finance queue, paid history, and rejected
+        if ($isFinance && !$isFinanceHead && !$isAdmin && !$isGM) {
+            // STRICT LAW: Regular Finance Staff ONLY see expenses assigned to their staff ID or their assigned COA/Bank account
+            $userId = (int) $user->id;
+            $items = $items->filter(function ($item) use ($userId) {
+                if (!in_array($item->status_key, ['finance_queue', 'paid', 'rejected'])) {
+                    return false;
+                }
+
+                // 1. Direct assignment
+                if ((int)($item->assigned_staff_id ?? 0) === $userId) {
+                    return true;
+                }
+
+                $raw = $item->raw_model ?? null;
+                if (!$raw) return false;
+
+                if (isset($raw->assigned_finance_staff_id) && (int)$raw->assigned_finance_staff_id === $userId) {
+                    return true;
+                }
+                if (isset($raw->finance_staff_id) && (int)$raw->finance_staff_id === $userId) {
+                    return true;
+                }
+
+                // 2. Chart of Account custodian
+                if (isset($raw->coa) && $raw->coa && (int)$raw->coa->assigned_to === $userId) {
+                    return true;
+                }
+                if (isset($raw->chartOfAccount) && $raw->chartOfAccount && (int)$raw->chartOfAccount->assigned_to === $userId) {
+                    return true;
+                }
+                if (isset($raw->payment) && $raw->payment && isset($raw->payment->coaAccount) && (int)$raw->payment->coaAccount?->assigned_to === $userId) {
+                    return true;
+                }
+                if (isset($raw->payment) && $raw->payment && (int)($raw->payment->assigned_finance_staff_id ?? 0) === $userId) {
+                    return true;
+                }
+
+                // 3. Bank Account custodian
+                if (isset($raw->bankAccount) && $raw->bankAccount && (int)$raw->bankAccount->assigned_to === $userId) {
+                    return true;
+                }
+
+                // 4. Paid by this staff
+                if (isset($raw->paid_by) && (int)$raw->paid_by === $userId) {
+                    return true;
+                }
+                if (isset($raw->payment) && $raw->payment && (int)$raw->payment->paid_by === $userId) {
+                    return true;
+                }
+
+                // 5. Requested by this user
+                if (isset($raw->user_id) && (int)$raw->user_id === $userId) {
+                    return true;
+                }
+                if (isset($raw->requested_by) && (int)$raw->requested_by === $userId) {
+                    return true;
+                }
+
+                return false;
+            });
+        } elseif ($isFinance && ($isFinanceHead || $isAdmin)) {
+            // Finance Head & Admin see all finance queue, paid, and rejected items
             $items = $items->filter(function ($item) {
                 return in_array($item->status_key, ['finance_queue', 'paid', 'rejected']);
             });
@@ -390,6 +451,7 @@ class ApprovalHubController extends Controller
                 return in_array($item->status_key, ['pending_gm', 'finance_queue', 'paid', 'rejected']);
             });
         }
+
 
         // Calculate Tab Counts
         $tabCounts = [

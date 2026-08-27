@@ -99,6 +99,18 @@ class OfficeSupplyRequestController extends Controller
     }
 
     /**
+     * Check if user is Finance Head / Admin / GM
+     */
+    protected function isFinanceHead(): bool
+    {
+        $user = Auth::user();
+        if (!$user) return false;
+        $userRoles = $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray();
+        $allowed = ['finance_head', 'finance_manager', 'admin', 'global_admin', 'gm', 'general_manager'];
+        return count(array_intersect($allowed, $userRoles)) > 0;
+    }
+
+    /**
      * Check if user is Finance Head / Finance Staff / Admin
      */
     protected function isFinance(): bool
@@ -118,6 +130,7 @@ class OfficeSupplyRequestController extends Controller
 
         $isHr = $this->isHrOrCoordinator();
         $isFinance = $this->isFinance();
+        $isFinanceHead = $this->isFinanceHead();
         $isSecretary = $user->hasRole('secretary') && !$isHr && !$isFinance;
 
         $query = OfficeMaterialRequest::with([
@@ -136,7 +149,24 @@ class OfficeSupplyRequestController extends Controller
             $query->where('requested_by', $user->id);
         }
 
+        // STRICT LAW: Regular Finance Staff (not Finance Head / Admin / HR) ONLY see requests assigned to them or their assigned COA/Bank
+        if ($isFinance && !$isFinanceHead && !$isHr) {
+            $userId = (int) $user->id;
+            $query->where(function ($q) use ($userId) {
+                $q->where('assigned_finance_staff_id', $userId)
+                  ->orWhere('paid_by', $userId)
+                  ->orWhere('requested_by', $userId)
+                  ->orWhereHas('coa', function ($sub) use ($userId) {
+                      $sub->where('assigned_to', $userId);
+                  })
+                  ->orWhereHas('bankAccount', function ($sub) use ($userId) {
+                      $sub->where('assigned_to', $userId);
+                  });
+            });
+        }
+
         // Tab filter
+
         $tab = $request->query('tab', 'all');
         if ($tab === 'pending_hr') {
             $query->where('status', OfficeMaterialRequest::STATUS_PENDING_HR);
@@ -204,12 +234,14 @@ class OfficeSupplyRequestController extends Controller
             'tab',
             'isHr',
             'isFinance',
+            'isFinanceHead',
             'isSecretary',
             'coaAccounts',
             'bankAccounts',
             'financeStaff'
         ));
     }
+
 
     // ─── 2. Create Requisition ───────────────────────────────────────────────
     public function create()
@@ -318,8 +350,8 @@ class OfficeSupplyRequestController extends Controller
 
         $isHr = $this->isHrOrCoordinator();
         $isFinance = $this->isFinance();
+        $isFinanceHead = $this->isFinanceHead();
 
-        // Accounts for Finance Head modal
         // Accounts for Finance Head assignment
         $coaAccounts = ChartOfAccount::with(['bankAccounts', 'manager'])
             ->where('is_active', true)
@@ -341,11 +373,13 @@ class OfficeSupplyRequestController extends Controller
             'officeRequest',
             'isHr',
             'isFinance',
+            'isFinanceHead',
             'coaAccounts',
             'bankAccounts',
             'financeStaff'
         ));
     }
+
 
     // ─── Step 2: HR / Coordinator Review & Money Addition ────────────────────
     public function hrApprove(Request $request, $id)
