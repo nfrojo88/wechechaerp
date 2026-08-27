@@ -1347,14 +1347,22 @@
             </a>
         </li>
         @endcanany
-        @canany(['admin.audit.view', 'finance.audit.view', 'audit.view', 'audit.*'])
+        @if(auth()->check() && (auth()->user()->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'admin', 'global_admin']) || (method_exists(auth()->user(), 'can') && (auth()->user()->can('audit.view') || auth()->user()->can('finance.audit.view') || auth()->user()->can('admin.audit.view')))))
+        <li class="sidebar-nav-item sidebar-section-label" style="padding:8px 16px 4px; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; pointer-events:none; user-select:none;">Audit &amp; Compliance</li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('audit.index') }}" class="sidebar-nav-link {{ request()->routeIs('audit.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-clipboard-list text-info"></i>
-                <span>Audit Logs</span>
+            <a href="{{ route('admin.activity-logs') }}" class="sidebar-nav-link {{ request()->routeIs('admin.activity-logs') ? 'active' : '' }}">
+                <i class="fa-solid fa-list-ol text-primary"></i>
+                <span>Audit &amp; Activity Trail</span>
             </a>
         </li>
-        @endcanany
+        <li class="sidebar-nav-item">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('finance.replenishments.index') ? route('finance.replenishments.index') : url('/finance/replenishments') }}" class="sidebar-nav-link {{ request()->is('finance/replenishments*') ? 'active' : '' }}">
+                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                <span>Petty Cash Audit &amp; Approvals</span>
+            </a>
+        </li>
+        @endif
+
 
         @endcanany
 

@@ -13,12 +13,25 @@ class ActivityLogController extends Controller
     {
         $this->middleware(function ($request, $next) {
             $user = auth()->user();
-            if (!$user || !$user->roles || !$user->roles->whereIn('name', ['global_admin', 'admin'])->count()) {
-                abort(403, 'Access denied. Admin only.');
+            if (!$user) {
+                abort(403, 'Access denied.');
+            }
+
+            $hasAccess = false;
+            if (method_exists($user, 'hasAnyRole')) {
+                $hasAccess = $user->hasAnyRole(['global_admin', 'admin', 'auditor', 'audit', 'internal_auditor', 'Finance head', 'finance_head']);
+            }
+            if (!$hasAccess && method_exists($user, 'can')) {
+                $hasAccess = $user->can('audit.view') || $user->can('finance.audit.view') || $user->can('admin.audit.view');
+            }
+
+            if (!$hasAccess) {
+                abort(403, 'Access denied. Auditor or Admin only.');
             }
             return $next($request);
         });
     }
+
 
     public function index(Request $request)
     {

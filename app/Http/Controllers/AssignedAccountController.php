@@ -37,6 +37,29 @@ class AssignedAccountController extends Controller
     }
 
     /**
+     * Check if the authenticated user is an Auditor or has audit rights
+     */
+    private function isAuditorUser(): bool
+    {
+        /** @var User|null $user */
+        $user = auth()->user();
+        if (!$user) {
+            return false;
+        }
+
+        if (method_exists($user, 'hasAnyRole') && $user->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'admin', 'global_admin'])) {
+            return true;
+        }
+
+        if (method_exists($user, 'can') && ($user->can('audit.view') || $user->can('finance.audit.view') || $user->can('admin.audit.view'))) {
+            return true;
+        }
+
+        return false;
+    }
+
+
+    /**
      * Self-healing schema check to guarantee tables exist without manual intervention
      */
     protected static function ensureSchema(): void
@@ -536,6 +559,21 @@ class AssignedAccountController extends Controller
                     'side'                        => 'credit',
                 ]);
             }
+
+            // Log to Audit Trail
+            \App\Models\ActivityLog::log(
+                'created',
+                "Petty Cash Replenishment #{$replenishment->request_no} submitted by " . (auth()->user()->name ?? 'Custodian') . " for ETB " . number_format($replenishment->requested_amount, 2) . " ([{$account->code}] {$account->name}) with " . $unreplenishedExpenses->count() . " attached expense vouchers.",
+                'Finance & Petty Cash Audit',
+                $replenishment,
+                [
+                    'request_no'       => $replenishment->request_no,
+                    'account'          => "[{$account->code}] {$account->name}",
+                    'requested_amount' => (float)$replenishment->requested_amount,
+                    'expenses_count'   => $unreplenishedExpenses->count(),
+                    'total_expenses'   => (float)$unreplenishedExpenses->sum('amount'),
+                ]
+            );
         });
 
         return redirect()->back()->with('success', 'Petty Cash replenishment request sent to Finance Head with ' . $unreplenishedExpenses->count() . ' attached expense records (ETB ' . number_format($unreplenishedExpenses->sum('amount'), 2) . ').');
@@ -634,6 +672,25 @@ class AssignedAccountController extends Controller
                 'fulfillment_reference' => $request->reference,
                 'fulfilled_at'          => now(),
             ]);
+
+            // 4. Log to Audit Trail / ActivityLog for Auditor oversight
+            \App\Models\ActivityLog::log(
+                'approved',
+                "Petty Cash Replenishment #{$replenishment->request_no} approved & fulfilled: Disbursed ETB " . number_format($amount, 2) . " from [{$sourceCoa->code}] {$sourceCoa->name} into [{$account->code}] {$account->name} for custodian " . ($replenishment->requester->name ?? 'Staff') . " ({$replenishment->items()->count()} attached expense records reconciled). Journal Entry: {$jeNo}",
+                'Finance & Petty Cash Audit',
+                $replenishment,
+                [
+                    'request_no'        => $replenishment->request_no,
+                    'fulfilled_amount'  => $amount,
+                    'petty_cash_account'=> "[{$account->code}] {$account->name}",
+                    'source_account'    => "[{$sourceCoa->code}] {$sourceCoa->name}",
+                    'custodian'         => $replenishment->requester->name ?? 'Staff',
+                    'vouchers_count'    => $replenishment->items()->count(),
+                    'journal_entry'     => $jeNo,
+                    'reference'         => $request->reference,
+                    'finance_head'      => auth()->user()->name ?? 'Finance Head',
+                ]
+            );
         });
 
         return redirect()->back()->with('success', "Replenishment #{$replenishment->request_no} fulfilled successfully! ETB " . number_format($amount, 2) . " disbursed into {$account->name}. Next cycle will start from this fulfillment point.");
@@ -668,6 +725,21 @@ class AssignedAccountController extends Controller
             'rejection_reason' => $request->rejection_reason,
         ]);
 
+        // Log to Audit Trail
+        \App\Models\ActivityLog::log(
+            'rejected',
+            "Petty Cash Replenishment #{$replenishment->request_no} (ETB " . number_format($replenishment->requested_amount, 2) . ") rejected by Finance Head. Reason: {$request->rejection_reason}",
+            'Finance & Petty Cash Audit',
+            $replenishment,
+            [
+                'request_no'        => $replenishment->request_no,
+                'requested_amount'  => (float)$replenishment->requested_amount,
+                'petty_cash_account'=> "[{$account->code}] {$account->name}",
+                'custodian'         => $replenishment->requester->name ?? 'Staff',
+                'rejection_reason'  => $request->rejection_reason,
+            ]
+        );
+
         return redirect()->back()->with('warning', "Replenishment #{$replenishment->request_no} has been rejected.");
     }
 
@@ -679,10 +751,11 @@ class AssignedAccountController extends Controller
         self::ensureSchema();
 
         $isFinanceHead = $this->isFinanceHeadUser();
+        $isAuditor = $this->isAuditorUser();
         $authId = auth()->id();
 
         $account = ChartOfAccount::where('id', $id)
-            ->when(!$isFinanceHead, function ($q) use ($authId) {
+            ->when(!$isFinanceHead && !$isAuditor, function ($q) use ($authId) {
                 $q->where('assigned_to', $authId);
             })
             ->firstOrFail();
@@ -701,16 +774,18 @@ class AssignedAccountController extends Controller
     }
 
     /**
-     * Finance Head: Central Petty Cash Replenishments Oversight & Approval Hub
+     * Finance Head & Auditor: Central Petty Cash Replenishments Oversight & Approval Hub
      */
     public function replenishmentsIndex(Request $request)
     {
         self::ensureSchema();
 
         $isFinanceHead = $this->isFinanceHeadUser();
-        if (!$isFinanceHead) {
-            abort(403, 'Unauthorized. Only Finance Head or Admin can access the Replenishments Hub.');
+        $isAuditor = $this->isAuditorUser();
+        if (!$isFinanceHead && !$isAuditor) {
+            abort(403, 'Unauthorized. Only Finance Head, Auditor, or Admin can access the Replenishments Hub.');
         }
+
 
         $query = PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'financeHead', 'sourceCoa', 'items']);
 

@@ -217,10 +217,10 @@
                                 </td>
                                 <td class="pe-4 py-3 text-end">
                                     <div class="btn-group btn-group-sm">
-                                        <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#viewModal{{ $rep->id }}" title="View Full Details">
-                                            <i class="fa-solid fa-eye text-primary"></i>
+                                        <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#viewModal{{ $rep->id }}" title="Audit & View Details">
+                                            <i class="fa-solid fa-eye text-primary me-1"></i> Audit Details
                                         </button>
-                                        @if($rep->status === 'pending')
+                                        @if($rep->status === 'pending' && auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']))
                                             <button type="button" class="btn btn-success text-white fw-bold shadow-xs px-3" data-bs-toggle="modal" data-bs-target="#fulfillModal{{ $rep->id }}">
                                                 <i class="fa-solid fa-check me-1"></i> Review &amp; Fulfill
                                             </button>
@@ -230,6 +230,7 @@
                                         @endif
                                     </div>
                                 </td>
+
                             </tr>
                         @empty
                             <tr>
@@ -517,16 +518,31 @@
                         </div>
                     </div>
 
+                    @if($rep->attachment_path)
+                    <div class="mb-4 p-3 bg-light rounded-3 border d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong class="text-dark d-block"><i class="fa-solid fa-file-invoice text-primary me-1"></i> Attached Physical Receipts &amp; Vouchers</strong>
+                            <small class="text-muted">Scanned supporting proof uploaded by custodian</small>
+                        </div>
+                        <a href="{{ \App\Services\FileUploadService::url($rep->attachment_path) }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
+                            <i class="fa-solid fa-download me-1"></i> Download Receipts
+                        </a>
+                    </div>
+                    @endif
+
                     @if($rep->status === 'fulfilled')
                     <div class="p-3 bg-success bg-opacity-10 border border-success-subtle rounded-3 text-dark small">
                         <div class="row g-2">
                             <div class="col-md-6"><strong>Disbursed By:</strong> {{ $rep->financeHead->name ?? 'Finance Head' }} on {{ optional($rep->fulfilled_at)->format('d M Y, h:i A') }}</div>
                             <div class="col-md-6"><strong>Source Account:</strong> [{{ $rep->sourceCoa->code ?? 'N/A' }}] {{ $rep->sourceCoa->name ?? 'Bank Account' }}</div>
                             @if($rep->fulfillment_reference)
-                            <div class="col-md-6"><strong>Reference:</strong> {{ $rep->fulfillment_reference }}</div>
+                            <div class="col-md-6"><strong>Transaction Reference:</strong> {{ $rep->fulfillment_reference }}</div>
+                            @endif
+                            @if($rep->journal_entry_id)
+                            <div class="col-md-6"><strong>GL Journal Entry ID:</strong> <span class="badge bg-dark font-monospace">JE #{{ $rep->journal_entry_id }}</span></div>
                             @endif
                             @if($rep->finance_notes)
-                            <div class="col-md-6"><strong>Remarks:</strong> {{ $rep->finance_notes }}</div>
+                            <div class="col-12"><strong>Finance Head Remarks:</strong> {{ $rep->finance_notes }}</div>
                             @endif
                         </div>
                     </div>
@@ -536,6 +552,7 @@
                         <div class="mt-1 text-danger"><strong>Reason:</strong> {{ $rep->rejection_reason }}</div>
                     </div>
                     @endif
+
 
                 </div>
                 <div class="modal-footer bg-light border-0 py-3 px-4">
