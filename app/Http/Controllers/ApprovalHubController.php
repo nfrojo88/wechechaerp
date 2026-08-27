@@ -299,68 +299,71 @@ class ApprovalHubController extends Controller
             $items = $items->concat($prs);
         } catch (\Throwable $e) {}
 
-        // 6. Office Supply Requests (Pending Finance Decision & Completed)
+        // 6. Office Material Requests (Mapped to HR, Finance Queue, Paid, and Rejected)
         try {
-            $officeRequests = PurchaseRequest::with(['requestedBy', 'items.product', 'workflowLogs.actor'])
-                ->where('is_office_request', true)
-                ->whereIn('status', [PurchaseRequest::STATUS_PENDING_FINANCE, PurchaseRequest::STATUS_COMPLETED])
+            if (\Illuminate\Support\Facades\Schema::hasTable('office_material_requests')) {
+                $officeRequests = \App\Models\OfficeMaterialRequest::with([
+                    'requestedBy',
+                    'hrReviewer',
+                    'financeHead',
+                    'assignedStaff',
+                    'paidBy',
+                    'coa',
+                    'bankAccount',
+                    'items.product'
+                ])
                 ->latest()
                 ->get()
-                ->map(function ($pr) {
-                    $totalItems = $pr->items->count();
-                    $itemNames  = $pr->items->take(3)->map(fn($i) => $i->product?->name ?? 'Item')->implode(', ');
-                    
-                    $totalEstimated = (float) $pr->items->sum(function ($item) {
-                        return (float) ($item->quantity ?? 0) * (float) ($item->estimated_unit_cost ?? $item->unit_price ?? 0);
-                    });
+                ->map(function ($req) {
+                    $totalItems = $req->items->count();
+                    $itemNames  = $req->items->take(3)->map(fn($i) => $i->item_name ?: ($i->product?->name ?? 'Item'))->implode(', ');
+                    $amount = (float) ($req->amount ?? 0);
 
-                    $isCompleted = ($pr->status === PurchaseRequest::STATUS_COMPLETED);
-                    $statusKey   = $isCompleted ? 'paid' : 'finance_queue';
-                    $statusLabel = $isCompleted ? 'Paid / Completed' : '⏳ Awaiting Finance Payment';
-                    $badgeColor  = $isCompleted ? 'success' : 'purple';
-
-                    // Find finance workflow log if available
-                    $financeLog = $pr->workflowLogs->firstWhere('action', 'finance_confirmed_expense');
+                    [$statusLabel, $statusKey, $badgeColor] = match($req->status) {
+                        \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR          => ['Pending HR Review', 'pending_hr', 'warning'],
+                        \App\Models\OfficeMaterialRequest::STATUS_APPROVED_BY_HR      => ['Finance Queue (Approved by HR)', 'finance_queue', 'primary'],
+                        \App\Models\OfficeMaterialRequest::STATUS_ASSIGNED_TO_FINANCE => ['Finance Queue (Assigned)', 'finance_queue', 'info'],
+                        \App\Models\OfficeMaterialRequest::STATUS_PAID                => ['Paid & Completed', 'paid', 'success'],
+                        \App\Models\OfficeMaterialRequest::STATUS_REJECTED            => ['Rejected', 'rejected', 'danger'],
+                        default                                                       => [ucfirst(str_replace('_', ' ', $req->status)), 'pending_hr', 'secondary'],
+                    };
 
                     return (object) [
-                        'id_raw'            => $pr->id,
-                        'id_formatted'      => $pr->pr_no,
+                        'id_raw'            => $req->id,
+                        'id_formatted'      => $req->request_no,
                         'type'              => 'office_supply_request',
-                        'date'              => $pr->created_at,
+                        'date'              => $req->paid_at ?? $req->created_at,
                         'project'           => 'Head Office',
-                        'category'          => '🏢 Office Supply',
-                        'description'       => ($pr->office_purpose ?? 'Office Materials') . ' — ' . $totalItems . ' item(s): ' . $itemNames,
-                        'applicant_name'    => $pr->requestedBy?->name ?? 'Secretary',
-                        'base_amount'       => $totalEstimated,
+                        'category'          => '🏢 Office Material',
+                        'description'       => ($req->office_purpose ?? 'Office Materials') . ' — ' . $totalItems . ' item(s): ' . $itemNames . ($req->justification ? ' (' . $req->justification . ')' : ''),
+                        'applicant_name'    => $req->requestedBy?->name ?? 'Secretary',
+                        'base_amount'       => $amount,
                         'vat_amount'        => 0,
-                        'net_amount'        => $totalEstimated,
+                        'net_amount'        => $amount,
                         'status'            => $statusLabel,
-                        'status_raw'        => $pr->status,
+                        'status_raw'        => $req->status,
                         'status_key'        => $statusKey,
                         'color'             => $badgeColor,
-                        'attachment'        => null,
-                        'attachment_url'    => null,
-                        'rejection_reason'  => null,
-                        'paid_at'           => $financeLog ? $financeLog->created_at : ($isCompleted ? $pr->updated_at : null),
-                        'paid_by_name'      => $financeLog?->actor?->name ?? null,
-                        'payment_reference' => $financeLog?->notes ?? null,
-                        'coa_name'          => null,
-                        'bank_name'         => null,
-                        'route_show'        => \Illuminate\Support\Facades\Route::has('office-requests.show')
-                                                ? route('office-requests.show', $pr)
-                                                : url('/office-requests/' . $pr->id),
-                        'route_approve'     => \Illuminate\Support\Facades\Route::has('office-requests.finance-confirm')
-                                                ? route('office-requests.finance-confirm', $pr)
-                                                : url('/office-requests/' . $pr->id . '/finance-confirm'),
-                        'route_reject'      => '#',
-                        'raw_model'         => $pr,
-                        'finance_confirm_url' => \Illuminate\Support\Facades\Route::has('office-requests.finance-confirm')
-                                                ? route('office-requests.finance-confirm', $pr)
-                                                : url('/office-requests/' . $pr->id . '/finance-confirm'),
+                        'attachment'        => $req->attachment,
+                        'attachment_url'    => $req->attachment ? \Illuminate\Support\Facades\Storage::url($req->attachment) : null,
+                        'rejection_reason'  => $req->rejection_reason,
+                        'paid_at'           => $req->paid_at,
+                        'paid_by_name'      => $req->paidBy?->name ?? null,
+                        'payment_reference' => $req->payment_reference,
+                        'coa_name'          => $req->coa?->name ?? null,
+                        'bank_name'         => $req->bankAccount?->bank_name ?? null,
+                        'assigned_staff_id' => $req->assigned_finance_staff_id,
+                        'assigned_staff_name' => $req->assignedStaff?->name ?? null,
+                        'route_show'        => route('office-requests.show', $req->id),
+                        'route_approve'     => route('office-requests.finance-assign', $req->id),
+                        'route_reject'      => route('office-requests.reject', $req->id),
+                        'raw_model'         => $req,
                     ];
                 });
-            $items = $items->concat($officeRequests);
+                $items = $items->concat($officeRequests);
+            }
         } catch (\Throwable $e) {}
+
 
 
         $user = Auth::user();

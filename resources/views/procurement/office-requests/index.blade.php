@@ -1,127 +1,97 @@
 @extends('layouts.app')
-@section('title', 'Office Supply Requests')
+
+@section('title', 'Office Material Requests')
 
 @section('content')
-<div class="container-fluid py-3">
-    <!-- Header Banner -->
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
-            <h1 class="h3 fw-bold text-dark mb-1">
-                <i class="fa-solid fa-boxes-stacked text-primary me-2"></i>Office Supply Requests
-                <span class="fs-6 fw-normal text-muted ms-2">(የቢሮ እቃዎች መጠየቂያ)</span>
-            </h1>
+            <h3 class="fw-bold mb-1 text-dark">
+                <i class="fa-solid fa-boxes-stacked text-primary me-2"></i>Office Material Requests
+            </h3>
             <p class="text-muted small mb-0">
-                Secretary material & stationery requisition workflow with direct HR & Coordinator review.
+                Streamlined Requisition &rarr; HR Money Approval &rarr; Finance Assignment &rarr; Payment Disbursement
             </p>
         </div>
-        <div class="d-flex gap-2">
-            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-primary shadow-sm px-3">
-                <i class="fa-solid fa-plus me-1"></i> New Office Request (አዲስ ጥያቄ)
-            </a>
-        </div>
+        <a href="{{ route('office-requests.create') }}" class="btn btn-primary px-4 shadow-sm fw-bold rounded-pill">
+            <i class="fa-solid fa-plus me-1"></i> New Office Requisition
+        </a>
     </div>
 
     @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 d-flex align-items-center" role="alert">
-            <i class="fa-solid fa-circle-check fs-5 me-2"></i>
-            <div>{{ session('success') }}</div>
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i>{{ session('success') }}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     @endif
 
-    <!-- Metric Cards -->
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100 bg-light">
-                <div class="card-body p-3 d-flex align-items-center justify-content-between">
-                    <div>
-                        <div class="text-muted small text-uppercase fw-bold">Total Requests</div>
-                        <div class="fs-4 fw-bold text-dark mt-1">{{ number_format($stats['total']) }}</div>
-                    </div>
-                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary">
-                        <i class="fa-solid fa-list-check fa-lg"></i>
-                    </div>
-                </div>
-            </div>
+    @if(session('error'))
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fa-solid fa-circle-exclamation me-2"></i>{{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-warning border-4 bg-white">
-                <div class="card-body p-3 d-flex align-items-center justify-content-between">
-                    <div>
-                        <div class="text-warning small text-uppercase fw-bold">Pending HR/Coordinator</div>
-                        <div class="fs-4 fw-bold text-warning mt-1">{{ number_format($stats['pending']) }}</div>
-                    </div>
-                    <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning">
-                        <i class="fa-solid fa-clock-rotate-left fa-lg"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-success border-4 bg-white">
-                <div class="card-body p-3 d-flex align-items-center justify-content-between">
-                    <div>
-                        <div class="text-success small text-uppercase fw-bold">Approved</div>
-                        <div class="fs-4 fw-bold text-success mt-1">{{ number_format($stats['approved']) }}</div>
-                    </div>
-                    <div class="rounded-circle bg-success bg-opacity-10 p-3 text-success">
-                        <i class="fa-solid fa-check-circle fa-lg"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100 border-start border-danger border-4 bg-white">
-                <div class="card-body p-3 d-flex align-items-center justify-content-between">
-                    <div>
-                        <div class="text-danger small text-uppercase fw-bold">Rejected</div>
-                        <div class="fs-4 fw-bold text-danger mt-1">{{ number_format($stats['rejected']) }}</div>
-                    </div>
-                    <div class="rounded-circle bg-danger bg-opacity-10 p-3 text-danger">
-                        <i class="fa-solid fa-circle-xmark fa-lg"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    @endif
 
-    <!-- Filters & Table Card -->
-    <div class="card border-0 shadow-sm rounded-3">
-        <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap align-items-center justify-content-between gap-3">
-            <!-- Filter Pills -->
-            <ul class="nav nav-pills card-header-pills small">
+    <!-- Workflow Stage Tabs -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-body p-2">
+            <ul class="nav nav-pills gap-2 flex-wrap">
                 <li class="nav-item">
-                    <a class="nav-link {{ !request('status') ? 'active' : '' }}" href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}">
-                        All ({{ $stats['total'] }})
+                    <a class="nav-link rounded-pill {{ $tab === 'all' ? 'active bg-primary text-white fw-bold shadow-sm' : 'text-dark' }}" 
+                       href="{{ route('office-requests.index', ['tab' => 'all']) }}">
+                        <i class="fa-solid fa-layer-group me-1"></i> All Requests
+                        <span class="badge {{ $tab === 'all' ? 'bg-white text-primary' : 'bg-secondary bg-opacity-10 text-dark' }} ms-1">{{ $stats['all'] }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {{ request('status') === 'pending_hr_approval' ? 'active' : '' }}" href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index', ['status' => 'pending_hr_approval']) : url('/office-requests?status=pending_hr_approval') }}">
-                        Pending Approval <span class="badge bg-warning text-dark ms-1">{{ $stats['pending'] }}</span>
+                    <a class="nav-link rounded-pill {{ $tab === 'pending_hr' ? 'active bg-warning text-dark fw-bold shadow-sm' : 'text-dark' }}" 
+                       href="{{ route('office-requests.index', ['tab' => 'pending_hr']) }}">
+                        <i class="fa-solid fa-clock me-1 text-warning"></i> Pending HR Review
+                        <span class="badge {{ $tab === 'pending_hr' ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1">{{ $stats['pending_hr'] }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {{ request('status') === 'approved' ? 'active' : '' }}" href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index', ['status' => 'approved']) : url('/office-requests?status=approved') }}">
-                        Approved ({{ $stats['approved'] }})
+                    <a class="nav-link rounded-pill {{ $tab === 'finance_queue' ? 'active text-white fw-bold shadow-sm' : 'text-dark' }}" 
+                       style="{{ $tab === 'finance_queue' ? 'background: #7c3aed;' : '' }}"
+                       href="{{ route('office-requests.index', ['tab' => 'finance_queue']) }}">
+                        <i class="fa-solid fa-wallet me-1" style="color: #7c3aed;"></i> Finance Queue
+                        <span class="badge {{ $tab === 'finance_queue' ? 'bg-white text-dark' : 'text-white' }}" style="{{ $tab !== 'finance_queue' ? 'background:#7c3aed;' : '' }} ms-1">{{ $stats['finance_queue'] }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {{ request('status') === 'rejected' ? 'active' : '' }}" href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index', ['status' => 'rejected']) : url('/office-requests?status=rejected') }}">
-                        Rejected ({{ $stats['rejected'] }})
+                    <a class="nav-link rounded-pill {{ $tab === 'paid' ? 'active bg-success text-white fw-bold shadow-sm' : 'text-dark' }}" 
+                       href="{{ route('office-requests.index', ['tab' => 'paid']) }}">
+                        <i class="fa-solid fa-circle-check me-1 text-success"></i> Paid &amp; Completed
+                        <span class="badge {{ $tab === 'paid' ? 'bg-white text-success' : 'bg-success text-white' }} ms-1">{{ $stats['paid'] }}</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link rounded-pill {{ $tab === 'rejected' ? 'active bg-danger text-white fw-bold shadow-sm' : 'text-dark' }}" 
+                       href="{{ route('office-requests.index', ['tab' => 'rejected']) }}">
+                        <i class="fa-solid fa-circle-xmark me-1 text-danger"></i> Rejected
+                        <span class="badge {{ $tab === 'rejected' ? 'bg-white text-danger' : 'bg-danger text-white' }} ms-1">{{ $stats['rejected'] }}</span>
                     </a>
                 </li>
             </ul>
+        </div>
+    </div>
 
-            <!-- Search Form -->
-            <form action="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index') : url('/office-requests') }}" method="GET" class="d-flex gap-2" style="max-width: 320px;">
-                @if(request('status'))
-                    <input type="hidden" name="status" value="{{ request('status') }}">
-                @endif
+    <!-- Requests Table Card -->
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+        <div class="card-header bg-white border-bottom py-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <h6 class="fw-bold mb-0 text-dark">
+                <i class="fa-solid fa-list text-primary me-2"></i>Requisitions List ({{ $requests->total() }})
+            </h6>
+
+            <!-- Search -->
+            <form method="GET" action="{{ route('office-requests.index') }}" class="d-flex gap-2">
+                <input type="hidden" name="tab" value="{{ $tab }}">
                 <div class="input-group input-group-sm">
-                    <input type="text" name="search" class="form-control" placeholder="Search PR / purpose..." value="{{ request('search') }}">
-                    <button class="btn btn-outline-secondary" type="submit"><i class="fa-solid fa-magnifying-glass"></i></button>
+                    <input type="text" name="search" class="form-control" placeholder="Search Req #, Purpose, Requester..." value="{{ request('search') }}">
+                    <button class="btn btn-outline-secondary" type="submit"><i class="fa-solid fa-search"></i></button>
                     @if(request('search'))
-                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.index') ? route('office-requests.index', request()->only('status')) : url('/office-requests') }}" class="btn btn-outline-secondary"><i class="fa-solid fa-xmark"></i></a>
+                        <a href="{{ route('office-requests.index', ['tab' => $tab]) }}" class="btn btn-outline-danger"><i class="fa-solid fa-xmark"></i></a>
                     @endif
                 </div>
             </form>
@@ -132,129 +102,107 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light text-secondary text-uppercase small" style="font-size: 0.75rem;">
                         <tr>
-                            <th class="ps-3 py-3">Request No</th>
+                            <th class="ps-4 py-3">Req Number</th>
                             <th>Purpose / Category</th>
-                            <th>Items</th>
                             <th>Requested By</th>
-                            <th>Required Date</th>
-                            <th>Priority</th>
-                            <th>Status</th>
-                            <th>Reviewer Note</th>
-                            <th class="text-end pe-3">Action</th>
+                            <th>Items Summary</th>
+                            <th>Approved Budget</th>
+                            <th>Stage / Status</th>
+                            <th>Date</th>
+                            <th class="text-end pe-4">Action</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y">
+                    <tbody>
                         @forelse($requests as $req)
-                        <tr>
-                            <td class="ps-3">
-                                <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $req) : url('/office-requests/' . $req->id) }}" class="fw-bold text-decoration-none text-primary">
-                                    {{ $req->pr_no }}
-                                </a>
-                                <div class="text-muted" style="font-size: 0.75rem;">
-                                    {{ $req->created_at ? $req->created_at->format('M d, Y') : '-' }}
-                                </div>
-                            </td>
-                            <td>
-                                <div class="fw-semibold text-dark">{{ $req->office_purpose ?: 'Office Material Requisition' }}</div>
-                                @if($req->justification)
-                                    <div class="text-muted text-truncate" style="max-width: 220px; font-size: 0.8rem;" title="{{ $req->justification }}">
-                                        {{ $req->justification }}
+                            <tr>
+                                <td class="ps-4">
+                                    <a href="{{ route('office-requests.show', $req->id) }}" class="fw-bold text-decoration-none text-primary">
+                                        {{ $req->request_no }}
+                                    </a>
+                                    @if($req->urgency === 'urgent')
+                                        <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">Urgent</span>
+                                    @elseif($req->urgency === 'emergency')
+                                        <span class="badge bg-danger text-white ms-1" style="font-size: 0.65rem;">Emergency</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ $req->office_purpose }}</div>
+                                    @if($req->justification)
+                                        <small class="text-muted d-block text-truncate" style="max-width: 220px;">{{ $req->justification }}</small>
+                                    @endif
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ $req->requestedBy?->name ?? 'Secretary' }}</div>
+                                    <small class="text-muted"><i class="fa-solid fa-building me-1"></i>Head Office</small>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">
+                                        <i class="fa-solid fa-boxes-stacked me-1 text-primary"></i>{{ $req->items->count() }} {{ \Illuminate\Support\Str::plural('item', $req->items->count()) }}
+                                    </span>
+                                    <div class="text-muted" style="font-size: 0.75rem;">
+                                        {{ $req->items->take(2)->pluck('item_name')->implode(', ') }}{{ $req->items->count() > 2 ? '...' : '' }}
                                     </div>
-                                @endif
-                            </td>
-                            <td>
-                                <span class="badge bg-secondary rounded-pill">
-                                    {{ $req->items->count() }} {{ \Illuminate\Support\Str::plural('item', $req->items->count()) }}
-                                </span>
-                                <div class="text-muted text-truncate" style="max-width: 180px; font-size: 0.78rem;">
-                                    {{ $req->items->take(2)->map(fn($i) => ($i->product?->name ?? 'Item') . ' (' . (float)$i->quantity . ' ' . $i->unit . ')')->implode(', ') }}
-                                    @if($req->items->count() > 2) ... @endif
-                                </div>
-                            </td>
-                            <td>
-                                <div class="fw-medium text-dark">{{ $req->requestedBy?->name ?? 'Secretary' }}</div>
-                                <div class="text-muted" style="font-size: 0.75rem;">{{ $req->requestedBy?->email }}</div>
-                            </td>
-                            <td>
-                                @if($req->required_date)
-                                    <span class="text-dark">{{ $req->required_date->format('M d, Y') }}</span>
-                                @else
-                                    <span class="text-muted">-</span>
-                                @endif
-                            </td>
-                            <td>
-                                @if($req->priority === 'urgent')
-                                    <span class="badge bg-danger">Urgent</span>
-                                @elseif($req->priority === 'high')
-                                    <span class="badge bg-warning text-dark">High</span>
-                                @else
-                                    <span class="badge bg-light text-dark border">Normal</span>
-                                @endif
-                            </td>
-                            <td>
-                                @if($req->status === 'pending_hr_approval')
-                                    <span class="badge bg-warning text-dark border border-warning">
-                                        <i class="fa-solid fa-hourglass-half me-1"></i> Pending HR/Coordinator
-                                    </span>
-                                @elseif($req->status === 'approved')
-                                    <span class="badge bg-success">
-                                        <i class="fa-solid fa-circle-check me-1"></i> Approved
-                                    </span>
-                                @elseif($req->status === 'rejected')
-                                    <span class="badge bg-danger">
-                                        <i class="fa-solid fa-circle-xmark me-1"></i> Rejected
-                                    </span>
-                                @elseif($req->status === 'pending_procurement_team')
-                                    <span class="badge bg-info text-dark">
-                                        <i class="fa-solid fa-cart-shopping me-1"></i> In Sourcing
-                                    </span>
-                                @elseif($req->status === 'pending_store_review')
-                                    <span class="badge bg-primary">
-                                        <i class="fa-solid fa-warehouse me-1"></i> Store Dispatch
-                                    </span>
-                                @else
-                                    <span class="badge bg-{{ \App\Models\PurchaseRequest::statusBadgeClass($req->status) }}">
-                                        {{ $req->status_label }}
-                                    </span>
-                                @endif
-                            </td>
-                            <td>
-                                @if($req->hr_coordinator_approved_by)
-                                    <div class="text-success small fw-semibold">
-                                        <i class="fa-solid fa-check me-1"></i>{{ $req->hrCoordinatorApprovedBy?->name }}
-                                    </div>
-                                    @if($req->hr_coordinator_notes)
-                                        <div class="text-muted text-truncate" style="max-width: 180px; font-size: 0.75rem;" title="{{ $req->hr_coordinator_notes }}">
-                                            {{ $req->hr_coordinator_notes }}
+                                </td>
+                                <td>
+                                    @if($req->amount !== null)
+                                        <div class="fw-bold text-success fs-6">ETB {{ number_format((float)$req->amount, 2) }}</div>
+                                        @if($req->hrReviewer)
+                                            <small class="text-muted" style="font-size: 0.72rem;">Set by {{ $req->hrReviewer->name }}</small>
+                                        @endif
+                                    @else
+                                        <span class="text-muted small fst-italic">Pending HR budget</span>
+                                    @endif
+                                </td>
+                                <td>
+                                    {!! $req->status_badge['badge'] !!}
+                                    @if($req->status === \App\Models\OfficeMaterialRequest::STATUS_ASSIGNED_TO_FINANCE && $req->assignedStaff)
+                                        <div class="text-muted mt-1" style="font-size: 0.72rem;">
+                                            <i class="fa-solid fa-user-check me-1 text-info"></i>Staff: {{ $req->assignedStaff->name }}
                                         </div>
                                     @endif
-                                @elseif($req->rejection_reason)
-                                    <div class="text-danger small text-truncate" style="max-width: 180px; font-size: 0.75rem;" title="{{ $req->rejection_reason }}">
-                                        {{ $req->rejection_reason }}
+                                </td>
+                                <td>
+                                    <div class="small text-muted">{{ $req->created_at ? $req->created_at->format('M d, Y') : '-' }}</div>
+                                    <div class="text-muted" style="font-size: 0.7rem;">{{ $req->created_at ? $req->created_at->format('h:i A') : '' }}</div>
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                                        <a href="{{ route('office-requests.show', $req->id) }}" class="btn btn-outline-primary btn-sm rounded-pill px-3" title="View Details">
+                                            <i class="fa-solid fa-eye me-1"></i> View
+                                        </a>
+
+                                        {{-- Step 2 Action: HR Money Review --}}
+                                        @if($req->status === \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR && $isHr)
+                                            <button type="button" class="btn btn-warning btn-sm fw-bold text-dark rounded-pill px-3 shadow-sm" 
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#hrApproveModal{{ $req->id }}">
+                                                <i class="fa-solid fa-money-bill-wave me-1"></i> Add Money &amp; Approve
+                                            </button>
+                                        @endif
+
+                                        {{-- Step 3 Action: Finance Head Assignment --}}
+                                        @if(in_array($req->status, [\App\Models\OfficeMaterialRequest::STATUS_APPROVED_BY_HR, \App\Models\OfficeMaterialRequest::STATUS_ASSIGNED_TO_FINANCE]) && $isFinance)
+                                            <button type="button" class="btn btn-sm text-white fw-bold rounded-pill px-3 shadow-sm" style="background:#7c3aed;"
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#financeAssignModal{{ $req->id }}">
+                                                <i class="fa-solid fa-user-gear me-1"></i> Assign Account
+                                            </button>
+                                            <button type="button" class="btn btn-success btn-sm fw-bold rounded-pill px-3 shadow-sm"
+                                                    data-bs-toggle="modal" 
+                                                    data-bs-target="#markPaidModal{{ $req->id }}">
+                                                <i class="fa-solid fa-money-bill-transfer me-1"></i> Disburse / Pay
+                                            </button>
+                                        @endif
                                     </div>
-                                @else
-                                    <span class="text-muted small">-</span>
-                                @endif
-                            </td>
-                            <td class="text-end pe-3">
-                                <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $req) : url('/office-requests/' . $req->id) }}" class="btn btn-sm btn-outline-primary px-2 py-1">
-                                    <i class="fa-solid fa-arrow-right me-1"></i> View
-                                </a>
-                            </td>
-                        </tr>
+                                </td>
+                            </tr>
                         @empty
-                        <tr>
-                            <td colspan="9" class="text-center py-5">
-                                <div class="text-muted mb-3">
-                                    <i class="fa-solid fa-folder-open fa-3x text-secondary opacity-50"></i>
-                                </div>
-                                <h6 class="text-dark fw-bold mb-1">No Office Supply Requests Found</h6>
-                                <p class="text-muted small mb-3">There are no material requests matching your current filter.</p>
-                                <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.create') ? route('office-requests.create') : url('/office-requests/create') }}" class="btn btn-sm btn-primary">
-                                    <i class="fa-solid fa-plus me-1"></i> Create Office Request
-                                </a>
-                            </td>
-                        </tr>
+                            <tr>
+                                <td colspan="8" class="text-center py-5 text-muted">
+                                    <i class="fa-solid fa-inbox fa-3x mb-3 text-secondary opacity-25 d-block"></i>
+                                    No office material requests found in this view.
+                                </td>
+                            </tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -262,12 +210,180 @@
         </div>
 
         @if($requests->hasPages())
-        <div class="card-footer bg-white border-top py-2">
-            <div class="d-flex justify-content-end">
+            <div class="card-footer bg-white border-0 py-3">
                 {{ $requests->links() }}
             </div>
-        </div>
         @endif
     </div>
 </div>
+
+{{-- ═══════════════════════════════════════════════════════════
+     MODALS RENDERED OUTSIDE THE TABLE (CLEAN Z-INDEX)
+═══════════════════════════════════════════════════════════ --}}
+@foreach($requests as $req)
+
+    {{-- Step 2 Modal: HR Add Money & Approve --}}
+    @if($req->status === \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR && $isHr)
+    <div class="modal fade" id="hrApproveModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form method="POST" action="{{ route('office-requests.hr-approve', $req->id) }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                @csrf
+                <div class="modal-header bg-warning text-dark py-3 px-4">
+                    <h5 class="modal-title fw-bold mb-0">
+                        <i class="fa-solid fa-circle-check me-2"></i>HR Money &amp; Budget Approval
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="alert alert-warning py-2 px-3 small mb-3 border-start border-4 border-warning">
+                        <strong>{{ $req->request_no }}</strong> &bull; Requested by {{ $req->requestedBy?->name ?? 'Secretary' }}
+                        <div class="text-muted mt-1">{{ $req->office_purpose }} ({{ $req->items->count() }} items)</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark small text-uppercase">Approved Amount (ETB) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-0 fw-bold">ETB</span>
+                            <input type="number" name="amount" class="form-control bg-light border-0 fw-bold fs-5 text-success" step="0.01" min="0.01" placeholder="e.g. 3500.00" required>
+                        </div>
+                        <div class="form-text small">Enter the total approved budget money for these office materials.</div>
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label fw-bold text-dark small text-uppercase">HR Remarks / Notes (ማስታወሻ)</label>
+                        <textarea name="hr_notes" rows="3" class="form-control bg-light border-0" placeholder="e.g. Approved budget for monthly stationery supplies..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 py-3 px-4">
+                    <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold shadow-sm">
+                        <i class="fa-solid fa-check me-1"></i> Approve &amp; Send to Finance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    @endif
+
+    {{-- Step 3 Modal: Finance Head Assigns COA/Bank & Staff --}}
+    @if(in_array($req->status, [\App\Models\OfficeMaterialRequest::STATUS_APPROVED_BY_HR, \App\Models\OfficeMaterialRequest::STATUS_ASSIGNED_TO_FINANCE]) && $isFinance)
+    <div class="modal fade" id="financeAssignModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form method="POST" action="{{ route('office-requests.finance-assign', $req->id) }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                @csrf
+                <div class="modal-header text-white py-3 px-4" style="background:#7c3aed;">
+                    <h5 class="modal-title fw-bold mb-0">
+                        <i class="fa-solid fa-user-gear me-2"></i>Finance Assignment: {{ $req->request_no }}
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div style="background:#ede9fe;border:1px solid #7c3aed;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.88rem;color:#5b21b6;">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Approved Budget:</span>
+                            <strong class="fs-5">ETB {{ number_format((float)$req->amount, 2) }}</strong>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark small text-uppercase">Funding Account (Chart of Accounts) <span class="text-danger">*</span></label>
+                        <select name="coa_id" class="form-select bg-light border-0" required>
+                            <option value="" disabled selected>-- Select Expense Account --</option>
+                            @foreach($coaAccounts as $coa)
+                                <option value="{{ $coa->id }}" {{ $req->coa_id == $coa->id ? 'selected' : '' }}>
+                                    [{{ $coa->code }}] {{ $coa->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark small text-uppercase">Bank Account (Optional)</label>
+                        <select name="bank_account_id" class="form-select bg-light border-0">
+                            <option value="">-- Select Bank Account --</option>
+                            @foreach($bankAccounts as $bank)
+                                <option value="{{ $bank->id }}" {{ $req->bank_account_id == $bank->id ? 'selected' : '' }}>
+                                    {{ $bank->bank_name }} ({{ $bank->account_number }}) - Bal: ETB {{ number_format((float)$bank->current_balance, 2) }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark small text-uppercase">Assign Finance Staff</label>
+                        <select name="assigned_finance_staff_id" class="form-select bg-light border-0">
+                            <option value="">-- Assign Staff / Self --</option>
+                            @foreach($financeStaff as $staff)
+                                <option value="{{ $staff->id }}" {{ $req->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
+                                    {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()?->name ?? 'Staff')) }})
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label fw-bold text-dark small text-uppercase">Finance Head Notes</label>
+                        <textarea name="finance_head_notes" rows="2" class="form-control bg-light border-0" placeholder="Instructions for cashier/staff...">{{ $req->finance_head_notes }}</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 py-3 px-4">
+                    <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white rounded-pill px-4 fw-bold shadow-sm" style="background:#7c3aed;">
+                        <i class="fa-solid fa-check me-1"></i> Save Assignment
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {{-- Step 4 Modal: Disburse Payment --}}
+    <div class="modal fade" id="markPaidModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form method="POST" action="{{ route('office-requests.mark-paid', $req->id) }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                @csrf
+                <div class="modal-header bg-success text-white py-3 px-4">
+                    <h5 class="modal-title fw-bold mb-0">
+                        <i class="fa-solid fa-money-bill-transfer me-2"></i>Disburse Payment: {{ $req->request_no }}
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="alert alert-success py-2 px-3 small mb-3 border-start border-4 border-success">
+                        <div class="d-flex justify-content-between">
+                            <span>Approved Budget:</span>
+                            <strong class="fs-5">ETB {{ number_format((float)$req->amount, 2) }}</strong>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark small text-uppercase">Actual Disbursed Amount (ETB)</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-0 fw-bold">ETB</span>
+                            <input type="number" name="paid_amount" class="form-control bg-light border-0 fw-bold fs-5 text-success" step="0.01" min="0.01" value="{{ $req->amount }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark small text-uppercase">Voucher / Transaction Reference No.</label>
+                        <input type="text" name="payment_reference" class="form-control bg-light border-0" placeholder="e.g. VC-2026-08-001 or FT26081234">
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label fw-bold text-dark small text-uppercase">Disbursement Notes</label>
+                        <textarea name="payment_notes" rows="2" class="form-control bg-light border-0" placeholder="e.g. Cash disbursed to secretary from Petty Cash..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 py-3 px-4">
+                    <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                        <i class="fa-solid fa-check-double me-1"></i> Confirm Paid &amp; Complete
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    @endif
+
+@endforeach
+
 @endsection

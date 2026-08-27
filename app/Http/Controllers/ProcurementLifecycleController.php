@@ -63,32 +63,10 @@ class ProcurementLifecycleController extends Controller
             ->latest();
 
         if (!$isAdmin) {
-            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm, $isStoreManager, $isPurchaseManager, $isFinanceHead) {
+            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm) {
                 $q->whereIn('current_owner_role', $targetRoles);
                 if ($isHr || $isCoordinator || $isGm) {
-                    $q->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
-                      ->orWhere(function ($sub) {
-                          $sub->where('is_office_request', true)
-                              ->where('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
-                      });
-                }
-                if ($isStoreManager) {
-                    $q->orWhere(function ($sub) {
-                        $sub->where('is_office_request', true)
-                            ->whereIn('status', [PurchaseRequest::STATUS_APPROVED, PurchaseRequest::STATUS_PENDING_STORE_REVIEW]);
-                    });
-                }
-                if ($isPurchaseManager) {
-                    $q->orWhere(function ($sub) {
-                        $sub->where('is_office_request', true)
-                            ->whereIn('status', [PurchaseRequest::STATUS_PENDING_PM_REVIEW, PurchaseRequest::STATUS_PENDING_PROC_TEAM]);
-                    });
-                }
-                if ($isFinanceHead) {
-                    $q->orWhere(function ($sub) {
-                        $sub->where('is_office_request', true)
-                            ->where('status', PurchaseRequest::STATUS_PENDING_FINANCE);
-                    });
+                    $q->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
                 }
             });
         }
@@ -111,34 +89,9 @@ class ProcurementLifecycleController extends Controller
                 ->get();
         }
 
-        // 4. Pending Office Requests specifically for HR / Coordinator & Store Manager
         $pendingOfficeCount = 0;
-        if ($isHr || $isCoordinator || $isAdmin || $isGm) {
-            try {
-                $pendingOfficeCount = PurchaseRequest::where(function($q) {
-                    $q->where('is_office_request', true)
-                      ->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
-                })->where('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL)->count();
-            } catch (\Throwable $e) {}
-        }
-
         $pendingStoreOfficeCount = 0;
-        if ($isStoreManager || $isAdmin) {
-            try {
-                $pendingStoreOfficeCount = PurchaseRequest::where('is_office_request', true)
-                    ->whereIn('status', [PurchaseRequest::STATUS_APPROVED, PurchaseRequest::STATUS_PENDING_STORE_REVIEW])
-                    ->count();
-            } catch (\Throwable $e) {}
-        }
-
         $pendingFinanceOfficeCount = 0;
-        if ($isFinanceHead || $isAdmin || $isGm) {
-            try {
-                $pendingFinanceOfficeCount = PurchaseRequest::where('is_office_request', true)
-                    ->where('status', PurchaseRequest::STATUS_PENDING_FINANCE)
-                    ->count();
-            } catch (\Throwable $e) {}
-        }
 
         // 5. Summary Counters
         $kpi = [

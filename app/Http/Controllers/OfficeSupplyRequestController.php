@@ -2,516 +2,504 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\PurchaseRequest;
-use App\Models\PurchaseRequestItem;
-use App\Models\PrWorkflowLog;
-use App\Models\ExpenseRequest;
-use App\Models\Project;
-use App\Models\Store;
+use App\Models\OfficeMaterialRequest;
+use App\Models\OfficeMaterialRequestItem;
 use App\Models\Product;
-use App\Models\Inventory;
 use App\Models\User;
+use App\Models\ChartOfAccount;
+use App\Models\BankAccount;
+use App\Models\BankTransaction;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Str;
 
 class OfficeSupplyRequestController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     /**
-     * Check if the authenticated user has HR, Coordinator, GM, or Admin role.
+     * Auto-ensure table exists on live/local database.
      */
-    protected function canApprove(): bool
+    private function ensureTableExists(): void
+    {
+        try {
+            if (!Schema::hasTable('office_material_requests')) {
+                Schema::create('office_material_requests', function (Blueprint $table) {
+                    $table->id();
+                    $table->string('request_no')->unique();
+                    $table->foreignId('requested_by')->constrained('users')->cascadeOnDelete();
+                    $table->string('office_purpose')->nullable();
+                    $table->text('justification')->nullable();
+                    $table->date('required_date')->nullable();
+                    $table->string('urgency')->default('normal');
+                    $table->string('attachment')->nullable();
+                    $table->string('status')->default('pending_hr');
+
+                    // Step 2: HR money addition
+                    $table->decimal('amount', 14, 2)->nullable();
+                    $table->foreignId('hr_reviewer_id')->nullable()->constrained('users')->nullOnDelete();
+                    $table->timestamp('hr_reviewed_at')->nullable();
+                    $table->text('hr_notes')->nullable();
+
+                    // Step 3: Finance Head assignment
+                    $table->foreignId('finance_head_id')->nullable()->constrained('users')->nullOnDelete();
+                    $table->foreignId('coa_id')->nullable()->constrained('chart_of_accounts')->nullOnDelete();
+                    $table->foreignId('bank_account_id')->nullable()->constrained('bank_accounts')->nullOnDelete();
+                    $table->foreignId('assigned_finance_staff_id')->nullable()->constrained('users')->nullOnDelete();
+                    $table->timestamp('finance_assigned_at')->nullable();
+                    $table->text('finance_head_notes')->nullable();
+
+                    // Step 4: Payment
+                    $table->foreignId('paid_by')->nullable()->constrained('users')->nullOnDelete();
+                    $table->timestamp('paid_at')->nullable();
+                    $table->string('payment_reference')->nullable();
+                    $table->text('payment_notes')->nullable();
+
+                    // Rejection
+                    $table->foreignId('rejected_by')->nullable()->constrained('users')->nullOnDelete();
+                    $table->timestamp('rejected_at')->nullable();
+                    $table->text('rejection_reason')->nullable();
+
+                    $table->timestamps();
+                });
+            }
+
+            if (!Schema::hasTable('office_material_request_items')) {
+                Schema::create('office_material_request_items', function (Blueprint $table) {
+                    $table->id();
+                    $table->foreignId('office_material_request_id')->constrained('office_material_requests')->cascadeOnDelete();
+                    $table->foreignId('product_id')->nullable()->constrained('products')->nullOnDelete();
+                    $table->string('item_name');
+                    $table->decimal('quantity', 12, 2)->default(1);
+                    $table->string('unit')->default('pcs');
+                    $table->text('specifications')->nullable();
+                    $table->decimal('estimated_unit_price', 14, 2)->nullable();
+                    $table->timestamps();
+                });
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    /**
+     * Check if user is HR / Coordinator / Admin
+     */
+    protected function isHrOrCoordinator(): bool
     {
         $user = Auth::user();
         if (!$user) return false;
-
         $userRoles = $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray();
-        $allowed = ['hr_manager', 'hr_officer', 'hr', 'coordinator', 'general_service', 'general_services', 'admin', 'global_admin', 'gm', 'general_manager'];
-
-        foreach ($allowed as $role) {
-            if (in_array($role, $userRoles)) {
-                return true;
-            }
-        }
-        return false;
+        $allowed = ['hr_manager', 'hr_officer', 'hr', 'coordinator', 'admin', 'global_admin', 'gm', 'general_manager'];
+        return count(array_intersect($allowed, $userRoles)) > 0 || $user->can('hr.view');
     }
 
     /**
-     * Get the user's primary display role for workflow logs.
+     * Check if user is Finance Head / Finance Staff / Admin
      */
-    protected function getUserRoleSlug(): string
+    protected function isFinance(): bool
     {
         $user = Auth::user();
-        if (!$user) return 'requester';
-
+        if (!$user) return false;
         $userRoles = $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray();
-        if (in_array('global_admin', $userRoles) || in_array('admin', $userRoles)) return 'admin';
-        if (in_array('gm', $userRoles) || in_array('general_manager', $userRoles)) return 'gm';
-        if (in_array('coordinator', $userRoles)) return 'coordinator';
-        if (in_array('hr_manager', $userRoles)) return 'hr_manager';
-        if (in_array('hr_officer', $userRoles) || in_array('hr', $userRoles)) return 'hr_officer';
-        if (in_array('secretary', $userRoles)) return 'secretary';
-        return 'requester';
+        $allowed = ['finance_head', 'finance_manager', 'finance', 'accountant', 'cashier', 'admin', 'global_admin', 'gm', 'general_manager'];
+        return count(array_intersect($allowed, $userRoles)) > 0;
     }
 
-    // ─── Index / List ────────────────────────────────────────────────────────
+    // ─── 1. Index / List ──────────────────────────────────────────────────────
     public function index(Request $request)
     {
+        $this->ensureTableExists();
         $user = Auth::user();
-        $canApprove = $this->canApprove();
 
-        $query = PurchaseRequest::with(['project', 'requestedBy', 'hrCoordinatorApprovedBy', 'items.product'])
-            ->where(function ($q) {
-                $q->where('is_office_request', true)
-                  ->orWhere('office_purpose', '!=', null)
-                  ->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
-            })
-            ->latest();
+        $isHr = $this->isHrOrCoordinator();
+        $isFinance = $this->isFinance();
+        $isSecretary = $user->hasRole('secretary') && !$isHr && !$isFinance;
 
-        // If user is secretary only (not admin/approver), default to showing their own requests unless specified
-        $isSecretaryOnly = !$canApprove && $user->hasRole('secretary');
-        if ($isSecretaryOnly) {
+        $query = OfficeMaterialRequest::with([
+            'requestedBy',
+            'hrReviewer',
+            'financeHead',
+            'assignedStaff',
+            'paidBy',
+            'coa',
+            'bankAccount',
+            'items.product'
+        ])->latest();
+
+        // If user is regular secretary/requester only, scope to own requests
+        if ($isSecretary) {
             $query->where('requested_by', $user->id);
+        }
+
+        // Tab filter
+        $tab = $request->query('tab', 'all');
+        if ($tab === 'pending_hr') {
+            $query->where('status', OfficeMaterialRequest::STATUS_PENDING_HR);
+        } elseif ($tab === 'finance_queue') {
+            $query->whereIn('status', [OfficeMaterialRequest::STATUS_APPROVED_BY_HR, OfficeMaterialRequest::STATUS_ASSIGNED_TO_FINANCE]);
+        } elseif ($tab === 'paid') {
+            $query->where('status', OfficeMaterialRequest::STATUS_PAID);
+        } elseif ($tab === 'rejected') {
+            $query->where('status', OfficeMaterialRequest::STATUS_REJECTED);
         }
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
+
         if ($request->filled('search')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('pr_no', 'like', '%' . $request->search . '%')
-                  ->orWhere('office_purpose', 'like', '%' . $request->search . '%')
-                  ->orWhere('justification', 'like', '%' . $request->search . '%');
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('request_no', 'like', "%{$search}%")
+                  ->orWhere('office_purpose', 'like', "%{$search}%")
+                  ->orWhere('justification', 'like', "%{$search}%")
+                  ->orWhereHas('requestedBy', function ($u) use ($search) {
+                      $u->where('name', 'like', "%{$search}%");
+                  });
             });
         }
 
         $requests = $query->paginate(15)->withQueryString();
 
-        // Summary Stats
-        $baseStatsQuery = PurchaseRequest::where(function ($q) {
-            $q->where('is_office_request', true)
-              ->orWhere('office_purpose', '!=', null)
-              ->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
-        });
-
-        if ($isSecretaryOnly) {
-            $baseStatsQuery->where('requested_by', $user->id);
+        // Calculate summary counters
+        $countQuery = OfficeMaterialRequest::query();
+        if ($isSecretary) {
+            $countQuery->where('requested_by', $user->id);
         }
 
         $stats = [
-            'total'     => (clone $baseStatsQuery)->count(),
-            'pending'   => (clone $baseStatsQuery)->where('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL)->count(),
-            'approved'  => (clone $baseStatsQuery)->whereIn('status', [PurchaseRequest::STATUS_APPROVED, PurchaseRequest::STATUS_COMPLETED, PurchaseRequest::STATUS_INTAKE_COMPLETE])->count(),
-            'rejected'  => (clone $baseStatsQuery)->where('status', PurchaseRequest::STATUS_REJECTED)->count(),
+            'all'           => (clone $countQuery)->count(),
+            'pending_hr'    => (clone $countQuery)->where('status', OfficeMaterialRequest::STATUS_PENDING_HR)->count(),
+            'finance_queue' => (clone $countQuery)->whereIn('status', [OfficeMaterialRequest::STATUS_APPROVED_BY_HR, OfficeMaterialRequest::STATUS_ASSIGNED_TO_FINANCE])->count(),
+            'paid'          => (clone $countQuery)->where('status', OfficeMaterialRequest::STATUS_PAID)->count(),
+            'rejected'      => (clone $countQuery)->where('status', OfficeMaterialRequest::STATUS_REJECTED)->count(),
         ];
 
-        return view('procurement.office-requests.index', compact('requests', 'stats', 'canApprove', 'isSecretaryOnly'));
-    }
-
-    // ─── Create ──────────────────────────────────────────────────────────────
-    public function create()
-    {
-        $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
-        if ($projects->isEmpty()) {
-            $projects = Project::orderBy('name')->get();
+        // COA & Bank accounts for modal
+        $coaAccounts = ChartOfAccount::where('is_active', true)->where('type', 'expense')->orderBy('code')->get();
+        if ($coaAccounts->isEmpty()) {
+            $coaAccounts = ChartOfAccount::where('is_active', true)->orderBy('code')->get();
         }
 
-        $stores = Store::where('is_active', true)->orderBy('name')->get();
+        $bankAccounts = BankAccount::where('is_active', true)->get();
 
-        $products = Product::orderBy('name')->get()->map(function ($product) {
-            $latestPriceRecord = null;
-            try {
-                $latestPriceRecord = \App\Models\MaterialPrice::where('product_id', $product->id)
-                    ->orderBy('effective_date', 'desc')
-                    ->first();
-            } catch (\Throwable $e) {}
+        $financeStaff = User::whereHas('roles', function ($q) {
+            $q->whereIn('name', ['finance', 'finance_head', 'finance_manager', 'accountant', 'cashier']);
+        })->get();
+        if ($financeStaff->isEmpty()) {
+            $financeStaff = User::where('is_active', true)->get();
+        }
 
-            $unitCost = $latestPriceRecord ? (float)$latestPriceRecord->price : (float)($product->unit_price ?? $product->selling_price ?? 0);
-            $product->latest_marketing_price = $unitCost;
-            return $product;
-        });
+        return view('procurement.office-requests.index', compact(
+            'requests',
+            'stats',
+            'tab',
+            'isHr',
+            'isFinance',
+            'isSecretary',
+            'coaAccounts',
+            'bankAccounts',
+            'financeStaff'
+        ));
+    }
 
-        // Common standard office purpose categories
+    // ─── 2. Create Requisition ───────────────────────────────────────────────
+    public function create()
+    {
+        $this->ensureTableExists();
+
+        $products = Product::where('is_active', true)->orderBy('name')->get();
+        if ($products->isEmpty()) {
+            $products = Product::orderBy('name')->get();
+        }
+
         $purposes = [
             'Stationery & Paper Supplies'      => 'Stationery & Paper Supplies (ደብተር፣ እስክሪብቶ፣ ወረቀት)',
             'Printing & Toners'                => 'Printing & Toners (ቶነር፣ ካርትሪጅ፣ ፕሪንተር እቃዎች)',
             'Pantry, Tea & Cleaning'           => 'Pantry, Tea & Cleaning (ሻይ፣ ስኳር፣ ሳሙና፣ የጽዳት እቃዎች)',
             'IT & Computer Accessories'        => 'IT & Computer Accessories (ፍላሽ፣ ኬብል፣ አይጥ፣ ኪቦርድ)',
             'Office Furniture & Fixtures'      => 'Office Furniture & Fixtures (ጠረጴዛ፣ ወንበር፣ መደርደሪያ)',
-            'Administrative & General Service' => 'Administrative & General Service (አስተዳደራዊ እና ጠቅላላ አገልግሎት)',
-            'Other Office Supplies'            => 'Other Office Supplies (ሌሎች የቢሮ እቃዎች)',
+            'Office Equipment & Utilities'     => 'Office Equipment & Utilities (የቢሮ መገልገያዎች)',
+            'General Office Materials'         => 'General Office Materials (አጠቃላይ የቢሮ እቃዎች)',
+            'Other Office Supplies'            => 'Other Office Supplies (ሌላ የቢሮ ፍላጎት)',
         ];
 
-        return view('procurement.office-requests.create', compact('projects', 'stores', 'products', 'purposes'));
+        return view('procurement.office-requests.create', compact('products', 'purposes'));
     }
 
-    // ─── Store ───────────────────────────────────────────────────────────────
+    // ─── 3. Store Requisition ────────────────────────────────────────────────
     public function store(Request $request)
     {
-        $request->validate([
-            'office_purpose'     => 'required|string|max:255',
-            'project_id'         => 'nullable|exists:projects,id',
-            'store_id'           => 'nullable|exists:stores,id',
-            'priority'           => 'required|in:normal,high,urgent',
-            'required_date'      => 'nullable|date',
-            'justification'      => 'nullable|string|max:1000',
-            'items'              => 'required|array|min:1',
-            'items.*.product_id' => 'required|exists:products,id',
-            'items.*.quantity'   => 'required|numeric|min:0.001',
-            'items.*.unit'       => 'nullable|string|max:30',
-            'items.*.specifications' => 'nullable|string|max:500',
+        $this->ensureTableExists();
+
+        $validated = $request->validate([
+            'office_purpose'  => 'required|string|max:255',
+            'justification'   => 'nullable|string|max:2000',
+            'required_date'   => 'nullable|date',
+            'urgency'         => 'required|in:normal,urgent,emergency',
+            'items'           => 'required|array|min:1',
+            'items.*.name'    => 'required|string|max:255',
+            'items.*.qty'     => 'required|numeric|min:0.01',
+            'items.*.unit'    => 'required|string|max:50',
+            'items.*.specs'   => 'nullable|string|max:500',
+            'items.*.product_id' => 'nullable|exists:products,id',
+            'attachment'      => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
         ]);
 
-        // Strict association: Office Requests belong exclusively to Head Office
-        $headOfficeProject = Project::where('name', 'like', '%Head Office%')
-            ->orWhere('name', 'like', '%Main Office%')
-            ->first();
-
-        if (!$headOfficeProject) {
-            try {
-                $headOfficeProject = Project::firstOrCreate(
-                    ['name' => 'Head Office (ዋና ቢሮ)'],
-                    [
-                        'code'        => 'HO-ADM',
-                        'status'      => 'active',
-                        'client_name' => 'Internal Administration',
-                        'start_date'  => now(),
-                    ]
-                );
-            } catch (\Throwable $e) {
-                $headOfficeProject = Project::first();
-            }
+        $attachmentPath = null;
+        if ($request->hasFile('attachment')) {
+            $attachmentPath = $request->file('attachment')->store('office-requests', 'public');
         }
-        $projectId = $headOfficeProject ? $headOfficeProject->id : 1;
 
-        $pr = DB::transaction(function () use ($request, $projectId) {
-            $no = 'PR-OFF-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
+        DB::beginTransaction();
+        try {
+            $today = date('Ymd');
+            $count = OfficeMaterialRequest::whereDate('created_at', today())->count() + 1;
+            $reqNo = 'OFF-' . $today . '-' . str_pad($count, 4, '0', STR_PAD_LEFT);
 
-            $purchaseRequest = PurchaseRequest::create([
-                'pr_no'               => $no,
-                'project_id'          => $projectId,
-                'store_id'            => $request->store_id,
-                'requested_by'        => Auth::id(),
-                'priority'            => $request->priority,
-                'type'                => 'normal',
-                'is_office_request'   => true,
-                'office_purpose'      => $request->office_purpose,
-                'required_date'       => $request->required_date,
-                'justification'       => $request->justification,
-                'status'              => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
-                'current_owner_role'  => 'hr_manager',
+            $officeRequest = OfficeMaterialRequest::create([
+                'request_no'     => $reqNo,
+                'requested_by'   => Auth::id(),
+                'office_purpose' => $validated['office_purpose'],
+                'justification'  => $validated['justification'] ?? null,
+                'required_date'  => $validated['required_date'] ?? null,
+                'urgency'        => $validated['urgency'],
+                'attachment'     => $attachmentPath,
+                'status'         => OfficeMaterialRequest::STATUS_PENDING_HR,
             ]);
 
-            foreach ($request->items as $item) {
-                $prod = Product::find($item['product_id']);
-                $unit = !empty($item['unit']) ? $item['unit'] : ($prod?->unit ?? 'pcs');
+            foreach ($validated['items'] as $item) {
+                if (empty($item['name']) || empty($item['qty'])) continue;
 
-                $latestPriceRecord = null;
-                try {
-                    $latestPriceRecord = \App\Models\MaterialPrice::where('product_id', $item['product_id'])
-                        ->orderBy('effective_date', 'desc')
-                        ->first();
-                } catch (\Throwable $e) {}
+                OfficeMaterialRequestItem::create([
+                    'office_material_request_id' => $officeRequest->id,
+                    'product_id'                 => $item['product_id'] ?? null,
+                    'item_name'                  => $item['name'],
+                    'quantity'                   => $item['qty'],
+                    'unit'                       => $item['unit'] ?? 'pcs',
+                    'specifications'             => $item['specs'] ?? null,
+                ]);
+            }
 
-                $estCost = $latestPriceRecord ? (float)$latestPriceRecord->price : (float)($prod?->unit_price ?? $prod?->selling_price ?? 0);
-                if (isset($item['estimated_unit_cost']) && $item['estimated_unit_cost'] !== '' && (float)$item['estimated_unit_cost'] > 0) {
-                    $estCost = (float) $item['estimated_unit_cost'];
+            DB::commit();
+
+            return redirect()->route('office-requests.show', $officeRequest->id)
+                ->with('success', "Office Supply Request #{$reqNo} submitted successfully and sent to HR / Coordinator for review & budget assignment.");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return back()->withInput()->with('error', 'Failed to submit office request: ' . $e->getMessage());
+        }
+    }
+
+    // ─── 4. Show Details & Timeline ──────────────────────────────────────────
+    public function show($id)
+    {
+        $this->ensureTableExists();
+
+        $officeRequest = OfficeMaterialRequest::with([
+            'requestedBy',
+            'hrReviewer',
+            'financeHead',
+            'assignedStaff',
+            'paidBy',
+            'rejectedBy',
+            'coa',
+            'bankAccount',
+            'items.product'
+        ])->findOrFail($id);
+
+        $isHr = $this->isHrOrCoordinator();
+        $isFinance = $this->isFinance();
+
+        // Accounts for Finance Head modal
+        $coaAccounts = ChartOfAccount::where('is_active', true)->where('type', 'expense')->orderBy('code')->get();
+        if ($coaAccounts->isEmpty()) {
+            $coaAccounts = ChartOfAccount::where('is_active', true)->orderBy('code')->get();
+        }
+        $bankAccounts = BankAccount::where('is_active', true)->get();
+        $financeStaff = User::whereHas('roles', function ($q) {
+            $q->whereIn('name', ['finance', 'finance_head', 'finance_manager', 'accountant', 'cashier']);
+        })->get();
+        if ($financeStaff->isEmpty()) {
+            $financeStaff = User::where('is_active', true)->get();
+        }
+
+        return view('procurement.office-requests.show', compact(
+            'officeRequest',
+            'isHr',
+            'isFinance',
+            'coaAccounts',
+            'bankAccounts',
+            'financeStaff'
+        ));
+    }
+
+    // ─── Step 2: HR / Coordinator Review & Money Addition ────────────────────
+    public function hrApprove(Request $request, $id)
+    {
+        $this->ensureTableExists();
+
+        if (!$this->isHrOrCoordinator()) {
+            abort(403, 'Unauthorized. Only HR / Coordinator can approve and assign budget.');
+        }
+
+        $officeRequest = OfficeMaterialRequest::findOrFail($id);
+
+        if ($officeRequest->status !== OfficeMaterialRequest::STATUS_PENDING_HR) {
+            return back()->with('error', 'Request is not currently in Pending HR status.');
+        }
+
+        $validated = $request->validate([
+            'amount'   => 'required|numeric|min:0.01',
+            'hr_notes' => 'nullable|string|max:1000',
+        ]);
+
+        $officeRequest->update([
+            'amount'         => $validated['amount'],
+            'hr_reviewer_id' => Auth::id(),
+            'hr_reviewed_at' => now(),
+            'hr_notes'       => $validated['hr_notes'] ?? null,
+            'status'         => OfficeMaterialRequest::STATUS_APPROVED_BY_HR,
+        ]);
+
+        return back()->with('success', "Office Request #{$officeRequest->request_no} approved with budget ETB " . number_format($validated['amount'], 2) . " and sent to Finance Head for assignment.");
+    }
+
+    // ─── Step 3: Finance Head Assigns COA/Bank & Staff ───────────────────────
+    public function financeAssign(Request $request, $id)
+    {
+        $this->ensureTableExists();
+
+        if (!$this->isFinance()) {
+            abort(403, 'Unauthorized. Only Finance Head or Admin can assign funding account.');
+        }
+
+        $officeRequest = OfficeMaterialRequest::findOrFail($id);
+
+        if (!in_array($officeRequest->status, [OfficeMaterialRequest::STATUS_APPROVED_BY_HR, OfficeMaterialRequest::STATUS_ASSIGNED_TO_FINANCE])) {
+            return back()->with('error', 'Request is not ready for Finance assignment.');
+        }
+
+        $validated = $request->validate([
+            'coa_id'                    => 'required|exists:chart_of_accounts,id',
+            'bank_account_id'           => 'nullable|exists:bank_accounts,id',
+            'assigned_finance_staff_id' => 'nullable|exists:users,id',
+            'finance_head_notes'        => 'nullable|string|max:1000',
+        ]);
+
+        $coa = ChartOfAccount::find($validated['coa_id']);
+        $bank = !empty($validated['bank_account_id']) ? BankAccount::find($validated['bank_account_id']) : ($coa ? BankAccount::where('coa_id', $coa->id)->first() : null);
+
+        $assignedStaffId = $validated['assigned_finance_staff_id']
+            ?? ($bank ? $bank->assigned_to : null)
+            ?? ($coa ? $coa->assigned_to : null)
+            ?? Auth::id();
+
+        $officeRequest->update([
+            'coa_id'                    => $coa ? $coa->id : null,
+            'bank_account_id'           => $bank ? $bank->id : null,
+            'finance_head_id'           => Auth::id(),
+            'assigned_finance_staff_id' => $assignedStaffId,
+            'finance_assigned_at'       => now(),
+            'finance_head_notes'        => $validated['finance_head_notes'] ?? null,
+            'status'                    => OfficeMaterialRequest::STATUS_ASSIGNED_TO_FINANCE,
+        ]);
+
+        $staffName = User::find($assignedStaffId)?->name ?? 'Finance Staff';
+
+        return back()->with('success', "Office Request #{$officeRequest->request_no} funding assigned ({$coa?->name}) and forwarded to {$staffName} for payment.");
+    }
+
+    // ─── Step 4: Finance Staff / Cashier Disburses Payment ───────────────────
+    public function markPaid(Request $request, $id)
+    {
+        $this->ensureTableExists();
+
+        if (!$this->isFinance()) {
+            abort(403, 'Unauthorized. Only Finance Staff can execute payment.');
+        }
+
+        $officeRequest = OfficeMaterialRequest::findOrFail($id);
+
+        if ($officeRequest->status === OfficeMaterialRequest::STATUS_PAID) {
+            return back()->with('error', 'Request is already marked as paid.');
+        }
+
+        $validated = $request->validate([
+            'payment_reference' => 'nullable|string|max:100',
+            'payment_notes'     => 'nullable|string|max:1000',
+            'paid_amount'       => 'nullable|numeric|min:0.01',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $user = Auth::user();
+            $paymentRef = $validated['payment_reference'] ?? ('PAY-OFF-' . strtoupper(Str::random(6)));
+            $finalAmount = $validated['paid_amount'] ?? $officeRequest->amount;
+
+            $officeRequest->update([
+                'amount'            => $finalAmount,
+                'status'            => OfficeMaterialRequest::STATUS_PAID,
+                'paid_by'           => $user->id,
+                'paid_at'           => now(),
+                'payment_reference' => $paymentRef,
+                'payment_notes'     => $validated['payment_notes'] ?? null,
+            ]);
+
+            // Deduct from bank account if set
+            if ($officeRequest->bank_account_id && $finalAmount > 0) {
+                $bankAccount = BankAccount::find($officeRequest->bank_account_id);
+                if ($bankAccount) {
+                    $bankAccount->decrement('current_balance', $finalAmount);
+                    $newBalance = $bankAccount->fresh()->current_balance;
+
+                    BankTransaction::create([
+                        'bank_account_id' => $bankAccount->id,
+                        'transaction_date'=> now()->toDateString(),
+                        'type'            => 'withdrawal',
+                        'amount'          => $finalAmount,
+                        'balance_after'   => $newBalance,
+                        'reference_no'    => $paymentRef,
+                        'reference_type'  => 'OfficeMaterialRequest',
+                        'reference_id'    => $officeRequest->id,
+                        'description'     => "Office Material Request #{$officeRequest->request_no}: {$officeRequest->office_purpose}",
+                        'is_reconciled'   => true,
+                    ]);
                 }
-
-                $purchaseRequest->items()->create([
-                    'product_id'          => $item['product_id'],
-                    'quantity'            => $item['quantity'],
-                    'unit'                => $unit,
-                    'specifications'      => $item['specifications'] ?? null,
-                    'estimated_unit_cost' => $estCost,
-                ]);
             }
 
-            // Create Initial Workflow Log
-            try {
-                PrWorkflowLog::create([
-                    'purchase_request_id' => $purchaseRequest->id,
-                    'from_stage'          => PurchaseRequest::STATUS_DRAFT,
-                    'to_stage'            => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
-                    'action'              => 'office_request_submitted',
-                    'actor_role'          => 'secretary',
-                    'actor_id'            => Auth::id(),
-                    'notes'               => "Office Supply Request ({$request->office_purpose}) submitted for HR / Coordinator review.",
-                    'created_at'          => now(),
-                ]);
-            } catch (\Throwable $e) {}
+            DB::commit();
 
-            return $purchaseRequest;
-        });
-
-        return redirect()->route('office-requests.show', $pr->id)
-            ->with('success', "Office Supply Request #{$pr->pr_no} has been submitted directly to HR & Coordinator for review.");
+            return back()->with('success', "Office Request #{$officeRequest->request_no} payment of ETB " . number_format($finalAmount, 2) . " disbursed successfully. Request is now COMPLETED.");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return back()->with('error', 'Payment execution failed: ' . $e->getMessage());
+        }
     }
 
-    // ─── Show ────────────────────────────────────────────────────────────────
-    public function show(PurchaseRequest $office_request)
+    // ─── Reject Request ──────────────────────────────────────────────────────
+    public function reject(Request $request, $id)
     {
-        $office_request->load([
-            'project', 'store', 'requestedBy', 'hrCoordinatorApprovedBy', 'approvedBy',
-            'items.product', 'workflowLogs.actor',
-        ]);
+        $this->ensureTableExists();
 
-        $canApprove = $this->canApprove();
+        $officeRequest = OfficeMaterialRequest::findOrFail($id);
 
-        // Check stock availability in active stores for these requested items
-        $stockAvailability = [];
-        foreach ($office_request->items as $item) {
-            if ($item->product_id) {
-                try {
-                    $stockAvailability[$item->product_id] = Inventory::with('store')
-                        ->where('product_id', $item->product_id)
-                        ->where('quantity_on_hand', '>', 0)
-                        ->get();
-                } catch (\Throwable $e) {
-                    $stockAvailability[$item->product_id] = collect();
-                }
-            }
-        }
-
-        return view('procurement.office-requests.show', compact('office_request', 'canApprove', 'stockAvailability'));
-    }
-
-    // ─── Approve (HR / Coordinator) ──────────────────────────────────────────
-    public function approve(Request $request, PurchaseRequest $office_request)
-    {
-        if (!$this->canApprove()) {
-            abort(403, 'Unauthorized: Only HR Manager, Coordinator, GM, or Admin can approve this office supply request.');
-        }
-
-        $request->validate([
-            'notes'       => 'nullable|string|max:1000',
-            'next_action' => 'required|in:approved_direct,send_to_procurement,send_to_store,send_to_pm',
-        ]);
-
-        $actorRole = $this->getUserRoleSlug();
-        $fromStatus = $office_request->status;
-
-        $newStatus = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
-        $ownerRole = 'store_manager';
-        $actionNote = "Approved by {$actorRole} (" . Auth::user()->name . ")";
-
-        if ($request->next_action === 'send_to_pm' || $request->next_action === 'send_to_procurement') {
-            $newStatus = PurchaseRequest::STATUS_PENDING_PM_REVIEW;
-            $ownerRole = 'purchase_manager';
-            $actionNote .= " and forwarded to Purchase Manager (PM) for procurement.";
-        } elseif ($request->next_action === 'send_to_store') {
-            $newStatus = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
-            $ownerRole = 'store_manager';
-            $actionNote .= " and routed to Store Manager to check stock & issue or send to PM.";
-        } else {
-            $newStatus = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
-            $ownerRole = 'store_manager';
-            $actionNote .= " and routed to Store Manager for fulfillment.";
-        }
-
-        if ($request->filled('notes')) {
-            $actionNote .= " Note: " . $request->notes;
-        }
-
-        DB::transaction(function () use ($office_request, $request, $newStatus, $ownerRole, $fromStatus, $actorRole, $actionNote) {
-            $office_request->update([
-                'status'                     => $newStatus,
-                'hr_coordinator_approved_by' => Auth::id(),
-                'hr_coordinator_approved_at' => now(),
-                'hr_coordinator_notes'       => $request->notes,
-                'approved_by'                => Auth::id(),
-                'approved_at'                => now(),
-                'current_owner_role'         => $ownerRole,
-            ]);
-
-            try {
-                PrWorkflowLog::create([
-                    'purchase_request_id' => $office_request->id,
-                    'from_stage'          => $fromStatus,
-                    'to_stage'            => $newStatus,
-                    'action'              => 'hr_coordinator_approved',
-                    'actor_role'          => $actorRole,
-                    'actor_id'            => Auth::id(),
-                    'notes'               => $actionNote,
-                    'created_at'          => now(),
-                ]);
-            } catch (\Throwable $e) {}
-        });
-
-        return back()->with('success', "Office Supply Request #{$office_request->pr_no} approved and routed to Store Manager.");
-    }
-
-    // ─── Store Manager sends to PM (Purchase Manager) ────────────────────────
-    public function sendToPm(Request $request, PurchaseRequest $office_request)
-    {
-        $user = Auth::user();
-        if (!$user->hasRole('store_manager') && !$user->hasRole('admin') && !$user->hasRole('global_admin') && !$user->hasRole('coordinator') && !$user->hasRole('gm')) {
-            abort(403, 'Unauthorized.');
-        }
-
-        $fromStatus = $office_request->status;
-        $newStatus  = PurchaseRequest::STATUS_PENDING_PM_REVIEW;
-        $note = $request->input('notes', 'Out of stock at Store. Forwarded by Store Manager to Purchase Manager (PM) for purchasing.');
-
-        DB::transaction(function () use ($office_request, $fromStatus, $newStatus, $note) {
-            $office_request->update([
-                'status'             => $newStatus,
-                'current_owner_role' => 'purchase_manager',
-            ]);
-
-            try {
-                PrWorkflowLog::create([
-                    'purchase_request_id' => $office_request->id,
-                    'from_stage'          => $fromStatus,
-                    'to_stage'            => $newStatus,
-                    'action'              => 'sent_to_purchase_manager',
-                    'actor_role'          => 'store_manager',
-                    'actor_id'            => Auth::id(),
-                    'notes'               => $note,
-                    'created_at'          => now(),
-                ]);
-            } catch (\Throwable $e) {}
-        });
-
-        return back()->with('success', "Office Request #{$office_request->pr_no} successfully sent to Purchase Manager (PM) for procurement.");
-    }
-
-    // ─── Store Manager Dispatches / Fulfills from Store (routes to Finance for expense tracking) ─
-    public function storeDispatch(Request $request, PurchaseRequest $office_request)
-    {
-        $user = Auth::user();
-        if (!$user->hasRole('store_manager') && !$user->hasRole('admin') && !$user->hasRole('global_admin')) {
-            abort(403, 'Unauthorized.');
-        }
-
-        $fromStatus = $office_request->status;
-        $newStatus = PurchaseRequest::STATUS_PENDING_FINANCE;
-        $dispatchNote = $request->input('notes', '');
-
-        DB::transaction(function () use ($office_request, $fromStatus, $newStatus, $request, $dispatchNote, $user) {
-            $office_request->update([
-                'status'             => $newStatus,
-                'current_owner_role' => 'finance_head',
-            ]);
-
-            try {
-                PrWorkflowLog::create([
-                    'purchase_request_id' => $office_request->id,
-                    'from_stage'          => $fromStatus,
-                    'to_stage'            => $newStatus,
-                    'action'              => 'store_dispatched_to_finance',
-                    'actor_role'          => 'store_manager',
-                    'actor_id'            => Auth::id(),
-                    'notes'               => 'Office supplies issued from store. Forwarded to Finance Head for expense tracking & payment assignment. ' . $dispatchNote,
-                    'created_at'          => now(),
-                ]);
-            } catch (\Throwable $e) {}
-
-            // Auto-create an ExpenseRequest entry in the Finance Expense Hub
-            try {
-                $totalEstimated = $office_request->items->sum(function ($item) {
-                    return (float)$item->quantity * (float)($item->estimated_unit_cost ?? 0);
-                });
-
-                $reqNo = 'EXP-OFF-' . date('Ymd') . '-' . str_pad(ExpenseRequest::count() + 1, 4, '0', STR_PAD_LEFT);
-
-                ExpenseRequest::create([
-                    'request_number' => $reqNo,
-                    'user_id'        => $office_request->requested_by,
-                    'category'       => ExpenseRequest::CATEGORY_OFFICE_MATERIAL,
-                    'amount'         => $totalEstimated > 0 ? $totalEstimated : null,
-                    'description'    => 'Office Supply Request: ' . ($office_request->office_purpose ?? 'Office Materials') .
-                                        ' | PR: ' . $office_request->pr_no .
-                                        ($dispatchNote ? ' | Store Note: ' . $dispatchNote : ''),
-                    'status'         => ExpenseRequest::STATUS_APPROVED_ASSIGNED,
-                ]);
-            } catch (\Throwable $e) {}
-        });
-
-        return back()->with('success', "Office Request #{$office_request->pr_no} dispatched from store. Expense entry created in Finance Hub and sent to Finance Head for payment tracking.");
-    }
-
-    // ─── Finance Head Confirms Expense & Marks Complete ─────────────────────
-    public function financeConfirm(Request $request, PurchaseRequest $office_request)
-    {
-        $user = Auth::user();
-        $userRoles = $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray();
-        $allowedFinance = ['finance_head', 'finance_manager', 'finance', 'accountant', 'admin', 'global_admin', 'gm', 'general_manager'];
-        $canFinance = count(array_intersect($allowedFinance, $userRoles)) > 0;
-
-        if (!$canFinance) {
-            abort(403, 'Unauthorized: Only Finance Head or Admin can confirm expense payment.');
-        }
-
-        $request->validate([
-            'payment_notes'  => 'nullable|string|max:1000',
-            'payment_amount' => 'nullable|numeric|min:0',
-        ]);
-
-        $fromStatus = $office_request->status;
-        $newStatus  = PurchaseRequest::STATUS_COMPLETED;
-
-        DB::transaction(function () use ($office_request, $fromStatus, $newStatus, $request, $user) {
-            $office_request->update([
-                'status'             => $newStatus,
-                'current_owner_role' => null,
-                'approved_by'        => $office_request->approved_by ?? Auth::id(),
-            ]);
-
-            try {
-                PrWorkflowLog::create([
-                    'purchase_request_id' => $office_request->id,
-                    'from_stage'          => $fromStatus,
-                    'to_stage'            => $newStatus,
-                    'action'              => 'finance_confirmed_expense',
-                    'actor_role'          => 'finance_head',
-                    'actor_id'            => Auth::id(),
-                    'notes'               => 'Expense confirmed & tracked by Finance Head (' . $user->name . ').' . ($request->filled('payment_notes') ? ' Notes: ' . $request->payment_notes : '') . ($request->filled('payment_amount') ? ' Amount paid: ETB ' . number_format((float)$request->payment_amount, 2) : ''),
-                    'created_at'          => now(),
-                ]);
-            } catch (\Throwable $e) {}
-        });
-
-        return back()->with('success', "Office Request #{$office_request->pr_no} expense confirmed by Finance. Request is now COMPLETED.");
-    }
-
-
-    // ─── Reject (HR / Coordinator) ──────────────────────────────────────────
-    public function reject(Request $request, PurchaseRequest $office_request)
-    {
-        if (!$this->canApprove()) {
-            abort(403, 'Unauthorized: Only HR Manager, Coordinator, GM, or Admin can reject this office supply request.');
-        }
-
-        $request->validate([
+        $validated = $request->validate([
             'rejection_reason' => 'required|string|max:1000',
         ]);
 
-        $actorRole = $this->getUserRoleSlug();
-        $fromStatus = $office_request->status;
+        $officeRequest->update([
+            'status'           => OfficeMaterialRequest::STATUS_REJECTED,
+            'rejected_by'      => Auth::id(),
+            'rejected_at'      => now(),
+            'rejection_reason' => $validated['rejection_reason'],
+        ]);
 
-        DB::transaction(function () use ($office_request, $request, $fromStatus, $actorRole) {
-            $office_request->update([
-                'status'               => PurchaseRequest::STATUS_REJECTED,
-                'rejection_reason'     => $request->rejection_reason,
-                'hr_coordinator_notes' => 'Rejected: ' . $request->rejection_reason,
-                'current_owner_role'   => null,
-            ]);
-
-            try {
-                PrWorkflowLog::create([
-                    'purchase_request_id' => $office_request->id,
-                    'from_stage'          => $fromStatus,
-                    'to_stage'            => PurchaseRequest::STATUS_REJECTED,
-                    'action'              => 'hr_coordinator_rejected',
-                    'actor_role'          => $actorRole,
-                    'actor_id'            => Auth::id(),
-                    'notes'               => "Rejected by {$actorRole} (" . Auth::user()->name . "): " . $request->rejection_reason,
-                    'created_at'          => now(),
-                ]);
-            } catch (\Throwable $e) {}
-        });
-
-        return back()->with('success', "Office Supply Request #{$office_request->pr_no} has been rejected.");
+        return back()->with('success', "Office Request #{$officeRequest->request_no} has been rejected.");
     }
 }

@@ -87,12 +87,11 @@
                 @php
                     $secOfficeReqCount = 0;
                     try {
-                        $secOfficeReqCount = \App\Models\PurchaseRequest::where(function($q) {
-                            $q->where('is_office_request', true)
-                              ->orWhere('status', 'pending_hr_approval');
-                        })->where('requested_by', auth()->id())
-                          ->where('status', 'pending_hr_approval')
-                          ->count();
+                        if (\Illuminate\Support\Facades\Schema::hasTable('office_material_requests')) {
+                            $secOfficeReqCount = \App\Models\OfficeMaterialRequest::where('requested_by', auth()->id())
+                                ->where('status', \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR)
+                                ->count();
+                        }
                     } catch (\Exception $e) {}
                 @endphp
                 @if($secOfficeReqCount > 0)
@@ -994,9 +993,12 @@
                 @php
                     $pendingFinOfficeReqCount = 0;
                     try {
-                        $pendingFinOfficeReqCount = \App\Models\PurchaseRequest::where('is_office_request', true)
-                            ->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_FINANCE)
-                            ->count();
+                        if (\Illuminate\Support\Facades\Schema::hasTable('office_material_requests')) {
+                            $pendingFinOfficeReqCount = \App\Models\OfficeMaterialRequest::whereIn('status', [
+                                \App\Models\OfficeMaterialRequest::STATUS_APPROVED_BY_HR,
+                                \App\Models\OfficeMaterialRequest::STATUS_ASSIGNED_TO_FINANCE
+                            ])->count();
+                        }
                     } catch (\Exception $e) {}
                 @endphp
                 @if($pendingFinOfficeReqCount > 0)
@@ -1114,10 +1116,9 @@
                 @php
                     $pendingHrOfficeReqCount = 0;
                     try {
-                        $pendingHrOfficeReqCount = \App\Models\PurchaseRequest::where(function($q) {
-                            $q->where('is_office_request', true)
-                              ->orWhere('status', 'pending_hr_approval');
-                        })->where('status', 'pending_hr_approval')->count();
+                        if (\Illuminate\Support\Facades\Schema::hasTable('office_material_requests')) {
+                            $pendingHrOfficeReqCount = \App\Models\OfficeMaterialRequest::where('status', \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR)->count();
+                        }
                     } catch (\Exception $e) {}
                 @endphp
                 @if($pendingHrOfficeReqCount > 0)

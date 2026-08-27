@@ -1599,16 +1599,15 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/book-driver', [App\Http\Controllers\PurchaseRequestController::class, 'bookDriver'])->name('purchase-requests.book-driver');
     Route::post('purchase-requests/{purchaseRequest}/store-intake', [App\Http\Controllers\PurchaseRequestController::class, 'storeIntake'])->name('purchase-requests.store-intake');
 
-    // ── Office Supply Requests (Secretary -> HR / Coordinator Approval -> Store / PM) ──
+    // ── Office Material Requests (Secretary -> HR Money Approval -> Finance Assign -> Finance Pay) ──
     Route::get('office-requests', [App\Http\Controllers\OfficeSupplyRequestController::class, 'index'])->name('office-requests.index');
     Route::get('office-requests/create', [App\Http\Controllers\OfficeSupplyRequestController::class, 'create'])->name('office-requests.create');
     Route::post('office-requests', [App\Http\Controllers\OfficeSupplyRequestController::class, 'store'])->name('office-requests.store');
-    Route::get('office-requests/{office_request}', [App\Http\Controllers\OfficeSupplyRequestController::class, 'show'])->name('office-requests.show');
-    Route::post('office-requests/{office_request}/approve', [App\Http\Controllers\OfficeSupplyRequestController::class, 'approve'])->name('office-requests.approve');
-    Route::post('office-requests/{office_request}/reject', [App\Http\Controllers\OfficeSupplyRequestController::class, 'reject'])->name('office-requests.reject');
-    Route::post('office-requests/{office_request}/send-to-pm', [App\Http\Controllers\OfficeSupplyRequestController::class, 'sendToPm'])->name('office-requests.send-to-pm');
-    Route::post('office-requests/{office_request}/store-dispatch', [App\Http\Controllers\OfficeSupplyRequestController::class, 'storeDispatch'])->name('office-requests.store-dispatch');
-    Route::post('office-requests/{office_request}/finance-confirm', [App\Http\Controllers\OfficeSupplyRequestController::class, 'financeConfirm'])->name('office-requests.finance-confirm');
+    Route::get('office-requests/{id}', [App\Http\Controllers\OfficeSupplyRequestController::class, 'show'])->name('office-requests.show');
+    Route::post('office-requests/{id}/hr-approve', [App\Http\Controllers\OfficeSupplyRequestController::class, 'hrApprove'])->name('office-requests.hr-approve');
+    Route::post('office-requests/{id}/finance-assign', [App\Http\Controllers\OfficeSupplyRequestController::class, 'financeAssign'])->name('office-requests.finance-assign');
+    Route::post('office-requests/{id}/mark-paid', [App\Http\Controllers\OfficeSupplyRequestController::class, 'markPaid'])->name('office-requests.mark-paid');
+    Route::post('office-requests/{id}/reject', [App\Http\Controllers\OfficeSupplyRequestController::class, 'reject'])->name('office-requests.reject');
 
 
     // Credit Store Ledger (Finance Head / Credit Purchases & Payment Tracking)
