@@ -18,6 +18,12 @@
             </div>
         </div>
         <div class="d-flex gap-2">
+            <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-success btn-sm rounded-pill px-3 shadow-xs fw-semibold">
+                <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask Money
+            </a>
+            <a href="{{ route('leave-requests.create') }}" class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-xs fw-semibold">
+                <i class="fa-solid fa-calendar-plus me-1"></i> Ask Leave
+            </a>
             <a href="{{ route('finance.replenishments.index') }}" class="btn btn-warning text-dark btn-sm rounded-pill px-3 shadow-xs fw-bold">
                 <i class="fa-solid fa-hand-holding-dollar me-1"></i> Petty Cash Approvals
             </a>
@@ -26,6 +32,38 @@
             </a>
         </div>
     </div>
+
+    <!-- Quick Employee Self-Service & Navigation Bar -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden">
+        <div class="card-body p-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary-subtle text-primary fw-bold px-2.5 py-1.5 rounded-3">
+                        <i class="fa-solid fa-user-check me-1"></i> Employee &amp; Audit Quick Actions
+                    </span>
+                    <small class="text-muted">Direct access to staff requests and financial audits</small>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ route('expense-requests.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
+                        <i class="fa-solid fa-wallet text-success me-1"></i> Ask Money (Expenses)
+                    </a>
+                    <a href="{{ route('leave-requests.create') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
+                        <i class="fa-solid fa-calendar-check text-info me-1"></i> Request Leave
+                    </a>
+                    <a href="{{ route('letters.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
+                        <i class="fa-solid fa-envelope text-primary me-1"></i> Letters &amp; Correspondence
+                    </a>
+                    <a href="{{ route('expenses.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
+                        <i class="fa-solid fa-file-invoice text-danger me-1"></i> Expense Audit Hub
+                    </a>
+                    <a href="{{ route('coa.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
+                        <i class="fa-solid fa-sitemap text-secondary me-1"></i> COA Ledger
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <!-- KPI Summary Row -->
     <div class="row g-3 mb-4">

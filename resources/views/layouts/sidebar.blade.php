@@ -547,7 +547,8 @@
         @endcanany
 
         {{-- Procurement / Stores --}}
-        @if(auth()->check() && !$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isContractAdmin && !$isStoreKeeper && !$isStoreManager && (auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin']) || auth()->user()->canAny(['inventory.view', 'inventory.*', 'purchases.suppliers.manage', 'suppliers.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'purchases.requests.create', 'purchases.view', 'purchases.receive', 'purchases.*', 'transfers.view', 'transfers.*'])))
+        @if(auth()->check() && !$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isContractAdmin && !$isStoreKeeper && !$isStoreManager && !$isAuditorUser && (auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin']) || auth()->user()->canAny(['inventory.view', 'inventory.*', 'purchases.suppliers.manage', 'suppliers.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'purchases.requests.create', 'purchases.view', 'purchases.receive', 'purchases.*', 'transfers.view', 'transfers.*'])))
+
 
         @if(!auth()->user()->hasAnyRole(['planning_manager', 'planning']) && auth()->user()->hasAnyRole(['Purchase Manager', 'purchase_manager', 'admin', 'global_admin', 'gm', 'general_manager']))
         <li class="sidebar-nav-item">
@@ -874,7 +875,7 @@
         @endif
 
         {{-- Operational --}}
-        @if(!$isContractAdmin && !$isSecretary && !$isStoreKeeper && (!auth()->check() || !auth()->user()->hasAnyRole(['finance', 'Finance', 'cashier', 'accountant'])))
+        @if(!$isContractAdmin && !$isSecretary && !$isStoreKeeper && !$isAuditorUser && (!auth()->check() || !auth()->user()->hasAnyRole(['finance', 'Finance', 'cashier', 'accountant'])))
         @canany(['material_usage.view', 'material_usage.*', 'cut_optimization.view_results', 'cut_optimization.*', 'issues.view', 'issues.create', 'issues.resolve', 'issues.*', 'waste.view', 'waste.create', 'waste.*', 'reports.daily.view', 'reports.daily.create', 'reports.weekly.view', 'reports.view', 'reports.*.view'])
 
         @canany(['material_usage.view', 'material_usage.*'])
@@ -931,7 +932,7 @@
         @endif
 
         {{-- Contract Admin Tools --}}
-        @if(auth()->check() && (auth()->user()->hasAnyRole(['Contract admin', 'contract_admin', 'admin', 'global_admin'])))
+        @if(auth()->check() && !$isAuditorUser && (auth()->user()->hasAnyRole(['Contract admin', 'contract_admin', 'admin', 'global_admin'])))
 
         @if(!$isContractAdmin)
         <li class="sidebar-nav-item">
@@ -974,7 +975,8 @@
         @endif
 
         {{-- Finance --}}
-        @if(auth()->check() && !auth()->user()->hasRole('site_engineer') && !$isContractAdmin && !$isStoreKeeper && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'admin', 'global_admin']) || auth()->user()->canAny(['finance.chart_of_accounts.view', 'finance.bank.manage', 'finance.income.view', 'finance.income.*', 'finance.expenses.view', 'finance.expenses.approve', 'finance.expenses.create', 'payments.view', 'payments.create', 'payments.approve', 'payments.*', 'subcon.view', 'subcon.create', 'subcon.edit', 'subcon.approve', 'subcon.*', 'finance.ipcs.manage', 'finance.*'])))
+        @if(auth()->check() && !$isAuditorUser && !auth()->user()->hasRole('site_engineer') && !$isContractAdmin && !$isStoreKeeper && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'admin', 'global_admin']) || auth()->user()->canAny(['finance.chart_of_accounts.view', 'finance.bank.manage', 'finance.income.view', 'finance.income.*', 'finance.expenses.view', 'finance.expenses.approve', 'finance.expenses.create', 'payments.view', 'payments.create', 'payments.approve', 'payments.*', 'subcon.view', 'subcon.create', 'subcon.edit', 'subcon.approve', 'subcon.*', 'finance.ipcs.manage', 'finance.*'])))
+
 
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
         <li class="sidebar-nav-item">
@@ -1364,6 +1366,17 @@
             <a href="{{ \Illuminate\Support\Facades\Route::has('finance.replenishments.index') ? route('finance.replenishments.index') : url('/finance/replenishments') }}" class="sidebar-nav-link {{ request()->is('finance/replenishments*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
                 <span>Petty Cash Audit &amp; Approvals</span>
+                @php
+                    $pendingAudReplenishCount = 0;
+                    try {
+                        if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_replenishments')) {
+                            $pendingAudReplenishCount = \App\Models\PettyCashReplenishment::where('status', 'pending')->count();
+                        }
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingAudReplenishCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingAudReplenishCount }}</span>
+                @endif
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -1372,7 +1385,20 @@
                 <span>Audit &amp; Activity Trail</span>
             </a>
         </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-file-invoice-dollar text-success"></i>
+                <span>Expense &amp; Payment Audit</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-sitemap text-secondary"></i>
+                <span>Chart of Accounts (COA)</span>
+            </a>
+        </li>
         @endif
+
 
 
 
