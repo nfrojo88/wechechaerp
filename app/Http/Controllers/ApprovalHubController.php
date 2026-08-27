@@ -458,11 +458,13 @@ class ApprovalHubController extends Controller
 
 
         // Calculate Tab Counts
+        $notPaidCount = $items->where('status_key', 'finance_queue')->count();
         $tabCounts = [
             'all'           => $items->count(),
             'pending_hr'    => $items->where('status_key', 'pending_hr')->count(),
             'pending_gm'    => $items->where('status_key', 'pending_gm')->count(),
-            'finance_queue' => $items->where('status_key', 'finance_queue')->count(),
+            'finance_queue' => $notPaidCount,
+            'not_paid'      => $notPaidCount,
             'paid'          => $items->where('status_key', 'paid')->count(),
             'rejected'      => $items->where('status_key', 'rejected')->count(),
         ];
@@ -470,6 +472,9 @@ class ApprovalHubController extends Controller
         // Determine default tab based on role
         if ($request->has('tab')) {
             $activeTab = $request->input('tab');
+            if (in_array($activeTab, ['not_paid', 'unpaid'])) {
+                $activeTab = 'finance_queue';
+            }
         } else {
             if ($isFinance && !$isAdmin && !$isHR && !$isGM) {
                 $activeTab = 'finance_queue';
@@ -486,6 +491,7 @@ class ApprovalHubController extends Controller
         if ($activeTab !== 'all' && array_key_exists($activeTab, $tabCounts)) {
             $items = $items->where('status_key', $activeTab);
         }
+
 
         // Apply Status Filter if explicitly selected in dropdown
         if ($request->filled('status') && $request->status !== 'all') {

@@ -51,15 +51,13 @@
                     </a>
                 </li>
                 @endif
-                @if(!empty($isAdmin) || !empty($isFinance))
                 <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'finance_queue' ? 'active shadow-sm bg-primary text-white' : 'text-secondary bg-white' }}" 
-                       href="{{ request()->fullUrlWithQuery(['tab' => 'finance_queue', 'page' => 1]) }}">
-                        <i class="fa-solid fa-building-columns me-1"></i> Finance Queue
-                        <span class="badge {{ $activeTab === 'finance_queue' ? 'bg-white text-primary' : 'bg-primary text-white' }} ms-1">{{ $tabCounts['finance_queue'] }}</span>
+                    <a class="nav-link rounded-3 fw-semibold py-2 {{ in_array($activeTab, ['finance_queue', 'not_paid', 'unpaid']) ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
+                       href="{{ request()->fullUrlWithQuery(['tab' => 'not_paid', 'page' => 1]) }}">
+                        <i class="fa-solid fa-hourglass-half me-1 text-warning"></i> Not Paid / Pending Payment
+                        <span class="badge {{ in_array($activeTab, ['finance_queue', 'not_paid', 'unpaid']) ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1">{{ $tabCounts['not_paid'] ?? 0 }}</span>
                     </a>
                 </li>
-                @endif
                 <li class="nav-item">
                     <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'paid' ? 'active shadow-sm bg-success text-white' : 'text-secondary bg-white' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'paid', 'page' => 1]) }}">
@@ -77,6 +75,7 @@
             </ul>
         </div>
     </div>
+
 
     <!-- Filter Bar Card -->
     <div class="card border-0 shadow-sm mb-4 rounded-4">
@@ -406,6 +405,35 @@
                         </div>
                     </div>
 
+                    @if($item->status_key === 'finance_queue')
+                        <div class="p-3 mb-4 rounded-3 border border-warning bg-warning bg-opacity-10">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <h6 class="fw-bold text-dark mb-0">
+                                    <i class="fa-solid fa-hourglass-half text-warning me-1"></i> Not Paid / Awaiting Finance Disbursement
+                                </h6>
+                                <span class="badge bg-warning text-dark font-monospace">Pending Payment</span>
+                            </div>
+                            <div class="row g-2 small text-dark">
+                                <div class="col-md-6">
+                                    <span class="text-muted d-block">Assigned Finance Staff:</span>
+                                    <strong>{{ $item->raw_model->assignedFinanceStaff->name ?? ($item->raw_model->assignedStaff->name ?? ($item->raw_model->financeStaff->name ?? 'Finance Department Pool')) }}</strong>
+                                </div>
+                                <div class="col-md-6">
+                                    <span class="text-muted d-block">Funding Source / Account:</span>
+                                    <strong>{{ $item->coa_name ?? ($item->bank_name ?? 'Pending Account Selection') }}</strong>
+                                </div>
+                                <div class="col-md-6 mt-2">
+                                    <span class="text-muted d-block">GM / HR Approval:</span>
+                                    <strong>{{ optional($item->raw_model->gm_approved_at ?? $item->raw_model->created_at)->format('d M Y, h:i A') }}</strong>
+                                </div>
+                                <div class="col-md-6 mt-2">
+                                    <span class="text-muted d-block">Amount Due to Pay:</span>
+                                    <strong class="text-danger fs-6">ETB {{ number_format($item->net_amount, 2) }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
                     @if($item->attachment_url)
                         <div class="mb-4">
                             <label class="form-label small text-muted text-uppercase fw-bold">Attachment / Supporting Receipt</label>
@@ -416,6 +444,7 @@
                             </div>
                         </div>
                     @endif
+
 
                     @if($item->type === 'expense_request')
                         @php $req = $item->raw_model; @endphp
