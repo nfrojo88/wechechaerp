@@ -56,6 +56,12 @@
                 <span>General Service Hub</span>
             </a>
         </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.create') || request()->routeIs('leave-requests.my-requests') ? 'active' : '' }}">
+                <i class="fa-solid fa-calendar-plus text-info"></i>
+                <span>Ask / Request Leave</span>
+            </a>
+        </li>
         @endif
 
         @if($isSecretary)
@@ -105,6 +111,12 @@
                 <span>New Office Request</span>
             </a>
         </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.create') || request()->routeIs('leave-requests.my-requests') ? 'active' : '' }}">
+                <i class="fa-solid fa-calendar-plus text-info"></i>
+                <span>Ask / Request Leave</span>
+            </a>
+        </li>
         @endif
 
         @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser)
@@ -150,6 +162,16 @@
         </li>
         @endif
 
+        {{-- Ask / Request Leave (Visible to All Roles) --}}
+        @if(!$isSecretary && !$isGeneralServiceUser)
+        <li class="sidebar-nav-item">
+            <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.create') || request()->routeIs('leave-requests.my-requests') ? 'active' : '' }}">
+                <i class="fa-solid fa-calendar-plus text-info"></i>
+                <span>Ask / Request Leave</span>
+            </a>
+        </li>
+        @endif
+
         {{-- General Manager Section --}}
         @if(auth()->check() && (auth()->user()->hasAnyRole(['gm', 'general_manager', 'General Manager', 'GM']) || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles)))
 
@@ -160,9 +182,27 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            @php
+                $pendingGmLeaveCount = 0;
+                try {
+                    if (\Illuminate\Support\Facades\Schema::hasTable('leave_requests')) {
+                        $pendingGmLeaveCount = \App\Models\LeaveRequest::where('status', 'pending')->count();
+                    }
+                } catch (\Exception $e) {}
+            @endphp
+            <a href="{{ route('leave-requests.index') }}" class="sidebar-nav-link {{ (request()->routeIs('leave-requests.*') && !request()->routeIs('leave-requests.create') && !request()->routeIs('leave-requests.my-requests')) ? 'active' : '' }}">
+                <i class="fa-solid fa-calendar-check text-success"></i>
+                <span>GM Leave Decisions</span>
+                @if($pendingGmLeaveCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingGmLeaveCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('expenses.index') }}?tab=pending_gm" class="sidebar-nav-link {{ (request()->routeIs('expenses.*') || request()->is('expenses*') || request()->routeIs('approvals.*')) && request('tab') === 'pending_gm' ? 'active' : '' }}">
                 <i class="fa-solid fa-file-invoice-dollar text-warning"></i>
                 <span>Expense Approvals</span>
+
                 @php
                     $pendingGmExpCount = 0;
                     try {
