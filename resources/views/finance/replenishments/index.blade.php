@@ -182,8 +182,9 @@
                                 </td>
                                 <td class="py-3">
                                     <strong class="text-dark d-block">[{{ $rep->chartOfAccount->code ?? 'N/A' }}] {{ $rep->chartOfAccount->name ?? 'Petty Cash' }}</strong>
-                                    <small class="text-muted">{{ $rep->chartOfAccount->category ?? 'Cash Asset' }}</small>
+                                    <small class="text-muted">{{ $rep->chartOfAccount->subtype ?? ucfirst($rep->chartOfAccount->type ?? 'Cash Asset') }}</small>
                                 </td>
+
                                 <td class="py-3 text-end">
                                     <span class="badge bg-light text-dark border font-monospace fs-6 px-2.5">
                                         ETB {{ number_format($rep->current_balance_at_request, 2) }}

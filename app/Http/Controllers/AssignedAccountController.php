@@ -768,11 +768,14 @@ class AssignedAccountController extends Controller
         $sourceAccounts = ChartOfAccount::where('is_active', true)
             ->where(function ($q) {
                 $q->where('type', 'asset')
-                  ->orWhere('category', 'like', '%Cash%')
-                  ->orWhere('category', 'like', '%Bank%');
+                  ->orWhere('name', 'like', '%Cash%')
+                  ->orWhere('name', 'like', '%Bank%')
+                  ->orWhere('subtype', 'like', '%Cash%')
+                  ->orWhere('subtype', 'like', '%Bank%');
             })
             ->orderBy('name')
             ->get();
+
 
         return view('finance.replenishments.index', compact(
             'replenishments',
