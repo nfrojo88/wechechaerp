@@ -166,7 +166,97 @@
                     </button>
                 </div>
                 @endif
+            </div>
+        </div>
+
+        {{-- Right Column: Official Leave Balance Card (Matching Employee Profile) --}}
+        <div class="col-lg-4">
+            @php
+                $employee = $leaveRequest->employee;
+                $currentYear = $leaveRequest->start_date ? $leaveRequest->start_date->year : \Carbon\Carbon::now()->year;
+                $annualBal = $currentBalance;
+                
+                $joinDate = $employee->date_of_joining ? \Carbon\Carbon::parse($employee->date_of_joining) : null;
+                $joinYear = $joinDate ? $joinDate->year : $currentYear;
+                $monthsActive = 12;
+                if ($joinDate && $joinYear === $currentYear) {
+                    $monthsActive = max(1, min(12, 12 - $joinDate->month + 1));
+                } elseif ($joinDate && $joinYear < $currentYear) {
+                    $monthsActive = 12;
+                }
+                $accruedDays = round(($monthsActive * (16.0 / 12)), 2);
+                $totalDays = $annualBal ? (float)$annualBal->total_days : 16.0;
+                $usedDays = $annualBal ? (float)$annualBal->used_days : 0.0;
+                $remainingDays = $annualBal ? (float)$annualBal->remaining_days : 16.0;
+                $usedPct = $totalDays > 0 ? min(100, round(($usedDays / $totalDays) * 100)) : 0;
+            @endphp
+
+            <div class="card border-0 shadow-sm rounded-3 mb-4 overflow-hidden border">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-umbrella-beach text-info me-2"></i>Leave Balance {{ $currentYear }}</h6>
+                        <small class="text-muted" style="font-size:0.75rem;">16 Days/Year (1.33 Days/Month)</small>
+                    </div>
+                </div>
+                <div class="card-body p-3">
+                    {{-- Active Balance Display --}}
+                    <div class="bg-light rounded-3 p-3 text-center mb-3 border">
+                        <span class="text-muted small fw-semibold text-uppercase d-block" style="letter-spacing:0.05em; font-size:0.72rem;">Available Balance</span>
+                        <h2 class="fw-bold text-primary mb-0 font-monospace">{{ number_format($remainingDays, 2) }} <span class="fs-6 text-muted fw-normal">Days</span></h2>
+                        <div class="badge bg-primary bg-opacity-10 text-primary mt-1 font-monospace" style="font-size:0.75rem;">
+                            Accrued to Date: {{ number_format($accruedDays, 2) }} Days ({{ $monthsActive }} Mos)
+                        </div>
+                    </div>
+
+                    {{-- Progress Bar --}}
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1 small">
+                            <span class="text-muted fw-semibold"><i class="fa-solid fa-plane-departure text-info me-1"></i>Annual Leave</span>
+                            <span class="fw-bold text-dark">{{ number_format($usedDays, 1) }} used / {{ number_format($totalDays, 1) }} total</span>
+                        </div>
+                        <div class="progress rounded-pill" style="height:10px;">
+                            <div class="progress-bar {{ $usedPct > 80 ? 'bg-danger' : ($usedPct > 50 ? 'bg-warning' : 'bg-info') }}" style="width:{{ $usedPct }}%;"></div>
+                        </div>
+                        <div class="d-flex justify-content-between mt-1" style="font-size:0.75rem;">
+                            <span class="text-success fw-semibold">{{ number_format($remainingDays, 1) }} days remaining</span>
+                            <span class="text-muted">{{ $usedPct }}% taken</span>
+                        </div>
+                    </div>
+
+                    {{-- Calculation Metadata --}}
+                    <div class="p-2.5 bg-light rounded-2 small text-muted" style="font-size:0.75rem;">
+                        <div class="d-flex justify-content-between py-1 border-bottom border-light">
+                            <span>Standard Quota:</span>
+                            <strong class="text-dark">16.0 Days / Year</strong>
+                        </div>
+                        <div class="d-flex justify-content-between py-1 border-bottom border-light">
+                            <span>Monthly Accrual:</span>
+                            <strong class="text-dark">1.33 Days / Month</strong>
+                        </div>
+                        <div class="d-flex justify-content-between py-1">
+                            <span>Service Since:</span>
+                            <strong class="text-dark">{{ optional($joinDate)->format('d M Y') ?? 'N/A' }}</strong>
+                        </div>
+                    </div>
+
+                    {{-- Impact Projection --}}
+                    <div class="p-2.5 bg-white rounded-2 border mt-3 small">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Days to Deduct:</span>
+                            <strong class="text-danger">-{{ $leaveRequest->days_requested }} day(s)</strong>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Balance After Leave:</span>
+                            <strong class="{{ ($remainingDays - $leaveRequest->days_requested) >= 0 ? 'text-success' : 'text-danger' }}">
+                                {{ number_format($remainingDays - $leaveRequest->days_requested, 1) }} day(s)
+                            </strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+</div>
 
 <!-- Approve Modal -->
 <div class="modal fade" id="approveModal" tabindex="-1" aria-hidden="true">
@@ -236,4 +326,5 @@ function rejectRequest() {
 }
 </script>
 @endsection
+
 

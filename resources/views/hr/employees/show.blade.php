@@ -1410,26 +1410,10 @@
                     <i class="fa-solid fa-plus me-1"></i> Ask / Request Leave
                 </a>
             </div>
-            <div class="card-body pt-1">
-                {{-- Balances Quota Grid --}}
-                <div class="row g-2 mb-3">
-                    @foreach($empBalances as $bal)
-                    <div class="col-md-4 col-sm-6">
-                        <div class="p-2.5 bg-light rounded-3 border d-flex justify-content-between align-items-center">
-                            <div>
-                                <span class="small fw-semibold text-dark d-block">{{ $bal->leaveType->name }}</span>
-                                <small class="text-muted" style="font-size:0.7rem;">Used: {{ number_format($bal->used_days, 0) }} / Total: {{ number_format($bal->total_days, 0) }}</small>
-                            </div>
-                            <span class="badge {{ $bal->remaining_days > 0 ? 'bg-success' : 'bg-danger' }} rounded-pill font-monospace fs-6 px-2.5">
-                                {{ number_format($bal->remaining_days, 1) }} Left
-                            </span>
-                        </div>
-                    </div>
-                    @endforeach
-                </div>
-
+            <div class="card-body pt-2">
                 {{-- Recent Requisitions Table --}}
                 @if($empLeaveRequests->count() > 0)
+
                 <div class="table-responsive">
                     <table class="table table-sm table-hover align-middle mb-0">
                         <thead class="table-light small">
