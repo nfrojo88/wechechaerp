@@ -181,12 +181,15 @@ class OfficeSupplyRequestController extends Controller
         ];
 
         // COA & Bank accounts for modal
-        $coaAccounts = ChartOfAccount::where('is_active', true)->where('type', 'expense')->orderBy('code')->get();
-        if ($coaAccounts->isEmpty()) {
-            $coaAccounts = ChartOfAccount::where('is_active', true)->orderBy('code')->get();
-        }
+        $coaAccounts = ChartOfAccount::with(['bankAccounts', 'manager'])
+            ->where('is_active', true)
+            ->orderBy('code')
+            ->get();
 
-        $bankAccounts = BankAccount::where('is_active', true)->get();
+        $bankAccounts = BankAccount::with(['coa', 'assignedStaff'])
+            ->where('is_active', true)
+            ->orderBy('bank_name')
+            ->get();
 
         $financeStaff = User::whereHas('roles', function ($q) {
             $q->whereIn('name', ['finance', 'finance_head', 'finance_manager', 'accountant', 'cashier']);
@@ -317,11 +320,16 @@ class OfficeSupplyRequestController extends Controller
         $isFinance = $this->isFinance();
 
         // Accounts for Finance Head modal
-        $coaAccounts = ChartOfAccount::where('is_active', true)->where('type', 'expense')->orderBy('code')->get();
-        if ($coaAccounts->isEmpty()) {
-            $coaAccounts = ChartOfAccount::where('is_active', true)->orderBy('code')->get();
-        }
-        $bankAccounts = BankAccount::where('is_active', true)->get();
+        // Accounts for Finance Head assignment
+        $coaAccounts = ChartOfAccount::with(['bankAccounts', 'manager'])
+            ->where('is_active', true)
+            ->orderBy('code')
+            ->get();
+
+        $bankAccounts = BankAccount::with(['coa', 'assignedStaff'])
+            ->where('is_active', true)
+            ->orderBy('bank_name')
+            ->get();
         $financeStaff = User::whereHas('roles', function ($q) {
             $q->whereIn('name', ['finance', 'finance_head', 'finance_manager', 'accountant', 'cashier']);
         })->get();

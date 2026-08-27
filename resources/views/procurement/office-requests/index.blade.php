@@ -287,23 +287,33 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-bold text-dark small text-uppercase">Funding Account (Chart of Accounts) <span class="text-danger">*</span></label>
-                        <select name="coa_id" class="form-select bg-light border-0" required>
+                        <select name="coa_id" id="modalCoaSelect{{ $req->id }}" class="form-select bg-light border-0" onchange="syncModalCoaToBank('{{ $req->id }}')" required>
                             <option value="" disabled selected>-- Select Expense Account --</option>
                             @foreach($coaAccounts as $coa)
-                                <option value="{{ $coa->id }}" {{ $req->coa_id == $coa->id ? 'selected' : '' }}>
-                                    [{{ $coa->code }}] {{ $coa->name }}
+                                @php $linkedBank = $coa->bankAccounts->first(); @endphp
+                                <option value="{{ $coa->id }}" 
+                                        data-bank-id="{{ $linkedBank?->id ?? '' }}"
+                                        data-bank-name="{{ $linkedBank?->bank_name ?? '' }}"
+                                        data-bank-acc="{{ $linkedBank?->account_number ?? '' }}"
+                                        data-staff-id="{{ $coa->assigned_to ?? $linkedBank?->assigned_to ?? '' }}"
+                                        data-staff-name="{{ $coa->manager?->name ?? $linkedBank?->assignedStaff?->name ?? '' }}"
+                                        {{ $req->coa_id == $coa->id ? 'selected' : '' }}>
+                                    [{{ $coa->code }}] {{ $coa->name }} {{ $linkedBank ? '— (' . $linkedBank->bank_name . ')' : '' }}
                                 </option>
                             @endforeach
                         </select>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold text-dark small text-uppercase">Bank Account (Optional)</label>
-                        <select name="bank_account_id" class="form-select bg-light border-0">
-                            <option value="">-- Select Bank Account --</option>
+                        <label class="form-label fw-bold text-dark small text-uppercase">Bank Account (Linked from COA)</label>
+                        <select name="bank_account_id" id="modalBankSelect{{ $req->id }}" class="form-select bg-light border-0">
+                            <option value="">-- Select / Auto-linked Bank --</option>
                             @foreach($bankAccounts as $bank)
-                                <option value="{{ $bank->id }}" {{ $req->bank_account_id == $bank->id ? 'selected' : '' }}>
-                                    {{ $bank->bank_name }} ({{ $bank->account_number }}) - Bal: ETB {{ number_format((float)$bank->current_balance, 2) }}
+                                <option value="{{ $bank->id }}" 
+                                        data-coa-id="{{ $bank->coa_id }}" 
+                                        data-staff-id="{{ $bank->assigned_to }}"
+                                        {{ $req->bank_account_id == $bank->id ? 'selected' : '' }}>
+                                    {{ $bank->bank_name }} ({{ $bank->account_number }}) - Bal: ETB {{ number_format((float)$bank->current_balance, 2) }} @if($bank->coa) [COA: {{ $bank->coa->code }} - {{ $bank->coa->name }}] @endif
                                 </option>
                             @endforeach
                         </select>
@@ -311,7 +321,7 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-bold text-dark small text-uppercase">Assign Finance Staff</label>
-                        <select name="assigned_finance_staff_id" class="form-select bg-light border-0">
+                        <select name="assigned_finance_staff_id" id="modalStaffSelect{{ $req->id }}" class="form-select bg-light border-0">
                             <option value="">-- Assign Staff / Self --</option>
                             @foreach($financeStaff as $staff)
                                 <option value="{{ $staff->id }}" {{ $req->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
@@ -386,4 +396,29 @@
 
 @endforeach
 
+@push('scripts')
+<script>
+function syncModalCoaToBank(reqId) {
+    const coaSelect = document.getElementById('modalCoaSelect' + reqId);
+    const bankSelect = document.getElementById('modalBankSelect' + reqId);
+    const staffSelect = document.getElementById('modalStaffSelect' + reqId);
+
+    if (!coaSelect) return;
+    const opt = coaSelect.options[coaSelect.selectedIndex];
+    if (!opt || !opt.value) return;
+
+    const bankId = opt.getAttribute('data-bank-id');
+    const staffId = opt.getAttribute('data-staff-id');
+
+    if (bankSelect && bankId) {
+        bankSelect.value = bankId;
+    }
+    if (staffSelect && staffId) {
+        staffSelect.value = staffId;
+    }
+}
+</script>
+@endpush
+
 @endsection
+
