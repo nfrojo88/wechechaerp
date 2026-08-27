@@ -1404,11 +1404,6 @@
         </li>
         @endif
 
-
-
-
-        @endcanany
-
         @role('global_admin')
         <li class="sidebar-nav-item mt-4">
             <a href="{{ route('dev.roles') }}" class="sidebar-nav-link text-warning">
