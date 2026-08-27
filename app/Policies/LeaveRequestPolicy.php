@@ -42,7 +42,8 @@ class LeaveRequestPolicy
      */
     public function approve(User $user): bool
     {
-        return $user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']);
+        $roleStr = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        return $user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']) || str_contains($roleStr, 'gm') || str_contains($roleStr, 'admin') || str_contains($roleStr, 'hr');
     }
 
     /**
@@ -50,6 +51,8 @@ class LeaveRequestPolicy
      */
     public function reject(User $user): bool
     {
-        return $user->hasRole(['hr_manager', 'hr_officer', 'admin']);
+        $roleStr = strtolower(implode(' ', $user->getRoleNames()->toArray()));
+        return $user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']) || str_contains($roleStr, 'gm') || str_contains($roleStr, 'admin') || str_contains($roleStr, 'hr');
     }
 }
+

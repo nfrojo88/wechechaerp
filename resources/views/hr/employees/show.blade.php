@@ -1378,7 +1378,109 @@
                 @endif
             </div>
         </div>
+
+        {{-- ============================
+             14. Leave Requests & Available Quota (የፍቃድ ታሪክና የቀረው ፈቃድ)
+        ============================= --}}
+        @php
+            $currentYear = \Carbon\Carbon::now()->year;
+            $leaveTypes = \App\Models\LeaveType::where('is_active', true)->get();
+            $empBalances = collect();
+            foreach ($leaveTypes as $lt) {
+                $empBalances->push(\App\Models\LeaveBalance::getOrCreateBalance($employee->id, $lt->id, $currentYear));
+            }
+            $empLeaveRequests = \App\Models\LeaveRequest::where('employee_id', $employee->id)
+                ->with(['leaveType', 'approvedByUser'])
+                ->orderBy('created_at', 'desc')
+                ->take(10)
+                ->get();
+        @endphp
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white border-0 py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="p-2 rounded-2 bg-info bg-opacity-10 text-info">
+                        <i class="fa-solid fa-calendar-check fa-lg"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-0 fw-bold text-dark">Leave Requests &amp; Available Days (የፍቃድ ታሪክና የቀረው ፈቃድ)</h6>
+                        <small class="text-muted">Real-time leave balance tracking &amp; requisition history</small>
+                    </div>
+                </div>
+                <a href="{{ route('leave-requests.create', ['employee_id' => $employee->id]) }}" class="btn btn-sm btn-primary shadow-sm">
+                    <i class="fa-solid fa-plus me-1"></i> Ask / Request Leave
+                </a>
+            </div>
+            <div class="card-body pt-1">
+                {{-- Balances Quota Grid --}}
+                <div class="row g-2 mb-3">
+                    @foreach($empBalances as $bal)
+                    <div class="col-md-4 col-sm-6">
+                        <div class="p-2.5 bg-light rounded-3 border d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="small fw-semibold text-dark d-block">{{ $bal->leaveType->name }}</span>
+                                <small class="text-muted" style="font-size:0.7rem;">Used: {{ number_format($bal->used_days, 0) }} / Total: {{ number_format($bal->total_days, 0) }}</small>
+                            </div>
+                            <span class="badge {{ $bal->remaining_days > 0 ? 'bg-success' : 'bg-danger' }} rounded-pill font-monospace fs-6 px-2.5">
+                                {{ number_format($bal->remaining_days, 1) }} Left
+                            </span>
+                        </div>
+                    </div>
+                    @endforeach
+                </div>
+
+                {{-- Recent Requisitions Table --}}
+                @if($empLeaveRequests->count() > 0)
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead class="table-light small">
+                            <tr>
+                                <th>Leave Type</th>
+                                <th>Period</th>
+                                <th>Days</th>
+                                <th>Status</th>
+                                <th>Reason</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($empLeaveRequests as $req)
+                            <tr>
+                                <td><span class="badge bg-light text-dark border">{{ $req->leaveType->name }}</span></td>
+                                <td class="small">{{ optional($req->start_date)->format('d M Y') }} &rarr; {{ optional($req->end_date)->format('d M Y') }}</td>
+                                <td><strong>{{ $req->days_requested }} d</strong></td>
+                                <td>
+                                    @if ($req->status === 'pending')
+                                        <span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>Pending</span>
+                                    @elseif ($req->status === 'approved')
+                                        <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Approved</span>
+                                    @elseif ($req->status === 'rejected')
+                                        <span class="badge bg-danger"><i class="fa-solid fa-xmark me-1"></i>Rejected</span>
+                                    @else
+                                        <span class="badge bg-secondary">{{ ucfirst($req->status) }}</span>
+                                    @endif
+                                </td>
+                                <td class="small text-muted" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    {{ $req->reason }}
+                                </td>
+                                <td class="text-end">
+                                    <a href="{{ route('leave-requests.show', $req->id) }}" class="btn btn-xs btn-outline-primary py-0.5 px-2 small">
+                                        <i class="fa-solid fa-eye me-1"></i> Review
+                                    </a>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                @else
+                <div class="text-center py-3 text-muted small">
+                    No leave requests recorded for this employee yet.
+                </div>
+                @endif
+            </div>
+        </div>
     </div>
+
 
 
     {{-- ============================

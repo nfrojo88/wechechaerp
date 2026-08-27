@@ -1104,6 +1104,24 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            @php
+                $pendingLeaveCount = 0;
+                try {
+                    if (\Illuminate\Support\Facades\Schema::hasTable('leave_requests')) {
+                        $pendingLeaveCount = \App\Models\LeaveRequest::where('status', 'pending')->count();
+                    }
+                } catch (\Exception $e) {}
+            @endphp
+            <a href="{{ route('leave-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-calendar-minus text-info"></i>
+                <span>Leave Approvals &amp; Quota</span>
+                @if($pendingLeaveCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingLeaveCount }}</span>
+                @endif
+            </a>
+        </li>
+
+        <li class="sidebar-nav-item">
             <a href="{{ route('daily-reports.approval') }}" class="sidebar-nav-link {{ request()->routeIs('daily-reports.approval') ? 'active' : '' }}">
                 <i class="fa-solid fa-file-check text-success"></i>
                 <span>Approve Daily Reports</span>

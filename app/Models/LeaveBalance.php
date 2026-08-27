@@ -42,4 +42,29 @@ class LeaveBalance extends Model
     {
         return $this->remaining_days >= $daysRequired;
     }
+
+    public static function getOrCreateBalance($employeeId, $leaveTypeId, $year = null)
+    {
+        $year = $year ?: \Carbon\Carbon::now()->year;
+        $balance = self::where('employee_id', $employeeId)
+            ->where('leave_type_id', $leaveTypeId)
+            ->where('year', $year)
+            ->first();
+
+        if (!$balance) {
+            $leaveType = LeaveType::find($leaveTypeId);
+            $totalDays = $leaveType ? ($leaveType->days_allowed ?: 16) : 16;
+            $balance = self::create([
+                'employee_id' => $employeeId,
+                'leave_type_id' => $leaveTypeId,
+                'year' => $year,
+                'total_days' => $totalDays,
+                'used_days' => 0,
+                'remaining_days' => $totalDays,
+            ]);
+        }
+
+        return $balance;
+    }
 }
+

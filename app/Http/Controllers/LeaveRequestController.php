@@ -18,14 +18,48 @@ class LeaveRequestController extends Controller
         $this->middleware('auth');
     }
 
+    private function ensureDefaultLeaveTypes(): void
+    {
+        try {
+            if (LeaveType::count() === 0) {
+                LeaveType::create(['name' => 'Annual Leave (ዓመታዊ ፈቃድ)', 'code' => 'ANNUAL', 'days_allowed' => 16, 'is_paid' => true, 'requires_documentation' => false, 'is_active' => true]);
+                LeaveType::create(['name' => 'Sick Leave (የህመም ፈቃድ)', 'code' => 'SICK', 'days_allowed' => 30, 'is_paid' => true, 'requires_documentation' => true, 'is_active' => true]);
+                LeaveType::create(['name' => 'Maternity Leave (የወሊድ ፈቃድ)', 'code' => 'MATERNITY', 'days_allowed' => 90, 'is_paid' => true, 'requires_documentation' => true, 'is_active' => true]);
+                LeaveType::create(['name' => 'Paternity Leave (የአባትነት ፈቃድ)', 'code' => 'PATERNITY', 'days_allowed' => 5, 'is_paid' => true, 'requires_documentation' => false, 'is_active' => true]);
+                LeaveType::create(['name' => 'Compassionate / Emergency (የሐዘን ፈቃድ)', 'code' => 'COMPASSIONATE', 'days_allowed' => 5, 'is_paid' => true, 'requires_documentation' => false, 'is_active' => true]);
+                LeaveType::create(['name' => 'Unpaid Leave (ያለ ክፍያ ፈቃድ)', 'code' => 'UNPAID', 'days_allowed' => 30, 'is_paid' => false, 'requires_documentation' => false, 'is_active' => true]);
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    protected function resolveEmployee(?int $employeeId = null): ?Employee
+    {
+        $user = Auth::user();
+        if ($employeeId) {
+            return Employee::find($employeeId);
+        }
+        if ($user) {
+            $emp = Employee::where('user_id', $user->id)->first();
+            if (!$emp && $user->email) {
+                $emp = Employee::where('email', $user->email)->first();
+            }
+            if (!$emp && $user->phone) {
+                $emp = Employee::where('phone', $user->phone)->first();
+            }
+            return $emp;
+        }
+        return null;
+    }
+
     /**
-     * Display all leave requests (HR Officer view)
+     * Display all leave requests (HR & GM view)
      */
     public function index(Request $request)
     {
+        $this->ensureDefaultLeaveTypes();
         $this->authorize('viewAny', LeaveRequest::class);
 
-        $query = LeaveRequest::with(['employee', 'leaveType', 'approvedByUser']);
+        $query = LeaveRequest::with(['employee.project', 'leaveType', 'approvedByUser']);
 
         // Filters
         if ($request->filled('status')) {
@@ -50,6 +84,14 @@ class LeaveRequestController extends Controller
 
         $leaveRequests = $query->orderBy('created_at', 'desc')->paginate(15);
 
+        // Attach balance info to each leave request for GM & HR quick view
+        $currentYear = Carbon::now()->year;
+        foreach ($leaveRequests as $lr) {
+            if ($lr->employee_id && $lr->leave_type_id) {
+                $lr->balance = LeaveBalance::getOrCreateBalance($lr->employee_id, $lr->leave_type_id, $lr->start_date ? $lr->start_date->year : $currentYear);
+            }
+        }
+
         $leaveTypes = LeaveType::where('is_active', true)->get();
         $employees = Employee::where('status', 'active')->orderBy('full_name')->get();
 
@@ -65,7 +107,12 @@ class LeaveRequestController extends Controller
      */
     public function myRequests(Request $request)
     {
-        $employee = Employee::where('user_id', Auth::id())->firstOrFail();
+        $this->ensureDefaultLeaveTypes();
+        $employee = $this->resolveEmployee();
+
+        if (!$employee) {
+            return redirect()->route('dashboard')->with('warning', 'No employee profile linked to your user account.');
+        }
 
         $query = LeaveRequest::where('employee_id', $employee->id)
             ->with(['leaveType', 'approvedByUser']);
@@ -75,26 +122,45 @@ class LeaveRequestController extends Controller
         }
 
         $leaveRequests = $query->orderBy('start_date', 'desc')->paginate(10);
+        $currentYear = Carbon::now()->year;
+        $balances = LeaveBalance::where('employee_id', $employee->id)
+            ->where('year', $currentYear)
+            ->with('leaveType')
+            ->get();
 
-        return view('hr-manager.leave-requests.my-requests', compact('leaveRequests'));
+        return view('hr-manager.leave-requests.my-requests', compact('leaveRequests', 'employee', 'balances'));
     }
 
     /**
      * Create leave request form
      */
-    public function create()
+    public function create(Request $request)
     {
-        $employee = Employee::where('user_id', Auth::id())->firstOrFail();
+        $this->ensureDefaultLeaveTypes();
+        $user = Auth::user();
+        $isHrOrGm = $user && ($user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']) || str_contains(strtolower(implode(' ', $user->getRoleNames()->toArray())), 'gm'));
+        
+        $employee = $this->resolveEmployee($request->input('employee_id'));
+        $allEmployees = $isHrOrGm ? Employee::where('status', 'active')->orderBy('full_name')->get() : collect();
+
+        if (!$employee && $allEmployees->isNotEmpty()) {
+            $employee = $allEmployees->first();
+        }
+
+        if (!$employee) {
+            return redirect()->route('employees.index')->with('warning', 'Please link your account to an employee profile or select an employee.');
+        }
 
         $leaveTypes = LeaveType::where('is_active', true)->get();
         
         // Get current year balances
-        $balances = LeaveBalance::where('employee_id', $employee->id)
-            ->where('year', Carbon::now()->year)
-            ->with('leaveType')
-            ->get();
+        $currentYear = Carbon::now()->year;
+        $balances = collect();
+        foreach ($leaveTypes as $lt) {
+            $balances->push(LeaveBalance::getOrCreateBalance($employee->id, $lt->id, $currentYear));
+        }
 
-        return view('hr-manager.leave-requests.create', compact('employee', 'leaveTypes', 'balances'));
+        return view('hr-manager.leave-requests.create', compact('employee', 'leaveTypes', 'balances', 'allEmployees', 'isHrOrGm'));
     }
 
     /**
@@ -102,14 +168,23 @@ class LeaveRequestController extends Controller
      */
     public function store(Request $request)
     {
-        $employee = Employee::where('user_id', Auth::id())->firstOrFail();
+        $this->ensureDefaultLeaveTypes();
+        $user = Auth::user();
+        $isHrOrGm = $user && ($user->hasAnyRole(['hr', 'hr_manager', 'hr_officer', 'admin', 'global_admin', 'gm', 'general_manager']) || str_contains(strtolower(implode(' ', $user->getRoleNames()->toArray())), 'gm'));
+
+        $employeeId = $isHrOrGm && $request->filled('employee_id') ? (int)$request->employee_id : null;
+        $employee = $this->resolveEmployee($employeeId);
+
+        if (!$employee) {
+            return back()->withErrors(['employee_id' => 'Employee profile not found.']);
+        }
 
         $validated = $request->validate([
             'leave_type_id' => 'required|exists:leave_types,id',
-            'start_date' => 'required|date|after_or_equal:today',
+            'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
-            'reason' => 'required|string|min:10|max:500',
-            'attachment' => 'nullable|file|mimes:pdf,doc,docx|max:2048',
+            'reason' => 'required|string|min:5|max:1000',
+            'attachment' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:5120',
         ]);
 
         $leaveType = LeaveType::findOrFail($validated['leave_type_id']);
@@ -130,23 +205,22 @@ class LeaveRequestController extends Controller
             ->exists();
 
         if ($overlap) {
-            return back()->withErrors(['start_date' => 'Overlapping leave already exists']);
+            return back()->withInput()->withErrors(['start_date' => 'An active or pending leave request already overlaps with these selected dates.']);
         }
 
-        // Check balance
-        $balance = LeaveBalance::where('employee_id', $employee->id)
-            ->where('leave_type_id', $leaveType->id)
-            ->where('year', Carbon::now()->year)
-            ->first();
+        // Check balance or initialize
+        $year = Carbon::parse($validated['start_date'])->year;
+        $balance = LeaveBalance::getOrCreateBalance($employee->id, $leaveType->id, $year);
 
-        if (!$balance || !$balance->hasEnoughBalance($daysRequested)) {
-            return back()->withErrors(['leave_type_id' => 'Insufficient leave balance']);
+        if ($leaveType->is_paid && (!$balance || !$balance->hasEnoughBalance($daysRequested))) {
+            $available = $balance ? $balance->remaining_days : 0;
+            return back()->withInput()->withErrors(['leave_type_id' => "Insufficient leave balance. You requested {$daysRequested} day(s), but only {$available} day(s) remain available."]);
         }
 
         // Handle attachment
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
-            $attachmentPath = \App\Services\FileUploadService::upload($request->file('attachment'), 'leave_attachments');
+            $attachmentPath = $request->file('attachment')->store('leave_attachments', 'public');
         }
 
         // Create leave request
@@ -160,8 +234,8 @@ class LeaveRequestController extends Controller
             'status' => 'pending',
         ]);
 
-        return redirect()->route('leave-requests.my-requests')
-            ->with('success', 'Leave request submitted successfully');
+        return redirect()->route('leave-requests.index')
+            ->with('success', 'Leave request submitted successfully. It is now awaiting General Manager / HR review.');
     }
 
     /**
@@ -170,11 +244,20 @@ class LeaveRequestController extends Controller
     public function show(LeaveRequest $leaveRequest)
     {
         $this->authorize('view', $leaveRequest);
+        $leaveRequest->load(['employee.project', 'leaveType', 'approvedByUser']);
 
-        $leaveRequest->load(['employee', 'leaveType', 'approvedByUser']);
+        $year = $leaveRequest->start_date ? $leaveRequest->start_date->year : Carbon::now()->year;
+        $currentBalance = LeaveBalance::getOrCreateBalance($leaveRequest->employee_id, $leaveRequest->leave_type_id, $year);
 
-        return view('hr-manager.leave-requests.show', compact('leaveRequest'));
+        $leaveTypes = LeaveType::where('is_active', true)->get();
+        $allBalances = collect();
+        foreach ($leaveTypes as $lt) {
+            $allBalances->push(LeaveBalance::getOrCreateBalance($leaveRequest->employee_id, $lt->id, $year));
+        }
+
+        return view('hr-manager.leave-requests.show', compact('leaveRequest', 'currentBalance', 'allBalances'));
     }
+
 
     /**
      * Approve leave request
