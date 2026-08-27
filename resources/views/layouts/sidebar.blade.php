@@ -17,10 +17,14 @@
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
         @php
+            $isGmUser = auth()->check() && (auth()->user()->hasAnyRole(['gm', 'general_manager', 'General Manager', 'GM']) || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles));
             $isFinanceUser = auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_manager', 'cashier', 'accountant']);
             $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard') ? route('dashboard') : url('/dashboard');
             $dashTitle = 'Dashboard';
-            if ($isFinanceUser) {
+            if ($isGmUser) {
+                $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.gm') ? route('dashboard.gm') : url('/dashboard/gm');
+                $dashTitle = 'GM Dashboard & Analytics';
+            } elseif ($isFinanceUser) {
                 $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.finance') ? route('dashboard.finance') : url('/dashboard/finance');
                 $dashTitle = 'Finance Dashboard';
             } elseif ($isSecretary) {
@@ -175,12 +179,6 @@
         {{-- General Manager Section --}}
         @if(auth()->check() && (auth()->user()->hasAnyRole(['gm', 'general_manager', 'General Manager', 'GM']) || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles)))
 
-        <li class="sidebar-nav-item">
-            <a href="{{ route('dashboard.gm') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.gm') ? 'active' : '' }}">
-                <i class="fa-solid fa-gauge-high text-primary"></i>
-                <span>GM Dashboard</span>
-            </a>
-        </li>
         <li class="sidebar-nav-item">
             @php
                 $pendingGmLeaveCount = 0;
