@@ -135,12 +135,8 @@
                             <select name="leave_type_id" id="leave_type_id" class="form-select @error('leave_type_id') is-invalid @enderror" required>
                                 <option value="">-- Choose Leave Type --</option>
                                 @foreach ($leaveTypes as $type)
-                                    @php
-                                        $b = $balances->firstWhere('leave_type_id', $type->id);
-                                        $rem = $b ? $b->remaining_days : $type->days_allowed;
-                                    @endphp
-                                    <option value="{{ $type->id }}" data-remaining="{{ $rem }}" {{ old('leave_type_id', $annualType?->id) == $type->id ? 'selected' : '' }}>
-                                        {{ $type->name }} ({{ number_format($rem, 1) }} days available | {{ $type->is_paid ? 'Paid' : 'Unpaid' }})
+                                    <option value="{{ $type->id }}" {{ old('leave_type_id', $annualType?->id) == $type->id ? 'selected' : '' }}>
+                                        {{ $type->name }}
                                     </option>
                                 @endforeach
                             </select>
@@ -148,6 +144,7 @@
                                 <div class="invalid-feedback d-block">{{ $message }}</div>
                             @enderror
                         </div>
+
 
 
                         <!-- Date Range -->
@@ -224,9 +221,9 @@
 document.addEventListener('DOMContentLoaded', function() {
     const startDateInput = document.getElementById('start_date');
     const endDateInput = document.getElementById('end_date');
-    const leaveTypeSelect = document.getElementById('leave_type_id');
     const daysText = document.getElementById('daysText');
     const balanceAlert = document.getElementById('balanceAlert');
+    const annualRemaining = {{ (float) $remainingDays }};
 
     function calculate() {
         const start = startDateInput.value ? new Date(startDateInput.value) : null;
@@ -237,13 +234,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
             daysText.innerText = diffDays + ' day(s)';
 
-            const selectedOption = leaveTypeSelect.options[leaveTypeSelect.selectedIndex];
-            const remaining = selectedOption ? parseFloat(selectedOption.getAttribute('data-remaining') || '999') : 999;
-
-            if (diffDays > remaining) {
-                balanceAlert.innerHTML = `<span class="text-danger fw-bold"><i class="fa-solid fa-triangle-exclamation me-1"></i>Warning: Request exceeds available balance (${remaining} days)!</span>`;
+            if (diffDays > annualRemaining) {
+                balanceAlert.innerHTML = `<span class="text-danger fw-bold"><i class="fa-solid fa-triangle-exclamation me-1"></i>Requested duration (${diffDays} days) exceeds available balance (${annualRemaining} days)!</span>`;
             } else {
-                balanceAlert.innerHTML = `<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Within available balance (${remaining - diffDays} remaining after leave)</span>`;
+                balanceAlert.innerHTML = `<span class="text-success"><i class="fa-solid fa-circle-check me-1"></i>Within balance (${(annualRemaining - diffDays).toFixed(1)} remaining after leave)</span>`;
             }
         } else {
             daysText.innerText = '0 day(s)';
@@ -260,8 +254,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     endDateInput.addEventListener('change', calculate);
-    leaveTypeSelect.addEventListener('change', calculate);
 });
 </script>
 @endsection
+
 

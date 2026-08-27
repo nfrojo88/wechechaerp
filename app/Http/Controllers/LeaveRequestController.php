@@ -208,13 +208,17 @@ class LeaveRequestController extends Controller
             return back()->withInput()->withErrors(['start_date' => 'An active or pending leave request already overlaps with these selected dates.']);
         }
 
-        // Check balance or initialize
+        // Check balance against employee's Statutory Annual Leave Balance
         $year = Carbon::parse($validated['start_date'])->year;
-        $balance = LeaveBalance::getOrCreateBalance($employee->id, $leaveType->id, $year);
+        $annualType = LeaveType::where('code', 'ANNUAL')->orWhere('name', 'like', '%Annual%')->first();
+        $annualTypeId = $annualType ? $annualType->id : $leaveType->id;
+        $balance = LeaveBalance::getOrCreateBalance($employee->id, $annualTypeId, $year);
 
-        if ($leaveType->is_paid && (!$balance || !$balance->hasEnoughBalance($daysRequested))) {
-            $available = $balance ? $balance->remaining_days : 0;
-            return back()->withInput()->withErrors(['leave_type_id' => "Insufficient leave balance. You requested {$daysRequested} day(s), but only {$available} day(s) remain available."]);
+        if ($leaveType->code === 'ANNUAL' || str_contains(strtolower($leaveType->name), 'annual')) {
+            if (!$balance || !$balance->hasEnoughBalance($daysRequested)) {
+                $available = $balance ? $balance->remaining_days : 0;
+                return back()->withInput()->withErrors(['leave_type_id' => "Insufficient annual leave balance. You requested {$daysRequested} day(s), but only {$available} day(s) remain available."]);
+            }
         }
 
         // Handle attachment
@@ -247,17 +251,12 @@ class LeaveRequestController extends Controller
         $leaveRequest->load(['employee.project', 'leaveType', 'approvedByUser']);
 
         $year = $leaveRequest->start_date ? $leaveRequest->start_date->year : Carbon::now()->year;
-        $currentBalance = LeaveBalance::getOrCreateBalance($leaveRequest->employee_id, $leaveRequest->leave_type_id, $year);
+        $annualType = LeaveType::where('code', 'ANNUAL')->orWhere('name', 'like', '%Annual%')->first();
+        $annualTypeId = $annualType ? $annualType->id : $leaveRequest->leave_type_id;
+        $currentBalance = LeaveBalance::getOrCreateBalance($leaveRequest->employee_id, $annualTypeId, $year);
 
-        $leaveTypes = LeaveType::where('is_active', true)->get();
-        $allBalances = collect();
-        foreach ($leaveTypes as $lt) {
-            $allBalances->push(LeaveBalance::getOrCreateBalance($leaveRequest->employee_id, $lt->id, $year));
-        }
-
-        return view('hr-manager.leave-requests.show', compact('leaveRequest', 'currentBalance', 'allBalances'));
+        return view('hr-manager.leave-requests.show', compact('leaveRequest', 'currentBalance'));
     }
-
 
     /**
      * Approve leave request
@@ -272,11 +271,11 @@ class LeaveRequestController extends Controller
 
         $daysRequested = $leaveRequest->days_requested;
 
-        // Update balance
-        $balance = LeaveBalance::where('employee_id', $leaveRequest->employee_id)
-            ->where('leave_type_id', $leaveRequest->leave_type_id)
-            ->where('year', $leaveRequest->start_date->year)
-            ->first();
+        // Deduct from employee's statutory annual leave balance
+        $year = $leaveRequest->start_date ? $leaveRequest->start_date->year : Carbon::now()->year;
+        $annualType = LeaveType::where('code', 'ANNUAL')->orWhere('name', 'like', '%Annual%')->first();
+        $annualTypeId = $annualType ? $annualType->id : $leaveRequest->leave_type_id;
+        $balance = LeaveBalance::getOrCreateBalance($leaveRequest->employee_id, $annualTypeId, $year);
 
         if ($balance) {
             $balance->updateBalance($daysRequested);
@@ -289,8 +288,9 @@ class LeaveRequestController extends Controller
             'approved_at' => now(),
         ]);
 
-        return back()->with('success', 'Leave request approved');
+        return back()->with('success', 'Leave request approved and granted successfully.');
     }
+
 
     /**
      * Reject leave request
