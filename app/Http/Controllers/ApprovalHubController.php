@@ -299,6 +299,70 @@ class ApprovalHubController extends Controller
             $items = $items->concat($prs);
         } catch (\Throwable $e) {}
 
+        // 6. Office Supply Requests (Pending Finance Decision & Completed)
+        try {
+            $officeRequests = PurchaseRequest::with(['requestedBy', 'items.product', 'workflowLogs.actor'])
+                ->where('is_office_request', true)
+                ->whereIn('status', [PurchaseRequest::STATUS_PENDING_FINANCE, PurchaseRequest::STATUS_COMPLETED])
+                ->latest()
+                ->get()
+                ->map(function ($pr) {
+                    $totalItems = $pr->items->count();
+                    $itemNames  = $pr->items->take(3)->map(fn($i) => $i->product?->name ?? 'Item')->implode(', ');
+                    
+                    $totalEstimated = (float) $pr->items->sum(function ($item) {
+                        return (float) ($item->quantity ?? 0) * (float) ($item->estimated_unit_cost ?? $item->unit_price ?? 0);
+                    });
+
+                    $isCompleted = ($pr->status === PurchaseRequest::STATUS_COMPLETED);
+                    $statusKey   = $isCompleted ? 'paid' : 'finance_queue';
+                    $statusLabel = $isCompleted ? 'Paid / Completed' : '⏳ Awaiting Finance Payment';
+                    $badgeColor  = $isCompleted ? 'success' : 'purple';
+
+                    // Find finance workflow log if available
+                    $financeLog = $pr->workflowLogs->firstWhere('action', 'finance_confirmed_expense');
+
+                    return (object) [
+                        'id_raw'            => $pr->id,
+                        'id_formatted'      => $pr->pr_no,
+                        'type'              => 'office_supply_request',
+                        'date'              => $pr->created_at,
+                        'project'           => 'Head Office',
+                        'category'          => '🏢 Office Supply',
+                        'description'       => ($pr->office_purpose ?? 'Office Materials') . ' — ' . $totalItems . ' item(s): ' . $itemNames,
+                        'applicant_name'    => $pr->requestedBy?->name ?? 'Secretary',
+                        'base_amount'       => $totalEstimated,
+                        'vat_amount'        => 0,
+                        'net_amount'        => $totalEstimated,
+                        'status'            => $statusLabel,
+                        'status_raw'        => $pr->status,
+                        'status_key'        => $statusKey,
+                        'color'             => $badgeColor,
+                        'attachment'        => null,
+                        'attachment_url'    => null,
+                        'rejection_reason'  => null,
+                        'paid_at'           => $financeLog ? $financeLog->created_at : ($isCompleted ? $pr->updated_at : null),
+                        'paid_by_name'      => $financeLog?->actor?->name ?? null,
+                        'payment_reference' => $financeLog?->notes ?? null,
+                        'coa_name'          => null,
+                        'bank_name'         => null,
+                        'route_show'        => \Illuminate\Support\Facades\Route::has('office-requests.show')
+                                                ? route('office-requests.show', $pr)
+                                                : url('/office-requests/' . $pr->id),
+                        'route_approve'     => \Illuminate\Support\Facades\Route::has('office-requests.finance-confirm')
+                                                ? route('office-requests.finance-confirm', $pr)
+                                                : url('/office-requests/' . $pr->id . '/finance-confirm'),
+                        'route_reject'      => '#',
+                        'raw_model'         => $pr,
+                        'finance_confirm_url' => \Illuminate\Support\Facades\Route::has('office-requests.finance-confirm')
+                                                ? route('office-requests.finance-confirm', $pr)
+                                                : url('/office-requests/' . $pr->id . '/finance-confirm'),
+                    ];
+                });
+            $items = $items->concat($officeRequests);
+        } catch (\Throwable $e) {}
+
+
         $user = Auth::user();
         $rolesStr = strtolower(implode(' ', $user ? $user->getRoleNames()->toArray() : []));
         $isAdmin = $user && ($user->hasAnyRole(['admin', 'global_admin']) || str_contains($rolesStr, 'admin'));

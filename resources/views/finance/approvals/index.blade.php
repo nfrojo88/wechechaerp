@@ -301,6 +301,24 @@
                                                 <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed PR">
                                                     <i class="fa-solid fa-check-circle me-1"></i> Paid
                                                 </a>
+                                            @elseif($item->type === 'office_supply_request')
+                                                @if($item->status_key === 'finance_queue')
+                                                    @if($isFinance || $isAdmin)
+                                                        <button type="button" class="btn btn-sm text-white fw-bold shadow-sm" style="background:#7c3aed;" 
+                                                                data-bs-toggle="modal" 
+                                                                data-bs-target="#financeOfficeModal{{ $item->id_raw }}"
+                                                                title="Decide & Confirm Office Expense Payment">
+                                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i> Decide / Pay
+                                                        </button>
+                                                    @endif
+                                                    <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Office Supply Request">
+                                                        <i class="fa-solid fa-eye me-1"></i> View
+                                                    </a>
+                                                @elseif($item->status_key === 'paid')
+                                                    <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed Office Request">
+                                                        <i class="fa-solid fa-check-circle me-1"></i> Paid
+                                                    </a>
+                                                @endif
                                             @endif
                                         @endif
                                     </div>
@@ -733,7 +751,57 @@
         </div>
     </div>
     @endif
+
+    @if($item->type === 'office_supply_request' && $item->status_key === 'finance_queue')
+    <div class="modal fade" id="financeOfficeModal{{ $item->id_raw }}" tabindex="-1" aria-labelledby="financeOfficeModalLabel{{ $item->id_raw }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <form method="POST" action="{{ $item->finance_confirm_url }}">
+                    @csrf
+                    <div class="modal-header text-white py-3 px-4" style="background:#7c3aed;">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-file-invoice-dollar fs-5"></i>
+                            <h5 class="modal-title fw-bold mb-0" id="financeOfficeModalLabel{{ $item->id_raw }}">
+                                Finance Decision / Payment: {{ $item->id_formatted }}
+                            </h5>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <div style="background:#ede9fe;border:1px solid #7c3aed;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:0.9rem;color:#5b21b6;line-height:1.5;">
+                            <div class="fw-bold mb-1"><i class="fa-solid fa-circle-info me-1"></i> Office Supply Fulfillment: {{ $item->id_formatted }}</div>
+                            <div>{{ $item->description }}</div>
+                            <div class="small mt-1 text-muted">Requested by: <strong>{{ $item->applicant_name }}</strong> (Head Office)</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">
+                                Amount Paid / Assigned (ETB) <span class="text-muted fw-normal">(optional)</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-0 fw-bold">ETB</span>
+                                <input type="number" name="payment_amount" class="form-control bg-light border-0" min="0" step="0.01" value="{{ $item->net_amount > 0 ? $item->net_amount : '' }}" placeholder="e.g. 4500.00">
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">Finance Notes / Voucher Remarks</label>
+                            <textarea name="payment_notes" class="form-control bg-light border-0" rows="3" placeholder="e.g. Charged to Head Office petty cash. Voucher #VC-2026-08 issued..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 py-3 px-4">
+                        <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn text-white rounded-pill px-4 fw-bold shadow-sm" style="background:#7c3aed;">
+                            <i class="fa-solid fa-check-double me-1"></i> Confirm & Mark Paid / Complete
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endif
 @endforeach
+
 
 <script>
 /**
