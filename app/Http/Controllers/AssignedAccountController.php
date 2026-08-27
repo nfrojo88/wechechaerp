@@ -699,4 +699,89 @@ class AssignedAccountController extends Controller
             'attachment_url' => $replenishment->attachment_url,
         ]);
     }
+
+    /**
+     * Finance Head: Central Petty Cash Replenishments Oversight & Approval Hub
+     */
+    public function replenishmentsIndex(Request $request)
+    {
+        self::ensureSchema();
+
+        $isFinanceHead = $this->isFinanceHeadUser();
+        if (!$isFinanceHead) {
+            abort(403, 'Unauthorized. Only Finance Head or Admin can access the Replenishments Hub.');
+        }
+
+        $query = PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'financeHead', 'sourceCoa', 'items']);
+
+        // Quick Filter Tabs
+        $activeTab = $request->input('tab', 'pending');
+        if ($activeTab === 'pending') {
+            $query->where('status', PettyCashReplenishment::STATUS_PENDING);
+        } elseif ($activeTab === 'fulfilled') {
+            $query->where('status', PettyCashReplenishment::STATUS_FULFILLED);
+        } elseif ($activeTab === 'rejected') {
+            $query->where('status', PettyCashReplenishment::STATUS_REJECTED);
+        }
+
+        // Search Filter
+        if ($request->filled('search')) {
+            $search = strtolower($request->search);
+            $query->where(function ($q) use ($search) {
+                $q->where('request_no', 'like', "%{$search}%")
+                  ->orWhere('notes', 'like', "%{$search}%")
+                  ->orWhereHas('requester', function ($uq) use ($search) {
+                      $uq->where('name', 'like', "%{$search}%");
+                  })
+                  ->orWhereHas('chartOfAccount', function ($caq) use ($search) {
+                      $caq->where('name', 'like', "%{$search}%")
+                          ->orWhere('code', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        // Date Filter
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
+        $replenishments = $query->latest()->paginate(15)->withQueryString();
+
+        // Metrics & Tab counts
+        $tabCounts = [
+            'all'       => PettyCashReplenishment::count(),
+            'pending'   => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_PENDING)->count(),
+            'fulfilled' => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_FULFILLED)->count(),
+            'rejected'  => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_REJECTED)->count(),
+        ];
+
+        $pendingAmount = PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_PENDING)->sum('requested_amount');
+        $fulfilledMonthAmount = PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_FULFILLED)
+            ->whereMonth('fulfilled_at', Carbon::now()->month)
+            ->whereYear('fulfilled_at', Carbon::now()->year)
+            ->sum('fulfilled_amount');
+
+        // Source Accounts for Disbursement Top-up
+        $sourceAccounts = ChartOfAccount::where('is_active', true)
+            ->where(function ($q) {
+                $q->where('type', 'asset')
+                  ->orWhere('category', 'like', '%Cash%')
+                  ->orWhere('category', 'like', '%Bank%');
+            })
+            ->orderBy('name')
+            ->get();
+
+        return view('finance.replenishments.index', compact(
+            'replenishments',
+            'activeTab',
+            'tabCounts',
+            'pendingAmount',
+            'fulfilledMonthAmount',
+            'sourceAccounts'
+        ));
+    }
 }
+

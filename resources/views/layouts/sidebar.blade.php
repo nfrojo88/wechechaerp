@@ -991,6 +991,25 @@
                 <span>My Assigned Accounts</span>
             </a>
         </li>
+        @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']))
+        <li class="sidebar-nav-item">
+            <a href="{{ route('finance.replenishments.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.replenishments.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                <span>Staff Replenishment Approvals</span>
+                @php
+                    $pendingReplenishCount = 0;
+                    try {
+                        if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_replenishments')) {
+                            $pendingReplenishCount = \App\Models\PettyCashReplenishment::where('status', 'pending')->count();
+                        }
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingReplenishCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingReplenishCount }}</span>
+                @endif
+            </a>
+        </li>
+        @endif
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
         <li class="sidebar-nav-item">
             <a href="{{ route('finance.payroll.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.payroll.*') ? 'active' : '' }}">
@@ -998,6 +1017,7 @@
                 <span>Payroll Management</span>
             </a>
         </li>
+
         <li class="sidebar-nav-item">
             <a href="{{ route('payroll.advances') }}" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
