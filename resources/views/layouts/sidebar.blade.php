@@ -258,7 +258,7 @@
         @endif
         {{-- Masters --}}
 
-        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isStoreKeeper && !$isStoreManager))
+        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isStoreKeeper && !$isStoreManager && !$isAuditorUser))
         @canany(['projects.view', 'planning.view', 'schedule.view', 'stores.view', 'stores.create', 'stores.edit', 'stores.delete', 'products.view', 'products.create', 'products.edit', 'products.delete'])
 
         @canany(['projects.view', 'planning.view', 'schedule.view'])
@@ -289,7 +289,7 @@
         @endif
 
         {{-- Inventory --}}
-        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isStoreKeeper && !$isStoreManager))
+        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isStoreKeeper && !$isStoreManager && !$isAuditorUser))
         @canany(['inventory.view', 'inventory.view_all_stores', 'inventory.*'])
 
         <li class="sidebar-nav-item">
@@ -300,6 +300,7 @@
         </li>
         @endcanany
         @endif
+
 
         {{-- Store Keeper Dedicated Menu --}}
         @if($isStoreKeeper)
@@ -427,7 +428,8 @@
         @endif
 
         {{-- Planning Section --}}
-        @if(auth()->user() && !$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isContractAdmin && !$isStoreKeeper && (auth()->user()->hasAnyPermission(['planning.boq.manage', 'boq.view', 'boq.create', 'schedule.view', 'schedule.approve', 'schedule.create', 'schedule.edit', 'schedule.*', 'planning.view', 'planning.*', 'takeoff.view', 'takeoff.create', 'takeoff.edit', 'takeoff.*', 'resources.dispatch', 'material_planning.view', 'material_planning.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'reports.view', 'reports.weekly.view', 'reports.*.view', 'finance.budgets.manage']) || auth()->user()->hasRole(['planning_manager', 'planning', 'technical_manager'])))
+        @if(auth()->user() && !$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isContractAdmin && !$isStoreKeeper && !$isAuditorUser && (auth()->user()->hasAnyPermission(['planning.boq.manage', 'boq.view', 'boq.create', 'schedule.view', 'schedule.approve', 'schedule.create', 'schedule.edit', 'schedule.*', 'planning.view', 'planning.*', 'takeoff.view', 'takeoff.create', 'takeoff.edit', 'takeoff.*', 'resources.dispatch', 'material_planning.view', 'material_planning.*', 'material_requests.view', 'material_requests.create', 'material_requests.approve', 'material_requests.issue', 'material_requests.*', 'reports.view', 'reports.weekly.view', 'reports.*.view', 'finance.budgets.manage']) || auth()->user()->hasRole(['planning_manager', 'planning', 'technical_manager'])))
+
 
         @role('planning_manager|planning|technical_manager')
         <li class="sidebar-nav-item">
@@ -639,7 +641,7 @@
         @endcanany
 
         {{-- ── Marketing & Pricing (Hidden from Planning Manager & Finance Staff) ───────────────────────── --}}
-        @if(auth()->check() && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin']) && !auth()->user()->hasAnyRole(['planning_manager', 'planning', 'contract_admin', 'secretary', 'store_keeper']))
+        @if(auth()->check() && !$isAuditorUser && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin']) && !auth()->user()->hasAnyRole(['planning_manager', 'planning', 'contract_admin', 'secretary', 'store_keeper']))
         <li class="sidebar-nav-item sidebar-section-label" style="padding:8px 16px 4px; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; pointer-events:none; user-select:none;">Marketing &amp; Pricing</li>
         <li class="sidebar-nav-item">
             <a href="{{ route('marketing.dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('marketing.dashboard') ? 'active' : '' }}">
@@ -670,7 +672,8 @@
         @endif
 
         {{-- Planning vs Actual (Available to Planning Manager, PMs, Finance Head, Marketing, Admins) --}}
-        @if(auth()->check() && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin', 'planning_manager', 'planning', 'finance_head', 'Finance head', 'project_manager', 'gm', 'general_manager']) && !auth()->user()->hasAnyRole(['contract_admin', 'secretary', 'store_keeper']))
+        @if(auth()->check() && !$isAuditorUser && auth()->user()->hasAnyRole(['marketing', 'admin', 'global_admin', 'planning_manager', 'planning', 'finance_head', 'Finance head', 'project_manager', 'gm', 'general_manager']) && !auth()->user()->hasAnyRole(['contract_admin', 'secretary', 'store_keeper']))
+
         <li class="sidebar-nav-item">
             <a href="{{ route('marketing.reports.planning-vs-actual') }}" class="sidebar-nav-link {{ request()->routeIs('marketing.reports.planning-vs-actual') ? 'active' : '' }}">
                 <i class="fa-solid fa-scale-balanced text-warning"></i>
@@ -1300,8 +1303,8 @@
 
 
         {{-- Admin --}}
-        @canany(['users.view', 'users.*', 'settings.view', 'settings.*', 'admin.audit.view', 'finance.audit.view'])
-
+        @php $isAuditorUser = auth()->user()->hasAnyRole(['auditor', 'audit', 'internal_auditor']); @endphp
+        @if(auth()->check() && !$isAuditorUser && (auth()->user()->hasAnyRole(['global_admin', 'admin']) || auth()->user()->canAny(['users.view', 'users.*', 'settings.view', 'settings.*'])))
         @canany(['users.view', 'users.*'])
         <li class="sidebar-nav-item">
             <a href="{{ route('users.index') }}" class="sidebar-nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}">
@@ -1354,6 +1357,8 @@
             </a>
         </li>
         @endcanany
+        @endif
+
         @if(auth()->check() && (auth()->user()->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'admin', 'global_admin']) || (method_exists(auth()->user(), 'can') && (auth()->user()->can('audit.view') || auth()->user()->can('finance.audit.view') || auth()->user()->can('admin.audit.view')))))
         <li class="sidebar-nav-item sidebar-section-label" style="padding:8px 16px 4px; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; pointer-events:none; user-select:none;">Audit &amp; Compliance</li>
         <li class="sidebar-nav-item">

@@ -137,8 +137,9 @@ class LoginController extends Controller
             'general_service', 'general_services' => route('dashboard.general_service'),
             'law'                 => route('subcon.index'),
             'marketing'           => route('marketing.dashboard'),
-            'audit_team'          => route('audit.index'),
+            'auditor', 'audit', 'internal_auditor', 'audit_team' => \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit'),
             default               => route('pending-role'),
         };
+
     }
 }
