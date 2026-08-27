@@ -301,26 +301,41 @@
                                                 <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed PR">
                                                     <i class="fa-solid fa-check-circle me-1"></i> Paid
                                                 </a>
-                                            @elseif($item->type === 'office_supply_request')
-                                                @if($item->status_key === 'finance_queue')
-                                                    @if($isFinance || $isAdmin)
-                                                        <button type="button" class="btn btn-sm text-white fw-bold shadow-sm" style="background:#7c3aed;" 
-                                                                data-bs-toggle="modal" 
-                                                                data-bs-target="#financeOfficeModal{{ $item->id_raw }}"
-                                                                title="Decide & Confirm Office Expense Payment">
-                                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i> Decide / Pay
-                                                        </button>
-                                                    @endif
-                                                    <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Office Supply Request">
-                                                        <i class="fa-solid fa-eye me-1"></i> View
-                                                    </a>
-                                                @elseif($item->status_key === 'paid')
-                                                    <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed Office Request">
-                                                        <i class="fa-solid fa-check-circle me-1"></i> Paid
-                                                    </a>
+                                            @endif
+
+                                        @elseif($item->type === 'office_supply_request')
+                                            @php
+                                                $officeReq = $item->raw_model;
+                                                $isAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id();
+                                                $isFinHeadOrAdmin = !empty($isAdmin) || (!empty($isFinance) && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager']) || str_contains(strtolower(auth()->user()->roles->pluck('name')->implode(' ')), 'head')));
+                                            @endphp
+
+                                            @if($item->status_key === 'finance_queue')
+                                                @if($isFinHeadOrAdmin)
+                                                    <button type="button" class="btn btn-sm text-white fw-bold shadow-sm" style="background:#7c3aed;" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#financeOfficeAssignModal{{ $item->id_raw }}"
+                                                            title="Assign Funding Account or Disburse Payment">
+                                                        <i class="fa-solid fa-money-bill-wave me-1"></i> Assign / Pay
+                                                    </button>
+                                                @elseif($isAssignedToMe)
+                                                    <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#payOfficeModal{{ $item->id_raw }}"
+                                                            title="Disburse payment for this Office Request">
+                                                        <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
+                                                    </button>
                                                 @endif
+                                                <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Office Material Request">
+                                                    <i class="fa-solid fa-eye me-1"></i> View
+                                                </a>
+                                            @elseif($item->status_key === 'paid')
+                                                <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed Office Request">
+                                                    <i class="fa-solid fa-check-circle me-1"></i> Paid
+                                                </a>
                                             @endif
                                         @endif
+
                                     </div>
                                 </td>
                             </tr>
@@ -753,46 +768,134 @@
     @endif
 
     @if($item->type === 'office_supply_request' && $item->status_key === 'finance_queue')
-    <div class="modal fade" id="financeOfficeModal{{ $item->id_raw }}" tabindex="-1" aria-labelledby="financeOfficeModalLabel{{ $item->id_raw }}" aria-hidden="true">
+    @php $officeReq = $item->raw_model; @endphp
+
+    <!-- 1. Finance Head Assign & Decision Modal -->
+    <div class="modal fade" id="financeOfficeAssignModal{{ $item->id_raw }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="modal-header text-white py-3 px-4" style="background:#7c3aed;">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-white bg-opacity-20 text-white p-2 rounded-3 fs-6">
+                            <i class="fa-solid fa-user-gear"></i>
+                        </span>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0">Finance Decision: {{ $item->id_formatted }}</h5>
+                            <span class="text-white-50 small">Amount: <strong>ETB {{ number_format($item->net_amount, 2) }}</strong> &bull; Requested by: <strong>{{ $item->applicant_name }}</strong></span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="row g-4">
+                        <!-- Option 1: Assign COA & Finance Staff -->
+                        <div class="col-md-6 border-end pe-md-4">
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <span class="badge bg-primary text-white rounded-circle">1</span>
+                                <h6 class="fw-bold text-dark mb-0">Assign Funding &amp; Staff</h6>
+                            </div>
+                            <form method="POST" action="{{ route('office-requests.finance-assign', $item->id_raw) }}">
+                                @csrf
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-dark text-uppercase">Funding Account (COA) <span class="text-danger">*</span></label>
+                                    <select name="coa_id" id="modalCoaSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0" onchange="syncModalCoaToStaff('{{ $item->id_raw }}')" required>
+                                        <option value="" disabled selected>-- Select Expense Account --</option>
+                                        @foreach($chartOfAccounts as $coa)
+                                            <option value="{{ $coa->id }}" 
+                                                    data-staff-id="{{ $coa->assigned_to }}"
+                                                    data-staff-name="{{ $coa->manager?->name }}"
+                                                    {{ $officeReq->coa_id == $coa->id ? 'selected' : '' }}>
+                                                [{{ $coa->code }}] {{ $coa->name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-dark text-uppercase">Assign Finance Staff</label>
+                                    <select name="assigned_finance_staff_id" id="modalStaffSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0">
+                                        <option value="">-- Assign Staff / Self --</option>
+                                        @foreach($financeStaff as $staff)
+                                            <option value="{{ $staff->id }}" {{ $officeReq->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
+                                                {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()?->name ?? 'Staff')) }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-outline-primary btn-sm w-100 rounded-3 py-2 fw-semibold">
+                                    <i class="fa-solid fa-floppy-disk me-1"></i> Save Assignment
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Option 2: Direct Disburse & Mark Paid -->
+                        <div class="col-md-6 ps-md-4">
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <span class="badge bg-success text-white rounded-circle">2</span>
+                                <h6 class="fw-bold text-dark mb-0">Disburse &amp; Mark Paid</h6>
+                            </div>
+                            <form method="POST" action="{{ route('office-requests.mark-paid', $item->id_raw) }}">
+                                @csrf
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-dark text-uppercase">Payment Voucher Ref #</label>
+                                    <input type="text" name="payment_reference" class="form-control form-control-sm bg-light border-0" placeholder="e.g. VC-2026-08-001, Cash Voucher #">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-dark text-uppercase">Payment Notes</label>
+                                    <textarea name="payment_notes" class="form-control form-control-sm bg-light border-0" rows="2" placeholder="Payment remarks..."></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-success btn-sm w-100 rounded-3 py-2 fw-semibold">
+                                    <i class="fa-solid fa-circle-check me-1"></i> Confirm Paid (ETB {{ number_format($item->net_amount, 2) }})
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Pay Modal for Assigned Finance Person -->
+    <div class="modal fade" id="payOfficeModal{{ $item->id_raw }}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                <form method="POST" action="{{ $item->finance_confirm_url }}">
+                <form method="POST" action="{{ route('office-requests.mark-paid', $item->id_raw) }}">
                     @csrf
-                    <div class="modal-header text-white py-3 px-4" style="background:#7c3aed;">
+                    <div class="modal-header bg-success text-white border-0 py-3 px-4">
                         <div class="d-flex align-items-center gap-2">
-                            <i class="fa-solid fa-file-invoice-dollar fs-5"></i>
-                            <h5 class="modal-title fw-bold mb-0" id="financeOfficeModalLabel{{ $item->id_raw }}">
-                                Finance Decision / Payment: {{ $item->id_formatted }}
-                            </h5>
+                            <span class="badge bg-white bg-opacity-20 text-white p-2 rounded-3 fs-6">
+                                <i class="fa-solid fa-money-bill-wave"></i>
+                            </span>
+                            <div>
+                                <h5 class="modal-title fw-bold mb-0">Disburse Payment: {{ $item->id_formatted }}</h5>
+                                <span class="text-white-50 small">Amount: <strong>ETB {{ number_format($item->net_amount, 2) }}</strong> &bull; Requester: <strong>{{ $item->applicant_name }}</strong></span>
+                            </div>
                         </div>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body p-4 bg-white">
-                        <div style="background:#ede9fe;border:1px solid #7c3aed;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:0.9rem;color:#5b21b6;line-height:1.5;">
-                            <div class="fw-bold mb-1"><i class="fa-solid fa-circle-info me-1"></i> Office Supply Fulfillment: {{ $item->id_formatted }}</div>
-                            <div>{{ $item->description }}</div>
-                            <div class="small mt-1 text-muted">Requested by: <strong>{{ $item->applicant_name }}</strong> (Head Office)</div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label class="form-label small fw-bold text-dark text-uppercase">
-                                Amount Paid / Assigned (ETB) <span class="text-muted fw-normal">(optional)</span>
-                            </label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light border-0 fw-bold">ETB</span>
-                                <input type="number" name="payment_amount" class="form-control bg-light border-0" min="0" step="0.01" value="{{ $item->net_amount > 0 ? $item->net_amount : '' }}" placeholder="e.g. 4500.00">
+                        <div class="p-3 bg-light rounded-3 mb-3 border">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="text-muted small text-uppercase fw-bold">Approved Budget:</span>
+                                <strong class="text-success fs-5">ETB {{ number_format($item->net_amount, 2) }}</strong>
                             </div>
+                            <div class="small text-muted mb-1"><i class="fa-solid fa-sitemap me-1"></i> Funding Account: <strong>{{ $officeReq->coa?->name ?? 'Head Office Expense' }}</strong></div>
+                            <div class="small text-muted"><i class="fa-solid fa-list me-1"></i> Purpose: {{ $item->description }}</div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label small fw-bold text-dark text-uppercase">Finance Notes / Voucher Remarks</label>
-                            <textarea name="payment_notes" class="form-control bg-light border-0" rows="3" placeholder="e.g. Charged to Head Office petty cash. Voucher #VC-2026-08 issued..."></textarea>
+                            <label class="form-label small fw-bold text-dark text-uppercase">Payment Voucher Ref #</label>
+                            <input type="text" name="payment_reference" class="form-control bg-light border-0" placeholder="e.g. VC-2026-08-001, FT-098234">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">Payment Remarks / Notes</label>
+                            <textarea name="payment_notes" class="form-control bg-light border-0" rows="2" placeholder="e.g. Disbursed cash from Petty Cash to secretary..."></textarea>
                         </div>
                     </div>
                     <div class="modal-footer bg-light border-0 py-3 px-4">
                         <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn text-white rounded-pill px-4 fw-bold shadow-sm" style="background:#7c3aed;">
-                            <i class="fa-solid fa-check-double me-1"></i> Confirm & Mark Paid / Complete
+                        <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-check-double me-1"></i> Confirm Paid &amp; Complete (ETB {{ number_format($item->net_amount, 2) }})
                         </button>
                     </div>
                 </form>
@@ -800,6 +903,7 @@
         </div>
     </div>
     @endif
+
 @endforeach
 
 
