@@ -823,4 +823,53 @@ class DashboardController extends Controller
             'recentPayments', 'dailyEarnedValue', 'allBoqs', 'recentSubcons'
         ));
     }
+
+    // ─── Audit / Compliance Dashboard ──────────────────────────────────────────
+    public function audit()
+    {
+        $kpi = [
+            'pending_replenishments_count' => $this->safe(fn() => \App\Models\PettyCashReplenishment::where('status', 'pending')->count()),
+            'pending_replenishments_amount'=> $this->safe(fn() => (float) \App\Models\PettyCashReplenishment::where('status', 'pending')->sum('requested_amount')),
+            'fulfilled_replenishments_month'=> $this->safe(fn() => (float) \App\Models\PettyCashReplenishment::where('status', 'fulfilled')
+                ->whereMonth('fulfilled_at', now()->month)
+                ->whereYear('fulfilled_at', now()->year)
+                ->sum('fulfilled_amount')),
+            'total_reconciled_vouchers'    => $this->safe(fn() => \App\Models\PettyCashReplenishmentItem::count()),
+            'total_reconciled_amount'      => $this->safe(fn() => (float) \App\Models\PettyCashReplenishmentItem::sum('amount')),
+            'total_activity_logs'          => $this->safe(fn() => \App\Models\ActivityLog::count()),
+            'total_paid_expenses_month'    => $this->safe(fn() => (float) \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                ->whereMonth('paid_at', now()->month)
+                ->whereYear('paid_at', now()->year)
+                ->sum('amount')),
+            'total_journal_entries'        => $this->safe(fn() => \App\Models\JournalEntry::count()),
+        ];
+
+        // Recent Petty Cash Replenishments & Fund Movements
+        $recentReplenishments = $this->safe(fn() => \App\Models\PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'financeHead', 'sourceCoa', 'items'])
+            ->latest()
+            ->take(10)
+            ->get(), collect());
+
+        // Recent Audit Activity Logs
+        $recentActivityLogs = $this->safe(fn() => \App\Models\ActivityLog::with('user')
+            ->latest()
+            ->take(15)
+            ->get(), collect());
+
+        // Cash & Bank Account Balances for Liquidity / Imprest Audit
+        $cashAndBankAccounts = $this->safe(fn() => \App\Models\ChartOfAccount::where('is_active', true)
+            ->where(function($q) {
+                $q->where('type', 'asset')
+                  ->orWhere('name', 'like', '%Cash%')
+                  ->orWhere('name', 'like', '%Bank%')
+                  ->orWhere('subtype', 'like', '%Cash%')
+                  ->orWhere('subtype', 'like', '%Bank%');
+            })
+            ->orderBy('code')
+            ->take(12)
+            ->get(), collect());
+
+        return view('dashboard.audit', compact('kpi', 'recentReplenishments', 'recentActivityLogs', 'cashAndBankAccounts'));
+    }
 }
+

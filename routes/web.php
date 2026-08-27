@@ -1413,9 +1413,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard/finance',        [App\Http\Controllers\DashboardController::class, 'finance'])->name('dashboard.finance');
     Route::get('/dashboard/purchase',       [App\Http\Controllers\DashboardController::class, 'purchase'])->name('dashboard.purchase');
     Route::get('/dashboard/contract-admin', [App\Http\Controllers\DashboardController::class, 'contractAdmin'])->name('dashboard.contract-admin');
+    Route::get('/dashboard/audit',          [App\Http\Controllers\DashboardController::class, 'audit'])->name('dashboard.audit');
     Route::get('/bidding',                  fn() => view('dashboard.admin'))->name('bidding.index');
     Route::get('/subcon',                   fn() => view('dashboard.admin'))->name('subcon.index');
-    Route::get('/audit',                    fn() => view('dashboard.admin'))->name('audit.index');
+    Route::get('/audit',                    [App\Http\Controllers\DashboardController::class, 'audit'])->name('audit.index');
+
 
     // ─── General Service Routes ────────────────────────────────────────────────
     Route::prefix('general-service')->name('general-service.')->group(function () {
