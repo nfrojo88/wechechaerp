@@ -46,6 +46,7 @@ class EmployeeLetter extends Model
         return match ($this->letter_type) {
             'thanks_letter'      => 'Thanks / Appreciation Letter',
             'appreciation'       => 'Letter of Recognition',
+            'guarantee_letter'   => 'Guarantee Letter / የዋስትና ደብዳቤ (Guarantor Confirmation)',
             'power_of_attorney'  => 'Power of Attorney / Representation (ውክልና)',
             'application_letter' => 'Application Letter / Request (ማመልከቻ)',
             'first_warning'      => 'First Written Warning',
@@ -63,6 +64,7 @@ class EmployeeLetter extends Model
     {
         return match ($this->letter_type) {
             'thanks_letter', 'appreciation', 'promotion' => 'bg-success text-white',
+            'guarantee_letter'   => 'bg-info text-dark border',
             'power_of_attorney'  => 'bg-primary text-white',
             'application_letter' => 'bg-indigo text-white',
             'first_warning'      => 'bg-warning text-dark',
@@ -79,6 +81,7 @@ class EmployeeLetter extends Model
     {
         return match ($this->letter_type) {
             'thanks_letter', 'appreciation', 'promotion' => 'fa-solid fa-award',
+            'guarantee_letter'   => 'fa-solid fa-handshake-angle',
             'power_of_attorney'  => 'fa-solid fa-stamp',
             'application_letter' => 'fa-solid fa-file-pen',
             'first_warning', 'second_warning' => 'fa-solid fa-triangle-exclamation',
@@ -89,3 +92,4 @@ class EmployeeLetter extends Model
         };
     }
 }
+

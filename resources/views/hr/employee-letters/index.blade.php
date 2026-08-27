@@ -109,6 +109,7 @@
                         <option value="">All Letter Types</option>
                         <option value="thanks_letter" {{ request('letter_type') == 'thanks_letter' ? 'selected' : '' }}>Thanks / Appreciation Letter</option>
                         <option value="appreciation" {{ request('letter_type') == 'appreciation' ? 'selected' : '' }}>Letter of Recognition</option>
+                        <option value="guarantee_letter" {{ request('letter_type') == 'guarantee_letter' ? 'selected' : '' }}>Guarantee Letter / የዋስትና ደብዳቤ</option>
                         <option value="power_of_attorney" {{ request('letter_type') == 'power_of_attorney' ? 'selected' : '' }}>Power of Attorney / Representation (ውክልና)</option>
                         <option value="application_letter" {{ request('letter_type') == 'application_letter' ? 'selected' : '' }}>Application Letter / Request (ማመልከቻ)</option>
                         <option value="first_warning" {{ request('letter_type') == 'first_warning' ? 'selected' : '' }}>First Written Warning</option>
@@ -119,6 +120,7 @@
                         <option value="promotion" {{ request('letter_type') == 'promotion' ? 'selected' : '' }}>Promotion Letter</option>
                         <option value="termination" {{ request('letter_type') == 'termination' ? 'selected' : '' }}>Termination Letter</option>
                     </select>
+
                 </div>
                 <div class="col-md-3">
                     <label class="form-label small fw-semibold text-muted mb-1">Employee</label>

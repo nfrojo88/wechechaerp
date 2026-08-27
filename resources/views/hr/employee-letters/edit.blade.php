@@ -38,6 +38,7 @@
                             <select name="letter_type" class="form-select" required>
                                 <option value="thanks_letter" {{ old('letter_type', $employeeLetter->letter_type) == 'thanks_letter' ? 'selected' : '' }}>Thanks / Appreciation Letter</option>
                                 <option value="appreciation" {{ old('letter_type', $employeeLetter->letter_type) == 'appreciation' ? 'selected' : '' }}>Letter of Recognition</option>
+                                <option value="guarantee_letter" {{ old('letter_type', $employeeLetter->letter_type) == 'guarantee_letter' ? 'selected' : '' }}>Guarantee Letter / የዋስትና ደብዳቤ (Guarantor Confirmation)</option>
                                 <option value="power_of_attorney" {{ old('letter_type', $employeeLetter->letter_type) == 'power_of_attorney' ? 'selected' : '' }}>Power of Attorney / Representation (ውክልና)</option>
                                 <option value="application_letter" {{ old('letter_type', $employeeLetter->letter_type) == 'application_letter' ? 'selected' : '' }}>Application Letter / Request (ማመልከቻ)</option>
                                 <option value="first_warning" {{ old('letter_type', $employeeLetter->letter_type) == 'first_warning' ? 'selected' : '' }}>First Written Warning</option>
@@ -48,6 +49,7 @@
                                 <option value="promotion" {{ old('letter_type', $employeeLetter->letter_type) == 'promotion' ? 'selected' : '' }}>Promotion Letter</option>
                                 <option value="termination" {{ old('letter_type', $employeeLetter->letter_type) == 'termination' ? 'selected' : '' }}>Termination Letter</option>
                             </select>
+
                         </div>
 
                         <div class="mb-3">

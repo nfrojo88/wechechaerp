@@ -127,6 +127,7 @@ class EmployeeLetterController extends Controller
         if (empty($validated['reference_number'])) {
             $prefix = match ($validated['letter_type']) {
                 'thanks_letter', 'appreciation' => 'LTR-APPR',
+                'guarantee_letter'              => 'LTR-GUR',
                 'power_of_attorney'             => 'LTR-POA',
                 'application_letter'            => 'LTR-APPL',
                 'first_warning'                 => 'LTR-WARN1',
@@ -139,6 +140,7 @@ class EmployeeLetterController extends Controller
             };
             $validated['reference_number'] = $prefix . '-' . date('Ymd') . '-' . str_pad(EmployeeLetter::count() + 1, 4, '0', STR_PAD_LEFT);
         }
+
 
         // Determine severity automatically
         $validated['severity'] = match ($validated['letter_type']) {

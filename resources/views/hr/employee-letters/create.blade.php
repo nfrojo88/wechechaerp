@@ -70,19 +70,26 @@
                                     </label>
                                 </div>
                                 <div class="col-md-4 col-6">
+                                    <input type="radio" class="btn-check" name="letter_type" id="type_guarantee" value="guarantee_letter" autocomplete="off" {{ old('letter_type', $defaultType) == 'guarantee_letter' ? 'checked' : '' }} onchange="loadTemplate('guarantee_letter')">
+                                    <label class="btn btn-outline-info text-dark w-100 text-start py-2 px-3 rounded-3 border-2" for="type_guarantee" style="background-color: #f0fdfa; border-color: #0d9488 !important;">
+                                        <i class="fa-solid fa-handshake-angle me-1 text-teal" style="color: #0d9488;"></i><strong style="color: #0f766e;">Guarantee Letter (የዋስትና ደብዳቤ)</strong>
+                                    </label>
+                                </div>
+                                <div class="col-md-4 col-6">
                                     <input type="radio" class="btn-check" name="letter_type" id="type_poa" value="power_of_attorney" autocomplete="off" {{ old('letter_type', $defaultType) == 'power_of_attorney' ? 'checked' : '' }} onchange="loadTemplate('power_of_attorney')">
                                     <label class="btn btn-outline-primary text-dark w-100 text-start py-2 px-3 rounded-3 border-2" for="type_poa" style="border-color:#4f46e5 !important; background-color: #eef2ff;">
-                                        <i class="fa-solid fa-stamp me-1 text-primary"></i><strong class="text-primary">Power of Attorney / Representation (ውክልና)</strong>
+                                        <i class="fa-solid fa-stamp me-1 text-primary"></i><strong class="text-primary">Power of Attorney (ውክልና)</strong>
                                     </label>
                                 </div>
                                 <div class="col-md-4 col-6">
                                     <input type="radio" class="btn-check" name="letter_type" id="type_application" value="application_letter" autocomplete="off" {{ old('letter_type', $defaultType) == 'application_letter' ? 'checked' : '' }} onchange="loadTemplate('application_letter')">
                                     <label class="btn btn-outline-secondary text-dark w-100 text-start py-2 px-3 rounded-3 border-2" for="type_application" style="background-color: #f8fafc;">
-                                        <i class="fa-solid fa-file-signature me-1 text-dark"></i><strong>Application Letter (የማመልከቻ ደብዳቤ)</strong>
+                                        <i class="fa-solid fa-file-signature me-1 text-dark"></i><strong>Application Letter (ማመልከቻ)</strong>
                                     </label>
                                 </div>
                             </div>
                         </div>
+
 
                         {{-- Subject / Title --}}
                         <div class="mb-3">
@@ -213,7 +220,13 @@ const templates = {
         content: `Dear [EMPLOYEE_NAME],\n\nIn recognition of your exceptional performance, demonstrated leadership, and continuous contribution to Wechecha Construction, management is pleased to officially promote you to the position of [NEW_POSITION].\n\nEffective Date: [EFFECTIVE_DATE]\nNew Department / Project: [DEPARTMENT]\n\nWe congratulate you on this well-deserved career advancement and trust you will continue to achieve great success in your new role.\n\nSincerely,\nHuman Resources Department\nWechecha Construction`,
         action: "HR update employee title, salary grading, and job contract."
     },
+    guarantee_letter: {
+        title: "Official Guarantee & Guarantor Confirmation Letter (የዋስትና ማረጋገጫ ደብዳቤ)",
+        content: `ለ፡ [ተቋም ወይም ግለሰብ ስም / Organization or Recipient Name]\n[አድራሻ / Address]\n\nጉዳዩ፡- የዋስትና ማረጋገጫ መስጠትን ይመለከታል (Official Employee Guarantee Letter)\n\nድርጅታችን ወጨጫ ኮንስትራክሽን (Wechecha Construction PLC) ሰራተኛችን የሆኑት አቶ/ወ/ሮ/ወ/ሪት [EMPLOYEE_NAME] (መለያ ቁጥር: [EMPLOYEE_CODE]፤ የሥራ መደብ: [EMPLOYEE_ROLE]) በድርጅታችን ውስጥ ተቀጥረው በማገልገል ላይ የሚገኙ ሰራተኛችን መሆናቸውን እናረጋግጣለን።\n\nሰራተኛችን [EMPLOYEE_NAME] ለአቶ/ወ/ሮ/ወ/ሪት [ዋስትና የተገባለት/የተያዘለት ሰው ስም / Guaranteed Person Name] ለ[የዋስትናው ዓላማ - ለምሳሌ፡ ለብድር / ለውል / ለስራ / ለትምህርት / Purpose of Guarantee] ህጋዊ ዋስ (Guarantor) ሆነው ለመቆም እና የዋስትና ደብዳቤ እንዲጻፍላቸው በጠየቁት መሰረት ይህ የዋስትና ማረጋገጫ ደብዳቤ የተሰጣቸው መሆኑን እንገልጻለን።\n\nየዋስትናው ዝርዝር መረጃ (Guarantee Details):\n1. ዋስትና የተሰጠለት ሰው/ድርጅት ስም (Guaranteed Person / Entity): [ዋስትና የተገባለት ሰው ስም / Guaranteed Person Name]\n2. የዋስትናው ዓላማ (Purpose of Guarantee): [ለምሳሌ፡ የብድር ዋስትና / የውል ዋስትና / Loan or Contract Guarantee]\n3. የዋስትናው መጠን / ገደብ (Guarantee Amount / Scope): ETB [መጠኑ / Amount] (ወይም በወርሃዊ ደመወዝ ገደብ መሰረት)\n4. የዋስትናው ጸንቶ የሚቆይበት ጊዜ (Validity Period): ከ [የመጀመሪያ ቀን] እስከ [የማብቂያ ቀን]\n\nሰራተኛችን ከድርጅታችን ጋር በህጋዊ የስራ ውል ተሳስረው እስካሉ ድረስ ይህ የዋስትና ማረጋገጫ በህግ ፊት የጸና እና ተፈጻሚነት ያለው ነው።\n\nከአክብሮት ሰላምታ ጋር / Authorized Signatory:\n\n___________________________________\nየሰው ሀብት አስተዳደር ክፍል / HR Department\nወጨጫ ኮንስትራክሽን (Wechecha Construction PLC)`,
+        action: "Employee guarantee registered in employee history. HR monitor guarantor commitment."
+    },
     power_of_attorney: {
+
         title: "Power of Attorney & Official Representation Letter (የውክልና ማስረጃ / መስጫ ደብዳቤ)",
         content: `ለሚመለከተው ሁሉ / To Whom It May Concern:\n\nጉዳዩ፡- የውክልና ስልጣን መስጠትን ይመለከታል (Official Power of Attorney & Corporate Representation)\n\nድርጅታችን ወጨጫ ኮንስትራክሽን (Wechecha Construction PLC) ሰራተኛችን የሆኑትን አቶ/ወ/ሮ/ወ/ሪት [EMPLOYEE_NAME] (መለያ ቁጥር: [EMPLOYEE_CODE]፤ የሥራ መደብ: [EMPLOYEE_ROLE]) ድርጅታችንን በመወከል ከዚህ በታች የተዘረዘሩትን ተግባራት በህጋዊ መንገድ እንዲያከናውኑ ሙሉ ውክልና የሰጠናቸው መሆኑን እናረጋግጣለን።\n\nየውክልናው ስልጣን ወሰንና ተግባራት / Scope of Authority & Representation:\n1. ድርጅታችንን በመወከል በማናቸውም የመንግስት እና የግል መስሪያ ቤቶች፣ ፍርድ ቤቶች፣ ባንኮች፣ ጉምሩክ፣ ማዘጋጃ ቤት፣ የኤሌክትሪክ እና የውሃ አገልግሎት መስሪያ ቤቶች፣ እንዲሁም ሌሎች አጋር ድርጅቶች ቀርበው ጉዳዮችን ለመከታተልና ለማስፈጸም።\n2. ከድርጅቱ የስራ እንቅስቃሴ ጋር የተያያዙ ሰነዶችን፣ ደብዳቤዎችን፣ ፈቃዶችን እና የፍተሻ ማረጋገጫዎችን ለማስገባት፣ ለመፈረም እንዲሁም ለመረከብ።\n3. ለግንባታ ፕሮጀክቶች የሚያስፈልጉ ግብዓቶችን፣ እቃዎችን እና ማሽነሪዎችን ከማናቸውም አቅራቢዎች እና መጋዘኖች ተረክቦ የርክክብ ሰነድ ለመፈረም።\n4. በድርጅቱ የበላይ አመራር የሚሰጡ ማናቸውንም ህጋዊ እና አስተዳደራዊ የስራ ውክልናዎችን በታማኝነት ለማከናወን።\n\nይህ የውክልና ስልጣን ደብዳቤ በይፋ በጽሁፍ እስካልተሻረ ወይም የተሰጣቸው ስራ እስኪጠናቀቅ ድረስ በህግ ፊት የጸና እና ሙሉ ተፈጻሚነት ያለው ነው።\n\nከአክብሮት ሰላምታ ጋር / Authorized Signatory:\n\n___________________________________\nዋና ስራ አስኪያጅ / General Manager\nወጨጫ ኮንስትራክሽን (Wechecha Construction PLC)`,
         action: "Official Power of Attorney registered in corporate registry and permanent employee archive."
