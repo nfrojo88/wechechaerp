@@ -986,14 +986,14 @@
         </li>
         @endif
         <li class="sidebar-nav-item">
-            <a href="{{ route('assigned-accounts.index') }}" class="sidebar-nav-link {{ request()->routeIs('assigned-accounts.*') ? 'active' : '' }}">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('assigned-accounts.index') ? route('assigned-accounts.index') : url('/assigned-accounts') }}" class="sidebar-nav-link {{ request()->is('assigned-accounts*') || request()->routeIs('assigned-accounts.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-briefcase text-primary"></i>
                 <span>My Assigned Accounts</span>
             </a>
         </li>
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']))
         <li class="sidebar-nav-item">
-            <a href="{{ route('finance.replenishments.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.replenishments.*') ? 'active' : '' }}">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('finance.replenishments.index') ? route('finance.replenishments.index') : url('/finance/replenishments') }}" class="sidebar-nav-link {{ request()->is('finance/replenishments*') || request()->routeIs('finance.replenishments.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
                 <span>Staff Replenishment Approvals</span>
                 @php
@@ -1010,6 +1010,7 @@
             </a>
         </li>
         @endif
+
         @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']))
         <li class="sidebar-nav-item">
             <a href="{{ route('finance.payroll.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.payroll.*') ? 'active' : '' }}">
