@@ -341,7 +341,7 @@
                             <!-- Quick Assign Form -->
                             <form method="POST" action="{{ route('office-requests.finance-assign', $officeRequest->id) }}" class="mb-3">
                                 @csrf
-                                <div class="mb-2">
+                                <div class="mb-3">
                                     <label class="form-label fw-bold text-dark small text-uppercase">Funding Account (Chart of Accounts) <span class="text-danger">*</span></label>
                                     <select name="coa_id" id="financeCoaSelect" class="form-select form-select-sm bg-light border-0" required>
                                         <option value="" disabled selected>-- Select Chart of Account --</option>
@@ -351,32 +351,14 @@
                                             @endphp
                                             <option value="{{ $coa->id }}" 
                                                     data-bank-id="{{ $linkedBank?->id ?? '' }}"
-                                                    data-bank-name="{{ $linkedBank?->bank_name ?? '' }}"
-                                                    data-bank-acc="{{ $linkedBank?->account_number ?? '' }}"
-                                                    data-bank-bal="{{ $linkedBank ? number_format((float)$linkedBank->current_balance, 2) : '' }}"
                                                     data-staff-id="{{ $coa->assigned_to ?? $linkedBank?->assigned_to ?? '' }}"
                                                     data-staff-name="{{ $coa->manager?->name ?? $linkedBank?->assignedStaff?->name ?? '' }}"
                                                     {{ $officeRequest->coa_id == $coa->id ? 'selected' : '' }}>
-                                                [{{ $coa->code }}] {{ $coa->name }} {{ $linkedBank ? '— (Bank: ' . $linkedBank->bank_name . ')' : '' }}
+                                                [{{ $coa->code }}] {{ $coa->name }}
                                             </option>
                                         @endforeach
                                     </select>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label fw-bold text-dark small text-uppercase">Bank Account (Linked from COA)</label>
-                                    <select name="bank_account_id" id="financeBankSelect" class="form-select form-select-sm bg-light border-0">
-                                        <option value="">-- Select / Auto-linked Bank --</option>
-                                        @foreach($bankAccounts as $bank)
-                                            <option value="{{ $bank->id }}" 
-                                                    data-coa-id="{{ $bank->coa_id }}" 
-                                                    data-staff-id="{{ $bank->assigned_to }}"
-                                                    data-staff-name="{{ $bank->assignedStaff?->name }}"
-                                                    {{ $officeRequest->bank_account_id == $bank->id ? 'selected' : '' }}>
-                                                {{ $bank->bank_name }} ({{ $bank->account_number }}) - Bal: ETB {{ number_format((float)$bank->current_balance, 2) }} @if($bank->coa) [COA: {{ $bank->coa->code }} - {{ $bank->coa->name }}] @endif
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                    <div id="linkedBankInfoBadge" class="mt-1 small" style="display:none;"></div>
+                                    <input type="hidden" name="bank_account_id" id="financeBankInput" value="{{ $officeRequest->bank_account_id }}">
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-bold text-dark small text-uppercase">Assign Finance Staff</label>
@@ -390,6 +372,7 @@
                                     </select>
                                     <div id="linkedStaffBadge" class="mt-1 small" style="display:none;"></div>
                                 </div>
+
                                 <button type="submit" class="btn btn-sm text-white w-100 fw-bold py-2 rounded-pill shadow-sm mb-3" style="background:#7c3aed;">
                                     <i class="fa-solid fa-user-check me-1"></i> Update Assignment
                                 </button>
@@ -612,40 +595,27 @@ document.addEventListener('DOMContentLoaded', function() {
         calculateItemizedTotal();
     }
 
-    // ── COA & Bank Account Auto-Sync ──
+    // ── COA & Staff Auto-Sync ──
     const coaSelect = document.getElementById('financeCoaSelect');
-    const bankSelect = document.getElementById('financeBankSelect');
+    const bankInput = document.getElementById('financeBankInput');
     const staffSelect = document.getElementById('financeStaffSelect');
-    const bankBadge = document.getElementById('linkedBankInfoBadge');
     const staffBadge = document.getElementById('linkedStaffBadge');
 
-    function syncCoaToBank() {
+    function syncCoaToStaff() {
         if (!coaSelect) return;
         const opt = coaSelect.options[coaSelect.selectedIndex];
         if (!opt || !opt.value) return;
 
         const bankId = opt.getAttribute('data-bank-id');
-        const bankName = opt.getAttribute('data-bank-name');
-        const bankAcc = opt.getAttribute('data-bank-acc');
-        const bankBal = opt.getAttribute('data-bank-bal');
         const staffId = opt.getAttribute('data-staff-id');
         const staffName = opt.getAttribute('data-staff-name');
 
-        if (bankSelect && bankId) {
-            bankSelect.value = bankId;
+        if (bankInput && bankId) {
+            bankInput.value = bankId;
         }
 
         if (staffSelect && staffId) {
             staffSelect.value = staffId;
-        }
-
-        if (bankBadge) {
-            if (bankName && bankAcc) {
-                bankBadge.innerHTML = `<span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2"><i class="fa-solid fa-building-columns me-1"></i>Linked Bank: <strong>${bankName} (${bankAcc})</strong> &bull; Bal: ETB ${bankBal}</span>`;
-                bankBadge.style.display = 'block';
-            } else {
-                bankBadge.style.display = 'none';
-            }
         }
 
         if (staffBadge) {
@@ -658,35 +628,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function syncBankToCoa() {
-        if (!bankSelect) return;
-        const opt = bankSelect.options[bankSelect.selectedIndex];
-        if (!opt || !opt.value) return;
-
-        const coaId = opt.getAttribute('data-coa-id');
-        const staffId = opt.getAttribute('data-staff-id');
-        const staffName = opt.getAttribute('data-staff-name');
-
-        if (coaSelect && coaId) {
-            coaSelect.value = coaId;
-        }
-        if (staffSelect && staffId) {
-            staffSelect.value = staffId;
-        }
-    }
-
     if (coaSelect) {
-        coaSelect.addEventListener('change', syncCoaToBank);
+        coaSelect.addEventListener('change', syncCoaToStaff);
         if (coaSelect.value) {
-            syncCoaToBank();
+            syncCoaToStaff();
         }
-    }
-
-    if (bankSelect) {
-        bankSelect.addEventListener('change', syncBankToCoa);
     }
 });
 </script>
 @endpush
 @endsection
+
 

@@ -287,36 +287,20 @@
 
                     <div class="mb-3">
                         <label class="form-label fw-bold text-dark small text-uppercase">Funding Account (Chart of Accounts) <span class="text-danger">*</span></label>
-                        <select name="coa_id" id="modalCoaSelect{{ $req->id }}" class="form-select bg-light border-0" onchange="syncModalCoaToBank('{{ $req->id }}')" required>
+                        <select name="coa_id" id="modalCoaSelect{{ $req->id }}" class="form-select bg-light border-0" onchange="syncModalCoaToStaff('{{ $req->id }}')" required>
                             <option value="" disabled selected>-- Select Expense Account --</option>
                             @foreach($coaAccounts as $coa)
                                 @php $linkedBank = $coa->bankAccounts->first(); @endphp
                                 <option value="{{ $coa->id }}" 
                                         data-bank-id="{{ $linkedBank?->id ?? '' }}"
-                                        data-bank-name="{{ $linkedBank?->bank_name ?? '' }}"
-                                        data-bank-acc="{{ $linkedBank?->account_number ?? '' }}"
                                         data-staff-id="{{ $coa->assigned_to ?? $linkedBank?->assigned_to ?? '' }}"
                                         data-staff-name="{{ $coa->manager?->name ?? $linkedBank?->assignedStaff?->name ?? '' }}"
                                         {{ $req->coa_id == $coa->id ? 'selected' : '' }}>
-                                    [{{ $coa->code }}] {{ $coa->name }} {{ $linkedBank ? '— (' . $linkedBank->bank_name . ')' : '' }}
+                                    [{{ $coa->code }}] {{ $coa->name }}
                                 </option>
                             @endforeach
                         </select>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold text-dark small text-uppercase">Bank Account (Linked from COA)</label>
-                        <select name="bank_account_id" id="modalBankSelect{{ $req->id }}" class="form-select bg-light border-0">
-                            <option value="">-- Select / Auto-linked Bank --</option>
-                            @foreach($bankAccounts as $bank)
-                                <option value="{{ $bank->id }}" 
-                                        data-coa-id="{{ $bank->coa_id }}" 
-                                        data-staff-id="{{ $bank->assigned_to }}"
-                                        {{ $req->bank_account_id == $bank->id ? 'selected' : '' }}>
-                                    {{ $bank->bank_name }} ({{ $bank->account_number }}) - Bal: ETB {{ number_format((float)$bank->current_balance, 2) }} @if($bank->coa) [COA: {{ $bank->coa->code }} - {{ $bank->coa->name }}] @endif
-                                </option>
-                            @endforeach
-                        </select>
+                        <input type="hidden" name="bank_account_id" id="modalBankInput{{ $req->id }}" value="{{ $req->bank_account_id }}">
                     </div>
 
                     <div class="mb-3">
@@ -398,9 +382,9 @@
 
 @push('scripts')
 <script>
-function syncModalCoaToBank(reqId) {
+function syncModalCoaToStaff(reqId) {
     const coaSelect = document.getElementById('modalCoaSelect' + reqId);
-    const bankSelect = document.getElementById('modalBankSelect' + reqId);
+    const bankInput = document.getElementById('modalBankInput' + reqId);
     const staffSelect = document.getElementById('modalStaffSelect' + reqId);
 
     if (!coaSelect) return;
@@ -410,8 +394,8 @@ function syncModalCoaToBank(reqId) {
     const bankId = opt.getAttribute('data-bank-id');
     const staffId = opt.getAttribute('data-staff-id');
 
-    if (bankSelect && bankId) {
-        bankSelect.value = bankId;
+    if (bankInput && bankId) {
+        bankInput.value = bankId;
     }
     if (staffSelect && staffId) {
         staffSelect.value = staffId;
@@ -419,6 +403,7 @@ function syncModalCoaToBank(reqId) {
 }
 </script>
 @endpush
+
 
 @endsection
 
