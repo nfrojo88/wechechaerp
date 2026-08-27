@@ -68,7 +68,7 @@
                 <!-- Step 2 -->
                 <div class="col-3">
                     @php $step2Done = in_array($officeRequest->status, [\App\Models\OfficeMaterialRequest::STATUS_APPROVED_BY_HR, \App\Models\OfficeMaterialRequest::STATUS_ASSIGNED_TO_FINANCE, \App\Models\OfficeMaterialRequest::STATUS_PAID]); @endphp
-                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle {{ $step2Done ? 'bg-success text-white' : ($officeRequest->status === \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR ? 'bg-warning text-dark ring' : 'bg-light text-muted border') }} mb-2" style="width: 44px; height: 44px;">
+                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle {{ $step2Done ? 'bg-success text-white' : ($officeRequest->status === \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR ? 'bg-warning text-dark' : 'bg-light text-muted border') }} mb-2" style="width: 44px; height: 44px;">
                         <i class="fa-solid {{ $step2Done ? 'fa-check' : 'fa-money-bill-wave' }}"></i>
                     </div>
                     <div class="fw-bold small {{ $step2Done ? 'text-success' : ($officeRequest->status === \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR ? 'text-warning fw-bold' : 'text-muted') }}">2. HR Money Approval</div>
@@ -106,6 +106,12 @@
         </div>
     </div>
 
+    <!-- MAIN CONTENT: If HR Approval is active, wrap in the form -->
+    @if($officeRequest->status === \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR && $isHr)
+        <form method="POST" action="{{ route('office-requests.hr-approve', $officeRequest->id) }}" id="hrApprovalForm">
+            @csrf
+    @endif
+
     <div class="row g-4">
         <!-- Left Column: Details & Items -->
         <div class="col-lg-8">
@@ -139,7 +145,7 @@
                         </div>
                         <div class="col-sm-6 col-md-4">
                             <div class="text-muted small text-uppercase">Approved Budget</div>
-                            <div class="fw-bold text-success fs-5 mt-1">
+                            <div class="fw-bold text-success fs-5 mt-1" id="summaryApprovedBudget">
                                 {{ $officeRequest->amount !== null ? 'ETB ' . number_format((float)$officeRequest->amount, 2) : 'Pending' }}
                             </div>
                         </div>
@@ -161,31 +167,52 @@
                 </div>
             </div>
 
-            <!-- Items Table -->
+            <!-- Items Table Card (Supports Per-Item Pricing for HR) -->
             <div class="card border-0 shadow-sm rounded-4 mb-4">
-                <div class="card-header bg-white border-bottom py-3">
-                    <h6 class="fw-bold mb-0 text-dark">
-                        <i class="fa-solid fa-boxes-stacked text-primary me-2"></i>Requested Materials &amp; Items ({{ $officeRequest->items->count() }})
-                    </h6>
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="fw-bold mb-0 text-dark">
+                            <i class="fa-solid fa-boxes-stacked text-primary me-2"></i>Requested Materials &amp; Items ({{ $officeRequest->items->count() }})
+                        </h6>
+                        @if($officeRequest->status === \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR && $isHr)
+                            <span class="text-warning small fw-semibold">
+                                <i class="fa-solid fa-pen me-1"></i> Enter the unit price / amount for each material below:
+                            </span>
+                        @endif
+                    </div>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light text-secondary text-uppercase small" style="font-size: 0.78rem;">
                                 <tr>
-                                    <th class="ps-4 py-3">#</th>
-                                    <th>Item Description</th>
-                                    <th class="text-end">Quantity</th>
-                                    <th>Unit</th>
-                                    <th>Specifications</th>
+                                    <th class="ps-4 py-3" style="width: 5%;">#</th>
+                                    <th style="width: 35%;">Item Description</th>
+                                    <th class="text-end" style="width: 15%;">Quantity</th>
+                                    <th style="width: 10%;">Unit</th>
+                                    @if($officeRequest->status === \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR && $isHr)
+                                        <th style="width: 18%;" class="text-end">Unit Price (ETB) <span class="text-danger">*</span></th>
+                                        <th style="width: 17%;" class="text-end pe-4">Subtotal (ETB)</th>
+                                    @else
+                                        <th style="width: 15%;" class="text-end">Unit Price</th>
+                                        <th style="width: 20%;" class="text-end pe-4">Subtotal</th>
+                                    @endif
                                 </tr>
                             </thead>
                             <tbody>
+                                @php $calculatedGrandTotal = 0; @endphp
                                 @foreach($officeRequest->items as $idx => $item)
-                                    <tr>
+                                    @php
+                                        $subtotal = (float)$item->quantity * (float)($item->estimated_unit_price ?? 0);
+                                        $calculatedGrandTotal += $subtotal;
+                                    @endphp
+                                    <tr class="pricing-row" data-qty="{{ (float)$item->quantity }}">
                                         <td class="ps-4 text-muted">{{ $idx + 1 }}</td>
                                         <td>
                                             <div class="fw-bold text-dark">{{ $item->item_name }}</div>
+                                            @if($item->specifications)
+                                                <small class="text-muted d-block">{{ $item->specifications }}</small>
+                                            @endif
                                             @if($item->product && $item->product->code)
                                                 <small class="text-muted">Code: {{ $item->product->code }}</small>
                                             @endif
@@ -196,12 +223,44 @@
                                         <td>
                                             <span class="badge bg-light text-dark border">{{ $item->unit }}</span>
                                         </td>
-                                        <td>
-                                            <span class="text-muted small">{{ $item->specifications ?: 'Standard' }}</span>
-                                        </td>
+
+                                        {{-- Unit Price & Subtotal Column --}}
+                                        @if($officeRequest->status === \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR && $isHr)
+                                            <td class="text-end">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text bg-light border-0">ETB</span>
+                                                    <input type="number" 
+                                                           name="items[{{ $item->id }}][unit_price]" 
+                                                           class="form-control form-control-sm text-end fw-bold item-unit-price-input" 
+                                                           step="0.01" 
+                                                           min="0" 
+                                                           value="{{ $item->estimated_unit_price > 0 ? $item->estimated_unit_price : '' }}" 
+                                                           placeholder="0.00" 
+                                                           required>
+                                                </div>
+                                            </td>
+                                            <td class="text-end pe-4 fw-bold text-success item-subtotal-text fs-6">
+                                                ETB {{ number_format($subtotal, 2) }}
+                                            </td>
+                                        @else
+                                            <td class="text-end text-dark fw-semibold">
+                                                {{ $item->estimated_unit_price !== null ? 'ETB ' . number_format((float)$item->estimated_unit_price, 2) : '-' }}
+                                            </td>
+                                            <td class="text-end pe-4 fw-bold text-success fs-6">
+                                                {{ $subtotal > 0 ? 'ETB ' . number_format($subtotal, 2) : '-' }}
+                                            </td>
+                                        @endif
                                     </tr>
                                 @endforeach
                             </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <th colspan="4" class="text-end fw-bold text-dark ps-4 py-3">Grand Total Approved:</th>
+                                    <th colspan="2" class="text-end pe-4 text-success fw-bold fs-5" id="grandTotalDisplay">
+                                        ETB {{ number_format($officeRequest->amount !== null ? (float)$officeRequest->amount : $calculatedGrandTotal, 2) }}
+                                    </th>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 </div>
@@ -223,29 +282,34 @@
                     </div>
                     <div class="card-body p-4">
                         @if($isHr)
-                            <form method="POST" action="{{ route('office-requests.hr-approve', $officeRequest->id) }}">
-                                @csrf
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold text-dark small text-uppercase">Approved Amount (ETB) <span class="text-danger">*</span></label>
-                                    <div class="input-group">
-                                        <span class="input-group-text bg-light border-0 fw-bold">ETB</span>
-                                        <input type="number" name="amount" class="form-control bg-light border-0 fw-bold fs-5 text-success" step="0.01" min="0.01" placeholder="e.g. 4500.00" required>
-                                    </div>
-                                    <div class="form-text small">Enter approved budget for these materials.</div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-dark small text-uppercase">Total Approved Budget (ETB) <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-0 fw-bold">ETB</span>
+                                    <input type="number" 
+                                           name="amount" 
+                                           id="totalAmountInput" 
+                                           class="form-control bg-light border-0 fw-bold fs-5 text-success" 
+                                           step="0.01" 
+                                           min="0.01" 
+                                           value="{{ $officeRequest->amount > 0 ? $officeRequest->amount : ($calculatedGrandTotal > 0 ? $calculatedGrandTotal : '') }}" 
+                                           placeholder="0.00" 
+                                           required>
                                 </div>
+                                <div class="form-text small">Auto-calculated from items table above. You can also adjust if needed.</div>
+                            </div>
 
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold text-dark small text-uppercase">HR Notes / Remarks</label>
-                                    <textarea name="hr_notes" rows="3" class="form-control bg-light border-0" placeholder="e.g. Approved standard office items..."></textarea>
-                                </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold text-dark small text-uppercase">HR Notes / Remarks</label>
+                                <textarea name="hr_notes" rows="3" class="form-control bg-light border-0" placeholder="e.g. Approved budget for monthly pantry and stationery items..."></textarea>
+                            </div>
 
-                                <button type="submit" class="btn btn-warning w-100 fw-bold py-2 shadow-sm rounded-pill">
-                                    <i class="fa-solid fa-check me-1"></i> Approve &amp; Send to Finance
-                                </button>
-                            </form>
+                            <button type="submit" class="btn btn-warning w-100 fw-bold py-2 shadow-sm rounded-pill">
+                                <i class="fa-solid fa-check me-1"></i> Approve &amp; Send to Finance Head
+                            </button>
                         @else
                             <div class="alert alert-warning py-3 mb-0 small">
-                                <i class="fa-solid fa-clock me-1"></i> This request is currently awaiting HR / Coordinator money review &amp; approval.
+                                <i class="fa-solid fa-clock me-1"></i> This request is currently awaiting HR / Coordinator money review &amp; item pricing.
                             </div>
                         @endif
                     </div>
@@ -460,6 +524,10 @@
             </div>
         </div>
     </div>
+
+    @if($officeRequest->status === \App\Models\OfficeMaterialRequest::STATUS_PENDING_HR && $isHr)
+        </form>
+    @endif
 </div>
 
 <!-- REJECT MODAL -->
@@ -487,4 +555,47 @@
     </div>
 </div>
 
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const priceInputs = document.querySelectorAll('.item-unit-price-input');
+    const grandTotalDisplay = document.getElementById('grandTotalDisplay');
+    const totalAmountInput = document.getElementById('totalAmountInput');
+
+    function calculateItemizedTotal() {
+        let total = 0;
+        document.querySelectorAll('.pricing-row').forEach(row => {
+            const qty = parseFloat(row.getAttribute('data-qty')) || 0;
+            const priceInput = row.querySelector('.item-unit-price-input');
+            const subtotalText = row.querySelector('.item-subtotal-text');
+
+            if (priceInput) {
+                const unitPrice = parseFloat(priceInput.value) || 0;
+                const subtotal = qty * unitPrice;
+                total += subtotal;
+
+                if (subtotalText) {
+                    subtotalText.textContent = 'ETB ' + subtotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                }
+            }
+        });
+
+        if (grandTotalDisplay) {
+            grandTotalDisplay.textContent = 'ETB ' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        if (totalAmountInput) {
+            totalAmountInput.value = total > 0 ? total.toFixed(2) : '';
+        }
+    }
+
+    priceInputs.forEach(input => {
+        input.addEventListener('input', calculateItemizedTotal);
+    });
+
+    if (priceInputs.length > 0) {
+        calculateItemizedTotal();
+    }
+});
+</script>
+@endpush
 @endsection

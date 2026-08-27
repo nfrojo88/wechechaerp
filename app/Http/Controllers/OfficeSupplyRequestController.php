@@ -355,20 +355,53 @@ class OfficeSupplyRequestController extends Controller
         }
 
         $validated = $request->validate([
-            'amount'   => 'required|numeric|min:0.01',
-            'hr_notes' => 'nullable|string|max:1000',
+            'amount'             => 'nullable|numeric|min:0',
+            'hr_notes'           => 'nullable|string|max:1000',
+            'items'              => 'nullable|array',
+            'items.*.unit_price' => 'nullable|numeric|min:0',
         ]);
 
-        $officeRequest->update([
-            'amount'         => $validated['amount'],
-            'hr_reviewer_id' => Auth::id(),
-            'hr_reviewed_at' => now(),
-            'hr_notes'       => $validated['hr_notes'] ?? null,
-            'status'         => OfficeMaterialRequest::STATUS_APPROVED_BY_HR,
-        ]);
+        DB::beginTransaction();
+        try {
+            $totalFromItems = 0;
+            if (!empty($validated['items'])) {
+                foreach ($validated['items'] as $itemId => $itemData) {
+                    $item = OfficeMaterialRequestItem::where('office_material_request_id', $officeRequest->id)->find($itemId);
+                    if ($item) {
+                        $unitPrice = (float)($itemData['unit_price'] ?? 0);
+                        $item->update([
+                            'estimated_unit_price' => $unitPrice,
+                        ]);
+                        $totalFromItems += ((float)$item->quantity * $unitPrice);
+                    }
+                }
+            }
 
-        return back()->with('success', "Office Request #{$officeRequest->request_no} approved with budget ETB " . number_format($validated['amount'], 2) . " and sent to Finance Head for assignment.");
+            $finalAmount = !empty($validated['amount']) && (float)$validated['amount'] > 0
+                ? (float)$validated['amount']
+                : ($totalFromItems > 0 ? $totalFromItems : 0);
+
+            if ($finalAmount <= 0) {
+                return back()->withInput()->with('error', 'Please enter a valid price/amount for the requested materials.');
+            }
+
+            $officeRequest->update([
+                'amount'         => $finalAmount,
+                'hr_reviewer_id' => Auth::id(),
+                'hr_reviewed_at' => now(),
+                'hr_notes'       => $validated['hr_notes'] ?? null,
+                'status'         => OfficeMaterialRequest::STATUS_APPROVED_BY_HR,
+            ]);
+
+            DB::commit();
+
+            return back()->with('success', "Office Request #{$officeRequest->request_no} approved with itemized budget ETB " . number_format($finalAmount, 2) . " and sent to Finance Head for assignment.");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return back()->with('error', 'Approval failed: ' . $e->getMessage());
+        }
     }
+
 
     // ─── Step 3: Finance Head Assigns COA/Bank & Staff ───────────────────────
     public function financeAssign(Request $request, $id)
