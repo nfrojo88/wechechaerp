@@ -286,14 +286,14 @@
     <div class="modal fade" id="reviewModal{{ $rep->id }}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                <div class="modal-header bg-warning text-dark py-3 px-4">
+                <div class="modal-header text-white py-3 px-4" style="background: #1e293b; border-bottom: 3px solid #f59e0b;">
                     <div>
-                        <h5 class="modal-title fw-bold mb-0">
-                            <i class="fa-solid fa-magnifying-glass-dollar me-2"></i>Review Vouchers &amp; Route to Audit #{{ $rep->request_no }}
+                        <h5 class="modal-title fw-bold mb-0 text-white">
+                            <i class="fa-solid fa-magnifying-glass-dollar text-warning me-2"></i>Review Vouchers &amp; Route to Audit #{{ $rep->request_no }}
                         </h5>
-                        <small class="text-dark opacity-75">Custodian: {{ $rep->requester->name ?? 'Staff' }} &bull; Requested on {{ $rep->created_at->format('M d, Y H:i') }}</small>
+                        <small class="text-white-50">Custodian: <strong class="text-white">{{ $rep->requester->name ?? 'Staff' }}</strong> &bull; Requested on {{ $rep->created_at->format('M d, Y H:i') }}</small>
                     </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 
                 <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/send-to-audit') }}">
@@ -304,24 +304,24 @@
                         <!-- Top Balance Stats -->
                         <div class="row g-3 mb-4">
                             <div class="col-md-4">
-                                <div class="p-3 bg-light rounded-3 border">
+                                <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #64748b !important;">
                                     <span class="text-muted small text-uppercase fw-bold d-block">Current Petty Cash Balance</span>
                                     <h4 class="fw-bold text-dark font-monospace mb-0 mt-1">ETB {{ number_format($rep->current_balance_at_request, 2) }}</h4>
                                     <small class="text-muted">Account: {{ $rep->chartOfAccount->name ?? 'N/A' }}</small>
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <div class="p-3 bg-light rounded-3 border">
+                                <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #ef4444 !important;">
                                     <span class="text-muted small text-uppercase fw-bold d-block">Valid Attached Expenses</span>
                                     <h4 class="fw-bold text-danger font-monospace mb-0 mt-1">ETB {{ number_format($rep->total_expenses_amount, 2) }}</h4>
                                     <small class="text-muted">{{ $rep->items->count() }} Attached Vouchers</small>
                                 </div>
                             </div>
                             <div class="col-md-4">
-                                <div class="p-3 bg-primary bg-opacity-10 rounded-3 border border-primary-subtle">
-                                    <span class="text-primary small text-uppercase fw-bold d-block">Requested Top-Up Amount</span>
-                                    <h4 class="fw-bold text-primary font-monospace mb-0 mt-1">ETB {{ number_format($rep->requested_amount, 2) }}</h4>
-                                    <small class="text-primary opacity-75">Cycle Status: {{ ucfirst(str_replace('_', ' ', $rep->status)) }}</small>
+                                <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #f59e0b !important;">
+                                    <span class="text-muted small text-uppercase fw-bold d-block">Requested Top-Up Amount</span>
+                                    <h4 class="fw-bold font-monospace mb-0 mt-1" style="color: #d97706 !important;">ETB {{ number_format($rep->requested_amount, 2) }}</h4>
+                                    <small class="text-muted">Status: <span class="badge bg-warning-subtle text-dark border">{{ ucfirst(str_replace('_', ' ', $rep->status)) }}</span></small>
                                 </div>
                             </div>
                         </div>
@@ -336,24 +336,24 @@
                                     <small class="text-muted d-block" style="font-size:11px;">Select vouchers to perform bulk actions or use individual buttons to reject or request description</small>
                                 </div>
                                 <div class="d-flex gap-2 align-items-center">
-                                    <span class="badge bg-light text-dark border font-monospace">Valid Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
+                                    <span class="badge bg-light text-dark border font-monospace px-3 py-1.5 fs-6">Valid Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
                                 </div>
                             </div>
 
                             <div class="voucher-scroll-box border rounded-top-3 shadow-xs" style="max-height: 380px; overflow-y: auto; overflow-x: auto;">
-                                <table class="table table-sm table-striped table-hover align-middle mb-0 small">
+                                <table class="table table-sm table-striped table-hover align-middle mb-0 small" style="min-width: 1050px;">
                                     <thead class="bg-light sticky-top shadow-xs" style="z-index: 5;">
                                         <tr>
-                                            <th class="ps-3 py-2.5 text-center bg-light" style="width: 40px;">
+                                            <th class="ps-3 py-2.5 text-center bg-light" style="width: 45px;">
                                                 <input type="checkbox" class="form-check-input" id="selectAllVouchers_{{ $rep->id }}" onchange="toggleSelectAllVouchers({{ $rep->id }}, this)">
                                             </th>
-                                            <th class="py-2.5 text-nowrap bg-light">Date</th>
-                                            <th class="py-2.5 text-nowrap bg-light">Voucher # / Ref</th>
-                                            <th class="py-2.5 text-nowrap bg-light">Category / Account</th>
-                                            <th class="py-2.5 bg-light" style="min-width: 250px;">Description &amp; Beneficiary</th>
-                                            <th class="py-2.5 text-end text-nowrap bg-light">Amount (ETB)</th>
-                                            <th class="py-2.5 text-center text-nowrap bg-light">Review Status</th>
-                                            <th class="pe-3 py-2.5 text-end text-nowrap bg-light">Voucher Action</th>
+                                            <th class="py-2.5 text-nowrap bg-light" style="width: 110px;">Date</th>
+                                            <th class="py-2.5 text-nowrap bg-light" style="width: 160px;">Voucher # / Ref</th>
+                                            <th class="py-2.5 text-nowrap bg-light" style="width: 170px;">Category / Account</th>
+                                            <th class="py-2.5 bg-light" style="min-width: 260px;">Description &amp; Beneficiary</th>
+                                            <th class="py-2.5 text-end text-nowrap bg-light" style="width: 130px;">Amount (ETB)</th>
+                                            <th class="py-2.5 text-center text-nowrap bg-light" style="width: 140px;">Review Status</th>
+                                            <th class="pe-3 py-2.5 text-end text-nowrap bg-light" style="width: 190px;">Voucher Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -385,31 +385,31 @@
                                                 </td>
                                                 <td class="py-2 text-center text-nowrap">
                                                     @if($item->status === 'rejected')
-                                                        <span class="badge bg-danger text-white"><i class="fa-solid fa-ban me-1"></i>Rejected</span>
+                                                        <span class="badge bg-danger text-white px-2 py-1"><i class="fa-solid fa-ban me-1"></i>Rejected</span>
                                                         @if($item->rejection_reason)
-                                                            <div class="text-danger small mt-0.5" style="font-size:11px;">{{ Str::limit($item->rejection_reason, 35) }}</div>
+                                                            <div class="text-danger small mt-0.5" style="font-size:11px;">{{ Str::limit($item->rejection_reason, 30) }}</div>
                                                         @endif
                                                     @elseif($item->status === 'clarification_needed')
-                                                        <span class="badge bg-warning text-dark"><i class="fa-solid fa-circle-question me-1"></i>Clarification Needed</span>
+                                                        <span class="badge bg-warning text-dark px-2 py-1"><i class="fa-solid fa-circle-question me-1"></i>Need Clarification</span>
                                                         @if($item->inquiry_note)
-                                                            <div class="text-dark small mt-0.5" style="font-size:11px;">"{{ Str::limit($item->inquiry_note, 35) }}"</div>
+                                                            <div class="text-dark small mt-0.5" style="font-size:11px;">"{{ Str::limit($item->inquiry_note, 30) }}"</div>
                                                         @endif
                                                     @else
-                                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="fa-solid fa-check me-1"></i>Valid</span>
+                                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1"><i class="fa-solid fa-check me-1"></i>Valid</span>
                                                     @endif
                                                 </td>
                                                 <td class="pe-3 py-2 text-end text-nowrap">
-                                                    <div class="btn-group btn-group-sm">
-                                                        <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold" onclick="askDescriptionPrompt({{ $item->id }}, '{{ addslashes($item->reference ?: 'Voucher #' . $item->id) }}')" title="Ask Description / Clarification from Custodian">
-                                                            <i class="fa-solid fa-comment-dots text-warning me-0.5"></i> Ask Description
+                                                    <div class="d-flex gap-1 justify-content-end align-items-center">
+                                                        <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-semibold px-2 py-0.5" style="font-size:0.75rem;" onclick="askDescriptionPrompt({{ $item->id }}, '{{ addslashes($item->reference ?: 'Voucher #' . $item->id) }}')" title="Ask Description / Clarification from Custodian">
+                                                            <i class="fa-solid fa-comment-dots text-warning me-1"></i> Ask Note
                                                         </button>
                                                         @if($item->status === 'rejected')
-                                                            <button type="button" class="btn btn-xs btn-outline-success" onclick="approveVoucher({{ $item->id }})" title="Restore and Include in Replenishment">
-                                                                <i class="fa-solid fa-rotate-left me-0.5"></i> Include
+                                                            <button type="button" class="btn btn-sm btn-outline-success px-2 py-0.5" style="font-size:0.75rem;" onclick="approveVoucher({{ $item->id }})" title="Restore and Include in Replenishment">
+                                                                <i class="fa-solid fa-rotate-left me-1"></i> Include
                                                             </button>
                                                         @else
-                                                            <button type="button" class="btn btn-xs btn-outline-danger" onclick="rejectVoucherPrompt({{ $item->id }}, '{{ addslashes($item->reference ?: 'Voucher #' . $item->id) }}')" title="Reject this Voucher">
-                                                                <i class="fa-solid fa-ban me-0.5"></i> Reject
+                                                            <button type="button" class="btn btn-sm btn-outline-danger px-2 py-0.5" style="font-size:0.75rem;" onclick="rejectVoucherPrompt({{ $item->id }}, '{{ addslashes($item->reference ?: 'Voucher #' . $item->id) }}')" title="Reject this Voucher">
+                                                                <i class="fa-solid fa-ban me-1"></i> Reject
                                                             </button>
                                                         @endif
                                                     </div>
@@ -425,14 +425,14 @@
                             </div>
                             
                             @if($rep->items->count() > 0)
-                            <div class="d-flex justify-content-between align-items-center bg-light border border-top-0 rounded-bottom-3 px-3 py-2 fw-bold small flex-wrap gap-2">
+                            <div class="d-flex justify-content-between align-items-center bg-light border border-top-0 rounded-bottom-3 px-3 py-2.5 fw-bold small flex-wrap gap-2">
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="text-dark"><i class="fa-solid fa-receipt text-secondary me-1"></i> Total: <span class="badge bg-dark rounded-pill">{{ $rep->items->count() }} Vouchers</span></span>
                                     <span class="text-muted">|</span>
-                                    <button type="button" class="btn btn-xs btn-outline-danger rounded-pill" onclick="submitBulkVoucherAction({{ $rep->chart_of_account_id }}, {{ $rep->id }}, 'reject')">
+                                    <button type="button" class="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-1" onclick="submitBulkVoucherAction({{ $rep->chart_of_account_id }}, {{ $rep->id }}, 'reject')">
                                         <i class="fa-solid fa-ban me-1"></i> Reject Selected
                                     </button>
-                                    <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold rounded-pill" onclick="submitBulkVoucherAction({{ $rep->chart_of_account_id }}, {{ $rep->id }}, 'ask_description')">
+                                    <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold rounded-pill px-2.5 py-1" onclick="submitBulkVoucherAction({{ $rep->chart_of_account_id }}, {{ $rep->id }}, 'ask_description')">
                                         <i class="fa-solid fa-comment-dots me-1"></i> Ask Description on Selected
                                     </button>
                                 </div>
@@ -440,6 +440,7 @@
                             </div>
                             @endif
                         </div>
+
 
                         <hr class="my-4">
 
