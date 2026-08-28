@@ -25,7 +25,6 @@
 </style>
 <div class="container-fluid px-4 py-3">
 
-
     <!-- Page Header -->
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
@@ -35,7 +34,7 @@
                 </div>
                 <div>
                     <h1 class="h3 mb-0 fw-bold" style="color:var(--brand-800)">Petty Cash Replenishment Approvals</h1>
-                    <p class="text-muted small mb-0">Finance Head portal to review attached expenses, verify imprest cycles, and disburse top-up funds</p>
+                    <p class="text-muted small mb-0">Finance Head portal to review attached expense vouchers, verify cycles, request descriptions, and route to audit</p>
                 </div>
             </div>
         </div>
@@ -51,11 +50,11 @@
 
     <!-- KPI Summary Row -->
     <div class="row g-3 mb-4">
-        <div class="col-xl-4 col-md-6">
+        <div class="col-xl-3 col-md-6">
             <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white" style="border-left: 5px solid #f59e0b !important;">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
-                        <span class="text-xs fw-bold text-uppercase text-warning" style="font-size:0.72rem; letter-spacing:0.5px;">Pending Finance Head Review</span>
+                        <span class="text-xs fw-bold text-uppercase text-warning" style="font-size:0.72rem; letter-spacing:0.5px;">Pending Finance Review</span>
                         <h3 class="fw-bold text-dark mb-0 mt-1">{{ $tabCounts['pending'] }} <span class="fs-6 text-muted fw-normal">Requests</span></h3>
                         <small class="text-danger fw-semibold">Total: ETB {{ number_format($pendingAmount, 2) }}</small>
                     </div>
@@ -66,7 +65,22 @@
             </div>
         </div>
 
-        <div class="col-xl-4 col-md-6">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white" style="border-left: 5px solid #0284c7 !important;">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <span class="text-xs fw-bold text-uppercase text-info" style="font-size:0.72rem; letter-spacing:0.5px;">Under Audit</span>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">{{ $tabCounts['under_audit'] ?? 0 }} <span class="fs-6 text-muted fw-normal">In Review</span></h3>
+                        <small class="text-muted">Routed to Internal Audit</small>
+                    </div>
+                    <div class="p-3 rounded-circle" style="background: rgba(2, 132, 199, 0.1);">
+                        <i class="fa-solid fa-magnifying-glass fa-2x text-info"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
             <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white" style="border-left: 5px solid #10b981 !important;">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
@@ -81,13 +95,13 @@
             </div>
         </div>
 
-        <div class="col-xl-4 col-md-12">
+        <div class="col-xl-3 col-md-6">
             <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white" style="border-left: 5px solid #6366f1 !important;">
                 <div class="d-flex align-items-center justify-content-between">
                     <div>
-                        <span class="text-xs fw-bold text-uppercase text-primary" style="font-size:0.72rem; letter-spacing:0.5px;">All Replenishment Cycles</span>
-                        <h3 class="fw-bold text-dark mb-0 mt-1">{{ $tabCounts['all'] }} <span class="fs-6 text-muted fw-normal">Total Cycles</span></h3>
-                        <small class="text-muted">Imprest System Top-ups</small>
+                        <span class="text-xs fw-bold text-uppercase text-primary" style="font-size:0.72rem; letter-spacing:0.5px;">All Cycles</span>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">{{ $tabCounts['all'] }} <span class="fs-6 text-muted fw-normal">Total</span></h3>
+                        <small class="text-muted">Imprest Replenishments</small>
                     </div>
                     <div class="p-3 rounded-circle" style="background: rgba(99, 102, 241, 0.1);">
                         <i class="fa-solid fa-receipt fa-2x text-primary"></i>
@@ -104,8 +118,15 @@
                 <li class="nav-item">
                     <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'pending' ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'pending', 'page' => 1]) }}">
-                        <i class="fa-solid fa-hourglass-half me-1"></i> Pending Approval
+                        <i class="fa-solid fa-hourglass-half me-1"></i> Pending Review
                         <span class="badge {{ $activeTab === 'pending' ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1">{{ $tabCounts['pending'] }}</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'under_audit' ? 'active shadow-sm bg-info text-white' : 'text-secondary bg-white' }}" 
+                       href="{{ request()->fullUrlWithQuery(['tab' => 'under_audit', 'page' => 1]) }}">
+                        <i class="fa-solid fa-magnifying-glass me-1"></i> Under Audit
+                        <span class="badge {{ $activeTab === 'under_audit' ? 'bg-dark text-white' : 'bg-info text-dark' }} ms-1">{{ $tabCounts['under_audit'] ?? 0 }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
@@ -113,20 +134,6 @@
                        href="{{ request()->fullUrlWithQuery(['tab' => 'fulfilled', 'page' => 1]) }}">
                         <i class="fa-solid fa-circle-check me-1"></i> Fulfilled &amp; Disbursed
                         <span class="badge {{ $activeTab === 'fulfilled' ? 'bg-white text-success' : 'bg-success text-white' }} ms-1">{{ $tabCounts['fulfilled'] }}</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'rejected' ? 'active shadow-sm bg-danger text-white' : 'text-secondary bg-white' }}" 
-                       href="{{ request()->fullUrlWithQuery(['tab' => 'rejected', 'page' => 1]) }}">
-                        <i class="fa-solid fa-circle-xmark me-1"></i> Rejected
-                        <span class="badge {{ $activeTab === 'rejected' ? 'bg-white text-danger' : 'bg-danger text-white' }} ms-1">{{ $tabCounts['rejected'] }}</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'all' ? 'active shadow-sm bg-dark text-white' : 'text-secondary bg-white' }}" 
-                       href="{{ request()->fullUrlWithQuery(['tab' => 'all', 'page' => 1]) }}">
-                        <i class="fa-solid fa-list me-1"></i> All Requests
-                        <span class="badge {{ $activeTab === 'all' ? 'bg-primary text-white' : 'bg-secondary' }} ms-1">{{ $tabCounts['all'] }}</span>
                     </a>
                 </li>
             </ul>
@@ -179,7 +186,6 @@
                             <th class="py-3">Petty Cash Account</th>
                             <th class="py-3 text-end">Current Balance</th>
                             <th class="py-3 text-end">Requested Amount</th>
-                            <th class="py-3 text-center">Attached Expenses</th>
                             <th class="py-3 text-center">Status</th>
                             <th class="pe-4 py-3 text-end">Actions</th>
                         </tr>
@@ -188,13 +194,13 @@
                         @forelse($replenishments as $rep)
                             <tr>
                                 <td class="ps-4 py-3">
-                                    <span class="fw-bold text-dark font-monospace d-block">{{ $rep->request_no }}</span>
+                                    <strong class="text-dark font-monospace d-block">{{ $rep->request_no }}</strong>
                                     <small class="text-muted">{{ $rep->created_at->format('M d, Y H:i') }}</small>
                                 </td>
                                 <td class="py-3">
                                     <div class="d-flex align-items-center gap-2">
-                                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center fw-bold" style="width:34px; height:34px; font-size:0.85rem;">
-                                            {{ substr($rep->requester->name ?? 'U', 0, 1) }}
+                                        <div class="avatar avatar-sm rounded-circle bg-primary bg-opacity-10 text-primary fw-bold d-flex align-items-center justify-content-center" style="width:32px;height:32px;">
+                                            {{ strtoupper(substr($rep->requester->name ?? 'S', 0, 1)) }}
                                         </div>
                                         <div>
                                             <strong class="text-dark d-block">{{ $rep->requester->name ?? 'Custodian' }}</strong>
@@ -204,9 +210,7 @@
                                 </td>
                                 <td class="py-3">
                                     <strong class="text-dark d-block">[{{ $rep->chartOfAccount->code ?? 'N/A' }}] {{ $rep->chartOfAccount->name ?? 'Petty Cash' }}</strong>
-                                    <small class="text-muted">{{ $rep->chartOfAccount->subtype ?? ucfirst($rep->chartOfAccount->type ?? 'Cash Asset') }}</small>
                                 </td>
-
                                 <td class="py-3 text-end">
                                     <span class="badge bg-light text-dark border font-monospace fs-6 px-2.5">
                                         ETB {{ number_format($rep->current_balance_at_request, 2) }}
@@ -218,14 +222,13 @@
                                     </strong>
                                 </td>
                                 <td class="py-3 text-center">
-                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle font-monospace px-2 py-1">
-                                        <i class="fa-solid fa-receipt me-1"></i> {{ $rep->items->count() }} Records (ETB {{ number_format($rep->total_expenses_amount, 2) }})
-                                    </span>
-                                </td>
-                                <td class="py-3 text-center">
                                     @if($rep->status === 'pending')
                                         <span class="badge bg-warning text-dark rounded-pill px-3 py-1.5 font-monospace">
-                                            <i class="fa-solid fa-clock me-1"></i>Pending Approval
+                                            <i class="fa-solid fa-clock me-1"></i>Pending Review
+                                        </span>
+                                    @elseif($rep->status === 'under_audit')
+                                        <span class="badge bg-info text-white rounded-pill px-3 py-1.5 font-monospace">
+                                            <i class="fa-solid fa-magnifying-glass me-1"></i>Under Audit
                                         </span>
                                     @elseif($rep->status === 'fulfilled')
                                         <span class="badge bg-success text-white rounded-pill px-3 py-1.5 font-monospace">
@@ -238,25 +241,25 @@
                                     @endif
                                 </td>
                                 <td class="pe-4 py-3 text-end">
-                                    <div class="btn-group btn-group-sm">
-                                        <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#viewModal{{ $rep->id }}" title="Audit & View Details">
-                                            <i class="fa-solid fa-eye text-primary me-1"></i> Audit Details
-                                        </button>
-                                        @if($rep->status === 'pending' && auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']))
-                                            <button type="button" class="btn btn-success text-white fw-bold shadow-xs px-3" data-bs-toggle="modal" data-bs-target="#fulfillModal{{ $rep->id }}">
-                                                <i class="fa-solid fa-check me-1"></i> Review &amp; Fulfill
+                                    <div class="btn-group btn-group-sm shadow-xs">
+                                        @if(in_array($rep->status, ['pending', 'under_audit']) && auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']))
+                                            <button type="button" class="btn btn-success text-white fw-bold px-3" data-bs-toggle="modal" data-bs-target="#reviewModal{{ $rep->id }}" title="Review Vouchers and Send to Audit">
+                                                <i class="fa-solid fa-magnifying-glass-dollar me-1"></i> Review &amp; Send to Audit
                                             </button>
-                                            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $rep->id }}" title="Reject Request">
-                                                <i class="fa-solid fa-times"></i>
+                                            <button type="button" class="btn btn-outline-danger px-2.5" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $rep->id }}" title="Reject Replenishment Cycle">
+                                                <i class="fa-solid fa-times text-danger"></i>
+                                            </button>
+                                        @else
+                                            <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#viewModal{{ $rep->id }}" title="Audit & View Details">
+                                                <i class="fa-solid fa-eye text-primary me-1"></i> Audit Details
                                             </button>
                                         @endif
                                     </div>
                                 </td>
-
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="text-center py-5 text-muted">
+                                <td colspan="7" class="text-center py-5 text-muted">
                                     <i class="fa-solid fa-inbox fa-3x mb-3 opacity-25"></i>
                                     <p class="mb-0 fw-semibold">No petty cash replenishment requests found in this view.</p>
                                 </td>
@@ -275,26 +278,25 @@
 </div>
 
 <!-- ========================================================================= -->
-<!-- MODALS FOR EACH REPLENISHMENT (Review, Fulfill, Reject, View History)      -->
+<!-- MODALS FOR EACH REPLENISHMENT                                              -->
 <!-- ========================================================================= -->
 @foreach($replenishments as $rep)
 
-    <!-- 1. Fulfill & Review Modal -->
-    @if($rep->status === 'pending')
-    <div class="modal fade" id="fulfillModal{{ $rep->id }}" tabindex="-1" aria-hidden="true">
+    <!-- 1. Review & Send to Audit Modal -->
+    <div class="modal fade" id="reviewModal{{ $rep->id }}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
                 <div class="modal-header bg-warning text-dark py-3 px-4">
                     <div>
                         <h5 class="modal-title fw-bold mb-0">
-                            <i class="fa-solid fa-hand-holding-dollar me-2"></i>Review &amp; Approve Replenishment #{{ $rep->request_no }}
+                            <i class="fa-solid fa-magnifying-glass-dollar me-2"></i>Review Vouchers &amp; Route to Audit #{{ $rep->request_no }}
                         </h5>
-                        <small class="text-dark opacity-75">Requested by {{ $rep->requester->name ?? 'Staff' }} on {{ $rep->created_at->format('M d, Y H:i') }}</small>
+                        <small class="text-dark opacity-75">Custodian: {{ $rep->requester->name ?? 'Staff' }} &bull; Requested on {{ $rep->created_at->format('M d, Y H:i') }}</small>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 
-                <form method="POST" action="{{ route('assigned-accounts.fulfill-replenishment', ['id' => $rep->chart_of_account_id, 'replenishmentId' => $rep->id]) }}">
+                <form method="POST" action="{{ route('assigned-accounts.send-to-audit', ['id' => $rep->chart_of_account_id, 'replenishmentId' => $rep->id]) }}">
                     @csrf
                     <div class="modal-body p-4 bg-white">
 
@@ -309,7 +311,7 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="p-3 bg-light rounded-3 border">
-                                    <span class="text-muted small text-uppercase fw-bold d-block">Attached Expenses Total</span>
+                                    <span class="text-muted small text-uppercase fw-bold d-block">Valid Attached Expenses</span>
                                     <h4 class="fw-bold text-danger font-monospace mb-0 mt-1">ETB {{ number_format($rep->total_expenses_amount, 2) }}</h4>
                                     <small class="text-muted">{{ $rep->items->count() }} Attached Vouchers</small>
                                 </div>
@@ -318,35 +320,48 @@
                                 <div class="p-3 bg-primary bg-opacity-10 rounded-3 border border-primary-subtle">
                                     <span class="text-primary small text-uppercase fw-bold d-block">Requested Top-Up Amount</span>
                                     <h4 class="fw-bold text-primary font-monospace mb-0 mt-1">ETB {{ number_format($rep->requested_amount, 2) }}</h4>
-                                    <small class="text-primary">Imprest Cycle Restoration</small>
+                                    <small class="text-primary opacity-75">Cycle Status: {{ ucfirst(str_replace('_', ' ', $rep->status)) }}</small>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Attached Payment History Table -->
-                        <!-- Attached Itemized Expenses Table -->
+                        <!-- Attached Itemized Expenses Table (With Select, Reject, Ask Description) -->
                         <div class="mb-4">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <label class="form-label fw-bold text-dark mb-0">
-                                    <i class="fa-solid fa-paperclip text-primary me-1"></i> Attached Expense Vouchers ({{ $rep->items->count() }} Records)
-                                </label>
-                                <span class="badge bg-light text-dark border font-monospace">Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
+                            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                <div>
+                                    <label class="form-label fw-bold text-dark mb-0">
+                                        <i class="fa-solid fa-list-check text-primary me-1"></i> Attached Expense Vouchers ({{ $rep->items->count() }} Records)
+                                    </label>
+                                    <small class="text-muted d-block" style="font-size:11px;">Select vouchers to perform bulk actions or use individual buttons to reject or request description</small>
+                                </div>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <span class="badge bg-light text-dark border font-monospace">Valid Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
+                                </div>
                             </div>
-                            <div class="voucher-scroll-box border rounded-top-3 shadow-xs" style="max-height: 360px; overflow-y: auto; overflow-x: auto;">
+
+                            <div class="voucher-scroll-box border rounded-top-3 shadow-xs" style="max-height: 380px; overflow-y: auto; overflow-x: auto;">
                                 <table class="table table-sm table-striped table-hover align-middle mb-0 small">
                                     <thead class="bg-light sticky-top shadow-xs" style="z-index: 5;">
                                         <tr>
-                                            <th class="ps-3 py-2.5 text-nowrap bg-light">Date</th>
+                                            <th class="ps-3 py-2.5 text-center bg-light" style="width: 40px;">
+                                                <input type="checkbox" class="form-check-input" id="selectAllVouchers_{{ $rep->id }}" onchange="toggleSelectAllVouchers({{ $rep->id }}, this)">
+                                            </th>
+                                            <th class="py-2.5 text-nowrap bg-light">Date</th>
                                             <th class="py-2.5 text-nowrap bg-light">Voucher # / Ref</th>
-                                            <th class="py-2.5 text-nowrap bg-light">Expense Category / Account</th>
-                                            <th class="py-2.5 bg-light" style="min-width: 300px;">Description &amp; Beneficiary Details</th>
-                                            <th class="pe-3 py-2.5 text-end text-nowrap bg-light">Amount (ETB)</th>
+                                            <th class="py-2.5 text-nowrap bg-light">Category / Account</th>
+                                            <th class="py-2.5 bg-light" style="min-width: 250px;">Description &amp; Beneficiary</th>
+                                            <th class="py-2.5 text-end text-nowrap bg-light">Amount (ETB)</th>
+                                            <th class="py-2.5 text-center text-nowrap bg-light">Review Status</th>
+                                            <th class="pe-3 py-2.5 text-end text-nowrap bg-light">Voucher Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         @forelse($rep->items as $item)
-                                            <tr>
-                                                <td class="ps-3 py-2 text-muted text-nowrap">
+                                            <tr class="{{ $item->status === 'rejected' ? 'table-danger opacity-75' : ($item->status === 'clarification_needed' ? 'table-warning' : '') }}">
+                                                <td class="ps-3 py-2 text-center">
+                                                    <input type="checkbox" name="voucher_ids[]" value="{{ $item->id }}" class="form-check-input voucher-cb-{{ $rep->id }}">
+                                                </td>
+                                                <td class="py-2 text-muted text-nowrap">
                                                     {{ $item->entry_date ? \Carbon\Carbon::parse($item->entry_date)->format('M d, Y') : ($item->created_at ? $item->created_at->format('M d, Y') : 'N/A') }}
                                                 </td>
                                                 <td class="py-2 text-nowrap">
@@ -364,84 +379,89 @@
                                                         {{ $item->description }}
                                                     </div>
                                                 </td>
-                                                <td class="pe-3 py-2 text-end fw-bold text-danger font-monospace text-nowrap">
+                                                <td class="py-2 text-end fw-bold {{ $item->status === 'rejected' ? 'text-decoration-line-through text-muted' : 'text-danger' }} font-monospace text-nowrap">
                                                     ETB {{ number_format($item->amount, 2) }}
+                                                </td>
+                                                <td class="py-2 text-center text-nowrap">
+                                                    @if($item->status === 'rejected')
+                                                        <span class="badge bg-danger text-white"><i class="fa-solid fa-ban me-1"></i>Rejected</span>
+                                                        @if($item->rejection_reason)
+                                                            <div class="text-danger small mt-0.5" style="font-size:11px;">{{ Str::limit($item->rejection_reason, 35) }}</div>
+                                                        @endif
+                                                    @elseif($item->status === 'clarification_needed')
+                                                        <span class="badge bg-warning text-dark"><i class="fa-solid fa-circle-question me-1"></i>Clarification Needed</span>
+                                                        @if($item->inquiry_note)
+                                                            <div class="text-dark small mt-0.5" style="font-size:11px;">"{{ Str::limit($item->inquiry_note, 35) }}"</div>
+                                                        @endif
+                                                    @else
+                                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="fa-solid fa-check me-1"></i>Valid</span>
+                                                    @endif
+                                                </td>
+                                                <td class="pe-3 py-2 text-end text-nowrap">
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold" onclick="askDescriptionPrompt({{ $item->id }}, '{{ addslashes($item->reference ?: 'Voucher #' . $item->id) }}')" title="Ask Description / Clarification from Custodian">
+                                                            <i class="fa-solid fa-comment-dots text-warning me-0.5"></i> Ask Description
+                                                        </button>
+                                                        @if($item->status === 'rejected')
+                                                            <button type="button" class="btn btn-xs btn-outline-success" onclick="approveVoucher({{ $item->id }})" title="Restore and Include in Replenishment">
+                                                                <i class="fa-solid fa-rotate-left me-0.5"></i> Include
+                                                            </button>
+                                                        @else
+                                                            <button type="button" class="btn btn-xs btn-outline-danger" onclick="rejectVoucherPrompt({{ $item->id }}, '{{ addslashes($item->reference ?: 'Voucher #' . $item->id) }}')" title="Reject this Voucher">
+                                                                <i class="fa-solid fa-ban me-0.5"></i> Reject
+                                                            </button>
+                                                        @endif
+                                                    </div>
                                                 </td>
                                             </tr>
                                         @empty
                                             <tr>
-                                                <td colspan="5" class="text-center py-4 text-muted">No line item breakdown attached.</td>
+                                                <td colspan="8" class="text-center py-4 text-muted">No line item breakdown attached.</td>
                                             </tr>
                                         @endforelse
                                     </tbody>
                                 </table>
                             </div>
+                            
                             @if($rep->items->count() > 0)
-                            <div class="d-flex justify-content-between align-items-center bg-light border border-top-0 rounded-bottom-3 px-3 py-2 fw-bold small">
-                                <span class="text-dark"><i class="fa-solid fa-receipt text-secondary me-1"></i> Total Vouchers: <span class="badge bg-dark rounded-pill">{{ $rep->items->count() }}</span></span>
-                                <span class="text-danger font-monospace fs-6">Grand Total: ETB {{ number_format($rep->items->sum('amount') ?: $rep->total_expenses_amount, 2) }}</span>
-                            </div>
-                            @endif
-                        </div>
-
-                        <!-- Custodian Notes & Attachment Link -->
-                        <div class="row g-3 mb-4">
-                            @if($rep->notes)
-                            <div class="col-md-8">
-                                <label class="form-label small fw-bold text-dark text-uppercase">Custodian Notes / Justification</label>
-                                <div class="p-3 bg-light rounded-3 border text-dark">{{ $rep->notes }}</div>
-                            </div>
-                            @endif
-                            @if($rep->attachment_path)
-                            <div class="col-md-4">
-                                <label class="form-label small fw-bold text-dark text-uppercase">Supporting Document</label>
-                                <div>
-                                    <a href="{{ \App\Services\FileUploadService::url($rep->attachment_path) }}" target="_blank" class="btn btn-outline-primary btn-sm w-100 py-2">
-                                        <i class="fa-solid fa-download me-1"></i> View Scanned Receipts
-                                    </a>
+                            <div class="d-flex justify-content-between align-items-center bg-light border border-top-0 rounded-bottom-3 px-3 py-2 fw-bold small flex-wrap gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="text-dark"><i class="fa-solid fa-receipt text-secondary me-1"></i> Total: <span class="badge bg-dark rounded-pill">{{ $rep->items->count() }} Vouchers</span></span>
+                                    <span class="text-muted">|</span>
+                                    <button type="button" class="btn btn-xs btn-outline-danger rounded-pill" onclick="submitBulkVoucherAction({{ $rep->chart_of_account_id }}, {{ $rep->id }}, 'reject')">
+                                        <i class="fa-solid fa-ban me-1"></i> Reject Selected
+                                    </button>
+                                    <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold rounded-pill" onclick="submitBulkVoucherAction({{ $rep->chart_of_account_id }}, {{ $rep->id }}, 'ask_description')">
+                                        <i class="fa-solid fa-comment-dots me-1"></i> Ask Description on Selected
+                                    </button>
                                 </div>
+                                <span class="text-danger font-monospace fs-6">Grand Total: ETB {{ number_format($rep->items->sum('amount') ?: $rep->total_expenses_amount, 2) }}</span>
                             </div>
                             @endif
                         </div>
 
                         <hr class="my-4">
 
-                        <!-- FULFILLMENT FORM -->
-                        <h6 class="fw-bold text-dark mb-3"><i class="fa-solid fa-money-bill-transfer text-success me-1"></i> Disburse Top-Up Funds</h6>
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <label class="form-label small fw-bold text-dark text-uppercase">Source Funding Account (Bank / Central Cash) <span class="text-danger">*</span></label>
-                                <select name="source_coa_id" class="form-select" required>
-                                    <option value="">-- Select Source Account to Deduct Funds --</option>
-                                    @foreach($sourceAccounts as $src)
-                                        @if($src->id !== $rep->chart_of_account_id)
-                                            <option value="{{ $src->id }}">
-                                                [{{ $src->code }}] {{ $src->name }} (Balance: ETB {{ number_format($src->current_balance, 2) }})
-                                            </option>
-                                        @endif
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small fw-bold text-dark text-uppercase">Fulfilled / Disbursed Amount (ETB) <span class="text-danger">*</span></label>
-                                <input type="number" step="0.01" name="fulfilled_amount" class="form-control font-monospace fw-bold text-primary" value="{{ $rep->requested_amount }}" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small fw-bold text-dark text-uppercase">Transaction Reference / Cheque #</label>
-                                <input type="text" name="reference" class="form-control" placeholder="e.g. TR-20260827-01 / Cheque #4920">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label small fw-bold text-dark text-uppercase">Finance Head Remarks</label>
-                                <input type="text" name="finance_notes" class="form-control" placeholder="Optional notes for custodian">
-                            </div>
+                        <!-- ROUTE TO AUDIT / FINANCE REMARKS -->
+                        <h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-magnifying-glass text-warning me-1"></i> Review Remarks &amp; Send to Audit Team</h6>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">Audit Instructions / Observations for Internal Auditor</label>
+                            <textarea name="audit_notes" class="form-control" rows="3" placeholder="Enter notes for the Internal Audit Team regarding verified vouchers, excluded items, or special instructions...">{{ $rep->audit_notes }}</textarea>
                         </div>
 
                     </div>
-                    <div class="modal-footer bg-light border-0 py-3 px-4">
-                        <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm" onclick="return confirm('Confirm and disburse replenishment top-up for {{ $rep->chartOfAccount->name }}?')">
-                            <i class="fa-solid fa-check-circle me-1"></i> Approve &amp; Disburse Funds
-                        </button>
+                    <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
+                        <div>
+                            <button type="button" class="btn btn-outline-danger rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $rep->id }}">
+                                <i class="fa-solid fa-times me-1"></i> Reject Replenishment Cycle
+                            </button>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Close</button>
+                            <button type="submit" class="btn btn-warning text-dark rounded-pill px-4 fw-bold shadow-sm" onclick="return confirm('Send Replenishment #{{ $rep->request_no }} to Internal Audit Team?')">
+                                <i class="fa-solid fa-paper-plane me-1"></i> Send to Audit Team
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -475,9 +495,8 @@
             </div>
         </div>
     </div>
-    @endif
 
-    <!-- 3. View Details Modal (For all states) -->
+    <!-- 3. View Details Modal -->
     <div class="modal fade" id="viewModal{{ $rep->id }}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
@@ -515,7 +534,9 @@
                                 <span class="text-muted small text-uppercase fw-bold d-block">Cycle Status</span>
                                 <div class="mt-1">
                                     @if($rep->status === 'pending')
-                                        <span class="badge bg-warning text-dark px-3 py-1.5 rounded-pill">Pending Approval</span>
+                                        <span class="badge bg-warning text-dark px-3 py-1.5 rounded-pill">Pending Review</span>
+                                    @elseif($rep->status === 'under_audit')
+                                        <span class="badge bg-info text-white px-3 py-1.5 rounded-pill">Under Audit</span>
                                     @elseif($rep->status === 'fulfilled')
                                         <span class="badge bg-success text-white px-3 py-1.5 rounded-pill">Fulfilled &amp; Disbursed</span>
                                     @elseif($rep->status === 'rejected')
@@ -526,11 +547,10 @@
                         </div>
                     </div>
 
-                    <!-- Attached Items Table (Dedicated Scroll Box) -->
                     <div class="mb-4">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label fw-bold text-dark mb-0">
-                                <i class="fa-solid fa-list-check text-primary me-1"></i> Attached Expense Vouchers ({{ $rep->items->count() }})
+                                <i class="fa-solid fa-list-check text-primary me-1"></i> Attached Expense Vouchers
                             </label>
                             <span class="badge bg-light text-dark border font-monospace">Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
                         </div>
@@ -540,7 +560,7 @@
                                     <tr>
                                         <th class="ps-3 py-2.5 text-nowrap bg-light">Date</th>
                                         <th class="py-2.5 text-nowrap bg-light">Voucher # / Ref</th>
-                                        <th class="py-2.5 text-nowrap bg-light">Expense Category / Account</th>
+                                        <th class="py-2.5 text-nowrap bg-light">Category / Account</th>
                                         <th class="py-2.5 bg-light" style="min-width: 300px;">Description &amp; Beneficiary Details</th>
                                         <th class="pe-3 py-2.5 text-end text-nowrap bg-light">Amount (ETB)</th>
                                     </tr>
@@ -561,11 +581,7 @@
                                                     {{ $item->target_account_name ?: 'Petty Cash Expense' }}
                                                 </span>
                                             </td>
-                                            <td class="py-2">
-                                                <div style="word-break: break-word; white-space: normal; line-height: 1.4;">
-                                                    {{ $item->description }}
-                                                </div>
-                                            </td>
+                                            <td class="py-2">{{ $item->description }}</td>
                                             <td class="pe-3 py-2 text-end fw-bold text-danger font-monospace text-nowrap">
                                                 ETB {{ number_format($item->amount, 2) }}
                                             </td>
@@ -586,8 +602,6 @@
                         @endif
                     </div>
 
-
-
                     @if($rep->attachment_path)
                     <div class="mb-4 p-3 bg-light rounded-3 border d-flex justify-content-between align-items-center">
                         <div>
@@ -597,6 +611,13 @@
                         <a href="{{ \App\Services\FileUploadService::url($rep->attachment_path) }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
                             <i class="fa-solid fa-download me-1"></i> Download Receipts
                         </a>
+                    </div>
+                    @endif
+
+                    @if($rep->audit_notes)
+                    <div class="mb-4 p-3 bg-info bg-opacity-10 rounded-3 border border-info border-opacity-25">
+                        <strong class="text-dark d-block"><i class="fa-solid fa-magnifying-glass text-info me-1"></i> Audit Review Instructions</strong>
+                        <p class="mb-0 text-dark small">{{ $rep->audit_notes }}</p>
                     </div>
                     @endif
 
@@ -623,7 +644,6 @@
                     </div>
                     @endif
 
-
                 </div>
                 <div class="modal-footer bg-light border-0 py-3 px-4">
                     <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Close</button>
@@ -633,5 +653,140 @@
     </div>
 
 @endforeach
+
+<!-- ========================================================================= -->
+<!-- GLOBAL MODAL: REJECT INDIVIDUAL VOUCHER                                    -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="rejectIndividualVoucherModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-danger text-white py-3 px-4">
+                <h5 class="modal-title fw-bold mb-0">
+                    <i class="fa-solid fa-ban me-2"></i>Reject Voucher: <span id="rejectVoucherRefText"></span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="rejectIndividualVoucherForm" method="POST" action="">
+                @csrf
+                <div class="modal-body p-4 bg-white">
+                    <p class="text-dark small mb-3">Rejecting this voucher will exclude its amount from the approved replenishment total.</p>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark text-uppercase">Rejection Reason <span class="text-danger">*</span></label>
+                        <textarea name="rejection_reason" class="form-control" rows="3" placeholder="e.g. Unapproved expense, missing original receipt, duplicate claim..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 py-3 px-4">
+                    <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger rounded-pill px-4 fw-bold shadow-sm">
+                        <i class="fa-solid fa-ban me-1"></i> Confirm Reject Voucher
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- GLOBAL MODAL: ASK DESCRIPTION ON VOUCHER                                   -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="askDescriptionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-warning text-dark py-3 px-4">
+                <h5 class="modal-title fw-bold mb-0">
+                    <i class="fa-solid fa-circle-question me-2"></i>Ask Description / Clarification: <span id="askVoucherRefText"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="askDescriptionForm" method="POST" action="">
+                @csrf
+                <div class="modal-body p-4 bg-white">
+                    <p class="text-dark small mb-3">Ask the custodian for further explanation, purpose description, or proof on this voucher.</p>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark text-uppercase">Inquiry / Clarification Request <span class="text-danger">*</span></label>
+                        <textarea name="inquiry_note" class="form-control" rows="3" placeholder="e.g. Please explain the purpose of this travel, specify site location and names of beneficiaries..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 py-3 px-4">
+                    <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning text-dark rounded-pill px-4 fw-bold shadow-sm">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Send Request
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden Bulk Action Form -->
+<form id="bulkVoucherActionForm" method="POST" action="" style="display:none;">
+    @csrf
+    <input type="hidden" name="bulk_action" id="bulkActionType">
+    <input type="hidden" name="bulk_note" id="bulkActionNote">
+    <div id="bulkVoucherIdsContainer"></div>
+</form>
+
+<!-- Hidden Restore Voucher Form -->
+<form id="restoreVoucherForm" method="POST" action="" style="display:none;">
+    @csrf
+</form>
+
+<script>
+function toggleSelectAllVouchers(repId, masterCb) {
+    const checkboxes = document.querySelectorAll('.voucher-cb-' + repId);
+    checkboxes.forEach(cb => cb.checked = masterCb.checked);
+}
+
+function rejectVoucherPrompt(itemId, refText) {
+    document.getElementById('rejectVoucherRefText').innerText = refText;
+    document.getElementById('rejectIndividualVoucherForm').action = "{{ url('/assigned-accounts/replenishment-items') }}/" + itemId + "/reject";
+    const modal = new bootstrap.Modal(document.getElementById('rejectIndividualVoucherModal'));
+    modal.show();
+}
+
+function askDescriptionPrompt(itemId, refText) {
+    document.getElementById('askVoucherRefText').innerText = refText;
+    document.getElementById('askDescriptionForm').action = "{{ url('/assigned-accounts/replenishment-items') }}/" + itemId + "/ask-description";
+    const modal = new bootstrap.Modal(document.getElementById('askDescriptionModal'));
+    modal.show();
+}
+
+function approveVoucher(itemId) {
+    if (confirm('Restore and include this voucher in the replenishment cycle?')) {
+        const form = document.getElementById('restoreVoucherForm');
+        form.action = "{{ url('/assigned-accounts/replenishment-items') }}/" + itemId + "/approve";
+        form.submit();
+    }
+}
+
+function submitBulkVoucherAction(accountId, repId, actionType) {
+    const checkboxes = document.querySelectorAll('.voucher-cb-' + repId + ':checked');
+    if (checkboxes.length === 0) {
+        alert('Please select at least one voucher using the checkboxes.');
+        return;
+    }
+
+    let promptText = actionType === 'reject' ? 'Enter rejection reason for selected vouchers:' : 'Enter description / clarification note for selected vouchers:';
+    let note = prompt(promptText);
+    if (note === null) return; // User cancelled
+
+    const form = document.getElementById('bulkVoucherActionForm');
+    form.action = "{{ url('/assigned-accounts') }}/" + accountId + "/replenishments/" + repId + "/bulk-voucher-action";
+    document.getElementById('bulkActionType').value = actionType;
+    document.getElementById('bulkActionNote').value = note;
+
+    const container = document.getElementById('bulkVoucherIdsContainer');
+    container.innerHTML = '';
+    checkboxes.forEach(cb => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'voucher_ids[]';
+        input.value = cb.value;
+        container.appendChild(input);
+    });
+
+    form.submit();
+}
+</script>
 
 @endsection

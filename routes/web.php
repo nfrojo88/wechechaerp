@@ -1805,7 +1805,13 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/assigned-accounts/{id}/request-replenishment', [App\Http\Controllers\AssignedAccountController::class, 'requestReplenishment'])->name('assigned-accounts.request-replenishment');
     Route::post('/assigned-accounts/{id}/replenishments/{replenishmentId}/fulfill', [App\Http\Controllers\AssignedAccountController::class, 'fulfillReplenishment'])->name('assigned-accounts.fulfill-replenishment');
     Route::post('/assigned-accounts/{id}/replenishments/{replenishmentId}/reject', [App\Http\Controllers\AssignedAccountController::class, 'rejectReplenishment'])->name('assigned-accounts.reject-replenishment');
+    Route::post('/assigned-accounts/{id}/replenishments/{replenishmentId}/send-to-audit', [App\Http\Controllers\AssignedAccountController::class, 'sendReplenishmentToAudit'])->name('assigned-accounts.send-to-audit');
+    Route::post('/assigned-accounts/replenishment-items/{itemId}/reject', [App\Http\Controllers\AssignedAccountController::class, 'rejectVoucherItem'])->name('assigned-accounts.reject-voucher-item');
+    Route::post('/assigned-accounts/replenishment-items/{itemId}/ask-description', [App\Http\Controllers\AssignedAccountController::class, 'askVoucherDescription'])->name('assigned-accounts.ask-voucher-description');
+    Route::post('/assigned-accounts/replenishment-items/{itemId}/approve', [App\Http\Controllers\AssignedAccountController::class, 'approveVoucherItem'])->name('assigned-accounts.approve-voucher-item');
+    Route::post('/assigned-accounts/{id}/replenishments/{replenishmentId}/bulk-voucher-action', [App\Http\Controllers\AssignedAccountController::class, 'bulkVoucherAction'])->name('assigned-accounts.bulk-voucher-action');
     Route::get('/assigned-accounts/{id}/replenishments/{replenishmentId}/details', [App\Http\Controllers\AssignedAccountController::class, 'getReplenishmentDetails'])->name('assigned-accounts.replenishment-details');
+
 
 
     Route::delete('manpower-assignment/{manpowerAssignment}', [App\Http\Controllers\ManpowerForecastController::class, 'removeAssignment'])->name('manpower-assignment.remove');

@@ -31,6 +31,11 @@ class PettyCashReplenishment extends Model
         'source_coa_id',
         'journal_entry_id',
         'finance_notes',
+        'audit_notes',
+        'audited_by',
+        'audited_at',
+        'reviewed_by',
+        'reviewed_at',
         'fulfillment_reference',
         'fulfilled_at',
         'rejected_at',
@@ -46,12 +51,26 @@ class PettyCashReplenishment extends Model
         'period_end_date'            => 'datetime',
         'fulfilled_at'               => 'datetime',
         'rejected_at'                => 'datetime',
+        'audited_at'                 => 'datetime',
+        'reviewed_at'                => 'datetime',
     ];
 
     // Status Constants
-    public const STATUS_PENDING   = 'pending';
-    public const STATUS_FULFILLED = 'fulfilled';
-    public const STATUS_REJECTED  = 'rejected';
+    public const STATUS_PENDING     = 'pending';
+    public const STATUS_UNDER_AUDIT = 'under_audit';
+    public const STATUS_FULFILLED   = 'fulfilled';
+    public const STATUS_REJECTED    = 'rejected';
+
+    public function auditor()
+    {
+        return $this->belongsTo(User::class, 'audited_by');
+    }
+
+    public function reviewer()
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
 
     public function account()
     {

@@ -20,7 +20,17 @@ class PettyCashReplenishmentItem extends Model
         'target_account_name',
         'amount',
         'side',
+        'status',
+        'rejection_reason',
+        'inquiry_note',
+        'custodian_reply',
     ];
+
+    public const STATUS_PENDING              = 'pending';
+    public const STATUS_APPROVED             = 'approved';
+    public const STATUS_REJECTED             = 'rejected';
+    public const STATUS_CLARIFICATION_NEEDED = 'clarification_needed';
+
 
     protected $casts = [
         'amount'     => 'decimal:2',

@@ -78,7 +78,7 @@ class AssignedAccountController extends Controller
                     $table->timestamp('period_end_date')->nullable();
                     $table->unsignedBigInteger('start_journal_line_id')->nullable();
                     $table->unsignedBigInteger('end_journal_line_id')->nullable();
-                    $table->enum('status', ['pending', 'fulfilled', 'rejected'])->default('pending')->index();
+                    $table->string('status', 30)->default('pending')->index();
                     $table->text('notes')->nullable();
                     $table->string('attachment_path')->nullable();
                     $table->foreignId('finance_head_id')->nullable()->constrained('users')->nullOnDelete();
@@ -86,6 +86,11 @@ class AssignedAccountController extends Controller
                     $table->foreignId('source_coa_id')->nullable()->constrained('chart_of_accounts')->nullOnDelete();
                     $table->foreignId('journal_entry_id')->nullable()->constrained('journal_entries')->nullOnDelete();
                     $table->text('finance_notes')->nullable();
+                    $table->text('audit_notes')->nullable();
+                    $table->foreignId('audited_by')->nullable()->constrained('users')->nullOnDelete();
+                    $table->timestamp('audited_at')->nullable();
+                    $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
+                    $table->timestamp('reviewed_at')->nullable();
                     $table->string('fulfillment_reference', 100)->nullable();
                     $table->timestamp('fulfilled_at')->nullable();
                     $table->timestamp('rejected_at')->nullable();
@@ -93,6 +98,24 @@ class AssignedAccountController extends Controller
                     $table->timestamps();
                     $table->softDeletes();
                     $table->index(['chart_of_account_id', 'status']);
+                });
+            } else {
+                Schema::table('petty_cash_replenishments', function (Blueprint $table) {
+                    if (!Schema::hasColumn('petty_cash_replenishments', 'audit_notes')) {
+                        $table->text('audit_notes')->nullable();
+                    }
+                    if (!Schema::hasColumn('petty_cash_replenishments', 'audited_by')) {
+                        $table->foreignId('audited_by')->nullable()->constrained('users')->nullOnDelete();
+                    }
+                    if (!Schema::hasColumn('petty_cash_replenishments', 'audited_at')) {
+                        $table->timestamp('audited_at')->nullable();
+                    }
+                    if (!Schema::hasColumn('petty_cash_replenishments', 'reviewed_by')) {
+                        $table->foreignId('reviewed_by')->nullable()->constrained('users')->nullOnDelete();
+                    }
+                    if (!Schema::hasColumn('petty_cash_replenishments', 'reviewed_at')) {
+                        $table->timestamp('reviewed_at')->nullable();
+                    }
                 });
             }
 
@@ -107,14 +130,34 @@ class AssignedAccountController extends Controller
                     $table->string('target_account_name')->nullable();
                     $table->decimal('amount', 18, 2);
                     $table->string('side', 20)->default('credit');
+                    $table->string('status', 30)->default('pending');
+                    $table->text('rejection_reason')->nullable();
+                    $table->text('inquiry_note')->nullable();
+                    $table->text('custodian_reply')->nullable();
                     $table->timestamps();
                     $table->index('petty_cash_replenishment_id', 'pcr_items_replenish_id_idx');
+                });
+            } else {
+                Schema::table('petty_cash_replenishment_items', function (Blueprint $table) {
+                    if (!Schema::hasColumn('petty_cash_replenishment_items', 'status')) {
+                        $table->string('status', 30)->default('pending');
+                    }
+                    if (!Schema::hasColumn('petty_cash_replenishment_items', 'rejection_reason')) {
+                        $table->text('rejection_reason')->nullable();
+                    }
+                    if (!Schema::hasColumn('petty_cash_replenishment_items', 'inquiry_note')) {
+                        $table->text('inquiry_note')->nullable();
+                    }
+                    if (!Schema::hasColumn('petty_cash_replenishment_items', 'custodian_reply')) {
+                        $table->text('custodian_reply')->nullable();
+                    }
                 });
             }
         } catch (\Throwable $e) {
             // Log or continue silently if schema cannot be checked/created
         }
     }
+
 
     public function index(Request $request)
     {
@@ -774,6 +817,191 @@ class AssignedAccountController extends Controller
     }
 
     /**
+     * Finance Head/Auditor reviews vouchers and sends replenishment to Audit Team.
+     */
+    public function sendReplenishmentToAudit(Request $request, int|string $id, int|string $replenishmentId)
+    {
+        self::ensureSchema();
+
+        $isFinanceHead = $this->isFinanceHeadUser();
+        $isAuditor = $this->isAuditorUser();
+        if (!$isFinanceHead && !$isAuditor) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $account = ChartOfAccount::findOrFail($id);
+        $replenishment = PettyCashReplenishment::where('id', $replenishmentId)
+            ->where('chart_of_account_id', $account->id)
+            ->firstOrFail();
+
+        $request->validate([
+            'audit_notes' => 'nullable|string|max:2000',
+        ]);
+
+        $replenishment->update([
+            'status'      => PettyCashReplenishment::STATUS_UNDER_AUDIT,
+            'audit_notes' => $request->audit_notes,
+            'reviewed_by' => auth()->id(),
+            'reviewed_at' => now(),
+        ]);
+
+        \App\Models\ActivityLog::log(
+            'audited',
+            "Petty Cash Replenishment #{$replenishment->request_no} reviewed and sent to Internal Audit Team by " . (auth()->user()->name ?? 'Finance') . ". Notes: " . ($request->audit_notes ?? 'None'),
+            'Finance & Petty Cash Audit',
+            $replenishment,
+            [
+                'request_no'       => $replenishment->request_no,
+                'requested_amount' => (float)$replenishment->requested_amount,
+                'account'          => "[{$account->code}] {$account->name}",
+                'custodian'        => $replenishment->requester->name ?? 'Staff',
+                'audit_notes'      => $request->audit_notes,
+            ]
+        );
+
+        return redirect()->back()->with('success', "Replenishment #{$replenishment->request_no} has been reviewed and successfully routed to Audit Team!");
+    }
+
+    /**
+     * Reject an individual voucher item from replenishment.
+     */
+    public function rejectVoucherItem(Request $request, int|string $itemId)
+    {
+        self::ensureSchema();
+
+        $item = PettyCashReplenishmentItem::with('replenishment.account')->findOrFail($itemId);
+        $replenishment = $item->replenishment;
+
+        $request->validate([
+            'rejection_reason' => 'required|string|max:1000',
+        ]);
+
+        $item->update([
+            'status'           => PettyCashReplenishmentItem::STATUS_REJECTED,
+            'rejection_reason' => $request->rejection_reason,
+        ]);
+
+        // Recalculate valid total expenses for the replenishment
+        $validTotal = $replenishment->items()->where('status', '!=', PettyCashReplenishmentItem::STATUS_REJECTED)->sum('amount');
+        $replenishment->update([
+            'total_expenses_amount' => $validTotal,
+        ]);
+
+        \App\Models\ActivityLog::log(
+            'rejected',
+            "Voucher #{$item->reference} (ETB " . number_format($item->amount, 2) . ") in Replenishment #{$replenishment->request_no} was rejected. Reason: {$request->rejection_reason}",
+            'Finance & Petty Cash Audit',
+            $replenishment
+        );
+
+        return redirect()->back()->with('warning', "Voucher #{$item->reference} (ETB " . number_format($item->amount, 2) . ") rejected and excluded from replenishment cycle.");
+    }
+
+    /**
+     * Ask description / request clarification on an individual voucher item.
+     */
+    public function askVoucherDescription(Request $request, int|string $itemId)
+    {
+        self::ensureSchema();
+
+        $item = PettyCashReplenishmentItem::with('replenishment.account')->findOrFail($itemId);
+        $replenishment = $item->replenishment;
+
+        $request->validate([
+            'inquiry_note' => 'required|string|max:1000',
+        ]);
+
+        $item->update([
+            'status'       => PettyCashReplenishmentItem::STATUS_CLARIFICATION_NEEDED,
+            'inquiry_note' => $request->inquiry_note,
+        ]);
+
+        \App\Models\ActivityLog::log(
+            'clarification_requested',
+            "Clarification / description requested on Voucher #{$item->reference} (Replenishment #{$replenishment->request_no}): {$request->inquiry_note}",
+            'Finance & Petty Cash Audit',
+            $replenishment
+        );
+
+        return redirect()->back()->with('info', "Description / clarification request recorded for Voucher #{$item->reference}.");
+    }
+
+    /**
+     * Approve / restore a voucher item.
+     */
+    public function approveVoucherItem(Request $request, int|string $itemId)
+    {
+        self::ensureSchema();
+
+        $item = PettyCashReplenishmentItem::with('replenishment.account')->findOrFail($itemId);
+        $replenishment = $item->replenishment;
+
+        $item->update([
+            'status'           => PettyCashReplenishmentItem::STATUS_APPROVED,
+            'rejection_reason' => null,
+        ]);
+
+        $validTotal = $replenishment->items()->where('status', '!=', PettyCashReplenishmentItem::STATUS_REJECTED)->sum('amount');
+        $replenishment->update([
+            'total_expenses_amount' => $validTotal,
+        ]);
+
+        return redirect()->back()->with('success', "Voucher #{$item->reference} verified and restored.");
+    }
+
+    /**
+     * Bulk action on selected vouchers (bulk reject or bulk ask description).
+     */
+    public function bulkVoucherAction(Request $request, int|string $id, int|string $replenishmentId)
+    {
+        self::ensureSchema();
+
+        $request->validate([
+            'voucher_ids'   => 'required|array|min:1',
+            'voucher_ids.*' => 'exists:petty_cash_replenishment_items,id',
+            'bulk_action'   => 'required|in:reject,ask_description,approve',
+            'bulk_note'     => 'nullable|string|max:1000',
+        ]);
+
+        $replenishment = PettyCashReplenishment::where('id', $replenishmentId)->firstOrFail();
+        $items = PettyCashReplenishmentItem::whereIn('id', $request->voucher_ids)
+            ->where('petty_cash_replenishment_id', $replenishment->id)
+            ->get();
+
+        if ($request->bulk_action === 'reject') {
+            $reason = $request->bulk_note ?: 'Excluded during finance review.';
+            foreach ($items as $item) {
+                $item->update([
+                    'status'           => PettyCashReplenishmentItem::STATUS_REJECTED,
+                    'rejection_reason' => $reason,
+                ]);
+            }
+            $validTotal = $replenishment->items()->where('status', '!=', PettyCashReplenishmentItem::STATUS_REJECTED)->sum('amount');
+            $replenishment->update(['total_expenses_amount' => $validTotal]);
+            return redirect()->back()->with('warning', count($items) . " voucher(s) rejected and excluded from replenishment.");
+        } elseif ($request->bulk_action === 'ask_description') {
+            $inquiry = $request->bulk_note ?: 'Please provide more details on this expenditure.';
+            foreach ($items as $item) {
+                $item->update([
+                    'status'       => PettyCashReplenishmentItem::STATUS_CLARIFICATION_NEEDED,
+                    'inquiry_note' => $inquiry,
+                ]);
+            }
+            return redirect()->back()->with('info', "Clarification requested on " . count($items) . " voucher(s).");
+        } else {
+            foreach ($items as $item) {
+                $item->update([
+                    'status'           => PettyCashReplenishmentItem::STATUS_APPROVED,
+                    'rejection_reason' => null,
+                ]);
+            }
+            $validTotal = $replenishment->items()->where('status', '!=', PettyCashReplenishmentItem::STATUS_REJECTED)->sum('amount');
+            $replenishment->update(['total_expenses_amount' => $validTotal]);
+            return redirect()->back()->with('success', count($items) . " voucher(s) approved and verified.");
+        }
+    }
+
+    /**
      * Finance Head & Auditor: Central Petty Cash Replenishments Oversight & Approval Hub
      */
     public function replenishmentsIndex(Request $request)
@@ -793,6 +1021,8 @@ class AssignedAccountController extends Controller
         $activeTab = $request->input('tab', 'pending');
         if ($activeTab === 'pending') {
             $query->where('status', PettyCashReplenishment::STATUS_PENDING);
+        } elseif ($activeTab === 'under_audit') {
+            $query->where('status', PettyCashReplenishment::STATUS_UNDER_AUDIT);
         } elseif ($activeTab === 'fulfilled') {
             $query->where('status', PettyCashReplenishment::STATUS_FULFILLED);
         } elseif ($activeTab === 'rejected') {
@@ -827,10 +1057,11 @@ class AssignedAccountController extends Controller
 
         // Metrics & Tab counts
         $tabCounts = [
-            'all'       => PettyCashReplenishment::count(),
-            'pending'   => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_PENDING)->count(),
-            'fulfilled' => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_FULFILLED)->count(),
-            'rejected'  => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_REJECTED)->count(),
+            'all'         => PettyCashReplenishment::count(),
+            'pending'     => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_PENDING)->count(),
+            'under_audit' => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_UNDER_AUDIT)->count(),
+            'fulfilled'   => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_FULFILLED)->count(),
+            'rejected'    => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_REJECTED)->count(),
         ];
 
         $pendingAmount = PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_PENDING)->sum('requested_amount');
@@ -862,4 +1093,5 @@ class AssignedAccountController extends Controller
         ));
     }
 }
+
 

@@ -672,7 +672,7 @@
                             </thead>
                             <tbody>
                                 @forelse($rep->items as $item)
-                                    <tr>
+                                    <tr class="{{ $item->status === 'rejected' ? 'table-danger opacity-75' : ($item->status === 'clarification_needed' ? 'table-warning' : '') }}">
                                         <td class="px-3 py-2 text-muted text-nowrap">{{ $item->entry_date ? \Carbon\Carbon::parse($item->entry_date)->format('M d, Y') : ($item->created_at ? $item->created_at->format('M d, Y') : 'N/A') }}</td>
                                         <td class="py-2 text-nowrap"><span class="badge bg-light text-primary border font-monospace">{{ $item->reference ?: ($item->journal_entry_line_id ? 'JL #' . $item->journal_entry_line_id : 'EXP-' . $item->id) }}</span></td>
                                         <td class="py-2 text-nowrap"><span class="badge bg-secondary-subtle text-dark border">{{ $item->target_account_name ?: 'Petty Cash Expense' }}</span></td>
@@ -680,12 +680,18 @@
                                             <div style="word-break: break-word; white-space: normal; line-height: 1.4;">
                                                 {{ $item->description }}
                                             </div>
+                                            @if($item->status === 'rejected' && $item->rejection_reason)
+                                                <div class="text-danger small mt-1"><i class="fa-solid fa-ban me-1"></i><strong>Rejected:</strong> {{ $item->rejection_reason }}</div>
+                                            @elseif($item->status === 'clarification_needed' && $item->inquiry_note)
+                                                <div class="text-dark small mt-1 p-1 bg-warning bg-opacity-25 rounded"><i class="fa-solid fa-circle-question text-warning me-1"></i><strong>Clarification Needed:</strong> {{ $item->inquiry_note }}</div>
+                                            @endif
                                         </td>
-                                        <td class="px-3 py-2 text-end fw-bold text-danger font-monospace text-nowrap">ETB {{ number_format($item->amount, 2) }}</td>
+                                        <td class="px-3 py-2 text-end fw-bold {{ $item->status === 'rejected' ? 'text-decoration-line-through text-muted' : 'text-danger' }} font-monospace text-nowrap">ETB {{ number_format($item->amount, 2) }}</td>
                                     </tr>
                                 @empty
                                     <tr><td colspan="5" class="text-center py-4 text-muted">No individual items attached.</td></tr>
                                 @endforelse
+
                             </tbody>
                         </table>
                     </div>
