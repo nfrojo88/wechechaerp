@@ -296,8 +296,9 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 
-                <form method="POST" action="{{ route('assigned-accounts.send-to-audit', ['id' => $rep->chart_of_account_id, 'replenishmentId' => $rep->id]) }}">
+                <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/send-to-audit') }}">
                     @csrf
+
                     <div class="modal-body p-4 bg-white">
 
                         <!-- Top Balance Stats -->
@@ -476,8 +477,9 @@
                     <h5 class="modal-title fw-bold mb-0"><i class="fa-solid fa-circle-xmark me-2"></i>Reject Replenishment #{{ $rep->request_no }}</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <form method="POST" action="{{ route('assigned-accounts.reject-replenishment', ['id' => $rep->chart_of_account_id, 'replenishmentId' => $rep->id]) }}">
+                <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/reject') }}">
                     @csrf
+
                     <div class="modal-body p-4 bg-white">
                         <p class="text-dark mb-2">Please specify the reason for rejecting <strong>{{ $rep->requester->name ?? 'Staff' }}</strong>'s replenishment request:</p>
                         <div class="mb-3">
