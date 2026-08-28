@@ -58,6 +58,12 @@ class PettyCashReplenishment extends Model
         return $this->belongsTo(ChartOfAccount::class, 'chart_of_account_id');
     }
 
+    public function chartOfAccount()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'chart_of_account_id');
+    }
+
+
     public function requester()
     {
         return $this->belongsTo(User::class, 'requested_by');
