@@ -571,8 +571,8 @@
 <!-- ========================================================================= -->
 @foreach($replenishments as $rep)
 <div class="modal fade" id="viewReplenishmentModal_{{ $rep->id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
-        <div class="modal-content border-0 shadow rounded-4">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
             <div class="modal-header bg-dark text-white border-0 py-3">
                 <div>
                     <h5 class="modal-title fw-bold mb-0">
@@ -585,27 +585,27 @@
             <div class="modal-body p-4">
                 <div class="row g-3 mb-4">
                     <div class="col-md-4">
-                        <div class="p-3 bg-light rounded-3">
+                        <div class="p-3 bg-light rounded-3 border">
                             <span class="text-muted small text-uppercase fw-bold">Requested Amount</span>
                             <h4 class="fw-bold text-primary mb-0 mt-1">ETB {{ number_format($rep->requested_amount, 2) }}</h4>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="p-3 bg-light rounded-3">
+                        <div class="p-3 bg-light rounded-3 border">
                             <span class="text-muted small text-uppercase fw-bold">Attached Expenses Total</span>
                             <h4 class="fw-bold text-danger mb-0 mt-1">ETB {{ number_format($rep->total_expenses_amount, 2) }}</h4>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="p-3 bg-light rounded-3">
-                            <span class="text-muted small text-uppercase fw-bold">Status</span>
+                        <div class="p-3 bg-light rounded-3 border">
+                            <span class="text-muted small text-uppercase fw-bold">Current Cycle Status</span>
                             <div class="mt-1">
-                                @if($rep->status === 'fulfilled')
-                                    <span class="badge bg-success px-3 py-2 rounded-pill"><i class="fas fa-check-circle me-1"></i> Fulfilled</span>
+                                @if($rep->status === 'pending')
+                                    <span class="badge bg-warning text-dark px-3 py-1.5 rounded-pill">Pending Finance Approval</span>
+                                @elseif($rep->status === 'fulfilled')
+                                    <span class="badge bg-success text-white px-3 py-1.5 rounded-pill">Fulfilled &amp; Disbursed</span>
                                 @elseif($rep->status === 'rejected')
-                                    <span class="badge bg-danger px-3 py-2 rounded-pill"><i class="fas fa-times-circle me-1"></i> Rejected</span>
-                                @else
-                                    <span class="badge bg-warning text-dark px-3 py-2 rounded-pill"><i class="fas fa-clock me-1"></i> Pending Review</span>
+                                    <span class="badge bg-danger text-white px-3 py-1.5 rounded-pill">Rejected</span>
                                 @endif
                             </div>
                         </div>
@@ -613,47 +613,68 @@
                 </div>
 
                 @if($rep->notes)
-                    <div class="mb-4 p-3 bg-light rounded-3">
-                        <span class="text-muted small text-uppercase fw-bold"><i class="fas fa-comment-alt me-1"></i> Custodian Notes</span>
-                        <p class="mb-0 mt-1 text-dark">{{ $rep->notes }}</p>
+                    <div class="mb-4 p-3 bg-light rounded-3 border">
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Custodian Justification / Notes</span>
+                        <div class="text-dark">{{ $rep->notes }}</div>
                     </div>
                 @endif
 
-                @if($rep->attachment_url)
-                    <div class="mb-4">
-                        <a href="{{ $rep->attachment_url }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                @if($rep->attachment_path)
+                    <div class="mb-4 p-3 bg-light rounded-3 border d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong class="text-dark d-block"><i class="fas fa-file-invoice text-primary me-1"></i> Attached Supporting Document</strong>
+                            <small class="text-muted">Uploaded receipt voucher copy</small>
+                        </div>
+                        <a href="{{ \App\Services\FileUploadService::url($rep->attachment_path) }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
                             <i class="fas fa-paperclip me-1"></i> View Supporting Document / Receipt
                         </a>
                     </div>
                 @endif
 
                 <!-- Attached Itemized Expenses Table -->
-                <h6 class="fw-bold text-dark mb-2"><i class="fas fa-list me-1 text-primary"></i> Attached Payment History ({{ $rep->items->count() }} items)</h6>
-                <div class="border rounded-4 overflow-hidden mb-4" style="max-height: 250px; overflow-y: auto;">
-                    <table class="table table-sm table-hover align-middle mb-0 small">
-                        <thead class="bg-light text-muted sticky-top">
-                            <tr>
-                                <th class="px-3 py-2">Date</th>
-                                <th class="py-2">Reference</th>
-                                <th class="py-2">Description</th>
-                                <th class="py-2">Category / Target</th>
-                                <th class="px-3 py-2 text-end">Amount (ETB)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($rep->items as $item)
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold text-dark mb-0"><i class="fas fa-list me-1 text-primary"></i> Attached Expense Vouchers ({{ $rep->items->count() }} Records)</h6>
+                        <span class="badge bg-light text-dark border font-monospace">Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
+                    </div>
+                    <div class="border rounded-3 overflow-hidden shadow-xs" style="max-height: 460px; overflow-y: auto;">
+                        <table class="table table-sm table-striped table-hover align-middle mb-0 small">
+                            <thead class="bg-light sticky-top shadow-xs">
                                 <tr>
-                                    <td class="px-3 py-2 text-muted">{{ $item->entry_date ? $item->entry_date->format('M d, Y') : '-' }}</td>
-                                    <td class="py-2"><span class="badge bg-light text-dark border">{{ $item->reference ?? '-' }}</span></td>
-                                    <td class="py-2">{{ $item->description }}</td>
-                                    <td class="py-2"><span class="badge bg-secondary-subtle text-secondary border">{{ $item->target_account_name }}</span></td>
-                                    <td class="px-3 py-2 text-end fw-bold text-danger">ETB {{ number_format($item->amount, 2) }}</td>
+                                    <th class="px-3 py-2 text-nowrap">Date</th>
+                                    <th class="py-2 text-nowrap">Voucher # / Ref</th>
+                                    <th class="py-2 text-nowrap">Category / Target</th>
+                                    <th class="py-2" style="min-width: 280px;">Description &amp; Beneficiary Details</th>
+                                    <th class="px-3 py-2 text-end text-nowrap">Amount (ETB)</th>
                                 </tr>
-                            @empty
-                                <tr><td colspan="5" class="text-center py-3 text-muted">No individual items attached.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @forelse($rep->items as $item)
+                                    <tr>
+                                        <td class="px-3 py-2 text-muted text-nowrap">{{ $item->entry_date ? \Carbon\Carbon::parse($item->entry_date)->format('M d, Y') : ($item->created_at ? $item->created_at->format('M d, Y') : 'N/A') }}</td>
+                                        <td class="py-2 text-nowrap"><span class="badge bg-light text-primary border font-monospace">{{ $item->reference ?: ($item->journal_entry_line_id ? 'JL #' . $item->journal_entry_line_id : 'EXP-' . $item->id) }}</span></td>
+                                        <td class="py-2 text-nowrap"><span class="badge bg-secondary-subtle text-dark border">{{ $item->target_account_name ?: 'Petty Cash Expense' }}</span></td>
+                                        <td class="py-2">
+                                            <div style="word-break: break-word; white-space: normal; line-height: 1.4;">
+                                                {{ $item->description }}
+                                            </div>
+                                        </td>
+                                        <td class="px-3 py-2 text-end fw-bold text-danger font-monospace text-nowrap">ETB {{ number_format($item->amount, 2) }}</td>
+                                    </tr>
+                                @empty
+                                    <tr><td colspan="5" class="text-center py-4 text-muted">No individual items attached.</td></tr>
+                                @endforelse
+                            </tbody>
+                            @if($rep->items->count() > 0)
+                            <tfoot class="bg-light sticky-bottom fw-bold border-top">
+                                <tr>
+                                    <td colspan="4" class="px-3 py-2 text-dark">Total ({{ $rep->items->count() }} Vouchers):</td>
+                                    <td class="px-3 py-2 text-end text-danger font-monospace">ETB {{ number_format($rep->items->sum('amount') ?: $rep->total_expenses_amount, 2) }}</td>
+                                </tr>
+                            </tfoot>
+                            @endif
+                        </table>
+                    </div>
                 </div>
 
                 @if($rep->status === 'fulfilled')

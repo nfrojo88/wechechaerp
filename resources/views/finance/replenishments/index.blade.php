@@ -302,41 +302,64 @@
                         </div>
 
                         <!-- Attached Payment History Table -->
+                        <!-- Attached Itemized Expenses Table -->
                         <div class="mb-4">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <label class="form-label fw-bold text-dark mb-0">
-                                    <i class="fa-solid fa-paperclip text-primary me-1"></i> Attached Payment History ({{ $rep->items->count() }} Records)
+                                    <i class="fa-solid fa-paperclip text-primary me-1"></i> Attached Expense Vouchers ({{ $rep->items->count() }} Records)
                                 </label>
-                                <span class="badge bg-light text-dark border">Cycle Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
+                                <span class="badge bg-light text-dark border font-monospace">Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
                             </div>
-                            <div class="border rounded-3 overflow-hidden" style="max-height: 250px; overflow-y: auto;">
+                            <div class="border rounded-3 overflow-hidden shadow-xs" style="max-height: 420px; overflow-y: auto;">
                                 <table class="table table-sm table-striped table-hover align-middle mb-0 small">
-                                    <thead class="bg-light sticky-top">
+                                    <thead class="bg-light sticky-top shadow-xs">
                                         <tr>
-                                            <th class="ps-3 py-2">Date</th>
-                                            <th class="py-2">Req # / Ref</th>
-                                            <th class="py-2">Requester / Dept</th>
-                                            <th class="py-2">Category</th>
-                                            <th class="py-2">Description</th>
-                                            <th class="pe-3 py-2 text-end">Amount (ETB)</th>
+                                            <th class="ps-3 py-2 text-nowrap">Date</th>
+                                            <th class="py-2 text-nowrap">Voucher # / Ref</th>
+                                            <th class="py-2 text-nowrap">Expense Category / Account</th>
+                                            <th class="py-2" style="min-width: 280px;">Description &amp; Beneficiary Details</th>
+                                            <th class="pe-3 py-2 text-end text-nowrap">Amount (ETB)</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         @forelse($rep->items as $item)
                                             <tr>
-                                                <td class="ps-3 py-2 text-muted" style="white-space:nowrap;">{{ optional($item->expense_date)->format('M d, Y H:i') ?? 'N/A' }}</td>
-                                                <td class="py-2"><span class="badge bg-light text-primary border">{{ $item->reference_number }}</span></td>
-                                                <td class="py-2"><strong>{{ $item->requester_name }}</strong><small class="text-muted d-block">{{ $item->department }}</small></td>
-                                                <td class="py-2"><span class="badge bg-secondary-subtle text-dark">{{ $item->category }}</span></td>
-                                                <td class="py-2">{{ Str::limit($item->description, 45) }}</td>
-                                                <td class="pe-3 py-2 text-end fw-bold text-danger">ETB {{ number_format($item->amount, 2) }}</td>
+                                                <td class="ps-3 py-2 text-muted text-nowrap">
+                                                    {{ $item->entry_date ? \Carbon\Carbon::parse($item->entry_date)->format('M d, Y') : ($item->created_at ? $item->created_at->format('M d, Y') : 'N/A') }}
+                                                </td>
+                                                <td class="py-2 text-nowrap">
+                                                    <span class="badge bg-light text-primary border font-monospace">
+                                                        {{ $item->reference ?: ($item->journal_entry_line_id ? 'JL #' . $item->journal_entry_line_id : 'EXP-' . $item->id) }}
+                                                    </span>
+                                                </td>
+                                                <td class="py-2 text-nowrap">
+                                                    <span class="badge bg-secondary-subtle text-dark border">
+                                                        {{ $item->target_account_name ?: 'Petty Cash Expense' }}
+                                                    </span>
+                                                </td>
+                                                <td class="py-2">
+                                                    <div style="word-break: break-word; white-space: normal; line-height: 1.4;">
+                                                        {{ $item->description }}
+                                                    </div>
+                                                </td>
+                                                <td class="pe-3 py-2 text-end fw-bold text-danger font-monospace text-nowrap">
+                                                    ETB {{ number_format($item->amount, 2) }}
+                                                </td>
                                             </tr>
                                         @empty
                                             <tr>
-                                                <td colspan="6" class="text-center py-3 text-muted">No line item breakdown attached.</td>
+                                                <td colspan="5" class="text-center py-4 text-muted">No line item breakdown attached.</td>
                                             </tr>
                                         @endforelse
                                     </tbody>
+                                    @if($rep->items->count() > 0)
+                                    <tfoot class="bg-light sticky-bottom fw-bold border-top">
+                                        <tr>
+                                            <td colspan="4" class="ps-3 py-2 text-dark">Total ({{ $rep->items->count() }} Vouchers):</td>
+                                            <td class="pe-3 py-2 text-end text-danger font-monospace">ETB {{ number_format($rep->items->sum('amount') ?: $rep->total_expenses_amount, 2) }}</td>
+                                        </tr>
+                                    </tfoot>
+                                    @endif
                                 </table>
                             </div>
                         </div>
@@ -436,7 +459,7 @@
 
     <!-- 3. View Details Modal (For all states) -->
     <div class="modal fade" id="viewModal{{ $rep->id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
                 <div class="modal-header bg-dark text-white py-3 px-4">
                     <div>
@@ -485,38 +508,66 @@
 
                     <!-- Attached Items Table -->
                     <div class="mb-4">
-                        <label class="form-label fw-bold text-dark"><i class="fa-solid fa-list-check text-primary me-1"></i> Attached Expense Vouchers ({{ $rep->items->count() }})</label>
-                        <div class="border rounded-3 overflow-hidden" style="max-height: 250px; overflow-y: auto;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bold text-dark mb-0">
+                                <i class="fa-solid fa-list-check text-primary me-1"></i> Attached Expense Vouchers ({{ $rep->items->count() }})
+                            </label>
+                            <span class="badge bg-light text-dark border font-monospace">Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
+                        </div>
+                        <div class="border rounded-3 overflow-hidden shadow-xs" style="max-height: 460px; overflow-y: auto;">
                             <table class="table table-sm table-striped table-hover align-middle mb-0 small">
-                                <thead class="bg-light sticky-top">
+                                <thead class="bg-light sticky-top shadow-xs">
                                     <tr>
-                                        <th class="ps-3 py-2">Date</th>
-                                        <th class="py-2">Req # / Ref</th>
-                                        <th class="py-2">Requester / Dept</th>
-                                        <th class="py-2">Category</th>
-                                        <th class="py-2">Description</th>
-                                        <th class="pe-3 py-2 text-end">Amount (ETB)</th>
+                                        <th class="ps-3 py-2 text-nowrap">Date</th>
+                                        <th class="py-2 text-nowrap">Voucher # / Ref</th>
+                                        <th class="py-2 text-nowrap">Expense Category / Account</th>
+                                        <th class="py-2" style="min-width: 280px;">Description &amp; Beneficiary Details</th>
+                                        <th class="pe-3 py-2 text-end text-nowrap">Amount (ETB)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse($rep->items as $item)
                                         <tr>
-                                            <td class="ps-3 py-2 text-muted" style="white-space:nowrap;">{{ optional($item->expense_date)->format('M d, Y H:i') ?? 'N/A' }}</td>
-                                            <td class="py-2"><span class="badge bg-light text-primary border">{{ $item->reference_number }}</span></td>
-                                            <td class="py-2"><strong>{{ $item->requester_name }}</strong><small class="text-muted d-block">{{ $item->department }}</small></td>
-                                            <td class="py-2"><span class="badge bg-secondary-subtle text-dark">{{ $item->category }}</span></td>
-                                            <td class="py-2">{{ Str::limit($item->description, 45) }}</td>
-                                            <td class="pe-3 py-2 text-end fw-bold text-danger">ETB {{ number_format($item->amount, 2) }}</td>
+                                            <td class="ps-3 py-2 text-muted text-nowrap">
+                                                {{ $item->entry_date ? \Carbon\Carbon::parse($item->entry_date)->format('M d, Y') : ($item->created_at ? $item->created_at->format('M d, Y') : 'N/A') }}
+                                            </td>
+                                            <td class="py-2 text-nowrap">
+                                                <span class="badge bg-light text-primary border font-monospace">
+                                                    {{ $item->reference ?: ($item->journal_entry_line_id ? 'JL #' . $item->journal_entry_line_id : 'EXP-' . $item->id) }}
+                                                </span>
+                                            </td>
+                                            <td class="py-2 text-nowrap">
+                                                <span class="badge bg-secondary-subtle text-dark border">
+                                                    {{ $item->target_account_name ?: 'Petty Cash Expense' }}
+                                                </span>
+                                            </td>
+                                            <td class="py-2">
+                                                <div style="word-break: break-word; white-space: normal; line-height: 1.4;">
+                                                    {{ $item->description }}
+                                                </div>
+                                            </td>
+                                            <td class="pe-3 py-2 text-end fw-bold text-danger font-monospace text-nowrap">
+                                                ETB {{ number_format($item->amount, 2) }}
+                                            </td>
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="6" class="text-center py-3 text-muted">No line item records.</td>
+                                            <td colspan="5" class="text-center py-4 text-muted">No line item records.</td>
                                         </tr>
                                     @endforelse
                                 </tbody>
+                                @if($rep->items->count() > 0)
+                                <tfoot class="bg-light sticky-bottom fw-bold border-top">
+                                    <tr>
+                                        <td colspan="4" class="ps-3 py-2 text-dark">Total ({{ $rep->items->count() }} Vouchers):</td>
+                                        <td class="pe-3 py-2 text-end text-danger font-monospace">ETB {{ number_format($rep->items->sum('amount') ?: $rep->total_expenses_amount, 2) }}</td>
+                                    </tr>
+                                </tfoot>
+                                @endif
                             </table>
                         </div>
                     </div>
+
 
                     @if($rep->attachment_path)
                     <div class="mb-4 p-3 bg-light rounded-3 border d-flex justify-content-between align-items-center">
