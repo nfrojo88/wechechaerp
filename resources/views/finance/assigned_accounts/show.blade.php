@@ -1,7 +1,29 @@
 @extends('layouts.app')
 @section('title', $account->name . ' - Petty Cash & Assigned Account')
 @section('content')
+<style>
+.voucher-scroll-box {
+    scrollbar-width: thin;
+    scrollbar-color: #adb5bd #f8f9fa;
+}
+.voucher-scroll-box::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.voucher-scroll-box::-webkit-scrollbar-track {
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+.voucher-scroll-box::-webkit-scrollbar-thumb {
+    background: #ced4da;
+    border-radius: 4px;
+}
+.voucher-scroll-box::-webkit-scrollbar-thumb:hover {
+    background: #adb5bd;
+}
+</style>
 <div class="container-fluid py-3">
+
     <!-- Header -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
         <div>
@@ -571,7 +593,7 @@
 <!-- ========================================================================= -->
 @foreach($replenishments as $rep)
 <div class="modal fade" id="viewReplenishmentModal_{{ $rep->id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content border-0 shadow rounded-4 overflow-hidden">
             <div class="modal-header bg-dark text-white border-0 py-3">
                 <div>
@@ -637,15 +659,15 @@
                         <h6 class="fw-bold text-dark mb-0"><i class="fas fa-list me-1 text-primary"></i> Attached Expense Vouchers ({{ $rep->items->count() }} Records)</h6>
                         <span class="badge bg-light text-dark border font-monospace">Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
                     </div>
-                    <div class="border rounded-3 overflow-hidden shadow-xs" style="max-height: 460px; overflow-y: auto;">
+                    <div class="border rounded-top-3 shadow-xs" style="max-height: 380px; overflow-y: auto; overflow-x: auto;">
                         <table class="table table-sm table-striped table-hover align-middle mb-0 small">
-                            <thead class="bg-light sticky-top shadow-xs">
+                            <thead class="bg-light sticky-top shadow-xs" style="z-index: 5;">
                                 <tr>
-                                    <th class="px-3 py-2 text-nowrap">Date</th>
-                                    <th class="py-2 text-nowrap">Voucher # / Ref</th>
-                                    <th class="py-2 text-nowrap">Category / Target</th>
-                                    <th class="py-2" style="min-width: 280px;">Description &amp; Beneficiary Details</th>
-                                    <th class="px-3 py-2 text-end text-nowrap">Amount (ETB)</th>
+                                    <th class="px-3 py-2.5 text-nowrap bg-light">Date</th>
+                                    <th class="py-2.5 text-nowrap bg-light">Voucher # / Ref</th>
+                                    <th class="py-2.5 text-nowrap bg-light">Category / Target</th>
+                                    <th class="py-2.5 bg-light" style="min-width: 300px;">Description &amp; Beneficiary Details</th>
+                                    <th class="px-3 py-2.5 text-end text-nowrap bg-light">Amount (ETB)</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -665,17 +687,16 @@
                                     <tr><td colspan="5" class="text-center py-4 text-muted">No individual items attached.</td></tr>
                                 @endforelse
                             </tbody>
-                            @if($rep->items->count() > 0)
-                            <tfoot class="bg-light sticky-bottom fw-bold border-top">
-                                <tr>
-                                    <td colspan="4" class="px-3 py-2 text-dark">Total ({{ $rep->items->count() }} Vouchers):</td>
-                                    <td class="px-3 py-2 text-end text-danger font-monospace">ETB {{ number_format($rep->items->sum('amount') ?: $rep->total_expenses_amount, 2) }}</td>
-                                </tr>
-                            </tfoot>
-                            @endif
                         </table>
                     </div>
+                    @if($rep->items->count() > 0)
+                    <div class="d-flex justify-content-between align-items-center bg-light border border-top-0 rounded-bottom-3 px-3 py-2 fw-bold small">
+                        <span class="text-dark"><i class="fa-solid fa-receipt text-secondary me-1"></i> Total Vouchers: <span class="badge bg-dark rounded-pill">{{ $rep->items->count() }}</span></span>
+                        <span class="text-danger font-monospace fs-6">Grand Total: ETB {{ number_format($rep->items->sum('amount') ?: $rep->total_expenses_amount, 2) }}</span>
+                    </div>
+                    @endif
                 </div>
+
 
                 @if($rep->status === 'fulfilled')
                     <div class="p-3 bg-success bg-opacity-10 rounded-4 border border-success border-opacity-20">
