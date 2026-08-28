@@ -147,18 +147,56 @@ class PurchaseRequestController extends Controller
             'workflowLogs.actor',
         ]);
 
-        // Cross-store stock availability for all items
+        // Cross-store stock availability & active transfer tracking for all items
+        $productIds = $purchaseRequest->items->pluck('product_id')->filter()->unique()->toArray();
+
+        // 1. Find all active transfers involving these products
+        $activeTransferItems = \App\Models\TransferItem::whereIn('product_id', $productIds)
+            ->whereHas('transfer', function ($q) {
+                $q->whereIn('status', ['draft', 'pending_approval', 'approved', 'in_transit', 'dispatched']);
+            })
+            ->with('transfer.fromStore', 'transfer.toStore')
+            ->get();
+
+        // 2. Find transfers specifically linked to this PR
+        $prTransfers = \App\Models\Transfer::with(['fromStore', 'toStore', 'items.product', 'requestedBy', 'driver'])
+            ->where(function ($q) use ($purchaseRequest) {
+                $q->where('reason', 'like', "%{$purchaseRequest->pr_no}%");
+                if ($purchaseRequest->material_request_id) {
+                    $q->orWhere('reason', 'like', "%MR-{$purchaseRequest->material_request_id}%");
+                }
+            })
+            ->latest()
+            ->get();
+
         $stockAvailability = [];
+        $transferAvailability = [];
+
         foreach ($purchaseRequest->items as $item) {
             if ($item->product_id) {
-                $stockAvailability[$item->product_id] = Inventory::with('store')
+                $rawStocks = Inventory::with('store')
                     ->where('product_id', $item->product_id)
                     ->where('quantity_on_hand', '>', 0)
                     ->get();
+
+                foreach ($rawStocks as $st) {
+                    $stInTransfer = $activeTransferItems
+                        ->where('product_id', $item->product_id)
+                        ->filter(fn($ti) => $ti->transfer && $ti->transfer->from_store_id == $st->store_id)
+                        ->sum('requested_quantity');
+
+                    $st->in_transfer_qty = (float)$stInTransfer;
+                    $st->net_available = max(0, (float)$st->quantity_on_hand - (float)$stInTransfer);
+                }
+
+                $stockAvailability[$item->product_id] = $rawStocks;
+                $transferAvailability[$item->product_id] = $activeTransferItems->where('product_id', $item->product_id);
             } else {
                 $stockAvailability[$item->id] = collect();
+                $transferAvailability[$item->id] = collect();
             }
         }
+
 
         // Data for action forms
         try {
@@ -374,10 +412,11 @@ class PurchaseRequestController extends Controller
         }
 
         return view('procurement.purchase-requests.show', compact(
-            'purchaseRequest', 'stockAvailability', 'coaAccounts',
+            'purchaseRequest', 'stockAvailability', 'transferAvailability', 'prTransfers', 'coaAccounts',
             'financeStaff', 'drivers', 'suppliers', 'stores', 'pricingBenchmarks',
             'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo'
         ));
+
     }
 
     /**

@@ -1055,8 +1055,10 @@
                                 @foreach($purchaseRequest->items as $item)
                                 @php
                                     $itemStocks = $stockAvailability[$item->product_id] ?? collect();
-                                    $totalStock = $itemStocks->sum('quantity_on_hand');
-                                    $hasStock = $totalStock > 0;
+                                    $totalRawStock = $itemStocks->sum('quantity_on_hand');
+                                    $totalInTransfer = $itemStocks->sum('in_transfer_qty');
+                                    $totalNetStock = $itemStocks->sum('net_available');
+                                    $hasStock = $totalNetStock > 0 || $totalRawStock > 0;
                                 @endphp
                                 <tr id="itemRow{{ $item->id }}">
                                     @if($isSelectableStage)
@@ -1068,28 +1070,40 @@
                                                data-product-name="{{ $item->product?->name ?? 'Item #' . $item->product_id }}"
                                                data-quantity="{{ (float)$item->quantity }}"
                                                data-unit="{{ $item->unit }}"
-                                               data-has-stock="{{ $hasStock ? '1' : '0' }}"
-                                               data-stock-qty="{{ $totalStock }}"
+                                               data-has-stock="{{ ($totalNetStock > 0) ? '1' : '0' }}"
+                                               data-stock-qty="{{ $totalNetStock }}"
                                                onchange="updateSelectionToolbar()">
                                     </td>
                                     @endif
                                     <td>
                                         <strong class="text-dark">{{ $item->product?->name ?? 'Item #' . $item->product_id }}</strong>
                                         @if($item->product?->code)
-                                            <br><code class="small text-muted">{{ $item->product->code }}</code>
+                                             <br><code class="small text-muted">{{ $item->product->code }}</code>
                                         @endif
                                     </td>
                                     <td>
-                                        @if($hasStock)
-                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2">
-                                                <i class="fas fa-warehouse me-1"></i> In Stock: {{ number_format($totalStock, 1) }} {{ $item->unit }}
-                                            </span>
-                                            <div class="small text-muted mt-1" style="font-size: 11px;">
-                                                @foreach($itemStocks as $st)
-                                                    {{ $st->store?->name }}: {{ number_format($st->quantity_on_hand, 1) }} | 
-                                                @endforeach
+                                        @if($totalInTransfer > 0)
+                                            <div class="mb-1">
+                                                <span class="badge bg-info text-dark border border-info border-opacity-25 py-1 px-2 shadow-xs">
+                                                    <i class="fas fa-truck-moving me-1"></i> In Transfer: {{ number_format($totalInTransfer, 1) }} {{ $item->unit }}
+                                                </span>
                                             </div>
-                                        @else
+                                        @endif
+
+                                        @if($totalNetStock > 0)
+                                            <div>
+                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 py-1 px-2">
+                                                    <i class="fas fa-warehouse me-1"></i> In Stock: {{ number_format($totalNetStock, 1) }} {{ $item->unit }}
+                                                </span>
+                                                <div class="small text-muted mt-1" style="font-size: 11px;">
+                                                    @foreach($itemStocks as $st)
+                                                        @if(($st->net_available ?? 0) > 0)
+                                                            {{ $st->store?->name }}: {{ number_format($st->net_available, 1) }} | 
+                                                        @endif
+                                                    @endforeach
+                                                </div>
+                                            </div>
+                                        @elseif($totalInTransfer <= 0)
                                             <span class="badge bg-light text-muted border py-1 px-2">
                                                 <i class="fas fa-circle-xmark me-1 text-secondary"></i> Out of Stock
                                             </span>
@@ -1103,11 +1117,12 @@
                                     <td class="pe-3 text-end">
                                         @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                                         <div class="btn-group btn-group-sm">
-                                            @if($hasStock)
+                                            @if($totalNetStock > 0 || $totalRawStock > 0)
                                             <button type="button" class="btn btn-outline-info" title="Quick Transfer this Item" onclick="quickTransferSingleItem({{ $item->id }})">
                                                 <i class="fas fa-truck-ramp-box"></i> Transfer
                                             </button>
                                             @endif
+
                                             <button type="button" class="btn btn-outline-success" title="Quick Purchase this Item" onclick="quickPurchaseSingleItem({{ $item->id }})">
                                                 <i class="fas fa-cart-shopping"></i> Purchase
                                             </button>
@@ -1382,33 +1397,145 @@
 
             <!-- Cross-Store Stock Availability View -->
             <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header bg-white font-weight-bold py-3 border-0">
-                    <i class="fas fa-warehouse text-warning me-2"></i>Real-time Cross-Store Inventory View
+                <div class="card-header bg-white font-weight-bold py-3 border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span class="fw-bold fs-6">
+                        <i class="fas fa-warehouse text-warning me-2"></i>Real-time Cross-Store Inventory View
+                    </span>
+                    <span class="badge bg-light text-dark border small">Real-time Stock vs In-Transfer Breakdown</span>
                 </div>
                 <div class="card-body p-0">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead class="table-light"><tr><th>Product</th><th>Store Name</th><th>Qty Available</th><th>Status</th></tr></thead>
-                        <tbody>
-                            @foreach($purchaseRequest->items as $item)
-                                @php $stocks = $stockAvailability[$item->product_id] ?? collect(); @endphp
-                                @forelse($stocks as $st)
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
                                 <tr>
-                                    <td>{{ $item->product?->name ?? 'Item #' . $item->product_id }}</td>
-                                    <td>{{ $st->store?->name ?? 'N/A' }}</td>
-                                    <td><strong class="text-success">{{ $st->quantity_on_hand }}</strong> {{ $item->unit }}</td>
-                                    <td><span class="badge bg-success">In Stock</span></td>
+                                    <th>Product</th>
+                                    <th>Store Name</th>
+                                    <th>Total on Hand</th>
+                                    <th>In Transfer</th>
+                                    <th>Net Available</th>
+                                    <th>Status</th>
                                 </tr>
-                                @empty
-                                <tr>
-                                    <td>{{ $item->product?->name ?? 'Item #' . $item->product_id }}</td>
-                                    <td colspan="3" class="text-muted italic">No stock available across any stores.</td>
-                                </tr>
-                                @endforelse
-                            @endforeach
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                @foreach($purchaseRequest->items as $item)
+                                    @php $stocks = $stockAvailability[$item->product_id] ?? collect(); @endphp
+                                    @forelse($stocks as $st)
+                                    <tr>
+                                        <td><strong>{{ $item->product?->name ?? 'Item #' . $item->product_id }}</strong></td>
+                                        <td>{{ $st->store?->name ?? 'N/A' }}</td>
+                                        <td>{{ number_format($st->quantity_on_hand, 2) }} {{ $item->unit }}</td>
+                                        <td>
+                                            @if(($st->in_transfer_qty ?? 0) > 0)
+                                                <span class="badge bg-info text-dark font-monospace shadow-xs">
+                                                    <i class="fas fa-truck-moving me-1"></i>{{ number_format($st->in_transfer_qty, 2) }} {{ $item->unit }}
+                                                </span>
+                                            @else
+                                                <span class="text-muted small">0.00</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if(($st->net_available ?? 0) > 0)
+                                                <strong class="text-success font-monospace">{{ number_format($st->net_available, 2) }} {{ $item->unit }}</strong>
+                                            @else
+                                                <span class="text-muted small fw-semibold">0.00 {{ $item->unit }}</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if(($st->net_available ?? 0) <= 0 && ($st->in_transfer_qty ?? 0) > 0)
+                                                <span class="badge bg-info text-dark shadow-xs"><i class="fas fa-truck-moving me-1"></i>In Transfer</span>
+                                            @elseif(($st->net_available ?? 0) > 0 && ($st->in_transfer_qty ?? 0) > 0)
+                                                <span class="badge bg-success me-1">In Stock</span>
+                                                <span class="badge bg-info text-dark">In Transfer</span>
+                                            @elseif(($st->net_available ?? 0) > 0)
+                                                <span class="badge bg-success">In Stock</span>
+                                            @else
+                                                <span class="badge bg-secondary">Out of Stock</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                    @empty
+                                    <tr>
+                                        <td><strong>{{ $item->product?->name ?? 'Item #' . $item->product_id }}</strong></td>
+                                        <td colspan="5" class="text-muted italic">No stock available across any stores.</td>
+                                    </tr>
+                                    @endforelse
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
+
+            <!-- Linked Store Transfers Created from this PR -->
+            @if(isset($prTransfers) && $prTransfers->count() > 0)
+            <div class="card border-0 shadow-sm mb-4 border-start border-4 border-info">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h6 class="font-weight-bold text-dark mb-0">
+                            <i class="fas fa-truck-ramp-box text-info me-2"></i>Store Transfers Created for this PR
+                        </h6>
+                        <small class="text-muted">Live transfer movements and dispatched items from PR #{{ $purchaseRequest->pr_no }}</small>
+                    </div>
+                    <span class="badge bg-info text-dark rounded-pill">{{ $prTransfers->count() }} Transfers</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Transfer #</th>
+                                    <th>From Store</th>
+                                    <th>To Store</th>
+                                    <th>Items Transferred</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($prTransfers as $tr)
+                                <tr>
+                                    <td>
+                                        <strong class="font-monospace text-primary">{{ $tr->transfer_no }}</strong>
+                                        <br><small class="text-muted">{{ $tr->created_at?->format('M d, Y H:i') }}</small>
+                                    </td>
+                                    <td><span class="badge bg-light text-dark border">{{ $tr->fromStore?->name ?? 'N/A' }}</span></td>
+                                    <td><span class="badge bg-light text-dark border">{{ $tr->toStore?->name ?? 'N/A' }}</span></td>
+                                    <td>
+                                        @foreach($tr->items as $tItem)
+                                            <div class="small">
+                                                <strong>{{ $tItem->product?->name ?? 'Item' }}</strong>: 
+                                                <span class="badge bg-info bg-opacity-10 text-info fw-bold">{{ number_format($tItem->requested_quantity, 1) }} {{ $tItem->unit }}</span>
+                                            </div>
+                                        @endforeach
+                                    </td>
+                                    <td>
+                                        @php
+                                            $trStatusClass = match($tr->status) {
+                                                'completed' => 'bg-success',
+                                                'in_transit', 'dispatched' => 'bg-primary text-white',
+                                                'approved' => 'bg-warning text-dark',
+                                                'rejected', 'cancelled' => 'bg-danger',
+                                                default => 'bg-secondary',
+                                            };
+                                        @endphp
+                                        <span class="badge {{ $trStatusClass }}">
+                                            <i class="fas fa-truck me-1"></i>{{ ucfirst(str_replace('_', ' ', $tr->status)) }}
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="{{ route('transfers.show', $tr->id) }}" class="btn btn-sm btn-outline-primary shadow-xs" target="_blank">
+                                            <i class="fas fa-external-link-alt me-1"></i> View Transfer
+                                        </a>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            @endif
+
 
             <!-- Audit Trail / Workflow History Logs -->
             <div class="card border-0 shadow-sm mb-4">
