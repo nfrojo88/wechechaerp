@@ -259,46 +259,45 @@
         {{-- Masters --}}
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isStoreKeeper && !$isStoreManager && !$isAuditorUser))
-        @canany(['projects.view', 'planning.view', 'schedule.view', 'stores.view', 'stores.create', 'stores.edit', 'stores.delete', 'products.view', 'products.create', 'products.edit', 'products.delete'])
+        @if($isCoordinator || (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['projects.view', 'planning.view', 'schedule.view', 'stores.view', 'stores.create', 'stores.edit', 'stores.delete', 'products.view', 'products.create', 'products.edit', 'products.delete']))))
 
-        @canany(['projects.view', 'planning.view', 'schedule.view'])
+        @if($isCoordinator || (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['projects.view', 'planning.view', 'schedule.view']))))
         <li class="sidebar-nav-item">
             <a href="{{ route('projects.index') }}" class="sidebar-nav-link {{ request()->routeIs('projects.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-building"></i>
                 <span>Projects</span>
             </a>
         </li>
-        @endcanany
-        @canany(['stores.view', 'stores.create', 'stores.edit', 'stores.delete'])
+        @endif
+        @if($isCoordinator || (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['stores.view', 'stores.create', 'stores.edit', 'stores.delete']))))
         <li class="sidebar-nav-item">
             <a href="{{ route('stores.index') }}" class="sidebar-nav-link {{ request()->routeIs('stores.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-warehouse"></i>
+                <i class="fa-solid fa-warehouse text-info"></i>
                 <span>Stores</span>
             </a>
         </li>
-        @endcanany
-        @canany(['products.view', 'products.create', 'products.edit', 'products.delete'])
+        @endif
+        @if($isCoordinator || (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['products.view', 'products.create', 'products.edit', 'products.delete']))))
         <li class="sidebar-nav-item">
             <a href="{{ route('products.index') }}" class="sidebar-nav-link {{ request()->routeIs('products.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-boxes-stacked"></i>
+                <i class="fa-solid fa-boxes-stacked text-warning"></i>
                 <span>Products</span>
             </a>
         </li>
-        @endcanany
-        @endcanany
+        @endif
+        @endif
         @endif
 
         {{-- Inventory --}}
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isStoreKeeper && !$isStoreManager && !$isAuditorUser))
-        @canany(['inventory.view', 'inventory.view_all_stores', 'inventory.*'])
-
+        @if($isCoordinator || (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->can('inventory.view') || auth()->user()->hasAnyPermission(['inventory.view', 'inventory.view_all_stores', 'inventory.*']))))
         <li class="sidebar-nav-item">
             <a href="{{ route('inventory.index') }}" class="sidebar-nav-link {{ request()->routeIs('inventory.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-clipboard-list"></i>
-                <span>Stock Levels</span>
+                <i class="fa-solid fa-boxes-stacked text-primary"></i>
+                <span>All Store Inventory</span>
             </a>
         </li>
-        @endcanany
+        @endif
         @endif
 
 
@@ -336,10 +335,10 @@
         </li>
         @endif
 
-        {{-- Store Hub (Central Store Manager / Admins) --}}
-        @if(auth()->check() && !$isGeneralServiceUser && !$isStoreKeeper && auth()->user()->hasAnyRole(['store_manager', 'admin', 'global_admin']))
+        {{-- Store Hub (Central Store Manager / Admins / Coordinators) --}}
+        @if(auth()->check() && !$isGeneralServiceUser && !$isStoreKeeper && (auth()->user()->hasAnyRole(['store_manager', 'admin', 'global_admin', 'coordinator', 'Coordinator']) || $isCoordinator))
 
-        @if(!$isStoreManager)
+        @if(!$isStoreManager && !$isCoordinator)
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.store-manager') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.store-manager') || request()->routeIs('store-manager.dashboard') ? 'active' : '' }}">
                 <i class="fa-solid fa-gauge-high text-primary"></i>
@@ -349,10 +348,11 @@
         @endif
         <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.inventory.all') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.inventory.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-boxes-stacked text-info"></i>
-                <span>All Inventory</span>
+                <i class="fa-solid fa-warehouse text-info"></i>
+                <span>All Store Inventory</span>
             </a>
         </li>
+
         <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.fixed-assets.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-truck-monster text-warning"></i>
