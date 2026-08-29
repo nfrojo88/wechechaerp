@@ -1087,6 +1087,16 @@
         </li>
         @endif
 
+        <!-- VAT & Withholding Tax Deductions Ledger -->
+        @if(auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_manager', 'admin', 'global_admin', 'gm', 'general_manager', 'auditor', 'audit']))
+        <li class="sidebar-nav-item">
+            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-receipt text-danger"></i>
+                <span>VAT &amp; Withholding Tax</span>
+            </a>
+        </li>
+        @endif
+
         <!-- Receipts & Verification -->
         <li class="sidebar-nav-item">
             <a href="{{ route('delivery-receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('delivery-receipts.*') ? 'active' : '' }}">
@@ -1104,6 +1114,7 @@
             </a>
         </li>
         @endif
+
 
         @canany(['finance.bank.manage', 'finance.*'])
         <li class="sidebar-nav-item">

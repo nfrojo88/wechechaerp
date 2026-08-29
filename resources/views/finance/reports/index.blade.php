@@ -168,7 +168,34 @@
         </a>
     </div>
 
+    {{-- VAT & Withholding Tax Deductions Ledger --}}
+    <div class="col-md-4">
+        <a href="{{ route('finance.tax-deductions.index') }}" class="text-decoration-none">
+            <div class="report-card card border-0 h-100" style="border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,.07);">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-start mb-3">
+                        <div class="report-icon me-3" style="width:52px;height:52px;border-radius:14px;background:rgba(239,68,68,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <i class="fa-solid fa-receipt" style="color:#ef4444;font-size:1.4rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-1 text-dark">VAT &amp; Withholding Tax</h5>
+                            <span class="badge" style="background:rgba(239,68,68,.12);color:#ef4444;font-size:.72rem;">Tax Compliance</span>
+                        </div>
+                    </div>
+                    <p class="text-muted small mb-3 lh-base">
+                        Track 15% VAT and 3% Withholding Tax deductions on services, contract works, attached tax slips, and ERCA export.
+                    </p>
+                    <div class="d-flex align-items-center text-danger small fw-semibold">
+                        <span>View Tax Ledger</span>
+                        <i class="fa-solid fa-arrow-right ms-2" style="font-size:.75rem;"></i>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+
 </div>
+
 
 <style>
 .report-card {

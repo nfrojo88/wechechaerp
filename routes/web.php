@@ -1947,7 +1947,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('finance/reports/general-ledger', [App\Http\Controllers\FinanceReportController::class, 'generalLedger'])->name('reports.general-ledger');
     Route::get('finance/reports/expense-by-site', [App\Http\Controllers\FinanceReportController::class, 'expenseBySite'])->name('reports.expense-by-site');
 
+    // VAT & Withholding Tax Deductions Ledger & Report
+    Route::get('finance/tax-deductions', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'index'])->name('finance.tax-deductions.index');
+    Route::get('finance/tax-deductions/export-csv', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'exportCsv'])->name('finance.tax-deductions.export-csv');
+
     Route::resource('payments', App\Http\Controllers\PaymentController::class)->only(['index','create','store','show']);
+
 
     // ─── Phase 8 Operational ────────────────────────────────────────────────
     Route::resource('material-plans', App\Http\Controllers\MaterialPlanController::class)->only(['index', 'create', 'store', 'show']);
