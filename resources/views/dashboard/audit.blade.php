@@ -427,8 +427,22 @@
                                     {{ $log->ip_address ?? 'N/A' }}
                                 </td>
                             </tr>
+                        @empty
+                            <tr>
+                                <td colspan="6" class="text-center py-4 text-muted">
+                                    No audit logs recorded yet.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- Modals for Under-Audit Replenishments -->
     @foreach($underAuditReplenishments as $rep)
+
         <!-- 1. Audit Clearance Decision Modal -->
         <div class="modal fade" id="dashboardAuditModal{{ $rep->id }}" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-xl modal-dialog-centered">
