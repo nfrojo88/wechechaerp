@@ -224,6 +224,13 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-receipt text-danger"></i>
+                <span>VAT &amp; Withholding Tax</span>
+            </a>
+        </li>
+
+        <li class="sidebar-nav-item">
             <a href="{{ route('payroll.advances') }}?status=pending" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') && request('status') === 'pending' ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-success"></i>
                 <span>Loan Approvals</span>
@@ -1408,11 +1415,18 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-receipt text-danger"></i>
+                <span>VAT &amp; Withholding Tax</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-sitemap text-secondary"></i>
                 <span>Chart of Accounts (COA)</span>
             </a>
         </li>
+
         @endif
 
         @role('global_admin')
