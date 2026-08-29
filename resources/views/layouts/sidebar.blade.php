@@ -417,9 +417,36 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.index') || request()->routeIs('store-manager.transfers.show') ? 'active' : '' }}">
+            <a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ (request()->routeIs('store-manager.transfers.index') && !request()->has('tab')) || request()->routeIs('store-manager.transfers.show') ? 'active' : '' }}">
                 <i class="fa-solid fa-truck-moving text-warning"></i>
-                <span>Transfer List</span>
+                <span>Transfers &amp; Drivers</span>
+                @php
+                    $smTransferPendingCount = 0;
+                    try {
+                        $smTransferPendingCount = \App\Models\Transfer::where(function($q) {
+                            $q->whereIn('status', ['draft', 'pending_approval'])
+                              ->orWhereNull('driver_employee_id');
+                        })->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($smTransferPendingCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto" title="Pending Driver Assignment">{{ $smTransferPendingCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('store-manager.transfers.index', ['tab' => 'in_transit']) }}" class="sidebar-nav-link {{ request()->input('tab') === 'in_transit' || request()->input('tab') === 'assigned_drivers' ? 'active' : '' }}">
+                <i class="fa-solid fa-truck-fast text-info"></i>
+                <span>Driver &amp; Dispatch Status</span>
+                @php
+                    $smInTransitCount = 0;
+                    try {
+                        $smInTransitCount = \App\Models\Transfer::where('status', 'in_transit')->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($smInTransitCount > 0)
+                    <span class="badge bg-info text-dark rounded-pill ms-auto" title="In-Transit with Driver">{{ $smInTransitCount }}</span>
+                @endif
             </a>
         </li>
         <li class="sidebar-nav-item">

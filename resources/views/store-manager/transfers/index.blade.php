@@ -66,15 +66,33 @@
         </div>
 
         <div class="col-xl-2 col-md-4 col-sm-6">
+            <a href="{{ route('store-manager.transfers.index', ['tab' => 'assigned_drivers']) }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'assigned_drivers' ? 'border-primary border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f5f3ff 100%);">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-muted small fw-semibold">Driver Assigned</div>
+                                <div class="fs-4 fw-bold text-primary mt-1">{{ number_format($assignedDriverCount ?? 0) }}</div>
+                            </div>
+                            <div class="p-2 rounded bg-primary bg-opacity-10 text-primary">
+                                <i class="fas fa-id-badge fa-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-xl-2 col-md-4 col-sm-6">
             <a href="{{ route('store-manager.transfers.index', ['tab' => 'pending_dispatch']) }}" class="text-decoration-none">
                 <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'pending_dispatch' ? 'border-info border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <div class="text-muted small fw-semibold">Ready to Dispatch</div>
-                                <div class="fs-4 fw-bold text-primary mt-1">{{ number_format($readyToDispatchCount ?? 0) }}</div>
+                                <div class="fs-4 fw-bold text-info mt-1">{{ number_format($readyToDispatchCount ?? 0) }}</div>
                             </div>
-                            <div class="p-2 rounded bg-info bg-opacity-10 text-primary">
+                            <div class="p-2 rounded bg-info bg-opacity-10 text-info">
                                 <i class="fas fa-dolly fa-lg"></i>
                             </div>
                         </div>
@@ -83,13 +101,13 @@
             </a>
         </div>
 
-        <div class="col-xl-3 col-md-6 col-sm-6">
+        <div class="col-xl-2 col-md-4 col-sm-6">
             <a href="{{ route('store-manager.transfers.index', ['tab' => 'in_transit']) }}" class="text-decoration-none">
                 <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'in_transit' ? 'border-info border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f0fdfa 100%);">
                     <div class="card-body p-3">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
-                                <div class="text-muted small fw-semibold">In Transit with Driver</div>
+                                <div class="text-muted small fw-semibold">In Transit</div>
                                 <div class="fs-4 fw-bold text-info mt-1">{{ number_format($inTransitCount ?? 0) }}</div>
                             </div>
                             <div class="p-2 rounded bg-info bg-opacity-10 text-info">
@@ -101,7 +119,7 @@
             </a>
         </div>
 
-        <div class="col-xl-3 col-md-6 col-sm-6">
+        <div class="col-xl-2 col-md-4 col-sm-6">
             <a href="{{ route('store-manager.transfers.index', ['tab' => 'completed']) }}" class="text-decoration-none">
                 <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'completed' ? 'border-success border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);">
                     <div class="card-body p-3">
@@ -146,8 +164,13 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link py-1 px-3 small {{ ($tab ?? '') === 'assigned_drivers' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'assigned_drivers'])) }}">
+                            <i class="fas fa-id-badge text-primary me-1"></i>Driver Assigned <span class="badge bg-primary text-white ms-1">{{ $assignedDriverCount ?? 0 }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link py-1 px-3 small {{ ($tab ?? '') === 'in_transit' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'in_transit'])) }}">
-                            In-Transit <span class="badge bg-info text-dark ms-1">{{ $inTransitCount ?? 0 }}</span>
+                            <i class="fas fa-truck-fast text-info me-1"></i>In-Transit <span class="badge bg-info text-dark ms-1">{{ $inTransitCount ?? 0 }}</span>
                         </a>
                     </li>
                     <li class="nav-item">

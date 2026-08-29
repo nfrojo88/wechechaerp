@@ -401,7 +401,12 @@ class StoreManagerController extends Controller
 
         // Tab Filters
         if ($tab === 'pending_driver') {
-            $query->whereIn('status', ['draft', 'pending_approval']);
+            $query->where(function($q) {
+                $q->whereIn('status', ['draft', 'pending_approval'])
+                  ->orWhereNull('driver_employee_id');
+            });
+        } elseif ($tab === 'assigned_drivers' || $tab === 'driver_status') {
+            $query->whereNotNull('driver_employee_id');
         } elseif ($tab === 'pending_dispatch') {
             $query->where('status', 'approved');
         } elseif ($tab === 'in_transit') {
@@ -434,7 +439,11 @@ class StoreManagerController extends Controller
             });
         }
         $totalCount           = (clone $baseStatQuery)->count();
-        $pendingDriverCount   = (clone $baseStatQuery)->whereIn('status', ['draft', 'pending_approval'])->count();
+        $pendingDriverCount   = (clone $baseStatQuery)->where(function($q) {
+            $q->whereIn('status', ['draft', 'pending_approval'])
+              ->orWhereNull('driver_employee_id');
+        })->count();
+        $assignedDriverCount  = (clone $baseStatQuery)->whereNotNull('driver_employee_id')->count();
         $readyToDispatchCount = (clone $baseStatQuery)->where('status', 'approved')->count();
         $inTransitCount       = (clone $baseStatQuery)->where('status', 'in_transit')->count();
         $completedCount       = (clone $baseStatQuery)->where('status', 'completed')->count();
@@ -444,7 +453,7 @@ class StoreManagerController extends Controller
 
         return view('store-manager.transfers.index', compact(
             'transfers', 'stores', 'isStoreKeeper', 'assignedStore', 'tab',
-            'totalCount', 'pendingDriverCount', 'readyToDispatchCount', 'inTransitCount', 'completedCount'
+            'totalCount', 'pendingDriverCount', 'assignedDriverCount', 'readyToDispatchCount', 'inTransitCount', 'completedCount'
         ));
     }
 
