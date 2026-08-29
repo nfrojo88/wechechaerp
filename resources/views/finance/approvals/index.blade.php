@@ -243,19 +243,19 @@
                                                     );
                                                 @endphp
 
-                                                @if($isFinHeadOrAdmin)
-                                                    <button type="button" class="btn btn-primary btn-sm text-white fw-semibold" 
-                                                            data-bs-toggle="modal" 
-                                                            data-bs-target="#financeAssignModal{{ $req->id }}"
-                                                            title="Assign Account or Disburse Payment">
-                                                        <i class="fa-solid fa-money-bill-wave me-1"></i> Assign / Pay
-                                                    </button>
-                                                @elseif($isAssignedToMe)
+                                                @if($isAssignedToMe)
                                                     <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
                                                             data-bs-toggle="modal" 
                                                             data-bs-target="#payModal{{ $req->id }}"
                                                             title="Pay this assigned expense">
                                                         <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
+                                                    </button>
+                                                @elseif($isFinHeadOrAdmin)
+                                                    <button type="button" class="btn btn-primary btn-sm text-white fw-semibold" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#financeAssignModal{{ $req->id }}"
+                                                            title="Assign Account &amp; Finance Custodian">
+                                                        <i class="fa-solid fa-user-tag me-1"></i> Assign
                                                     </button>
                                                 @endif
                                             @endif
@@ -281,11 +281,14 @@
                                             @if($item->status_key === 'finance_queue')
                                                 @php
                                                     $prPayment = $item->raw_model->payment;
-                                                    $isAssignedToMe = $prPayment && (int)$prPayment->assigned_finance_staff_id === (int)auth()->id();
-                                                    $isFinHeadOrAdmin = !empty($isAdmin) || (!empty($isFinance) && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager']) || str_contains(strtolower(auth()->user()->roles->pluck('name')->implode(' ')), 'head')));
+                                                    $prCoa = $item->raw_model->chartOfAccount ?? null;
+                                                    $isAssignedToMe = (
+                                                        ($prPayment && (int)$prPayment->assigned_finance_staff_id === (int)auth()->id()) ||
+                                                        ($prCoa && (int)$prCoa->assigned_to === (int)auth()->id())
+                                                    );
                                                 @endphp
 
-                                                @if($isFinHeadOrAdmin || $isAssignedToMe)
+                                                @if($isAssignedToMe)
                                                     <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
                                                             data-bs-toggle="modal" 
                                                             data-bs-target="#payPrModal{{ $item->id_raw }}"
@@ -305,24 +308,24 @@
                                         @elseif($item->type === 'office_supply_request')
                                             @php
                                                 $officeReq = $item->raw_model;
-                                                $isAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id();
+                                                $isAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() || ($officeReq->coa && (int)$officeReq->coa->assigned_to === (int)auth()->id());
                                                 $isFinHeadOrAdmin = !empty($isAdmin) || (!empty($isFinance) && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager']) || str_contains(strtolower(auth()->user()->roles->pluck('name')->implode(' ')), 'head')));
                                             @endphp
 
                                             @if($item->status_key === 'finance_queue')
-                                                @if($isFinHeadOrAdmin)
-                                                    <button type="button" class="btn btn-sm text-white fw-bold shadow-sm" style="background:#7c3aed;" 
-                                                            data-bs-toggle="modal" 
-                                                            data-bs-target="#financeOfficeAssignModal{{ $item->id_raw }}"
-                                                            title="Assign Funding Account or Disburse Payment">
-                                                        <i class="fa-solid fa-money-bill-wave me-1"></i> Assign / Pay
-                                                    </button>
-                                                @elseif($isAssignedToMe)
+                                                @if($isAssignedToMe)
                                                     <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
                                                             data-bs-toggle="modal" 
                                                             data-bs-target="#payOfficeModal{{ $item->id_raw }}"
                                                             title="Disburse payment for this Office Request">
                                                         <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
+                                                    </button>
+                                                @elseif($isFinHeadOrAdmin)
+                                                    <button type="button" class="btn btn-sm text-white fw-bold shadow-sm" style="background:#7c3aed;" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#financeOfficeAssignModal{{ $item->id_raw }}"
+                                                            title="Assign Funding Account &amp; Staff">
+                                                        <i class="fa-solid fa-user-tag me-1"></i> Assign
                                                     </button>
                                                 @endif
                                                 <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Office Material Request">
@@ -334,6 +337,7 @@
                                                 </a>
                                             @endif
                                         @endif
+
 
                                     </div>
                                 </td>
@@ -580,97 +584,160 @@
             </div>
         </div>
 
-        <!-- 4. Finance Assign / Pay Modal -->
+        <!-- 4. Finance Assign Modal -->
+        @php
+            $isAssignedToMe = (
+                $req->assigned_finance_staff_id == $authUser->id ||
+                $req->finance_staff_id == $authUser->id ||
+                ($req->chartOfAccount && $req->chartOfAccount->assigned_to == $authUser->id) ||
+                ($req->coa && $req->coa->assigned_to == $authUser->id)
+            );
+        @endphp
         <div class="modal fade" id="financeAssignModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-dialog modal-dialog-centered {{ $isAssignedToMe ? 'modal-lg' : 'modal-md' }}">
                 <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
                     <div class="modal-header bg-white border-bottom py-3 px-4">
                         <div class="d-flex align-items-center gap-2">
                             <span class="badge bg-primary-subtle text-primary p-2 rounded-3 fs-6">
-                                <i class="fa-solid fa-money-bill-wave"></i>
+                                <i class="fa-solid fa-user-tag"></i>
                             </span>
                             <div>
-                                <h5 class="modal-title fw-bold text-dark mb-0">Finance Processing: {{ $req->request_number }}</h5>
+                                <h5 class="modal-title fw-bold text-dark mb-0">Finance Assignment: {{ $req->request_number }}</h5>
                                 <span class="text-muted small">Total: <strong>ETB {{ number_format($req->amount, 2) }}</strong> &bull; Requester: <strong>{{ $item->applicant_name }}</strong></span>
                             </div>
                         </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body p-4 bg-white">
-                        <div class="row g-4">
-                            <!-- Option 1: Assign COA & Staff -->
-                            <div class="col-md-6 border-end pe-md-4">
-                                <div class="d-flex align-items-center gap-2 mb-3">
-                                    <span class="badge bg-primary text-white rounded-circle">1</span>
-                                    <h6 class="fw-bold text-dark mb-0">Assign Account & Staff</h6>
+                        @if($isAssignedToMe)
+                            <div class="row g-4">
+                                <!-- Option 1: Assign COA & Staff -->
+                                <div class="col-md-6 border-end pe-md-4">
+                                    <div class="d-flex align-items-center gap-2 mb-3">
+                                        <span class="badge bg-primary text-white rounded-circle">1</span>
+                                        <h6 class="fw-bold text-dark mb-0">Assign Account &amp; Staff</h6>
+                                    </div>
+                                    <form method="POST" action="{{ route('expense-requests.finance-assign', $req->id) }}">
+                                        @csrf
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-bold text-dark">Chart of Account (COA) <span class="text-danger">*</span></label>
+                                            <select name="coa_id" 
+                                                    id="coaSelect{{ $req->id }}"
+                                                    class="form-select form-select-sm bg-white" 
+                                                    onchange="autoSelectFinanceStaff(this, {{ $req->id }})"
+                                                    required>
+                                                <option value="" data-staff-id="" data-staff-name="">-- Select COA Account --</option>
+                                                @foreach($chartOfAccounts as $coa)
+                                                    @php
+                                                        $isSelected = ($req->coa_id == $coa->id || $req->chart_of_account_id == $coa->id);
+                                                        $assignedStaffId = $coa->assigned_to ?? '';
+                                                        $assignedStaffName = $coa->manager->name ?? '';
+                                                    @endphp
+                                                    <option value="{{ $coa->id }}" 
+                                                            data-staff-id="{{ $assignedStaffId }}" 
+                                                            data-staff-name="{{ $assignedStaffName }}"
+                                                            {{ $isSelected ? 'selected' : '' }}>
+                                                        {{ $coa->code }} - {{ $coa->name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-bold text-dark">Assigned Finance Staff</label>
+                                            <select name="assigned_finance_staff_id" 
+                                                    id="financeStaffSelect{{ $req->id }}" 
+                                                    class="form-select form-select-sm bg-white">
+                                                <option value="">Auto-assigned from COA or Select Staff...</option>
+                                                @foreach($financeStaff as $st)
+                                                    <option value="{{ $st->id }}" {{ ($req->assigned_finance_staff_id == $st->id || $req->finance_staff_id == $st->id) ? 'selected' : '' }}>
+                                                        {{ $st->name }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            <div id="autoStaffBadge{{ $req->id }}" class="mt-2" style="display: none;"></div>
+                                        </div>
+                                        <button type="submit" class="btn btn-outline-primary btn-sm w-100 rounded-3 py-2 fw-semibold">
+                                            <i class="fa-solid fa-floppy-disk me-1"></i> Save Assignment
+                                        </button>
+                                    </form>
                                 </div>
-                                <form method="POST" action="{{ route('expense-requests.finance-assign', $req->id) }}">
-                                    @csrf
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-dark">Chart of Account (COA) <span class="text-danger">*</span></label>
-                                        <select name="coa_id" 
-                                                id="coaSelect{{ $req->id }}"
-                                                class="form-select form-select-sm bg-white" 
-                                                onchange="autoSelectFinanceStaff(this, {{ $req->id }})"
-                                                required>
-                                            <option value="" data-staff-id="" data-staff-name="">-- Select COA Account --</option>
-                                            @foreach($chartOfAccounts as $coa)
-                                                @php
-                                                    $isSelected = ($req->coa_id == $coa->id || $req->chart_of_account_id == $coa->id);
-                                                    $assignedStaffId = $coa->assigned_to ?? '';
-                                                    $assignedStaffName = $coa->manager->name ?? '';
-                                                @endphp
-                                                <option value="{{ $coa->id }}" 
-                                                        data-staff-id="{{ $assignedStaffId }}" 
-                                                        data-staff-name="{{ $assignedStaffName }}"
-                                                        {{ $isSelected ? 'selected' : '' }}>
-                                                    {{ $coa->code }} - {{ $coa->name }}
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-dark">Assigned Finance Staff</label>
-                                        <select name="assigned_finance_staff_id" 
-                                                id="financeStaffSelect{{ $req->id }}" 
-                                                class="form-select form-select-sm bg-white">
-                                            <option value="">Auto-assigned from COA or Select Staff...</option>
-                                            @foreach($financeStaff as $st)
-                                                <option value="{{ $st->id }}" {{ ($req->assigned_finance_staff_id == $st->id || $req->finance_staff_id == $st->id) ? 'selected' : '' }}>
-                                                    {{ $st->name }}
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                        <div id="autoStaffBadge{{ $req->id }}" class="mt-2" style="display: none;"></div>
-                                    </div>
-                                    <button type="submit" class="btn btn-outline-primary btn-sm w-100 rounded-3 py-2 fw-semibold">
-                                        <i class="fa-solid fa-floppy-disk me-1"></i> Save Assignment
-                                    </button>
-                                </form>
-                            </div>
 
-                            <!-- Option 2: Direct Mark as Paid -->
-                            <div class="col-md-6 ps-md-4">
-                                <div class="d-flex align-items-center gap-2 mb-3">
-                                    <span class="badge bg-success text-white rounded-circle">2</span>
-                                    <h6 class="fw-bold text-dark mb-0">Disburse & Mark Paid</h6>
+                                <!-- Option 2: Direct Mark as Paid -->
+                                <div class="col-md-6 ps-md-4">
+                                    <div class="d-flex align-items-center gap-2 mb-3">
+                                        <span class="badge bg-success text-white rounded-circle">2</span>
+                                        <h6 class="fw-bold text-dark mb-0">Disburse &amp; Mark Paid</h6>
+                                    </div>
+                                    <form method="POST" action="{{ route('expense-requests.mark-paid', $req->id) }}">
+                                        @csrf
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-bold text-dark">Payment Reference / Txn #</label>
+                                            <input type="text" name="payment_reference" class="form-control form-control-sm bg-white" placeholder="e.g. FT260823-001, Cash Voucher #">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-bold text-dark">Payment Notes</label>
+                                            <textarea name="payment_notes" class="form-control form-control-sm bg-white" rows="2" placeholder="Payment remarks..."></textarea>
+                                        </div>
+                                        <button type="submit" class="btn btn-success btn-sm w-100 rounded-3 py-2 fw-semibold">
+                                            <i class="fa-solid fa-circle-check me-1"></i> Confirm Paid (ETB {{ number_format($req->amount, 2) }})
+                                        </button>
+                                    </form>
                                 </div>
-                                <form method="POST" action="{{ route('expense-requests.mark-paid', $req->id) }}">
-                                    @csrf
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-dark">Payment Reference / Txn #</label>
-                                        <input type="text" name="payment_reference" class="form-control form-control-sm bg-white" placeholder="e.g. FT260823-001, Cash Voucher #">
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-dark">Payment Notes</label>
-                                        <textarea name="payment_notes" class="form-control form-control-sm bg-white" rows="2" placeholder="Payment remarks..."></textarea>
-                                    </div>
-                                    <button type="submit" class="btn btn-success btn-sm w-100 rounded-3 py-2 fw-semibold">
-                                        <i class="fa-solid fa-circle-check me-1"></i> Confirm Paid (ETB {{ number_format($req->amount, 2) }})
-                                    </button>
-                                </form>
                             </div>
-                        </div>
+                        @else
+                            <div class="p-3 bg-light rounded-3 border mb-3">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-user-tag text-primary fs-5"></i>
+                                    <div>
+                                        <strong class="text-dark d-block">Assign Account &amp; Custodian</strong>
+                                        <small class="text-muted">As Finance Head, designate the paying Chart of Account and assigned custodian. Once saved, only the assigned custodian can execute disbursement.</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <form method="POST" action="{{ route('expense-requests.finance-assign', $req->id) }}">
+                                @csrf
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-dark">Chart of Account (COA) <span class="text-danger">*</span></label>
+                                    <select name="coa_id" 
+                                            id="coaSelect{{ $req->id }}"
+                                            class="form-select form-select-sm bg-white" 
+                                            onchange="autoSelectFinanceStaff(this, {{ $req->id }})"
+                                            required>
+                                        <option value="" data-staff-id="" data-staff-name="">-- Select COA Account --</option>
+                                        @foreach($chartOfAccounts as $coa)
+                                            @php
+                                                $isSelected = ($req->coa_id == $coa->id || $req->chart_of_account_id == $coa->id);
+                                                $assignedStaffId = $coa->assigned_to ?? '';
+                                                $assignedStaffName = $coa->manager->name ?? '';
+                                            @endphp
+                                            <option value="{{ $coa->id }}" 
+                                                    data-staff-id="{{ $assignedStaffId }}" 
+                                                    data-staff-name="{{ $assignedStaffName }}"
+                                                    {{ $isSelected ? 'selected' : '' }}>
+                                                {{ $coa->code }} - {{ $coa->name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-dark">Assigned Finance Staff / Custodian</label>
+                                    <select name="assigned_finance_staff_id" 
+                                            id="financeStaffSelect{{ $req->id }}" 
+                                            class="form-select form-select-sm bg-white">
+                                        <option value="">Auto-assigned from COA or Select Staff...</option>
+                                        @foreach($financeStaff as $st)
+                                            <option value="{{ $st->id }}" {{ ($req->assigned_finance_staff_id == $st->id || $req->finance_staff_id == $st->id) ? 'selected' : '' }}>
+                                                {{ $st->name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <div id="autoStaffBadge{{ $req->id }}" class="mt-2" style="display: none;"></div>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-sm w-100 rounded-3 py-2 fw-semibold">
+                                    <i class="fa-solid fa-floppy-disk me-1"></i> Save Assignment
+                                </button>
+                            </form>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -696,27 +763,17 @@
                         </div>
                         <div class="modal-body p-4 bg-white">
                             <div class="p-3 bg-light rounded-3 mb-3 border">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <span class="text-muted small">Requester:</span>
-                                    <span class="fw-bold text-dark">{{ $item->applicant_name }}</span>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-muted small text-uppercase fw-bold">Approved Total:</span>
+                                    <strong class="text-success fs-5">ETB {{ number_format($req->amount, 2) }}</strong>
                                 </div>
-                                <div class="d-flex justify-content-between mb-1">
-                                    <span class="text-muted small">Category:</span>
-                                    <span class="badge bg-primary-subtle text-primary border">{{ $item->category }}</span>
-                                </div>
-                                <div class="d-flex justify-content-between mb-1">
-                                    <span class="text-muted small">Account:</span>
-                                    <span class="fw-bold text-dark">{{ $req->chartOfAccount->name ?? ($req->coa->name ?? 'Assigned Petty Cash') }}</span>
-                                </div>
-                                <div class="d-flex justify-content-between mt-2 pt-2 border-top">
-                                    <span class="text-muted small fw-bold">Disbursement Amount:</span>
-                                    <span class="fw-bold text-success fs-5">ETB {{ number_format($req->amount, 2) }}</span>
-                                </div>
+                                <div class="small text-muted mb-1"><i class="fa-solid fa-sitemap me-1"></i> Paying Account: <strong>{{ $req->chartOfAccount->name ?? ($req->coa->name ?? 'Default Petty Cash') }}</strong></div>
+                                <div class="small text-muted"><i class="fa-solid fa-list me-1"></i> Category: {{ $req->category }} &bull; {{ $req->description }}</div>
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label small fw-bold text-dark">Payment Reference / Voucher / Txn #</label>
-                                <input type="text" name="payment_reference" class="form-control bg-light border-0 py-2" placeholder="e.g. PV-260823, Cash Voucher #14" required>
+                                <label class="form-label small fw-bold text-dark">Payment Reference / Voucher #</label>
+                                <input type="text" name="payment_reference" class="form-control bg-light border-0" placeholder="e.g. FT260823-001, Cash Voucher #">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-dark">Payment Notes (Optional)</label>
@@ -797,11 +854,14 @@
     @endif
 
     @if($item->type === 'office_supply_request' && $item->status_key === 'finance_queue')
-    @php $officeReq = $item->raw_model; @endphp
+    @php 
+        $officeReq = $item->raw_model; 
+        $isOfficeAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() || ($officeReq->coa && (int)$officeReq->coa->assigned_to === (int)auth()->id());
+    @endphp
 
     <!-- 1. Finance Head Assign & Decision Modal -->
     <div class="modal fade" id="financeOfficeAssignModal{{ $item->id_raw }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-dialog modal-dialog-centered {{ $isOfficeAssignedToMe ? 'modal-lg' : 'modal-md' }}">
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
                 <div class="modal-header text-white py-3 px-4" style="background:#7c3aed;">
                     <div class="d-flex align-items-center gap-2">
@@ -816,68 +876,111 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4 bg-white">
-                    <div class="row g-4">
-                        <!-- Option 1: Assign COA & Finance Staff -->
-                        <div class="col-md-6 border-end pe-md-4">
-                            <div class="d-flex align-items-center gap-2 mb-3">
-                                <span class="badge bg-primary text-white rounded-circle">1</span>
-                                <h6 class="fw-bold text-dark mb-0">Assign Funding &amp; Staff</h6>
+                    @if($isOfficeAssignedToMe)
+                        <div class="row g-4">
+                            <!-- Option 1: Assign COA & Finance Staff -->
+                            <div class="col-md-6 border-end pe-md-4">
+                                <div class="d-flex align-items-center gap-2 mb-3">
+                                    <span class="badge bg-primary text-white rounded-circle">1</span>
+                                    <h6 class="fw-bold text-dark mb-0">Assign Funding &amp; Staff</h6>
+                                </div>
+                                <form method="POST" action="{{ route('office-requests.finance-assign', $item->id_raw) }}">
+                                    @csrf
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-dark text-uppercase">Funding Account (COA) <span class="text-danger">*</span></label>
+                                        <select name="coa_id" id="modalCoaSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0" onchange="syncModalCoaToStaff('{{ $item->id_raw }}')" required>
+                                            <option value="" disabled selected>-- Select Expense Account --</option>
+                                            @foreach($chartOfAccounts as $coa)
+                                                <option value="{{ $coa->id }}" 
+                                                        data-staff-id="{{ $coa->assigned_to }}"
+                                                        data-staff-name="{{ $coa->manager?->name }}"
+                                                        {{ $officeReq->coa_id == $coa->id ? 'selected' : '' }}>
+                                                    [{{ $coa->code }}] {{ $coa->name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-dark text-uppercase">Assign Finance Staff</label>
+                                        <select name="assigned_finance_staff_id" id="modalStaffSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0">
+                                            <option value="">-- Assign Staff / Self --</option>
+                                            @foreach($financeStaff as $staff)
+                                                <option value="{{ $staff->id }}" {{ $officeReq->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
+                                                    {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()?->name ?? 'Staff')) }})
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="btn btn-outline-primary btn-sm w-100 rounded-3 py-2 fw-semibold">
+                                        <i class="fa-solid fa-floppy-disk me-1"></i> Save Assignment
+                                    </button>
+                                </form>
                             </div>
-                            <form method="POST" action="{{ route('office-requests.finance-assign', $item->id_raw) }}">
-                                @csrf
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-dark text-uppercase">Funding Account (COA) <span class="text-danger">*</span></label>
-                                    <select name="coa_id" id="modalCoaSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0" onchange="syncModalCoaToStaff('{{ $item->id_raw }}')" required>
-                                        <option value="" disabled selected>-- Select Expense Account --</option>
-                                        @foreach($chartOfAccounts as $coa)
-                                            <option value="{{ $coa->id }}" 
-                                                    data-staff-id="{{ $coa->assigned_to }}"
-                                                    data-staff-name="{{ $coa->manager?->name }}"
-                                                    {{ $officeReq->coa_id == $coa->id ? 'selected' : '' }}>
-                                                [{{ $coa->code }}] {{ $coa->name }}
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-dark text-uppercase">Assign Finance Staff</label>
-                                    <select name="assigned_finance_staff_id" id="modalStaffSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0">
-                                        <option value="">-- Assign Staff / Self --</option>
-                                        @foreach($financeStaff as $staff)
-                                            <option value="{{ $staff->id }}" {{ $officeReq->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
-                                                {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()?->name ?? 'Staff')) }})
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                                <button type="submit" class="btn btn-outline-primary btn-sm w-100 rounded-3 py-2 fw-semibold">
-                                    <i class="fa-solid fa-floppy-disk me-1"></i> Save Assignment
-                                </button>
-                            </form>
-                        </div>
 
-                        <!-- Option 2: Direct Disburse & Mark Paid -->
-                        <div class="col-md-6 ps-md-4">
-                            <div class="d-flex align-items-center gap-2 mb-3">
-                                <span class="badge bg-success text-white rounded-circle">2</span>
-                                <h6 class="fw-bold text-dark mb-0">Disburse &amp; Mark Paid</h6>
+                            <!-- Option 2: Direct Disburse & Mark Paid -->
+                            <div class="col-md-6 ps-md-4">
+                                <div class="d-flex align-items-center gap-2 mb-3">
+                                    <span class="badge bg-success text-white rounded-circle">2</span>
+                                    <h6 class="fw-bold text-dark mb-0">Disburse &amp; Mark Paid</h6>
+                                </div>
+                                <form method="POST" action="{{ route('office-requests.mark-paid', $item->id_raw) }}">
+                                    @csrf
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-dark text-uppercase">Payment Voucher Ref #</label>
+                                        <input type="text" name="payment_reference" class="form-control form-control-sm bg-light border-0" placeholder="e.g. VC-2026-08-001, Cash Voucher #">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-dark text-uppercase">Payment Notes</label>
+                                        <textarea name="payment_notes" class="form-control form-control-sm bg-light border-0" rows="2" placeholder="Payment remarks..."></textarea>
+                                    </div>
+                                    <button type="submit" class="btn btn-success btn-sm w-100 rounded-3 py-2 fw-semibold">
+                                        <i class="fa-solid fa-circle-check me-1"></i> Confirm Paid (ETB {{ number_format($item->net_amount, 2) }})
+                                    </button>
+                                </form>
                             </div>
-                            <form method="POST" action="{{ route('office-requests.mark-paid', $item->id_raw) }}">
-                                @csrf
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-dark text-uppercase">Payment Voucher Ref #</label>
-                                    <input type="text" name="payment_reference" class="form-control form-control-sm bg-light border-0" placeholder="e.g. VC-2026-08-001, Cash Voucher #">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label small fw-bold text-dark text-uppercase">Payment Notes</label>
-                                    <textarea name="payment_notes" class="form-control form-control-sm bg-light border-0" rows="2" placeholder="Payment remarks..."></textarea>
-                                </div>
-                                <button type="submit" class="btn btn-success btn-sm w-100 rounded-3 py-2 fw-semibold">
-                                    <i class="fa-solid fa-circle-check me-1"></i> Confirm Paid (ETB {{ number_format($item->net_amount, 2) }})
-                                </button>
-                            </form>
                         </div>
-                    </div>
+                    @else
+                        <div class="p-3 bg-light rounded-3 border mb-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-user-gear text-primary fs-5"></i>
+                                <div>
+                                    <strong class="text-dark d-block">Finance Head Assignment Portal</strong>
+                                    <small class="text-muted">Designate the funding account (COA) and assign the custodian staff to disburse payment.</small>
+                                </div>
+                            </div>
+                        </div>
+                        <form method="POST" action="{{ route('office-requests.finance-assign', $item->id_raw) }}">
+                            @csrf
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-dark text-uppercase">Funding Account (COA) <span class="text-danger">*</span></label>
+                                <select name="coa_id" id="modalCoaSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0" onchange="syncModalCoaToStaff('{{ $item->id_raw }}')" required>
+                                    <option value="" disabled selected>-- Select Expense Account --</option>
+                                    @foreach($chartOfAccounts as $coa)
+                                        <option value="{{ $coa->id }}" 
+                                                data-staff-id="{{ $coa->assigned_to }}"
+                                                data-staff-name="{{ $coa->manager?->name }}"
+                                                {{ $officeReq->coa_id == $coa->id ? 'selected' : '' }}>
+                                            [{{ $coa->code }}] {{ $coa->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-dark text-uppercase">Assign Finance Staff / Custodian</label>
+                                <select name="assigned_finance_staff_id" id="modalStaffSelect{{ $item->id_raw }}" class="form-select form-select-sm bg-light border-0">
+                                    <option value="">-- Assign Staff / Self --</option>
+                                    @foreach($financeStaff as $staff)
+                                        <option value="{{ $staff->id }}" {{ $officeReq->assigned_finance_staff_id == $staff->id ? 'selected' : '' }}>
+                                            {{ $staff->name }} ({{ ucfirst(str_replace('_', ' ', $staff->roles->first()?->name ?? 'Staff')) }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm w-100 rounded-3 py-2 fw-semibold">
+                                <i class="fa-solid fa-floppy-disk me-1"></i> Save Assignment
+                            </button>
+                        </form>
+                    @endif
                 </div>
             </div>
         </div>
