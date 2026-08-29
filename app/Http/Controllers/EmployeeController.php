@@ -245,6 +245,8 @@ class EmployeeController extends Controller
             'employment_type'               => 'required|in:permanent,contract,daily',
             'contract_type'                 => 'nullable|string',
             'contract_end_date'             => 'nullable|date',
+            'contract_duration_type'        => 'nullable|in:fixed_date,until_project_completion',
+            'is_project_based'              => 'nullable|boolean',
             'tin_number'                    => 'nullable|string|max:50',
             'probation_completed'           => 'nullable|boolean',
             'date_of_joining'               => 'required|date',
@@ -300,13 +302,29 @@ class EmployeeController extends Controller
         // Auto-heal missing database columns if necessary
         $this->ensureGuarantorAndRegistrationColumnsExist();
 
-        // Apply defaults
+        // Apply defaults and project-based contract duration rules
         $validated['employment_type']     = $validated['employment_type'] ?? 'permanent';
         $validated['status']              = $validated['status'] ?? 'active';
         $validated['basic_salary']        = $validated['basic_salary'] ?? 0;
         $validated['transport_allowance'] = $validated['transport_allowance'] ?? 0;
         $validated['house_allowance']     = $validated['house_allowance'] ?? 0;
         $validated['position_allowance']  = $validated['position_allowance'] ?? 0;
+
+        if (($validated['contract_duration_type'] ?? '') === 'until_project_completion' || $request->boolean('is_project_based')) {
+            $validated['contract_duration_type'] = 'until_project_completion';
+            $validated['is_project_based'] = true;
+            if (!empty($validated['project_id'])) {
+                $targetProj = \App\Models\Project::find($validated['project_id']);
+                if ($targetProj && in_array(strtolower((string)$targetProj->status), ['completed', 'finished', 'closed', 'cancelled', 'handover', 'archived'])) {
+                    $validated['status'] = 'locked';
+                    $validated['lock_reason'] = "Project Finished: {$targetProj->name} ({$targetProj->code})";
+                }
+            }
+        } else {
+            $validated['contract_duration_type'] = $validated['contract_duration_type'] ?? 'fixed_date';
+            $validated['is_project_based'] = false;
+        }
+
 
         // Handle guarantee letter upload (Guarantor 1)
         if ($request->hasFile('guarantee_letter')) {
@@ -694,9 +712,12 @@ class EmployeeController extends Controller
             'employment_type'      => 'required|in:permanent,contract,daily',
             'contract_type'        => 'nullable|string',
             'contract_end_date'    => 'nullable|date',
+            'contract_duration_type' => 'nullable|in:fixed_date,until_project_completion',
+            'is_project_based'     => 'nullable|boolean',
             'tin_number'           => 'nullable|string|max:50',
             'probation_completed'  => 'nullable|boolean',
             'date_of_joining'      => 'required|date',
+
             'basic_salary'         => 'required|numeric|min:0',
             'transport_allowance'  => 'nullable|numeric|min:0',
             'house_allowance'      => 'nullable|numeric|min:0',
@@ -788,6 +809,22 @@ class EmployeeController extends Controller
             $validated['registration_letters'] = [$singlePath];
         }
 
+        // Handle contract duration type & project based lock
+        if (($validated['contract_duration_type'] ?? '') === 'until_project_completion' || $request->boolean('is_project_based')) {
+            $validated['contract_duration_type'] = 'until_project_completion';
+            $validated['is_project_based'] = true;
+            if (!empty($validated['project_id'])) {
+                $targetProj = \App\Models\Project::find($validated['project_id']);
+                if ($targetProj && in_array(strtolower((string)$targetProj->status), ['completed', 'finished', 'closed', 'cancelled', 'handover', 'archived'])) {
+                    $validated['status'] = 'locked';
+                    $validated['lock_reason'] = "Project Finished: {$targetProj->name} ({$targetProj->code})";
+                }
+            }
+        } else {
+            $validated['contract_duration_type'] = $validated['contract_duration_type'] ?? 'fixed_date';
+            $validated['is_project_based'] = false;
+        }
+
         // If employee was rejected by GM, resubmitting clears rejection and queues for GM review
         if ($employee->gm_approval_status === 'rejected') {
             $validated['gm_approval_status'] = 'pending';
@@ -801,6 +838,7 @@ class EmployeeController extends Controller
         // Strip non-model attributes
         $employeeData = \Illuminate\Support\Arr::except($validated, ['fixed_asset_units', 'education', 'experience', 'licenses']);
         $employee->update($employeeData);
+
 
         // ── Sync Fixed Asset Units ──────────────────────────────────────────
         $currentAssignedIds = $employee->assignedFixedAssets()->pluck('id')->toArray();
@@ -1436,9 +1474,16 @@ class EmployeeController extends Controller
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'contract_end_date')) {
                         $table->date('contract_end_date')->nullable();
                     }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'contract_duration_type')) {
+                        $table->string('contract_duration_type', 40)->default('fixed_date');
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'is_project_based')) {
+                        $table->boolean('is_project_based')->default(false);
+                    }
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'tin_number')) {
                         $table->string('tin_number', 50)->nullable();
                     }
+
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'probation_ends_at')) {
                         $table->date('probation_ends_at')->nullable();
                     }

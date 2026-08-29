@@ -180,8 +180,18 @@
                                 'daily'     => 'secondary',
                                 default     => 'secondary'
                             }; @endphp
-                            <span class="badge bg-{{ $typeColor }}">{{ ucfirst($emp->employment_type) }}</span>
+                            @if($emp->isProjectBased())
+                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle" title="Until Project Completion">
+                                    <i class="fa-solid fa-diagram-project me-1"></i>Project Contract
+                                </span>
+                            @else
+                                <span class="badge bg-{{ $typeColor }}">{{ ucfirst($emp->employment_type) }}</span>
+                            @endif
+                            @if($emp->status === 'locked')
+                                <span class="badge bg-danger ms-1" title="{{ $emp->lock_reason ?? 'Locked' }}"><i class="fa-solid fa-lock me-1"></i>Locked</span>
+                            @endif
                         </td>
+
                         <td class="fw-semibold">{{ number_format($emp->basic_salary, 2) }} ETB</td>
                         <td>
                             @if($emp->is_approved_by_gm)

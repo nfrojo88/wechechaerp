@@ -185,8 +185,13 @@
                             @php
                                 $types = ['permanent' => 'Permanent', 'contract' => 'Contract', 'daily' => 'Daily Worker'];
                             @endphp
-                            {{ $types[$employee->employment_type] ?? $employee->employment_type }}
-                            @if($employee->contract_end_date)
+                            <span class="fw-bold">{{ $types[$employee->employment_type] ?? $employee->employment_type }}</span>
+                            
+                            @if($employee->isProjectBased())
+                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle ms-1" title="Contract valid until project completion">
+                                    <i class="fa-solid fa-diagram-project me-1"></i>Until Project Completion
+                                </span>
+                            @elseif($employee->contract_end_date)
                                 <span class="badge bg-info-subtle text-info border border-info-subtle ms-1">
                                     Valid Upto: {{ $employee->contract_end_date->format('d M Y') }}
                                 </span>
@@ -231,15 +236,32 @@
                     </div>
                     @if($employee->lock_reason)
                     <div class="col-12">
-                        <div class="alert alert-danger py-2 px-3 mb-0 small">
-                            <i class="fa-solid fa-lock me-1"></i><strong>Account Lock Reason:</strong> {{ $employee->lock_reason }}
+                        <div class="alert alert-danger py-2.5 px-3 mb-0 small d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div>
+                                <i class="fa-solid fa-lock me-1"></i><strong>Account Lock Reason:</strong> {{ $employee->lock_reason }}
+                            </div>
+                            @if($employee->isProjectBased())
+                            <a href="{{ route('employees.edit', $employee) }}" class="btn btn-xs btn-outline-danger">
+                                <i class="fa-solid fa-rotate me-1"></i>Reassign Project / Renew
+                            </a>
+                            @endif
                         </div>
                     </div>
                     @endif
                     @if($employee->project)
                     <div class="col-md-6">
                         <small class="text-muted d-block mb-1">Assigned Project</small>
-                        <h6 class="mb-0">{{ $employee->project->name }}</h6>
+                        <h6 class="mb-0">
+                            <i class="fa-solid fa-diagram-project text-primary me-1"></i>
+                            <a href="{{ route('projects.show', $employee->project) }}" class="text-dark fw-semibold text-decoration-none">
+                                {{ $employee->project->name }} ({{ $employee->project->code }})
+                            </a>
+                            @if(in_array(strtolower((string)$employee->project->status), ['completed', 'finished', 'closed', 'cancelled', 'handover']))
+                                <span class="badge bg-danger ms-1"><i class="fa-solid fa-circle-check me-1"></i>Project Finished (Locked)</span>
+                            @else
+                                <span class="badge bg-success ms-1"><i class="fa-solid fa-play me-1"></i>{{ ucfirst($employee->project->status) }}</span>
+                            @endif
+                        </h6>
                     </div>
                     @endif
                     @if($employee->site_assignment)
@@ -251,6 +273,7 @@
                 </div>
             </div>
         </div>
+
 
         {{-- Contact & Identity Information Card --}}
         <div class="card border-0 shadow-sm mb-3">

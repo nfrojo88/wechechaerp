@@ -146,6 +146,54 @@ class Project extends Model
         };
     }
 
+    protected static function booted()
+    {
+        static::saved(function ($project) {
+            $project->syncProjectBasedEmployees();
+        });
+    }
+
+    /**
+     * Auto-locks or updates project-based contract employees when this project is completed or closed.
+     */
+    public function syncProjectBasedEmployees(): void
+    {
+        $terminalStatuses = ['completed', 'finished', 'closed', 'cancelled', 'handover', 'archived'];
+        if (in_array(strtolower((string)$this->status), $terminalStatuses)) {
+            try {
+                // Find all project-based employees tied to this project who are not yet locked
+                $employees = Employee::where('project_id', $this->id)
+                    ->where(function($q) {
+                        $q->where('contract_duration_type', 'until_project_completion')
+                          ->orWhere('is_project_based', true);
+                    })
+                    ->where('status', '!=', 'locked')
+                    ->get();
+
+                foreach ($employees as $emp) {
+                    $emp->update([
+                        'status' => 'locked',
+                        'lock_reason' => "Project Finished: {$this->name} ({$this->code})",
+                    ]);
+
+                    // Complete any active employee contract linked to this project
+                    if (\Illuminate\Support\Facades\Schema::hasTable('employee_contracts')) {
+                        EmployeeContract::where('employee_id', $emp->id)
+                            ->where('status', 'active')
+                            ->where(function($cq) {
+                                $cq->where('project_id', $this->id)
+                                   ->orWhere('duration_type', 'until_project_completion')
+                                   ->orWhere('is_project_based', true);
+                            })
+                            ->update(['status' => 'completed']);
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Project-based employee auto-lock sync: ' . $e->getMessage());
+            }
+        }
+    }
+
     /**
      * Recalculate and persist the project `status` from its current
      * `planning_phase_status`, UNLESS the project is in a terminal /
@@ -171,4 +219,5 @@ class Project extends Model
         }
     }
 }
+
 

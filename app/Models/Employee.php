@@ -13,7 +13,7 @@ class Employee extends Model
         'user_id', 'project_id', 'employee_code', 'full_name',
         'national_id_number', 'national_id_card', 'tin_number',
         'phone', 'email', 'role_title', 'department',
-        'employment_type', 'contract_type', 'contract_end_date', 'date_of_joining',
+        'employment_type', 'contract_type', 'contract_end_date', 'contract_duration_type', 'is_project_based', 'date_of_joining',
         'probation_ends_at', 'probation_completed', 'lock_reason',
         'basic_salary', 'transport_allowance', 'house_allowance', 'position_allowance',
         'status', 'notes', 'bank_name', 'account_number',
@@ -28,6 +28,7 @@ class Employee extends Model
     protected $casts = [
         'date_of_joining' => 'date',
         'contract_end_date' => 'date',
+        'is_project_based' => 'boolean',
         'probation_ends_at' => 'date',
         'probation_completed' => 'boolean',
         'basic_salary'    => 'decimal:2',
@@ -38,6 +39,7 @@ class Employee extends Model
         'gm_approved_at' => 'datetime',
         'gm_rejected_at' => 'datetime',
     ];
+
 
     /**
      * The "booted" method of the model.
@@ -233,6 +235,72 @@ class Employee extends Model
     /**
      * Get effective probation end date (45 days from date_of_joining by default)
      */
+    /**
+     * Whether this employee has a project-linked contract (tied to project completion)
+     */
+    public function isProjectBased(): bool
+    {
+        return $this->contract_duration_type === 'until_project_completion' || (bool)$this->is_project_based;
+    }
+
+    /**
+     * Get human-readable contract duration type label
+     */
+    public function getContractDurationTypeLabelAttribute(): string
+    {
+        if ($this->isProjectBased()) {
+            return 'Until Project Completion (ፕሮጀክት-ተኮር)';
+        }
+        return 'Fixed Calendar Date (የተወሰነ የቀን ገደብ)';
+    }
+
+    /**
+     * Check if the assigned project is finished/completed/closed
+     */
+    public function getIsProjectCompletedAttribute(): bool
+    {
+        if (!$this->project_id || !$this->project) {
+            return false;
+        }
+        return in_array(strtolower($this->project->status), ['completed', 'finished', 'closed', 'cancelled', 'handover', 'archived']);
+    }
+
+    /**
+     * Check if this employee's contract has expired (either project finished or calendar date passed)
+     */
+    public function getIsContractExpiredAttribute(): bool
+    {
+        if ($this->isProjectBased()) {
+            return $this->is_project_completed;
+        }
+
+        if ($this->employment_type === 'contract' && $this->contract_end_date) {
+            return $this->contract_end_date->isPast();
+        }
+
+        return false;
+    }
+
+    /**
+     * Sync and apply lock if the linked project has finished
+     */
+    public function checkAndApplyProjectLock(): bool
+    {
+        if ($this->isProjectBased() && $this->project_id) {
+            $project = $this->project;
+            if ($project && in_array(strtolower($project->status), ['completed', 'finished', 'closed', 'cancelled', 'handover', 'archived'])) {
+                if ($this->status !== 'locked') {
+                    $this->update([
+                        'status' => 'locked',
+                        'lock_reason' => "Project Finished: {$project->name} ({$project->code})",
+                    ]);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public function getProbationEndDateAttribute()
     {
         if ($this->probation_ends_at) {
@@ -248,6 +316,7 @@ class Employee extends Model
      * Get days passed since employee joining date
      */
     public function getDaysSinceJoiningAttribute()
+
     {
         if (!$this->date_of_joining) {
             return 0;

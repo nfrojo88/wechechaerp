@@ -95,16 +95,27 @@ class EmployeeContractManagementController extends Controller
         $this->authorize('create', EmployeeContract::class);
 
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,id',
-            'contract_type' => 'required|string',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
-            'salary' => 'required|numeric|min:0',
+            'employee_id'     => 'required|exists:employees,id',
+            'project_id'      => 'nullable|exists:projects,id',
+            'contract_type'   => 'required|string',
+            'duration_type'   => 'nullable|in:fixed_date,until_project_completion',
+            'is_project_based'=> 'nullable|boolean',
+            'start_date'      => 'required|date',
+            'end_date'        => 'nullable|date|after:start_date',
+            'salary'          => 'required|numeric|min:0',
             'benefits_amount' => 'nullable|numeric|min:0',
-            'terms' => 'required|string|min:20',
-            'special_terms' => 'nullable|string',
-            'contract_file' => 'nullable|file|mimes:pdf,doc,docx|max:5120',
+            'terms'           => 'required|string|min:20',
+            'special_terms'   => 'nullable|string',
+            'contract_file'   => 'nullable|file|mimes:pdf,doc,docx|max:5120',
         ]);
+
+        if (($validated['duration_type'] ?? '') === 'until_project_completion' || $request->boolean('is_project_based')) {
+            $validated['duration_type'] = 'until_project_completion';
+            $validated['is_project_based'] = true;
+        } else {
+            $validated['duration_type'] = $validated['duration_type'] ?? 'fixed_date';
+            $validated['is_project_based'] = false;
+        }
 
         // Generate contract number
         $contractNumber = 'CNT-' . date('Y') . '-' . str_pad(EmployeeContract::whereYear('created_at', date('Y'))->count() + 1, 4, '0', STR_PAD_LEFT);
@@ -118,6 +129,7 @@ class EmployeeContractManagementController extends Controller
         $validated['status'] = 'draft';
 
         $contract = EmployeeContract::create($validated);
+
 
         return redirect()->route('contracts.show', $contract->id)
             ->with('success', 'Contract created successfully. Pending approval.');

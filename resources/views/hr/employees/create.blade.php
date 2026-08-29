@@ -260,18 +260,61 @@
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label">Employment Type <span class="text-danger">*</span></label>
-                        <select name="employment_type" id="create_employment_type" class="form-select" onchange="toggleContractEndDate(this.value)" required>
-                            <option value="permanent" {{ old('employment_type', 'permanent') == 'permanent' ? 'selected' : '' }}>Permanent</option>
-                            <option value="contract"  {{ old('employment_type') == 'contract' ? 'selected' : '' }}>Contract</option>
-                            <option value="daily"     {{ old('employment_type') == 'daily' ? 'selected' : '' }}>Daily Labor</option>
+                        <select name="employment_type" id="create_employment_type" class="form-select" onchange="toggleContractFields(this.value)" required>
+                            <option value="permanent" {{ old('employment_type', 'permanent') == 'permanent' ? 'selected' : '' }}>Permanent (ቋሚ)</option>
+                            <option value="contract"  {{ old('employment_type') == 'contract' ? 'selected' : '' }}>Contract / Project-Linked (ኮንትራት / ፕሮጀክት-ተኮር)</option>
+                            <option value="daily"     {{ old('employment_type') == 'daily' ? 'selected' : '' }}>Daily Labor (የቀን ሰራተኛ)</option>
                         </select>
                     </div>
-                    <div class="col-md-6" id="contract_end_date_wrapper" style="{{ old('employment_type') == 'contract' ? '' : 'display:none;' }}">
-                        <label class="form-label">Contract End Date (Valid Upto) <span class="text-danger">*</span></label>
-                        <input type="date" name="contract_end_date" id="contract_end_date_input" class="form-control @error('contract_end_date') is-invalid @enderror"
-                               value="{{ old('contract_end_date') }}">
-                        @error('contract_end_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+
+                    {{-- Contract Duration & Project Link Configuration --}}
+                    <div class="col-12" id="contract_config_wrapper" style="{{ old('employment_type') == 'contract' ? '' : 'display:none;' }}">
+                        <div class="p-3 rounded-3 border bg-light shadow-xs">
+                            <label class="form-label fw-bold text-dark mb-2">
+                                <i class="fa-solid fa-link text-primary me-1"></i>Contract Duration Mechanism (የኮንትራት ማብቂያ ደንብ) <span class="text-danger">*</span>
+                            </label>
+                            
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="form-check p-2.5 rounded border bg-white h-100 cursor-pointer" onclick="selectDurationType('until_project_completion')">
+                                        <input class="form-check-input ms-1" type="radio" name="contract_duration_type" id="dur_project_completion" value="until_project_completion" {{ old('contract_duration_type', 'until_project_completion') == 'until_project_completion' ? 'checked' : '' }} onchange="onDurationTypeChange(this.value)">
+                                        <label class="form-check-label ps-2 cursor-pointer" for="dur_project_completion">
+                                            <strong class="d-block text-primary"><i class="fa-solid fa-diagram-project me-1"></i>Until Project Completion (የፕሮጀክት ማለቂያ ድረስ)</strong>
+                                            <small class="text-muted">Contract remains active as long as the assigned project is active. When the project finishes/completes, the employee automatically locks.</small>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check p-2.5 rounded border bg-white h-100 cursor-pointer" onclick="selectDurationType('fixed_date')">
+                                        <input class="form-check-input ms-1" type="radio" name="contract_duration_type" id="dur_fixed_date" value="fixed_date" {{ old('contract_duration_type') == 'fixed_date' ? 'checked' : '' }} onchange="onDurationTypeChange(this.value)">
+                                        <label class="form-check-label ps-2 cursor-pointer" for="dur_fixed_date">
+                                            <strong class="d-block text-dark"><i class="fa-solid fa-calendar-day me-1"></i>Fixed Calendar End Date (የተወሰነ የቀን ገደብ)</strong>
+                                            <small class="text-muted">Contract has a fixed calendar end date regardless of project completion status.</small>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                {{-- Notice for Project-Linked Contract --}}
+                                <div class="col-12" id="project_linked_notice" style="{{ old('contract_duration_type', 'until_project_completion') == 'until_project_completion' ? '' : 'display:none;' }}">
+                                    <div class="alert alert-success d-flex align-items-center gap-2 mb-0 py-2 px-3 border-success-subtle">
+                                        <i class="fa-solid fa-circle-check text-success fs-5"></i>
+                                        <div class="small">
+                                            <strong>Project-Linked Contract Active:</strong> Select the <strong>Assigned Project</strong> below. The employee's contract availability will dynamically track that project's lifecycle.
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- Calendar End Date Field --}}
+                                <div class="col-md-6" id="fixed_date_field_wrapper" style="{{ old('contract_duration_type') == 'fixed_date' ? '' : 'display:none;' }}">
+                                    <label class="form-label small fw-bold text-dark">Contract End Date (Valid Upto) <span class="text-danger">*</span></label>
+                                    <input type="date" name="contract_end_date" id="contract_end_date_input" class="form-control @error('contract_end_date') is-invalid @enderror"
+                                           value="{{ old('contract_end_date') }}">
+                                    @error('contract_end_date')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                </div>
+                            </div>
+                        </div>
                     </div>
+
                     <div class="col-md-6">
                         <label class="form-label">Start Date / Joining Date <span class="text-danger">*</span></label>
                         <input type="date" name="date_of_joining" class="form-control @error('date_of_joining') is-invalid @enderror"
@@ -286,17 +329,21 @@
                             <option value="terminated" {{ old('status') == 'terminated' ? 'selected' : '' }}>Terminated</option>
                         </select>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label">Assigned Project</label>
-                        <select name="project_id" class="form-select">
+                    <div class="col-md-6" id="assigned_project_wrapper">
+                        <label class="form-label fw-semibold text-dark">
+                            <i class="fa-solid fa-diagram-project text-primary me-1"></i>Assigned Project
+                            <span class="text-danger" id="project_required_indicator" style="{{ old('contract_duration_type', 'until_project_completion') == 'until_project_completion' && old('employment_type') == 'contract' ? '' : 'display:none;' }}">* (Required for Project-Linked Contract)</span>
+                        </label>
+                        <select name="project_id" id="assigned_project_select" class="form-select">
                             <option value="">-- No Specific Project (HQ) --</option>
                             @foreach($projects as $project)
                                 <option value="{{ $project->id }}" {{ old('project_id') == $project->id ? 'selected' : '' }}>
-                                    {{ $project->name }} ({{ $project->code }})
+                                    {{ $project->name }} ({{ $project->code }}) &bull; Status: {{ ucfirst($project->status) }}
                                 </option>
                             @endforeach
                         </select>
                     </div>
+
                     <div class="col-md-6">
                         <label class="form-label">
                             Site Assignment 
@@ -1616,21 +1663,57 @@ function toggleRemoteNotice(selectEl) {
     }
 }
 
-function toggleContractEndDate(val) {
-    const wrapper = document.getElementById('contract_end_date_wrapper');
-    const input = document.getElementById('contract_end_date_input');
-    if (!wrapper) return;
-    if (val === 'contract') {
-        wrapper.style.display = 'block';
-        if (input) input.required = true;
-    } else {
-        wrapper.style.display = 'none';
-        if (input) {
-            input.required = false;
-            input.value = '';
-        }
+function toggleContractFields(val) {
+    const configWrapper = document.getElementById('contract_config_wrapper');
+    const projectReq = document.getElementById('project_required_indicator');
+    const projectSel = document.getElementById('assigned_project_select');
+    const durType = document.querySelector('input[name="contract_duration_type"]:checked')?.value || 'until_project_completion';
+
+    if (configWrapper) {
+        configWrapper.style.display = (val === 'contract') ? 'block' : 'none';
+    }
+    
+    onDurationTypeChange(durType);
+}
+
+function selectDurationType(type) {
+    const radio = document.getElementById(type === 'until_project_completion' ? 'dur_project_completion' : 'dur_fixed_date');
+    if (radio) {
+        radio.checked = true;
+        onDurationTypeChange(type);
     }
 }
+
+function onDurationTypeChange(type) {
+    const empType = document.getElementById('create_employment_type')?.value;
+    const isContract = empType === 'contract';
+    const notice = document.getElementById('project_linked_notice');
+    const fixedField = document.getElementById('fixed_date_field_wrapper');
+    const dateInput = document.getElementById('contract_end_date_input');
+    const projectReq = document.getElementById('project_required_indicator');
+    const projectSel = document.getElementById('assigned_project_select');
+
+    if (isContract && type === 'until_project_completion') {
+        if (notice) notice.style.display = 'block';
+        if (fixedField) fixedField.style.display = 'none';
+        if (dateInput) dateInput.required = false;
+        if (projectReq) projectReq.style.display = 'inline';
+        if (projectSel) projectSel.required = true;
+    } else if (isContract && type === 'fixed_date') {
+        if (notice) notice.style.display = 'none';
+        if (fixedField) fixedField.style.display = 'block';
+        if (dateInput) dateInput.required = true;
+        if (projectReq) projectReq.style.display = 'none';
+        if (projectSel) projectSel.required = false;
+    } else {
+        if (notice) notice.style.display = 'none';
+        if (fixedField) fixedField.style.display = 'none';
+        if (dateInput) dateInput.required = false;
+        if (projectReq) projectReq.style.display = 'none';
+        if (projectSel) projectSel.required = false;
+    }
+}
+
 
 // ── Multi-Step Form Submit Handler ───────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
