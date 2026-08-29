@@ -2,7 +2,13 @@
 
 @section('title', 'Expense Track & Approve')
 
+@php
+    $authUser = auth()->user();
+    $authUserId = auth()->id();
+@endphp
+
 @section('content')
+
 <div class="container-fluid px-2 px-md-3">
     <!-- Header -->
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
@@ -586,14 +592,15 @@
 
         <!-- 4. Finance Assign Modal -->
         @php
-            $isAssignedToMe = (
-                $req->assigned_finance_staff_id == $authUser->id ||
-                $req->finance_staff_id == $authUser->id ||
-                ($req->chartOfAccount && $req->chartOfAccount->assigned_to == $authUser->id) ||
-                ($req->coa && $req->coa->assigned_to == $authUser->id)
+            $isAssignedToMe = $authUserId && (
+                $req->assigned_finance_staff_id == $authUserId ||
+                $req->finance_staff_id == $authUserId ||
+                ($req->chartOfAccount && $req->chartOfAccount->assigned_to == $authUserId) ||
+                ($req->coa && $req->coa->assigned_to == $authUserId)
             );
         @endphp
         <div class="modal fade" id="financeAssignModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
+
             <div class="modal-dialog modal-dialog-centered {{ $isAssignedToMe ? 'modal-lg' : 'modal-md' }}">
                 <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
                     <div class="modal-header bg-white border-bottom py-3 px-4">
