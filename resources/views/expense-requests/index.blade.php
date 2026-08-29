@@ -103,12 +103,15 @@
 
                     <select name="category" class="form-select form-select-sm" style="max-width: 200px;" onchange="this.form.submit()">
                         <option value="">All Categories</option>
-                        <option value="Transport" {{ request('category') === 'Transport' ? 'selected' : '' }}>Transport</option>
-                        <option value="Office Material" {{ request('category') === 'Office Material' ? 'selected' : '' }}>Office Material</option>
-                        <option value="Loading & Unloading" {{ (request('category') === 'Loading & Unloading' || request('category') === 'Loading / Unloading' || request('category') === 'Loading Unloading') ? 'selected' : '' }}>Loading & Unloading</option>
-                        <option value="Contract Work" {{ request('category') === 'Contract Work' ? 'selected' : '' }}>Contract Work</option>
-                        <option value="Other" {{ request('category') === 'Other' ? 'selected' : '' }}>Other</option>
+                        <option value="Service" {{ request('category') === 'Service' ? 'selected' : '' }}>Service (አገልግሎት)</option>
+                        <option value="Transport" {{ request('category') === 'Transport' ? 'selected' : '' }}>Transport (ትራንስፖርት)</option>
+                        <option value="Loading & Unloading" {{ (request('category') === 'Loading & Unloading' || request('category') === 'Loading / Unloading' || request('category') === 'Loading Unloading') ? 'selected' : '' }}>Loading &amp; Unloading (መጫን/ማውረድ)</option>
+                        <option value="Contract Work" {{ request('category') === 'Contract Work' ? 'selected' : '' }}>Contract Work (የኮንትራት ስራ)</option>
+                        <option value="Office Material" {{ request('category') === 'Office Material' ? 'selected' : '' }}>Office Material (የቢሮ እቃ)</option>
+                        <option value="Maintenance" {{ request('category') === 'Maintenance' ? 'selected' : '' }}>Maintenance (ጥገና)</option>
+                        <option value="Other" {{ request('category') === 'Other' ? 'selected' : '' }}>Other (ሌሎች)</option>
                     </select>
+
 
                     <button type="submit" class="btn btn-sm btn-secondary">Filter</button>
                     @if(request('search') || request('category'))
@@ -692,10 +695,10 @@
 {{-- Create Request Modal --}}
 <div class="modal fade" id="createRequestModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content shadow border-0">
-            <form method="POST" action="{{ route('expense-requests.store') }}" enctype="multipart/form-data">
+        <div class="modal-content shadow border-0 rounded-4 overflow-hidden">
+            <form method="POST" action="{{ route('expense-requests.store') }}" enctype="multipart/form-data" id="createExpenseRequestForm">
                 @csrf
-                <div class="modal-header bg-success bg-gradient text-white">
+                <div class="modal-header bg-success bg-gradient text-white py-3 px-4">
                     <h5 class="modal-title fw-bold"><i class="fa-solid fa-hand-holding-dollar me-2"></i>New Expense Request ("Ask Money")</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -703,23 +706,86 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label fw-bold">Category <span class="text-danger">*</span></label>
-                            <select name="category" id="categorySelect" class="form-select" onchange="toggleOtherReason()" required>
-                                <option value="Transport">Transport</option>
-                                <option value="Office Material">Office Material</option>
-                                <option value="Loading & Unloading">Loading & Unloading</option>
-                                <option value="Contract Work">Contract Work</option>
-                                <option value="Maintenance">Maintenance &amp; Repairs</option>
-                                <option value="Other">Other</option>
+                            <select name="category" id="categorySelect" class="form-select fw-semibold" onchange="toggleCategoryOptions()" required>
+                                <option value="Service">🤝 Service (አገልግሎት)</option>
+                                <option value="Transport">🚚 Transport (ትራንስፖርት)</option>
+                                <option value="Loading & Unloading">📦 Loading &amp; Unloading (መጫን እና ማውረድ)</option>
+                                <option value="Contract Work">📝 Contract Work (የኮንትራት ስራ)</option>
+                                <option value="Office Material">📁 Office Material (የቢሮ እቃ)</option>
+                                <option value="Maintenance">🔧 Maintenance &amp; Repairs (ጥገና)</option>
+                                <option value="Other">✨ Other (ሌሎች)</option>
                             </select>
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">Requested Amount (ETB) <span class="text-danger">*</span></label>
+                            <label class="form-label fw-bold">Invoice / Base Amount (ETB) <span class="text-danger">*</span></label>
                             <div class="input-group">
                                 <span class="input-group-text fw-bold bg-light">ETB</span>
-                                <input type="number" step="0.01" min="1" name="amount" class="form-control fw-bold fs-5 text-success" placeholder="0.00" required>
+                                <input type="number" step="0.01" min="0.01" name="gross_amount" id="createGrossAmount" class="form-control fw-bold fs-5 text-dark" placeholder="0.00" oninput="recalculateCreateTaxes()" required>
                             </div>
                         </div>
+
+                        {{-- Service Tax & Deduction Section (VAT & Withholding) --}}
+                        <div class="col-12" id="createTaxSection">
+                            <div class="card border border-primary-subtle bg-light rounded-3 p-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                                    <strong class="text-primary small text-uppercase">
+                                        <i class="fa-solid fa-receipt me-1"></i>Service Tax &amp; Deduction Config (VAT &amp; Withholding)
+                                    </strong>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0">Tax Calculator</span>
+                                </div>
+
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold mb-1">VAT Option (ቫት)</label>
+                                        <select name="vat_type" id="createVatType" class="form-select form-select-sm" onchange="recalculateCreateTaxes()">
+                                            <option value="none">No VAT (0% / ያለ ቫት)</option>
+                                            <option value="exclusive">15% VAT Added (+15% ተጨማሪ ቫት)</option>
+                                            <option value="vat_b">15% VAT Included / VAT B (ከቫት 15% ጋር የተካተተ - ቫት ቢ)</option>
+                                        </select>
+                                        <input type="hidden" name="vat_rate" id="createVatRate" value="15.00">
+                                        <input type="hidden" name="vat_amount" id="createVatAmount" value="0.00">
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር 2%)</label>
+                                        <div class="form-check form-switch mt-1">
+                                            <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" id="createWithholdingToggle" onchange="recalculateCreateTaxes()">
+                                            <label class="form-check-label small" for="createWithholdingToggle">
+                                                Apply 2% Service Withholding Deduction
+                                            </label>
+                                        </div>
+                                        <input type="hidden" name="withholding_rate" id="createWithholdingRate" value="2.00">
+                                        <input type="hidden" name="withholding_amount" id="createWithholdingAmount" value="0.00">
+                                    </div>
+                                </div>
+
+                                {{-- Real-time Tax Breakdown Card --}}
+                                <div class="mt-3 p-2 bg-white rounded border shadow-sm">
+                                    <div class="row text-center g-2 small">
+                                        <div class="col-3 border-end">
+                                            <span class="text-muted d-block" style="font-size:0.75rem;">Base Amount</span>
+                                            <strong class="text-dark" id="displayCreateBase">ETB 0.00</strong>
+                                        </div>
+                                        <div class="col-3 border-end">
+                                            <span class="text-muted d-block" style="font-size:0.75rem;">VAT (15%)</span>
+                                            <strong class="text-info" id="displayCreateVat">+ ETB 0.00</strong>
+                                        </div>
+                                        <div class="col-3 border-end">
+                                            <span class="text-muted d-block" style="font-size:0.75rem;">Withholding (2%)</span>
+                                            <strong class="text-danger" id="displayCreateWht">- ETB 0.00</strong>
+                                        </div>
+                                        <div class="col-3">
+                                            <span class="text-muted d-block" style="font-size:0.75rem;">Net Requested</span>
+                                            <strong class="text-success" id="displayCreateNet">ETB 0.00</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <input type="hidden" name="amount" id="createFinalAmount" value="0.00">
+                        <input type="hidden" name="net_amount" id="createNetAmount" value="0.00">
 
                         <div class="col-12" id="otherReasonGroup" style="display: none;">
                             <label class="form-label fw-bold">Specify Reason for "Other" Category <span class="text-danger">*</span></label>
@@ -732,9 +798,9 @@
                         </div>
 
                         <div class="col-12">
-                            <label class="form-label fw-bold">Attachment (Receipt / Photo / Quote) <small class="text-muted">(Optional — Max 10MB)</small></label>
+                            <label class="form-label fw-bold">Attachment (Receipt / Invoice / Proforma / Photo) <small class="text-muted">(Optional — Max 10MB)</small></label>
                             <input type="file" name="attachment" class="form-control" accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
-                            <small class="text-muted">Upload receipt image or PDF if available.</small>
+                            <small class="text-muted">Upload invoice receipt image or PDF if available.</small>
                         </div>
                     </div>
 
@@ -743,10 +809,10 @@
                         <strong>Workflow Notice:</strong> Requests 5,000 ETB or less will be directly reviewed by HR. Requests over 5,000 ETB will automatically require General Manager (GM) sign-off.
                     </div>
                 </div>
-                <div class="modal-footer bg-light border-top-0">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success fw-bold px-4">
-                        <i class="fa-solid fa-paper-plane me-1"></i> Submit Request
+                <div class="modal-footer bg-light border-top-0 py-3 px-4">
+                    <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success fw-bold rounded-pill px-4" id="btnSubmitCreate">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Submit Request (<span id="btnSubmitAmount">ETB 0.00</span>)
                     </button>
                 </div>
             </form>
@@ -754,18 +820,102 @@
     </div>
 </div>
 
+
 <script>
-function toggleOtherReason() {
+function toggleCategoryOptions() {
     const category = document.getElementById('categorySelect').value;
     const group = document.getElementById('otherReasonGroup');
     const input = document.getElementById('otherReasonInput');
+    const taxSection = document.getElementById('createTaxSection');
+
     if (category === 'Other') {
-        group.style.display = 'block';
-        input.required = true;
+        if (group) group.style.display = 'block';
+        if (input) input.required = true;
     } else {
-        group.style.display = 'none';
-        input.required = false;
+        if (group) group.style.display = 'none';
+        if (input) input.required = false;
     }
+
+    if (taxSection) {
+        if (category === 'Service' || category === 'Contract Work') {
+            taxSection.style.display = 'block';
+        } else {
+            taxSection.style.display = 'none';
+            const vatType = document.getElementById('createVatType');
+            const whtToggle = document.getElementById('createWithholdingToggle');
+            if (vatType) vatType.value = 'none';
+            if (whtToggle) whtToggle.checked = false;
+        }
+    }
+    recalculateCreateTaxes();
+}
+
+function recalculateCreateTaxes() {
+    const grossInput = document.getElementById('createGrossAmount');
+    const vatTypeSelect = document.getElementById('createVatType');
+    const whtToggle = document.getElementById('createWithholdingToggle');
+
+    if (!grossInput) return;
+    const gross = parseFloat(grossInput.value) || 0;
+    const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
+    const vatRate = 15.00;
+    const hasWht = whtToggle ? whtToggle.checked : false;
+    const whtRate = 2.00;
+
+    let vatAmount = 0.0;
+    let baseAmount = gross;
+    let whtAmount = 0.0;
+    let netAmount = gross;
+
+    if (vatType === 'exclusive') {
+        vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
+        baseAmount = gross;
+        const totalGrossWithVat = gross + vatAmount;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
+    } else if (vatType === 'inclusive' || vatType === 'vat_b') {
+        baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
+        vatAmount = Math.round((gross - baseAmount) * 100) / 100;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((gross - whtAmount) * 100) / 100;
+    } else {
+        baseAmount = gross;
+        vatAmount = 0.0;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((gross - whtAmount) * 100) / 100;
+    }
+
+    // Set hidden inputs
+    const hiddenVat = document.getElementById('createVatAmount');
+    const hiddenWht = document.getElementById('createWithholdingAmount');
+    const hiddenNet = document.getElementById('createNetAmount');
+    const hiddenAmount = document.getElementById('createFinalAmount');
+
+    if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
+    if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
+    if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
+    if (hiddenAmount) hiddenAmount.value = (netAmount > 0 ? netAmount : gross).toFixed(2);
+
+    // Update display labels
+    const dispBase = document.getElementById('displayCreateBase');
+    const dispVat = document.getElementById('displayCreateVat');
+    const dispWht = document.getElementById('displayCreateWht');
+    const dispNet = document.getElementById('displayCreateNet');
+    const btnSpan = document.getElementById('btnSubmitAmount');
+
+    const fmt = num => 'ETB ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (dispBase) dispBase.innerText = fmt(baseAmount);
+    if (dispVat) dispVat.innerText = (vatAmount > 0 ? '+ ' : '') + fmt(vatAmount);
+    if (dispWht) dispWht.innerText = (whtAmount > 0 ? '- ' : '') + fmt(whtAmount);
+    if (dispNet) dispNet.innerText = fmt(netAmount);
+    if (btnSpan) btnSpan.innerText = fmt(netAmount);
 }
 
 function autoDetectFinanceStaff(selectEl) {
@@ -803,5 +953,10 @@ function autoDetectFinanceStaff(selectEl) {
         if (hiddenInput) hiddenInput.value = '';
     }
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    toggleCategoryOptions();
+});
 </script>
+
 @endsection

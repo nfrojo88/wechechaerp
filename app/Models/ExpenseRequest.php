@@ -21,6 +21,15 @@ class ExpenseRequest extends Model
         'category',
         'other_reason',
         'amount',
+        'gross_amount',
+        'vat_type',
+        'vat_rate',
+        'vat_amount',
+        'has_withholding',
+        'withholding_rate',
+        'withholding_amount',
+        'net_amount',
+        'service_type',
         'description',
         'attachment',
         'status',
@@ -46,6 +55,13 @@ class ExpenseRequest extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'gross_amount' => 'decimal:2',
+        'vat_rate' => 'decimal:2',
+        'vat_amount' => 'decimal:2',
+        'has_withholding' => 'boolean',
+        'withholding_rate' => 'decimal:2',
+        'withholding_amount' => 'decimal:2',
+        'net_amount' => 'decimal:2',
         'hr_reviewed_at' => 'datetime',
         'gm_reviewed_at' => 'datetime',
         'gm_approved_at' => 'datetime',
@@ -62,12 +78,83 @@ class ExpenseRequest extends Model
     public const STATUS_REJECTED = 'Rejected';
 
     // Category Constants
+    public const CATEGORY_SERVICE = 'Service';
     public const CATEGORY_TRANSPORT = 'Transport';
-    public const CATEGORY_OFFICE_MATERIAL = 'Office Material';
     public const CATEGORY_LOADING_UNLOADING = 'Loading & Unloading';
     public const CATEGORY_CONTRACT_WORK = 'Contract Work';
+    public const CATEGORY_OFFICE_MATERIAL = 'Office Material';
     public const CATEGORY_MAINTENANCE = 'Maintenance';
     public const CATEGORY_OTHER = 'Other';
+
+    /**
+     * Categories list with icons and descriptions
+     */
+    public static function getCategoriesList(): array
+    {
+        return [
+            self::CATEGORY_SERVICE => [
+                'label' => 'Service (አገልግሎት)',
+                'icon' => 'fa-solid fa-handshake',
+                'color' => 'primary',
+                'has_tax_options' => true,
+                'description' => 'Professional, technical, rental, or general service fees with optional VAT & Withholding'
+            ],
+            self::CATEGORY_TRANSPORT => [
+                'label' => 'Transport (ትራንስፖርት)',
+                'icon' => 'fa-solid fa-truck-plane',
+                'color' => 'info',
+                'has_tax_options' => false,
+                'description' => 'Vehicle fuel, freight, taxi, bus, or machinery mobilization transport costs'
+            ],
+            self::CATEGORY_LOADING_UNLOADING => [
+                'label' => 'Loading & Unloading (መጫን እና ማውረድ)',
+                'icon' => 'fa-solid fa-dolly',
+                'color' => 'warning',
+                'has_tax_options' => false,
+                'description' => 'Material handling, portage, site loading/unloading labor costs'
+            ],
+            self::CATEGORY_CONTRACT_WORK => [
+                'label' => 'Contract Work (የኮንትራት ስራ)',
+                'icon' => 'fa-solid fa-file-signature',
+                'color' => 'dark',
+                'has_tax_options' => true,
+                'description' => 'Subcontractors, task-based construction work, cobblestone/masonry labor'
+            ],
+            self::CATEGORY_OFFICE_MATERIAL => [
+                'label' => 'Office Material (የቢሮ እቃ)',
+                'icon' => 'fa-solid fa-boxes-stacked',
+                'color' => 'secondary',
+                'has_tax_options' => false,
+                'description' => 'Stationery, consumables, office utilities and cleaning items'
+            ],
+            self::CATEGORY_MAINTENANCE => [
+                'label' => 'Maintenance & Repairs (ጥገና)',
+                'icon' => 'fa-solid fa-screwdriver-wrench',
+                'color' => 'danger',
+                'has_tax_options' => true,
+                'description' => 'Machinery parts, vehicle maintenance, site generator servicing'
+            ],
+            self::CATEGORY_OTHER => [
+                'label' => 'Other (ሌሎች)',
+                'icon' => 'fa-solid fa-ellipsis',
+                'color' => 'secondary',
+                'has_tax_options' => true,
+                'description' => 'Uncategorized emergency expense'
+            ],
+        ];
+    }
+
+    /**
+     * Get effective payable / disbursed amount (net_amount if taxes applied, otherwise amount).
+     */
+    public function getEffectivePayableAmountAttribute(): float
+    {
+        if ($this->net_amount !== null && (float)$this->net_amount > 0) {
+            return (float)$this->net_amount;
+        }
+        return (float)$this->amount;
+    }
+
 
     /**
      * User who submitted the request.

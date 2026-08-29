@@ -86,11 +86,35 @@ class ExpenseRequestController extends Controller
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'payment_reference')) {
                         $table->string('payment_reference')->nullable();
                     }
-                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'payment_notes')) {
-                        $table->text('payment_notes')->nullable();
-                    }
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'maintenance_request_id')) {
                         $table->unsignedBigInteger('maintenance_request_id')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'gross_amount')) {
+                        $table->decimal('gross_amount', 14, 2)->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'vat_type')) {
+                        $table->string('vat_type', 30)->default('none');
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'vat_rate')) {
+                        $table->decimal('vat_rate', 5, 2)->default(15.00);
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'vat_amount')) {
+                        $table->decimal('vat_amount', 14, 2)->default(0);
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'has_withholding')) {
+                        $table->boolean('has_withholding')->default(false);
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'withholding_rate')) {
+                        $table->decimal('withholding_rate', 5, 2)->default(2.00);
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'withholding_amount')) {
+                        $table->decimal('withholding_amount', 14, 2)->default(0);
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'net_amount')) {
+                        $table->decimal('net_amount', 14, 2)->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'service_type')) {
+                        $table->string('service_type', 100)->nullable();
                     }
                 });
             }
@@ -98,6 +122,7 @@ class ExpenseRequestController extends Controller
             Log::error('Expense table auto-heal error: ' . $e->getMessage());
         }
     }
+
 
     /**
      * Display listing of expense requests based on role & active tab.
@@ -301,10 +326,19 @@ class ExpenseRequestController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'category' => 'required|string|in:Transport,Office Material,Loading & Unloading,Loading / Unloading,Loading Unloading,Contract Work,Maintenance,Other',
+            'category' => 'required|string|in:Service,Transport,Office Material,Loading & Unloading,Loading / Unloading,Loading Unloading,Contract Work,Maintenance,Other',
             'other_reason' => 'required_if:category,Other|nullable|string|max:255',
+            'service_type' => 'nullable|string|max:100',
             'maintenance_request_id' => 'nullable|exists:maintenance_requests,id',
-            'amount' => 'required|numeric|min:1',
+            'amount' => 'required|numeric|min:0.01',
+            'gross_amount' => 'nullable|numeric|min:0',
+            'vat_type' => 'nullable|string|in:none,inclusive,exclusive,vat_b',
+            'vat_rate' => 'nullable|numeric|min:0',
+            'vat_amount' => 'nullable|numeric|min:0',
+            'has_withholding' => 'nullable|boolean',
+            'withholding_rate' => 'nullable|numeric|min:0',
+            'withholding_amount' => 'nullable|numeric|min:0',
+            'net_amount' => 'nullable|numeric|min:0',
             'description' => 'required|string|max:2000',
             'attachment' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
         ]);
@@ -326,14 +360,68 @@ class ExpenseRequestController extends Controller
             }
         }
 
+        // Standardize category name
+        $category = $validated['category'];
+        if (in_array($category, ['Loading / Unloading', 'Loading Unloading'])) {
+            $category = 'Loading & Unloading';
+        }
+
+        // Tax & Amount Calculations
+        $rawAmount = (float)$validated['amount'];
+        $gross = isset($validated['gross_amount']) && (float)$validated['gross_amount'] > 0 ? (float)$validated['gross_amount'] : $rawAmount;
+        $vatType = $request->input('vat_type', 'none');
+        $vatRate = (float)$request->input('vat_rate', 15.00);
+        $hasWithholding = $request->boolean('has_withholding');
+        $withholdingRate = (float)$request->input('withholding_rate', 2.00);
+
+        $vatAmount = 0.0;
+        $baseAmount = $gross;
+        $withholdingAmount = 0.0;
+        $netAmount = $gross;
+
+        if ($vatType === 'exclusive') {
+            $vatAmount = round($gross * ($vatRate / 100), 2);
+            $baseAmount = $gross;
+            $totalGrossWithVat = $gross + $vatAmount;
+            if ($hasWithholding) {
+                $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+            }
+            $netAmount = $totalGrossWithVat - $withholdingAmount;
+        } elseif ($vatType === 'inclusive' || $vatType === 'vat_b') {
+            $baseAmount = round($gross / (1 + ($vatRate / 100)), 2);
+            $vatAmount = round($gross - $baseAmount, 2);
+            if ($hasWithholding) {
+                $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+            }
+            $netAmount = $gross - $withholdingAmount;
+        } else {
+            $baseAmount = $gross;
+            $vatAmount = 0.0;
+            if ($hasWithholding) {
+                $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+            }
+            $netAmount = $gross - $withholdingAmount;
+        }
+
+        $finalAmount = $netAmount > 0 ? $netAmount : $rawAmount;
+
         $expenseRequest = ExpenseRequest::create([
             'request_number' => $requestNumber,
             'user_id' => $user->id,
             'employee_id' => $employee ? $employee->id : null,
             'maintenance_request_id' => $request->input('maintenance_request_id'),
-            'category' => $validated['category'],
-            'other_reason' => $validated['category'] === 'Other' ? $validated['other_reason'] : ($validated['category'] === 'Maintenance' ? ($validated['other_reason'] ?? 'Equipment / Asset Maintenance') : null),
-            'amount' => $validated['amount'],
+            'category' => $category,
+            'service_type' => $validated['service_type'] ?? null,
+            'other_reason' => $category === 'Other' ? $validated['other_reason'] : ($category === 'Maintenance' ? ($validated['other_reason'] ?? 'Equipment / Asset Maintenance') : null),
+            'amount' => $finalAmount,
+            'gross_amount' => $gross,
+            'vat_type' => $vatType,
+            'vat_rate' => $vatRate,
+            'vat_amount' => $vatAmount,
+            'has_withholding' => $hasWithholding,
+            'withholding_rate' => $withholdingRate,
+            'withholding_amount' => $withholdingAmount,
+            'net_amount' => $netAmount,
             'description' => $validated['description'],
             'attachment' => $attachmentUrl,
             'status' => ExpenseRequest::STATUS_PENDING_HR,
@@ -342,6 +430,7 @@ class ExpenseRequestController extends Controller
         return redirect('/expense-requests?tab=my_requests')
             ->with('success', "Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " submitted successfully!");
     }
+
 
     /**
      * Step 1 — HR Review (Approve or Reject).
@@ -496,67 +585,144 @@ class ExpenseRequestController extends Controller
         }
 
         $validated = $request->validate([
-            'payment_reference' => 'nullable|string|max:100',
-            'payment_notes' => 'nullable|string|max:1000',
+            'payment_reference'  => 'nullable|string|max:100',
+            'payment_notes'      => 'nullable|string|max:1000',
+            'paid_amount'        => 'nullable|numeric|min:0.01',
+            'gross_amount'       => 'nullable|numeric|min:0',
+            'vat_type'           => 'nullable|string|in:none,inclusive,exclusive,vat_b',
+            'vat_rate'           => 'nullable|numeric|min:0',
+            'vat_amount'         => 'nullable|numeric|min:0',
+            'has_withholding'    => 'nullable|boolean',
+            'withholding_rate'   => 'nullable|numeric|min:0',
+            'withholding_amount' => 'nullable|numeric|min:0',
+            'net_amount'         => 'nullable|numeric|min:0',
+            'category'           => 'nullable|string',
+            'service_type'       => 'nullable|string|max:100',
         ]);
 
         DB::beginTransaction();
         try {
             $user = auth()->user();
-
             $paymentRef = $validated['payment_reference'] ?? ('PAY-' . strtoupper(Str::random(6)));
 
-            // 1. Update Expense Request Status
-            $expenseRequest->update([
-                'status' => ExpenseRequest::STATUS_PAID,
-                'paid_by' => $user->id,
-                'paid_at' => now(),
-                'finance_staff_id' => $user->id,
-                'payment_reference' => $paymentRef,
-                'payment_notes' => $validated['payment_notes'] ?? null,
-            ]);
+            // Calculate or fetch updated tax components if provided in modal
+            $gross = isset($validated['gross_amount']) && (float)$validated['gross_amount'] > 0
+                ? (float)$validated['gross_amount']
+                : ((float)($expenseRequest->gross_amount ?? $expenseRequest->amount));
 
-            // 2. Deduct amount from selected Bank Account
+            $vatType = $validated['vat_type'] ?? ($expenseRequest->vat_type ?? 'none');
+            $vatRate = isset($validated['vat_rate']) ? (float)$validated['vat_rate'] : (float)($expenseRequest->vat_rate ?? 15.00);
+            $hasWithholding = isset($validated['has_withholding']) ? $request->boolean('has_withholding') : (bool)($expenseRequest->has_withholding ?? false);
+            $withholdingRate = isset($validated['withholding_rate']) ? (float)$validated['withholding_rate'] : (float)($expenseRequest->withholding_rate ?? 2.00);
+
+            $vatAmount = 0.0;
+            $baseAmount = $gross;
+            $withholdingAmount = 0.0;
+            $netAmount = $gross;
+
+            if ($vatType === 'exclusive') {
+                $vatAmount = round($gross * ($vatRate / 100), 2);
+                $baseAmount = $gross;
+                $totalGrossWithVat = $gross + $vatAmount;
+                if ($hasWithholding) {
+                    $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+                }
+                $netAmount = $totalGrossWithVat - $withholdingAmount;
+            } elseif ($vatType === 'inclusive' || $vatType === 'vat_b') {
+                $baseAmount = round($gross / (1 + ($vatRate / 100)), 2);
+                $vatAmount = round($gross - $baseAmount, 2);
+                if ($hasWithholding) {
+                    $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+                }
+                $netAmount = $gross - $withholdingAmount;
+            } else {
+                $baseAmount = $gross;
+                $vatAmount = 0.0;
+                if ($hasWithholding) {
+                    $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+                }
+                $netAmount = $gross - $withholdingAmount;
+            }
+
+            // Actual disbursed amount to deduct from funding account
+            $disbursedAmount = isset($validated['net_amount']) && (float)$validated['net_amount'] > 0
+                ? (float)$validated['net_amount']
+                : (isset($validated['paid_amount']) && (float)$validated['paid_amount'] > 0 ? (float)$validated['paid_amount'] : $netAmount);
+
+            if ($disbursedAmount <= 0) {
+                $disbursedAmount = (float)$expenseRequest->amount;
+            }
+
+            // 1. Update Expense Request Status & Tax Breakdown
+            $updateData = [
+                'status'             => ExpenseRequest::STATUS_PAID,
+                'paid_by'            => $user->id,
+                'paid_at'            => now(),
+                'finance_staff_id'   => $user->id,
+                'payment_reference'  => $paymentRef,
+                'payment_notes'      => $validated['payment_notes'] ?? null,
+                'gross_amount'       => $gross,
+                'vat_type'           => $vatType,
+                'vat_rate'           => $vatRate,
+                'vat_amount'         => $vatAmount,
+                'has_withholding'    => $hasWithholding,
+                'withholding_rate'   => $withholdingRate,
+                'withholding_amount' => $withholdingAmount,
+                'net_amount'         => $disbursedAmount,
+            ];
+
+            if (!empty($validated['category'])) {
+                $updateData['category'] = $validated['category'];
+            }
+            if (!empty($validated['service_type'])) {
+                $updateData['service_type'] = $validated['service_type'];
+            }
+
+            $expenseRequest->update($updateData);
+
+            // 2. Deduct disbursed amount from selected Bank Account
             if ($expenseRequest->bank_account_id) {
                 $bankAccount = BankAccount::find($expenseRequest->bank_account_id);
                 if ($bankAccount) {
-                    $bankAccount->decrement('current_balance', $expenseRequest->amount);
+                    $bankAccount->decrement('current_balance', $disbursedAmount);
                     $newBalance = $bankAccount->fresh()->current_balance;
 
                     // 3. Create Bank Transaction Ledger Entry
+                    $taxNote = ($vatAmount > 0 ? " [VAT: {$vatAmount}]" : '') . ($withholdingAmount > 0 ? " [WHT: -{$withholdingAmount}]" : '');
                     BankTransaction::create([
                         'bank_account_id' => $bankAccount->id,
                         'transaction_date' => now()->toDateString(),
                         'type' => 'withdrawal',
-                        'amount' => $expenseRequest->amount,
+                        'amount' => $disbursedAmount,
                         'balance_after' => $newBalance,
                         'reference_no' => $paymentRef,
                         'reference_type' => 'ExpenseRequest',
                         'reference_id' => $expenseRequest->id,
-                        'description' => "Expense Request #{$expenseRequest->request_number}: {$expenseRequest->category} - " . Str::limit($expenseRequest->description, 100),
+                        'description' => "Expense Request #{$expenseRequest->request_number}: {$expenseRequest->category}{$taxNote} - " . Str::limit($expenseRequest->description, 100),
                         'is_reconciled' => true,
                     ]);
                 }
             }
 
-            // 4. Deduct amount from Chart of Account if assigned
+            // 4. Deduct disbursed amount from Chart of Account if assigned
             $coaId = $expenseRequest->chart_of_account_id ?? $expenseRequest->coa_id;
             if ($coaId) {
                 $coa = ChartOfAccount::find($coaId);
                 if ($coa) {
-                    $coa->decrement('current_balance', $expenseRequest->amount);
+                    $coa->decrement('current_balance', $disbursedAmount);
                 }
             }
 
             DB::commit();
 
-            return back()->with('success', "Payment of ETB " . number_format($expenseRequest->amount, 2) . " processed successfully for Request #{$expenseRequest->request_number}!");
+            return back()->with('success', "Payment of ETB " . number_format($disbursedAmount, 2) . " processed successfully for Request #{$expenseRequest->request_number}!");
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error('Expense payment error: ' . $e->getMessage());
             return back()->with('error', 'Failed to process payment: ' . $e->getMessage());
         }
     }
+
 
     /**
      * Dedicated Payment History View (strictly scoped per Section 3).
