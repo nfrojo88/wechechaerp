@@ -81,23 +81,18 @@
             </div>
         </div>
 
-        {{-- WHT Slips Attached Status --}}
+        {{-- Verified Slips Count --}}
         <div class="col-12 col-sm-6 col-xl">
             <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white border-start border-4 border-warning">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="text-muted small text-uppercase fw-bold">WHT Slips Status</span>
+                    <span class="text-muted small text-uppercase fw-bold">Verified WHT Slips</span>
                     <span class="badge bg-warning-subtle text-warning rounded-pill"><i class="fa-solid fa-paperclip"></i></span>
                 </div>
                 <div class="d-flex align-items-baseline gap-2">
-                    <span class="fs-4 fw-bold text-success">{{ $slipsAttachedCount }}</span>
-                    <span class="text-muted small">Attached</span>
-                    @if($missingSlipsCount > 0)
-                        <span class="badge bg-danger rounded-pill ms-auto">{{ $missingSlipsCount }} Missing</span>
-                    @else
-                        <span class="badge bg-success rounded-pill ms-auto">All Attached</span>
-                    @endif
+                    <span class="fs-4 fw-bold text-success">{{ $totalRecords }}</span>
+                    <span class="text-muted small">Uploaded &amp; Verified</span>
                 </div>
-                <div class="text-muted small" style="font-size:0.75rem;">የቅድመ ግብር ደረሰኝ ሁኔታ</div>
+                <div class="text-muted small" style="font-size:0.75rem;">የተያያዙ እና የተረጋገጡ ደረሰኞች</div>
             </div>
         </div>
     </div>
@@ -109,28 +104,19 @@
                 <li class="nav-item">
                     <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'all' ? 'active bg-primary text-white shadow-sm' : 'text-secondary' }}" 
                        href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'all'])) }}">
-                        <i class="fa-solid fa-list me-1"></i> All Transactions ({{ $totalRecords }})
+                        <i class="fa-solid fa-receipt me-1"></i> All Verified Slips ({{ $totalRecords }})
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'withholding' ? 'active bg-danger text-white shadow-sm' : 'text-secondary' }}" 
                        href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'withholding'])) }}">
-                        <i class="fa-solid fa-scissors me-1"></i> 3% Withholding Tax ({{ $totalWhtTransactions }})
+                        <i class="fa-solid fa-scissors me-1"></i> 3% Withholding Tax
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'vat' ? 'active bg-info text-white shadow-sm' : 'text-secondary' }}" 
                        href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'vat'])) }}">
                         <i class="fa-solid fa-percent me-1"></i> VAT Applied
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'missing_receipt' ? 'active bg-warning text-dark shadow-sm' : 'text-secondary' }}" 
-                       href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'missing_receipt'])) }}">
-                        <i class="fa-solid fa-triangle-exclamation me-1"></i> Missing WHT Slips 
-                        @if($missingSlipsCount > 0)
-                            <span class="badge bg-danger rounded-pill ms-1">{{ $missingSlipsCount }}</span>
-                        @endif
                     </a>
                 </li>
                 <li class="nav-item">
@@ -141,6 +127,7 @@
                 </li>
             </ul>
         </div>
+
 
         {{-- Filter Inputs --}}
         <div class="card-body p-3 p-md-4 bg-light-subtle border-bottom">

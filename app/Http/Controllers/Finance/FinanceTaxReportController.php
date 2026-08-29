@@ -26,15 +26,10 @@ class FinanceTaxReportController extends Controller
         $toDate = $request->input('to_date');
         $accountId = $request->input('account_id');
 
-        // Base Query: Expense Requests with any tax involvement OR categorized as Service / Contract Work
+        // Base Query: ONLY records that have an uploaded Withholding / Tax receipt attached
         $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount'])
-            ->where(function ($q) {
-                $q->where('vat_amount', '>', 0)
-                  ->orWhere('withholding_amount', '>', 0)
-                  ->orWhere('has_withholding', true)
-                  ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b'])
-                  ->orWhereIn('category', ['Service', 'Contract Work']);
-            });
+            ->whereNotNull('withholding_receipt')
+            ->where('withholding_receipt', '!=', '');
 
         // Tab Filtering
         if ($tab === 'withholding') {
@@ -47,14 +42,10 @@ class FinanceTaxReportController extends Controller
                 $q->where('vat_amount', '>', 0)
                   ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
             });
-        } elseif ($tab === 'missing_receipt') {
-            $query->where(function ($q) {
-                $q->where('has_withholding', true)
-                  ->orWhere('withholding_amount', '>', 0);
-            })->whereNull('withholding_receipt');
         } elseif ($tab === 'paid') {
             $query->where('status', ExpenseRequest::STATUS_PAID);
         }
+
 
         // Search Filter
         if (!empty($search)) {
@@ -154,14 +145,10 @@ class FinanceTaxReportController extends Controller
         $fromDate = $request->input('from_date');
         $toDate = $request->input('to_date');
 
+        // Base Query: ONLY records that have an uploaded Withholding / Tax receipt attached
         $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount'])
-            ->where(function ($q) {
-                $q->where('vat_amount', '>', 0)
-                  ->orWhere('withholding_amount', '>', 0)
-                  ->orWhere('has_withholding', true)
-                  ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b'])
-                  ->orWhereIn('category', ['Service', 'Contract Work']);
-            });
+            ->whereNotNull('withholding_receipt')
+            ->where('withholding_receipt', '!=', '');
 
         if ($tab === 'withholding') {
             $query->where(function ($q) {
@@ -173,12 +160,10 @@ class FinanceTaxReportController extends Controller
                 $q->where('vat_amount', '>', 0)
                   ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
             });
-        } elseif ($tab === 'missing_receipt') {
-            $query->where(function ($q) {
-                $q->where('has_withholding', true)
-                  ->orWhere('withholding_amount', '>', 0);
-            })->whereNull('withholding_receipt');
+        } elseif ($tab === 'paid') {
+            $query->where('status', ExpenseRequest::STATUS_PAID);
         }
+
 
         if (!empty($search)) {
             $query->where(function ($q) use ($search) {
