@@ -28,6 +28,8 @@ class ExpenseRequest extends Model
         'has_withholding',
         'withholding_rate',
         'withholding_amount',
+        'withholding_receipt',
+        'withholding_receipt_number',
         'net_amount',
         'service_type',
         'description',
@@ -52,6 +54,7 @@ class ExpenseRequest extends Model
         'payment_reference',
         'payment_notes',
     ];
+
 
     protected $casts = [
         'amount' => 'decimal:2',
@@ -395,4 +398,16 @@ class ExpenseRequest extends Model
     {
         return $this->gm_reviewed_at ?? $this->gm_approved_at ?? $this->hr_reviewed_at ?? $this->updated_at;
     }
+
+    /**
+     * Get public / accessible URL for withholding tax receipt.
+     */
+    public function getWithholdingReceiptUrlAttribute(): ?string
+    {
+        if (empty($this->withholding_receipt)) {
+            return null;
+        }
+        return \App\Services\FileUploadService::url($this->withholding_receipt);
+    }
 }
+

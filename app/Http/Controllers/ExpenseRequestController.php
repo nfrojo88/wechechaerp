@@ -111,12 +111,19 @@ class ExpenseRequestController extends Controller
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'withholding_amount')) {
                         $table->decimal('withholding_amount', 14, 2)->default(0);
                     }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'withholding_receipt')) {
+                        $table->string('withholding_receipt', 500)->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'withholding_receipt_number')) {
+                        $table->string('withholding_receipt_number', 100)->nullable();
+                    }
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'net_amount')) {
                         $table->decimal('net_amount', 14, 2)->nullable();
                     }
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'service_type')) {
                         $table->string('service_type', 100)->nullable();
                     }
+
                 });
             }
         } catch (\Throwable $e) {
@@ -342,6 +349,8 @@ class ExpenseRequestController extends Controller
             'net_amount' => 'nullable|numeric|min:0',
             'description' => 'required|string|max:2000',
             'attachment' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'withholding_receipt' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'withholding_receipt_number' => 'nullable|string|max:100',
         ]);
 
         $user = auth()->user();
@@ -360,6 +369,19 @@ class ExpenseRequestController extends Controller
                 Log::error('Expense request attachment upload error: ' . $e->getMessage());
             }
         }
+
+        // Handle withholding receipt upload
+        $withholdingReceiptUrl = null;
+        if ($request->hasFile('withholding_receipt')) {
+            try {
+                $cloudinary = app(CloudinaryService::class);
+                $withholdingReceiptUrl = $cloudinary->upload($request->file('withholding_receipt'), 'expense_withholding_receipts');
+            } catch (\Throwable $e) {
+                Log::error('Withholding receipt upload error: ' . $e->getMessage());
+                $withholdingReceiptUrl = $request->file('withholding_receipt')->store('uploads/withholding_receipts', 'public');
+            }
+        }
+
 
         // Standardize category name
         $category = $validated['category'];
@@ -423,11 +445,14 @@ class ExpenseRequestController extends Controller
             'has_withholding' => $hasWithholding,
             'withholding_rate' => $withholdingRate,
             'withholding_amount' => $withholdingAmount,
+            'withholding_receipt' => $withholdingReceiptUrl,
+            'withholding_receipt_number' => $request->input('withholding_receipt_number'),
             'net_amount' => $netAmount,
             'description' => $validated['description'],
             'attachment' => $attachmentUrl,
             'status' => ExpenseRequest::STATUS_PENDING_HR,
         ]);
+
 
         return redirect('/expense-requests?tab=my_requests')
             ->with('success', "Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " submitted successfully!");
@@ -600,12 +625,27 @@ class ExpenseRequestController extends Controller
             'net_amount'         => 'nullable|numeric|min:0',
             'category'           => 'nullable|string',
             'service_type'       => 'nullable|string|max:100',
+            'withholding_receipt' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'withholding_receipt_number' => 'nullable|string|max:100',
         ]);
 
         DB::beginTransaction();
         try {
             $user = auth()->user();
             $paymentRef = $validated['payment_reference'] ?? ('PAY-' . strtoupper(Str::random(6)));
+
+            // Handle Withholding Tax Receipt upload if attached
+            $withholdingReceiptUrl = $expenseRequest->withholding_receipt;
+            if ($request->hasFile('withholding_receipt')) {
+                try {
+                    $cloudinary = app(CloudinaryService::class);
+                    $withholdingReceiptUrl = $cloudinary->upload($request->file('withholding_receipt'), 'expense_withholding_receipts');
+                } catch (\Throwable $e) {
+                    Log::error('Withholding receipt upload error: ' . $e->getMessage());
+                    $withholdingReceiptUrl = $request->file('withholding_receipt')->store('uploads/withholding_receipts', 'public');
+                }
+            }
+
 
             // Calculate or fetch updated tax components if provided in modal
             $gross = isset($validated['gross_amount']) && (float)$validated['gross_amount'] > 0
@@ -671,8 +711,11 @@ class ExpenseRequestController extends Controller
                 'has_withholding'    => $hasWithholding,
                 'withholding_rate'   => $withholdingRate,
                 'withholding_amount' => $withholdingAmount,
+                'withholding_receipt' => $withholdingReceiptUrl,
+                'withholding_receipt_number' => $request->input('withholding_receipt_number', $expenseRequest->withholding_receipt_number),
                 'net_amount'         => $disbursedAmount,
             ];
+
 
             if (!empty($validated['category'])) {
                 $updateData['category'] = $validated['category'];

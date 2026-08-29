@@ -501,15 +501,29 @@
                     @endif
 
                     @if($item->attachment_url)
-                        <div class="mb-4">
-                            <label class="form-label small text-muted text-uppercase fw-bold">Attachment / Supporting Receipt</label>
+                        <div class="mb-3">
+                            <label class="form-label small text-muted text-uppercase fw-bold">Attachment / Supporting Invoice Receipt</label>
                             <div>
-                                <a href="{{ $item->attachment_url }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-3 px-3">
+                                <a href="{{ $item->attachment_url }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-3 px-3 shadow-sm">
                                     <i class="fa-solid fa-paperclip me-1"></i> Open / Download Supporting Document
                                 </a>
                             </div>
                         </div>
                     @endif
+
+                    @if(isset($item->raw_model->withholding_receipt) && !empty($item->raw_model->withholding_receipt))
+                        <div class="mb-3">
+                            <label class="form-label small text-muted text-uppercase fw-bold">
+                                <i class="fa-solid fa-file-invoice-dollar text-danger me-1"></i>3% Withholding Tax Receipt / Slip (የቅድመ ግብር ደረሰኝ)
+                            </label>
+                            <div>
+                                <a href="{{ $item->raw_model->withholding_receipt_url }}" target="_blank" class="btn btn-outline-danger btn-sm rounded-3 px-3 shadow-sm">
+                                    <i class="fa-solid fa-file-pdf me-1"></i> View / Download Withholding Receipt @if(!empty($item->raw_model->withholding_receipt_number)) (Ref: {{ $item->raw_model->withholding_receipt_number }}) @endif
+                                </a>
+                            </div>
+                        </div>
+                    @endif
+
 
 
                     @if($item->type === 'expense_request')
@@ -810,8 +824,9 @@
         <div class="modal fade" id="payModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered modal-lg">
                 <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                    <form method="POST" action="{{ route('expense-requests.mark-paid', $req->id) }}" id="payForm{{ $req->id }}">
+                    <form method="POST" action="{{ route('expense-requests.mark-paid', $req->id) }}" id="payForm{{ $req->id }}" enctype="multipart/form-data">
                         @csrf
+
                         <div class="modal-header bg-success text-white border-0 py-3 px-4">
                             <div class="d-flex align-items-center gap-2">
                                 <span class="badge bg-white bg-opacity-20 text-white p-2 rounded-3 fs-6">
@@ -921,7 +936,41 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <!-- Withholding Tax Receipt & Voucher Upload Section (Visible & Required when 3% WHT is ON) -->
+                                <div id="withholdingReceiptSection{{ $req->id }}" class="mt-3 p-3 bg-white rounded-3 border border-danger-subtle shadow-sm" style="{{ ($req->has_withholding ?? false) ? '' : 'display:none;' }}">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <label class="form-label small fw-bold text-danger text-uppercase mb-0">
+                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i>Withholding Tax Receipt / Slip Upload (የቅድመ ግብር ደረሰኝ) <span class="text-danger">*</span>
+                                        </label>
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0">Required for 3% WHT</span>
+                                    </div>
+                                    <div class="row g-2 align-items-center">
+                                        <div class="col-md-7">
+                                            <input type="file" name="withholding_receipt" id="modalWithholdingReceipt{{ $req->id }}" 
+                                                   class="form-control form-control-sm" 
+                                                   accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp"
+                                                   data-has-existing="{{ !empty($req->withholding_receipt) ? '1' : '0' }}"
+                                                   {{ ($req->has_withholding ?? false) && empty($req->withholding_receipt) ? 'required' : '' }}>
+                                            <small class="text-muted" style="font-size:0.75rem;">Upload official Withholding receipt image or PDF.</small>
+                                        </div>
+                                        <div class="col-md-5">
+                                            <input type="text" name="withholding_receipt_number" id="modalWithholdingReceiptNo{{ $req->id }}" 
+                                                   class="form-control form-control-sm" 
+                                                   placeholder="WHT Receipt / Voucher #" 
+                                                   value="{{ $req->withholding_receipt_number ?? '' }}">
+                                            <small class="text-muted" style="font-size:0.75rem;">Voucher / Receipt Serial # (Optional)</small>
+                                        </div>
+                                    </div>
+                                    @if(!empty($req->withholding_receipt))
+                                        <div class="mt-2 text-success small">
+                                            <i class="fa-solid fa-circle-check me-1"></i> Existing slip uploaded: 
+                                            <a href="{{ $req->withholding_receipt_url }}" target="_blank" class="fw-bold text-decoration-underline text-success">View Current Withholding Slip</a>
+                                        </div>
+                                    @endif
+                                </div>
                             </div>
+
 
                             <input type="hidden" name="net_amount" id="modalNetAmount{{ $req->id }}" value="{{ $req->effective_payable_amount }}">
                             <input type="hidden" name="paid_amount" id="modalPaidAmount{{ $req->id }}" value="{{ $req->effective_payable_amount }}">
@@ -1313,7 +1362,25 @@ function recalculateDisbursement(reqId) {
     if (dispWht) dispWht.innerText = (whtAmount > 0 ? '- ' : '') + fmt(whtAmount);
     if (dispNet) dispNet.innerText = fmt(netAmount);
     if (btnPaySpan) btnPaySpan.innerText = fmt(netAmount);
+
+    // Toggle Withholding Receipt Upload Requirement and Visibility
+    const whtReceiptGroup = document.getElementById('withholdingReceiptSection' + reqId);
+    const whtReceiptInput = document.getElementById('modalWithholdingReceipt' + reqId);
+    if (whtReceiptGroup) {
+        if (hasWht) {
+            whtReceiptGroup.style.display = 'block';
+            if (whtReceiptInput && whtReceiptInput.dataset.hasExisting !== '1') {
+                whtReceiptInput.required = true;
+            }
+        } else {
+            whtReceiptGroup.style.display = 'none';
+            if (whtReceiptInput) {
+                whtReceiptInput.required = false;
+            }
+        }
+    }
 }
+
 
 // Auto-trigger on modal open to reflect current COA custodian and tax state
 document.addEventListener('DOMContentLoaded', function () {

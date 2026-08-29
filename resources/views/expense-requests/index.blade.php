@@ -683,6 +683,18 @@
                         </div>
                     </div>
                     @endif
+
+                    @if($req->withholding_receipt)
+                    <div class="mb-3">
+                        <label class="fw-bold mb-1 text-danger"><i class="fa-solid fa-file-invoice-dollar me-1"></i>3% Withholding Tax Receipt / Slip:</label>
+                        <div>
+                            <a href="{{ $req->withholding_receipt_url }}" target="_blank" class="btn btn-outline-danger btn-sm shadow-sm">
+                                <i class="fa-solid fa-file-pdf me-1"></i>View Withholding Slip @if($req->withholding_receipt_number) (Ref: {{ $req->withholding_receipt_number }}) @endif
+                            </a>
+                        </div>
+                    </div>
+                    @endif
+
                 </div>
                 <div class="modal-footer bg-light border-top-0">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -781,8 +793,33 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                {{-- Withholding Tax Receipt & Voucher Upload Section --}}
+                                <div id="createWithholdingReceiptSection" class="mt-3 p-3 bg-white rounded-3 border border-danger-subtle shadow-sm" style="display:none;">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <label class="form-label small fw-bold text-danger text-uppercase mb-0">
+                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i>Withholding Tax Receipt / Slip Upload (የቅድመ ግብር ደረሰኝ) <span class="text-danger">*</span>
+                                        </label>
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0">Required for 3% WHT</span>
+                                    </div>
+                                    <div class="row g-2 align-items-center">
+                                        <div class="col-md-7">
+                                            <input type="file" name="withholding_receipt" id="createWithholdingReceipt" 
+                                                   class="form-control form-control-sm" 
+                                                   accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
+                                            <small class="text-muted" style="font-size:0.75rem;">Upload official Withholding slip (PDF, JPG, PNG).</small>
+                                        </div>
+                                        <div class="col-md-5">
+                                            <input type="text" name="withholding_receipt_number" id="createWithholdingReceiptNo" 
+                                                   class="form-control form-control-sm" 
+                                                   placeholder="Receipt / Voucher #">
+                                            <small class="text-muted" style="font-size:0.75rem;">WHT Receipt Serial # (Optional)</small>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+
 
                         <input type="hidden" name="amount" id="createFinalAmount" value="0.00">
                         <input type="hidden" name="net_amount" id="createNetAmount" value="0.00">
@@ -917,7 +954,21 @@ function recalculateCreateTaxes() {
     if (dispWht) dispWht.innerText = (whtAmount > 0 ? '- ' : '') + fmt(whtAmount);
     if (dispNet) dispNet.innerText = fmt(netAmount);
     if (btnSpan) btnSpan.innerText = fmt(netAmount);
+
+    // Toggle Withholding Receipt Section requirement
+    const createWhtSection = document.getElementById('createWithholdingReceiptSection');
+    const createWhtInput = document.getElementById('createWithholdingReceipt');
+    if (createWhtSection) {
+        if (hasWht) {
+            createWhtSection.style.display = 'block';
+            if (createWhtInput) createWhtInput.required = true;
+        } else {
+            createWhtSection.style.display = 'none';
+            if (createWhtInput) createWhtInput.required = false;
+        }
+    }
 }
+
 
 function autoDetectFinanceStaff(selectEl) {
     const reqId = selectEl.dataset.reqId;
