@@ -1719,8 +1719,11 @@ Route::middleware(['auth'])->group(function () {
     Route::post('employees/{employee}/update-device-id', [App\Http\Controllers\EmployeeController::class, 'updateDeviceId'])->name('employees.update-device-id');
     Route::post('employees/{employee}/sync-device-attendance', [App\Http\Controllers\EmployeeController::class, 'syncDeviceAttendance'])->name('employees.sync-device-attendance');
     Route::resource('employees', App\Http\Controllers\EmployeeController::class);
+    Route::get('employee-letters/{employeeLetter}/print', [App\Http\Controllers\EmployeeLetterController::class, 'print'])->name('employee-letters.print');
+    Route::resource('employee-letters', App\Http\Controllers\EmployeeLetterController::class);
     Route::resource('contracts', App\Http\Controllers\EmployeeContractController::class)->only(['index', 'create', 'store', 'show']);
     Route::resource('manpower-requests', App\Http\Controllers\ManpowerRequestController::class)->only(['index', 'create', 'store', 'show']);
+
 
     // ─── Asset Management ────────────────────────────────────────────────────────
     Route::prefix('assets')->name('assets.')->group(function () {

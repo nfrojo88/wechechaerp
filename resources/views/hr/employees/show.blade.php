@@ -1251,13 +1251,13 @@
 
                                     {{-- Action Buttons --}}
                                     <div class="d-flex gap-2">
-                                        <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1 fw-semibold py-1.5 shadow-xs" data-bs-toggle="modal" data-bs-target="#empLetterModal{{ $ltr->id }}">
+                                        <button type="button" class="btn btn-sm btn-outline-primary flex-grow-1 fw-semibold py-1.5 shadow-xs" data-bs-toggle="modal" data-bs-target="#empLetterModal{{ $ltr->id }}" onclick="openLetterModal({{ $ltr->id }})">
                                             <i class="fa-solid fa-eye me-1"></i> View Letter Details
                                         </button>
-                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.print') ? route('employee-letters.print', $ltr) : url('/employee-letters/'.$ltr->id.'/print') }}" target="_blank" class="btn btn-sm btn-light border py-1.5 px-2.5" title="Print Letterhead">
+                                        <a href="{{ route('employee-letters.print', $ltr) }}" target="_blank" class="btn btn-sm btn-light border py-1.5 px-2.5" title="Print Letterhead">
                                             <i class="fa-solid fa-print text-secondary"></i>
                                         </a>
-                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.edit') ? route('employee-letters.edit', $ltr) : url('/employee-letters/'.$ltr->id.'/edit') }}" class="btn btn-sm btn-light border py-1.5 px-2.5" title="Edit Letter">
+                                        <a href="{{ route('employee-letters.edit', $ltr) }}" class="btn btn-sm btn-light border py-1.5 px-2.5" title="Edit Letter">
                                             <i class="fa-solid fa-pen-to-square text-warning"></i>
                                         </a>
                                         @if($ltr->attachment_path)
@@ -1270,114 +1270,136 @@
                             </div>
                         </div>
                     </div>
-
-                    {{-- DETAIL MODAL FOR THIS LETTER --}}
-                    <div class="modal fade" id="empLetterModal{{ $ltr->id }}" tabindex="-1" aria-labelledby="empLetterModalLabel{{ $ltr->id }}" aria-hidden="true">
-                        <div class="modal-dialog modal-dialog-centered modal-lg">
-                            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                                {{-- Modal Header --}}
-                                <div class="modal-header text-white py-3 px-4" style="background: {{ $borderAccent }};">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="badge bg-white bg-opacity-20 text-white p-2 rounded-3 fs-6">
-                                            <i class="{{ $ltr->icon }}"></i>
-                                        </span>
-                                        <div>
-                                            <h5 class="modal-title fw-bold mb-0 text-white" id="empLetterModalLabel{{ $ltr->id }}">
-                                                {{ $ltr->type_label }}
-                                            </h5>
-                                            <span class="text-white-50 small font-monospace">Ref: {{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }} &bull; Issued: {{ optional($ltr->issued_date)->format('d M Y') }}</span>
-                                        </div>
-                                    </div>
-                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                </div>
-
-                                {{-- Modal Body: Form / Letterhead Preview --}}
-                                <div class="modal-body p-4 bg-white">
-                                    {{-- Mini Letterhead Header --}}
-                                    <div class="text-center border-bottom pb-3 mb-3">
-                                        <h5 class="fw-bold text-dark text-uppercase mb-0" style="letter-spacing: 1px;">Wechecha Construction PLC</h5>
-                                        <div class="text-muted small text-uppercase">Human Resources &amp; Personnel Administration</div>
-                                    </div>
-
-                                    {{-- Reference & Date Bar --}}
-                                    <div class="d-flex justify-content-between align-items-center p-2 rounded bg-light border mb-3 small">
-                                        <div><strong>Reference:</strong> <span class="font-monospace text-primary">{{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }}</span></div>
-                                        <div><strong>Date:</strong> {{ optional($ltr->issued_date)->format('d F Y') }}</div>
-                                    </div>
-
-                                    {{-- Employee Info Summary --}}
-                                    <div class="row g-2 p-3 bg-light rounded-3 border mb-3 small">
-                                        <div class="col-md-6">
-                                            <span class="text-muted d-block">Employee Name:</span>
-                                            <strong class="text-dark">{{ $employee->full_name }}</strong> ({{ $employee->employee_code }})
-                                        </div>
-                                        <div class="col-md-6">
-                                            <span class="text-muted d-block">Department &amp; Role:</span>
-                                            <strong>{{ $employee->department }} &bull; {{ $employee->role_title ?? 'Employee' }}</strong>
-                                        </div>
-                                    </div>
-
-                                    {{-- Subject --}}
-                                    <div class="mb-3">
-                                        <div class="small fw-bold text-uppercase text-muted">Subject:</div>
-                                        <h6 class="fw-bold text-dark border-bottom pb-1 mb-0">{{ $ltr->title }}</h6>
-                                    </div>
-
-                                    {{-- Full Letter Content --}}
-                                    <div class="mb-3">
-                                        <div class="small fw-bold text-uppercase text-muted mb-1">Letter Body / Content:</div>
-                                        <div class="p-3 bg-light rounded-3 border font-monospace text-dark" style="white-space: pre-wrap; font-size: 0.88rem; line-height: 1.6; max-height: 320px; overflow-y: auto;">{{ $ltr->content }}</div>
-                                    </div>
-
-                                    {{-- Action Required / Notes --}}
-                                    @if($ltr->action_required)
-                                    <div class="p-3 rounded-3 border-start border-4 border-warning bg-warning bg-opacity-10 mb-3 small">
-                                        <strong class="text-dark d-block mb-1"><i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Follow-up / Action Required:</strong>
-                                        <div>{{ $ltr->action_required }}</div>
-                                    </div>
-                                    @endif
-
-                                    {{-- Attachment Info --}}
-                                    @if($ltr->attachment_path)
-                                    <div class="p-2.5 rounded bg-success bg-opacity-10 border border-success-subtle d-flex align-items-center justify-content-between">
-                                        <div class="small">
-                                            <i class="fa-solid fa-file-pdf text-success me-1"></i> <strong>Signed Copy Attached:</strong> {{ basename($ltr->attachment_path) }}
-                                        </div>
-                                        <a href="{{ asset('storage/' . $ltr->attachment_path) }}" target="_blank" class="btn btn-sm btn-success py-1 px-3">
-                                            <i class="fa-solid fa-download me-1"></i> View / Download Attachment
-                                        </a>
-                                    </div>
-                                    @endif
-                                </div>
-
-                                {{-- Modal Footer --}}
-                                <div class="modal-footer bg-light border-0 py-3 px-4 justify-content-between">
-                                    <button type="button" class="btn btn-light border rounded-pill px-3" data-bs-dismiss="modal">Close</button>
-                                    <div class="d-flex gap-2">
-                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.edit') ? route('employee-letters.edit', $ltr) : url('/employee-letters/'.$ltr->id.'/edit') }}" class="btn btn-outline-warning rounded-pill px-3 fw-semibold">
-                                            <i class="fa-solid fa-pen-to-square me-1"></i> Edit Letter
-                                        </a>
-                                        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.print') ? route('employee-letters.print', $ltr) : url('/employee-letters/'.$ltr->id.'/print') }}" target="_blank" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
-                                            <i class="fa-solid fa-print me-1"></i> Print Letterhead
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                     @endforeach
                 </div>
                 @else
                 <div class="text-center py-4 text-muted">
                     <i class="fa-solid fa-envelope-open-text fa-2x mb-2 d-block opacity-25"></i>
                     <p class="small mb-2">No official letters or warning notices issued to this employee yet.</p>
-                    <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.create') ? route('employee-letters.create', ['employee_id' => $employee->id]) : url('/employee-letters/create?employee_id='.$employee->id) }}" class="btn btn-sm btn-outline-primary">
+                    <a href="{{ route('employee-letters.create', ['employee_id' => $employee->id]) }}" class="btn btn-sm btn-outline-primary">
                         <i class="fa-solid fa-plus me-1"></i> Issue Thanks / Guarantee / Warning Letter
                     </a>
                 </div>
                 @endif
             </div>
         </div>
+
+        {{-- Modals for Official Employee Letters (Relocated outside card/grid to avoid backdrop and stacking context trapping) --}}
+        @if(isset($empLetters) && $empLetters->count() > 0)
+            @foreach($empLetters as $ltr)
+                @php
+                    $borderAccent = match($ltr->letter_type) {
+                        'guarantee_letter'   => '#0d9488',
+                        'power_of_attorney'  => '#4f46e5',
+                        'application_letter' => '#6366f1',
+                        'thanks_letter', 'appreciation', 'promotion' => '#10b981',
+                        'first_warning'      => '#f59e0b',
+                        'second_warning'     => '#f97316',
+                        'final_warning', 'termination' => '#ef4444',
+                        'show_cause'         => '#06b6d4',
+                        'suspension'         => '#8b5cf6',
+                        default              => '#64748b'
+                    };
+                @endphp
+                <div class="modal fade" id="empLetterModal{{ $ltr->id }}" tabindex="-1" aria-labelledby="empLetterModalLabel{{ $ltr->id }}" aria-hidden="true" style="z-index: 1060;">
+                    <div class="modal-dialog modal-dialog-centered modal-lg">
+                        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                            {{-- Modal Header --}}
+                            <div class="modal-header text-white py-3 px-4" style="background: {{ $borderAccent }};">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-white bg-opacity-20 text-white p-2 rounded-3 fs-6">
+                                        <i class="{{ $ltr->icon }}"></i>
+                                    </span>
+                                    <div>
+                                        <h5 class="modal-title fw-bold mb-0 text-white" id="empLetterModalLabel{{ $ltr->id }}">
+                                            {{ $ltr->type_label }}
+                                        </h5>
+                                        <span class="text-white-50 small font-monospace">Ref: {{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }} &bull; Issued: {{ optional($ltr->issued_date)->format('d M Y') }}</span>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+
+                            {{-- Modal Body: Form / Letterhead Preview --}}
+                            <div class="modal-body p-4 bg-white">
+                                {{-- Mini Letterhead Header --}}
+                                <div class="text-center border-bottom pb-3 mb-3">
+                                    <h5 class="fw-bold text-dark text-uppercase mb-0" style="letter-spacing: 1px;">Wechecha Construction PLC</h5>
+                                    <div class="text-muted small text-uppercase">Human Resources &amp; Personnel Administration</div>
+                                </div>
+
+                                {{-- Reference & Date Bar --}}
+                                <div class="d-flex justify-content-between align-items-center p-2 rounded bg-light border mb-3 small">
+                                    <div><strong>Reference:</strong> <span class="font-monospace text-primary">{{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }}</span></div>
+                                    <div><strong>Date:</strong> {{ optional($ltr->issued_date)->format('d F Y') }}</div>
+                                </div>
+
+                                {{-- Employee Info Summary --}}
+                                <div class="row g-2 p-3 bg-light rounded-3 border mb-3 small">
+                                    <div class="col-md-6">
+                                        <span class="text-muted d-block">Employee Name:</span>
+                                        <strong class="text-dark">{{ $employee->full_name }}</strong> ({{ $employee->employee_code }})
+                                    </div>
+                                    <div class="col-md-6">
+                                        <span class="text-muted d-block">Department &amp; Role:</span>
+                                        <strong>{{ $employee->department }} &bull; {{ $employee->role_title ?? 'Employee' }}</strong>
+                                    </div>
+                                </div>
+
+                                {{-- Subject --}}
+                                <div class="mb-3">
+                                    <div class="small fw-bold text-uppercase text-muted">Subject:</div>
+                                    <h6 class="fw-bold text-dark border-bottom pb-1 mb-0">{{ $ltr->title }}</h6>
+                                </div>
+
+                                {{-- Full Letter Content --}}
+                                <div class="mb-3">
+                                    <div class="small fw-bold text-uppercase text-muted mb-1">Letter Body / Content:</div>
+                                    <div class="p-3 bg-light rounded-3 border font-monospace text-dark" style="white-space: pre-wrap; font-size: 0.88rem; line-height: 1.6; max-height: 320px; overflow-y: auto;">{{ $ltr->content }}</div>
+                                </div>
+
+                                {{-- Action Required / Notes --}}
+                                @if($ltr->action_required)
+                                <div class="p-3 rounded-3 border-start border-4 border-warning bg-warning bg-opacity-10 mb-3 small">
+                                    <strong class="text-dark d-block mb-1"><i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Follow-up / Action Required:</strong>
+                                    <div>{{ $ltr->action_required }}</div>
+                                </div>
+                                @endif
+
+                                {{-- Attachment Info --}}
+                                @if($ltr->attachment_path)
+                                <div class="p-2.5 rounded bg-success bg-opacity-10 border border-success-subtle d-flex align-items-center justify-content-between">
+                                    <div class="small">
+                                        <i class="fa-solid fa-file-pdf text-success me-1"></i> <strong>Signed Copy Attached:</strong> {{ basename($ltr->attachment_path) }}
+                                    </div>
+                                    <a href="{{ asset('storage/' . $ltr->attachment_path) }}" target="_blank" class="btn btn-sm btn-success py-1 px-3">
+                                        <i class="fa-solid fa-download me-1"></i> View / Download Attachment
+                                    </a>
+                                </div>
+                                @endif
+                            </div>
+
+                            {{-- Modal Footer --}}
+                            <div class="modal-footer bg-light border-0 py-3 px-4 justify-content-between flex-wrap gap-2">
+                                <button type="button" class="btn btn-light border rounded-pill px-3" data-bs-dismiss="modal">Close</button>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <a href="{{ route('employee-letters.show', $ltr) }}" class="btn btn-outline-primary rounded-pill px-3 fw-semibold">
+                                        <i class="fa-solid fa-up-right-from-square me-1"></i> Full Page
+                                    </a>
+                                    <a href="{{ route('employee-letters.edit', $ltr) }}" class="btn btn-outline-warning rounded-pill px-3 fw-semibold">
+                                        <i class="fa-solid fa-pen-to-square me-1"></i> Edit Letter
+                                    </a>
+                                    <a href="{{ route('employee-letters.print', $ltr) }}" target="_blank" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
+                                        <i class="fa-solid fa-print me-1"></i> Print Letterhead
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
+        @endif
+
 
         {{-- ============================
              14. Leave Requests & Available Quota (የፍቃድ ታሪክና የቀረው ፈቃድ)
@@ -2670,6 +2692,15 @@ function filterEmployeeAssets() {
         row.style.display = (filter === '' || text.includes(filter)) ? '' : 'none';
     });
 }
+
+function openLetterModal(id) {
+    const modalEl = document.getElementById('empLetterModal' + id);
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+}
 </script>
 
 @endsection
+
