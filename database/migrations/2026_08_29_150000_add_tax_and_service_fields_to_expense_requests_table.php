@@ -28,8 +28,9 @@ return new class extends Migration
                 $table->boolean('has_withholding')->default(false)->after('vat_amount');
             }
             if (!Schema::hasColumn('expense_requests', 'withholding_rate')) {
-                $table->decimal('withholding_rate', 5, 2)->default(2.00)->after('has_withholding');
+                $table->decimal('withholding_rate', 5, 2)->default(3.00)->after('has_withholding');
             }
+
             if (!Schema::hasColumn('expense_requests', 'withholding_amount')) {
                 $table->decimal('withholding_amount', 14, 2)->default(0)->after('withholding_rate');
             }

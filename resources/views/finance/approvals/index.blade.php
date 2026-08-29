@@ -452,10 +452,11 @@
                                         @endif
                                         @if($item->raw_model->withholding_amount > 0)
                                         <div class="d-flex justify-content-between text-danger">
-                                            <span>Withholding Tax ({{ $item->raw_model->withholding_rate ?? 2 }}%):</span>
+                                            <span>Withholding Tax ({{ $item->raw_model->withholding_rate ?? 3 }}%):</span>
                                             <span>- ETB {{ number_format($item->raw_model->withholding_amount, 2) }}</span>
                                         </div>
                                         @endif
+
                                     </div>
                                 @endif
                             </div>
@@ -884,17 +885,17 @@
 
                                     <!-- Withholding Tax -->
                                     <div class="col-md-6">
-                                        <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር 2%)</label>
+                                        <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር 3%)</label>
                                         <div class="form-check form-switch mt-1">
                                             <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" 
                                                    id="modalWithholdingToggle{{ $req->id }}" 
                                                    {{ ($req->has_withholding ?? false) ? 'checked' : '' }}
                                                    onchange="recalculateDisbursement({{ $req->id }})">
                                             <label class="form-check-label small" for="modalWithholdingToggle{{ $req->id }}">
-                                                Apply 2% Service Withholding Deduction
+                                                Apply 3% Service Withholding Deduction
                                             </label>
                                         </div>
-                                        <input type="hidden" name="withholding_rate" id="modalWithholdingRate{{ $req->id }}" value="{{ $req->withholding_rate ?? 2.00 }}">
+                                        <input type="hidden" name="withholding_rate" id="modalWithholdingRate{{ $req->id }}" value="{{ $req->withholding_rate ?? 3.00 }}">
                                         <input type="hidden" name="withholding_amount" id="modalWithholdingAmount{{ $req->id }}" value="{{ $req->withholding_amount ?? 0 }}">
                                     </div>
                                 </div>
@@ -911,7 +912,7 @@
                                             <strong class="text-info" id="displayVatAmount{{ $req->id }}">+ ETB {{ number_format($req->vat_amount ?? 0, 2) }}</strong>
                                         </div>
                                         <div class="col-3 border-end">
-                                            <span class="text-muted d-block" style="font-size:0.75rem;">Withholding (2%)</span>
+                                            <span class="text-muted d-block" style="font-size:0.75rem;">Withholding (3%)</span>
                                             <strong class="text-danger" id="displayWhtAmount{{ $req->id }}">- ETB {{ number_format($req->withholding_amount ?? 0, 2) }}</strong>
                                         </div>
                                         <div class="col-3">
@@ -1255,7 +1256,8 @@ function recalculateDisbursement(reqId) {
     const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
     const vatRate = 15.00;
     const hasWht = whtToggle ? whtToggle.checked : false;
-    const whtRate = 2.00;
+    const whtRate = 3.00;
+
 
     let vatAmount = 0.0;
     let baseAmount = gross;

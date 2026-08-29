@@ -748,14 +748,14 @@
                                     </div>
 
                                     <div class="col-md-6">
-                                        <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር 2%)</label>
+                                        <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር 3%)</label>
                                         <div class="form-check form-switch mt-1">
                                             <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" id="createWithholdingToggle" onchange="recalculateCreateTaxes()">
                                             <label class="form-check-label small" for="createWithholdingToggle">
-                                                Apply 2% Service Withholding Deduction
+                                                Apply 3% Service Withholding Deduction
                                             </label>
                                         </div>
-                                        <input type="hidden" name="withholding_rate" id="createWithholdingRate" value="2.00">
+                                        <input type="hidden" name="withholding_rate" id="createWithholdingRate" value="3.00">
                                         <input type="hidden" name="withholding_amount" id="createWithholdingAmount" value="0.00">
                                     </div>
                                 </div>
@@ -772,7 +772,7 @@
                                             <strong class="text-info" id="displayCreateVat">+ ETB 0.00</strong>
                                         </div>
                                         <div class="col-3 border-end">
-                                            <span class="text-muted d-block" style="font-size:0.75rem;">Withholding (2%)</span>
+                                            <span class="text-muted d-block" style="font-size:0.75rem;">Withholding (3%)</span>
                                             <strong class="text-danger" id="displayCreateWht">- ETB 0.00</strong>
                                         </div>
                                         <div class="col-3">
@@ -860,7 +860,8 @@ function recalculateCreateTaxes() {
     const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
     const vatRate = 15.00;
     const hasWht = whtToggle ? whtToggle.checked : false;
-    const whtRate = 2.00;
+    const whtRate = 3.00;
+
 
     let vatAmount = 0.0;
     let baseAmount = gross;
