@@ -863,9 +863,103 @@ class AssignedAccountController extends Controller
     }
 
     /**
+     * Internal Auditor grants Audit Clearance / Approval for replenishment.
+     */
+    public function auditApproveReplenishment(Request $request, int|string $id, int|string $replenishmentId)
+    {
+        self::ensureSchema();
+
+        $isFinanceHead = $this->isFinanceHeadUser();
+        $isAuditor = $this->isAuditorUser();
+        if (!$isFinanceHead && !$isAuditor) {
+            abort(403, 'Unauthorized. Only internal audit and authorized finance managers can approve audit clearance.');
+        }
+
+        $account = ChartOfAccount::findOrFail($id);
+        $replenishment = PettyCashReplenishment::where('id', $replenishmentId)
+            ->where('chart_of_account_id', $account->id)
+            ->firstOrFail();
+
+        $request->validate([
+            'audit_notes' => 'nullable|string|max:2000',
+        ]);
+
+        $replenishment->update([
+            'status'      => PettyCashReplenishment::STATUS_PENDING, // Ready for Finance Head fulfillment/disbursal
+            'audited_by'  => auth()->id(),
+            'audited_at'  => now(),
+            'audit_notes' => $request->audit_notes ?: $replenishment->audit_notes,
+        ]);
+
+        \App\Models\ActivityLog::log(
+            'audit_cleared',
+            "Petty Cash Replenishment #{$replenishment->request_no} cleared and approved by Internal Auditor " . (auth()->user()->name ?? 'Auditor') . ". Audit Notes: " . ($request->audit_notes ?? 'No observations.'),
+            'Finance & Petty Cash Audit',
+            $replenishment,
+            [
+                'request_no'       => $replenishment->request_no,
+                'requested_amount' => (float)$replenishment->requested_amount,
+                'account'          => "[{$account->code}] {$account->name}",
+                'custodian'        => $replenishment->requester->name ?? 'Staff',
+                'auditor'          => auth()->user()->name ?? 'Auditor',
+                'audit_notes'      => $request->audit_notes,
+            ]
+        );
+
+        return redirect()->back()->with('success', "Replenishment #{$replenishment->request_no} has been audited & cleared! Ready for Finance Head top-up disbursement.");
+    }
+
+    /**
+     * Internal Auditor rejects replenishment cycle back to custodian.
+     */
+    public function auditRejectReplenishment(Request $request, int|string $id, int|string $replenishmentId)
+    {
+        self::ensureSchema();
+
+        $isFinanceHead = $this->isFinanceHeadUser();
+        $isAuditor = $this->isAuditorUser();
+        if (!$isFinanceHead && !$isAuditor) {
+            abort(403, 'Unauthorized. Only internal audit and authorized finance managers can reject replenishments.');
+        }
+
+        $account = ChartOfAccount::findOrFail($id);
+        $replenishment = PettyCashReplenishment::where('id', $replenishmentId)
+            ->where('chart_of_account_id', $account->id)
+            ->firstOrFail();
+
+        $request->validate([
+            'rejection_reason' => 'required|string|max:1500',
+        ]);
+
+        $replenishment->update([
+            'status'           => PettyCashReplenishment::STATUS_REJECTED,
+            'audited_by'       => auth()->id(),
+            'audited_at'       => now(),
+            'rejected_at'      => now(),
+            'rejection_reason' => $request->rejection_reason,
+        ]);
+
+        \App\Models\ActivityLog::log(
+            'audit_rejected',
+            "Petty Cash Replenishment #{$replenishment->request_no} rejected during Internal Audit by " . (auth()->user()->name ?? 'Auditor') . ". Reason: " . $request->rejection_reason,
+            'Finance & Petty Cash Audit',
+            $replenishment,
+            [
+                'request_no'       => $replenishment->request_no,
+                'account'          => "[{$account->code}] {$account->name}",
+                'custodian'        => $replenishment->requester->name ?? 'Staff',
+                'rejection_reason' => $request->rejection_reason,
+            ]
+        );
+
+        return redirect()->back()->with('warning', "Replenishment cycle #{$replenishment->request_no} rejected by Internal Audit.");
+    }
+
+    /**
      * Reject an individual voucher item from replenishment.
      */
     public function rejectVoucherItem(Request $request, int|string $itemId)
+
     {
         self::ensureSchema();
 

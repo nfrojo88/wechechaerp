@@ -828,6 +828,8 @@ class DashboardController extends Controller
     public function audit()
     {
         $kpi = [
+            'under_audit_count'            => $this->safe(fn() => \App\Models\PettyCashReplenishment::where('status', \App\Models\PettyCashReplenishment::STATUS_UNDER_AUDIT)->count()),
+            'under_audit_amount'           => $this->safe(fn() => (float) \App\Models\PettyCashReplenishment::where('status', \App\Models\PettyCashReplenishment::STATUS_UNDER_AUDIT)->sum('requested_amount')),
             'pending_replenishments_count' => $this->safe(fn() => \App\Models\PettyCashReplenishment::where('status', 'pending')->count()),
             'pending_replenishments_amount'=> $this->safe(fn() => (float) \App\Models\PettyCashReplenishment::where('status', 'pending')->sum('requested_amount')),
             'fulfilled_replenishments_month'=> $this->safe(fn() => (float) \App\Models\PettyCashReplenishment::where('status', 'fulfilled')
@@ -844,8 +846,14 @@ class DashboardController extends Controller
             'total_journal_entries'        => $this->safe(fn() => \App\Models\JournalEntry::count()),
         ];
 
+        // Replenishments awaiting Audit clearance (under_audit)
+        $underAuditReplenishments = $this->safe(fn() => \App\Models\PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'reviewer', 'auditor', 'sourceCoa', 'items'])
+            ->where('status', \App\Models\PettyCashReplenishment::STATUS_UNDER_AUDIT)
+            ->latest()
+            ->get(), collect());
+
         // Recent Petty Cash Replenishments & Fund Movements
-        $recentReplenishments = $this->safe(fn() => \App\Models\PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'financeHead', 'sourceCoa', 'items'])
+        $recentReplenishments = $this->safe(fn() => \App\Models\PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'financeHead', 'reviewer', 'auditor', 'sourceCoa', 'items'])
             ->latest()
             ->take(10)
             ->get(), collect());
@@ -869,7 +877,8 @@ class DashboardController extends Controller
             ->take(12)
             ->get(), collect());
 
-        return view('dashboard.audit', compact('kpi', 'recentReplenishments', 'recentActivityLogs', 'cashAndBankAccounts'));
+        return view('dashboard.audit', compact('kpi', 'underAuditReplenishments', 'recentReplenishments', 'recentActivityLogs', 'cashAndBankAccounts'));
     }
 }
+
 
