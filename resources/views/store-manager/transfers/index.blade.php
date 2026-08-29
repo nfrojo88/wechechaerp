@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Transfers - ' . ($isStoreKeeper ? 'Site Store' : 'Store Hub'))
+@section('title', 'Material Transfers - ' . ($isStoreKeeper ? 'Site Store' : 'Store Hub'))
 
 @section('content')
 <div class="container-fluid px-4 py-3">
@@ -8,46 +8,170 @@
     {{-- Header --}}
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
-            <h4 class="fw-bold mb-0" style="color:var(--brand-800)">
-                <i class="fas fa-truck-moving me-2 text-primary"></i>{{ $isStoreKeeper ? 'Site Store Transfers' : 'Transfer List' }}
+            <h4 class="fw-bold mb-1" style="color:var(--brand-800)">
+                <i class="fas fa-truck-moving me-2 text-primary"></i>{{ $isStoreKeeper ? 'Store Keeper - Material Transfers' : 'Inter-Store Material Transfers' }}
             </h4>
             <p class="text-muted small mb-0">
-                {{ $isStoreKeeper ? 'Manage incoming and outgoing material transfers for ' . ($assignedStore->name ?? 'your store') : 'Manage material transfers between warehouses and project sites' }}
+                {{ $isStoreKeeper ? 'Manage material dispatch and receiving with driver waybill slips for ' . ($assignedStore->name ?? 'your store') : 'Track and control inter-site material dispatches, driver logistics, and verified stock receipts' }}
             </p>
         </div>
         <div class="d-flex gap-2">
             <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm shadow-sm">
-                <i class="fas fa-plus me-1"></i>Create Transfer
+                <i class="fas fa-plus me-1"></i>New Transfer Request
             </a>
             @if($isStoreKeeper)
             <a href="{{ route('dashboard.store-keeper') }}" class="btn btn-outline-secondary btn-sm">
-                <i class="fa-solid fa-arrow-left me-1"></i>Dashboard
+                <i class="fa-solid fa-arrow-left me-1"></i>Store Dashboard
             </a>
             @endif
         </div>
     </div>
 
-    {{-- Filters --}}
+    {{-- KPI Summary Cards --}}
+    <div class="row g-3 mb-4">
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <a href="{{ route('store-manager.transfers.index', ['tab' => 'all']) }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? 'all') === 'all' ? 'border-primary border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-muted small fw-semibold">Total Transfers</div>
+                                <div class="fs-4 fw-bold text-dark mt-1">{{ number_format($totalCount ?? 0) }}</div>
+                            </div>
+                            <div class="p-2 rounded bg-primary bg-opacity-10 text-primary">
+                                <i class="fas fa-boxes-stacked fa-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <a href="{{ route('store-manager.transfers.index', ['tab' => 'pending_driver']) }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'pending_driver' ? 'border-warning border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #fffbeb 100%);">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-muted small fw-semibold">Need Driver</div>
+                                <div class="fs-4 fw-bold text-warning mt-1">{{ number_format($pendingDriverCount ?? 0) }}</div>
+                            </div>
+                            <div class="p-2 rounded bg-warning bg-opacity-10 text-warning">
+                                <i class="fas fa-user-clock fa-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-xl-2 col-md-4 col-sm-6">
+            <a href="{{ route('store-manager.transfers.index', ['tab' => 'pending_dispatch']) }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'pending_dispatch' ? 'border-info border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-muted small fw-semibold">Ready to Dispatch</div>
+                                <div class="fs-4 fw-bold text-primary mt-1">{{ number_format($readyToDispatchCount ?? 0) }}</div>
+                            </div>
+                            <div class="p-2 rounded bg-info bg-opacity-10 text-primary">
+                                <i class="fas fa-dolly fa-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-xl-3 col-md-6 col-sm-6">
+            <a href="{{ route('store-manager.transfers.index', ['tab' => 'in_transit']) }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'in_transit' ? 'border-info border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f0fdfa 100%);">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-muted small fw-semibold">In Transit with Driver</div>
+                                <div class="fs-4 fw-bold text-info mt-1">{{ number_format($inTransitCount ?? 0) }}</div>
+                            </div>
+                            <div class="p-2 rounded bg-info bg-opacity-10 text-info">
+                                <i class="fas fa-truck-fast fa-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-xl-3 col-md-6 col-sm-6">
+            <a href="{{ route('store-manager.transfers.index', ['tab' => 'completed']) }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'completed' ? 'border-success border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="text-muted small fw-semibold">Received & Completed</div>
+                                <div class="fs-4 fw-bold text-success mt-1">{{ number_format($completedCount ?? 0) }}</div>
+                            </div>
+                            <div class="p-2 rounded bg-success bg-opacity-10 text-success">
+                                <i class="fas fa-check-double fa-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    {{-- Tabs & Filters Bar --}}
     <div class="card shadow-sm border-0 rounded-3 mb-4">
         <div class="card-body p-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 border-bottom pb-3 mb-3">
+                <ul class="nav nav-pills gap-1">
+                    <li class="nav-item">
+                        <a class="nav-link py-1 px-3 small {{ ($tab ?? 'all') === 'all' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'all'])) }}">
+                            All Transfers
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-1 px-3 small {{ ($tab ?? '') === 'outgoing' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'outgoing'])) }}">
+                            <i class="fas fa-arrow-up text-primary me-1"></i>Outgoing (መላኪያ)
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-1 px-3 small {{ ($tab ?? '') === 'incoming' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'incoming'])) }}">
+                            <i class="fas fa-arrow-down text-success me-1"></i>Incoming (መቀበያ)
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-1 px-3 small {{ ($tab ?? '') === 'pending_driver' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'pending_driver'])) }}">
+                            Needs Driver <span class="badge bg-warning text-dark ms-1">{{ $pendingDriverCount ?? 0 }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-1 px-3 small {{ ($tab ?? '') === 'in_transit' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'in_transit'])) }}">
+                            In-Transit <span class="badge bg-info text-dark ms-1">{{ $inTransitCount ?? 0 }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-1 px-3 small {{ ($tab ?? '') === 'completed' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'completed'])) }}">
+                            Completed
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
             <form method="GET" class="row g-2 align-items-center">
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold text-muted mb-1">Status</label>
-                    <select name="status" class="form-select form-select-sm">
-                        <option value="">All Statuses</option>
-                        <option value="draft" {{ request('status') == 'draft' ? 'selected' : '' }}>Draft / Pending</option>
-                        <option value="in_transit" {{ request('status') == 'in_transit' ? 'selected' : '' }}>In Transit</option>
-                        <option value="approved" {{ request('status') == 'approved' ? 'selected' : '' }}>Approved</option>
-                        <option value="completed" {{ request('status') == 'completed' ? 'selected' : '' }}>Completed</option>
-                        <option value="rejected" {{ request('status') == 'rejected' ? 'selected' : '' }}>Rejected</option>
-                    </select>
+                <input type="hidden" name="tab" value="{{ $tab ?? 'all' }}">
+                
+                <div class="col-md-4">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                        <input type="text" name="search" class="form-control" placeholder="Search Transfer #, Slip #, Driver, Plate..." value="{{ request('search') }}">
+                    </div>
                 </div>
 
                 @if(!$isStoreKeeper)
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold text-muted mb-1">Store</label>
                     <select name="store_id" class="form-select form-select-sm">
-                        <option value="">All Stores</option>
+                        <option value="">All Stores &amp; Warehouses</option>
                         @foreach($stores as $store)
                         <option value="{{ $store->id }}" {{ request('store_id') == $store->id ? 'selected' : '' }}>
                             {{ $store->name }}
@@ -58,11 +182,21 @@
                 @endif
 
                 <div class="col-md-3">
-                    <label class="form-label small fw-semibold text-muted mb-1">&nbsp;</label>
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary btn-sm px-3"><i class="fas fa-search me-1"></i>Filter</button>
-                        <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-outline-secondary btn-sm">Reset</a>
-                    </div>
+                    <select name="status" class="form-select form-select-sm">
+                        <option value="">All Statuses</option>
+                        <option value="draft" {{ request('status') == 'draft' ? 'selected' : '' }}>Draft / Pending Driver</option>
+                        <option value="approved" {{ request('status') == 'approved' ? 'selected' : '' }}>Approved / Ready to Dispatch</option>
+                        <option value="in_transit" {{ request('status') == 'in_transit' ? 'selected' : '' }}>In Transit with Driver</option>
+                        <option value="completed" {{ request('status') == 'completed' ? 'selected' : '' }}>Completed / Received</option>
+                        <option value="rejected" {{ request('status') == 'rejected' ? 'selected' : '' }}>Rejected</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="fas fa-filter me-1"></i>Filter</button>
+                    <a href="{{ route('store-manager.transfers.index', ['tab' => $tab ?? 'all']) }}" class="btn btn-outline-secondary btn-sm" title="Clear search">
+                        <i class="fas fa-rotate-left"></i>
+                    </a>
                 </div>
             </form>
         </div>
@@ -76,11 +210,11 @@
                     <thead class="table-light">
                         <tr>
                             <th class="ps-3">Transfer #</th>
-                            <th>Physical Slip #</th>
-                            <th>From Store</th>
-                            <th>To Store</th>
-                            <th>Items</th>
-                            <th>Required Date</th>
+                            <th>Origin (From)</th>
+                            <th>Destination (To)</th>
+                            <th>Assigned Driver &amp; Vehicle</th>
+                            <th>Outgoing Slip</th>
+                            <th>Receiving Status</th>
                             <th>Status</th>
                             <th class="text-end pe-3">Actions</th>
                         </tr>
@@ -97,23 +231,86 @@
                                 <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="fw-bold font-monospace text-primary text-decoration-none">
                                     {{ $transfer->transfer_no }}
                                 </a>
-                                @if($isIncoming)
-                                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1" style="font-size:0.68rem;">Incoming</span>
-                                @elseif($isOutgoing)
-                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1" style="font-size:0.68rem;">Outgoing</span>
+                                <div>
+                                    <small class="text-muted">{{ $transfer->created_at ? $transfer->created_at->format('M d, Y') : '' }}</small>
+                                    @if($isIncoming)
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1" style="font-size:0.68rem;">Incoming</span>
+                                    @elseif($isOutgoing)
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1" style="font-size:0.68rem;">Outgoing</span>
+                                    @endif
+                                </div>
+                            </td>
+
+                            {{-- Origin Store --}}
+                            <td>
+                                <div class="fw-semibold text-dark">{{ $transfer->fromStore->name ?? 'N/A' }}</div>
+                                <small class="text-muted"><i class="fas fa-boxes-stacked me-1"></i>{{ $transfer->items->count() }} item(s)</small>
+                            </td>
+
+                            {{-- Destination Store --}}
+                            <td>
+                                <div class="fw-semibold text-dark">{{ $transfer->toStore->name ?? 'N/A' }}</div>
+                                <small class="text-muted"><i class="fas fa-user me-1"></i>Req: {{ $transfer->requestedBy->name ?? 'N/A' }}</small>
+                            </td>
+
+                            {{-- Driver & Vehicle --}}
+                            <td>
+                                @if($transfer->driver)
+                                    <div class="fw-semibold text-dark">
+                                        <i class="fas fa-id-badge text-primary me-1"></i>{{ $transfer->driver->full_name }}
+                                    </div>
+                                    <small class="text-muted">
+                                        <i class="fas fa-truck text-secondary me-1"></i>{{ $transfer->vehicle_plate_no ?: 'No plate' }}
+                                        @if($transfer->driver->phone) &bull; {{ $transfer->driver->phone }} @endif
+                                    </small>
+                                @else
+                                    <span class="badge bg-warning bg-opacity-10 text-dark border border-warning">
+                                        <i class="fas fa-clock me-1"></i>No Driver Assigned
+                                    </span>
                                 @endif
                             </td>
+
+                            {{-- Outgoing Slip --}}
                             <td>
-                                @if($transfer->physical_slip_no)
-                                    <span class="badge bg-success font-monospace" style="font-size:0.75rem;">{{ $transfer->physical_slip_no }}</span>
+                                @if($transfer->outgoing_slip_file || $transfer->outgoing_slip_no || $transfer->physical_slip_no)
+                                    <div>
+                                        <span class="badge bg-light text-dark font-monospace border">
+                                            <i class="fas fa-receipt text-primary me-1"></i>{{ $transfer->outgoing_slip_no ?: $transfer->physical_slip_no ?: 'Uploaded' }}
+                                        </span>
+                                    </div>
+                                    @if($transfer->outgoing_slip_url)
+                                        <a href="{{ $transfer->outgoing_slip_url }}" target="_blank" class="badge bg-primary bg-opacity-10 text-primary text-decoration-none mt-1 d-inline-block">
+                                            <i class="fas fa-paperclip me-1"></i>View Slip Attachment
+                                        </a>
+                                    @endif
                                 @else
                                     <span class="text-muted small">—</span>
                                 @endif
                             </td>
-                            <td><span class="fw-semibold text-dark small">{{ $transfer->fromStore->name ?? 'N/A' }}</span></td>
-                            <td><span class="fw-semibold text-dark small">{{ $transfer->toStore->name ?? 'N/A' }}</span></td>
-                            <td><span class="badge bg-light text-dark">{{ $transfer->items->count() }} items</span></td>
-                            <td><small class="text-muted">{{ $transfer->required_date ? $transfer->required_date->format('d M Y') : '-' }}</small></td>
+
+                            {{-- Receiving Status --}}
+                            <td>
+                                @if($transfer->status === 'completed')
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success">
+                                        <i class="fas fa-check-circle me-1"></i>Received into Store
+                                    </span>
+                                    @if($transfer->receiving_slip_url)
+                                        <div>
+                                            <a href="{{ $transfer->receiving_slip_url }}" target="_blank" class="badge bg-light text-success text-decoration-none mt-1 d-inline-block">
+                                                <i class="fas fa-file-check me-1"></i>Signed Slip
+                                            </a>
+                                        </div>
+                                    @endif
+                                @elseif($transfer->status === 'in_transit')
+                                    <span class="badge bg-info bg-opacity-10 text-info border border-info">
+                                        <i class="fas fa-truck-moving me-1"></i>On Road to Destination
+                                    </span>
+                                @else
+                                    <span class="text-muted small">Pending Dispatch</span>
+                                @endif
+                            </td>
+
+                            {{-- Status Badge --}}
                             <td>
                                 @php
                                     $sBadge = match($transfer->status) {
@@ -123,22 +320,47 @@
                                         'rejected'   => 'bg-danger',
                                         default      => 'bg-secondary',
                                     };
+                                    $sLabel = match($transfer->status) {
+                                        'completed'  => 'Completed',
+                                        'in_transit' => 'In Transit',
+                                        'approved'   => 'Ready to Dispatch',
+                                        'rejected'   => 'Rejected',
+                                        default      => 'Draft / Pending',
+                                    };
                                 @endphp
-                                <span class="badge {{ $sBadge }} small">
-                                    {{ ucfirst(str_replace('_', ' ', $transfer->status)) }}
+                                <span class="badge {{ $sBadge }} px-2 py-1 small">
+                                    {{ $sLabel }}
                                 </span>
                             </td>
+
+                            {{-- Actions --}}
                             <td class="text-end pe-3">
-                                <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-eye me-1"></i>View
-                                </a>
+                                <div class="d-flex justify-content-end gap-1">
+                                    @if($transfer->status === 'in_transit' && ($isIncoming || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager'])))
+                                        <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-success shadow-sm" title="Inspect & Receive Materials">
+                                            <i class="fas fa-box-open me-1"></i>Receive
+                                        </a>
+                                    @elseif(in_array($transfer->status, ['draft', 'approved']) && ($isOutgoing || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager'])))
+                                        <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-primary shadow-sm" title="Dispatch & Upload Outgoing Slip">
+                                            <i class="fas fa-truck-fast me-1"></i>Dispatch
+                                        </a>
+                                    @else
+                                        <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye me-1"></i>View
+                                        </a>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="8" class="text-center py-4 text-muted">
-                                <i class="fa-solid fa-truck-moving fa-2x mb-2 d-block opacity-25"></i>
-                                No transfers found on record.
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="fa-solid fa-truck-moving fa-3x mb-2 d-block opacity-25"></i>
+                                <h6 class="fw-bold mb-1">No Material Transfers Found</h6>
+                                <p class="small mb-3">No transfer records match your current filter selection.</p>
+                                <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-plus me-1"></i>Create New Transfer
+                                </a>
                             </td>
                         </tr>
                         @endforelse

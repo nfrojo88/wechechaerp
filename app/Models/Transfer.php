@@ -10,11 +10,22 @@ class Transfer extends Model
 {
     use SoftDeletes, ScopesByStore;
 
+    const STATUS_DRAFT            = 'draft';
+    const STATUS_PENDING_APPROVAL = 'pending_approval';
+    const STATUS_APPROVED         = 'approved';
+    const STATUS_IN_TRANSIT       = 'in_transit';
+    const STATUS_COMPLETED        = 'completed';
+    const STATUS_REJECTED         = 'rejected';
+    const STATUS_CANCELLED        = 'cancelled';
+
     protected $fillable = [
         'transfer_no', 'physical_slip_no', 'from_store_id', 'to_store_id', 'requested_by',
         'required_date', 'reason', 'status', 'approved_by', 'approved_at',
         'received_by', 'received_at', 'rejection_reason',
-        'driver_employee_id', 'dispatch_notes', 'dispatched_at',
+        'driver_employee_id', 'vehicle_plate_no', 'dispatch_notes',
+        'dispatched_by', 'dispatched_at', 'outgoing_slip_file', 'outgoing_slip_no',
+        'receiving_slip_file', 'receiving_slip_no', 'receiving_notes',
+        'material_request_id',
     ];
 
     protected $casts = [
@@ -44,6 +55,11 @@ class Transfer extends Model
         return $this->belongsTo(User::class, 'approved_by');
     }
 
+    public function dispatchedBy()
+    {
+        return $this->belongsTo(User::class, 'dispatched_by');
+    }
+
     public function receivedBy()
     {
         return $this->belongsTo(User::class, 'received_by');
@@ -58,4 +74,27 @@ class Transfer extends Model
     {
         return $this->hasMany(TransferItem::class);
     }
+
+    public function getOutgoingSlipUrlAttribute(): ?string
+    {
+        if (empty($this->outgoing_slip_file)) {
+            return null;
+        }
+        if (str_starts_with($this->outgoing_slip_file, 'http://') || str_starts_with($this->outgoing_slip_file, 'https://')) {
+            return $this->outgoing_slip_file;
+        }
+        return asset('storage/' . $this->outgoing_slip_file);
+    }
+
+    public function getReceivingSlipUrlAttribute(): ?string
+    {
+        if (empty($this->receiving_slip_file)) {
+            return null;
+        }
+        if (str_starts_with($this->receiving_slip_file, 'http://') || str_starts_with($this->receiving_slip_file, 'https://')) {
+            return $this->receiving_slip_file;
+        }
+        return asset('storage/' . $this->receiving_slip_file);
+    }
 }
+

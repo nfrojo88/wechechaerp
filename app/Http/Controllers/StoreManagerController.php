@@ -357,51 +357,318 @@ class StoreManagerController extends Controller
     /**
      * List Transfers
      */
+    /**
+     * List Transfers with filter tabs and storekeeper metrics
+     */
     public function transfersIndex(Request $request)
     {
         $user = Auth::user();
-        $isStoreKeeper = $user && $user->hasRole('store_keeper');
-        $assignedStore = null;
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isStoreKeeper = in_array('store_keeper', $rawUserRoles);
+        $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
+        $storeId = $assignedStore?->id;
 
-        $query = Transfer::with(['fromStore', 'toStore', 'requestedBy', 'items.product']);
+        $tab = $request->input('tab', 'all');
+        $search = $request->input('search');
+        $filterStoreId = $request->input('store_id');
+        $status = $request->input('status');
 
-        if ($isStoreKeeper) {
-            $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
-            $storeId = $assignedStore?->id;
-            if ($storeId) {
+        $query = Transfer::with(['fromStore', 'toStore', 'requestedBy', 'approvedBy', 'dispatchedBy', 'receivedBy', 'driver', 'items.product']);
+
+        if ($isStoreKeeper && $storeId) {
+            if ($tab === 'outgoing') {
+                $query->where('from_store_id', $storeId);
+            } elseif ($tab === 'incoming') {
+                $query->where('to_store_id', $storeId);
+            } else {
                 $query->where(function ($q) use ($storeId) {
                     $q->where('from_store_id', $storeId)
                       ->orWhere('to_store_id', $storeId);
                 });
             }
-        } elseif ($request->filled('store_id')) {
-            $query->where(function ($q) use ($request) {
-                $q->where('from_store_id', $request->store_id)
-                  ->orWhere('to_store_id', $request->store_id);
+        } elseif (!empty($filterStoreId)) {
+            if ($tab === 'outgoing') {
+                $query->where('from_store_id', $filterStoreId);
+            } elseif ($tab === 'incoming') {
+                $query->where('to_store_id', $filterStoreId);
+            } else {
+                $query->where(function ($q) use ($filterStoreId) {
+                    $q->where('from_store_id', $filterStoreId)
+                      ->orWhere('to_store_id', $filterStoreId);
+                });
+            }
+        }
+
+        // Tab Filters
+        if ($tab === 'pending_driver') {
+            $query->whereIn('status', ['draft', 'pending_approval']);
+        } elseif ($tab === 'pending_dispatch') {
+            $query->where('status', 'approved');
+        } elseif ($tab === 'in_transit') {
+            $query->where('status', 'in_transit');
+        } elseif ($tab === 'completed') {
+            $query->where('status', 'completed');
+        } elseif (!empty($status)) {
+            $query->where('status', $status);
+        }
+
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('transfer_no', 'like', "%{$search}%")
+                  ->orWhere('physical_slip_no', 'like', "%{$search}%")
+                  ->orWhere('outgoing_slip_no', 'like', "%{$search}%")
+                  ->orWhere('receiving_slip_no', 'like', "%{$search}%")
+                  ->orWhere('vehicle_plate_no', 'like', "%{$search}%")
+                  ->orWhereHas('fromStore', fn($sq) => $sq->where('name', 'like', "%{$search}%"))
+                  ->orWhereHas('toStore', fn($sq) => $sq->where('name', 'like', "%{$search}%"))
+                  ->orWhereHas('driver', fn($sq) => $sq->where('full_name', 'like', "%{$search}%"));
             });
         }
 
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
+        // KPI Counts for Store Keeper / Store Manager
+        $baseStatQuery = Transfer::query();
+        if ($isStoreKeeper && $storeId) {
+            $baseStatQuery->where(function ($q) use ($storeId) {
+                $q->where('from_store_id', $storeId)
+                  ->orWhere('to_store_id', $storeId);
+            });
         }
+        $totalCount           = (clone $baseStatQuery)->count();
+        $pendingDriverCount   = (clone $baseStatQuery)->whereIn('status', ['draft', 'pending_approval'])->count();
+        $readyToDispatchCount = (clone $baseStatQuery)->where('status', 'approved')->count();
+        $inTransitCount       = (clone $baseStatQuery)->where('status', 'in_transit')->count();
+        $completedCount       = (clone $baseStatQuery)->where('status', 'completed')->count();
 
         $transfers = $query->latest()->paginate(20)->withQueryString();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
 
-        return view('store-manager.transfers.index', compact('transfers', 'stores', 'isStoreKeeper', 'assignedStore'));
+        return view('store-manager.transfers.index', compact(
+            'transfers', 'stores', 'isStoreKeeper', 'assignedStore', 'tab',
+            'totalCount', 'pendingDriverCount', 'readyToDispatchCount', 'inTransitCount', 'completedCount'
+        ));
     }
 
     /**
-     * Show Transfer
+     * Show Transfer Details & Interactive Workflow Steps
      */
     public function showTransfer(Transfer $transfer)
     {
         $user = Auth::user();
-        $isStoreKeeper = $user && $user->hasRole('store_keeper');
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isStoreKeeper = in_array('store_keeper', $rawUserRoles);
         $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
 
-        $transfer->load(['fromStore', 'toStore', 'requestedBy', 'approvedBy', 'receivedBy', 'items.product']);
-        return view('store-manager.transfers.show', compact('transfer', 'isStoreKeeper', 'assignedStore'));
+        $transfer->load([
+            'fromStore', 'toStore', 'requestedBy', 'approvedBy',
+            'dispatchedBy', 'receivedBy', 'driver', 'items.product'
+        ]);
+
+        // Fetch Drivers for assignment
+        $drivers = \App\Models\Employee::where('status', 'active')
+            ->where(function ($q) {
+                $q->where('department', 'like', '%driver%')
+                  ->orWhere('role_title', 'like', '%driver%');
+            })->orderBy('full_name')->get();
+
+        if ($drivers->isEmpty()) {
+            $drivers = \App\Models\Employee::where('status', 'active')->orderBy('full_name')->get();
+        }
+
+        return view('store-manager.transfers.show', compact('transfer', 'isStoreKeeper', 'assignedStore', 'drivers'));
+    }
+
+    /**
+     * Assign Driver & Approve Transfer (General Service / Store Manager / Admin)
+     */
+    public function assignDriver(Request $request, Transfer $transfer)
+    {
+        $request->validate([
+            'driver_employee_id' => 'required|exists:employees,id',
+            'vehicle_plate_no'   => 'nullable|string|max:100',
+            'dispatch_notes'     => 'nullable|string|max:500',
+        ]);
+
+        $transfer->update([
+            'driver_employee_id' => $request->driver_employee_id,
+            'vehicle_plate_no'   => $request->vehicle_plate_no,
+            'dispatch_notes'     => $request->dispatch_notes,
+            'approved_by'        => Auth::id(),
+            'approved_at'        => now(),
+            'status'             => 'approved',
+        ]);
+
+        // Send SMS to Driver
+        $driver = \App\Models\Employee::find($request->driver_employee_id);
+        if ($driver && !empty($driver->phone)) {
+            try {
+                $fromStoreName = $transfer->fromStore->name ?? 'Main Store';
+                $toStoreName   = $transfer->toStore->name ?? 'Destination Store';
+                $itemsList     = $transfer->items->map(function($i) {
+                    return ($i->product->name ?? 'Item') . ' (' . number_format($i->requested_quantity, 2) . ' ' . $i->unit . ')';
+                })->implode(', ');
+
+                $smsMessage = "ConstructPro: Transfer #{$transfer->transfer_no} has been assigned to you.\nPickup: {$fromStoreName}\nDelivery To: {$toStoreName}\nItems: {$itemsList}";
+                $smsService = app(\App\Services\SmsEthiopiaService::class);
+                $smsService->sendMessage($driver->phone, $smsMessage);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('Transfer Driver SMS error: ' . $e->getMessage());
+            }
+        }
+
+        return back()->with('success', 'Driver assigned successfully. Transfer is now ready for outgoing store keeper to dispatch.');
+    }
+
+    /**
+     * Dispatch Transfer from Outgoing Store:
+     * - Uploads physical outgoing slip / waybill
+     * - Records sent quantities
+     * - Deducts sent quantities from Origin Store Inventory
+     * - Changes status to 'in_transit'
+     */
+    public function dispatchTransfer(Request $request, Transfer $transfer)
+    {
+        $request->validate([
+            'outgoing_slip_no'   => 'required|string|max:100',
+            'outgoing_slip_file' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'vehicle_plate_no'   => 'nullable|string|max:100',
+            'items'              => 'required|array',
+            'items.*.sent_qty'   => 'required|numeric|min:0.001',
+        ]);
+
+        $outgoingSlipUrl = $transfer->outgoing_slip_file;
+        if ($request->hasFile('outgoing_slip_file')) {
+            try {
+                $cloudinary = app(\App\Services\CloudinaryService::class);
+                $outgoingSlipUrl = $cloudinary->upload($request->file('outgoing_slip_file'), 'transfer_slips');
+            } catch (\Throwable $e) {
+                $outgoingSlipUrl = $request->file('outgoing_slip_file')->store('transfer_slips', 'public');
+            }
+        }
+
+        DB::transaction(function () use ($request, $transfer, $outgoingSlipUrl) {
+            $transfer->load('items');
+
+            foreach ($transfer->items as $item) {
+                $sentQty = (float)($request->input("items.{$item->id}.sent_qty", $item->requested_quantity));
+                $item->update(['sent_quantity' => $sentQty]);
+
+                // Deduct from Origin Store Inventory
+                $inv = Inventory::where('store_id', $transfer->from_store_id)
+                    ->where('product_id', $item->product_id)
+                    ->first();
+
+                if ($inv) {
+                    $inv->decrement('quantity_on_hand', $sentQty);
+
+                    DB::table('inventory_movements')->insert([
+                        'inventory_id' => $inv->id,
+                        'type'         => 'transfer_out',
+                        'quantity'     => -$sentQty,
+                        'reference_id' => $transfer->id,
+                        'notes'        => 'Transfer #' . $transfer->transfer_no . ' dispatched to driver (Slip: ' . $request->outgoing_slip_no . ')',
+                        'created_at'   => now(),
+                        'updated_at'   => now(),
+                    ]);
+                }
+            }
+
+            $transfer->update([
+                'outgoing_slip_no'   => $request->outgoing_slip_no,
+                'physical_slip_no'   => $request->outgoing_slip_no,
+                'outgoing_slip_file' => $outgoingSlipUrl,
+                'vehicle_plate_no'   => $request->vehicle_plate_no ?? $transfer->vehicle_plate_no,
+                'dispatched_by'      => Auth::id(),
+                'dispatched_at'      => now(),
+                'status'             => 'in_transit',
+            ]);
+        });
+
+        return back()->with('success', 'Transfer dispatched successfully! Outgoing slip recorded and inventory deducted from origin store.');
+    }
+
+    /**
+     * Receive Transfer at Destination Store:
+     * - Verifies outgoing slip and inspects incoming quantities
+     * - Records received quantities
+     * - Uploads signed receiving slip (optional)
+     * - Adds received quantities to Destination Store Inventory
+     * - Changes status to 'completed'
+     */
+    public function receiveTransfer(Request $request, Transfer $transfer)
+    {
+        $request->validate([
+            'receiving_slip_no'   => 'nullable|string|max:100',
+            'receiving_slip_file' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'receiving_notes'     => 'nullable|string|max:500',
+            'items'               => 'required|array',
+            'items.*.received_qty'=> 'required|numeric|min:0',
+        ]);
+
+        $receivingSlipUrl = $transfer->receiving_slip_file;
+        if ($request->hasFile('receiving_slip_file')) {
+            try {
+                $cloudinary = app(\App\Services\CloudinaryService::class);
+                $receivingSlipUrl = $cloudinary->upload($request->file('receiving_slip_file'), 'transfer_slips');
+            } catch (\Throwable $e) {
+                $receivingSlipUrl = $request->file('receiving_slip_file')->store('transfer_slips', 'public');
+            }
+        }
+
+        DB::transaction(function () use ($request, $transfer, $receivingSlipUrl) {
+            $transfer->load('items');
+
+            foreach ($transfer->items as $item) {
+                $receivedQty = (float)($request->input("items.{$item->id}.received_qty", $item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity));
+                $item->update(['received_quantity' => $receivedQty]);
+
+                if ($receivedQty > 0) {
+                    // Add or update inventory in destination store
+                    $inv = Inventory::firstOrCreate(
+                        ['store_id' => $transfer->to_store_id, 'product_id' => $item->product_id],
+                        ['quantity_on_hand' => 0, 'min_stock' => 5, 'unit_cost' => 0]
+                    );
+                    $inv->increment('quantity_on_hand', $receivedQty);
+
+                    DB::table('inventory_movements')->insert([
+                        'inventory_id' => $inv->id,
+                        'type'         => 'transfer_in',
+                        'quantity'     => $receivedQty,
+                        'reference_id' => $transfer->id,
+                        'notes'        => 'Transfer #' . $transfer->transfer_no . ' received from ' . ($transfer->fromStore->name ?? 'Source Store') . ' (Slip: ' . ($request->receiving_slip_no ?? $transfer->outgoing_slip_no ?? 'N/A') . ')',
+                        'created_at'   => now(),
+                        'updated_at'   => now(),
+                    ]);
+                }
+            }
+
+            $transfer->update([
+                'receiving_slip_no'   => $request->receiving_slip_no,
+                'receiving_slip_file' => $receivingSlipUrl,
+                'receiving_notes'     => $request->receiving_notes,
+                'received_by'         => Auth::id(),
+                'received_at'         => now(),
+                'status'              => 'completed',
+            ]);
+        });
+
+        return back()->with('success', 'Transfer confirmed and received! Materials have been added to destination store inventory.');
+    }
+
+    /**
+     * Reject or Cancel Transfer
+     */
+    public function rejectTransfer(Request $request, Transfer $transfer)
+    {
+        $request->validate([
+            'rejection_reason' => 'required|string|max:500',
+        ]);
+
+        $transfer->update([
+            'status'           => 'rejected',
+            'rejection_reason' => $request->rejection_reason,
+        ]);
+
+        return back()->with('success', 'Transfer has been marked as rejected.');
     }
 
     /**
@@ -415,100 +682,12 @@ class StoreManagerController extends Controller
 
         $transfer->update([
             'physical_slip_no' => $request->physical_slip_no,
+            'outgoing_slip_no' => $request->physical_slip_no,
         ]);
 
         return back()->with('success', 'Physical Slip #' . $request->physical_slip_no . ' saved successfully.');
     }
 
-    /**
-     * Dispatch Transfer (Sender store keeper marks transfer in transit and logs stock deduction)
-     */
-    public function dispatchTransfer(Request $request, Transfer $transfer)
-    {
-        $request->validate([
-            'physical_slip_no' => 'nullable|string|max:100',
-        ]);
-
-        if ($request->filled('physical_slip_no')) {
-            $transfer->physical_slip_no = $request->physical_slip_no;
-        }
-
-        DB::transaction(function () use ($transfer) {
-            $transfer->load('items');
-            foreach ($transfer->items as $item) {
-                // Deduct inventory from origin store
-                $inv = Inventory::where('store_id', $transfer->from_store_id)
-                    ->where('product_id', $item->product_id)
-                    ->first();
-                if ($inv) {
-                    $qtyToSend = $item->approved_quantity > 0 ? $item->approved_quantity : $item->requested_quantity;
-                    $inv->decrement('quantity_on_hand', $qtyToSend);
-                    $item->update(['sent_quantity' => $qtyToSend]);
-
-                    DB::table('inventory_movements')->insert([
-                        'inventory_id' => $inv->id,
-                        'type'         => 'transfer_out',
-                        'quantity'     => -$qtyToSend,
-                        'reference_id' => $transfer->id,
-                        'notes'        => 'Transfer #' . $transfer->transfer_no . ' dispatched (Slip: ' . ($transfer->physical_slip_no ?? 'N/A') . ')',
-                        'created_at'   => now(),
-                        'updated_at'   => now(),
-                    ]);
-                }
-            }
-
-            $transfer->status = 'in_transit';
-            $transfer->save();
-        });
-
-        return back()->with('success', 'Transfer marked as In-Transit and dispatched from store.');
-    }
-
-    /**
-     * Receive Transfer (Destination store keeper confirms received items and adds to stock)
-     */
-    public function receiveTransfer(Request $request, Transfer $transfer)
-    {
-        $request->validate([
-            'physical_slip_no' => 'nullable|string|max:100',
-        ]);
-
-        if ($request->filled('physical_slip_no')) {
-            $transfer->physical_slip_no = $request->physical_slip_no;
-        }
-
-        DB::transaction(function () use ($transfer) {
-            $transfer->load('items');
-            foreach ($transfer->items as $item) {
-                $qtyReceived = $item->sent_quantity > 0 ? $item->sent_quantity : ($item->approved_quantity > 0 ? $item->approved_quantity : $item->requested_quantity);
-                $item->update(['received_quantity' => $qtyReceived]);
-
-                // Add or update inventory in destination store
-                $inv = Inventory::firstOrCreate(
-                    ['store_id' => $transfer->to_store_id, 'product_id' => $item->product_id],
-                    ['quantity_on_hand' => 0, 'min_stock' => 5, 'unit_cost' => 0]
-                );
-                $inv->increment('quantity_on_hand', $qtyReceived);
-
-                DB::table('inventory_movements')->insert([
-                    'inventory_id' => $inv->id,
-                    'type'         => 'transfer_in',
-                    'quantity'     => $qtyReceived,
-                    'reference_id' => $transfer->id,
-                    'notes'        => 'Transfer #' . $transfer->transfer_no . ' received into store (Slip: ' . ($transfer->physical_slip_no ?? 'N/A') . ')',
-                    'created_at'   => now(),
-                    'updated_at'   => now(),
-                ]);
-            }
-
-            $transfer->status = 'completed';
-            $transfer->received_by = Auth::id();
-            $transfer->received_at = now();
-            $transfer->save();
-        });
-
-        return back()->with('success', 'Transfer confirmed and received into store inventory successfully!');
-    }
 
     /**
      * Material Requests from Site Engineers / Coordinator

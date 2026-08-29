@@ -66,6 +66,21 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-truck-moving text-primary"></i>
+                <span>Transfers &amp; Drivers</span>
+                @php
+                    $gsPendingDriverCount = 0;
+                    try {
+                        $gsPendingDriverCount = \App\Models\Transfer::whereIn('status', ['draft', 'pending_approval'])->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($gsPendingDriverCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $gsPendingDriverCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.create') || request()->routeIs('leave-requests.my-requests') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-plus text-info"></i>
                 <span>Ask / Request Leave</span>
@@ -323,9 +338,26 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.*') ? 'active' : '' }}">
+            <a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.*') || request()->routeIs('transfers.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-truck-moving text-warning"></i>
-                <span>Transfers</span>
+                <span>Material Transfers</span>
+                @php
+                    $skPendingTransferCount = 0;
+                    try {
+                        $skStoreId = auth()->user()->store_id ?? \App\Models\Store::where('manager_id', auth()->id())->value('id');
+                        if ($skStoreId) {
+                            $skPendingTransferCount = \App\Models\Transfer::where(function($q) use ($skStoreId) {
+                                $q->where('from_store_id', $skStoreId)->where('status', 'approved')
+                                  ->orWhere(function($sq) use ($skStoreId) {
+                                      $sq->where('to_store_id', $skStoreId)->where('status', 'in_transit');
+                                  });
+                            })->count();
+                        }
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($skPendingTransferCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $skPendingTransferCount }}</span>
+                @endif
             </a>
         </li>
         <li class="sidebar-nav-item">
