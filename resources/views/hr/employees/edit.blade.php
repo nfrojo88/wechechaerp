@@ -287,8 +287,8 @@
                 </div>
                 
                 <div class="row g-3">
-                <div class="row g-3">
                     <div class="col-md-4">
+
                         <label class="form-label">Employment Type <span class="text-danger">*</span></label>
                         @php $empType = old('employment_type', $employee->employment_type); @endphp
                         <select name="employment_type" id="edit_employment_type" class="form-select" onchange="toggleEditContractFields(this.value)" required>
@@ -405,8 +405,9 @@
             <div class="step-panel" id="step-panel-3">
                 <div class="d-flex justify-content-between align-items-center mb-4 pb-2 border-bottom">
                     <h5 class="mb-0"><i class="fa-solid fa-money-bill-wave text-warning me-2"></i>Step 3: Salary & Bank Information</h5>
-                    <span class="badge bg-warning text-dark">Step 3 of 6</span>
+                    <span class="badge bg-warning text-dark">Step 3 of 8</span>
                 </div>
+
                 
                 <div class="row g-3">
                     <div class="col-md-6">
@@ -1266,6 +1267,14 @@ let currentActiveCategory = 'ALL';
 
 function goToStep(step) {
     if (step < 1 || step > totalSteps) return;
+
+    // If advancing to a higher step, validate current step required fields first
+    if (step > currentStep) {
+        if (!validateStep(currentStep)) {
+            return;
+        }
+    }
+
     currentStep = step;
 
     // Show active step panel
@@ -1305,6 +1314,7 @@ function nextStep() {
         goToStep(currentStep + 1);
     }
 }
+
 
 function prevStep() {
     if (currentStep > 1) {
