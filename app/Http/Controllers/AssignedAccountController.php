@@ -117,6 +117,12 @@ class AssignedAccountController extends Controller
                         $table->timestamp('reviewed_at')->nullable();
                     }
                 });
+
+                try {
+                    \Illuminate\Support\Facades\DB::statement("ALTER TABLE petty_cash_replenishments MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'pending'");
+                } catch (\Throwable $ex) {
+                    // Ignore
+                }
             }
 
             if (!Schema::hasTable('petty_cash_replenishment_items')) {
@@ -152,11 +158,18 @@ class AssignedAccountController extends Controller
                         $table->text('custodian_reply')->nullable();
                     }
                 });
+
+                try {
+                    \Illuminate\Support\Facades\DB::statement("ALTER TABLE petty_cash_replenishment_items MODIFY COLUMN status VARCHAR(50) NOT NULL DEFAULT 'pending'");
+                } catch (\Throwable $ex) {
+                    // Ignore
+                }
             }
         } catch (\Throwable $e) {
             // Log or continue silently if schema cannot be checked/created
         }
     }
+
 
 
     public function index(Request $request)
