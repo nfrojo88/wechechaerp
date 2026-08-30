@@ -22,28 +22,16 @@ class ActivityLogController extends Controller
                 ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() 
                 : [];
 
-            $allowedRoles = [
-                'global_admin', 'admin', 'auditor', 'audit', 'internal_auditor', 'audit_team',
-                'finance_head', 'finance_manager', 'finance', 'gm', 'general_manager'
-            ];
-
-            if (!empty(array_intersect($rawRoles, $allowedRoles))) {
+            if (in_array('global_admin', $rawRoles) || in_array('admin', $rawRoles)) {
                 $hasAccess = true;
             }
 
             if (!$hasAccess && method_exists($user, 'hasAnyRole')) {
-                $hasAccess = $user->hasAnyRole([
-                    'global_admin', 'admin', 'auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit', 
-                    'Finance head', 'finance_head', 'finance_manager', 'GM', 'gm', 'general_manager'
-                ]);
-            }
-
-            if (!$hasAccess && method_exists($user, 'can')) {
-                $hasAccess = $user->can('audit.view') || $user->can('finance.audit.view') || $user->can('admin.audit.view');
+                $hasAccess = $user->hasAnyRole(['global_admin', 'admin', 'Global Admin', 'Admin']);
             }
 
             if (!$hasAccess) {
-                abort(403, 'Access denied. Auditor, Finance Head, or Admin only.');
+                abort(403, 'Access denied. Global Admin or Admin only.');
             }
             return $next($request);
         });

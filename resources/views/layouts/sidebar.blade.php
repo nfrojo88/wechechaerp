@@ -121,12 +121,6 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('admin.activity-logs') }}" class="sidebar-nav-link {{ request()->routeIs('admin.activity-logs') ? 'active' : '' }}">
-                <i class="fa-solid fa-list-ol text-primary"></i>
-                <span>Audit &amp; Activity Trail</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
             <a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-sitemap text-secondary"></i>
                 <span>Chart of Accounts (COA)</span>
