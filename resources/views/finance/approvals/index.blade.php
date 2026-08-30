@@ -1,11 +1,13 @@
 @extends('layouts.app')
 
-@section('title', 'Expense Track & Approve')
-
 @php
     $authUser = auth()->user();
     $authUserId = auth()->id();
+    $authRoleNames = strtolower(implode(' ', $authUser ? $authUser->getRoleNames()->toArray() : []));
+    $isAuditorUser = !empty($isAuditor) || ($authUser && ($authUser->hasAnyRole(['auditor', 'Auditor', 'audit', 'internal_auditor', 'audit_team']) || str_contains($authRoleNames, 'audit')));
 @endphp
+
+@section('title', $isAuditorUser ? 'Expense Audit & Tracking' : 'Expense Track & Approve')
 
 @section('content')
 
@@ -14,17 +16,23 @@
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
         <div>
             <h1 class="h3 mb-1 text-dark fw-bold">
-                <i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Expense Track & Approve
+                <i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>{{ $isAuditorUser ? 'Expense Audit & Tracking' : 'Expense Track & Approve' }}
             </h1>
-            <p class="text-muted small mb-0">Track all employee expense requests, operational expenses, GM/HR approvals, and paid history in one unified location.</p>
+            <p class="text-muted small mb-0">{{ $isAuditorUser ? 'Internal Audit stream of company expenses, approvals, and disbursement records for financial oversight.' : 'Track all employee expense requests, operational expenses, GM/HR approvals, and paid history in one unified location.' }}</p>
         </div>
         <div class="d-flex gap-2">
-            <a href="{{ url('/expense-requests') }}" class="btn btn-outline-primary btn-sm rounded-3 px-3">
-                <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask Money Portal
-            </a>
-            <a href="{{ route('expenses.create') }}" class="btn btn-primary btn-sm rounded-3 px-3 shadow-sm">
-                <i class="fa-solid fa-plus me-1"></i> New Direct Expense
-            </a>
+            @if(!$isAuditorUser)
+                <a href="{{ url('/expense-requests') }}" class="btn btn-outline-primary btn-sm rounded-3 px-3">
+                    <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask Money Portal
+                </a>
+                <a href="{{ route('expenses.create') }}" class="btn btn-primary btn-sm rounded-3 px-3 shadow-sm">
+                    <i class="fa-solid fa-plus me-1"></i> New Direct Expense
+                </a>
+            @else
+                <a href="{{ route('dashboard.audit') }}" class="btn btn-outline-info btn-sm rounded-3 px-3">
+                    <i class="fa-solid fa-chart-pie me-1"></i> Audit Dashboard
+                </a>
+            @endif
         </div>
     </div>
 
@@ -39,7 +47,7 @@
                         <span class="badge {{ $activeTab === 'all' ? 'bg-primary text-white' : 'bg-secondary' }} ms-1">{{ $tabCounts['all'] }}</span>
                     </a>
                 </li>
-                @if(!empty($isAdmin) || !empty($isHR))
+                @if(!empty($isAdmin) || !empty($isHR) || $isAuditorUser)
                 <li class="nav-item">
                     <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'pending_hr' ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'pending_hr', 'page' => 1]) }}">
@@ -48,7 +56,7 @@
                     </a>
                 </li>
                 @endif
-                @if(!empty($isAdmin) || !empty($isGM))
+                @if(!empty($isAdmin) || !empty($isGM) || $isAuditorUser)
                 <li class="nav-item">
                     <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'pending_gm' ? 'active shadow-sm bg-info text-white' : 'text-secondary bg-white' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'pending_gm', 'page' => 1]) }}">
@@ -60,7 +68,7 @@
                 <li class="nav-item">
                     <a class="nav-link rounded-3 fw-semibold py-2 {{ in_array($activeTab, ['finance_queue', 'not_paid', 'unpaid']) ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'not_paid', 'page' => 1]) }}">
-                        <i class="fa-solid fa-hourglass-half me-1 text-warning"></i> Not Paid / Pending Payment
+                        <i class="fa-solid fa-hourglass-half me-1 text-warning"></i> {{ $isAuditorUser ? 'Unpaid Records' : 'Not Paid / Pending Payment' }}
                         <span class="badge {{ in_array($activeTab, ['finance_queue', 'not_paid', 'unpaid']) ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1">{{ $tabCounts['not_paid'] ?? 0 }}</span>
                     </a>
                 </li>
@@ -242,139 +250,141 @@
                                             <i class="fa-solid fa-eye text-primary"></i>
                                         </button>
 
-                                        @if($item->type === 'expense_request')
-                                            @php $req = $item->raw_model; @endphp
-                                            
-                                            <!-- HR / Coordinator Review Action Button -->
-                                            @if($req->status === \App\Models\ExpenseRequest::STATUS_PENDING_HR && (auth()->user()->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'Coordinator', 'coordinator', 'admin', 'global_admin']) || auth()->user()->can('hr.view')))
-                                                <button type="button" class="btn btn-warning btn-sm text-dark fw-semibold" 
-                                                        data-bs-toggle="modal" 
-                                                        data-bs-target="#hrReviewModal{{ $req->id }}"
-                                                        title="Review & Approve">
-                                                    <i class="fa-solid fa-user-check me-1"></i> HR/Coordinator Review
-                                                </button>
-                                            @endif
+                                        @if(!$isAuditorUser)
+                                            @if($item->type === 'expense_request')
+                                                @php $req = $item->raw_model; @endphp
+                                                
+                                                <!-- HR / Coordinator Review Action Button -->
+                                                @if($req->status === \App\Models\ExpenseRequest::STATUS_PENDING_HR && (auth()->user()->hasAnyRole(['HR Manager', 'hr_manager', 'HR Officer', 'hr_officer', 'Coordinator', 'coordinator', 'admin', 'global_admin']) || auth()->user()->can('hr.view')))
+                                                    <button type="button" class="btn btn-warning btn-sm text-dark fw-semibold" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#hrReviewModal{{ $req->id }}"
+                                                            title="Review & Approve">
+                                                        <i class="fa-solid fa-user-check me-1"></i> HR/Coordinator Review
+                                                    </button>
+                                                @endif
 
-                                            <!-- GM Review Action Button -->
-                                            @if($req->status === \App\Models\ExpenseRequest::STATUS_PENDING_GM && (auth()->user()->hasAnyRole(['General Manager', 'gm', 'admin', 'global_admin'])))
-                                                <button type="button" class="btn btn-info btn-sm text-white fw-semibold" 
-                                                        data-bs-toggle="modal" 
-                                                        data-bs-target="#gmReviewModal{{ $req->id }}"
-                                                        title="GM Review">
-                                                    <i class="fa-solid fa-user-shield me-1"></i> GM Review
-                                                </button>
-                                            @endif
+                                                <!-- GM Review Action Button -->
+                                                @if($req->status === \App\Models\ExpenseRequest::STATUS_PENDING_GM && (auth()->user()->hasAnyRole(['General Manager', 'gm', 'admin', 'global_admin'])))
+                                                    <button type="button" class="btn btn-info btn-sm text-white fw-semibold" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#gmReviewModal{{ $req->id }}"
+                                                            title="GM Review">
+                                                        <i class="fa-solid fa-user-shield me-1"></i> GM Review
+                                                    </button>
+                                                @endif
 
-                                            <!-- Finance Assign / Pay Action Button -->
-                                            @if(in_array($req->status, [\App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED, \App\Models\ExpenseRequest::STATUS_ASSIGNED, 'Assigned to Finance', 'Approved - Assigned to Finance']))
+                                                <!-- Finance Assign / Pay Action Button -->
+                                                @if(in_array($req->status, [\App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED, \App\Models\ExpenseRequest::STATUS_ASSIGNED, 'Assigned to Finance', 'Approved - Assigned to Finance']))
+                                                    @php
+                                                        $authUser = auth()->user();
+                                                        $authRoleNames = strtolower(implode(' ', $authUser->getRoleNames()->toArray()));
+                                                        $isFinHeadOrAdmin = $authUser->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']) 
+                                                            || str_contains($authRoleNames, 'finance_head') 
+                                                            || str_contains($authRoleNames, 'finance_manager') 
+                                                            || str_contains($authRoleNames, 'admin');
+
+                                                        $isAssignedToMe = (
+                                                            $req->assigned_finance_staff_id == $authUser->id ||
+                                                            $req->finance_staff_id == $authUser->id ||
+                                                            ($req->chartOfAccount && $req->chartOfAccount->assigned_to == $authUser->id) ||
+                                                            ($req->coa && $req->coa->assigned_to == $authUser->id)
+                                                        );
+                                                    @endphp
+
+                                                    @if($isAssignedToMe)
+                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
+                                                                data-bs-toggle="modal" 
+                                                                data-bs-target="#payModal{{ $req->id }}"
+                                                                title="Pay this assigned expense">
+                                                            <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
+                                                        </button>
+                                                    @elseif($isFinHeadOrAdmin)
+                                                        <button type="button" class="btn btn-primary btn-sm text-white fw-semibold" 
+                                                                data-bs-toggle="modal" 
+                                                                data-bs-target="#financeAssignModal{{ $req->id }}"
+                                                                title="Assign Account &amp; Finance Custodian">
+                                                            <i class="fa-solid fa-user-tag me-1"></i> Assign
+                                                        </button>
+                                                    @endif
+                                                @endif
+
+                                                <!-- Paid Indicator Button -->
+                                                @if($req->status === \App\Models\ExpenseRequest::STATUS_PAID)
+                                                    <button type="button" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold"
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#detailModal{{ $item->id_raw }}_{{ $item->type }}">
+                                                        <i class="fa-solid fa-check-circle me-1"></i> Paid
+                                                    </button>
+                                                @endif
+
+                                            @elseif($item->type === 'expense')
+                                                @if(strtolower($item->status_raw) === 'pending')
+                                                    <form method="POST" action="{{ $item->route_approve }}" class="d-inline">
+                                                        @csrf
+                                                        <button type="submit" class="btn btn-success btn-sm"><i class="fa-solid fa-check"></i> Approve</button>
+                                                    </form>
+                                                @endif
+
+                                            @elseif($item->type === 'purchase_request')
+                                                @if($item->status_key === 'finance_queue')
+                                                    @php
+                                                        $prPayment = $item->raw_model->payment;
+                                                        $prCoa = $item->raw_model->chartOfAccount ?? null;
+                                                        $isAssignedToMe = (
+                                                            ($prPayment && (int)$prPayment->assigned_finance_staff_id === (int)auth()->id()) ||
+                                                            ($prCoa && (int)$prCoa->assigned_to === (int)auth()->id())
+                                                        );
+                                                    @endphp
+
+                                                    @if($isAssignedToMe)
+                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
+                                                                data-bs-toggle="modal" 
+                                                                data-bs-target="#payPrModal{{ $item->id_raw }}"
+                                                                title="Disburse payment for this Purchase Request">
+                                                            <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
+                                                        </button>
+                                                    @endif
+                                                    <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Purchase Request details">
+                                                        <i class="fa-solid fa-eye me-1"></i> PR
+                                                    </a>
+                                                @elseif($item->status_key === 'paid')
+                                                    <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed PR">
+                                                        <i class="fa-solid fa-check-circle me-1"></i> Paid
+                                                    </a>
+                                                @endif
+
+                                            @elseif($item->type === 'office_supply_request')
                                                 @php
-                                                    $authUser = auth()->user();
-                                                    $authRoleNames = strtolower(implode(' ', $authUser->getRoleNames()->toArray()));
-                                                    $isFinHeadOrAdmin = $authUser->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']) 
-                                                        || str_contains($authRoleNames, 'finance_head') 
-                                                        || str_contains($authRoleNames, 'finance_manager') 
-                                                        || str_contains($authRoleNames, 'admin');
-
-                                                    $isAssignedToMe = (
-                                                        $req->assigned_finance_staff_id == $authUser->id ||
-                                                        $req->finance_staff_id == $authUser->id ||
-                                                        ($req->chartOfAccount && $req->chartOfAccount->assigned_to == $authUser->id) ||
-                                                        ($req->coa && $req->coa->assigned_to == $authUser->id)
-                                                    );
+                                                    $officeReq = $item->raw_model;
+                                                    $isAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() || ($officeReq->coa && (int)$officeReq->coa->assigned_to === (int)auth()->id());
+                                                    $isFinHeadOrAdmin = !empty($isAdmin) || (!empty($isFinance) && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager']) || str_contains(strtolower(auth()->user()->roles->pluck('name')->implode(' ')), 'head')));
                                                 @endphp
 
-                                                @if($isAssignedToMe)
-                                                    <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
-                                                            data-bs-toggle="modal" 
-                                                            data-bs-target="#payModal{{ $req->id }}"
-                                                            title="Pay this assigned expense">
-                                                        <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
-                                                    </button>
-                                                @elseif($isFinHeadOrAdmin)
-                                                    <button type="button" class="btn btn-primary btn-sm text-white fw-semibold" 
-                                                            data-bs-toggle="modal" 
-                                                            data-bs-target="#financeAssignModal{{ $req->id }}"
-                                                            title="Assign Account &amp; Finance Custodian">
-                                                        <i class="fa-solid fa-user-tag me-1"></i> Assign
-                                                    </button>
+                                                @if($item->status_key === 'finance_queue')
+                                                    @if($isAssignedToMe)
+                                                        <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
+                                                                data-bs-toggle="modal" 
+                                                                data-bs-target="#payOfficeModal{{ $item->id_raw }}"
+                                                                title="Disburse payment for this Office Request">
+                                                            <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
+                                                        </button>
+                                                    @elseif($isFinHeadOrAdmin)
+                                                        <button type="button" class="btn btn-sm text-white fw-bold shadow-sm" style="background:#7c3aed;" 
+                                                                data-bs-toggle="modal" 
+                                                                data-bs-target="#financeOfficeAssignModal{{ $item->id_raw }}"
+                                                                title="Assign Funding Account &amp; Staff">
+                                                            <i class="fa-solid fa-user-tag me-1"></i> Assign
+                                                        </button>
+                                                    @endif
+                                                    <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Office Material Request">
+                                                        <i class="fa-solid fa-eye me-1"></i> View
+                                                    </a>
+                                                @elseif($item->status_key === 'paid')
+                                                    <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed Office Request">
+                                                        <i class="fa-solid fa-check-circle me-1"></i> Paid
+                                                    </a>
                                                 @endif
-                                            @endif
-
-                                            <!-- Paid Indicator Button -->
-                                            @if($req->status === \App\Models\ExpenseRequest::STATUS_PAID)
-                                                <button type="button" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold"
-                                                        data-bs-toggle="modal" 
-                                                        data-bs-target="#detailModal{{ $item->id_raw }}_{{ $item->type }}">
-                                                    <i class="fa-solid fa-check-circle me-1"></i> Paid
-                                                </button>
-                                            @endif
-
-                                        @elseif($item->type === 'expense')
-                                            @if(strtolower($item->status_raw) === 'pending')
-                                                <form method="POST" action="{{ $item->route_approve }}" class="d-inline">
-                                                    @csrf
-                                                    <button type="submit" class="btn btn-success btn-sm"><i class="fa-solid fa-check"></i> Approve</button>
-                                                </form>
-                                            @endif
-
-                                        @elseif($item->type === 'purchase_request')
-                                            @if($item->status_key === 'finance_queue')
-                                                @php
-                                                    $prPayment = $item->raw_model->payment;
-                                                    $prCoa = $item->raw_model->chartOfAccount ?? null;
-                                                    $isAssignedToMe = (
-                                                        ($prPayment && (int)$prPayment->assigned_finance_staff_id === (int)auth()->id()) ||
-                                                        ($prCoa && (int)$prCoa->assigned_to === (int)auth()->id())
-                                                    );
-                                                @endphp
-
-                                                @if($isAssignedToMe)
-                                                    <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
-                                                            data-bs-toggle="modal" 
-                                                            data-bs-target="#payPrModal{{ $item->id_raw }}"
-                                                            title="Disburse payment for this Purchase Request">
-                                                        <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
-                                                    </button>
-                                                @endif
-                                                <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Purchase Request details">
-                                                    <i class="fa-solid fa-eye me-1"></i> PR
-                                                </a>
-                                            @elseif($item->status_key === 'paid')
-                                                <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed PR">
-                                                    <i class="fa-solid fa-check-circle me-1"></i> Paid
-                                                </a>
-                                            @endif
-
-                                        @elseif($item->type === 'office_supply_request')
-                                            @php
-                                                $officeReq = $item->raw_model;
-                                                $isAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() || ($officeReq->coa && (int)$officeReq->coa->assigned_to === (int)auth()->id());
-                                                $isFinHeadOrAdmin = !empty($isAdmin) || (!empty($isFinance) && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager']) || str_contains(strtolower(auth()->user()->roles->pluck('name')->implode(' ')), 'head')));
-                                            @endphp
-
-                                            @if($item->status_key === 'finance_queue')
-                                                @if($isAssignedToMe)
-                                                    <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
-                                                            data-bs-toggle="modal" 
-                                                            data-bs-target="#payOfficeModal{{ $item->id_raw }}"
-                                                            title="Disburse payment for this Office Request">
-                                                        <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
-                                                    </button>
-                                                @elseif($isFinHeadOrAdmin)
-                                                    <button type="button" class="btn btn-sm text-white fw-bold shadow-sm" style="background:#7c3aed;" 
-                                                            data-bs-toggle="modal" 
-                                                            data-bs-target="#financeOfficeAssignModal{{ $item->id_raw }}"
-                                                            title="Assign Funding Account &amp; Staff">
-                                                        <i class="fa-solid fa-user-tag me-1"></i> Assign
-                                                    </button>
-                                                @endif
-                                                <a href="{{ $item->route_show }}" class="btn btn-outline-primary btn-sm" title="View Office Material Request">
-                                                    <i class="fa-solid fa-eye me-1"></i> View
-                                                </a>
-                                            @elseif($item->status_key === 'paid')
-                                                <a href="{{ $item->route_show }}" class="btn btn-success-subtle text-success border border-success-subtle btn-sm fw-semibold" title="View completed Office Request">
-                                                    <i class="fa-solid fa-check-circle me-1"></i> Paid
-                                                </a>
                                             @endif
                                         @endif
 

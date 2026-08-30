@@ -111,7 +111,7 @@
         <li class="sidebar-nav-item">
             <a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-file-invoice-dollar text-success"></i>
-                <span>Expense &amp; Payment Audit</span>
+                <span>Expense Audit &amp; Tracking</span>
             </a>
         </li>
         <li class="sidebar-nav-item">

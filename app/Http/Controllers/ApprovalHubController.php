@@ -586,6 +586,7 @@ class ApprovalHubController extends Controller
             'bankAccounts',
             'financeStaff',
             'isAdmin',
+            'isAuditor',
             'isHR',
             'isGM',
             'isFinance'
