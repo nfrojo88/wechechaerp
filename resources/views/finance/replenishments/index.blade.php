@@ -501,54 +501,59 @@
             <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/audit-approve') }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
                 @csrf
                 <div class="modal-header text-white py-3 px-4 flex-shrink-0" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-bottom: 3px solid #0284c7;">
-                    <div>
-                        <h5 class="modal-title fw-bold mb-0 text-white d-flex align-items-center gap-2">
-                            <span class="badge bg-info-subtle text-info border border-info border-opacity-25 px-2.5 py-1 rounded-pill fs-6"><i class="fa-solid fa-shield-halved me-1"></i> Internal Audit</span>
-                            <span>Review &amp; Clearance #{{ $rep->request_no }}</span>
-                        </h5>
-                        <small class="text-white-50 d-flex flex-wrap gap-2 align-items-center mt-1">
-                            <span>Custodian: <strong class="text-white">{{ $rep->requester->name ?? 'Staff' }}</strong></span>
-                            <span>&bull;</span>
-                            <span>Routed: <strong class="text-white-50">{{ $rep->reviewed_at ? $rep->reviewed_at->format('M d, Y H:i') : $rep->created_at->format('M d, Y H:i') }}</strong></span>
-                            @if($rep->reviewer)
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="p-2 bg-info bg-opacity-25 rounded-3 text-info">
+                            <i class="fa-solid fa-shield-halved fa-lg"></i>
+                        </div>
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge rounded-pill px-2.5 py-1 fw-bold text-uppercase" style="background: #0284c7; color: #ffffff; font-size: 10px; letter-spacing: 0.5px;">Internal Audit</span>
+                                <h5 class="modal-title fw-bold mb-0 text-white">Review &amp; Clearance #{{ $rep->request_no }}</h5>
+                            </div>
+                            <small class="text-white-50 d-flex flex-wrap gap-2 align-items-center mt-0.5">
+                                <span>Custodian: <strong class="text-white">{{ $rep->requester->name ?? 'Staff' }}</strong></span>
                                 <span>&bull;</span>
-                                <span>Reviewed by Finance Head: <strong class="text-info">{{ $rep->reviewer->name }}</strong></span>
-                            @endif
-                        </small>
+                                <span>Routed: <strong class="text-white-50">{{ $rep->reviewed_at ? $rep->reviewed_at->format('M d, Y H:i') : $rep->created_at->format('M d, Y H:i') }}</strong></span>
+                                @if($rep->reviewer)
+                                    <span>&bull;</span>
+                                    <span>Reviewed by Finance Head: <strong class="text-info">{{ $rep->reviewer->name }}</strong></span>
+                                @endif
+                            </small>
+                        </div>
                     </div>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
 
-                <div class="modal-body p-4 bg-white flex-grow-1" style="overflow-y: auto;">
+                <div class="modal-body p-4 bg-light flex-grow-1" style="overflow-y: auto;">
 
                     <!-- Top Balance Stats -->
                     <div class="row g-3 mb-3">
                         <div class="col-md-4">
-                            <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #64748b !important;">
-                                <span class="text-muted small text-uppercase fw-bold d-block">Current Petty Cash Balance</span>
+                            <div class="p-3 bg-white rounded-3 border shadow-xs" style="border-left: 4px solid #64748b !important;">
+                                <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 11px;">Current Petty Cash Balance</span>
                                 <h4 class="fw-bold text-dark font-monospace mb-0 mt-1">ETB {{ number_format($rep->current_balance_at_request, 2) }}</h4>
                                 <small class="text-muted">Account: {{ $rep->chartOfAccount->name ?? 'N/A' }}</small>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #ef4444 !important;">
-                                <span class="text-muted small text-uppercase fw-bold d-block">Valid Attached Expenses</span>
+                            <div class="p-3 bg-white rounded-3 border shadow-xs" style="border-left: 4px solid #ef4444 !important;">
+                                <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 11px;">Valid Attached Expenses</span>
                                 <h4 class="fw-bold text-danger font-monospace mb-0 mt-1">ETB {{ number_format($rep->total_expenses_amount, 2) }}</h4>
                                 <small class="text-muted">{{ $rep->items->count() }} Attached Vouchers</small>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #0284c7 !important;">
-                                <span class="text-muted small text-uppercase fw-bold d-block">Requested Top-Up Amount</span>
+                            <div class="p-3 bg-white rounded-3 border shadow-xs" style="border-left: 4px solid #0284c7 !important;">
+                                <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 11px;">Requested Top-Up Amount</span>
                                 <h4 class="fw-bold font-monospace mb-0 mt-1" style="color: #0284c7 !important;">ETB {{ number_format($rep->requested_amount, 2) }}</h4>
-                                <small class="text-muted">Audit State: <span class="badge bg-info text-white border">Under Audit</span></small>
+                                <small class="text-muted">Status: <span class="badge bg-info text-white border rounded-pill px-2">Under Audit</span></small>
                             </div>
                         </div>
                     </div>
 
                     <!-- Finance Head Review Notes Banner -->
                     @if($rep->audit_notes)
-                    <div class="alert alert-info py-2.5 px-3 mb-4 rounded-3 border-start border-4 border-info">
+                    <div class="alert alert-info py-2.5 px-3 mb-3 rounded-3 border-start border-4 border-info shadow-xs bg-white">
                         <div class="d-flex align-items-center gap-2">
                             <i class="fa-solid fa-clipboard-check text-info fs-5"></i>
                             <div>
@@ -560,7 +565,7 @@
                     @endif
 
                     <!-- Attached Itemized Expenses Table (With Select, Reject, Ask Description) -->
-                    <div class="mb-4">
+                    <div class="card border-0 shadow-sm rounded-4 p-3 mb-3 bg-white">
                         <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
                             <div>
                                 <label class="form-label fw-bold text-dark mb-0">
@@ -573,7 +578,7 @@
                             </div>
                         </div>
 
-                        <div class="voucher-scroll-box border rounded-top-3 shadow-xs" style="max-height: 320px; overflow-y: auto; overflow-x: auto;">
+                        <div class="voucher-scroll-box border rounded-top-3 shadow-xs" style="max-height: 280px; overflow-y: auto; overflow-x: auto;">
                             <table class="table table-sm table-striped table-hover align-middle mb-0 small" style="min-width: 1050px;">
                                 <thead class="bg-light sticky-top shadow-xs" style="z-index: 5;">
                                     <tr>
@@ -674,36 +679,36 @@
                         @endif
                     </div>
 
-                    <hr class="my-4">
-
                     <!-- AUDIT VERIFIED REPLENISHMENT AMOUNT & ROUTING TO GM -->
-                    <div class="card border-primary border-opacity-25 bg-primary bg-opacity-10 p-3 mb-4 rounded-3">
+                    <div class="card border-0 shadow-sm rounded-4 p-3 mb-3 bg-white" style="border-left: 5px solid #10b981 !important;">
                         <div class="row g-3 align-items-center">
                             <div class="col-md-7">
-                                <label class="form-label small fw-bold text-dark text-uppercase mb-1">
-                                    <i class="fa-solid fa-coins text-warning me-1"></i> Verified Replenishment Amount (ETB) <span class="text-danger">*</span>
+                                <label class="form-label small fw-bold text-dark text-uppercase mb-1.5 d-flex align-items-center gap-1.5">
+                                    <i class="fa-solid fa-coins text-warning"></i>
+                                    <span>Verified Replenishment Amount (ETB)</span>
+                                    <span class="text-danger">*</span>
                                 </label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-white fw-bold text-primary">ETB</span>
-                                    <input type="number" step="0.01" min="0.01" name="replenishment_amount" class="form-control form-control-lg font-monospace fw-bold text-primary" value="{{ (float)($rep->requested_amount ?: $rep->total_expenses_amount) }}" required>
+                                <div class="input-group input-group-lg shadow-xs">
+                                    <span class="input-group-text bg-light fw-bold text-success border-end-0 px-3">ETB</span>
+                                    <input type="number" step="0.01" min="0.01" name="replenishment_amount" class="form-control font-monospace fw-bold text-dark fs-4 border-start-0 ps-1" value="{{ (float)($rep->requested_amount ?: $rep->total_expenses_amount) }}" required style="background: #ffffff;">
                                 </div>
-                                <small class="text-muted" style="font-size: 11px;">
-                                    Specify the audit-cleared top-up amount to route to the General Manager (GM) for approval in the Expense Approval section.
+                                <small class="text-muted mt-1.5 d-block" style="font-size: 11.5px;">
+                                    <i class="fa-solid fa-circle-info text-info me-1"></i> Specify the audit-cleared top-up amount to route to the General Manager (GM) for final approval.
                                 </small>
                             </div>
                             <div class="col-md-5">
-                                <div class="p-2.5 bg-white rounded-3 border">
-                                    <div class="d-flex justify-content-between small text-muted mb-1">
+                                <div class="p-3 bg-light rounded-3 border shadow-xs">
+                                    <div class="d-flex justify-content-between small text-muted mb-1.5">
                                         <span>Total Valid Expenses:</span>
                                         <span class="font-monospace fw-bold text-danger">ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
                                     </div>
-                                    <div class="d-flex justify-content-between small text-muted mb-1">
+                                    <div class="d-flex justify-content-between small text-muted mb-1.5">
                                         <span>Current Petty Cash:</span>
                                         <span class="font-monospace fw-bold text-dark">ETB {{ number_format($rep->current_balance_at_request, 2) }}</span>
                                     </div>
-                                    <div class="d-flex justify-content-between small text-muted">
-                                        <span>Destination:</span>
-                                        <span class="badge bg-primary text-white"><i class="fa-solid fa-user-shield me-1"></i> GM Expense Approvals</span>
+                                    <div class="d-flex justify-content-between small text-muted align-items-center pt-1 border-top">
+                                        <span>Destination Queue:</span>
+                                        <span class="badge bg-primary text-white rounded-pill px-2.5 py-1 fw-semibold"><i class="fa-solid fa-user-shield me-1"></i> GM Approvals</span>
                                     </div>
                                 </div>
                             </div>
@@ -711,22 +716,24 @@
                     </div>
 
                     <!-- AUDIT OBSERVATIONS & CLEARANCE REMARKS -->
-                    <h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-clipboard-check text-info me-1"></i> Internal Audit Clearance Findings &amp; Observations</h6>
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold text-dark text-uppercase">Audit Verification Notes / Compliance Clearance Statement</label>
-                        <textarea name="audit_notes" class="form-control" rows="3" placeholder="Enter Internal Audit verification findings, sample test results, or clearance instructions...">{{ $rep->audit_notes }}</textarea>
+                    <div class="card border-0 shadow-sm rounded-4 p-3 mb-2 bg-white" style="border-left: 5px solid #0284c7 !important;">
+                        <label class="form-label small fw-bold text-dark text-uppercase mb-1.5 d-flex align-items-center gap-1.5">
+                            <i class="fa-solid fa-clipboard-check text-info"></i>
+                            <span>Audit Verification Notes / Compliance Clearance Statement</span>
+                        </label>
+                        <textarea name="audit_notes" class="form-control rounded-3 border" rows="3" placeholder="Enter Internal Audit verification findings, sample test results, or clearance instructions...">{{ $rep->audit_notes }}</textarea>
                     </div>
 
                 </div>
-                <div class="modal-footer bg-light border-top py-3 px-4 flex-shrink-0 d-flex justify-content-between align-items-center">
+                <div class="modal-footer border-top py-3 px-4 flex-shrink-0 d-flex justify-content-between align-items-center" style="background: #f8fafc !important;">
                     <div>
                         <button type="button" class="btn btn-outline-danger rounded-pill px-3.5 py-2 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#auditRejectModal{{ $rep->id }}">
                             <i class="fa-solid fa-ban me-1.5"></i> Reject Replenishment Cycle
                         </button>
                     </div>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 align-items-center">
                         <button type="button" class="btn btn-light border rounded-pill px-4 py-2 text-secondary fw-semibold" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-success rounded-pill px-4 py-2 fw-bold shadow-sm" onclick="return confirm('Pass Audit & Send Replenishment #{{ $rep->request_no }} to GM for Approval?')">
+                        <button type="submit" class="btn btn-success rounded-pill px-4 py-2 fw-bold shadow-sm" style="background: #10b981; border-color: #10b981;" onclick="return confirm('Pass Audit & Send Replenishment #{{ $rep->request_no }} to GM for Approval?')">
                             <i class="fa-solid fa-paper-plane me-1.5"></i> Pass Audit &amp; Send to GM for Approval
                         </button>
                     </div>
