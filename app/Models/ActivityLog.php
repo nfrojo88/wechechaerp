@@ -21,6 +21,16 @@ class ActivityLog extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function model()
+    {
+        return $this->morphTo('model', 'model_type', 'model_id');
+    }
+
+    public function subject()
+    {
+        return $this->morphTo('subject', 'model_type', 'model_id');
+    }
+
     /**
      * Log an activity statically
      */
