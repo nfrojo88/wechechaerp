@@ -92,14 +92,14 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ \Illuminate\Support\Facades\Route::has('finance.replenishments.index') ? route('finance.replenishments.index') : url('/finance/replenishments') }}" class="sidebar-nav-link {{ request()->is('finance/replenishments*') ? 'active' : '' }}">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.audit') || request()->is('finance/replenishments*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
                 <span>Petty Cash Audit &amp; Approvals</span>
                 @php
                     $pendingAudReplenishCount = 0;
                     try {
                         if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_replenishments')) {
-                            $pendingAudReplenishCount = \App\Models\PettyCashReplenishment::where('status', 'pending')->count();
+                            $pendingAudReplenishCount = \App\Models\PettyCashReplenishment::where('status', \App\Models\PettyCashReplenishment::STATUS_UNDER_AUDIT)->count();
                         }
                     } catch (\Exception $e) {}
                 @endphp
