@@ -1246,10 +1246,11 @@ Route::middleware(['auth'])->group(function () {
 
 
     
+    // --- Activity & Audit Logs (Accessible to Global Admin, Admin, Auditor, and Finance Head) ---
+    Route::get('/admin/activity-logs', [ActivityLogController::class, 'index'])->name('admin.activity-logs');
+
     // --- Admin Dashboard Enhancements ---
     Route::middleware('role:global_admin|admin')->group(function () {
-        Route::get('/admin/activity-logs', [ActivityLogController::class, 'index'])->name('admin.activity-logs');
-        
         Route::get('/admin/employee-ratings', [EmployeeRatingController::class, 'index'])->name('admin.employee-ratings.index');
         Route::post('/admin/employee-ratings', [EmployeeRatingController::class, 'store'])->name('admin.employee-ratings.store');
         

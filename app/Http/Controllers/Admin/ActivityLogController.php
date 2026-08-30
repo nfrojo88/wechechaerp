@@ -18,15 +18,32 @@ class ActivityLogController extends Controller
             }
 
             $hasAccess = false;
-            if (method_exists($user, 'hasAnyRole')) {
-                $hasAccess = $user->hasAnyRole(['global_admin', 'admin', 'auditor', 'audit', 'internal_auditor', 'Finance head', 'finance_head']);
+            $rawRoles = method_exists($user, 'roles') 
+                ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() 
+                : [];
+
+            $allowedRoles = [
+                'global_admin', 'admin', 'auditor', 'audit', 'internal_auditor', 'audit_team',
+                'finance_head', 'finance_manager', 'finance', 'gm', 'general_manager'
+            ];
+
+            if (!empty(array_intersect($rawRoles, $allowedRoles))) {
+                $hasAccess = true;
             }
+
+            if (!$hasAccess && method_exists($user, 'hasAnyRole')) {
+                $hasAccess = $user->hasAnyRole([
+                    'global_admin', 'admin', 'auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit', 
+                    'Finance head', 'finance_head', 'finance_manager', 'GM', 'gm', 'general_manager'
+                ]);
+            }
+
             if (!$hasAccess && method_exists($user, 'can')) {
                 $hasAccess = $user->can('audit.view') || $user->can('finance.audit.view') || $user->can('admin.audit.view');
             }
 
             if (!$hasAccess) {
-                abort(403, 'Access denied. Auditor or Admin only.');
+                abort(403, 'Access denied. Auditor, Finance Head, or Admin only.');
             }
             return $next($request);
         });
