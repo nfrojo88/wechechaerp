@@ -12,9 +12,15 @@
                     </h1>
                     <p class="text-muted small mb-0">Submit a leave requisition for General Manager &amp; HR approval</p>
                 </div>
-                <a href="{{ route('leave-requests.index') }}" class="btn btn-outline-secondary btn-sm">
-                    <i class="fa-solid fa-arrow-left me-1"></i> Back to Requests
-                </a>
+                @if($isHrOrGm)
+                    <a href="{{ route('leave-requests.index') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa-solid fa-arrow-left me-1"></i> All Leave Requests
+                    </a>
+                @else
+                    <a href="{{ route('leave-requests.my-requests') }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fa-solid fa-clock-rotate-left me-1"></i> My Leave History
+                    </a>
+                @endif
             </div>
 
             <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
