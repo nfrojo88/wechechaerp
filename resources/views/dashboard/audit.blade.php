@@ -2,6 +2,33 @@
 @section('title', 'Audit & Compliance Dashboard')
 
 @section('content')
+<style>
+.modal {
+    z-index: 1055 !important;
+}
+.modal-backdrop {
+    z-index: 1050 !important;
+}
+.modal-dialog-scrollable .modal-content {
+    max-height: calc(100vh - 3.5rem);
+}
+.voucher-scroll-box {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f8fafc;
+}
+.voucher-scroll-box::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.voucher-scroll-box::-webkit-scrollbar-track {
+    background: #f8fafc;
+    border-radius: 4px;
+}
+.voucher-scroll-box::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+</style>
 <div class="container-fluid px-4 py-3">
 
     <!-- Page Header -->
@@ -445,28 +472,27 @@
 
         <!-- 1. Audit Clearance Decision Modal -->
         <div class="modal fade" id="dashboardAuditModal{{ $rep->id }}" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
                 <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                    <div class="modal-header text-white py-3 px-4" style="background: #1e293b; border-bottom: 3px solid #0284c7;">
-                        <div>
-                            <h5 class="modal-title fw-bold mb-0 text-white">
-                                <i class="fa-solid fa-shield-halved text-info me-2"></i>Internal Audit Review &amp; Clearance: #{{ $rep->request_no }}
-                            </h5>
-                            <small class="text-white-50">
-                                Custodian: <strong class="text-white">{{ $rep->requester->name ?? 'Staff' }}</strong> &bull; 
-                                Routed on {{ $rep->reviewed_at ? $rep->reviewed_at->format('M d, Y H:i') : $rep->created_at->format('M d, Y H:i') }}
-                                @if($rep->reviewer)
-                                    &bull; Reviewed by Finance Head: <strong class="text-info">{{ $rep->reviewer->name }}</strong>
-                                @endif
-                            </small>
-                        </div>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    
-                    <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/audit-approve') }}">
+                    <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/audit-approve') }}" class="d-flex flex-column h-100 mb-0">
                         @csrf
+                        <div class="modal-header text-white py-3 px-4 flex-shrink-0" style="background: #1e293b; border-bottom: 3px solid #0284c7;">
+                            <div>
+                                <h5 class="modal-title fw-bold mb-0 text-white">
+                                    <i class="fa-solid fa-shield-halved text-info me-2"></i>Internal Audit Review &amp; Clearance: #{{ $rep->request_no }}
+                                </h5>
+                                <small class="text-white-50">
+                                    Custodian: <strong class="text-white">{{ $rep->requester->name ?? 'Staff' }}</strong> &bull; 
+                                    Routed on {{ $rep->reviewed_at ? $rep->reviewed_at->format('M d, Y H:i') : $rep->created_at->format('M d, Y H:i') }}
+                                    @if($rep->reviewer)
+                                        &bull; Reviewed by Finance Head: <strong class="text-info">{{ $rep->reviewer->name }}</strong>
+                                    @endif
+                                </small>
+                            </div>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
 
-                        <div class="modal-body p-4 bg-white">
+                        <div class="modal-body p-4 bg-white flex-grow-1" style="overflow-y: auto;">
 
                             <!-- Top Balance Stats -->
                             <div class="row g-3 mb-3">
@@ -520,7 +546,7 @@
                                     </div>
                                 </div>
 
-                                <div class="voucher-scroll-box border rounded-top-3 shadow-xs" style="max-height: 380px; overflow-y: auto; overflow-x: auto;">
+                                <div class="voucher-scroll-box border rounded-top-3 shadow-xs" style="max-height: 360px; overflow-y: auto; overflow-x: auto;">
                                     <table class="table table-sm table-striped table-hover align-middle mb-0 small" style="min-width: 1050px;">
                                         <thead class="bg-light sticky-top shadow-xs" style="z-index: 5;">
                                             <tr>
@@ -631,7 +657,7 @@
                             </div>
 
                         </div>
-                        <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
+                        <div class="modal-footer bg-light border-top py-3 px-4 flex-shrink-0 d-flex justify-content-between">
                             <div>
                                 <button type="button" class="btn btn-outline-danger rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#dashboardAuditRejectModal{{ $rep->id }}">
                                     <i class="fa-solid fa-times me-1"></i> Reject Replenishment Cycle
@@ -651,23 +677,22 @@
 
         <!-- 2. Audit Rejection Modal -->
         <div class="modal fade" id="dashboardAuditRejectModal{{ $rep->id }}" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                 <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                    <div class="modal-header bg-danger text-white py-3 px-4">
-                        <h5 class="modal-title fw-bold mb-0"><i class="fa-solid fa-shield-xmark me-2"></i>Audit Reject: #{{ $rep->request_no }}</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/audit-reject') }}">
+                    <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/audit-reject') }}" class="d-flex flex-column h-100 mb-0">
                         @csrf
-
-                        <div class="modal-body p-4 bg-white">
+                        <div class="modal-header bg-danger text-white py-3 px-4 flex-shrink-0">
+                            <h5 class="modal-title fw-bold mb-0"><i class="fa-solid fa-shield-xmark me-2"></i>Audit Reject: #{{ $rep->request_no }}</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body p-4 bg-white flex-grow-1" style="overflow-y: auto;">
                             <p class="text-dark mb-2">Specify the internal audit findings / reasons for rejecting <strong>{{ $rep->requester->name ?? 'Staff' }}</strong>'s replenishment request:</p>
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-dark text-uppercase">Audit Rejection Reason <span class="text-danger">*</span></label>
                                 <textarea name="rejection_reason" class="form-control" rows="4" placeholder="e.g. Non-compliant expense receipts, missing supporting documentation, exceeded spending ceiling..." required></textarea>
                             </div>
                         </div>
-                        <div class="modal-footer bg-light border-0 py-3 px-4">
+                        <div class="modal-footer bg-light border-top py-3 px-4 flex-shrink-0">
                             <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
                             <button type="submit" class="btn btn-danger rounded-pill px-4 fw-bold shadow-sm">
                                 <i class="fa-solid fa-ban me-1"></i> Confirm Audit Rejection
