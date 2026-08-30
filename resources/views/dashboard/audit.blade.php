@@ -9,8 +9,20 @@
 .modal-backdrop {
     z-index: 1050 !important;
 }
+.modal-dialog-scrollable {
+    max-height: calc(100vh - 3.5rem);
+}
 .modal-dialog-scrollable .modal-content {
     max-height: calc(100vh - 3.5rem);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.modal-dialog-scrollable .modal-body {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    flex: 1 1 auto;
+    min-height: 0;
 }
 .voucher-scroll-box {
     scrollbar-width: thin;
@@ -473,267 +485,266 @@
         <!-- 1. Audit Clearance Decision Modal -->
         <div class="modal fade" id="dashboardAuditModal{{ $rep->id }}" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-                <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                    <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/audit-approve') }}" class="d-flex flex-column h-100 mb-0">
-                        @csrf
-                        <div class="modal-header text-white py-3 px-4 flex-shrink-0" style="background: #1e293b; border-bottom: 3px solid #0284c7;">
-                            <div>
-                                <h5 class="modal-title fw-bold mb-0 text-white">
-                                    <i class="fa-solid fa-shield-halved text-info me-2"></i>Internal Audit Review &amp; Clearance: #{{ $rep->request_no }}
-                                </h5>
-                                <small class="text-white-50">
-                                    Custodian: <strong class="text-white">{{ $rep->requester->name ?? 'Staff' }}</strong> &bull; 
-                                    Routed on {{ $rep->reviewed_at ? $rep->reviewed_at->format('M d, Y H:i') : $rep->created_at->format('M d, Y H:i') }}
-                                    @if($rep->reviewer)
-                                        &bull; Reviewed by Finance Head: <strong class="text-info">{{ $rep->reviewer->name }}</strong>
-                                    @endif
-                                </small>
+                <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/audit-approve') }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                    @csrf
+                    <div class="modal-header text-white py-3 px-4 flex-shrink-0" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-bottom: 3px solid #0284c7;">
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0 text-white d-flex align-items-center gap-2">
+                                <span class="badge bg-info-subtle text-info border border-info border-opacity-25 px-2.5 py-1 rounded-pill fs-6"><i class="fa-solid fa-shield-halved me-1"></i> Internal Audit</span>
+                                <span>Review &amp; Clearance: #{{ $rep->request_no }}</span>
+                            </h5>
+                            <small class="text-white-50 d-flex flex-wrap gap-2 align-items-center mt-1">
+                                <span>Custodian: <strong class="text-white">{{ $rep->requester->name ?? 'Staff' }}</strong></span>
+                                <span>&bull;</span>
+                                <span>Routed: <strong class="text-white-50">{{ $rep->reviewed_at ? $rep->reviewed_at->format('M d, Y H:i') : $rep->created_at->format('M d, Y H:i') }}</strong></span>
+                                @if($rep->reviewer)
+                                    <span>&bull;</span>
+                                    <span>Reviewed by Finance Head: <strong class="text-info">{{ $rep->reviewer->name }}</strong></span>
+                                @endif
+                            </small>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body p-4 bg-white flex-grow-1" style="overflow-y: auto;">
+
+                        <!-- Top Balance Stats -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #64748b !important;">
+                                    <span class="text-muted small text-uppercase fw-bold d-block">Current Petty Cash Balance</span>
+                                    <h4 class="fw-bold text-dark font-monospace mb-0 mt-1">ETB {{ number_format($rep->current_balance_at_request, 2) }}</h4>
+                                    <small class="text-muted">Account: {{ $rep->chartOfAccount->name ?? 'N/A' }}</small>
+                                </div>
                             </div>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                            <div class="col-md-4">
+                                <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #ef4444 !important;">
+                                    <span class="text-muted small text-uppercase fw-bold d-block">Valid Attached Expenses</span>
+                                    <h4 class="fw-bold text-danger font-monospace mb-0 mt-1">ETB {{ number_format($rep->total_expenses_amount, 2) }}</h4>
+                                    <small class="text-muted">{{ $rep->items->count() }} Attached Vouchers</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #0284c7 !important;">
+                                    <span class="text-muted small text-uppercase fw-bold d-block">Requested Top-Up Amount</span>
+                                    <h4 class="fw-bold font-monospace mb-0 mt-1" style="color: #0284c7 !important;">ETB {{ number_format($rep->requested_amount, 2) }}</h4>
+                                    <small class="text-muted">Status: <span class="badge bg-info text-white border">Under Audit Review</span></small>
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="modal-body p-4 bg-white flex-grow-1" style="overflow-y: auto;">
+                        <!-- Finance Head Review Notes Banner -->
+                        @if($rep->audit_notes)
+                        <div class="alert alert-info py-2.5 px-3 mb-4 rounded-3 border-start border-4 border-info">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-clipboard-check text-info fs-5"></i>
+                                <div>
+                                    <strong class="text-dark d-block">Finance Head Review Instructions / Notes:</strong>
+                                    <span class="text-dark">{{ $rep->audit_notes }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
 
-                            <!-- Top Balance Stats -->
-                            <div class="row g-3 mb-3">
-                                <div class="col-md-4">
-                                    <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #64748b !important;">
-                                        <span class="text-muted small text-uppercase fw-bold d-block">Current Petty Cash Balance</span>
-                                        <h4 class="fw-bold text-dark font-monospace mb-0 mt-1">ETB {{ number_format($rep->current_balance_at_request, 2) }}</h4>
-                                        <small class="text-muted">Account: {{ $rep->chartOfAccount->name ?? 'N/A' }}</small>
-                                    </div>
+                        <!-- Attached Itemized Expenses Table (With Select, Reject, Ask Description) -->
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                <div>
+                                    <label class="form-label fw-bold text-dark mb-0">
+                                        <i class="fa-solid fa-list-check text-primary me-1"></i> Attached Expense Vouchers ({{ $rep->items->count() }} Records)
+                                    </label>
+                                    <small class="text-muted d-block" style="font-size:11px;">Internal Auditor: Examine line vouchers, request custodian notes, or exclude invalid vouchers before clearance</small>
                                 </div>
-                                <div class="col-md-4">
-                                    <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #ef4444 !important;">
-                                        <span class="text-muted small text-uppercase fw-bold d-block">Valid Attached Expenses</span>
-                                        <h4 class="fw-bold text-danger font-monospace mb-0 mt-1">ETB {{ number_format($rep->total_expenses_amount, 2) }}</h4>
-                                        <small class="text-muted">{{ $rep->items->count() }} Attached Vouchers</small>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="p-3 bg-light rounded-3 border" style="border-left: 4px solid #0284c7 !important;">
-                                        <span class="text-muted small text-uppercase fw-bold d-block">Requested Top-Up Amount</span>
-                                        <h4 class="fw-bold font-monospace mb-0 mt-1" style="color: #0284c7 !important;">ETB {{ number_format($rep->requested_amount, 2) }}</h4>
-                                        <small class="text-muted">Status: <span class="badge bg-info text-white border">Under Audit Review</span></small>
-                                    </div>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <span class="badge bg-light text-dark border font-monospace px-3 py-1.5 fs-6">Valid Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
                                 </div>
                             </div>
 
-                            <!-- Finance Head Review Notes Banner -->
-                            @if($rep->audit_notes)
-                            <div class="alert alert-info py-2.5 px-3 mb-4 rounded-3 border-start border-4 border-info">
+                            <div class="voucher-scroll-box border rounded-top-3 shadow-xs" style="max-height: 320px; overflow-y: auto; overflow-x: auto;">
+                                <table class="table table-sm table-striped table-hover align-middle mb-0 small" style="min-width: 1050px;">
+                                    <thead class="bg-light sticky-top shadow-xs" style="z-index: 5;">
+                                        <tr>
+                                            <th class="ps-3 py-2.5 text-center bg-light" style="width: 45px;">
+                                                <input type="checkbox" class="form-check-input" id="selectAllDashboardAudit_{{ $rep->id }}" onchange="toggleSelectAllVouchers({{ $rep->id }}, this)">
+                                            </th>
+                                            <th class="py-2.5 text-nowrap bg-light" style="width: 110px;">Date</th>
+                                            <th class="py-2.5 text-nowrap bg-light" style="width: 160px;">Voucher # / Ref</th>
+                                            <th class="py-2.5 text-nowrap bg-light" style="width: 170px;">Category / Account</th>
+                                            <th class="py-2.5 bg-light" style="min-width: 260px;">Description &amp; Beneficiary</th>
+                                            <th class="py-2.5 text-end text-nowrap bg-light" style="width: 130px;">Amount (ETB)</th>
+                                            <th class="py-2.5 text-center text-nowrap bg-light" style="width: 140px;">Review Status</th>
+                                            <th class="pe-3 py-2.5 text-end text-nowrap bg-light" style="width: 190px;">Audit Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse($rep->items as $item)
+                                            <tr class="{{ $item->status === 'rejected' ? 'table-danger opacity-75' : ($item->status === 'clarification_needed' ? 'table-warning' : '') }}">
+                                                <td class="ps-3 py-2 text-center">
+                                                    <input type="checkbox" name="voucher_ids[]" value="{{ $item->id }}" class="form-check-input voucher-cb-{{ $rep->id }}">
+                                                </td>
+                                                <td class="py-2 text-muted text-nowrap">
+                                                    {{ $item->entry_date ? \Carbon\Carbon::parse($item->entry_date)->format('M d, Y') : ($item->created_at ? $item->created_at->format('M d, Y') : 'N/A') }}
+                                                </td>
+                                                <td class="py-2 text-nowrap">
+                                                    <span class="badge bg-light text-primary border font-monospace">
+                                                        {{ $item->reference ?: ($item->journal_entry_line_id ? 'JL #' . $item->journal_entry_line_id : 'EXP-' . $item->id) }}
+                                                    </span>
+                                                </td>
+                                                <td class="py-2 text-nowrap">
+                                                    <span class="badge bg-secondary-subtle text-dark border">
+                                                        {{ $item->target_account_name ?: 'Petty Cash Expense' }}
+                                                    </span>
+                                                </td>
+                                                <td class="py-2">
+                                                    <div style="word-break: break-word; white-space: normal; line-height: 1.4;">
+                                                        {{ $item->description }}
+                                                    </div>
+                                                </td>
+                                                <td class="py-2 text-end fw-bold {{ $item->status === 'rejected' ? 'text-decoration-line-through text-muted' : 'text-danger' }} font-monospace text-nowrap">
+                                                    ETB {{ number_format($item->amount, 2) }}
+                                                </td>
+                                                <td class="py-2 text-center text-nowrap">
+                                                    @if($item->status === 'rejected')
+                                                        <span class="badge bg-danger text-white px-2 py-1"><i class="fa-solid fa-ban me-1"></i>Rejected</span>
+                                                        @if($item->rejection_reason)
+                                                            <div class="text-danger small mt-0.5" style="font-size:11px;">{{ Str::limit($item->rejection_reason, 30) }}</div>
+                                                        @endif
+                                                    @elseif($item->status === 'clarification_needed')
+                                                        <span class="badge bg-warning text-dark px-2 py-1"><i class="fa-solid fa-circle-question me-1"></i>Need Clarification</span>
+                                                        @if($item->inquiry_note)
+                                                            <div class="text-dark small mt-0.5" style="font-size:11px;">"{{ Str::limit($item->inquiry_note, 30) }}"</div>
+                                                        @endif
+                                                    @else
+                                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1"><i class="fa-solid fa-check me-1"></i>Valid</span>
+                                                    @endif
+                                                </td>
+                                                <td class="pe-3 py-2 text-end text-nowrap">
+                                                    <div class="d-flex gap-1 justify-content-end align-items-center">
+                                                        <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-semibold px-2 py-0.5" style="font-size:0.75rem;" onclick="askDescriptionPrompt({{ $item->id }}, '{{ addslashes($item->reference ?: 'Voucher #' . $item->id) }}')" title="Ask Description / Clarification from Custodian">
+                                                            <i class="fa-solid fa-comment-dots text-warning me-1"></i> Ask Note
+                                                        </button>
+                                                        @if($item->status === 'rejected')
+                                                            <button type="button" class="btn btn-sm btn-outline-success px-2 py-0.5" style="font-size:0.75rem;" onclick="approveVoucher({{ $item->id }})" title="Restore and Include in Replenishment">
+                                                                <i class="fa-solid fa-rotate-left me-1"></i> Include
+                                                            </button>
+                                                        @else
+                                                            <button type="button" class="btn btn-sm btn-outline-danger px-2 py-0.5" style="font-size:0.75rem;" onclick="rejectVoucherPrompt({{ $item->id }}, '{{ addslashes($item->reference ?: 'Voucher #' . $item->id) }}')" title="Reject this Voucher">
+                                                                <i class="fa-solid fa-ban me-1"></i> Reject
+                                                            </button>
+                                                        @endif
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <tr>
+                                                <td colspan="8" class="text-center py-4 text-muted">No line item breakdown attached.</td>
+                                            </tr>
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            @if($rep->items->count() > 0)
+                            <div class="d-flex justify-content-between align-items-center bg-light border border-top-0 rounded-bottom-3 px-3 py-2.5 fw-bold small flex-wrap gap-2">
                                 <div class="d-flex align-items-center gap-2">
-                                    <i class="fa-solid fa-clipboard-check text-info fs-5"></i>
-                                    <div>
-                                        <strong class="text-dark d-block">Finance Head Review Instructions / Notes:</strong>
-                                        <span class="text-dark">{{ $rep->audit_notes }}</span>
-                                    </div>
+                                    <span class="text-dark"><i class="fa-solid fa-receipt text-secondary me-1"></i> Total: <span class="badge bg-dark rounded-pill">{{ $rep->items->count() }} Vouchers</span></span>
+                                    <span class="text-muted">|</span>
+                                    <button type="button" class="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-1" onclick="submitBulkVoucherAction({{ $rep->chart_of_account_id }}, {{ $rep->id }}, 'reject')">
+                                        <i class="fa-solid fa-ban me-1"></i> Reject Selected
+                                    </button>
+                                    <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold rounded-pill px-2.5 py-1" onclick="submitBulkVoucherAction({{ $rep->chart_of_account_id }}, {{ $rep->id }}, 'ask_description')">
+                                        <i class="fa-solid fa-comment-dots me-1"></i> Ask Description on Selected
+                                    </button>
                                 </div>
+                                <span class="text-danger font-monospace fs-6">Grand Total: ETB {{ number_format($rep->items->sum('amount') ?: $rep->total_expenses_amount, 2) }}</span>
                             </div>
                             @endif
+                        </div>
 
-                            <!-- Attached Itemized Expenses Table (With Select, Reject, Ask Description) -->
-                            <div class="mb-4">
-                                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                                    <div>
-                                        <label class="form-label fw-bold text-dark mb-0">
-                                            <i class="fa-solid fa-list-check text-primary me-1"></i> Attached Expense Vouchers ({{ $rep->items->count() }} Records)
-                                        </label>
-                                        <small class="text-muted d-block" style="font-size:11px;">Internal Auditor: Examine line vouchers, request custodian notes, or exclude invalid vouchers before clearance</small>
+                        <hr class="my-4">
+
+                        <!-- AUDIT VERIFIED REPLENISHMENT AMOUNT & ROUTING TO GM -->
+                        <div class="card border-primary border-opacity-25 bg-primary bg-opacity-10 p-3 mb-4 rounded-3">
+                            <div class="row g-3 align-items-center">
+                                <div class="col-md-7">
+                                    <label class="form-label small fw-bold text-dark text-uppercase mb-1">
+                                        <i class="fa-solid fa-coins text-warning me-1"></i> Verified Replenishment Amount (ETB) <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white fw-bold text-primary">ETB</span>
+                                        <input type="number" step="0.01" min="0.01" name="replenishment_amount" class="form-control form-control-lg font-monospace fw-bold text-primary" value="{{ (float)($rep->requested_amount ?: $rep->total_expenses_amount) }}" required>
                                     </div>
-                                    <div class="d-flex gap-2 align-items-center">
-                                        <span class="badge bg-light text-dark border font-monospace px-3 py-1.5 fs-6">Valid Total: ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
-                                    </div>
+                                    <small class="text-muted" style="font-size: 11px;">
+                                        Specify the audit-cleared top-up amount to route to the General Manager (GM) for approval in the Expense Approval section.
+                                    </small>
                                 </div>
-
-                                <div class="voucher-scroll-box border rounded-top-3 shadow-xs" style="max-height: 360px; overflow-y: auto; overflow-x: auto;">
-                                    <table class="table table-sm table-striped table-hover align-middle mb-0 small" style="min-width: 1050px;">
-                                        <thead class="bg-light sticky-top shadow-xs" style="z-index: 5;">
-                                            <tr>
-                                                <th class="ps-3 py-2.5 text-center bg-light" style="width: 45px;">
-                                                    <input type="checkbox" class="form-check-input" id="selectAllDashboardAudit_{{ $rep->id }}" onchange="toggleSelectAllVouchers({{ $rep->id }}, this)">
-                                                </th>
-                                                <th class="py-2.5 text-nowrap bg-light" style="width: 110px;">Date</th>
-                                                <th class="py-2.5 text-nowrap bg-light" style="width: 160px;">Voucher # / Ref</th>
-                                                <th class="py-2.5 text-nowrap bg-light" style="width: 170px;">Category / Account</th>
-                                                <th class="py-2.5 bg-light" style="min-width: 260px;">Description &amp; Beneficiary</th>
-                                                <th class="py-2.5 text-end text-nowrap bg-light" style="width: 130px;">Amount (ETB)</th>
-                                                <th class="py-2.5 text-center text-nowrap bg-light" style="width: 140px;">Review Status</th>
-                                                <th class="pe-3 py-2.5 text-end text-nowrap bg-light" style="width: 190px;">Audit Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @forelse($rep->items as $item)
-                                                <tr class="{{ $item->status === 'rejected' ? 'table-danger opacity-75' : ($item->status === 'clarification_needed' ? 'table-warning' : '') }}">
-                                                    <td class="ps-3 py-2 text-center">
-                                                        <input type="checkbox" name="voucher_ids[]" value="{{ $item->id }}" class="form-check-input voucher-cb-{{ $rep->id }}">
-                                                    </td>
-                                                    <td class="py-2 text-muted text-nowrap">
-                                                        {{ $item->entry_date ? \Carbon\Carbon::parse($item->entry_date)->format('M d, Y') : ($item->created_at ? $item->created_at->format('M d, Y') : 'N/A') }}
-                                                    </td>
-                                                    <td class="py-2 text-nowrap">
-                                                        <span class="badge bg-light text-primary border font-monospace">
-                                                            {{ $item->reference ?: ($item->journal_entry_line_id ? 'JL #' . $item->journal_entry_line_id : 'EXP-' . $item->id) }}
-                                                        </span>
-                                                    </td>
-                                                    <td class="py-2 text-nowrap">
-                                                        <span class="badge bg-secondary-subtle text-dark border">
-                                                            {{ $item->target_account_name ?: 'Petty Cash Expense' }}
-                                                        </span>
-                                                    </td>
-                                                    <td class="py-2">
-                                                        <div style="word-break: break-word; white-space: normal; line-height: 1.4;">
-                                                            {{ $item->description }}
-                                                        </div>
-                                                    </td>
-                                                    <td class="py-2 text-end fw-bold {{ $item->status === 'rejected' ? 'text-decoration-line-through text-muted' : 'text-danger' }} font-monospace text-nowrap">
-                                                        ETB {{ number_format($item->amount, 2) }}
-                                                    </td>
-                                                    <td class="py-2 text-center text-nowrap">
-                                                        @if($item->status === 'rejected')
-                                                            <span class="badge bg-danger text-white px-2 py-1"><i class="fa-solid fa-ban me-1"></i>Rejected</span>
-                                                            @if($item->rejection_reason)
-                                                                <div class="text-danger small mt-0.5" style="font-size:11px;">{{ Str::limit($item->rejection_reason, 30) }}</div>
-                                                            @endif
-                                                        @elseif($item->status === 'clarification_needed')
-                                                            <span class="badge bg-warning text-dark px-2 py-1"><i class="fa-solid fa-circle-question me-1"></i>Need Clarification</span>
-                                                            @if($item->inquiry_note)
-                                                                <div class="text-dark small mt-0.5" style="font-size:11px;">"{{ Str::limit($item->inquiry_note, 30) }}"</div>
-                                                            @endif
-                                                        @else
-                                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1"><i class="fa-solid fa-check me-1"></i>Valid</span>
-                                                        @endif
-                                                    </td>
-                                                    <td class="pe-3 py-2 text-end text-nowrap">
-                                                        <div class="d-flex gap-1 justify-content-end align-items-center">
-                                                            <button type="button" class="btn btn-sm btn-outline-warning text-dark fw-semibold px-2 py-0.5" style="font-size:0.75rem;" onclick="askDescriptionPrompt({{ $item->id }}, '{{ addslashes($item->reference ?: 'Voucher #' . $item->id) }}')" title="Ask Description / Clarification from Custodian">
-                                                                <i class="fa-solid fa-comment-dots text-warning me-1"></i> Ask Note
-                                                            </button>
-                                                            @if($item->status === 'rejected')
-                                                                <button type="button" class="btn btn-sm btn-outline-success px-2 py-0.5" style="font-size:0.75rem;" onclick="approveVoucher({{ $item->id }})" title="Restore and Include in Replenishment">
-                                                                    <i class="fa-solid fa-rotate-left me-1"></i> Include
-                                                                </button>
-                                                            @else
-                                                                <button type="button" class="btn btn-sm btn-outline-danger px-2 py-0.5" style="font-size:0.75rem;" onclick="rejectVoucherPrompt({{ $item->id }}, '{{ addslashes($item->reference ?: 'Voucher #' . $item->id) }}')" title="Reject this Voucher">
-                                                                    <i class="fa-solid fa-ban me-1"></i> Reject
-                                                                </button>
-                                                            @endif
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            @empty
-                                                <tr>
-                                                    <td colspan="8" class="text-center py-4 text-muted">No line item breakdown attached.</td>
-                                                </tr>
-                                            @endforelse
-                                        </tbody>
-                                    </table>
-                                </div>
-                                
-                                @if($rep->items->count() > 0)
-                                <div class="d-flex justify-content-between align-items-center bg-light border border-top-0 rounded-bottom-3 px-3 py-2.5 fw-bold small flex-wrap gap-2">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="text-dark"><i class="fa-solid fa-receipt text-secondary me-1"></i> Total: <span class="badge bg-dark rounded-pill">{{ $rep->items->count() }} Vouchers</span></span>
-                                        <span class="text-muted">|</span>
-                                        <button type="button" class="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-1" onclick="submitBulkVoucherAction({{ $rep->chart_of_account_id }}, {{ $rep->id }}, 'reject')">
-                                            <i class="fa-solid fa-ban me-1"></i> Reject Selected
-                                        </button>
-                                        <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-semibold rounded-pill px-2.5 py-1" onclick="submitBulkVoucherAction({{ $rep->chart_of_account_id }}, {{ $rep->id }}, 'ask_description')">
-                                            <i class="fa-solid fa-comment-dots me-1"></i> Ask Description on Selected
-                                        </button>
-                                    </div>
-                                    <span class="text-danger font-monospace fs-6">Grand Total: ETB {{ number_format($rep->items->sum('amount') ?: $rep->total_expenses_amount, 2) }}</span>
-                                </div>
-                                @endif
-                            </div>
-
-                            <hr class="my-4">
-
-                            <!-- AUDIT VERIFIED REPLENISHMENT AMOUNT & ROUTING TO GM -->
-                            <div class="card border-primary border-opacity-25 bg-primary bg-opacity-10 p-3 mb-4 rounded-3">
-                                <div class="row g-3 align-items-center">
-                                    <div class="col-md-7">
-                                        <label class="form-label small fw-bold text-dark text-uppercase mb-1">
-                                            <i class="fa-solid fa-coins text-warning me-1"></i> Verified Replenishment Amount (ETB) <span class="text-danger">*</span>
-                                        </label>
-                                        <div class="input-group">
-                                            <span class="input-group-text bg-white fw-bold text-primary">ETB</span>
-                                            <input type="number" step="0.01" min="0.01" name="replenishment_amount" class="form-control form-control-lg font-monospace fw-bold text-primary" value="{{ (float)($rep->requested_amount ?: $rep->total_expenses_amount) }}" required>
+                                <div class="col-md-5">
+                                    <div class="p-2.5 bg-white rounded-3 border">
+                                        <div class="d-flex justify-content-between small text-muted mb-1">
+                                            <span>Total Valid Expenses:</span>
+                                            <span class="font-monospace fw-bold text-danger">ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
                                         </div>
-                                        <small class="text-muted" style="font-size: 11px;">
-                                            Specify the audit-cleared top-up amount to route to the General Manager (GM) for approval in the Expense Approval section.
-                                        </small>
-                                    </div>
-                                    <div class="col-md-5">
-                                        <div class="p-2.5 bg-white rounded-3 border">
-                                            <div class="d-flex justify-content-between small text-muted mb-1">
-                                                <span>Total Valid Expenses:</span>
-                                                <span class="font-monospace fw-bold text-danger">ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
-                                            </div>
-                                            <div class="d-flex justify-content-between small text-muted mb-1">
-                                                <span>Current Petty Cash:</span>
-                                                <span class="font-monospace fw-bold text-dark">ETB {{ number_format($rep->current_balance_at_request, 2) }}</span>
-                                            </div>
-                                            <div class="d-flex justify-content-between small text-muted">
-                                                <span>Destination:</span>
-                                                <span class="badge bg-primary text-white"><i class="fa-solid fa-user-shield me-1"></i> GM Expense Approvals</span>
-                                            </div>
+                                        <div class="d-flex justify-content-between small text-muted mb-1">
+                                            <span>Current Petty Cash:</span>
+                                            <span class="font-monospace fw-bold text-dark">ETB {{ number_format($rep->current_balance_at_request, 2) }}</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between small text-muted">
+                                            <span>Destination:</span>
+                                            <span class="badge bg-primary text-white"><i class="fa-solid fa-user-shield me-1"></i> GM Expense Approvals</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-
-                            <!-- AUDIT OBSERVATIONS & CLEARANCE REMARKS -->
-                            <h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-clipboard-check text-info me-1"></i> Internal Audit Clearance Findings &amp; Observations</h6>
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-dark text-uppercase">Audit Verification Notes / Compliance Clearance Statement</label>
-                                <textarea name="audit_notes" class="form-control" rows="3" placeholder="Enter Internal Audit verification findings, sample test results, or clearance instructions...">{{ $rep->audit_notes }}</textarea>
-                            </div>
-
                         </div>
-                        <div class="modal-footer bg-light border-top py-3 px-4 flex-shrink-0 d-flex justify-content-between">
-                            <div>
-                                <button type="button" class="btn btn-outline-danger rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#dashboardAuditRejectModal{{ $rep->id }}">
-                                    <i class="fa-solid fa-times me-1"></i> Reject Replenishment Cycle
-                                </button>
-                            </div>
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Close</button>
-                                <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm" onclick="return confirm('Pass Audit & Send Replenishment #{{ $rep->request_no }} to GM for Approval?')">
-                                    <i class="fa-solid fa-paper-plane me-1"></i> Pass Audit &amp; Ask Replacement to GM
-                                </button>
-                            </div>
+
+                        <!-- AUDIT OBSERVATIONS & CLEARANCE REMARKS -->
+                        <h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-clipboard-check text-info me-1"></i> Internal Audit Clearance Findings &amp; Observations</h6>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">Audit Verification Notes / Compliance Clearance Statement</label>
+                            <textarea name="audit_notes" class="form-control" rows="3" placeholder="Enter Internal Audit verification findings, sample test results, or clearance instructions...">{{ $rep->audit_notes }}</textarea>
                         </div>
-                    </form>
-                </div>
+
+                    </div>
+                    <div class="modal-footer bg-light border-top py-3 px-4 flex-shrink-0 d-flex justify-content-between align-items-center">
+                        <div>
+                            <button type="button" class="btn btn-outline-danger rounded-pill px-3.5 py-2 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#dashboardAuditRejectModal{{ $rep->id }}">
+                                <i class="fa-solid fa-ban me-1.5"></i> Reject Replenishment Cycle
+                            </button>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-light border rounded-pill px-4 py-2 text-secondary fw-semibold" data-bs-dismiss="modal">Close</button>
+                            <button type="submit" class="btn btn-success rounded-pill px-4 py-2 fw-bold shadow-sm" onclick="return confirm('Pass Audit & Send Replenishment #{{ $rep->request_no }} to GM for Approval?')">
+                                <i class="fa-solid fa-paper-plane me-1.5"></i> Pass Audit &amp; Send to GM for Approval
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
 
         <!-- 2. Audit Rejection Modal -->
         <div class="modal fade" id="dashboardAuditRejectModal{{ $rep->id }}" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-                <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                    <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/audit-reject') }}" class="d-flex flex-column h-100 mb-0">
-                        @csrf
-                        <div class="modal-header bg-danger text-white py-3 px-4 flex-shrink-0">
-                            <h5 class="modal-title fw-bold mb-0"><i class="fa-solid fa-shield-xmark me-2"></i>Audit Reject: #{{ $rep->request_no }}</h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <form method="POST" action="{{ url('/assigned-accounts/' . $rep->chart_of_account_id . '/replenishments/' . $rep->id . '/audit-reject') }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                    @csrf
+                    <div class="modal-header bg-danger text-white py-3 px-4 flex-shrink-0">
+                        <h5 class="modal-title fw-bold mb-0"><i class="fa-solid fa-shield-xmark me-2"></i>Audit Reject: #{{ $rep->request_no }}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white flex-grow-1" style="overflow-y: auto;">
+                        <p class="text-dark mb-2">Specify the internal audit findings / reasons for rejecting <strong>{{ $rep->requester->name ?? 'Staff' }}</strong>'s replenishment request:</p>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-dark text-uppercase">Audit Rejection Reason <span class="text-danger">*</span></label>
+                            <textarea name="rejection_reason" class="form-control" rows="4" placeholder="e.g. Non-compliant expense receipts, missing supporting documentation, exceeded spending ceiling..." required></textarea>
                         </div>
-                        <div class="modal-body p-4 bg-white flex-grow-1" style="overflow-y: auto;">
-                            <p class="text-dark mb-2">Specify the internal audit findings / reasons for rejecting <strong>{{ $rep->requester->name ?? 'Staff' }}</strong>'s replenishment request:</p>
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-dark text-uppercase">Audit Rejection Reason <span class="text-danger">*</span></label>
-                                <textarea name="rejection_reason" class="form-control" rows="4" placeholder="e.g. Non-compliant expense receipts, missing supporting documentation, exceeded spending ceiling..." required></textarea>
-                            </div>
-                        </div>
-                        <div class="modal-footer bg-light border-top py-3 px-4 flex-shrink-0">
-                            <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-danger rounded-pill px-4 fw-bold shadow-sm">
-                                <i class="fa-solid fa-ban me-1"></i> Confirm Audit Rejection
-                            </button>
-                        </div>
-                    </form>
-                </div>
+                    </div>
+                    <div class="modal-footer bg-light border-top py-3 px-4 flex-shrink-0 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-ban me-1"></i> Confirm Audit Rejection
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     @endforeach
