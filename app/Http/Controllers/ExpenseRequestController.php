@@ -542,6 +542,18 @@ class ExpenseRequestController extends Controller
                 'rejection_reason' => $reason,
             ]);
 
+            if (str_starts_with($expenseRequest->request_number, 'EXP-PCR-')) {
+                $pcrNo = substr($expenseRequest->request_number, 8);
+                $pcr = \App\Models\PettyCashReplenishment::where('request_no', $pcrNo)->first();
+                if ($pcr) {
+                    $pcr->update([
+                        'status' => \App\Models\PettyCashReplenishment::STATUS_REJECTED,
+                        'rejected_at' => now(),
+                        'rejection_reason' => 'GM Rejected: ' . $reason,
+                    ]);
+                }
+            }
+
             return back()->with('success', "Request #{$expenseRequest->request_number} rejected by GM.");
         }
 
@@ -553,7 +565,17 @@ class ExpenseRequestController extends Controller
             'gm_approved_at' => now(),
         ]);
 
-        return back()->with('success', "Request #{$expenseRequest->request_number} approved by GM and sent to Finance Head!");
+        if (str_starts_with($expenseRequest->request_number, 'EXP-PCR-')) {
+            $pcrNo = substr($expenseRequest->request_number, 8);
+            $pcr = \App\Models\PettyCashReplenishment::where('request_no', $pcrNo)->first();
+            if ($pcr) {
+                $pcr->update([
+                    'status' => \App\Models\PettyCashReplenishment::STATUS_PENDING,
+                ]);
+            }
+        }
+
+        return back()->with('success', "Request #{$expenseRequest->request_number} approved by GM and sent to Finance Head for disbursement!");
     }
 
     /**

@@ -729,6 +729,18 @@ class AssignedAccountController extends Controller
                 'fulfilled_at'          => now(),
             ]);
 
+            // Sync with ExpenseRequest if exists
+            $expReq = \App\Models\ExpenseRequest::where('request_number', 'EXP-PCR-' . $replenishment->request_no)->first();
+            if ($expReq) {
+                $expReq->update([
+                    'status'            => \App\Models\ExpenseRequest::STATUS_PAID,
+                    'paid_by'           => $authId,
+                    'paid_at'           => now(),
+                    'payment_reference' => $request->reference ?? $jeNo,
+                    'bank_account_id'   => \App\Models\BankAccount::where('coa_id', $sourceCoa->id)->value('id'),
+                ]);
+            }
+
             // 4. Log to Audit Trail / ActivityLog for Auditor oversight
             \App\Models\ActivityLog::log(
                 'approved',
@@ -894,32 +906,64 @@ class AssignedAccountController extends Controller
             ->firstOrFail();
 
         $request->validate([
-            'audit_notes' => 'nullable|string|max:2000',
+            'replenishment_amount' => 'nullable|numeric|min:0.01',
+            'audit_notes'          => 'nullable|string|max:2000',
         ]);
 
+        $approvedAmount = $request->filled('replenishment_amount') 
+            ? (float)$request->replenishment_amount 
+            : ((float)($replenishment->requested_amount ?: $replenishment->total_expenses_amount));
+
+        if ($approvedAmount <= 0) {
+            $approvedAmount = (float)$replenishment->total_expenses_amount;
+        }
+
         $replenishment->update([
-            'status'      => PettyCashReplenishment::STATUS_PENDING, // Ready for Finance Head fulfillment/disbursal
-            'audited_by'  => auth()->id(),
-            'audited_at'  => now(),
-            'audit_notes' => $request->audit_notes ?: $replenishment->audit_notes,
+            'requested_amount' => $approvedAmount,
+            'status'           => PettyCashReplenishment::STATUS_PENDING, // Ready for GM review / Finance Head fulfillment
+            'audited_by'       => auth()->id(),
+            'audited_at'       => now(),
+            'audit_notes'      => $request->audit_notes ?: $replenishment->audit_notes,
         ]);
+
+        // Route / Create Expense Request for GM Approval in Expense Approvals section
+        $expReqNumber = 'EXP-PCR-' . $replenishment->request_no;
+        \App\Models\ExpenseRequest::updateOrCreate(
+            [
+                'request_number' => $expReqNumber,
+            ],
+            [
+                'user_id'             => $replenishment->requested_by ?? auth()->id(),
+                'employee_id'         => $replenishment->requester?->employee?->id ?? null,
+                'category'            => \App\Models\ExpenseRequest::CATEGORY_OTHER,
+                'other_reason'        => 'Petty Cash Replenishment',
+                'amount'              => $approvedAmount,
+                'gross_amount'        => $approvedAmount,
+                'net_amount'          => $approvedAmount,
+                'description'         => "Petty Cash Replenishment #{$replenishment->request_no} for [{$account->code}] {$account->name}. Verified & Cleared by Internal Audit (" . (auth()->user()->name ?? 'Auditor') . ")." . ($request->audit_notes ? " Audit Remarks: " . $request->audit_notes : ""),
+                'status'              => \App\Models\ExpenseRequest::STATUS_PENDING_GM,
+                'chart_of_account_id' => $account->id,
+                'coa_id'              => $account->id,
+            ]
+        );
 
         \App\Models\ActivityLog::log(
             'audit_cleared',
-            "Petty Cash Replenishment #{$replenishment->request_no} cleared and approved by Internal Auditor " . (auth()->user()->name ?? 'Auditor') . ". Audit Notes: " . ($request->audit_notes ?? 'No observations.'),
+            "Petty Cash Replenishment #{$replenishment->request_no} cleared and approved by Internal Auditor " . (auth()->user()->name ?? 'Auditor') . " for ETB " . number_format($approvedAmount, 2) . " and routed to GM Expense Approvals queue. Audit Notes: " . ($request->audit_notes ?? 'No observations.'),
             'Finance & Petty Cash Audit',
             $replenishment,
             [
                 'request_no'       => $replenishment->request_no,
-                'requested_amount' => (float)$replenishment->requested_amount,
+                'requested_amount' => $approvedAmount,
                 'account'          => "[{$account->code}] {$account->name}",
                 'custodian'        => $replenishment->requester->name ?? 'Staff',
                 'auditor'          => auth()->user()->name ?? 'Auditor',
                 'audit_notes'      => $request->audit_notes,
+                'expense_request'  => $expReqNumber,
             ]
         );
 
-        return redirect()->back()->with('success', "Replenishment #{$replenishment->request_no} has been audited & cleared! Ready for Finance Head top-up disbursement.");
+        return redirect()->back()->with('success', "Replenishment #{$replenishment->request_no} (ETB " . number_format($approvedAmount, 2) . ") has been audited & sent to General Manager (GM) for approval in the Expense Approval section!");
     }
 
     /**

@@ -656,6 +656,40 @@
 
                         <hr class="my-4">
 
+                        <!-- AUDIT VERIFIED REPLENISHMENT AMOUNT & ROUTING TO GM -->
+                        <div class="card border-primary border-opacity-25 bg-primary bg-opacity-10 p-3 mb-4 rounded-3">
+                            <div class="row g-3 align-items-center">
+                                <div class="col-md-7">
+                                    <label class="form-label small fw-bold text-dark text-uppercase mb-1">
+                                        <i class="fa-solid fa-coins text-warning me-1"></i> Verified Replenishment Amount (ETB) <span class="text-danger">*</span>
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white fw-bold text-primary">ETB</span>
+                                        <input type="number" step="0.01" min="0.01" name="replenishment_amount" class="form-control form-control-lg font-monospace fw-bold text-primary" value="{{ (float)($rep->requested_amount ?: $rep->total_expenses_amount) }}" required>
+                                    </div>
+                                    <small class="text-muted" style="font-size: 11px;">
+                                        Specify the audit-cleared top-up amount to route to the General Manager (GM) for approval in the Expense Approval section.
+                                    </small>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="p-2.5 bg-white rounded-3 border">
+                                        <div class="d-flex justify-content-between small text-muted mb-1">
+                                            <span>Total Valid Expenses:</span>
+                                            <span class="font-monospace fw-bold text-danger">ETB {{ number_format($rep->total_expenses_amount, 2) }}</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between small text-muted mb-1">
+                                            <span>Current Petty Cash:</span>
+                                            <span class="font-monospace fw-bold text-dark">ETB {{ number_format($rep->current_balance_at_request, 2) }}</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between small text-muted">
+                                            <span>Destination:</span>
+                                            <span class="badge bg-primary text-white"><i class="fa-solid fa-user-shield me-1"></i> GM Expense Approvals</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- AUDIT OBSERVATIONS & CLEARANCE REMARKS -->
                         <h6 class="fw-bold text-dark mb-2"><i class="fa-solid fa-clipboard-check text-info me-1"></i> Internal Audit Clearance Findings &amp; Observations</h6>
                         <div class="mb-3">
@@ -672,8 +706,8 @@
                         </div>
                         <div class="d-flex gap-2">
                             <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Close</button>
-                            <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm" onclick="return confirm('Grant Audit Clearance for Replenishment #{{ $rep->request_no }}?')">
-                                <i class="fa-solid fa-circle-check me-1"></i> Pass &amp; Clear Audit
+                            <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm" onclick="return confirm('Pass Audit & Send Replenishment #{{ $rep->request_no }} to GM for Approval?')">
+                                <i class="fa-solid fa-paper-plane me-1"></i> Pass Audit &amp; Ask Replacement to GM
                             </button>
                         </div>
                     </div>
