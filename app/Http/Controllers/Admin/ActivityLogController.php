@@ -52,7 +52,7 @@ class ActivityLogController extends Controller
 
     public function index(Request $request)
     {
-        $query = ActivityLog::with('user')->latest();
+        $query = ActivityLog::with(['user', 'subject'])->latest();
 
         if ($request->filled('user_id')) {
             $query->where('user_id', $request->user_id);
@@ -78,6 +78,16 @@ class ActivityLogController extends Controller
         $actions = ActivityLog::select('action')->distinct()->pluck('action');
         $modules = ActivityLog::select('module')->whereNotNull('module')->distinct()->pluck('module');
 
-        return view('admin.activity-logs.index', compact('logs', 'users', 'actions', 'modules'));
+        $underAuditReplenishments = collect();
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_replenishments')) {
+                $underAuditReplenishments = \App\Models\PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'reviewer', 'auditor', 'sourceCoa', 'items'])
+                    ->where('status', \App\Models\PettyCashReplenishment::STATUS_UNDER_AUDIT)
+                    ->latest()
+                    ->get();
+            }
+        } catch (\Throwable $e) {}
+
+        return view('admin.activity-logs.index', compact('logs', 'users', 'actions', 'modules', 'underAuditReplenishments'));
     }
 }
