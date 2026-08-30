@@ -1168,10 +1168,12 @@ class AssignedAccountController extends Controller
 
         $query = PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'financeHead', 'sourceCoa', 'items']);
 
-        // Quick Filter Tabs
+        // Quick Filter Tabs: 'pending' (Finance Head queue) vs 'history' (All processed/in-progress cycles)
         $activeTab = $request->input('tab', 'pending');
         if ($activeTab === 'pending') {
             $query->where('status', PettyCashReplenishment::STATUS_PENDING);
+        } elseif ($activeTab === 'history') {
+            $query->where('status', '!=', PettyCashReplenishment::STATUS_PENDING);
         } elseif ($activeTab === 'under_audit') {
             $query->where('status', PettyCashReplenishment::STATUS_UNDER_AUDIT);
         } elseif ($activeTab === 'fulfilled') {
@@ -1210,6 +1212,7 @@ class AssignedAccountController extends Controller
         $tabCounts = [
             'all'         => PettyCashReplenishment::count(),
             'pending'     => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_PENDING)->count(),
+            'history'     => PettyCashReplenishment::where('status', '!=', PettyCashReplenishment::STATUS_PENDING)->count(),
             'under_audit' => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_UNDER_AUDIT)->count(),
             'fulfilled'   => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_FULFILLED)->count(),
             'rejected'    => PettyCashReplenishment::where('status', PettyCashReplenishment::STATUS_REJECTED)->count(),

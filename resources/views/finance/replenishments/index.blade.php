@@ -63,92 +63,22 @@
         </div>
     </div>
 
-    <!-- KPI Summary Row -->
-    <div class="row g-3 mb-4">
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white" style="border-left: 5px solid #f59e0b !important;">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <span class="text-xs fw-bold text-uppercase text-warning" style="font-size:0.72rem; letter-spacing:0.5px;">Pending Finance Review</span>
-                        <h3 class="fw-bold text-dark mb-0 mt-1">{{ $tabCounts['pending'] }} <span class="fs-6 text-muted fw-normal">Requests</span></h3>
-                        <small class="text-danger fw-semibold">Total: ETB {{ number_format($pendingAmount, 2) }}</small>
-                    </div>
-                    <div class="p-3 rounded-circle" style="background: rgba(245, 158, 11, 0.1);">
-                        <i class="fa-solid fa-clock fa-2x text-warning"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white" style="border-left: 5px solid #0284c7 !important;">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <span class="text-xs fw-bold text-uppercase text-info" style="font-size:0.72rem; letter-spacing:0.5px;">Under Audit</span>
-                        <h3 class="fw-bold text-dark mb-0 mt-1">{{ $tabCounts['under_audit'] ?? 0 }} <span class="fs-6 text-muted fw-normal">In Review</span></h3>
-                        <small class="text-muted">Routed to Internal Audit</small>
-                    </div>
-                    <div class="p-3 rounded-circle" style="background: rgba(2, 132, 199, 0.1);">
-                        <i class="fa-solid fa-magnifying-glass fa-2x text-info"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white" style="border-left: 5px solid #10b981 !important;">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <span class="text-xs fw-bold text-uppercase text-success" style="font-size:0.72rem; letter-spacing:0.5px;">Fulfilled This Month</span>
-                        <h3 class="fw-bold text-dark mb-0 mt-1">{{ $tabCounts['fulfilled'] }} <span class="fs-6 text-muted fw-normal">Completed</span></h3>
-                        <small class="text-success fw-semibold">Disbursed: ETB {{ number_format($fulfilledMonthAmount, 2) }}</small>
-                    </div>
-                    <div class="p-3 rounded-circle" style="background: rgba(16, 185, 129, 0.1);">
-                        <i class="fa-solid fa-circle-check fa-2x text-success"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white" style="border-left: 5px solid #6366f1 !important;">
-                <div class="d-flex align-items-center justify-content-between">
-                    <div>
-                        <span class="text-xs fw-bold text-uppercase text-primary" style="font-size:0.72rem; letter-spacing:0.5px;">All Cycles</span>
-                        <h3 class="fw-bold text-dark mb-0 mt-1">{{ $tabCounts['all'] }} <span class="fs-6 text-muted fw-normal">Total</span></h3>
-                        <small class="text-muted">Imprest Replenishments</small>
-                    </div>
-                    <div class="p-3 rounded-circle" style="background: rgba(99, 102, 241, 0.1);">
-                        <i class="fa-solid fa-receipt fa-2x text-primary"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Quick Navigation Tabs -->
+    <!-- Quick Navigation Tabs: Pending Review vs History -->
     <div class="card border-0 shadow-sm mb-4 rounded-4 overflow-hidden">
         <div class="card-body p-2 bg-light">
-            <ul class="nav nav-pills nav-fill gap-1 flex-nowrap overflow-auto" style="white-space: nowrap;">
+            <ul class="nav nav-pills nav-fill gap-2 flex-nowrap overflow-auto" style="white-space: nowrap;">
                 <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'pending' ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
+                    <a class="nav-link rounded-3 fw-bold py-2.5 {{ $activeTab === 'pending' ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'pending', 'page' => 1]) }}">
-                        <i class="fa-solid fa-hourglass-half me-1"></i> Pending Review
-                        <span class="badge {{ $activeTab === 'pending' ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1">{{ $tabCounts['pending'] }}</span>
+                        <i class="fa-solid fa-hourglass-half me-1.5 text-dark"></i> Pending Finance Review
+                        <span class="badge {{ $activeTab === 'pending' ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1.5 px-2.5 py-1">{{ $tabCounts['pending'] }}</span>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'under_audit' ? 'active shadow-sm bg-info text-white' : 'text-secondary bg-white' }}" 
-                       href="{{ request()->fullUrlWithQuery(['tab' => 'under_audit', 'page' => 1]) }}">
-                        <i class="fa-solid fa-magnifying-glass me-1"></i> Under Audit
-                        <span class="badge {{ $activeTab === 'under_audit' ? 'bg-dark text-white' : 'bg-info text-dark' }} ms-1">{{ $tabCounts['under_audit'] ?? 0 }}</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-semibold py-2 {{ $activeTab === 'fulfilled' ? 'active shadow-sm bg-success text-white' : 'text-secondary bg-white' }}" 
-                       href="{{ request()->fullUrlWithQuery(['tab' => 'fulfilled', 'page' => 1]) }}">
-                        <i class="fa-solid fa-circle-check me-1"></i> Fulfilled &amp; Disbursed
-                        <span class="badge {{ $activeTab === 'fulfilled' ? 'bg-white text-success' : 'bg-success text-white' }} ms-1">{{ $tabCounts['fulfilled'] }}</span>
+                    <a class="nav-link rounded-3 fw-bold py-2.5 {{ $activeTab === 'history' ? 'active shadow-sm bg-primary text-white' : 'text-secondary bg-white' }}" 
+                       href="{{ request()->fullUrlWithQuery(['tab' => 'history', 'page' => 1]) }}">
+                        <i class="fa-solid fa-clock-rotate-left me-1.5"></i> Replenishment History &amp; Cycles
+                        <span class="badge {{ $activeTab === 'history' ? 'bg-white text-primary' : 'bg-secondary text-white' }} ms-1.5 px-2.5 py-1">{{ $tabCounts['history'] }}</span>
                     </a>
                 </li>
             </ul>
@@ -156,13 +86,13 @@
     </div>
 
     <!-- Search & Filter Card -->
-    <div class="card border-0 shadow-sm mb-4 rounded-4">
+    <div class="card border-0 shadow-sm mb-4 rounded-4 bg-white">
         <div class="card-body p-3">
             <form method="GET" action="{{ route('finance.replenishments.index') }}" class="row g-2 align-items-end">
                 <input type="hidden" name="tab" value="{{ $activeTab }}">
                 
                 <div class="col-md-5">
-                    <label class="form-label small text-muted mb-1 fw-bold">Search</label>
+                    <label class="form-label small text-muted mb-1 fw-bold text-uppercase" style="font-size: 11px;">Search</label>
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
                         <input type="text" name="search" class="form-control border-start-0" placeholder="Request #, custodian name, account..." value="{{ request('search') }}">
@@ -170,7 +100,7 @@
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label small text-muted mb-1 fw-bold">Date Range</label>
+                    <label class="form-label small text-muted mb-1 fw-bold text-uppercase" style="font-size: 11px;">Date Range</label>
                     <div class="d-flex gap-1">
                         <input type="date" name="date_from" class="form-control form-control-sm" value="{{ request('date_from') }}">
                         <input type="date" name="date_to" class="form-control form-control-sm" value="{{ request('date_to') }}">
@@ -190,11 +120,11 @@
     </div>
 
     <!-- Replenishments Table Card -->
-    <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-light text-muted small text-uppercase">
+                    <thead class="bg-light text-muted small text-uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;">
                         <tr>
                             <th class="ps-4 py-3">Request # &amp; Date</th>
                             <th class="py-3">Custodian / Staff</th>
@@ -243,7 +173,7 @@
                                         </span>
                                     @elseif($rep->status === 'under_audit')
                                         <span class="badge bg-info text-white rounded-pill px-3 py-1.5 font-monospace">
-                                            <i class="fa-solid fa-magnifying-glass me-1"></i>Under Audit
+                                            <i class="fa-solid fa-shield-halved me-1"></i>Under Internal Audit
                                         </span>
                                     @elseif($rep->status === 'fulfilled')
                                         <span class="badge bg-success text-white rounded-pill px-3 py-1.5 font-monospace">
@@ -253,30 +183,29 @@
                                         <span class="badge bg-danger text-white rounded-pill px-3 py-1.5 font-monospace">
                                             <i class="fa-solid fa-circle-xmark me-1"></i>Rejected
                                         </span>
+                                    @else
+                                        <span class="badge bg-secondary text-white rounded-pill px-3 py-1.5 font-monospace">
+                                            {{ ucfirst($rep->status) }}
+                                        </span>
                                     @endif
                                 </td>
                                 <td class="pe-4 py-3 text-end">
-                                    <div class="btn-group btn-group-sm shadow-xs">
-                                        @if($rep->status === 'under_audit' && auth()->check() && auth()->user()->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'admin', 'global_admin', 'Finance head', 'finance_head', 'finance_manager']))
-                                            <button type="button" class="btn btn-info text-white fw-bold px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#auditDecisionModal{{ $rep->id }}" title="Audit Review & Decision">
-                                                <i class="fa-solid fa-shield-halved me-1"></i> Audit Review &amp; Decision
-                                            </button>
-                                            <button type="button" class="btn btn-outline-danger px-2.5" data-bs-toggle="modal" data-bs-target="#auditRejectModal{{ $rep->id }}" title="Reject Replenishment Cycle">
-                                                <i class="fa-solid fa-times text-danger"></i>
-                                            </button>
-                                        @elseif($rep->status === 'pending' && auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']))
-                                            <button type="button" class="btn btn-success text-white fw-bold px-3" data-bs-toggle="modal" data-bs-target="#reviewModal{{ $rep->id }}" title="Review Vouchers and Send to Audit">
+                                    @if($rep->status === 'pending')
+                                        <div class="d-flex justify-content-end gap-1.5">
+                                            <button type="button" class="btn btn-sm btn-success rounded-pill px-3 py-1.5 fw-bold shadow-xs" data-bs-toggle="modal" data-bs-target="#reviewModal{{ $rep->id }}" title="Review Vouchers and Send to Audit">
                                                 <i class="fa-solid fa-magnifying-glass-dollar me-1"></i> Review &amp; Send to Audit
                                             </button>
-                                            <button type="button" class="btn btn-outline-danger px-2.5" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $rep->id }}" title="Reject Replenishment Cycle">
-                                                <i class="fa-solid fa-times text-danger"></i>
+                                            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1.5" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $rep->id }}" title="Reject Replenishment Cycle">
+                                                <i class="fa-solid fa-ban"></i>
                                             </button>
-                                        @else
-                                            <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#viewModal{{ $rep->id }}" title="Audit & View Details">
-                                                <i class="fa-solid fa-eye text-primary me-1"></i> Audit Details
+                                        </div>
+                                    @else
+                                        <div class="d-flex justify-content-end gap-1.5">
+                                            <button type="button" class="btn btn-sm btn-light border rounded-pill px-3 py-1.5 text-dark fw-semibold shadow-xs" data-bs-toggle="modal" data-bs-target="#viewModal{{ $rep->id }}" title="View Details">
+                                                <i class="fa-solid fa-eye text-primary me-1"></i> View Details
                                             </button>
-                                        @endif
-                                    </div>
+                                        </div>
+                                    @endif
                                 </td>
                             </tr>
 
@@ -284,7 +213,7 @@
                             <tr>
                                 <td colspan="7" class="text-center py-5 text-muted">
                                     <i class="fa-solid fa-inbox fa-3x mb-3 opacity-25"></i>
-                                    <p class="mb-0 fw-semibold">No petty cash replenishment requests found in this view.</p>
+                                    <p class="mb-0 fw-semibold">No replenishment requests found in this view.</p>
                                 </td>
                             </tr>
                         @endforelse
