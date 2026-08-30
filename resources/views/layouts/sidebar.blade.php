@@ -92,7 +92,7 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.audit') || request()->is('finance/replenishments*') ? 'active' : '' }}">
+            <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" class="sidebar-nav-link {{ request()->is('finance/replenishments*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
                 <span>Petty Cash Audit &amp; Approvals</span>
                 @php

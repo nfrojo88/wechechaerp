@@ -1165,17 +1165,18 @@ class AssignedAccountController extends Controller
             abort(403, 'Unauthorized. Only Finance Head, Auditor, or Admin can access the Replenishments Hub.');
         }
 
+        $query = PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'financeHead', 'reviewer', 'auditor', 'sourceCoa', 'items']);
 
-        $query = PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'financeHead', 'sourceCoa', 'items']);
+        // Default tab: 'under_audit' for Auditor (their primary action queue), 'pending' for Finance Head
+        $defaultTab = ($isAuditor && !$isFinanceHead) ? 'under_audit' : 'pending';
+        $activeTab = $request->input('tab', $defaultTab);
 
-        // Quick Filter Tabs: 'pending' (Finance Head queue) vs 'history' (All processed/in-progress cycles)
-        $activeTab = $request->input('tab', 'pending');
-        if ($activeTab === 'pending') {
+        if ($activeTab === 'under_audit') {
+            $query->where('status', PettyCashReplenishment::STATUS_UNDER_AUDIT);
+        } elseif ($activeTab === 'pending') {
             $query->where('status', PettyCashReplenishment::STATUS_PENDING);
         } elseif ($activeTab === 'history') {
             $query->where('status', '!=', PettyCashReplenishment::STATUS_PENDING);
-        } elseif ($activeTab === 'under_audit') {
-            $query->where('status', PettyCashReplenishment::STATUS_UNDER_AUDIT);
         } elseif ($activeTab === 'fulfilled') {
             $query->where('status', PettyCashReplenishment::STATUS_FULFILLED);
         } elseif ($activeTab === 'rejected') {

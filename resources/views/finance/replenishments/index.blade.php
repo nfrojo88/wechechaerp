@@ -1,5 +1,10 @@
 @extends('layouts.app')
-@section('title', 'Petty Cash Replenishment Approvals - Finance Head')
+@php
+    $authUser = auth()->user();
+    $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+    $isAuditor = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
+@endphp
+@section('title', $isAuditor ? 'Petty Cash Audit & Clearance' : 'Petty Cash Replenishment Approvals - Finance Head')
 
 @section('content')
 <style>
@@ -44,43 +49,83 @@
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
             <div class="d-flex align-items-center gap-2">
-                <div class="p-2.5 rounded-3 text-white shadow-sm" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
-                    <i class="fa-solid fa-hand-holding-dollar fa-lg"></i>
-                </div>
-                <div>
-                    <h1 class="h3 mb-0 fw-bold" style="color:var(--brand-800)">Petty Cash Replenishment Approvals</h1>
-                    <p class="text-muted small mb-0">Finance Head portal to review attached expense vouchers, verify cycles, request descriptions, and route to audit</p>
-                </div>
+                @if($isAuditor)
+                    <div class="p-2.5 rounded-3 text-white shadow-sm" style="background: linear-gradient(135deg, #0284c7, #0369a1);">
+                        <i class="fa-solid fa-shield-halved fa-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="h3 mb-0 fw-bold" style="color:var(--brand-800)">Petty Cash Audit &amp; Approvals</h1>
+                        <p class="text-muted small mb-0">Internal Audit portal to review attached expense vouchers, verify compliance, and pass to GM for approval</p>
+                    </div>
+                @else
+                    <div class="p-2.5 rounded-3 text-white shadow-sm" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                        <i class="fa-solid fa-hand-holding-dollar fa-lg"></i>
+                    </div>
+                    <div>
+                        <h1 class="h3 mb-0 fw-bold" style="color:var(--brand-800)">Petty Cash Replenishment Approvals</h1>
+                        <p class="text-muted small mb-0">Finance Head portal to review attached expense vouchers, verify cycles, request descriptions, and route to audit</p>
+                    </div>
+                @endif
             </div>
         </div>
         <div class="d-flex gap-2">
-            <a href="{{ route('assigned-accounts.index') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-briefcase me-1"></i> My Assigned Accounts
-            </a>
+            @if($isAuditor)
+                <a href="{{ route('dashboard.audit') }}" class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-xs">
+                    <i class="fa-solid fa-chart-pie me-1"></i> Audit Dashboard
+                </a>
+            @else
+                <a href="{{ route('assigned-accounts.index') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
+                    <i class="fa-solid fa-briefcase me-1"></i> My Assigned Accounts
+                </a>
+            @endif
             <a href="{{ route('expenses.index') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-file-invoice-dollar me-1"></i> Expense Hub
             </a>
         </div>
     </div>
 
-    <!-- Quick Navigation Tabs: Pending Review vs History -->
+    <!-- Quick Navigation Tabs -->
     <div class="card border-0 shadow-sm mb-4 rounded-4 overflow-hidden">
         <div class="card-body p-2 bg-light">
             <ul class="nav nav-pills nav-fill gap-2 flex-nowrap overflow-auto" style="white-space: nowrap;">
-                <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-bold py-2.5 {{ $activeTab === 'pending' ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
-                       href="{{ request()->fullUrlWithQuery(['tab' => 'pending', 'page' => 1]) }}">
-                        <i class="fa-solid fa-hourglass-half me-1.5 text-dark"></i> Pending Finance Review
-                        <span class="badge {{ $activeTab === 'pending' ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1.5 px-2.5 py-1">{{ $tabCounts['pending'] }}</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link rounded-3 fw-bold py-2.5 {{ $activeTab === 'history' ? 'active shadow-sm bg-primary text-white' : 'text-secondary bg-white' }}" 
-                       href="{{ request()->fullUrlWithQuery(['tab' => 'history', 'page' => 1]) }}">
-                        <i class="fa-solid fa-clock-rotate-left me-1.5"></i> Replenishment History &amp; Cycles
-                        <span class="badge {{ $activeTab === 'history' ? 'bg-white text-primary' : 'bg-secondary text-white' }} ms-1.5 px-2.5 py-1">{{ $tabCounts['history'] }}</span>
-                    </a>
-                </li>
+                @if($isAuditor)
+                    <li class="nav-item">
+                        <a class="nav-link rounded-3 fw-bold py-2.5 {{ $activeTab === 'under_audit' ? 'active shadow-sm bg-info text-white' : 'text-secondary bg-white' }}" 
+                           href="{{ request()->fullUrlWithQuery(['tab' => 'under_audit', 'page' => 1]) }}">
+                            <i class="fa-solid fa-shield-halved me-1.5"></i> Awaiting Audit Clearance
+                            <span class="badge {{ $activeTab === 'under_audit' ? 'bg-white text-info' : 'bg-info text-white' }} ms-1.5 px-2.5 py-1">{{ $tabCounts['under_audit'] }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link rounded-3 fw-bold py-2.5 {{ $activeTab === 'pending' ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
+                           href="{{ request()->fullUrlWithQuery(['tab' => 'pending', 'page' => 1]) }}">
+                            <i class="fa-solid fa-hourglass-half me-1.5 text-dark"></i> Pending Finance Review
+                            <span class="badge {{ $activeTab === 'pending' ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1.5 px-2.5 py-1">{{ $tabCounts['pending'] }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link rounded-3 fw-bold py-2.5 {{ $activeTab === 'history' ? 'active shadow-sm bg-primary text-white' : 'text-secondary bg-white' }}" 
+                           href="{{ request()->fullUrlWithQuery(['tab' => 'history', 'page' => 1]) }}">
+                            <i class="fa-solid fa-clock-rotate-left me-1.5"></i> Replenishment History &amp; Cycles
+                            <span class="badge {{ $activeTab === 'history' ? 'bg-white text-primary' : 'bg-secondary text-white' }} ms-1.5 px-2.5 py-1">{{ $tabCounts['history'] }}</span>
+                        </a>
+                    </li>
+                @else
+                    <li class="nav-item">
+                        <a class="nav-link rounded-3 fw-bold py-2.5 {{ $activeTab === 'pending' ? 'active shadow-sm bg-warning text-dark' : 'text-secondary bg-white' }}" 
+                           href="{{ request()->fullUrlWithQuery(['tab' => 'pending', 'page' => 1]) }}">
+                            <i class="fa-solid fa-hourglass-half me-1.5 text-dark"></i> Pending Finance Review
+                            <span class="badge {{ $activeTab === 'pending' ? 'bg-dark text-white' : 'bg-warning text-dark' }} ms-1.5 px-2.5 py-1">{{ $tabCounts['pending'] }}</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link rounded-3 fw-bold py-2.5 {{ $activeTab === 'history' ? 'active shadow-sm bg-primary text-white' : 'text-secondary bg-white' }}" 
+                           href="{{ request()->fullUrlWithQuery(['tab' => 'history', 'page' => 1]) }}">
+                            <i class="fa-solid fa-clock-rotate-left me-1.5"></i> Replenishment History &amp; Cycles
+                            <span class="badge {{ $activeTab === 'history' ? 'bg-white text-primary' : 'bg-secondary text-white' }} ms-1.5 px-2.5 py-1">{{ $tabCounts['history'] }}</span>
+                        </a>
+                    </li>
+                @endif
             </ul>
         </div>
     </div>
@@ -169,7 +214,7 @@
                                 <td class="py-3 text-center">
                                     @if($rep->status === 'pending')
                                         <span class="badge bg-warning text-dark rounded-pill px-3 py-1.5 font-monospace">
-                                            <i class="fa-solid fa-clock me-1"></i>Pending Review
+                                            <i class="fa-solid fa-clock me-1"></i>Pending Finance Review
                                         </span>
                                     @elseif($rep->status === 'under_audit')
                                         <span class="badge bg-info text-white rounded-pill px-3 py-1.5 font-monospace">
@@ -190,7 +235,16 @@
                                     @endif
                                 </td>
                                 <td class="pe-4 py-3 text-end">
-                                    @if($rep->status === 'pending')
+                                    @if($rep->status === 'under_audit' && $isAuditor)
+                                        <div class="d-flex justify-content-end gap-1.5">
+                                            <button type="button" class="btn btn-sm btn-info text-white rounded-pill px-3 py-1.5 fw-bold shadow-xs" data-bs-toggle="modal" data-bs-target="#auditDecisionModal{{ $rep->id }}" title="Audit Review & Clearance Decision">
+                                                <i class="fa-solid fa-shield-halved me-1"></i> Review &amp; Decision
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1.5" data-bs-toggle="modal" data-bs-target="#auditRejectModal{{ $rep->id }}" title="Reject Replenishment Cycle">
+                                                <i class="fa-solid fa-ban"></i>
+                                            </button>
+                                        </div>
+                                    @elseif($rep->status === 'pending' && !$isAuditor)
                                         <div class="d-flex justify-content-end gap-1.5">
                                             <button type="button" class="btn btn-sm btn-success rounded-pill px-3 py-1.5 fw-bold shadow-xs" data-bs-toggle="modal" data-bs-target="#reviewModal{{ $rep->id }}" title="Review Vouchers and Send to Audit">
                                                 <i class="fa-solid fa-magnifying-glass-dollar me-1"></i> Review &amp; Send to Audit
