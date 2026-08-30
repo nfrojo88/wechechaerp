@@ -10,22 +10,19 @@
     $isHrManager = in_array('hr_manager', $rawUserRoles);
     $isCoordinator = in_array('coordinator', $rawUserRoles);
     $isStoreManager = in_array('store_manager', $rawUserRoles);
-    $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles);
+    $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
 @endphp
 
 <div class="sidebar-scroll">
     <ul class="sidebar-nav">
 
-        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser))
+        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isAuditorUser))
         @php
             $isGmUser = auth()->check() && (auth()->user()->hasAnyRole(['gm', 'general_manager', 'General Manager', 'GM']) || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles));
             $isFinanceUser = auth()->check() && auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance', 'Finance', 'finance_manager', 'cashier', 'accountant']);
             $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard') ? route('dashboard') : url('/dashboard');
             $dashTitle = 'Dashboard';
-            if ($isAuditorUser) {
-                $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit');
-                $dashTitle = 'Audit Dashboard';
-            } elseif ($isGmUser) {
+            if ($isGmUser) {
                 $dashUrl = \Illuminate\Support\Facades\Route::has('dashboard.gm') ? route('dashboard.gm') : url('/dashboard/gm');
                 $dashTitle = 'GM Dashboard & Analytics';
             } elseif ($isFinanceUser) {
@@ -78,6 +75,61 @@
                 @if($gsPendingDriverCount > 0)
                     <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $gsPendingDriverCount }}</span>
                 @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.create') || request()->routeIs('leave-requests.my-requests') ? 'active' : '' }}">
+                <i class="fa-solid fa-calendar-plus text-info"></i>
+                <span>Ask / Request Leave</span>
+            </a>
+        </li>
+        @elseif($isAuditorUser)
+        {{-- Clean & Dedicated Auditor Workspace --}}
+        <li class="sidebar-nav-item">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.audit') || request()->routeIs('dashboard') ? 'active' : '' }}">
+                <i class="fa-solid fa-chart-pie text-info"></i>
+                <span>Audit Dashboard</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('finance.replenishments.index') ? route('finance.replenishments.index') : url('/finance/replenishments') }}" class="sidebar-nav-link {{ request()->is('finance/replenishments*') ? 'active' : '' }}">
+                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                <span>Petty Cash Audit &amp; Approvals</span>
+                @php
+                    $pendingAudReplenishCount = 0;
+                    try {
+                        if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_replenishments')) {
+                            $pendingAudReplenishCount = \App\Models\PettyCashReplenishment::where('status', 'pending')->count();
+                        }
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingAudReplenishCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingAudReplenishCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-file-invoice-dollar text-success"></i>
+                <span>Expense &amp; Payment Audit</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-receipt text-danger"></i>
+                <span>VAT &amp; Withholding Tax</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('admin.activity-logs') }}" class="sidebar-nav-link {{ request()->routeIs('admin.activity-logs') ? 'active' : '' }}">
+                <i class="fa-solid fa-list-ol text-primary"></i>
+                <span>Audit &amp; Activity Trail</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-sitemap text-secondary"></i>
+                <span>Chart of Accounts (COA)</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -143,7 +195,7 @@
         </li>
         @endif
 
-        @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser)
+        @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser && !$isAuditorUser)
         <li class="sidebar-nav-item">
             <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-success"></i>
@@ -161,7 +213,7 @@
         </li>
         @endif
 
-        @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser)
+        @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser && !$isAuditorUser)
         <li class="sidebar-nav-item">
             <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-envelope-open-text text-primary"></i>
@@ -187,7 +239,7 @@
         @endif
 
         {{-- Ask / Request Leave (Visible to All Roles) --}}
-        @if(!$isSecretary && !$isGeneralServiceUser)
+        @if(!$isSecretary && !$isGeneralServiceUser && !$isAuditorUser)
         <li class="sidebar-nav-item">
             <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.create') || request()->routeIs('leave-requests.my-requests') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-plus text-info"></i>
@@ -1352,7 +1404,7 @@
         @endif
 
         {{-- Communication --}}
-
+        @if(!$isAuditorUser)
         <li class="sidebar-nav-item">
             <a href="{{ route('messages.index') }}" class="sidebar-nav-link {{ request()->routeIs('messages.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-envelope"></i>
@@ -1376,11 +1428,10 @@
                 @endif
             </a>
         </li>
-
-
+        @endif
 
         {{-- Admin --}}
-        @php $isAuditorUser = auth()->user()->hasAnyRole(['auditor', 'audit', 'internal_auditor']); @endphp
+        @php $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit'])); @endphp
         @if(auth()->check() && !$isAuditorUser && (auth()->user()->hasAnyRole(['global_admin', 'admin']) || auth()->user()->canAny(['users.view', 'users.*', 'settings.view', 'settings.*'])))
         @canany(['users.view', 'users.*'])
         <li class="sidebar-nav-item">
@@ -1436,7 +1487,7 @@
         @endcanany
         @endif
 
-        @if(auth()->check() && (auth()->user()->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'admin', 'global_admin']) || (method_exists(auth()->user(), 'can') && (auth()->user()->can('audit.view') || auth()->user()->can('finance.audit.view') || auth()->user()->can('admin.audit.view')))))
+        @if(auth()->check() && !$isAuditorUser && (auth()->user()->hasAnyRole(['admin', 'global_admin']) || (method_exists(auth()->user(), 'can') && (auth()->user()->can('audit.view') || auth()->user()->can('finance.audit.view') || auth()->user()->can('admin.audit.view')))))
         <li class="sidebar-nav-item sidebar-section-label" style="padding:8px 16px 4px; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; pointer-events:none; user-select:none;">Audit &amp; Compliance</li>
         <li class="sidebar-nav-item">
             <a href="{{ \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.audit') ? 'active' : '' }}">
