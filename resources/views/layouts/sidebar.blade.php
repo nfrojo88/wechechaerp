@@ -127,9 +127,27 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.create') || request()->routeIs('leave-requests.my-requests') ? 'active' : '' }}">
+            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-envelope-open-text text-primary"></i>
+                <span>Letters &amp; Correspondence</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ url('/expense-requests') }}" class="sidebar-nav-link {{ request()->is('expense-requests*') ? 'active' : '' }}">
+                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
+                <span>Ask Money (Expense Request)</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-plus text-info"></i>
                 <span>Ask / Request Leave</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('tickets.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-headset text-success"></i>
+                <span>Open Support Ticket</span>
             </a>
         </li>
         @endif
