@@ -459,6 +459,20 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                                 $probationAlertCount = $probationAlertEmployees->count();
                             } catch (\Throwable $e) {}
                         }
+
+                        $unreadLetterNotifications = collect();
+                        if (auth()->check()) {
+                            try {
+                                $unreadLetterNotifications = \App\Models\LetterNotification::with('letter')
+                                    ->where('user_id', auth()->id())
+                                    ->where('is_read', false)
+                                    ->latest()
+                                    ->take(5)
+                                    ->get();
+                            } catch (\Throwable $e) {}
+                        }
+
+                        $totalAlertCount = ($isHrOrGm ? $probationAlertCount : 0) + $unreadLetterNotifications->count();
                     @endphp
 
                     @if($isHrOrGm && $probationAlertCount > 0)
@@ -476,17 +490,15 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                     <div class="dropdown">
                         <a href="#" class="header-icon-btn position-relative" data-bs-toggle="dropdown">
                             <i class="fa-regular fa-bell"></i>
-                            @if($isHrOrGm && $probationAlertCount > 0)
+                            @if($totalAlertCount > 0)
                                 <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle"></span>
-                            @else
-                                <span class="header-badge"></span>
                             @endif
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 300px;">
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 300px; max-width: 360px;">
                             <li><h6 class="dropdown-header d-flex justify-content-between align-items-center">
                                 Notifications
-                                @if($isHrOrGm && $probationAlertCount > 0)
-                                    <span class="badge bg-warning text-dark">{{ $probationAlertCount }} Urgent</span>
+                                @if($totalAlertCount > 0)
+                                    <span class="badge bg-warning text-dark">{{ $totalAlertCount }} Urgent</span>
                                 @endif
                             </h6></li>
                             @if($isHrOrGm && $probationAlertCount > 0)
@@ -501,9 +513,36 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                                         </div>
                                     </a>
                                 </li>
-                                <li><hr class="dropdown-divider my-1"></li>
                             @endif
-                            <li><a class="dropdown-item text-muted small" href="{{ route('employees.index') }}">View All Employees</a></li>
+
+                            @if($unreadLetterNotifications->isNotEmpty())
+                                @if($isHrOrGm && $probationAlertCount > 0)
+                                    <li><hr class="dropdown-divider my-1"></li>
+                                @endif
+                                @foreach($unreadLetterNotifications as $notif)
+                                    <li>
+                                        <a class="dropdown-item py-2" href="{{ $notif->letter_id ? route('letters.show', $notif->letter_id) : '#' }}">
+                                            <div class="d-flex align-items-start gap-2">
+                                                <i class="fa-solid fa-envelope-open-text text-primary mt-1"></i>
+                                                <div>
+                                                    <strong class="d-block text-dark font-size-13">{{ $notif->letter?->subject ?? 'New Letter Notification' }}</strong>
+                                                    <small class="text-muted text-wrap d-block">{{ \Illuminate\Support\Str::limit($notif->message, 70) }}</small>
+                                                    <small class="text-muted" style="font-size: 0.7rem;">{{ $notif->created_at?->diffForHumans() }}</small>
+                                                </div>
+                                            </div>
+                                        </a>
+                                    </li>
+                                @endforeach
+                            @endif
+
+                            @if($totalAlertCount === 0)
+                                <li>
+                                    <div class="text-center py-3 text-muted small">
+                                        <i class="fa-regular fa-bell-slash d-block mb-1 fs-5 text-muted opacity-50"></i>
+                                        No new notifications
+                                    </div>
+                                </li>
+                            @endif
                         </ul>
                     </div>
                     
