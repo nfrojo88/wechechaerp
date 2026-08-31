@@ -481,11 +481,16 @@
                             </label>
                             <select name="primary_keeper_id" class="form-select form-select-lg rounded-3">
                                 <option value="">-- Select Primary Store Keeper (Or Leave Unassigned) --</option>
-                                @foreach($allActiveUsers as $u)
+                                @foreach($storeKeepers as $u)
                                     <option value="{{ $u->id }}" {{ $store->manager_id == $u->id ? 'selected' : '' }}>
-                                        {{ $u->name }} ({{ $u->email }}) @if($u->store_id && $u->store_id != $store->id) [Currently assigned elsewhere] @endif
+                                        {{ $u->name }} ({{ $u->email }}) @if($u->store_id && $u->store_id != $store->id) [Assigned to {{ $u->store ? $u->store->name : 'Store #' . $u->store_id }}] @endif
                                     </option>
                                 @endforeach
+                                @if($store->manager && !$storeKeepers->contains('id', $store->manager->id))
+                                    <option value="{{ $store->manager->id }}" selected>
+                                        {{ $store->manager->name }} ({{ $store->manager->email }}) [Currently Assigned]
+                                    </option>
+                                @endif
                             </select>
                             <small class="text-muted d-block mt-1">
                                 The primary store keeper receives direct material transfers, incoming shipments, and material issue authorizations for this store.
@@ -501,15 +506,22 @@
                                 @php
                                     $currentAssignedIds = $store->users->pluck('id')->toArray();
                                 @endphp
-                                @foreach($allActiveUsers as $u)
+                                @forelse($storeKeepers as $u)
                                     <div class="form-check mb-2">
                                         <input class="form-check-input" type="checkbox" name="additional_keeper_ids[]" value="{{ $u->id }}" id="keeper_{{ $store->id }}_{{ $u->id }}"
                                             {{ in_array($u->id, $currentAssignedIds) && $store->manager_id != $u->id ? 'checked' : '' }}>
                                         <label class="form-check-label small text-dark" for="keeper_{{ $store->id }}_{{ $u->id }}">
                                             <strong>{{ $u->name }}</strong> <span class="text-muted">({{ $u->email }})</span>
+                                            @if($u->store_id && $u->store_id != $store->id)
+                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle ms-1" style="font-size:0.7rem;">Assigned elsewhere</span>
+                                            @endif
                                         </label>
                                     </div>
-                                @endforeach
+                                @empty
+                                    <div class="text-muted small py-2 text-center">
+                                        <i class="fa-solid fa-circle-exclamation me-1"></i> No users with Store Keeper role found.
+                                    </div>
+                                @endforelse
                             </div>
                             <small class="text-muted d-block mt-1">Assistant keepers will also have permission to record physical receipts and inventory movements for this store.</small>
                         </div>
@@ -638,7 +650,7 @@
                         <label class="form-label small fw-bold">Initial Assigned Primary Store Keeper (Optional)</label>
                         <select name="primary_keeper_id" class="form-select rounded-3">
                             <option value="">-- Assign Later --</option>
-                            @foreach($allActiveUsers as $u)
+                            @foreach($storeKeepers as $u)
                                 <option value="{{ $u->id }}">{{ $u->name }} ({{ $u->email }})</option>
                             @endforeach
                         </select>

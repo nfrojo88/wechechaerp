@@ -731,21 +731,35 @@ class StoreManagerController extends Controller
     public function materialRequests(Request $request)
     {
         $user = Auth::user();
-        $isStoreKeeper = $user && $user->hasRole('store_keeper');
+        $isStoreKeeper = $user && $user->hasRole('store_keeper') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'coordinator', 'planning_manager']);
         $assignedStore = null;
 
         $query = MaterialRequest::with(['project', 'requestedBy', 'items.product', 'maintenanceRequest']);
 
         if ($isStoreKeeper) {
-            $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
-            $storeId = $assignedStore?->id;
-            $projectId = $assignedStore?->project_id;
+            $assignedStore = $user->store
+                ?? Store::where('manager_id', $user->id)->first()
+                ?? Store::whereHas('users', fn($q) => $q->where('users.id', $user->id))->first();
 
-            if ($storeId || $projectId) {
-                $query->where(function ($q) use ($storeId, $projectId) {
-                    if ($storeId) $q->where('destination_store_id', $storeId);
-                    if ($projectId) $q->orWhere('project_id', $projectId);
+            $assignedStoreIds = collect([$user->store_id])
+                ->concat(Store::where('manager_id', $user->id)->pluck('id'))
+                ->concat(Store::whereHas('users', fn($q) => $q->where('users.id', $user->id))->pluck('id'))
+                ->filter()
+                ->unique();
+
+            $assignedProjectIds = Store::whereIn('id', $assignedStoreIds)->whereNotNull('project_id')->pluck('project_id')->unique();
+
+            if ($assignedStoreIds->isNotEmpty() || $assignedProjectIds->isNotEmpty()) {
+                $query->where(function ($q) use ($assignedStoreIds, $assignedProjectIds) {
+                    if ($assignedStoreIds->isNotEmpty()) {
+                        $q->whereIn('destination_store_id', $assignedStoreIds);
+                    }
+                    if ($assignedProjectIds->isNotEmpty()) {
+                        $q->orWhereIn('project_id', $assignedProjectIds);
+                    }
                 });
+            } else {
+                $query->whereRaw('1 = 0');
             }
         }
 
@@ -1289,22 +1303,13 @@ class StoreManagerController extends Controller
         // Projects for filters & create modal
         $projects = Project::where('status', 'active')->orderBy('name')->get();
 
-        // Candidates for Store Keepers (users with store_keeper role or all active users)
+        // Candidates for Store Keepers (strictly users with store_keeper role)
         $storeKeepers = User::with(['store', 'roles'])
             ->where('is_active', true)
-            ->where(function($q) {
-                $q->whereHas('roles', function($rq) {
-                    $rq->whereIn('name', ['store_keeper', 'storekeeper', 'Store Keeper']);
-                })
-                ->orWhereNotNull('store_id');
+            ->whereHas('roles', function($rq) {
+                $rq->whereIn('name', ['store_keeper', 'storekeeper', 'Store Keeper']);
             })
             ->orderBy('name')
-            ->get();
-
-        // All active users list for assignment dropdown (if store manager wants to assign someone else)
-        $allActiveUsers = User::where('is_active', true)
-            ->orderBy('name')
-            ->select('id', 'name', 'email', 'store_id')
             ->get();
 
         // Metrics
@@ -1319,7 +1324,6 @@ class StoreManagerController extends Controller
             'stores',
             'projects',
             'storeKeepers',
-            'allActiveUsers',
             'totalStoresCount',
             'assignedStoresCount',
             'unassignedStoresCount',

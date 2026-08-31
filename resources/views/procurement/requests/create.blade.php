@@ -104,47 +104,50 @@
 document.addEventListener('DOMContentLoaded', function() {
     const projectSelect = document.getElementById('projectSelect');
     const storeSelect = document.getElementById('storeSelect');
+    if (!projectSelect || !storeSelect) return;
+
+    // Cache original store options (excluding the placeholder)
+    const allStoreOptions = Array.from(storeSelect.querySelectorAll('option')).filter(opt => opt.value !== '');
 
     function syncProjectAndStore() {
-        if (!projectSelect || !storeSelect) return;
-
-        // If no project selected yet, try selecting the first available project option if present
-        if (!projectSelect.value && projectSelect.options.length > 1) {
+        // If no project selected yet and there is only 1 project option, auto-select it
+        if (!projectSelect.value && projectSelect.options.length === 2) {
             projectSelect.selectedIndex = 1;
         }
 
         const selectedProjectId = projectSelect.value;
-        if (!selectedProjectId) return;
+        const currentSelectedStoreId = storeSelect.value;
 
-        // Find store option matching data-project-id
-        let matchedStoreId = '';
-        for (let i = 0; i < storeSelect.options.length; i++) {
-            const opt = storeSelect.options[i];
-            if (opt.getAttribute('data-project-id') == selectedProjectId) {
-                matchedStoreId = opt.value;
-                break;
+        // Clear existing store options
+        storeSelect.innerHTML = '<option value="">— Select Receiving Store —</option>';
+
+        let matchingStoreCount = 0;
+        let exactMatchedStoreId = '';
+
+        allStoreOptions.forEach(opt => {
+            const storeProjId = opt.getAttribute('data-project-id');
+            // If project is chosen, only include stores linked to this project
+            if (!selectedProjectId || storeProjId === selectedProjectId || (!storeProjId && !selectedProjectId)) {
+                storeSelect.appendChild(opt.cloneNode(true));
+                matchingStoreCount++;
+                if (!exactMatchedStoreId && storeProjId === selectedProjectId) {
+                    exactMatchedStoreId = opt.value;
+                }
             }
-        }
+        });
 
-        // Fallback to data-store-id on the selected project option
-        if (!matchedStoreId) {
-            const selectedProjOpt = projectSelect.options[projectSelect.selectedIndex];
-            if (selectedProjOpt && selectedProjOpt.dataset.storeId) {
-                matchedStoreId = selectedProjOpt.dataset.storeId;
-            }
-        }
-
-        if (matchedStoreId) {
-            storeSelect.value = matchedStoreId;
-        } else if (!storeSelect.value && storeSelect.options.length > 1) {
+        // Try restoring previous selection if still available
+        if (currentSelectedStoreId && storeSelect.querySelector(`option[value="${currentSelectedStoreId}"]`)) {
+            storeSelect.value = currentSelectedStoreId;
+        } else if (exactMatchedStoreId) {
+            storeSelect.value = exactMatchedStoreId;
+        } else if (matchingStoreCount === 1) {
             storeSelect.selectedIndex = 1;
         }
     }
 
-    if (projectSelect && storeSelect) {
-        projectSelect.addEventListener('change', syncProjectAndStore);
-        syncProjectAndStore();
-    }
+    projectSelect.addEventListener('change', syncProjectAndStore);
+    syncProjectAndStore();
 });
 </script>
 @endpush

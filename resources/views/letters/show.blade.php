@@ -264,6 +264,9 @@
                                 </div>
                                 <div class="small text-muted">
                                     To: <strong class="text-dark">{{ $recipient->recipient_label }}</strong>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 0.68rem;">
+                                        <i class="fa-solid fa-mobile-screen me-1"></i>SMS Dispatched
+                                    </span>
                                 </div>
 
                                 @if($recipient->notes)

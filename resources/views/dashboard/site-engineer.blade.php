@@ -95,7 +95,6 @@
                 </div>
                 <div class="card-body">
                     <a href="{{ route('material-requests.create', ['source' => 'Emergency']) }}" class="btn btn-danger btn-block mb-2 font-weight-bold"><i class="fas fa-bolt mr-2"></i> Ask Emergency Material Request</a>
-                    <a href="{{ route('material-requests.create') }}" class="btn btn-primary btn-block mb-2"><i class="fas fa-plus mr-2"></i> New Standard Material Request</a>
                     <a href="{{ route('issues.create') }}" class="btn btn-secondary btn-block mb-2"><i class="fas fa-bug mr-2"></i> Report Issue</a>
                     <a href="{{ route('waste.create') }}" class="btn btn-warning btn-block mb-2"><i class="fas fa-trash mr-2"></i> Log Waste</a>
                     <a href="{{ route('attendance.create') }}" class="btn btn-success btn-block"><i class="fas fa-user-check mr-2"></i> Mark Attendance</a>

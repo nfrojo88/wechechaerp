@@ -31,6 +31,28 @@ class MaterialRequestController extends Controller
                 $q->whereIn('project_id', $assignedProjectIds->unique())
                   ->orWhere('created_by', $user->id);
             });
+        } elseif ($user && $user->hasRole('store_keeper') && !$user->hasAnyRole(['admin', 'global_admin', 'coordinator', 'store_manager', 'purchase_manager'])) {
+            // Scoped strictly to Store Keeper's assigned store(s) / project(s)
+            $assignedStoreIds = collect([$user->store_id])
+                ->concat(Store::where('manager_id', $user->id)->pluck('id'))
+                ->concat(Store::whereHas('users', fn($q) => $q->where('users.id', $user->id))->pluck('id'))
+                ->filter()
+                ->unique();
+
+            $assignedProjectIds = Store::whereIn('id', $assignedStoreIds)->whereNotNull('project_id')->pluck('project_id')->unique();
+
+            if ($assignedStoreIds->isNotEmpty() || $assignedProjectIds->isNotEmpty()) {
+                $query->where(function($q) use ($assignedStoreIds, $assignedProjectIds) {
+                    if ($assignedStoreIds->isNotEmpty()) {
+                        $q->whereIn('destination_store_id', $assignedStoreIds);
+                    }
+                    if ($assignedProjectIds->isNotEmpty()) {
+                        $q->orWhereIn('project_id', $assignedProjectIds);
+                    }
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         } elseif ($request->filled('status')) {
             $query->where('status', $request->query('status'));
         }
@@ -46,8 +68,10 @@ class MaterialRequestController extends Controller
         
         /** @var \App\Models\User|null $user */
         $user = auth()->user();
+        $isSiteEngineer = $user && $user->hasRole('site_engineer') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'purchase_manager', 'coordinator', 'planning_manager']);
+
         $projectsQuery = Project::where('status', '!=', 'cancelled')->with('stores');
-        if ($user && $user->hasRole('site_engineer') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'purchase_manager'])) {
+        if ($isSiteEngineer) {
             $assignedProjectIds = $user->projects()->pluck('projects.id');
             if ($user->employee?->project_id) {
                 $assignedProjectIds->push($user->employee->project_id);
@@ -59,11 +83,19 @@ class MaterialRequestController extends Controller
         }
         $projects = $projectsQuery->get();
 
-        $stores = Store::where('is_active', true);
-        if ($user && $user->store_id) {
-            $stores->where('id', $user->store_id);
+        $storesQuery = Store::where('is_active', true);
+        if ($isSiteEngineer) {
+            $projectIds = $projects->pluck('id')->toArray();
+            $storesQuery->where(function($q) use ($user, $projectIds) {
+                $q->whereIn('project_id', $projectIds);
+                if ($user->store_id) {
+                    $q->orWhere('id', $user->store_id);
+                }
+            });
+        } elseif ($user && $user->store_id) {
+            $storesQuery->where('id', $user->store_id);
         }
-        $stores = $stores->get();
+        $stores = $storesQuery->get();
 
         $selectedProjectId = $request->query('project_id');
         if (!$selectedProjectId && $user) {
@@ -80,10 +112,8 @@ class MaterialRequestController extends Controller
             $selectedStoreId = $stores->where('project_id', $selectedProjectId)->first()?->id
                 ?? $projects->where('id', $selectedProjectId)->first()?->stores->first()?->id;
         }
-        if (!$selectedStoreId && $user) {
-            $selectedStoreId = $user->store_id
-                ?? $user->employee?->project?->stores->first()?->id
-                ?? $user->projects()->first()?->stores->first()?->id;
+        if (!$selectedStoreId && $user && $user->store_id) {
+            $selectedStoreId = $user->store_id;
         }
         if (!$selectedStoreId && $stores->count() >= 1) {
             $selectedStoreId = $stores->first()->id;

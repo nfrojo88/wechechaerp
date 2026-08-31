@@ -7,9 +7,11 @@ use App\Models\LetterAttachment;
 use App\Models\LetterRecipient;
 use App\Models\LetterNotification;
 use App\Models\User;
+use App\Services\SmsEthiopiaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 
@@ -215,8 +217,15 @@ class LetterController extends Controller
                 'status'       => Letter::STATUS_PENDING,
             ]);
 
-            // 4. Create In-App Notifications for Target Users
-            $this->createNotificationsForRecipient($letter, $toUserId, $toRoleName, "New letter {$letter->letter_number} sent to you by {$user->name}: {$letter->subject}");
+            // 4. Create In-App Notifications & Send SMS for Target Users
+            $this->createNotificationsForRecipient(
+                $letter,
+                $toUserId,
+                $toRoleName,
+                "New letter {$letter->letter_number} sent to you by {$user->name}: {$letter->subject}",
+                'initial_sent',
+                $validated['initial_notes'] ?? null
+            );
 
             DB::commit();
 
@@ -323,12 +332,14 @@ class LetterController extends Controller
             // Update letter status to redirected
             $letter->update(['status' => Letter::STATUS_REDIRECTED]);
 
-            // Notify recipient(s)
+            // Notify recipient(s) & Send SMS
             $this->createNotificationsForRecipient(
                 $letter,
                 $toUserId,
                 $toRoleName,
-                "Letter {$letter->letter_number} was redirected to you by {$user->name}: {$validated['redirection_notes']}"
+                "Letter {$letter->letter_number} was redirected to you by {$user->name}: {$validated['redirection_notes']}",
+                'redirected',
+                $validated['redirection_notes'] ?? null
             );
 
             DB::commit();
@@ -515,32 +526,88 @@ class LetterController extends Controller
     }
 
     /**
-     * Helper: Create notifications for target user or role
+     * Helper: Create notifications for target user or role and send SMS alert
      */
-    private function createNotificationsForRecipient(Letter $letter, ?int $userId, ?string $roleName, string $message): void
+    private function createNotificationsForRecipient(Letter $letter, ?int $userId, ?string $roleName, string $message, string $actionType = 'initial_sent', ?string $notes = null): void
     {
+        $sender = Auth::user();
+        $senderName = $sender ? $sender->name : 'System';
+
         if ($userId) {
-            LetterNotification::create([
-                'user_id'   => $userId,
-                'letter_id' => $letter->id,
-                'message'   => $message,
-            ]);
+            $targetUser = User::with('employee')->find($userId);
+            if ($targetUser) {
+                LetterNotification::create([
+                    'user_id'   => $targetUser->id,
+                    'letter_id' => $letter->id,
+                    'message'   => $message,
+                ]);
+
+                // Send SMS notification
+                $this->sendLetterSms($targetUser, $letter, $senderName, $actionType, $notes);
+            }
             return;
         }
 
         if ($roleName) {
             try {
-                $roleUsers = User::role($roleName)->where('is_active', true)->get(['id']);
+                $roleUsers = User::role($roleName)->where('is_active', true)->with('employee')->get();
                 foreach ($roleUsers as $u) {
                     LetterNotification::create([
                         'user_id'   => $u->id,
                         'letter_id' => $letter->id,
                         'message'   => $message,
                     ]);
+
+                    $this->sendLetterSms($u, $letter, $senderName, $actionType, $notes);
                 }
             } catch (\Throwable $e) {
-                // If spatie role query fails, skip gracefully
+                Log::warning("Letter role notification error: " . $e->getMessage());
             }
         }
+    }
+
+    /**
+     * Send SMS notification to recipient user
+     */
+    private function sendLetterSms(User $user, Letter $letter, string $senderName, string $actionType = 'initial_sent', ?string $notes = null): void
+    {
+        try {
+            $phone = $this->getUserPhone($user);
+            if (empty($phone)) {
+                Log::info("Letter SMS skipped: No phone number registered for user {$user->name} (ID: {$user->id})");
+                return;
+            }
+
+            $smsService = app(SmsEthiopiaService::class);
+            $subjectSnippet = \Illuminate\Support\Str::limit($letter->subject, 50);
+
+            if ($actionType === 'redirected') {
+                $notesSnippet = $notes ? (' - Note: ' . \Illuminate\Support\Str::limit($notes, 40)) : '';
+                $smsMessage = "Wechacha Construction: Letter #{$letter->letter_number} ({$subjectSnippet}) was forwarded to you by {$senderName}{$notesSnippet}. Check ERP inbox: " . url('/letters/' . $letter->id);
+            } else {
+                $smsMessage = "Wechacha Construction: You have a new letter (#{$letter->letter_number}) in your ERP inbox from {$senderName}. Subject: {$subjectSnippet}. View: " . url('/letters/' . $letter->id);
+            }
+
+            $smsService->sendNotification($phone, $smsMessage);
+        } catch (\Throwable $e) {
+            Log::error("Failed to send letter SMS to user {$user->id}: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Resolve phone number for a user
+     */
+    private function getUserPhone(User $user): ?string
+    {
+        if (!empty($user->phone)) {
+            return $user->phone;
+        }
+        if ($user->employee && !empty($user->employee->phone)) {
+            return $user->employee->phone;
+        }
+
+        return \App\Models\Employee::where('user_id', $user->id)
+            ->orWhere('email', $user->email)
+            ->value('phone');
     }
 }

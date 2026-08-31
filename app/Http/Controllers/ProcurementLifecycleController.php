@@ -83,11 +83,21 @@ class ProcurementLifecycleController extends Controller
         // 3. Emergency / Pending MR approval queue for Planning Team
         $emergencyMrs = collect();
         if ($user->hasRole('planning') || $user->hasRole('planning_manager') || $isAdmin) {
-            $emergencyMrs = MaterialRequest::with(['project', 'creator', 'requestedBy'])
+            $emergencyMrs = MaterialRequest::with(['project', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product'])
                 ->where('planning_approval_status', 'pending')
                 ->latest()
                 ->get();
         }
+
+        // 4. Material & Maintenance Requisitions (Store & Procurement Phase)
+        $mrQuery = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
+            ->latest();
+
+        if ($request->filled('project_id')) {
+            $mrQuery->where('project_id', $request->project_id);
+        }
+
+        $materialRequestsQueue = $mrQuery->take(25)->get();
 
         $pendingOfficeCount = 0;
         $pendingStoreOfficeCount = 0;
@@ -95,12 +105,13 @@ class ProcurementLifecycleController extends Controller
 
         // 5. Summary Counters
         $kpi = [
-            'my_pending'                   => $myPrs->total(),
-            'emergency_mrs'                => $emergencyMrs->count(),
-            'pending_office_requests'      => $pendingOfficeCount,
-            'pending_store_office_requests'=> $pendingStoreOfficeCount,
-            'pending_finance_office_requests' => $pendingFinanceOfficeCount,
-            'completed'                    => PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(),
+            'my_pending'                     => $myPrs->total(),
+            'emergency_mrs'                  => $emergencyMrs->count(),
+            'material_requests_queue'        => $materialRequestsQueue->count(),
+            'pending_office_requests'        => $pendingOfficeCount,
+            'pending_store_office_requests'  => $pendingStoreOfficeCount,
+            'pending_finance_office_requests'=> $pendingFinanceOfficeCount,
+            'completed'                      => PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(),
         ];
 
         $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
@@ -108,6 +119,6 @@ class ProcurementLifecycleController extends Controller
             $projects = Project::orderBy('name')->get();
         }
 
-        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'kpi', 'projects', 'isHr', 'isCoordinator', 'isStoreManager', 'isPurchaseManager', 'isFinanceHead'));
+        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'materialRequestsQueue', 'kpi', 'projects', 'isHr', 'isCoordinator', 'isStoreManager', 'isPurchaseManager', 'isFinanceHead'));
     }
 }

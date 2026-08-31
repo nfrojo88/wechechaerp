@@ -448,9 +448,9 @@ class DashboardController extends Controller
                 ->get(), collect());
 
             // Site Material Requests for this store
-            $kpi['pending_requests'] = $this->safe(fn() => \App\Models\MaterialRequest::where('store_id', $storeId)->where('status', 'pending')->count(), 0);
+            $kpi['pending_requests'] = $this->safe(fn() => \App\Models\MaterialRequest::where('destination_store_id', $storeId)->whereIn('status', ['pending', 'sent_to_store_manager'])->count(), 0);
             $materialRequests = $this->safe(fn() => \App\Models\MaterialRequest::with(['project', 'requestedBy', 'items.product'])
-                ->where('store_id', $storeId)
+                ->where('destination_store_id', $storeId)
                 ->latest()
                 ->take(8)
                 ->get(), collect());

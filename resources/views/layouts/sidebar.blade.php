@@ -914,12 +914,6 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-requests.*') && !request()->fullUrlIs('*source=Emergency*') ? 'active' : '' }}">
-                <i class="fa-solid fa-cart-flatbed text-warning"></i>
-                <span>Material Requests</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
             <a href="{{ route('dispatches.index') }}" class="sidebar-nav-link {{ request()->routeIs('dispatches.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-week text-info"></i>
                 <span>Weekly Plans</span>

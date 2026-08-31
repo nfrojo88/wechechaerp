@@ -6,9 +6,11 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="h3 mb-0">Material Requests</h1>
     @can('material_requests.create')
+    @if(!auth()->user()->hasRole('site_engineer'))
     <a href="{{ route('material-requests.create') }}" class="btn btn-primary">
         <i class="fa-solid fa-plus me-1"></i> New Request
     </a>
+    @endif
     @endcan
 </div>
 
