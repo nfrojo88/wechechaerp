@@ -166,8 +166,7 @@
                                 <select name="issue_type" class="form-select rounded-3" required>
                                     <option value="needs_repair" {{ old('issue_type') == 'needs_repair' ? 'selected' : '' }}>Needs Repair (አጠቃላይ ጥገና)</option>
                                     <option value="breakdown" {{ old('issue_type') == 'breakdown' ? 'selected' : '' }}>Breakdown / Stopped (ስራ ያቆመ)</option>
-                                    <option value="routine_service" {{ old('issue_type') == 'routine_service' ? 'selected' : '' }}>Routine Service / Oil Change (ወቅታዊ ሰርቪስ)</option>
-                                    <option value="service_due" {{ old('issue_type') == 'service_due' ? 'selected' : '' }}>Service Due (የደረሰ ሰርቪስ)</option>
+                                    <option value="service_due" {{ (old('issue_type') == 'service_due' || old('issue_type') == 'routine_service') ? 'selected' : '' }}>Routine Service / Oil Change (ወቅታዊ ሰርቪስ)</option>
                                     <option value="damage" {{ old('issue_type') == 'damage' ? 'selected' : '' }}>Physical Damage (ጉዳት የደረሰበት)</option>
                                     <option value="malfunction" {{ old('issue_type') == 'malfunction' ? 'selected' : '' }}>Malfunction (ብልሽት ያለበት)</option>
                                     <option value="other" {{ old('issue_type') == 'other' ? 'selected' : '' }}>Other Service Request</option>

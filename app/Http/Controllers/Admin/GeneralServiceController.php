@@ -98,7 +98,7 @@ class GeneralServiceController extends Controller
             'asset_name'          => 'required|string|max:255',
             'asset_code'          => 'nullable|string|max:100',
             'employee_id'         => 'nullable|exists:employees,id',
-            'issue_type'          => 'required|in:breakdown,damage,service_due,malfunction,needs_repair,routine_service,other',
+            'issue_type'          => 'required|string|max:100',
             'urgency'             => 'required|in:low,normal,urgent,critical',
             'description'         => 'required|string|max:4000',
             'admin_notes'         => 'nullable|string|max:3000',
@@ -125,6 +125,16 @@ class GeneralServiceController extends Controller
 
         $user = \Illuminate\Support\Facades\Auth::user();
 
+        // Normalize issue_type for strict MySQL ENUM compatibility
+        $issueType = $validated['issue_type'] ?? 'needs_repair';
+        if ($issueType === 'routine_service') {
+            $issueType = 'service_due';
+        }
+        $validEnums = ['breakdown', 'damage', 'service_due', 'malfunction', 'needs_repair', 'other'];
+        if (!in_array($issueType, $validEnums)) {
+            $issueType = 'other';
+        }
+
         // If fixed asset unit chosen, resolve employee and details if not provided
         $unit = null;
         if (!empty($validated['fixed_asset_unit_id'])) {
@@ -141,15 +151,18 @@ class GeneralServiceController extends Controller
             }
         }
 
-        // Resolve employee ID
+        // Resolve employee ID (with fallback to first active employee if user has no employee profile)
         $employeeId = $validated['employee_id'] ?? ($user->employee?->id);
+        if (!$employeeId) {
+            $employeeId = \App\Models\Employee::where('status', 'active')->value('id') ?? \App\Models\Employee::value('id');
+        }
 
         $maintenanceRequest = MaintenanceRequest::create([
             'employee_id'         => $employeeId,
             'fixed_asset_unit_id' => $validated['fixed_asset_unit_id'] ?? null,
             'asset_name'          => $validated['asset_name'],
             'asset_code'          => $validated['asset_code'] ?? null,
-            'issue_type'          => $validated['issue_type'],
+            'issue_type'          => $issueType,
             'urgency'             => $validated['urgency'],
             'description'         => $validated['description'],
             'admin_notes'         => $validated['admin_notes'] ?? null,
