@@ -236,50 +236,25 @@
         <!-- Current Cycle Payment History Overview (To be submitted in next Ask Money) -->
         <div class="col-lg-7">
             <div class="card shadow-sm border-0 rounded-4 h-100">
-                <div class="card-header bg-white border-0 pt-4 px-4 pb-0 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="card-header bg-white border-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
                     <div>
-                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <h5 class="fw-bold text-dark mb-0">
-                                <i class="fas fa-hourglass-half text-warning me-2"></i>{{ ($includeAll ?? false) ? 'All Historical Expenses' : 'Active Cycle Payment History' }}
-                            </h5>
-                            @if($includeAll ?? false)
-                                <span class="badge bg-warning text-dark border border-warning">Showing All History</span>
-                            @endif
-                        </div>
-                        <p class="text-muted small mb-0">
-                            @if($includeAll ?? false)
-                                Showing all historical paid expenses. You can select specific items to attach and send to Audit.
-                            @else
-                                Payments recorded since last fulfillment ({{ $lastFulfilled ? $lastFulfilled->fulfilled_at->format('M d, Y') : 'start' }}).
-                            @endif
-                        </p>
+                        <h5 class="fw-bold text-dark mb-0">
+                            <i class="fas fa-hourglass-half text-warning me-2"></i>Active Cycle Payment History
+                        </h5>
+                        <p class="text-muted small mb-0">Payments recorded since last fulfillment ({{ $lastFulfilled ? $lastFulfilled->fulfilled_at->format('M d, Y') : 'start' }}). These will be attached when you Ask Money.</p>
                     </div>
-                    <div class="d-flex align-items-center gap-2">
-                        @if($includeAll ?? false)
-                            <a href="{{ route('assigned-accounts.show', [$account->id, 'include_all' => 0]) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
-                                <i class="fas fa-filter me-1"></i> Active Cycle Only
-                            </a>
-                        @else
-                            <a href="{{ route('assigned-accounts.show', [$account->id, 'include_all' => 1]) }}" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3" title="View all historical expenses (One-time override)">
-                                <i class="fas fa-history me-1"></i> Show All Expenses
-                            </a>
-                        @endif
-                        @if(!$pendingReplenishment)
-                            <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#requestReplenishmentModal">
-                                <i class="fas fa-paper-plane me-1"></i> Ask Money
-                            </button>
-                        @endif
-                    </div>
+                    @if($unreplenishedCount > 0 && !$pendingReplenishment)
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#requestReplenishmentModal">
+                            <i class="fas fa-paper-plane me-1"></i> Ask Money
+                        </button>
+                    @endif
                 </div>
                 <div class="card-body p-0 mt-3">
-                    <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
+                    <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="bg-light text-muted small text-uppercase sticky-top">
                                 <tr>
-                                    <th class="px-3 py-2 text-center" style="width: 40px;">
-                                        <input type="checkbox" id="selectAllDirectExpenses" class="form-check-input" checked title="Select/Deselect All">
-                                    </th>
-                                    <th class="py-2">Date</th>
+                                    <th class="px-3 py-2">Date</th>
                                     <th class="py-2">Ref / Requester</th>
                                     <th class="py-2">Category &amp; Description</th>
                                     <th class="px-3 py-2 text-end">Amount (ETB)</th>
@@ -288,10 +263,7 @@
                             <tbody>
                                 @forelse($unreplenishedExpenses as $exp)
                                     <tr>
-                                        <td class="px-3 py-2 text-center">
-                                            <input type="checkbox" class="direct-expense-checkbox form-check-input" data-key="{{ $exp->source_type }}:{{ $exp->source_id }}" data-amount="{{ $exp->amount }}" checked>
-                                        </td>
-                                        <td class="py-2 text-muted small" style="white-space: nowrap;">
+                                        <td class="px-3 py-2 text-muted small" style="white-space: nowrap;">
                                             {{ \Carbon\Carbon::parse($exp->date)->format('M d, Y') }}
                                             <div class="text-muted" style="font-size: 0.75rem;">{{ \Carbon\Carbon::parse($exp->date)->format('H:i') }}</div>
                                         </td>
@@ -314,7 +286,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="5" class="text-center py-5 text-muted">
+                                        <td colspan="4" class="text-center py-5 text-muted">
                                             <i class="fas fa-check-circle text-success fa-2x mb-2"></i>
                                             <div>All expenses up to date! No un-replenished payments in the current cycle.</div>
                                         </td>
@@ -324,13 +296,9 @@
                         </table>
                     </div>
                 </div>
-                <div class="card-footer bg-light border-0 py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2 rounded-bottom-4">
-                    <span id="directSelectedSummary" class="text-muted small fw-bold">Selected: {{ $unreplenishedCount }} items (ETB {{ number_format($unreplenishedExpensesTotal, 2) }})</span>
-                    @if(!$pendingReplenishment)
-                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#requestReplenishmentModal">
-                            <i class="fas fa-paper-plane me-1"></i> Send Selected to Finance Head
-                        </button>
-                    @endif
+                <div class="card-footer bg-light border-0 py-3 px-4 d-flex justify-content-between align-items-center rounded-bottom-4">
+                    <span class="text-muted small fw-bold">Active Cycle Total ({{ $unreplenishedCount }} items):</span>
+                    <span class="fw-bold fs-5 text-danger">ETB {{ number_format($unreplenishedExpensesTotal, 2) }}</span>
                 </div>
             </div>
         </div>
@@ -531,19 +499,7 @@
                         </div>
                     </div>
 
-                    <!-- One-time historical override switch -->
-                    <div class="d-flex justify-content-between align-items-center bg-light p-3 rounded-3 mb-3 border">
-                        <div>
-                            <span class="fw-bold text-dark d-block"><i class="fas fa-tasks me-1 text-primary"></i> Select Expenses to Send to Audit</span>
-                            <small class="text-muted">Check or uncheck individual expense vouchers below to include them in this replenishment cycle.</small>
-                        </div>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="include_all" value="1" id="modalIncludeAllToggle" {{ ($includeAll ?? false) ? 'checked' : '' }} onchange="window.location.href='{{ route('assigned-accounts.show', $account->id) }}?include_all=' + (this.checked ? 1 : 0)">
-                            <label class="form-check-label small fw-bold text-dark" for="modalIncludeAllToggle">Show All History</label>
-                        </div>
-                    </div>
-
-                    <div class="row g-3 mb-3">
+                    <div class="row g-3 mb-4">
                         <div class="col-md-6">
                             <label class="form-label text-muted small fw-bold text-uppercase">Current Petty Cash Balance</label>
                             <input type="text" class="form-control bg-light border-0 py-2 fw-bold text-dark fs-5" value="ETB {{ number_format($account->current_balance, 2) }}" readonly>
@@ -552,39 +508,34 @@
                             <label class="form-label text-muted small fw-bold text-uppercase">Requested Replenishment Amount (ETB)</label>
                             <div class="input-group">
                                 <span class="input-group-text bg-light border-0 fw-bold">ETB</span>
-                                <input type="number" step="0.01" min="0.01" name="requested_amount" id="modalRequestedAmountInput" class="form-control bg-light border-0 py-2 fw-bold text-primary fs-5" value="{{ $unreplenishedExpensesTotal > 0 ? $unreplenishedExpensesTotal : '' }}" placeholder="Enter requested amount" required>
+                                <input type="number" step="0.01" min="0.01" name="requested_amount" class="form-control bg-light border-0 py-2 fw-bold text-primary fs-5" value="{{ $unreplenishedExpensesTotal > 0 ? $unreplenishedExpensesTotal : '' }}" placeholder="Enter requested amount" required>
                             </div>
-                            <small class="text-muted">Automatically updated based on your selected items below.</small>
+                            <small class="text-muted">Suggested: Equal to total expenses incurred in this cycle (ETB {{ number_format($unreplenishedExpensesTotal, 2) }}).</small>
                         </div>
                     </div>
 
-                    <!-- Payment History Selection Table -->
+                    <!-- Payment History Preview Table -->
                     <div class="mb-4">
                         <label class="form-label text-muted small fw-bold text-uppercase d-flex justify-content-between align-items-center mb-2">
-                            <span><i class="fas fa-paperclip me-1"></i> <span id="modalSelectedCountBadge">{{ $unreplenishedCount }} items selected</span></span>
-                            <span class="text-danger fw-bold fs-6" id="modalSelectedTotalBadge">Total: ETB {{ number_format($unreplenishedExpensesTotal, 2) }}</span>
+                            <span><i class="fas fa-paperclip me-1"></i> Attached Payment History ({{ $unreplenishedCount }} Records)</span>
+                            <span class="text-danger fw-bold fs-6">Total: ETB {{ number_format($unreplenishedExpensesTotal, 2) }}</span>
                         </label>
                         <div class="border rounded-4 overflow-hidden" style="max-height: 280px; overflow-y: auto;">
                             <table class="table table-sm table-striped table-hover align-middle mb-0 small">
                                 <thead class="bg-light text-muted sticky-top">
                                     <tr>
-                                        <th class="px-3 py-2 text-center" style="width: 40px;">
-                                            <input type="checkbox" id="selectAllExpensesModal" class="form-check-input" checked title="Select / Deselect All">
-                                        </th>
-                                        <th class="py-2">Date</th>
-                                        <th class="py-2">Req # / Ref</th>
+                                        <th class="px-3 py-2">Date</th>
+                                        <th class="py-2">Req # / Reference</th>
                                         <th class="py-2">Requester / Dept</th>
-                                        <th class="py-2">Category &amp; Description</th>
+                                        <th class="py-2">Category</th>
+                                        <th class="py-2">Description</th>
                                         <th class="px-3 py-2 text-end">Amount (ETB)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse($unreplenishedExpenses as $exp)
                                         <tr>
-                                            <td class="px-3 py-2 text-center">
-                                                <input type="checkbox" name="selected_items[]" value="{{ $exp->source_type }}:{{ $exp->source_id }}" data-amount="{{ $exp->amount }}" class="form-check-input expense-item-checkbox" checked>
-                                            </td>
-                                            <td class="py-2 text-muted" style="white-space: nowrap;">
+                                            <td class="px-3 py-2 text-muted" style="white-space: nowrap;">
                                                 {{ \Carbon\Carbon::parse($exp->date)->format('M d, Y H:i') }}
                                             </td>
                                             <td class="py-2">
@@ -597,18 +548,16 @@
                                                 @endif
                                             </td>
                                             <td class="py-2">
-                                                @if($exp->category)
-                                                    <span class="badge bg-primary-subtle text-primary border mb-1">{{ $exp->category }}</span>
-                                                @endif
-                                                <div class="text-dark small">{{ Str::limit($exp->description, 45) }}</div>
+                                                <span class="badge bg-primary-subtle text-primary border">{{ $exp->category }}</span>
                                             </td>
+                                            <td class="py-2">{{ Str::limit($exp->description, 50) }}</td>
                                             <td class="px-3 py-2 text-end fw-bold text-danger" style="white-space: nowrap;">
                                                 ETB {{ number_format($exp->amount, 2) }}
                                             </td>
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="6" class="text-center py-4 text-muted">No expense records found.</td>
+                                            <td colspan="6" class="text-center py-4 text-muted">No expense records in the active cycle.</td>
                                         </tr>
                                     @endforelse
                                 </tbody>
@@ -619,7 +568,7 @@
                     <div class="row g-3">
                         <div class="col-md-12">
                             <label class="form-label text-muted small fw-bold text-uppercase">Custodian Notes / Request Justification</label>
-                            <textarea name="notes" class="form-control bg-light border-0" rows="3" placeholder="Provide any additional remarks or details for the Internal Audit / Finance Head..."></textarea>
+                            <textarea name="notes" class="form-control bg-light border-0" rows="3" placeholder="Provide any additional remarks or details for the Finance Head..."></textarea>
                         </div>
                         <div class="col-md-12">
                             <label class="form-label text-muted small fw-bold text-uppercase">Attach Supporting Documents / Scanned Receipts (Optional)</label>
@@ -629,10 +578,9 @@
                     </div>
                 </div>
                 <div class="modal-footer bg-light border-0 py-3 px-4">
-                    <input type="hidden" name="send_to_audit" value="1">
                     <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" id="submitReplenishmentBtn" {{ $unreplenishedCount === 0 ? 'disabled' : '' }}>
-                        <i class="fas fa-paper-plane me-2"></i> Submit &amp; Send to Audit
+                    <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" {{ $unreplenishedCount === 0 ? 'disabled' : '' }}>
+                        <i class="fas fa-paper-plane me-2"></i> Submit Request to Finance Head
                     </button>
                 </div>
             </form>
@@ -919,89 +867,4 @@
 @endif
 @endforeach
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const selectAllModal = document.getElementById('selectAllExpensesModal');
-    const expenseCheckboxes = document.querySelectorAll('.expense-item-checkbox');
-    const selectAllDirect = document.getElementById('selectAllDirectExpenses');
-    const directCheckboxes = document.querySelectorAll('.direct-expense-checkbox');
-    const requestedAmountInput = document.getElementById('modalRequestedAmountInput');
-    const selectedCountBadge = document.getElementById('modalSelectedCountBadge');
-    const selectedTotalBadge = document.getElementById('modalSelectedTotalBadge');
-    const directSelectedSummary = document.getElementById('directSelectedSummary');
-    const submitBtn = document.getElementById('submitReplenishmentBtn');
-
-    function recalculateSelectedExpenses() {
-        let total = 0;
-        let count = 0;
-
-        expenseCheckboxes.forEach(cb => {
-            if (cb.checked) {
-                count++;
-                total += parseFloat(cb.getAttribute('data-amount') || 0);
-            }
-        });
-
-        if (requestedAmountInput) {
-            requestedAmountInput.value = total > 0 ? total.toFixed(2) : '';
-        }
-        if (selectedCountBadge) {
-            selectedCountBadge.innerText = count + ' items selected';
-        }
-        if (selectedTotalBadge) {
-            selectedTotalBadge.innerText = 'Total: ETB ' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        }
-        if (directSelectedSummary) {
-            directSelectedSummary.innerText = 'Selected: ' + count + ' items (ETB ' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ')';
-        }
-        if (submitBtn) {
-            submitBtn.disabled = (count === 0);
-        }
-        if (selectAllModal) {
-            selectAllModal.checked = (count === expenseCheckboxes.length && expenseCheckboxes.length > 0);
-            selectAllModal.indeterminate = (count > 0 && count < expenseCheckboxes.length);
-        }
-        if (selectAllDirect) {
-            selectAllDirect.checked = (count === directCheckboxes.length && directCheckboxes.length > 0);
-            selectAllDirect.indeterminate = (count > 0 && count < directCheckboxes.length);
-        }
-    }
-
-    if (selectAllModal) {
-        selectAllModal.addEventListener('change', function() {
-            expenseCheckboxes.forEach(cb => cb.checked = selectAllModal.checked);
-            directCheckboxes.forEach(cb => cb.checked = selectAllModal.checked);
-            recalculateSelectedExpenses();
-        });
-    }
-
-    if (selectAllDirect) {
-        selectAllDirect.addEventListener('change', function() {
-            directCheckboxes.forEach(cb => cb.checked = selectAllDirect.checked);
-            expenseCheckboxes.forEach(cb => cb.checked = selectAllDirect.checked);
-            recalculateSelectedExpenses();
-        });
-    }
-
-    directCheckboxes.forEach(cb => {
-        cb.addEventListener('change', function() {
-            const key = cb.getAttribute('data-key');
-            expenseCheckboxes.forEach(mcb => {
-                if (mcb.value === key) mcb.checked = cb.checked;
-            });
-            recalculateSelectedExpenses();
-        });
-    });
-
-    expenseCheckboxes.forEach(cb => {
-        cb.addEventListener('change', function() {
-            const val = cb.value;
-            directCheckboxes.forEach(dcb => {
-                if (dcb.getAttribute('data-key') === val) dcb.checked = cb.checked;
-            });
-            recalculateSelectedExpenses();
-        });
-    });
-});
-</script>
 @endsection
