@@ -305,8 +305,9 @@
                                 </div>
                             </td>
                         </tr>
-                        @endforeachody>
-                        @forelse($myPrs as $pr)
+                        @endforeach
+
+                        @foreach($myPrs as $pr)
                         <tr class="{{ $pr->is_office_request && $pr->status === 'pending_hr_approval' ? 'table-warning bg-opacity-25' : '' }}">
                             <td>
                                 @if($pr->is_office_request)
