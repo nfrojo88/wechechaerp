@@ -1,3 +1,5 @@
+@extends('layouts.app')
+
 @php
     $authUser = auth()->user();
     $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
