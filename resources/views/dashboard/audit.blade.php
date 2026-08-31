@@ -496,6 +496,110 @@
         </div>
     </div>
 
+    <!-- Inter-Store Material Transfers Oversight (Read-Only) -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden" style="border-top: 4px solid #f59e0b !important;">
+        <div class="card-header bg-white border-0 py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="fa-solid fa-truck-moving text-warning me-2"></i>Inter-Store Material Transfers &amp; Logistics (Read-Only)
+                </h5>
+                <small class="text-muted">Live audit tracking of warehouse-to-site dispatches, waybills, driver custody, and verified destination receiving slips</small>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-warning text-dark font-monospace px-3 py-1.5 rounded-pill fs-6">
+                    {{ $activeTransfersCount ?? 0 }} Active In-Flight
+                </span>
+                <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-sm btn-outline-warning rounded-pill px-3 text-dark fw-semibold">
+                    View Full Transfers Hub <i class="fa-solid fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="bg-light text-muted text-uppercase" style="font-size: 0.75rem;">
+                        <tr>
+                            <th class="ps-4 py-2.5">Transfer #</th>
+                            <th class="py-2.5">From Store (Origin)</th>
+                            <th class="py-2.5">To Store (Destination)</th>
+                            <th class="py-2.5">Assigned Driver &amp; Vehicle</th>
+                            <th class="py-2.5">Outgoing Waybill</th>
+                            <th class="py-2.5">Status</th>
+                            <th class="pe-4 py-2.5 text-end">Audit Inspection</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($recentTransfers ?? [] as $tr)
+                            <tr>
+                                <td class="ps-4 py-3">
+                                    <span class="fw-bold font-monospace text-primary">{{ $tr->transfer_no }}</span>
+                                    <small class="text-muted d-block">{{ $tr->created_at?->format('M d, Y') }}</small>
+                                </td>
+                                <td class="py-3">
+                                    <strong class="text-dark">{{ $tr->fromStore->name ?? 'Main Store' }}</strong>
+                                </td>
+                                <td class="py-3">
+                                    <strong class="text-dark">{{ $tr->toStore->name ?? 'Site / Store' }}</strong>
+                                </td>
+                                <td class="py-3">
+                                    @if($tr->driver)
+                                        <span class="d-block fw-semibold text-dark"><i class="fas fa-id-badge text-primary me-1"></i>{{ $tr->driver->full_name }}</span>
+                                        <small class="text-muted">{{ $tr->vehicle_plate_no ?: 'No plate' }}</small>
+                                    @else
+                                        <span class="badge bg-warning bg-opacity-10 text-dark border border-warning">
+                                            <i class="fas fa-clock me-1"></i>Awaiting Driver
+                                        </span>
+                                    @endif
+                                </td>
+                                <td class="py-3">
+                                    @if($tr->outgoing_slip_no || $tr->physical_slip_no)
+                                        <span class="badge bg-light text-dark font-monospace border">
+                                            <i class="fas fa-receipt text-primary me-1"></i>{{ $tr->outgoing_slip_no ?: $tr->physical_slip_no }}
+                                        </span>
+                                    @else
+                                        <span class="text-muted small">—</span>
+                                    @endif
+                                </td>
+                                <td class="py-3">
+                                    @php
+                                        $tBadge = match($tr->status) {
+                                            'completed'  => 'bg-success',
+                                            'in_transit' => 'bg-info text-dark',
+                                            'approved'   => 'bg-primary',
+                                            'rejected'   => 'bg-danger',
+                                            default      => 'bg-secondary',
+                                        };
+                                        $tLabel = match($tr->status) {
+                                            'completed'  => 'Completed & Received',
+                                            'in_transit' => 'In Transit',
+                                            'approved'   => 'Ready to Dispatch',
+                                            'rejected'   => 'Rejected',
+                                            default      => 'Draft / Pending',
+                                        };
+                                    @endphp
+                                    <span class="badge {{ $tBadge }} px-2 py-1 small">
+                                        {{ $tLabel }}
+                                    </span>
+                                </td>
+                                <td class="pe-4 py-3 text-end">
+                                    <a href="{{ route('store-manager.transfers.show', $tr->id) }}" class="btn btn-sm btn-outline-primary shadow-xs">
+                                        <i class="fa-solid fa-eye me-1"></i> Inspect Transfer
+                                    </a>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">
+                                    No material transfer records found.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- Live System Audit & Activity Trail -->
     <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
         <div class="card-header bg-white border-0 py-3 px-4 d-flex justify-content-between align-items-center">

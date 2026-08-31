@@ -884,7 +884,14 @@ class DashboardController extends Controller
             ->take(8)
             ->get(), collect());
 
-        return view('dashboard.audit', compact('kpi', 'underAuditReplenishments', 'recentReplenishments', 'recentActivityLogs', 'cashAndBankAccounts', 'activeProcurementCount', 'recentProcurements'));
+        // Inter-Store Material Transfers Oversight (Read-Only for Auditor)
+        $activeTransfersCount = $this->safe(fn() => \App\Models\Transfer::whereIn('status', ['draft', 'pending_approval', 'approved', 'in_transit'])->count(), 0);
+        $recentTransfers = $this->safe(fn() => \App\Models\Transfer::with(['fromStore', 'toStore', 'requestedBy', 'driver', 'items.product'])
+            ->latest()
+            ->take(8)
+            ->get(), collect());
+
+        return view('dashboard.audit', compact('kpi', 'underAuditReplenishments', 'recentReplenishments', 'recentActivityLogs', 'cashAndBankAccounts', 'activeProcurementCount', 'recentProcurements', 'activeTransfersCount', 'recentTransfers'));
     }
 }
 
