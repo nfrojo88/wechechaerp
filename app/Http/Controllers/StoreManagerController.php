@@ -448,12 +448,19 @@ class StoreManagerController extends Controller
         $inTransitCount       = (clone $baseStatQuery)->where('status', 'in_transit')->count();
         $completedCount       = (clone $baseStatQuery)->where('status', 'completed')->count();
 
+        // Storekeeper specific counts (Incoming vs Outgoing)
+        $incomingCount        = $storeId ? (clone $baseStatQuery)->where('to_store_id', $storeId)->count() : (clone $baseStatQuery)->count();
+        $outgoingCount        = $storeId ? (clone $baseStatQuery)->where('from_store_id', $storeId)->count() : 0;
+        $pendingIncomingCount = $storeId ? (clone $baseStatQuery)->where('to_store_id', $storeId)->whereIn('status', ['in_transit', 'approved'])->count() : (clone $baseStatQuery)->where('status', 'in_transit')->count();
+        $pendingOutgoingCount = $storeId ? (clone $baseStatQuery)->where('from_store_id', $storeId)->whereIn('status', ['draft', 'approved'])->count() : (clone $baseStatQuery)->where('status', 'approved')->count();
+
         $transfers = $query->latest()->paginate(20)->withQueryString();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
 
         return view('store-manager.transfers.index', compact(
             'transfers', 'stores', 'isStoreKeeper', 'assignedStore', 'tab',
-            'totalCount', 'pendingDriverCount', 'assignedDriverCount', 'readyToDispatchCount', 'inTransitCount', 'completedCount'
+            'totalCount', 'pendingDriverCount', 'assignedDriverCount', 'readyToDispatchCount', 'inTransitCount', 'completedCount',
+            'incomingCount', 'outgoingCount', 'pendingIncomingCount', 'pendingOutgoingCount'
         ));
     }
 

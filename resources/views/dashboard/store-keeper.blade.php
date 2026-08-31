@@ -173,18 +173,23 @@
 
             {{-- Transfers Card --}}
             <div class="card border-0 shadow-sm rounded-3 mb-4">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
                         <h6 class="mb-0 fw-bold text-dark">
                             <i class="fa-solid fa-truck-arrow-right text-primary me-2"></i>Site Store Transfers &amp; Physical Slips
                         </h6>
                         <small class="text-muted">Incoming &amp; outgoing transfers for this store</small>
                     </div>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ route('store-manager.transfers.index', ['tab' => 'incoming']) }}" class="btn btn-sm btn-outline-success">
+                            <i class="fa-solid fa-arrow-down me-1"></i>Incoming ({{ $kpi['pending_incoming'] ?? 0 }})
+                        </a>
+                        <a href="{{ route('store-manager.transfers.index', ['tab' => 'outgoing']) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="fa-solid fa-arrow-up me-1"></i>Outgoing ({{ $kpi['pending_outgoing'] ?? 0 }})
+                        </a>
                         <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-sm btn-primary">
                             <i class="fa-solid fa-plus me-1"></i>New Transfer
                         </a>
-                        <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-sm btn-outline-secondary">View All</a>
                     </div>
                 </div>
                 <div class="table-responsive">
