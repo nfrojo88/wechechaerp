@@ -6,6 +6,10 @@ use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\ChartOfAccount;
 use App\Models\ExpenseRequest;
+use App\Models\PettyCashReplenishment;
+use App\Models\JournalEntry;
+use App\Models\JournalEntryLine;
+use App\Models\ActivityLog;
 use App\Models\User;
 use App\Services\CloudinaryService;
 use Illuminate\Http\Request;
@@ -748,7 +752,12 @@ class ExpenseRequestController extends Controller
 
             $expenseRequest->update($updateData);
 
-            // 2. Deduct disbursed amount from selected Bank Account
+            $isPettyCash = str_starts_with($expenseRequest->request_number, 'EXP-PCR-')
+                || ($expenseRequest->category === ExpenseRequest::CATEGORY_OTHER && $expenseRequest->other_reason === 'Petty Cash Replenishment')
+                || str_contains($expenseRequest->description, 'Petty Cash Replenishment')
+                || str_contains($expenseRequest->category, 'Petty Cash Replenishment');
+
+            // 2. Deduct disbursed amount from selected funding Bank Account
             if ($expenseRequest->bank_account_id) {
                 $bankAccount = BankAccount::find($expenseRequest->bank_account_id);
                 if ($bankAccount) {
@@ -772,22 +781,150 @@ class ExpenseRequestController extends Controller
                 }
             }
 
-            // 4. Deduct disbursed amount from Chart of Account if assigned
+            // 4. Deduct disbursed amount from Source Chart of Account if assigned (only if not petty cash target)
             $coaId = $expenseRequest->chart_of_account_id ?? $expenseRequest->coa_id;
-            if ($coaId) {
+            if ($coaId && !$expenseRequest->bank_account_id && !$isPettyCash) {
                 $coa = ChartOfAccount::find($coaId);
                 if ($coa) {
                     $coa->decrement('current_balance', $disbursedAmount);
                 }
             }
 
+            // 5. If this is a Petty Cash Replenishment, TOP UP the Petty Cash Account & fulfill Replenishment
+            if ($isPettyCash) {
+                $this->handlePettyCashReplenishmentFulfillment($expenseRequest, $disbursedAmount, $paymentRef, $user);
+            }
+
             DB::commit();
 
-            return back()->with('success', "Payment of ETB " . number_format($disbursedAmount, 2) . " processed successfully for Request #{$expenseRequest->request_number}!");
+            return back()->with('success', "Payment of ETB " . number_format($disbursedAmount, 2) . " processed successfully for Request #{$expenseRequest->request_number}" . ($isPettyCash ? " and credited to the Petty Cash Account!" : "!"));
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error('Expense payment error: ' . $e->getMessage());
             return back()->with('error', 'Failed to process payment: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Helper: Top up Petty Cash Account and fulfill linked Replenishment cycle
+     */
+    private function handlePettyCashReplenishmentFulfillment(ExpenseRequest $expenseRequest, float $disbursedAmount, string $paymentRef, User $user): void
+    {
+        // 1. Resolve linked Petty Cash Replenishment
+        $replenishment = $expenseRequest->linked_replenishment;
+        if (!$replenishment) {
+            $reqNo = (string)$expenseRequest->request_number;
+            $cleanNo = preg_replace('/^EXP-PCR-/', '', $reqNo);
+            $cleanNo = preg_replace('/^EXP-/', '', $cleanNo);
+
+            $replenishment = PettyCashReplenishment::where('request_no', $cleanNo)
+                ->orWhere('request_no', 'PCR-' . $cleanNo)
+                ->orWhere('request_no', $reqNo)
+                ->first();
+        }
+
+        if (!$replenishment && preg_match('/#?(PCR-[A-Za-z0-9\-]+)/', $expenseRequest->description, $matches)) {
+            $replenishment = PettyCashReplenishment::where('request_no', $matches[1])->first();
+        }
+
+        // 2. Resolve target Petty Cash Chart of Account
+        $pettyAccount = null;
+        if ($replenishment && $replenishment->chart_of_account_id) {
+            $pettyAccount = ChartOfAccount::find($replenishment->chart_of_account_id);
+        }
+
+        if (!$pettyAccount && preg_match('/\[(\d+)\]/', $expenseRequest->description, $codeMatches)) {
+            $pettyAccount = ChartOfAccount::where('code', $codeMatches[1])->first();
+        }
+
+        if (!$pettyAccount && $expenseRequest->chart_of_account_id) {
+            $candidate = ChartOfAccount::find($expenseRequest->chart_of_account_id);
+            if ($candidate && (str_contains(strtolower($candidate->name), 'petty') || $candidate->code == '1010')) {
+                $pettyAccount = $candidate;
+            }
+        }
+
+        if (!$pettyAccount) {
+            $pettyAccount = ChartOfAccount::where('code', '1010')
+                ->orWhere('name', 'like', '%Petty Cash%')
+                ->first();
+        }
+
+        if ($pettyAccount) {
+            // Add funds to Petty Cash Account
+            $isPettyAssetOrExpense = in_array($pettyAccount->type, ['asset', 'expense']);
+            if ($isPettyAssetOrExpense) {
+                $pettyAccount->increment('current_balance', $disbursedAmount);
+            } else {
+                $pettyAccount->decrement('current_balance', $disbursedAmount);
+            }
+
+            // Resolve funding source COA
+            $sourceCoa = null;
+            if ($expenseRequest->bank_account_id) {
+                $bank = BankAccount::find($expenseRequest->bank_account_id);
+                $sourceCoa = $bank?->chartOfAccount ?? ($bank?->coa_id ? ChartOfAccount::find($bank->coa_id) : null);
+            }
+            if (!$sourceCoa && $expenseRequest->coa_id && $expenseRequest->coa_id !== $pettyAccount->id) {
+                $sourceCoa = ChartOfAccount::find($expenseRequest->coa_id);
+            }
+
+            // Record Journal Entry
+            $jeCount = JournalEntry::count() + 1;
+            $jeNo = 'JE-' . date('Ymd') . '-' . str_pad($jeCount, 4, '0', STR_PAD_LEFT);
+
+            $journalEntry = JournalEntry::create([
+                'entry_no'       => $jeNo,
+                'entry_date'     => now(),
+                'reference_type' => 'petty_cash_replenishment',
+                'reference_id'   => $replenishment ? $replenishment->id : $expenseRequest->id,
+                'description'    => "Petty Cash Replenishment: Disbursed ETB " . number_format($disbursedAmount, 2) . " into [{$pettyAccount->code}] {$pettyAccount->name} via Expense Request #{$expenseRequest->request_number}",
+                'status'         => 'posted',
+                'created_by'     => $user->id,
+                'approved_by'    => $user->id,
+                'posted_at'      => now(),
+            ]);
+
+            // Debit Petty Cash (Asset increase)
+            JournalEntryLine::create([
+                'journal_entry_id' => $journalEntry->id,
+                'account_id'       => $pettyAccount->id,
+                'description'      => "Replenishment Top-up from " . ($sourceCoa ? "[{$sourceCoa->code}] {$sourceCoa->name}" : "Bank Disbursement"),
+                'side'             => $isPettyAssetOrExpense ? 'debit' : 'credit',
+                'amount'           => $disbursedAmount,
+            ]);
+
+            // Credit Source Account if different from petty cash account
+            if ($sourceCoa && $sourceCoa->id !== $pettyAccount->id) {
+                $isSourceAssetOrExpense = in_array($sourceCoa->type, ['asset', 'expense']);
+                JournalEntryLine::create([
+                    'journal_entry_id' => $journalEntry->id,
+                    'account_id'       => $sourceCoa->id,
+                    'description'      => "Disbursement for Petty Cash Replenishment #{$expenseRequest->request_number}",
+                    'side'             => $isSourceAssetOrExpense ? 'credit' : 'debit',
+                    'amount'           => $disbursedAmount,
+                ]);
+            }
+
+            // Update Replenishment record to Fulfilled
+            if ($replenishment) {
+                $replenishment->update([
+                    'status'                => PettyCashReplenishment::STATUS_FULFILLED,
+                    'finance_head_id'       => $user->id,
+                    'fulfilled_amount'      => $disbursedAmount,
+                    'source_coa_id'         => $sourceCoa?->id,
+                    'journal_entry_id'      => $journalEntry->id,
+                    'fulfillment_reference' => $paymentRef,
+                    'fulfilled_at'          => now(),
+                ]);
+
+                ActivityLog::log(
+                    'approved',
+                    "Petty Cash Replenishment #{$replenishment->request_no} fulfilled via Expense Request Payment: Disbursed ETB " . number_format($disbursedAmount, 2) . " into [{$pettyAccount->code}] {$pettyAccount->name}. Journal Entry: {$jeNo}",
+                    'Finance & Petty Cash Audit',
+                    $replenishment
+                );
+            }
         }
     }
 

@@ -211,6 +211,9 @@ class AssignedAccountController extends Controller
             })
             ->firstOrFail();
 
+        // Auto-fulfill and credit any Paid Expense Requests linked to this account's Replenishments that haven't been fulfilled yet
+        $this->syncPaidExpenseReplenishments($account);
+
         $startDate = $request->input('start_date');
         $endDate = $request->input('end_date');
 
@@ -1246,6 +1249,70 @@ class AssignedAccountController extends Controller
             'fulfilledMonthAmount',
             'sourceAccounts'
         ));
+    }
+
+    /**
+     * Helper: Automatically fulfill and top up Petty Cash balance for any Paid Expense Requests
+     */
+    private function syncPaidExpenseReplenishments(ChartOfAccount $account): void
+    {
+        try {
+            $unfulfilledReplenishments = PettyCashReplenishment::where('chart_of_account_id', $account->id)
+                ->where('status', '!=', PettyCashReplenishment::STATUS_FULFILLED)
+                ->where('status', '!=', PettyCashReplenishment::STATUS_REJECTED)
+                ->get();
+
+            foreach ($unfulfilledReplenishments as $pcr) {
+                $exp = ExpenseRequest::where('request_number', 'EXP-PCR-' . $pcr->request_no)
+                    ->orWhere('request_number', 'like', '%PCR-' . $pcr->request_no . '%')
+                    ->orWhere('request_number', 'like', '%' . $pcr->request_no . '%')
+                    ->first();
+
+                if ($exp && in_array(strtolower($exp->status), ['paid', ExpenseRequest::STATUS_PAID])) {
+                    $disbursedAmount = (float)($exp->net_amount > 0 ? $exp->net_amount : ($exp->amount ?: $pcr->requested_amount));
+
+                    $isPettyAssetOrExpense = in_array($account->type, ['asset', 'expense']);
+                    if ($isPettyAssetOrExpense) {
+                        $account->increment('current_balance', $disbursedAmount);
+                    } else {
+                        $account->decrement('current_balance', $disbursedAmount);
+                    }
+
+                    $jeCount = JournalEntry::count() + 1;
+                    $jeNo = 'JE-' . date('Ymd') . '-' . str_pad($jeCount, 4, '0', STR_PAD_LEFT);
+
+                    $journalEntry = JournalEntry::create([
+                        'entry_no'       => $jeNo,
+                        'entry_date'     => $exp->paid_at ?? now(),
+                        'reference_type' => 'petty_cash_replenishment',
+                        'reference_id'   => $pcr->id,
+                        'description'    => "Petty Cash Replenishment: Top-up [{$account->code}] {$account->name} via Paid Expense Request #{$exp->request_number}",
+                        'status'         => 'posted',
+                        'created_by'     => $exp->paid_by ?? auth()->id(),
+                        'approved_by'    => $exp->paid_by ?? auth()->id(),
+                        'posted_at'      => $exp->paid_at ?? now(),
+                    ]);
+
+                    JournalEntryLine::create([
+                        'journal_entry_id' => $journalEntry->id,
+                        'account_id'       => $account->id,
+                        'description'      => "Replenishment Top-up via Expense Request Payment",
+                        'side'             => $isPettyAssetOrExpense ? 'debit' : 'credit',
+                        'amount'           => $disbursedAmount,
+                    ]);
+
+                    $pcr->update([
+                        'status'                => PettyCashReplenishment::STATUS_FULFILLED,
+                        'fulfilled_amount'      => $disbursedAmount,
+                        'journal_entry_id'      => $journalEntry->id,
+                        'fulfillment_reference' => $exp->payment_reference ?? $jeNo,
+                        'fulfilled_at'          => $exp->paid_at ?? now(),
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Error syncing paid PCR expense replenishments: ' . $e->getMessage());
+        }
     }
 }
 
