@@ -272,20 +272,26 @@
                     </div>
                 </div>
                 <div class="card-body p-0 mt-3">
-                    <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
+                    <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="bg-light text-muted small text-uppercase sticky-top">
                                 <tr>
-                                    <th class="px-3 py-2">Date</th>
+                                    <th class="px-3 py-2 text-center" style="width: 40px;">
+                                        <input type="checkbox" id="selectAllDirectExpenses" class="form-check-input" checked title="Select/Deselect All">
+                                    </th>
+                                    <th class="py-2">Date</th>
                                     <th class="py-2">Ref / Requester</th>
-                                    <th class="py-2">Category & Description</th>
+                                    <th class="py-2">Category &amp; Description</th>
                                     <th class="px-3 py-2 text-end">Amount (ETB)</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 @forelse($unreplenishedExpenses as $exp)
                                     <tr>
-                                        <td class="px-3 py-2 text-muted small" style="white-space: nowrap;">
+                                        <td class="px-3 py-2 text-center">
+                                            <input type="checkbox" class="direct-expense-checkbox form-check-input" data-key="{{ $exp->source_type }}:{{ $exp->source_id }}" data-amount="{{ $exp->amount }}" checked>
+                                        </td>
+                                        <td class="py-2 text-muted small" style="white-space: nowrap;">
                                             {{ \Carbon\Carbon::parse($exp->date)->format('M d, Y') }}
                                             <div class="text-muted" style="font-size: 0.75rem;">{{ \Carbon\Carbon::parse($exp->date)->format('H:i') }}</div>
                                         </td>
@@ -308,7 +314,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="4" class="text-center py-5 text-muted">
+                                        <td colspan="5" class="text-center py-5 text-muted">
                                             <i class="fas fa-check-circle text-success fa-2x mb-2"></i>
                                             <div>All expenses up to date! No un-replenished payments in the current cycle.</div>
                                         </td>
@@ -318,9 +324,13 @@
                         </table>
                     </div>
                 </div>
-                <div class="card-footer bg-light border-0 py-3 px-4 d-flex justify-content-between align-items-center rounded-bottom-4">
-                    <span class="text-muted small fw-bold">Active Cycle Total ({{ $unreplenishedCount }} items):</span>
-                    <span class="fw-bold fs-5 text-danger">ETB {{ number_format($unreplenishedExpensesTotal, 2) }}</span>
+                <div class="card-footer bg-light border-0 py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-2 rounded-bottom-4">
+                    <span id="directSelectedSummary" class="text-muted small fw-bold">Selected: {{ $unreplenishedCount }} items (ETB {{ number_format($unreplenishedExpensesTotal, 2) }})</span>
+                    @if(!$pendingReplenishment)
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-4 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#requestReplenishmentModal">
+                            <i class="fas fa-paper-plane me-1"></i> Send Selected to Finance Head
+                        </button>
+                    @endif
                 </div>
             </div>
         </div>
@@ -913,9 +923,12 @@
 document.addEventListener('DOMContentLoaded', function() {
     const selectAllModal = document.getElementById('selectAllExpensesModal');
     const expenseCheckboxes = document.querySelectorAll('.expense-item-checkbox');
+    const selectAllDirect = document.getElementById('selectAllDirectExpenses');
+    const directCheckboxes = document.querySelectorAll('.direct-expense-checkbox');
     const requestedAmountInput = document.getElementById('modalRequestedAmountInput');
     const selectedCountBadge = document.getElementById('modalSelectedCountBadge');
     const selectedTotalBadge = document.getElementById('modalSelectedTotalBadge');
+    const directSelectedSummary = document.getElementById('directSelectedSummary');
     const submitBtn = document.getElementById('submitReplenishmentBtn');
 
     function recalculateSelectedExpenses() {
@@ -938,6 +951,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (selectedTotalBadge) {
             selectedTotalBadge.innerText = 'Total: ETB ' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         }
+        if (directSelectedSummary) {
+            directSelectedSummary.innerText = 'Selected: ' + count + ' items (ETB ' + total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ')';
+        }
         if (submitBtn) {
             submitBtn.disabled = (count === 0);
         }
@@ -945,19 +961,46 @@ document.addEventListener('DOMContentLoaded', function() {
             selectAllModal.checked = (count === expenseCheckboxes.length && expenseCheckboxes.length > 0);
             selectAllModal.indeterminate = (count > 0 && count < expenseCheckboxes.length);
         }
+        if (selectAllDirect) {
+            selectAllDirect.checked = (count === directCheckboxes.length && directCheckboxes.length > 0);
+            selectAllDirect.indeterminate = (count > 0 && count < directCheckboxes.length);
+        }
     }
 
     if (selectAllModal) {
         selectAllModal.addEventListener('change', function() {
-            expenseCheckboxes.forEach(cb => {
-                cb.checked = selectAllModal.checked;
-            });
+            expenseCheckboxes.forEach(cb => cb.checked = selectAllModal.checked);
+            directCheckboxes.forEach(cb => cb.checked = selectAllModal.checked);
             recalculateSelectedExpenses();
         });
     }
 
+    if (selectAllDirect) {
+        selectAllDirect.addEventListener('change', function() {
+            directCheckboxes.forEach(cb => cb.checked = selectAllDirect.checked);
+            expenseCheckboxes.forEach(cb => cb.checked = selectAllDirect.checked);
+            recalculateSelectedExpenses();
+        });
+    }
+
+    directCheckboxes.forEach(cb => {
+        cb.addEventListener('change', function() {
+            const key = cb.getAttribute('data-key');
+            expenseCheckboxes.forEach(mcb => {
+                if (mcb.value === key) mcb.checked = cb.checked;
+            });
+            recalculateSelectedExpenses();
+        });
+    });
+
     expenseCheckboxes.forEach(cb => {
-        cb.addEventListener('change', recalculateSelectedExpenses);
+        cb.addEventListener('change', function() {
+            const val = cb.value;
+            directCheckboxes.forEach(dcb => {
+                if (dcb.getAttribute('data-key') === val) dcb.checked = cb.checked;
+            });
+            recalculateSelectedExpenses();
+        });
     });
 });
 </script>
