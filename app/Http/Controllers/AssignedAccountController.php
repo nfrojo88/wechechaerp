@@ -259,6 +259,8 @@ class AssignedAccountController extends Controller
             ->latest('fulfilled_at')
             ->first();
 
+        $cycleStartDate = $lastFulfilled ? $lastFulfilled->fulfilled_at : ($account->created_at ?? \Carbon\Carbon::now()->subMonths(6));
+
         $includeAll = $request->has('include_all') ? $request->boolean('include_all') : true;
 
         $unreplenishedExpenses = $this->getUnreplenishedExpenses($account, $cycleStartDate, $includeAll);
