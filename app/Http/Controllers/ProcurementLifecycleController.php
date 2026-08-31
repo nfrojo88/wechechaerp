@@ -90,11 +90,19 @@ class ProcurementLifecycleController extends Controller
         }
 
         // 4. Material & Maintenance Requisitions (Store & Procurement Phase)
+        $prMrIds = $myPrs->pluck('material_request_id')->filter()->toArray();
+
         $mrQuery = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
+            ->whereNotIn('id', $prMrIds)
             ->latest();
 
         if ($request->filled('project_id')) {
             $mrQuery->where('project_id', $request->project_id);
+        }
+
+        // Only show MRs pending store/planning action if not already converted to PR
+        if (!$isAdmin && !$isStoreManager) {
+            $mrQuery->whereIn('status', ['sent_to_store_manager', 'needs_purchase', 'sent_to_pr', 'planning_approved', 'pending']);
         }
 
         $materialRequestsQueue = $mrQuery->take(25)->get();

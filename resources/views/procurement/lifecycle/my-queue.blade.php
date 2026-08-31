@@ -223,11 +223,21 @@
                     <tbody>
                         {{-- 1. Merged Material & Maintenance Requisitions --}}
                         @foreach($materialRequestsQueue ?? [] as $mr)
+                        @php
+                            $linkedPr = $mr->purchaseRequests?->first() ?? \App\Models\PurchaseRequest::where('material_request_id', $mr->id)->first();
+                        @endphp
                         <tr class="table-light bg-opacity-25">
                             <td>
-                                <a href="{{ route('material-requests.show', $mr) }}" class="fw-bold text-decoration-none text-primary font-monospace">
-                                    {{ $mr->reference_number }}
-                                </a>
+                                @if($linkedPr)
+                                    <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="fw-bold text-decoration-none text-primary font-monospace">
+                                        {{ $linkedPr->pr_no }}
+                                    </a>
+                                    <small class="text-muted d-block" style="font-size: 0.75rem;">MR: {{ $mr->reference_number }}</small>
+                                @else
+                                    <a href="{{ route('material-requests.show', $mr) }}" class="fw-bold text-decoration-none text-primary font-monospace">
+                                        {{ $mr->reference_number }}
+                                    </a>
+                                @endif
                                 @if($mr->maintenance_request_id && $mr->maintenanceRequest)
                                     <div class="mt-1">
                                         <a href="{{ route('general-service.maintenance.show', $mr->maintenanceRequest) }}" class="badge bg-warning text-dark text-decoration-none border shadow-xs" title="View linked maintenance ticket">
@@ -262,46 +272,72 @@
                                 </span>
                             </td>
                             <td>
-                                @php
-                                    $mrBadge = match($mr->status) {
-                                        'sent_to_store_manager' => ['class' => 'bg-warning text-dark', 'label' => 'Sent to Store Manager', 'icon' => 'fa-warehouse'],
-                                        'pending', 'pending_planning' => ['class' => 'bg-warning text-dark', 'label' => 'Pending Planning', 'icon' => 'fa-hourglass-half'],
-                                        'planning_approved'     => ['class' => 'bg-info text-dark',    'label' => 'Planning Approved',     'icon' => 'fa-check'],
-                                        'issued'                => ['class' => 'bg-success',           'label' => 'Issued from Store',     'icon' => 'fa-check-double'],
-                                        'processed'             => ['class' => 'bg-info text-dark',    'label' => 'Processed',             'icon' => 'fa-boxes-packing'],
-                                        'needs_purchase', 'sent_to_pr' => ['class' => 'bg-primary',   'label' => 'In Procurement (PR)',   'icon' => 'fa-cart-shopping'],
-                                        default                 => ['class' => 'bg-secondary',         'label' => ucfirst(str_replace('_', ' ', $mr->status)), 'icon' => 'fa-circle-dot'],
-                                    };
-                                @endphp
-                                <span class="badge {{ $mrBadge['class'] }}">
-                                    <i class="fa-solid {{ $mrBadge['icon'] }} me-1"></i>{{ $mrBadge['label'] }}
-                                </span>
+                                @if($linkedPr)
+                                    <span class="badge bg-{{ \App\Models\PurchaseRequest::statusBadgeClass($linkedPr->status) }}">
+                                        {{ $linkedPr->status_label }}
+                                    </span>
+                                @else
+                                    @php
+                                        $mrBadge = match($mr->status) {
+                                            'sent_to_store_manager' => ['class' => 'bg-warning text-dark', 'label' => 'Sent to Store Manager', 'icon' => 'fa-warehouse'],
+                                            'pending', 'pending_planning' => ['class' => 'bg-warning text-dark', 'label' => 'Pending Planning', 'icon' => 'fa-hourglass-half'],
+                                            'planning_approved'     => ['class' => 'bg-info text-dark',    'label' => 'Planning Approved',     'icon' => 'fa-check'],
+                                            'issued'                => ['class' => 'bg-success',           'label' => 'Issued from Store',     'icon' => 'fa-check-double'],
+                                            'processed'             => ['class' => 'bg-info text-dark',    'label' => 'Processed',             'icon' => 'fa-boxes-packing'],
+                                            'needs_purchase', 'sent_to_pr' => ['class' => 'bg-primary',   'label' => 'In Procurement (PR)',   'icon' => 'fa-cart-shopping'],
+                                            default                 => ['class' => 'bg-secondary',         'label' => ucfirst(str_replace('_', ' ', $mr->status)), 'icon' => 'fa-circle-dot'],
+                                        };
+                                    @endphp
+                                    <span class="badge {{ $mrBadge['class'] }}">
+                                        <i class="fa-solid {{ $mrBadge['icon'] }} me-1"></i>{{ $mrBadge['label'] }}
+                                    </span>
+                                @endif
                             </td>
                             <td>
-                                <span class="badge bg-secondary bg-opacity-10 text-dark">
-                                    <i class="fas fa-warehouse me-1"></i> Store Manager
-                                </span>
+                                @if($linkedPr)
+                                    <span class="badge bg-secondary bg-opacity-10 text-dark">
+                                        <i class="fas fa-user-tag me-1"></i> {{ ucfirst(str_replace('_', ' ', $linkedPr->current_owner_role ?? 'Purchase')) }}
+                                    </span>
+                                @elseif(in_array($mr->status, ['needs_purchase', 'sent_to_pr']))
+                                    <span class="badge bg-secondary bg-opacity-10 text-dark">
+                                        <i class="fas fa-user-tag me-1"></i> Purchase
+                                    </span>
+                                @else
+                                    <span class="badge bg-secondary bg-opacity-10 text-dark">
+                                        <i class="fas fa-warehouse me-1"></i> Store Manager
+                                    </span>
+                                @endif
                             </td>
                             <td>{{ $mr->created_at->format('M d, Y') }}</td>
                             <td class="text-end">
                                 <div class="d-flex justify-content-end gap-1 flex-wrap">
-                                    @if(in_array($mr->status, ['sent_to_store_manager', 'planning_approved', 'pending']))
-                                        <form method="POST" action="{{ route('material-requests.send-to-pr', $mr) }}" class="d-inline">
-                                            @csrf
-                                            <button type="submit" class="btn btn-sm btn-primary shadow-sm" title="Route to Purchase Request (Buy)">
-                                                <i class="fas fa-cart-plus me-1"></i> Route to PR
-                                            </button>
-                                        </form>
-                                        <form method="POST" action="{{ route('material-requests.create-transfer', $mr) }}" class="d-inline">
-                                            @csrf
-                                            <button type="submit" class="btn btn-sm btn-outline-success" title="Create Transfer from other store">
-                                                <i class="fas fa-exchange-alt me-1"></i> Transfer
-                                            </button>
-                                        </form>
+                                    @if($linkedPr)
+                                        <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-eye me-1"></i> View &amp; Review
+                                        </a>
+                                    @elseif(in_array($mr->status, ['needs_purchase', 'sent_to_pr']))
+                                        <a href="{{ route('purchase-requests.create', ['material_request_id' => $mr->id, 'project_id' => $mr->project_id, 'store_id' => $mr->destination_store_id]) }}" class="btn btn-sm btn-primary shadow-sm" title="Create and review PR">
+                                            <i class="fas fa-eye me-1"></i> View &amp; Review
+                                        </a>
+                                    @else
+                                        @if(in_array($mr->status, ['sent_to_store_manager', 'planning_approved', 'pending']))
+                                            <form method="POST" action="{{ route('material-requests.send-to-pr', $mr) }}" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-primary shadow-sm" title="Route to Purchase Request (Buy)">
+                                                    <i class="fas fa-cart-plus me-1"></i> Route to PR
+                                                </button>
+                                            </form>
+                                            <form method="POST" action="{{ route('material-requests.create-transfer', $mr) }}" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Create Transfer from other store">
+                                                    <i class="fas fa-exchange-alt me-1"></i> Transfer
+                                                </button>
+                                            </form>
+                                        @endif
+                                        <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-primary" title="View Full Details">
+                                            <i class="fas fa-eye me-1"></i> View &amp; Review
+                                        </a>
                                     @endif
-                                    <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-secondary" title="View Full Details">
-                                        <i class="fas fa-eye me-1"></i> View
-                                    </a>
                                 </div>
                             </td>
                         </tr>
