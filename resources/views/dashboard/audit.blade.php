@@ -98,6 +98,9 @@
                     <a href="{{ route('procurement.my-queue') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
                         <i class="fa-solid fa-boxes-packing text-primary me-1"></i> Procurement Status
                     </a>
+                    <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
+                        <i class="fa-solid fa-truck-moving text-warning me-1"></i> Store Transfers
+                    </a>
                     <a href="{{ route('coa.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
                         <i class="fa-solid fa-sitemap text-secondary me-1"></i> COA Ledger
                     </a>

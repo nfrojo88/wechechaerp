@@ -127,6 +127,12 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.*') || request()->routeIs('transfers.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-truck-moving text-warning"></i>
+                <span>Store Transfers (Read-Only)</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-receipt text-danger"></i>
                 <span>VAT &amp; Withholding Tax</span>

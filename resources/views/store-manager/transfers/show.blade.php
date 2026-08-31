@@ -8,10 +8,13 @@
     {{-- User Permissions & Roles Check --}}
     @php
         $user = auth()->user();
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($user && $user->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
+
         $userStoreId = $assignedStore?->id ?? $user->store_id;
-        $isSenderStore = $userStoreId && ($transfer->from_store_id == $userStoreId);
-        $isReceiverStore = $userStoreId && ($transfer->to_store_id == $userStoreId);
-        $isAdmin = $user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'general_service', 'coordinator']);
+        $isSenderStore = !$isAuditorUser && $userStoreId && ($transfer->from_store_id == $userStoreId);
+        $isReceiverStore = !$isAuditorUser && $userStoreId && ($transfer->to_store_id == $userStoreId);
+        $isAdmin = !$isAuditorUser && $user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'general_service', 'coordinator']);
 
         // Workflow step flags
         $step1Completed = true;
@@ -19,6 +22,23 @@
         $step3Completed = in_array($transfer->status, ['in_transit', 'completed']);
         $step4Completed = $transfer->status === 'completed';
     @endphp
+
+    @if($isAuditorUser)
+        <div class="alert alert-info border-start border-4 border-info shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <div class="p-2.5 rounded-circle bg-info bg-opacity-25 text-info">
+                    <i class="fa-solid fa-shield-halved fa-lg"></i>
+                </div>
+                <div>
+                    <strong class="d-block text-dark">Internal Audit Oversight — Read-Only Mode</strong>
+                    <span class="text-muted small">You have complete read-only inspection visibility into this material transfer's waybill, origin store, destination store, driver assignment, and received quantities.</span>
+                </div>
+            </div>
+            <span class="badge bg-white text-info border border-info px-3 py-2 fw-semibold">
+                <i class="fa-solid fa-lock me-1"></i> Read-Only Audit View
+            </span>
+        </div>
+    @endif
 
     {{-- Top Header --}}
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">

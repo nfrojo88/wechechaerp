@@ -1,6 +1,10 @@
-@extends('layouts.app')
+@php
+    $authUser = auth()->user();
+    $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+    $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
+@endphp
 
-@section('title', 'Material Transfers - ' . ($isStoreKeeper ? 'Site Store' : 'Store Hub'))
+@section('title', $isAuditorUser ? 'Material Transfers Status (Read-Only)' : ('Material Transfers - ' . ($isStoreKeeper ? 'Site Store' : 'Store Hub')))
 
 @section('content')
 <div class="container-fluid px-4 py-3">
@@ -9,13 +13,14 @@
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
             <h4 class="fw-bold mb-1" style="color:var(--brand-800)">
-                <i class="fas fa-truck-moving me-2 text-primary"></i>{{ $isStoreKeeper ? 'Store Keeper - Material Transfers' : 'Inter-Store Material Transfers' }}
+                <i class="fas {{ $isAuditorUser ? 'fa-shield-halved text-info' : 'fa-truck-moving text-primary' }} me-2"></i>{{ $isAuditorUser ? 'Inter-Store Material Transfers (Read-Only)' : ($isStoreKeeper ? 'Store Keeper - Material Transfers' : 'Inter-Store Material Transfers') }}
             </h4>
             <p class="text-muted small mb-0">
-                {{ $isStoreKeeper ? 'Manage material dispatch and receiving with driver waybill slips for ' . ($assignedStore->name ?? 'your store') : 'Track and control inter-site material dispatches, driver logistics, and verified stock receipts' }}
+                {{ $isAuditorUser ? 'Internal audit inspection of all warehouse transfers, driver logistics, dispatch slips, and verified destination stock receipts.' : ($isStoreKeeper ? 'Manage material dispatch and receiving with driver waybill slips for ' . ($assignedStore->name ?? 'your store') : 'Track and control inter-site material dispatches, driver logistics, and verified stock receipts') }}
             </p>
         </div>
         <div class="d-flex gap-2">
+            @if(!$isAuditorUser)
             <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm shadow-sm">
                 <i class="fas fa-plus me-1"></i>New Transfer Request
             </a>
@@ -24,8 +29,28 @@
                 <i class="fa-solid fa-arrow-left me-1"></i>Store Dashboard
             </a>
             @endif
+            @else
+            <span class="badge bg-info text-dark px-3 py-2 fs-6 rounded-pill fw-bold">
+                <i class="fa-solid fa-eye me-1"></i> Read-Only Audit Stream
+            </span>
+            @endif
         </div>
     </div>
+
+    @if($isAuditorUser)
+    <div class="alert alert-info border-start border-4 border-info shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <div class="p-2 rounded-circle bg-info bg-opacity-25 text-info">
+                <i class="fa-solid fa-shield-halved fa-lg"></i>
+            </div>
+            <div>
+                <strong class="d-block text-dark">Auditor Oversight Mode</strong>
+                <span class="text-muted small">Full read-only visibility into origin/destination stores, assigned drivers, waybill slips, and received material quantities across all construction stores.</span>
+            </div>
+        </div>
+        <span class="badge bg-white text-info border border-info px-3 py-2 fw-semibold"><i class="fa-solid fa-lock me-1"></i>Read-Only</span>
+    </div>
+    @endif
 
     {{-- KPI Summary Cards --}}
     <div class="row g-3 mb-4">
@@ -456,7 +481,11 @@
                             {{-- Actions --}}
                             <td class="text-end pe-3">
                                 <div class="d-flex justify-content-end gap-1">
-                                    @if($transfer->status === 'in_transit' && ($isIncoming || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager'])))
+                                    @if($isAuditorUser)
+                                        <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye me-1"></i> Audit Review
+                                        </a>
+                                    @elseif($transfer->status === 'in_transit' && ($isIncoming || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager'])))
                                         <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-success shadow-sm" title="Inspect & Receive Materials">
                                             <i class="fas fa-box-open me-1"></i>Receive
                                         </a>
