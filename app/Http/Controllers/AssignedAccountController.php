@@ -261,14 +261,16 @@ class AssignedAccountController extends Controller
 
         $cycleStartDate = $lastFulfilled ? $lastFulfilled->fulfilled_at : ($account->created_at ?? Carbon::now()->subMonths(6));
 
-        $unreplenishedExpenses = $this->getUnreplenishedExpenses($account, $cycleStartDate);
+        $includeAll = $request->boolean('include_all', false);
+
+        $unreplenishedExpenses = $this->getUnreplenishedExpenses($account, $cycleStartDate, $includeAll);
         $unreplenishedExpensesTotal = $unreplenishedExpenses->sum('amount');
         $unreplenishedCount = $unreplenishedExpenses->count();
 
         // Check if there is currently a pending replenishment request
         $pendingReplenishment = PettyCashReplenishment::with(['requester', 'items'])
             ->where('chart_of_account_id', $account->id)
-            ->where('status', PettyCashReplenishment::STATUS_PENDING)
+            ->whereIn('status', [PettyCashReplenishment::STATUS_PENDING, PettyCashReplenishment::STATUS_UNDER_AUDIT])
             ->latest()
             ->first();
 
@@ -292,7 +294,8 @@ class AssignedAccountController extends Controller
             'unreplenishedCount',
             'pendingReplenishment',
             'replenishments',
-            'isFinanceHead'
+            'isFinanceHead',
+            'includeAll'
         ));
     }
 
@@ -395,15 +398,19 @@ class AssignedAccountController extends Controller
             'requested_amount' => 'required|numeric|min:0.01',
             'notes'            => 'nullable|string|max:1000',
             'attachment'       => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+            'selected_items'   => 'nullable|array',
+            'selected_items.*' => 'string',
+            'include_all'      => 'nullable|boolean',
+            'send_to_audit'    => 'nullable|boolean',
         ]);
 
         // Check if there is already a pending replenishment
         $existingPending = PettyCashReplenishment::where('chart_of_account_id', $account->id)
-            ->where('status', PettyCashReplenishment::STATUS_PENDING)
+            ->whereIn('status', [PettyCashReplenishment::STATUS_PENDING, PettyCashReplenishment::STATUS_UNDER_AUDIT])
             ->first();
 
         if ($existingPending) {
-            return redirect()->back()->with('error', 'There is already a pending replenishment request (' . $existingPending->request_no . ') awaiting Finance Head review.');
+            return redirect()->back()->with('error', 'There is already a pending replenishment request (' . $existingPending->request_no . ') awaiting review.');
         }
 
         $lastFulfilled = PettyCashReplenishment::where('chart_of_account_id', $account->id)
@@ -413,7 +420,19 @@ class AssignedAccountController extends Controller
 
         $cycleStartDate = $lastFulfilled ? $lastFulfilled->fulfilled_at : ($account->created_at ?? Carbon::now()->subMonths(6));
 
-        $unreplenishedExpenses = $this->getUnreplenishedExpenses($account, $cycleStartDate);
+        $includeAll = $request->boolean('include_all', false);
+        $allAvailableExpenses = $this->getUnreplenishedExpenses($account, $cycleStartDate, $includeAll);
+
+        $selectedItemKeys = $request->input('selected_items', []);
+        
+        if (!empty($selectedItemKeys) && is_array($selectedItemKeys)) {
+            $unreplenishedExpenses = $allAvailableExpenses->filter(function ($item) use ($selectedItemKeys) {
+                $key = $item->source_type . ':' . $item->source_id;
+                return in_array($key, $selectedItemKeys);
+            })->values();
+        } else {
+            $unreplenishedExpenses = $allAvailableExpenses;
+        }
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
@@ -426,6 +445,7 @@ class AssignedAccountController extends Controller
             $requestNo = 'PCR-' . $today . '-' . str_pad($countToday, 4, '0', STR_PAD_LEFT);
 
             $totalExpenses = $unreplenishedExpenses->sum('amount');
+            $status = $request->boolean('send_to_audit', true) ? PettyCashReplenishment::STATUS_UNDER_AUDIT : PettyCashReplenishment::STATUS_PENDING;
 
             $replenishment = PettyCashReplenishment::create([
                 'request_no'                 => $requestNo,
@@ -436,9 +456,11 @@ class AssignedAccountController extends Controller
                 'total_expenses_amount'      => $totalExpenses,
                 'period_start_date'          => $cycleStartDate,
                 'period_end_date'            => now(),
-                'status'                     => PettyCashReplenishment::STATUS_PENDING,
+                'status'                     => $status,
                 'notes'                      => $request->notes,
                 'attachment_path'            => $attachmentPath,
+                'reviewed_by'                => $status === PettyCashReplenishment::STATUS_UNDER_AUDIT ? $authId : null,
+                'reviewed_at'                => $status === PettyCashReplenishment::STATUS_UNDER_AUDIT ? now() : null,
             ]);
 
             foreach ($unreplenishedExpenses as $item) {
@@ -457,7 +479,7 @@ class AssignedAccountController extends Controller
             // Log to Audit Trail
             \App\Models\ActivityLog::log(
                 'created',
-                "Petty Cash Replenishment #{$replenishment->request_no} submitted by " . (auth()->user()->name ?? 'Custodian') . " for ETB " . number_format($replenishment->requested_amount, 2) . " ([{$account->code}] {$account->name}) with " . $unreplenishedExpenses->count() . " attached expense vouchers.",
+                "Petty Cash Replenishment #{$replenishment->request_no} submitted and routed to Audit by " . (auth()->user()->name ?? 'Custodian') . " for ETB " . number_format($replenishment->requested_amount, 2) . " ([{$account->code}] {$account->name}) with " . $unreplenishedExpenses->count() . " attached expense vouchers.",
                 'Finance & Petty Cash Audit',
                 $replenishment,
                 [
@@ -470,7 +492,7 @@ class AssignedAccountController extends Controller
             );
         });
 
-        return redirect()->back()->with('success', 'Petty Cash replenishment request sent to Finance Head with ' . $unreplenishedExpenses->count() . ' attached expense records (ETB ' . number_format($unreplenishedExpenses->sum('amount'), 2) . ').');
+        return redirect()->back()->with('success', 'Petty Cash replenishment request sent to Internal Audit with ' . $unreplenishedExpenses->count() . ' selected expense records (ETB ' . number_format($unreplenishedExpenses->sum('amount'), 2) . ').');
     }
 
     /**
@@ -1153,12 +1175,12 @@ class AssignedAccountController extends Controller
     /**
      * Helper: Fetch active cycle expense payments paid out of this account (excluding replenishment top-ups)
      */
-    private function getUnreplenishedExpenses(ChartOfAccount $account, $cycleStartDate): \Illuminate\Support\Collection
+    private function getUnreplenishedExpenses(ChartOfAccount $account, $cycleStartDate = null, bool $includeAll = false): \Illuminate\Support\Collection
     {
         $isPettyCashAccount = (str_contains(strtolower($account->name), 'petty') || $account->code === '1010');
 
         // 1. Fetch Paid Expense Requests (Real expense vouchers paid out from petty cash)
-        $paidExpenseRequests = ExpenseRequest::with(['user', 'employee', 'paidBy'])
+        $paidExpenseRequestsQuery = ExpenseRequest::with(['user', 'employee', 'paidBy'])
             ->where(function ($q) {
                 $q->where('status', ExpenseRequest::STATUS_PAID)
                   ->orWhere('status', 'Paid')
@@ -1185,26 +1207,32 @@ class AssignedAccountController extends Controller
             ->where(function ($q) {
                 $q->whereNull('description')
                   ->orWhere('description', 'not like', '%Petty Cash Replenishment%');
-            })
-            ->where(function ($q) use ($cycleStartDate) {
+            });
+
+        if (!$includeAll && $cycleStartDate) {
+            $paidExpenseRequestsQuery->where(function ($q) use ($cycleStartDate) {
                 $q->where('paid_at', '>=', $cycleStartDate)
                   ->orWhere(function ($sq) use ($cycleStartDate) {
                       $sq->whereNull('paid_at')->where('updated_at', '>=', $cycleStartDate);
                   });
-            })
-            ->latest('paid_at')
-            ->get();
+            });
+        }
+
+        $paidExpenseRequests = $paidExpenseRequestsQuery->latest('paid_at')->get();
 
         // 2. Fetch Direct Ledger Payments (Journal Entry Lines where funds were paid out of this account)
         $paymentSide = in_array($account->type, ['asset', 'expense']) ? 'credit' : 'debit';
-        $paymentLines = JournalEntryLine::with(['journalEntry.lines.account', 'journalEntry.creator'])
+        $paymentLinesQuery = JournalEntryLine::with(['journalEntry.lines.account', 'journalEntry.creator'])
             ->where('account_id', $account->id)
-            ->where('side', $paymentSide)
-            ->whereHas('journalEntry', function ($q) use ($cycleStartDate) {
+            ->where('side', $paymentSide);
+
+        if (!$includeAll && $cycleStartDate) {
+            $paymentLinesQuery->whereHas('journalEntry', function ($q) use ($cycleStartDate) {
                 $q->where('created_at', '>=', $cycleStartDate);
-            })
-            ->orderBy('created_at', 'desc')
-            ->get();
+            });
+        }
+
+        $paymentLines = $paymentLinesQuery->orderBy('created_at', 'desc')->get();
 
         // 3. Unify into a single structured collection of active cycle payment items
         $unreplenishedExpenses = collect();
