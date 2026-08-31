@@ -28,10 +28,11 @@ class ProcurementLifecycleController extends Controller
         $isCoordinator = $user->hasRole('coordinator');
         $isAdmin = $user->hasRole('global_admin') || $user->hasRole('admin');
         $isGm = $user->hasRole('gm') || $user->hasRole('general_manager');
+        $isAuditor = $user->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']) || in_array('auditor', $roles) || in_array('audit', $roles);
 
         // 1. Identify owner roles to query
         $targetRoles = [];
-        if ($isAdmin) {
+        if ($isAdmin || $isAuditor) {
             $targetRoles = PurchaseRequest::allStatuses();
         } else {
             if ($isCoordinator) {
@@ -62,7 +63,7 @@ class ProcurementLifecycleController extends Controller
         $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'materialRequest', 'items'])
             ->latest();
 
-        if (!$isAdmin) {
+        if (!$isAdmin && !$isAuditor) {
             $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm) {
                 $q->whereIn('current_owner_role', $targetRoles);
                 if ($isHr || $isCoordinator || $isGm) {
@@ -101,7 +102,7 @@ class ProcurementLifecycleController extends Controller
         }
 
         // Only show MRs pending store/planning action if not already converted to PR
-        if (!$isAdmin && !$isStoreManager) {
+        if (!$isAdmin && !$isStoreManager && !$isAuditor) {
             $mrQuery->whereIn('status', ['sent_to_store_manager', 'needs_purchase', 'sent_to_pr', 'planning_approved', 'pending']);
         }
 
@@ -113,7 +114,7 @@ class ProcurementLifecycleController extends Controller
 
         // 5. Summary Counters
         $kpi = [
-            'my_pending'                     => $myPrs->total() + $materialRequestsQueue->count(),
+            'my_pending'                     => $isAuditor ? PurchaseRequest::where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count() : ($myPrs->total() + $materialRequestsQueue->count()),
             'emergency_mrs'                  => $emergencyMrs->count(),
             'material_requests_queue'        => $materialRequestsQueue->count(),
             'pending_office_requests'        => $pendingOfficeCount,
@@ -127,6 +128,6 @@ class ProcurementLifecycleController extends Controller
             $projects = Project::orderBy('name')->get();
         }
 
-        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'materialRequestsQueue', 'kpi', 'projects', 'isHr', 'isCoordinator', 'isStoreManager', 'isPurchaseManager', 'isFinanceHead'));
+        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'materialRequestsQueue', 'kpi', 'projects', 'isHr', 'isCoordinator', 'isStoreManager', 'isPurchaseManager', 'isFinanceHead', 'isAuditor'));
     }
 }

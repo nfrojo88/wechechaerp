@@ -1,19 +1,49 @@
 @extends('layouts.app')
 
-@section('title', 'Procurement My Queue')
+@php
+    $isAuditorUser = !empty($isAuditor) || (auth()->check() && (auth()->user()->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']) || in_array('auditor', auth()->user()->roles->pluck('name')->toArray()) || in_array('audit', auth()->user()->roles->pluck('name')->toArray())));
+@endphp
+
+@section('title', $isAuditorUser ? 'Procurement Status & Compliance (Read-Only)' : 'Procurement My Queue')
 
 @section('content')
 <div class="container-fluid px-4 py-3">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
-            <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-tasks text-primary me-2"></i>Procurement — My Queue</h1>
-            <p class="text-muted small mb-0">Items awaiting action by your role in the 14-stage procurement lifecycle.</p>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas {{ $isAuditorUser ? 'fa-shield-halved text-info' : 'fa-tasks text-primary' }} me-2"></i>
+                {{ $isAuditorUser ? 'Procurement Status & Compliance Trail' : 'Procurement — My Queue' }}
+            </h1>
+            <p class="text-muted small mb-0">
+                {{ $isAuditorUser ? 'Complete internal audit view of all 14 procurement lifecycle stages, proforma quotes, GM approvals, and payment disbursement statuses.' : 'Items awaiting action by your role in the 14-stage procurement lifecycle.' }}
+            </p>
         </div>
+        @if(!$isAuditorUser)
         <a href="{{ route('purchase-requests.create') }}" class="btn btn-primary shadow-sm">
             <i class="fas fa-plus me-1"></i> New Purchase Request
         </a>
+        @else
+        <span class="badge bg-info text-dark px-3 py-2 fs-6 rounded-pill fw-bold">
+            <i class="fa-solid fa-eye me-1"></i> Read-Only Audit Stream
+        </span>
+        @endif
     </div>
+
+    @if($isAuditorUser)
+    <div class="alert alert-info border-start border-4 border-info shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <div class="p-2 rounded-circle bg-info bg-opacity-25 text-info">
+                <i class="fa-solid fa-shield-halved fa-lg"></i>
+            </div>
+            <div>
+                <strong class="d-block text-dark">Auditor Oversight Mode</strong>
+                <span class="text-muted small">You have full read-only inspection visibility across all procurement stages, material requests, quotes, finance releases, and delivery verification.</span>
+            </div>
+        </div>
+        <span class="badge bg-white text-info border border-info px-3 py-2 fw-semibold"><i class="fa-solid fa-lock me-1"></i>Read-Only</span>
+    </div>
+    @endif
 
     <!-- KPI Summary Cards -->
     <div class="row g-3 mb-4">
@@ -21,7 +51,7 @@
             <div class="card border-0 shadow-sm bg-primary text-white h-100">
                 <div class="card-body p-3 d-flex align-items-center justify-content-between">
                     <div>
-                        <div class="text-white-50 small font-weight-bold">Awaiting Your Action</div>
+                        <div class="text-white-50 small font-weight-bold">{{ $isAuditorUser ? 'Active Procurement Cycles' : 'Awaiting Your Action' }}</div>
                         <div class="h2 mb-0 font-weight-bold">{{ $kpi['my_pending'] }}</div>
                     </div>
                     <i class="fas fa-hourglass-half fa-2x text-white-50"></i>
@@ -311,32 +341,44 @@
                             <td>{{ $mr->created_at->format('M d, Y') }}</td>
                             <td class="text-end">
                                 <div class="d-flex justify-content-end gap-1 flex-wrap">
-                                    @if($linkedPr)
-                                        <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-sm btn-primary">
-                                            <i class="fas fa-eye me-1"></i> View &amp; Review
-                                        </a>
-                                    @elseif(in_array($mr->status, ['needs_purchase', 'sent_to_pr']))
-                                        <a href="{{ route('purchase-requests.create', ['material_request_id' => $mr->id, 'project_id' => $mr->project_id, 'store_id' => $mr->destination_store_id]) }}" class="btn btn-sm btn-primary shadow-sm" title="Create and review PR">
-                                            <i class="fas fa-eye me-1"></i> View &amp; Review
-                                        </a>
-                                    @else
-                                        @if(in_array($mr->status, ['sent_to_store_manager', 'planning_approved', 'pending']))
-                                            <form method="POST" action="{{ route('material-requests.send-to-pr', $mr) }}" class="d-inline">
-                                                @csrf
-                                                <button type="submit" class="btn btn-sm btn-primary shadow-sm" title="Route to Purchase Request (Buy)">
-                                                    <i class="fas fa-cart-plus me-1"></i> Route to PR
-                                                </button>
-                                            </form>
-                                            <form method="POST" action="{{ route('material-requests.create-transfer', $mr) }}" class="d-inline">
-                                                @csrf
-                                                <button type="submit" class="btn btn-sm btn-outline-success" title="Create Transfer from other store">
-                                                    <i class="fas fa-exchange-alt me-1"></i> Transfer
-                                                </button>
-                                            </form>
+                                    @if($isAuditorUser)
+                                        @if($linkedPr)
+                                            <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye me-1"></i> Audit Review
+                                            </a>
+                                        @else
+                                            <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye me-1"></i> Audit Review
+                                            </a>
                                         @endif
-                                        <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-primary" title="View Full Details">
-                                            <i class="fas fa-eye me-1"></i> View &amp; Review
-                                        </a>
+                                    @else
+                                        @if($linkedPr)
+                                            <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-eye me-1"></i> View &amp; Review
+                                            </a>
+                                        @elseif(in_array($mr->status, ['needs_purchase', 'sent_to_pr']))
+                                            <a href="{{ route('purchase-requests.create', ['material_request_id' => $mr->id, 'project_id' => $mr->project_id, 'store_id' => $mr->destination_store_id]) }}" class="btn btn-sm btn-primary shadow-sm" title="Create and review PR">
+                                                <i class="fas fa-eye me-1"></i> View &amp; Review
+                                            </a>
+                                        @else
+                                            @if(in_array($mr->status, ['sent_to_store_manager', 'planning_approved', 'pending']))
+                                                <form method="POST" action="{{ route('material-requests.send-to-pr', $mr) }}" class="d-inline">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-sm btn-primary shadow-sm" title="Route to Purchase Request (Buy)">
+                                                        <i class="fas fa-cart-plus me-1"></i> Route to PR
+                                                    </button>
+                                                </form>
+                                                <form method="POST" action="{{ route('material-requests.create-transfer', $mr) }}" class="d-inline">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-sm btn-outline-success" title="Create Transfer from other store">
+                                                        <i class="fas fa-exchange-alt me-1"></i> Transfer
+                                                    </button>
+                                                </form>
+                                            @endif
+                                            <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-primary" title="View Full Details">
+                                                <i class="fas fa-eye me-1"></i> View &amp; Review
+                                            </a>
+                                        @endif
                                     @endif
                                 </div>
                             </td>
@@ -436,31 +478,43 @@
                             <td>{{ $pr->created_at->format('M d, Y') }}</td>
                             <td class="text-end">
                                 <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
-                                    @if($pr->is_office_request)
-                                        <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-outline-primary" title="View Request Details">
-                                            <i class="fas fa-eye me-1"></i> View
-                                        </a>
-
-                                        @if($pr->status === 'pending_hr_approval')
-                                            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-warning text-dark fw-bold shadow-sm" title="Approve or Reject">
-                                                <i class="fas fa-gavel me-1"></i> Decide
+                                    @if($isAuditorUser)
+                                        @if($pr->is_office_request)
+                                            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-outline-primary" title="View Request Details">
+                                                <i class="fas fa-eye me-1"></i> Audit Review
                                             </a>
-                                        @elseif(in_array($pr->status, ['approved', 'pending_store_review']))
-                                            <button type="button" class="btn btn-sm btn-success fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#dispatchModal{{ $pr->id }}" title="Issue from Store & Send to Finance Head">
-                                                <i class="fas fa-boxes-packing me-1"></i> Dispatch → Finance
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-info text-dark fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#sendToPmModal{{ $pr->id }}" title="Send to Purchase Manager (PM)">
-                                                <i class="fas fa-paper-plane me-1"></i> Send to PM
-                                            </button>
-                                        @elseif($pr->status === 'pending_finance')
-                                            <button type="button" class="btn btn-sm fw-bold shadow-sm text-white" style="background:#7c3aed;" data-bs-toggle="modal" data-bs-target="#financeConfirmModal{{ $pr->id }}" title="Confirm Expense & Mark as Paid">
-                                                <i class="fas fa-file-invoice-dollar me-1"></i> Confirm Expense
-                                            </button>
+                                        @else
+                                            <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye me-1"></i> Audit Review
+                                            </a>
                                         @endif
                                     @else
-                                        <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-primary">
-                                            <i class="fas fa-eye me-1"></i> View &amp; Review
-                                        </a>
+                                        @if($pr->is_office_request)
+                                            <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-outline-primary" title="View Request Details">
+                                                <i class="fas fa-eye me-1"></i> View
+                                            </a>
+
+                                            @if($pr->status === 'pending_hr_approval')
+                                                <a href="{{ \Illuminate\Support\Facades\Route::has('office-requests.show') ? route('office-requests.show', $pr) : url('/office-requests/' . $pr->id) }}" class="btn btn-sm btn-warning text-dark fw-bold shadow-sm" title="Approve or Reject">
+                                                    <i class="fas fa-gavel me-1"></i> Decide
+                                                </a>
+                                            @elseif(in_array($pr->status, ['approved', 'pending_store_review']))
+                                                <button type="button" class="btn btn-sm btn-success fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#dispatchModal{{ $pr->id }}" title="Issue from Store & Send to Finance Head">
+                                                    <i class="fas fa-boxes-packing me-1"></i> Dispatch → Finance
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-info text-dark fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#sendToPmModal{{ $pr->id }}" title="Send to Purchase Manager (PM)">
+                                                    <i class="fas fa-paper-plane me-1"></i> Send to PM
+                                                </button>
+                                            @elseif($pr->status === 'pending_finance')
+                                                <button type="button" class="btn btn-sm fw-bold shadow-sm text-white" style="background:#7c3aed;" data-bs-toggle="modal" data-bs-target="#financeConfirmModal{{ $pr->id }}" title="Confirm Expense & Mark as Paid">
+                                                    <i class="fas fa-file-invoice-dollar me-1"></i> Confirm Expense
+                                                </button>
+                                            @endif
+                                        @else
+                                            <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-eye me-1"></i> View &amp; Review
+                                            </a>
+                                        @endif
                                     @endif
                                 </div>
                             </td>

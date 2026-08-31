@@ -115,6 +115,18 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-boxes-packing text-primary"></i>
+                <span>Procurement Status (Read-Only)</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('purchase-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-file-invoice text-info"></i>
+                <span>Purchase Requests (Read-Only)</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-receipt text-danger"></i>
                 <span>VAT &amp; Withholding Tax</span>

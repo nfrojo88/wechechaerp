@@ -95,6 +95,9 @@
                     <a href="{{ route('expenses.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
                         <i class="fa-solid fa-file-invoice text-danger me-1"></i> Expense Audit Hub
                     </a>
+                    <a href="{{ route('procurement.my-queue') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
+                        <i class="fa-solid fa-boxes-packing text-primary me-1"></i> Procurement Status
+                    </a>
                     <a href="{{ route('coa.index') }}" class="btn btn-light border btn-sm rounded-pill px-3 text-dark fw-semibold">
                         <i class="fa-solid fa-sitemap text-secondary me-1"></i> COA Ledger
                     </a>
@@ -397,6 +400,97 @@
             </div>
         </div>
 
+    </div>
+
+    <!-- Procurement & Purchasing Lifecycle Oversight (Read-Only) -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden" style="border-top: 4px solid #3b82f6 !important;">
+        <div class="card-header bg-white border-0 py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="fa-solid fa-boxes-packing text-primary me-2"></i>Procurement &amp; Material Sourcing Status (Read-Only)
+                </h5>
+                <small class="text-muted">Real-time audit oversight of purchase requisitions, quotations, GM approvals, and vendor payment clearances</small>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary text-white font-monospace px-3 py-1.5 rounded-pill fs-6">
+                    {{ $activeProcurementCount ?? 0 }} Active In-Flight
+                </span>
+                <a href="{{ route('procurement.my-queue') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                    View Full Lifecycle <i class="fa-solid fa-arrow-right ms-1"></i>
+                </a>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="bg-light text-muted text-uppercase" style="font-size: 0.75rem;">
+                        <tr>
+                            <th class="ps-4 py-2.5">PR Number</th>
+                            <th class="py-2.5">Project / Channel</th>
+                            <th class="py-2.5">Priority</th>
+                            <th class="py-2.5">Lifecycle Stage / Status</th>
+                            <th class="py-2.5">Current Owner</th>
+                            <th class="py-2.5 text-center">Quotes &amp; Payments</th>
+                            <th class="pe-4 py-2.5 text-end">Audit Inspection</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($recentProcurements ?? [] as $pr)
+                            <tr>
+                                <td class="ps-4 py-3">
+                                    <span class="fw-bold font-monospace text-primary">{{ $pr->pr_no }}</span>
+                                    <small class="text-muted d-block">{{ $pr->created_at?->format('M d, Y') }}</small>
+                                </td>
+                                <td class="py-3">
+                                    <strong class="text-dark">{{ $pr->project?->name ?? 'Head Office / Store' }}</strong>
+                                    <small class="text-muted d-block">{{ $pr->materialRequest?->source ?? 'Purchase Request' }}</small>
+                                </td>
+                                <td class="py-3">
+                                    <span class="badge bg-{{ $pr->priority === 'urgent' ? 'danger' : ($pr->priority === 'high' ? 'warning' : 'secondary') }}">
+                                        {{ ucfirst($pr->priority ?? 'normal') }}
+                                    </span>
+                                </td>
+                                <td class="py-3">
+                                    <span class="badge bg-{{ \App\Models\PurchaseRequest::statusBadgeClass($pr->status) }}">
+                                        {{ $pr->status_label }}
+                                    </span>
+                                </td>
+                                <td class="py-3">
+                                    <span class="badge bg-secondary bg-opacity-10 text-dark">
+                                        <i class="fa-solid fa-user-tag me-1"></i>{{ ucfirst(str_replace('_', ' ', $pr->current_owner_role ?? 'None')) }}
+                                    </span>
+                                </td>
+                                <td class="py-3 text-center">
+                                    @if($pr->proformaInvoices->count() > 0)
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info-subtle font-monospace px-2 py-1 me-1">
+                                            {{ $pr->proformaInvoices->count() }} Quotes
+                                        </span>
+                                    @endif
+                                    @if($pr->payment)
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle font-monospace px-2 py-1">
+                                            <i class="fa-solid fa-money-bill me-1"></i>{{ ucfirst($pr->payment->status ?? 'Payment') }}
+                                        </span>
+                                    @else
+                                        <span class="text-muted small">Pending Finance</span>
+                                    @endif
+                                </td>
+                                <td class="pe-4 py-3 text-end">
+                                    <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-outline-primary shadow-xs">
+                                        <i class="fa-solid fa-eye me-1"></i> Inspect PR
+                                    </a>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="7" class="text-center py-4 text-muted">
+                                    No active procurement requests found.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Live System Audit & Activity Trail -->

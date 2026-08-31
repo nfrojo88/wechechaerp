@@ -877,7 +877,14 @@ class DashboardController extends Controller
             ->take(12)
             ->get(), collect());
 
-        return view('dashboard.audit', compact('kpi', 'underAuditReplenishments', 'recentReplenishments', 'recentActivityLogs', 'cashAndBankAccounts'));
+        // Procurement & Purchasing Lifecycle Oversight (Read-Only for Auditor)
+        $activeProcurementCount = $this->safe(fn() => \App\Models\PurchaseRequest::where('status', '!=', \App\Models\PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(), 0);
+        $recentProcurements = $this->safe(fn() => \App\Models\PurchaseRequest::with(['project', 'requestedBy', 'proformaInvoices', 'payment'])
+            ->latest()
+            ->take(8)
+            ->get(), collect());
+
+        return view('dashboard.audit', compact('kpi', 'underAuditReplenishments', 'recentReplenishments', 'recentActivityLogs', 'cashAndBankAccounts', 'activeProcurementCount', 'recentProcurements'));
     }
 }
 

@@ -26,69 +26,89 @@
     $authUser = auth()->user();
     $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
     $isGlobalAdmin = in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles);
+    $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
     
     // Check whether the logged-in user can execute action controls for the current stage
     $canActOnCurrentStage = false;
     $currentRoleName = $purchaseRequest->current_owner_role;
 
-    switch ($purchaseRequest->status) {
-        case \App\Models\PurchaseRequest::STATUS_DRAFT:
-            $canActOnCurrentStage = $isGlobalAdmin || ($authUser && $purchaseRequest->requested_by === $authUser->id) || in_array('coordinator', $rawUserRoles) || in_array('site_engineer', $rawUserRoles);
-            break;
+    if (!$isAuditorUser) {
+        switch ($purchaseRequest->status) {
+            case \App\Models\PurchaseRequest::STATUS_DRAFT:
+                $canActOnCurrentStage = $isGlobalAdmin || ($authUser && $purchaseRequest->requested_by === $authUser->id) || in_array('coordinator', $rawUserRoles) || in_array('site_engineer', $rawUserRoles);
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW:
-            $canActOnCurrentStage = $isGlobalAdmin || in_array('store_manager', $rawUserRoles);
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('store_manager', $rawUserRoles);
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER:
-            $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase_manager', $rawUserRoles) || in_array('procurement_manager', $rawUserRoles);
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase_manager', $rawUserRoles) || in_array('procurement_manager', $rawUserRoles);
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM:
-            $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase', $rawUserRoles) || in_array('procurement_team', $rawUserRoles) || in_array('purchaser', $rawUserRoles) || in_array('buyer', $rawUserRoles);
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase', $rawUserRoles) || in_array('procurement_team', $rawUserRoles) || in_array('purchaser', $rawUserRoles) || in_array('buyer', $rawUserRoles);
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING:
-            $canActOnCurrentStage = $isGlobalAdmin || in_array('marketing', $rawUserRoles) || in_array('market_research', $rawUserRoles);
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('marketing', $rawUserRoles) || in_array('market_research', $rawUserRoles);
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION:
-            $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase_manager', $rawUserRoles) || in_array('procurement_manager', $rawUserRoles);
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase_manager', $rawUserRoles) || in_array('procurement_manager', $rawUserRoles);
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_GM:
-            $canActOnCurrentStage = $isGlobalAdmin || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles);
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_GM:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles);
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_FINANCE:
-            $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles);
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_FINANCE:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles);
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT:
-            if (!$purchaseRequest->payment?->assigned_finance_staff_id) {
-                $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles);
-            } else {
-                $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || ($authUser && $purchaseRequest->payment->assigned_finance_staff_id === $authUser->id);
-            }
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT:
+                if (!$purchaseRequest->payment?->assigned_finance_staff_id) {
+                    $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles);
+                } else {
+                    $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || ($authUser && $purchaseRequest->payment->assigned_finance_staff_id === $authUser->id);
+                }
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD:
-            $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase', $rawUserRoles) || in_array('procurement_team', $rawUserRoles) || in_array('purchaser', $rawUserRoles) || in_array('buyer', $rawUserRoles);
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase', $rawUserRoles) || in_array('procurement_team', $rawUserRoles) || in_array('purchaser', $rawUserRoles) || in_array('buyer', $rawUserRoles);
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY:
-            $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles);
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles);
+                break;
 
-        case \App\Models\PurchaseRequest::STATUS_PENDING_DRIVER:
-            $canActOnCurrentStage = $isGlobalAdmin || in_array('general_service', $rawUserRoles) || in_array('general_services', $rawUserRoles);
-            break;
+            case \App\Models\PurchaseRequest::STATUS_PENDING_DRIVER:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('general_service', $rawUserRoles) || in_array('general_services', $rawUserRoles);
+                break;
 
-        default:
-            $canActOnCurrentStage = false;
-            break;
+            default:
+                $canActOnCurrentStage = false;
+                break;
+        }
     }
 @endphp
+
+    @if($isAuditorUser)
+        <div class="alert alert-info border-start border-4 border-info shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <div class="p-2.5 rounded-circle bg-info bg-opacity-25 text-info">
+                    <i class="fa-solid fa-shield-halved fa-lg"></i>
+                </div>
+                <div>
+                    <strong class="d-block text-dark">Internal Audit Oversight — Read-Only Mode</strong>
+                    <span class="text-muted small">You have complete read-only visibility into this Purchase Request's entire history, stage logs, vendor proformas, GM approvals, payment receipts, and delivery details.</span>
+                </div>
+            </div>
+            <span class="badge bg-white text-info border border-info px-3 py-2 fw-semibold">
+                <i class="fa-solid fa-lock me-1"></i> Read-Only Audit View
+            </span>
+        </div>
+    @endif
 
     <div class="row g-4">
         <!-- Left Panel: Summary & Details -->
