@@ -261,93 +261,7 @@ class AssignedAccountController extends Controller
 
         $cycleStartDate = $lastFulfilled ? $lastFulfilled->fulfilled_at : ($account->created_at ?? Carbon::now()->subMonths(6));
 
-        // 1. Fetch Paid Expense Requests in active cycle
-        $isPettyCashAccount = (str_contains(strtolower($account->name), 'petty') || $account->code === '1010');
-
-        $paidExpenseRequests = ExpenseRequest::with(['user', 'employee', 'paidBy'])
-            ->where(function ($q) {
-                $q->where('status', ExpenseRequest::STATUS_PAID)
-                  ->orWhere('status', 'Paid')
-                  ->orWhere('status', 'paid');
-            })
-            ->where(function ($q) use ($account, $isPettyCashAccount) {
-                $q->where('chart_of_account_id', $account->id)
-                  ->orWhere('coa_id', $account->id);
-
-                if ($isPettyCashAccount) {
-                    $q->orWhereNull('bank_account_id');
-                }
-            })
-            ->where(function ($q) use ($cycleStartDate) {
-                $q->where('paid_at', '>=', $cycleStartDate)
-                  ->orWhere(function ($sq) use ($cycleStartDate) {
-                      $sq->whereNull('paid_at')->where('updated_at', '>=', $cycleStartDate);
-                  });
-            })
-            ->latest('paid_at')
-            ->get();
-
-        // 2. Fetch Direct Ledger Payments (Journal Entry Lines)
-        $paymentSide = in_array($account->type, ['asset', 'expense']) ? 'credit' : 'debit';
-        $paymentLines = JournalEntryLine::with(['journalEntry.lines.account', 'journalEntry.creator'])
-            ->where('account_id', $account->id)
-            ->where('side', $paymentSide)
-            ->whereHas('journalEntry', function ($q) use ($cycleStartDate) {
-                $q->where('created_at', '>=', $cycleStartDate);
-            })
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        // 3. Unify into a single structured collection of active cycle payment items
-        $unreplenishedExpenses = collect();
-
-        foreach ($paidExpenseRequests as $req) {
-            $applicantName = $req->employee ? $req->employee->full_name : ($req->user->name ?? 'Employee');
-            $dept = $req->employee->department ?? ($req->user->department ?? 'General');
-            $categoryName = $req->category . ($req->other_reason ? ' (' . $req->other_reason . ')' : '');
-
-            $unreplenishedExpenses->push((object) [
-                'source_type'       => 'expense_request',
-                'source_id'         => $req->id,
-                'date'              => $req->paid_at ?? $req->created_at,
-                'reference'         => $req->request_number ?? ('REQ-' . $req->id),
-                'requester'         => $applicantName,
-                'department'        => $dept,
-                'category'          => $categoryName ?: 'Expense Request',
-                'description'       => $req->description,
-                'amount'            => (float) $req->amount,
-                'target_account'    => $categoryName ?: 'Expense Request',
-                'payment_reference' => $req->payment_reference,
-                'paid_by_name'      => $req->paidBy->name ?? 'Finance',
-            ]);
-        }
-
-        foreach ($paymentLines as $line) {
-            $jeRef = $line->journalEntry?->entry_no ?? '';
-            if ($line->journalEntry?->reference_type === 'ExpenseRequest' || $unreplenishedExpenses->contains('reference', $jeRef)) {
-                continue;
-            }
-
-            $otherLine = $line->journalEntry?->lines?->where('id', '!=', $line->id)->first();
-            $targetName = $otherLine?->account ? ($otherLine->account->code . ' - ' . $otherLine->account->name) : 'General Expense';
-
-            $unreplenishedExpenses->push((object) [
-                'source_type'       => 'journal_line',
-                'source_id'         => $line->id,
-                'date'              => $line->journalEntry?->entry_date ?? $line->created_at,
-                'reference'         => $line->journalEntry?->entry_no ?? ('REF-' . $line->id),
-                'requester'         => $line->journalEntry?->creator->name ?? 'Direct Voucher',
-                'department'        => 'Finance / Operations',
-                'category'          => 'Direct Cash Payment',
-                'description'       => $line->description ?? $line->journalEntry?->description,
-                'amount'            => (float) $line->amount,
-                'target_account'    => $targetName,
-                'payment_reference' => $line->journalEntry?->entry_no,
-                'paid_by_name'      => $line->journalEntry?->creator->name ?? 'Custodian',
-            ]);
-        }
-
-        $unreplenishedExpenses = $unreplenishedExpenses->sortByDesc('date')->values();
+        $unreplenishedExpenses = $this->getUnreplenishedExpenses($account, $cycleStartDate);
         $unreplenishedExpensesTotal = $unreplenishedExpenses->sum('amount');
         $unreplenishedCount = $unreplenishedExpenses->count();
 
@@ -499,86 +413,7 @@ class AssignedAccountController extends Controller
 
         $cycleStartDate = $lastFulfilled ? $lastFulfilled->fulfilled_at : ($account->created_at ?? Carbon::now()->subMonths(6));
 
-        // 1. Fetch Paid Expense Requests
-        $isPettyCashAccount = (str_contains(strtolower($account->name), 'petty') || $account->code === '1010');
-
-        $paidExpenseRequests = ExpenseRequest::with(['user', 'employee', 'paidBy'])
-            ->where(function ($q) {
-                $q->where('status', ExpenseRequest::STATUS_PAID)
-                  ->orWhere('status', 'Paid')
-                  ->orWhere('status', 'paid');
-            })
-            ->where(function ($q) use ($account, $isPettyCashAccount) {
-                $q->where('chart_of_account_id', $account->id)
-                  ->orWhere('coa_id', $account->id);
-
-                if ($isPettyCashAccount) {
-                    $q->orWhereNull('bank_account_id');
-                }
-            })
-            ->where(function ($q) use ($cycleStartDate) {
-                $q->where('paid_at', '>=', $cycleStartDate)
-                  ->orWhere(function ($sq) use ($cycleStartDate) {
-                      $sq->whereNull('paid_at')->where('updated_at', '>=', $cycleStartDate);
-                  });
-            })
-            ->latest('paid_at')
-            ->get();
-
-        // 2. Fetch Direct Ledger Payments (Journal Entry Lines)
-        $paymentSide = in_array($account->type, ['asset', 'expense']) ? 'credit' : 'debit';
-        $paymentLines = JournalEntryLine::with(['journalEntry.lines.account', 'journalEntry.creator'])
-            ->where('account_id', $account->id)
-            ->where('side', $paymentSide)
-            ->whereHas('journalEntry', function ($q) use ($cycleStartDate) {
-                $q->where('created_at', '>=', $cycleStartDate);
-            })
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        $unreplenishedExpenses = collect();
-
-        foreach ($paidExpenseRequests as $req) {
-            $applicantName = $req->employee ? $req->employee->full_name : ($req->user->name ?? 'Employee');
-            $dept = $req->employee->department ?? ($req->user->department ?? 'General');
-            $categoryName = $req->category . ($req->other_reason ? ' (' . $req->other_reason . ')' : '');
-
-            $unreplenishedExpenses->push((object) [
-                'source_type'       => 'expense_request',
-                'source_id'         => $req->id,
-                'date'              => $req->paid_at ?? $req->created_at,
-                'reference'         => $req->request_number ?? ('REQ-' . $req->id),
-                'requester'         => $applicantName,
-                'department'        => $dept,
-                'category'          => $categoryName ?: 'Expense Request',
-                'description'       => $req->description,
-                'amount'            => (float) $req->amount,
-                'target_account'    => $categoryName ?: 'Expense Request',
-            ]);
-        }
-
-        foreach ($paymentLines as $line) {
-            $jeRef = $line->journalEntry?->entry_no ?? '';
-            if ($line->journalEntry?->reference_type === 'ExpenseRequest' || $unreplenishedExpenses->contains('reference', $jeRef)) {
-                continue;
-            }
-
-            $otherLine = $line->journalEntry?->lines?->where('id', '!=', $line->id)->first();
-            $targetName = $otherLine?->account ? ($otherLine->account->code . ' - ' . $otherLine->account->name) : 'General Expense';
-
-            $unreplenishedExpenses->push((object) [
-                'source_type'       => 'journal_line',
-                'source_id'         => $line->id,
-                'date'              => $line->journalEntry?->entry_date ?? $line->created_at,
-                'reference'         => $line->journalEntry?->entry_no ?? ('REF-' . $line->id),
-                'requester'         => $line->journalEntry?->creator->name ?? 'Direct Voucher',
-                'department'        => 'Finance / Operations',
-                'category'          => 'Direct Cash Payment',
-                'description'       => $line->description ?? $line->journalEntry?->description,
-                'amount'            => (float) $line->amount,
-                'target_account'    => $targetName,
-            ]);
-        }
+        $unreplenishedExpenses = $this->getUnreplenishedExpenses($account, $cycleStartDate);
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
@@ -1313,6 +1148,127 @@ class AssignedAccountController extends Controller
         } catch (\Throwable $e) {
             Log::warning('Error syncing paid PCR expense replenishments: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Helper: Fetch active cycle expense payments paid out of this account (excluding replenishment top-ups)
+     */
+    private function getUnreplenishedExpenses(ChartOfAccount $account, $cycleStartDate): \Illuminate\Support\Collection
+    {
+        $isPettyCashAccount = (str_contains(strtolower($account->name), 'petty') || $account->code === '1010');
+
+        // 1. Fetch Paid Expense Requests (Real expense vouchers paid out from petty cash)
+        $paidExpenseRequests = ExpenseRequest::with(['user', 'employee', 'paidBy'])
+            ->where(function ($q) {
+                $q->where('status', ExpenseRequest::STATUS_PAID)
+                  ->orWhere('status', 'Paid')
+                  ->orWhere('status', 'paid');
+            })
+            ->where(function ($q) use ($account, $isPettyCashAccount) {
+                $q->where('chart_of_account_id', $account->id)
+                  ->orWhere('coa_id', $account->id);
+
+                if ($isPettyCashAccount) {
+                    $q->orWhereNull('bank_account_id');
+                }
+            })
+            // STRICT FILTER: Exclude Replenishment Top-up Expense Requests
+            ->where('request_number', 'not like', 'EXP-PCR-%')
+            ->where(function ($q) {
+                $q->whereNull('other_reason')
+                  ->orWhere('other_reason', '!=', 'Petty Cash Replenishment');
+            })
+            ->where(function ($q) {
+                $q->whereNull('category')
+                  ->orWhere('category', 'not like', '%Petty Cash Replenishment%');
+            })
+            ->where(function ($q) {
+                $q->whereNull('description')
+                  ->orWhere('description', 'not like', '%Petty Cash Replenishment%');
+            })
+            ->where(function ($q) use ($cycleStartDate) {
+                $q->where('paid_at', '>=', $cycleStartDate)
+                  ->orWhere(function ($sq) use ($cycleStartDate) {
+                      $sq->whereNull('paid_at')->where('updated_at', '>=', $cycleStartDate);
+                  });
+            })
+            ->latest('paid_at')
+            ->get();
+
+        // 2. Fetch Direct Ledger Payments (Journal Entry Lines where funds were paid out of this account)
+        $paymentSide = in_array($account->type, ['asset', 'expense']) ? 'credit' : 'debit';
+        $paymentLines = JournalEntryLine::with(['journalEntry.lines.account', 'journalEntry.creator'])
+            ->where('account_id', $account->id)
+            ->where('side', $paymentSide)
+            ->whereHas('journalEntry', function ($q) use ($cycleStartDate) {
+                $q->where('created_at', '>=', $cycleStartDate);
+            })
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // 3. Unify into a single structured collection of active cycle payment items
+        $unreplenishedExpenses = collect();
+
+        foreach ($paidExpenseRequests as $req) {
+            $applicantName = $req->employee ? $req->employee->full_name : ($req->user->name ?? 'Employee');
+            $dept = $req->employee->department ?? ($req->user->department ?? 'General');
+            $categoryName = $req->category . ($req->other_reason ? ' (' . $req->other_reason . ')' : '');
+
+            $unreplenishedExpenses->push((object) [
+                'source_type'       => 'expense_request',
+                'source_id'         => $req->id,
+                'date'              => $req->paid_at ?? $req->created_at,
+                'reference'         => $req->request_number ?? ('REQ-' . $req->id),
+                'requester'         => $applicantName,
+                'department'        => $dept,
+                'category'          => $categoryName ?: 'Expense Request',
+                'description'       => $req->description,
+                'amount'            => (float) ($req->net_amount > 0 ? $req->net_amount : $req->amount),
+                'target_account'    => $categoryName ?: 'Expense Request',
+                'payment_reference' => $req->payment_reference,
+                'paid_by_name'      => $req->paidBy->name ?? 'Finance',
+            ]);
+        }
+
+        foreach ($paymentLines as $line) {
+            $jeRef = $line->journalEntry?->entry_no ?? '';
+            $jeRefType = $line->journalEntry?->reference_type ?? '';
+            $jeDesc = $line->journalEntry?->description ?? '';
+            $lineDesc = $line->description ?? '';
+
+            // STRICT FILTER: Exclude Replenishment Top-ups, ExpenseRequest duplicates, or Inflows
+            if (
+                $jeRefType === 'petty_cash_replenishment' ||
+                $jeRefType === 'ExpenseRequest' ||
+                str_contains($jeDesc, 'Petty Cash Replenishment') ||
+                str_contains($jeDesc, 'Replenishment Top-up') ||
+                str_contains($lineDesc, 'Replenishment Top-up') ||
+                str_contains($lineDesc, 'Petty Cash Replenishment') ||
+                $unreplenishedExpenses->contains('reference', $jeRef)
+            ) {
+                continue;
+            }
+
+            $otherLine = $line->journalEntry?->lines?->where('id', '!=', $line->id)->first();
+            $targetName = $otherLine?->account ? ($otherLine->account->code . ' - ' . $otherLine->account->name) : 'General Expense';
+
+            $unreplenishedExpenses->push((object) [
+                'source_type'       => 'journal_line',
+                'source_id'         => $line->id,
+                'date'              => $line->journalEntry?->entry_date ?? $line->created_at,
+                'reference'         => $line->journalEntry?->entry_no ?? ('REF-' . $line->id),
+                'requester'         => $line->journalEntry?->creator->name ?? 'Direct Voucher',
+                'department'        => 'Finance / Operations',
+                'category'          => 'Direct Cash Payment',
+                'description'       => $line->description ?? $line->journalEntry?->description,
+                'amount'            => (float) $line->amount,
+                'target_account'    => $targetName,
+                'payment_reference' => $line->journalEntry?->entry_no,
+                'paid_by_name'      => $line->journalEntry?->creator->name ?? 'Custodian',
+            ]);
+        }
+
+        return $unreplenishedExpenses->sortByDesc('date')->values();
     }
 }
 
