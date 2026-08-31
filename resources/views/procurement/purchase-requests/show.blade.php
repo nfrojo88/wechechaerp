@@ -38,6 +38,14 @@
                 $canActOnCurrentStage = $isGlobalAdmin || ($authUser && $purchaseRequest->requested_by === $authUser->id) || in_array('coordinator', $rawUserRoles) || in_array('site_engineer', $rawUserRoles);
                 break;
 
+            case \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('planning', $rawUserRoles) || in_array('planning_manager', $rawUserRoles);
+                break;
+
+            case \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL:
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('coordinator', $rawUserRoles) || in_array('hr_manager', $rawUserRoles) || in_array('hr', $rawUserRoles);
+                break;
+
             case \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW:
                 $canActOnCurrentStage = $isGlobalAdmin || in_array('store_manager', $rawUserRoles);
                 break;
