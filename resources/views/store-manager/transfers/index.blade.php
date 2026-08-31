@@ -30,78 +30,57 @@
     {{-- KPI Summary Cards --}}
     <div class="row g-3 mb-4">
         @if($isStoreKeeper)
-            {{-- Storekeeper Specific KPIs: Focused on Incoming and Outgoing --}}
-            <div class="col-xl-2 col-md-4 col-sm-6">
-                <a href="{{ route('store-manager.transfers.index', ['tab' => 'all']) }}" class="text-decoration-none">
-                    <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? 'all') === 'all' ? 'border-primary border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);">
-                        <div class="card-body p-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="text-muted small fw-semibold">All Site Transfers</div>
-                                    <div class="fs-4 fw-bold text-dark mt-1">{{ number_format($totalCount ?? 0) }}</div>
-                                </div>
-                                <div class="p-2 rounded bg-primary bg-opacity-10 text-primary">
-                                    <i class="fas fa-boxes-stacked fa-lg"></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </a>
-            </div>
-
-            <div class="col-xl-2 col-md-4 col-sm-6">
+            {{-- Storekeeper Specific KPIs: Strict Incoming vs Outgoing for Assigned Store --}}
+            <div class="col-md-6 col-lg-3">
                 <a href="{{ route('store-manager.transfers.index', ['tab' => 'incoming']) }}" class="text-decoration-none">
-                    <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'incoming' ? 'border-success border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);">
+                    <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? 'incoming') === 'incoming' ? 'border-success border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);">
                         <div class="card-body p-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
-                                    <div class="text-muted small fw-semibold">Incoming (መቀበያ)</div>
-                                    <div class="fs-4 fw-bold text-success mt-1">{{ number_format($incomingCount ?? 0) }}</div>
+                                    <div class="text-muted small fw-semibold text-uppercase">Total Incoming (መቀበያ)</div>
+                                    <div class="fs-3 fw-bold text-success mt-1">{{ number_format($incomingCount ?? 0) }}</div>
+                                    <small class="text-muted">Materials arriving at {{ $assignedStore->name ?? 'your store' }}</small>
                                 </div>
-                                <div class="p-2 rounded bg-success bg-opacity-10 text-success">
-                                    <i class="fas fa-arrow-down fa-lg"></i>
+                                <div class="p-3 rounded-3 bg-success bg-opacity-10 text-success">
+                                    <i class="fas fa-arrow-down fa-xl"></i>
                                 </div>
-                            </div>
-                            <div class="small text-muted mt-1" style="font-size:0.75rem;">
-                                <span class="badge bg-success bg-opacity-25 text-success">{{ $pendingIncomingCount ?? 0 }} To Receive</span>
                             </div>
                         </div>
                     </div>
                 </a>
             </div>
 
-            <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="col-md-6 col-lg-3">
+                <a href="{{ route('store-manager.transfers.index', ['tab' => 'incoming', 'status' => 'in_transit']) }}" class="text-decoration-none">
+                    <div class="card border-0 shadow-sm rounded-3 h-100" style="background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="text-muted small fw-semibold text-uppercase">To Receive (In Transit)</div>
+                                    <div class="fs-3 fw-bold text-info mt-1">{{ number_format($pendingIncomingCount ?? 0) }}</div>
+                                    <small class="text-muted">On the road from other stores</small>
+                                </div>
+                                <div class="p-3 rounded-3 bg-info bg-opacity-10 text-info">
+                                    <i class="fas fa-truck-moving fa-xl"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+
+            <div class="col-md-6 col-lg-3">
                 <a href="{{ route('store-manager.transfers.index', ['tab' => 'outgoing']) }}" class="text-decoration-none">
                     <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'outgoing' ? 'border-primary border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);">
                         <div class="card-body p-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
-                                    <div class="text-muted small fw-semibold">Outgoing (መላኪያ)</div>
-                                    <div class="fs-4 fw-bold text-primary mt-1">{{ number_format($outgoingCount ?? 0) }}</div>
+                                    <div class="text-muted small fw-semibold text-uppercase">Total Outgoing (መላኪያ)</div>
+                                    <div class="fs-3 fw-bold text-primary mt-1">{{ number_format($outgoingCount ?? 0) }}</div>
+                                    <small class="text-muted">Materials dispatched from {{ $assignedStore->name ?? 'your store' }}</small>
                                 </div>
-                                <div class="p-2 rounded bg-primary bg-opacity-10 text-primary">
-                                    <i class="fas fa-arrow-up fa-lg"></i>
-                                </div>
-                            </div>
-                            <div class="small text-muted mt-1" style="font-size:0.75rem;">
-                                <span class="badge bg-primary bg-opacity-25 text-primary">{{ $pendingOutgoingCount ?? 0 }} To Dispatch</span>
-                            </div>
-                        </div>
-                    </div>
-                </a>
-            </div>
-
-            <div class="col-xl-2 col-md-4 col-sm-6">
-                <a href="{{ route('store-manager.transfers.index', ['tab' => 'incoming', 'status' => 'in_transit']) }}" class="text-decoration-none">
-                    <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'in_transit' ? 'border-info border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f0fdfa 100%);">
-                        <div class="card-body p-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="text-muted small fw-semibold">On Road / To Receive</div>
-                                    <div class="fs-4 fw-bold text-info mt-1">{{ number_format($pendingIncomingCount ?? 0) }}</div>
-                                </div>
-                                <div class="p-2 rounded bg-info bg-opacity-10 text-info">
-                                    <i class="fas fa-truck-fast fa-lg"></i>
+                                <div class="p-3 rounded-3 bg-primary bg-opacity-10 text-primary">
+                                    <i class="fas fa-arrow-up fa-xl"></i>
                                 </div>
                             </div>
                         </div>
@@ -109,35 +88,18 @@
                 </a>
             </div>
 
-            <div class="col-xl-2 col-md-4 col-sm-6">
+            <div class="col-md-6 col-lg-3">
                 <a href="{{ route('store-manager.transfers.index', ['tab' => 'outgoing', 'status' => 'approved']) }}" class="text-decoration-none">
                     <div class="card border-0 shadow-sm rounded-3 h-100" style="background: linear-gradient(135deg, #ffffff 0%, #fffbeb 100%);">
                         <div class="card-body p-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
-                                    <div class="text-muted small fw-semibold">Ready for Dispatch</div>
-                                    <div class="fs-4 fw-bold text-warning mt-1">{{ number_format($pendingOutgoingCount ?? 0) }}</div>
+                                    <div class="text-muted small fw-semibold text-uppercase">Ready for Dispatch</div>
+                                    <div class="fs-3 fw-bold text-warning mt-1">{{ number_format($pendingOutgoingCount ?? 0) }}</div>
+                                    <small class="text-muted">Pending outgoing waybill / slip</small>
                                 </div>
-                                <div class="p-2 rounded bg-warning bg-opacity-10 text-warning">
-                                    <i class="fas fa-dolly fa-lg"></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </a>
-            </div>
-
-            <div class="col-xl-2 col-md-4 col-sm-6">
-                <a href="{{ route('store-manager.transfers.index', ['tab' => 'completed']) }}" class="text-decoration-none">
-                    <div class="card border-0 shadow-sm rounded-3 h-100 {{ ($tab ?? '') === 'completed' ? 'border-success border-2' : '' }}" style="background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);">
-                        <div class="card-body p-3">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="text-muted small fw-semibold">Completed</div>
-                                    <div class="fs-4 fw-bold text-success mt-1">{{ number_format($completedCount ?? 0) }}</div>
-                                </div>
-                                <div class="p-2 rounded bg-success bg-opacity-10 text-success">
-                                    <i class="fas fa-check-double fa-lg"></i>
+                                <div class="p-3 rounded-3 bg-warning bg-opacity-10 text-warning">
+                                    <i class="fas fa-dolly fa-xl"></i>
                                 </div>
                             </div>
                         </div>
@@ -260,27 +222,19 @@
     <div class="card shadow-sm border-0 rounded-3 mb-4">
         <div class="card-body p-3">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 border-bottom pb-3 mb-3">
-                <ul class="nav nav-pills gap-1">
+                <ul class="nav nav-pills gap-2">
                     @if($isStoreKeeper)
-                        {{-- Store Keeper Tabs: Incoming and Outgoing --}}
+                        {{-- Store Keeper Tabs: Strictly Only Incoming and Outgoing --}}
                         <li class="nav-item">
-                            <a class="nav-link py-1 px-3 small {{ ($tab ?? 'all') === 'all' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'all'])) }}">
-                                <i class="fas fa-list-ul me-1"></i>All Transfers <span class="badge bg-secondary bg-opacity-25 text-dark ms-1">{{ $totalCount ?? 0 }}</span>
+                            <a class="nav-link py-2 px-4 fw-semibold {{ ($tab ?? 'incoming') === 'incoming' ? 'active bg-success text-white shadow-sm' : 'bg-light text-dark' }}" href="{{ route('store-manager.transfers.index', ['tab' => 'incoming']) }}">
+                                <i class="fas fa-arrow-down me-2"></i>Incoming Materials (መቀበያ)
+                                <span class="badge {{ ($tab ?? 'incoming') === 'incoming' ? 'bg-white text-success' : 'bg-success text-white' }} ms-2">{{ $incomingCount ?? 0 }}</span>
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link py-1 px-3 small {{ ($tab ?? '') === 'incoming' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'incoming'])) }}">
-                                <i class="fas fa-arrow-down text-success me-1"></i>Incoming (መቀበያ) <span class="badge bg-success text-white ms-1">{{ $incomingCount ?? 0 }}</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link py-1 px-3 small {{ ($tab ?? '') === 'outgoing' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'outgoing'])) }}">
-                                <i class="fas fa-arrow-up text-primary me-1"></i>Outgoing (መላኪያ) <span class="badge bg-primary text-white ms-1">{{ $outgoingCount ?? 0 }}</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link py-1 px-3 small {{ ($tab ?? '') === 'completed' ? 'active' : '' }}" href="{{ route('store-manager.transfers.index', array_merge(request()->except('tab'), ['tab' => 'completed'])) }}">
-                                <i class="fas fa-check-double text-success me-1"></i>Completed <span class="badge bg-light text-dark ms-1">{{ $completedCount ?? 0 }}</span>
+                            <a class="nav-link py-2 px-4 fw-semibold {{ ($tab ?? '') === 'outgoing' ? 'active bg-primary text-white shadow-sm' : 'bg-light text-dark' }}" href="{{ route('store-manager.transfers.index', ['tab' => 'outgoing']) }}">
+                                <i class="fas fa-arrow-up me-2"></i>Outgoing Materials (መላኪያ)
+                                <span class="badge {{ ($tab ?? '') === 'outgoing' ? 'bg-white text-primary' : 'bg-primary text-white' }} ms-2">{{ $outgoingCount ?? 0 }}</span>
                             </a>
                         </li>
                     @else

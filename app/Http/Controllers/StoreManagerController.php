@@ -368,23 +368,27 @@ class StoreManagerController extends Controller
         $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
         $storeId = $assignedStore?->id;
 
-        $tab = $request->input('tab', 'all');
+        $tab = $request->input('tab');
+        if ($isStoreKeeper && empty($tab)) {
+            $tab = 'incoming';
+        } elseif (empty($tab)) {
+            $tab = 'all';
+        }
         $search = $request->input('search');
         $filterStoreId = $request->input('store_id');
         $status = $request->input('status');
 
         $query = Transfer::with(['fromStore', 'toStore', 'requestedBy', 'approvedBy', 'dispatchedBy', 'receivedBy', 'driver', 'items.product']);
 
-        if ($isStoreKeeper && $storeId) {
-            if ($tab === 'outgoing') {
+        if ($isStoreKeeper) {
+            if (!$storeId) {
+                // If storekeeper has no assigned store, do not show any other store's data
+                $query->whereRaw('1 = 0');
+            } elseif ($tab === 'outgoing') {
                 $query->where('from_store_id', $storeId);
-            } elseif ($tab === 'incoming') {
-                $query->where('to_store_id', $storeId);
             } else {
-                $query->where(function ($q) use ($storeId) {
-                    $q->where('from_store_id', $storeId)
-                      ->orWhere('to_store_id', $storeId);
-                });
+                // Default to incoming transfers assigned to their store
+                $query->where('to_store_id', $storeId);
             }
         } elseif (!empty($filterStoreId)) {
             if ($tab === 'outgoing') {
@@ -399,7 +403,7 @@ class StoreManagerController extends Controller
             }
         }
 
-        // Tab Filters
+        // Tab Filters (for manager / logistics)
         if ($tab === 'pending_driver') {
             $query->where(function($q) {
                 $q->whereIn('status', ['draft', 'pending_approval'])
@@ -432,11 +436,15 @@ class StoreManagerController extends Controller
 
         // KPI Counts for Store Keeper / Store Manager
         $baseStatQuery = Transfer::query();
-        if ($isStoreKeeper && $storeId) {
-            $baseStatQuery->where(function ($q) use ($storeId) {
-                $q->where('from_store_id', $storeId)
-                  ->orWhere('to_store_id', $storeId);
-            });
+        if ($isStoreKeeper) {
+            if ($storeId) {
+                $baseStatQuery->where(function ($q) use ($storeId) {
+                    $q->where('from_store_id', $storeId)
+                      ->orWhere('to_store_id', $storeId);
+                });
+            } else {
+                $baseStatQuery->whereRaw('1 = 0');
+            }
         }
         $totalCount           = (clone $baseStatQuery)->count();
         $pendingDriverCount   = (clone $baseStatQuery)->where(function($q) {
@@ -448,11 +456,13 @@ class StoreManagerController extends Controller
         $inTransitCount       = (clone $baseStatQuery)->where('status', 'in_transit')->count();
         $completedCount       = (clone $baseStatQuery)->where('status', 'completed')->count();
 
-        // Storekeeper specific counts (Incoming vs Outgoing)
-        $incomingCount        = $storeId ? (clone $baseStatQuery)->where('to_store_id', $storeId)->count() : (clone $baseStatQuery)->count();
-        $outgoingCount        = $storeId ? (clone $baseStatQuery)->where('from_store_id', $storeId)->count() : 0;
-        $pendingIncomingCount = $storeId ? (clone $baseStatQuery)->where('to_store_id', $storeId)->whereIn('status', ['in_transit', 'approved'])->count() : (clone $baseStatQuery)->where('status', 'in_transit')->count();
-        $pendingOutgoingCount = $storeId ? (clone $baseStatQuery)->where('from_store_id', $storeId)->whereIn('status', ['draft', 'approved'])->count() : (clone $baseStatQuery)->where('status', 'approved')->count();
+        // Storekeeper specific counts (Incoming vs Outgoing strictly for assigned store)
+        $incomingCount        = $storeId ? Transfer::where('to_store_id', $storeId)->count() : 0;
+        $outgoingCount        = $storeId ? Transfer::where('from_store_id', $storeId)->count() : 0;
+        $pendingIncomingCount = $storeId ? Transfer::where('to_store_id', $storeId)->whereIn('status', ['in_transit', 'approved'])->count() : 0;
+        $completedIncomingCount = $storeId ? Transfer::where('to_store_id', $storeId)->where('status', 'completed')->count() : 0;
+        $pendingOutgoingCount = $storeId ? Transfer::where('from_store_id', $storeId)->whereIn('status', ['draft', 'approved'])->count() : 0;
+        $completedOutgoingCount = $storeId ? Transfer::where('from_store_id', $storeId)->where('status', 'completed')->count() : 0;
 
         $transfers = $query->latest()->paginate(20)->withQueryString();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
@@ -460,7 +470,7 @@ class StoreManagerController extends Controller
         return view('store-manager.transfers.index', compact(
             'transfers', 'stores', 'isStoreKeeper', 'assignedStore', 'tab',
             'totalCount', 'pendingDriverCount', 'assignedDriverCount', 'readyToDispatchCount', 'inTransitCount', 'completedCount',
-            'incomingCount', 'outgoingCount', 'pendingIncomingCount', 'pendingOutgoingCount'
+            'incomingCount', 'outgoingCount', 'pendingIncomingCount', 'completedIncomingCount', 'pendingOutgoingCount', 'completedOutgoingCount'
         ));
     }
 
@@ -473,6 +483,14 @@ class StoreManagerController extends Controller
         $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
         $isStoreKeeper = in_array('store_keeper', $rawUserRoles);
         $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
+        $storeId = $assignedStore?->id;
+
+        // Strict authorization check for Storekeeper: only view transfers belonging to assigned store
+        if ($isStoreKeeper) {
+            if (!$storeId || ($transfer->from_store_id != $storeId && $transfer->to_store_id != $storeId)) {
+                abort(403, 'Unauthorized. You can only view incoming or outgoing transfers assigned to your store (' . ($assignedStore->name ?? 'None') . ').');
+            }
+        }
 
         $transfer->load([
             'fromStore', 'toStore', 'requestedBy', 'approvedBy',
