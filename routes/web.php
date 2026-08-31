@@ -1422,7 +1422,10 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('general-service')->name('general-service.')->group(function () {
         Route::get('/',                                                 [App\Http\Controllers\DashboardController::class, 'generalService'])->name('dashboard');
         Route::get('/maintenance',                                      [App\Http\Controllers\Admin\GeneralServiceController::class, 'index'])->name('maintenance.index');
+        Route::get('/maintenance/create',                               [App\Http\Controllers\Admin\GeneralServiceController::class, 'create'])->name('maintenance.create');
+        Route::post('/maintenance',                                     [App\Http\Controllers\Admin\GeneralServiceController::class, 'store'])->name('maintenance.store');
         Route::get('/maintenance/{maintenanceRequest}',                 [App\Http\Controllers\Admin\GeneralServiceController::class, 'show'])->name('maintenance.show');
+        Route::get('/maintenance/{maintenanceRequest}/report',          [App\Http\Controllers\Admin\GeneralServiceController::class, 'report'])->name('maintenance.report');
         Route::match(['put', 'post'], '/maintenance/{maintenanceRequest}/status', [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.status');
         Route::post('/maintenance/{maintenanceRequest}/update-status',  [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.update-status');
         Route::post('/maintenance/{maintenanceRequest}/ask-money',      [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMoney'])->name('maintenance.ask-money');

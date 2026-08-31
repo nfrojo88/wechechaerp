@@ -57,7 +57,211 @@ class GeneralServiceController extends Controller
             'global_admin', 'admin', 'store_manager', 'general_service'
         ]))->get(['id', 'name']);
 
-        return view('general-service.maintenance.index', compact('requests', 'stats', 'staff'));
+        $fixedAssetUnits = \App\Models\FixedAssetUnit::with(['parentAsset', 'assignedEmployee'])
+            ->whereNull('deleted_at')
+            ->orderBy('unit_code')
+            ->get();
+        $employees = \App\Models\Employee::where('status', 'active')->orderBy('full_name')->get();
+        $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
+        $products = \App\Models\Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit', 'category']);
+
+        return view('general-service.maintenance.index', compact('requests', 'stats', 'staff', 'fixedAssetUnits', 'employees', 'stores', 'products'));
+    }
+
+    /**
+     * Create a new maintenance & service request for Fixed Asset (Form View).
+     */
+    public function create()
+    {
+        $fixedAssetUnits = \App\Models\FixedAssetUnit::with(['parentAsset', 'assignedEmployee'])
+            ->whereNull('deleted_at')
+            ->orderBy('unit_code')
+            ->get();
+
+        $employees = \App\Models\Employee::where('status', 'active')->orderBy('full_name')->get();
+        $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
+        $products = \App\Models\Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit', 'category']);
+        $staff = User::whereHas('roles', fn($q) => $q->whereIn('name', [
+            'global_admin', 'admin', 'store_manager', 'general_service'
+        ]))->get(['id', 'name']);
+
+        return view('general-service.maintenance.create', compact('fixedAssetUnits', 'employees', 'stores', 'products', 'staff'));
+    }
+
+    /**
+     * Store a new service / maintenance request from General Service.
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'fixed_asset_unit_id' => 'nullable|exists:fixed_asset_units,id',
+            'asset_name'          => 'required|string|max:255',
+            'asset_code'          => 'nullable|string|max:100',
+            'employee_id'         => 'nullable|exists:employees,id',
+            'issue_type'          => 'required|in:breakdown,damage,service_due,malfunction,needs_repair,routine_service,other',
+            'urgency'             => 'required|in:low,normal,urgent,critical',
+            'description'         => 'required|string|max:4000',
+            'admin_notes'         => 'nullable|string|max:3000',
+            'assigned_to_user_id' => 'nullable|exists:users,id',
+            
+            // Optional direct Ask Money
+            'ask_money'           => 'nullable',
+            'money_amount'        => 'nullable|numeric|min:1',
+            'money_description'   => 'nullable|string|max:2000',
+            'money_attachment'    => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+
+            // Optional direct Ask Material
+            'ask_material'        => 'nullable',
+            'destination_store_id'=> 'nullable|exists:stores,id',
+            'required_date'       => 'nullable|date',
+            'material_notes'      => 'nullable|string|max:2000',
+            'items'               => 'nullable|array',
+            'items.*.product_id'  => 'nullable',
+            'items.*.custom_name' => 'nullable|string|max:255',
+            'items.*.quantity'    => 'nullable|numeric|min:0.01',
+            'items.*.unit'        => 'nullable|string|max:50',
+            'items.*.notes'       => 'nullable|string|max:500',
+        ]);
+
+        $user = \Illuminate\Support\Facades\Auth::user();
+
+        // If fixed asset unit chosen, resolve employee and details if not provided
+        $unit = null;
+        if (!empty($validated['fixed_asset_unit_id'])) {
+            $unit = \App\Models\FixedAssetUnit::with('parentAsset')->find($validated['fixed_asset_unit_id']);
+            if ($unit) {
+                if (empty($validated['asset_code'])) {
+                    $validated['asset_code'] = $unit->unit_code;
+                }
+                if (empty($validated['employee_id']) && $unit->assigned_to_employee_id) {
+                    $validated['employee_id'] = $unit->assigned_to_employee_id;
+                }
+                // Mark unit status as in maintenance
+                $unit->update(['status' => \App\Models\FixedAssetUnit::STATUS_MAINTENANCE]);
+            }
+        }
+
+        // Resolve employee ID
+        $employeeId = $validated['employee_id'] ?? ($user->employee?->id);
+
+        $maintenanceRequest = MaintenanceRequest::create([
+            'employee_id'         => $employeeId,
+            'fixed_asset_unit_id' => $validated['fixed_asset_unit_id'] ?? null,
+            'asset_name'          => $validated['asset_name'],
+            'asset_code'          => $validated['asset_code'] ?? null,
+            'issue_type'          => $validated['issue_type'],
+            'urgency'             => $validated['urgency'],
+            'description'         => $validated['description'],
+            'admin_notes'         => $validated['admin_notes'] ?? null,
+            'status'              => 'in_progress',
+            'reported_by_user_id' => $user->id,
+            'assigned_to_user_id' => $validated['assigned_to_user_id'] ?? $user->id,
+        ]);
+
+        // Process direct Ask Money if requested
+        if ($request->boolean('ask_money') && !empty($validated['money_amount'])) {
+            $attachmentUrl = null;
+            if ($request->hasFile('money_attachment')) {
+                try {
+                    $cloudinary = app(\App\Services\CloudinaryService::class);
+                    $attachmentUrl = $cloudinary->upload($request->file('money_attachment'), 'expense_receipts');
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error('Maintenance Ask Money attachment upload error: ' . $e->getMessage());
+                }
+            }
+
+            $requestNumber = 'REQ-' . date('Ymd') . '-' . strtoupper(\Illuminate\Support\Str::random(4));
+            \App\Models\ExpenseRequest::create([
+                'request_number'         => $requestNumber,
+                'user_id'                => $user->id,
+                'employee_id'            => $employeeId,
+                'maintenance_request_id' => $maintenanceRequest->id,
+                'category'               => 'Maintenance',
+                'other_reason'           => 'Maintenance for ' . $maintenanceRequest->request_no . ' (' . $maintenanceRequest->asset_name . ')',
+                'amount'                 => $validated['money_amount'],
+                'description'            => $validated['money_description'] ?? ("Maintenance expense for " . $maintenanceRequest->asset_name),
+                'attachment'             => $attachmentUrl,
+                'status'                 => \App\Models\ExpenseRequest::STATUS_PENDING_HR,
+            ]);
+        }
+
+        // Process direct Ask Material if requested
+        if ($request->boolean('ask_material') && !empty($validated['items'])) {
+            $storeId = $validated['destination_store_id'] ?? \App\Models\Store::where('is_active', true)->value('id');
+            $store = \App\Models\Store::find($storeId);
+            $projectId = $store?->project_id ?? (\App\Models\Project::where('status', 'active')->value('id') ?? \App\Models\Project::value('id'));
+
+            $refNumber = 'MR-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(\Illuminate\Support\Str::random(3));
+            $materialRequest = \App\Models\MaterialRequest::create([
+                'project_id'             => $projectId,
+                'destination_store_id'   => $storeId,
+                'maintenance_request_id' => $maintenanceRequest->id,
+                'reference_number'       => $refNumber,
+                'source'                 => 'Maintenance — ' . $maintenanceRequest->request_no,
+                'status'                 => 'sent_to_store_manager',
+                'required_date'          => $validated['required_date'] ?? now()->addDays(2),
+                'notes'                  => $validated['material_notes'] ?? ("Maintenance spare parts for {$maintenanceRequest->request_no} — {$maintenanceRequest->asset_name}"),
+                'created_by'             => $user->id,
+            ]);
+
+            foreach ($validated['items'] as $itemData) {
+                if (empty($itemData['quantity'])) continue;
+                $productId = $itemData['product_id'] ?? null;
+                if ((!$productId || $productId === 'custom') && !empty($itemData['custom_name'])) {
+                    $product = \App\Models\Product::firstOrCreate(
+                        ['name' => trim($itemData['custom_name'])],
+                        [
+                            'sku'      => 'MAT-' . strtoupper(\Illuminate\Support\Str::random(6)),
+                            'unit'     => $itemData['unit'] ?? 'pcs',
+                            'category' => 'Maintenance / Spare Parts',
+                            'is_active'=> true,
+                        ]
+                    );
+                    $productId = $product->id;
+                }
+
+                if ($productId && $productId !== 'custom') {
+                    $materialRequest->items()->create([
+                        'product_id'         => $productId,
+                        'quantity_requested' => $itemData['quantity'],
+                        'notes'              => trim(($itemData['unit'] ? ('[' . $itemData['unit'] . '] ') : '') . ($itemData['notes'] ?? '')),
+                    ]);
+                }
+            }
+        }
+
+        \App\Models\ActivityLog::log(
+            'created',
+            "General Service created service ticket {$maintenanceRequest->request_no} for asset: {$maintenanceRequest->asset_name}",
+            'Maintenance Requests',
+            $maintenanceRequest
+        );
+
+        return redirect()->route('general-service.maintenance.show', $maintenanceRequest)
+            ->with('success', "Service & Maintenance Request #{$maintenanceRequest->request_no} created successfully!");
+    }
+
+    /**
+     * Printable Maintenance & Service Report.
+     */
+    public function report(MaintenanceRequest $maintenanceRequest)
+    {
+        $maintenanceRequest->load([
+            'employee', 
+            'reportedBy', 
+            'assignedTo', 
+            'fixedAssetUnit.parentAsset',
+            'expenseRequests.user',
+            'expenseRequests.paidBy',
+            'expenseRequests.financeStaff',
+            'materialRequests.items.product',
+            'materialRequests.store',
+            'materialRequests.creator',
+            'materialRequests.purchaseRequests.receipt.uploadedBy',
+            'materialRequests.purchaseRequests.payment'
+        ]);
+
+        return view('general-service.maintenance.report', compact('maintenanceRequest'));
     }
 
     /**
