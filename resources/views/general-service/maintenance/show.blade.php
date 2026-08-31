@@ -32,7 +32,7 @@
             <span class="badge {{ $sb['class'] }} rounded-pill px-3 fs-6">
                 <i class="fa-solid {{ $sb['icon'] }} me-1"></i>{{ $sb['label'] }}
             </span>
-            <a href="{{ route('general-service.maintenance.report', $maintenanceRequest) }}" target="_blank" class="btn btn-outline-dark fw-bold rounded-pill px-3 shadow-xs">
+            <a href="{{ Route::has('general-service.maintenance.report') ? route('general-service.maintenance.report', $maintenanceRequest) : url('/general-service/maintenance/' . $maintenanceRequest->id . '/report') }}" target="_blank" class="btn btn-outline-dark fw-bold rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-print me-1"></i>Print Report
             </a>
             <button type="button" class="btn btn-primary fw-bold rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#askMaterialModal">

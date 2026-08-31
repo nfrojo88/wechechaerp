@@ -13,10 +13,10 @@
             <p class="text-muted small mb-0">Manage employee maintenance requests, workshop assets, logistics & store transfers.</p>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <a href="{{ route('general-service.maintenance.create') }}" class="btn btn-primary btn-sm fw-bold shadow-sm rounded-pill px-3">
+            <a href="{{ Route::has('general-service.maintenance.create') ? route('general-service.maintenance.create') : url('/general-service/maintenance/create') }}" class="btn btn-primary btn-sm fw-bold shadow-sm rounded-pill px-3">
                 <i class="fa-solid fa-plus me-1"></i>New Service Request
             </a>
-            <a href="{{ route('general-service.maintenance.index') }}" class="btn btn-warning btn-sm fw-bold shadow-sm text-dark rounded-pill px-3">
+            <a href="{{ Route::has('general-service.maintenance.index') ? route('general-service.maintenance.index') : url('/general-service/maintenance') }}" class="btn btn-warning btn-sm fw-bold shadow-sm text-dark rounded-pill px-3">
                 <i class="fa-solid fa-list-check me-1"></i>All Requests
             </a>
             <span class="badge bg-light text-dark border p-2 shadow-sm rounded-pill">

@@ -7,7 +7,7 @@
     {{-- Page Header --}}
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
         <div class="d-flex align-items-center gap-3">
-            <a href="{{ route('general-service.maintenance.index') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
+            <a href="{{ Route::has('general-service.maintenance.index') ? route('general-service.maintenance.index') : url('/general-service/maintenance') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-arrow-left me-1"></i>Back
             </a>
             <div>
@@ -19,7 +19,7 @@
             </div>
         </div>
         <div class="d-flex gap-2">
-            <a href="{{ route('general-service.maintenance.index') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+            <a href="{{ Route::has('general-service.maintenance.index') ? route('general-service.maintenance.index') : url('/general-service/maintenance') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
                 <i class="fa-solid fa-list-check me-1"></i>All Maintenance Requests
             </a>
         </div>
@@ -37,7 +37,7 @@
         </div>
     @endif
 
-    <form action="{{ route('general-service.maintenance.store') }}" method="POST" enctype="multipart/form-data">
+    <form action="{{ Route::has('general-service.maintenance.store') ? route('general-service.maintenance.store') : url('/general-service/maintenance') }}" method="POST" enctype="multipart/form-data">
         @csrf
 
         <div class="row g-4">

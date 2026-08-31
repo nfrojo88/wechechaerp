@@ -10,10 +10,10 @@
             <p class="text-muted mb-0 small">Asset maintenance requests reported by employees &amp; workshop service orders</p>
         </div>
         <div class="d-flex gap-2">
-            <a href="{{ route('general-service.maintenance.create') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm fw-bold">
+            <a href="{{ Route::has('general-service.maintenance.create') ? route('general-service.maintenance.create') : url('/general-service/maintenance/create') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm fw-bold">
                 <i class="fa-solid fa-plus me-1"></i>New Service Request
             </a>
-            <a href="{{ route('general-service.dashboard') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+            <a href="{{ Route::has('general-service.dashboard') ? route('general-service.dashboard') : url('/general-service') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
                 <i class="fa-solid fa-gauge me-1"></i>Dashboard
             </a>
         </div>
@@ -188,7 +188,7 @@
                                        class="btn btn-xs btn-outline-primary rounded-pill px-3 me-1">
                                         <i class="fa-solid fa-eye me-1"></i>Manage
                                     </a>
-                                    <a href="{{ route('general-service.maintenance.report', $req) }}"
+                                    <a href="{{ Route::has('general-service.maintenance.report') ? route('general-service.maintenance.report', $req) : url('/general-service/maintenance/' . $req->id . '/report') }}"
                                        class="btn btn-xs btn-outline-secondary rounded-pill px-2" title="Print Maintenance Report" target="_blank">
                                         <i class="fa-solid fa-print"></i>
                                     </a>
