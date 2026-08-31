@@ -82,6 +82,9 @@
             <p>Real-time inventory values, stock movements, and financial summary</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ route('store-manager.store-keepers.index') }}" class="btn btn-info text-white btn-sm fw-semibold px-3" style="border-radius:8px;">
+                <i class="fa-solid fa-users-gear me-1"></i> Assign Store Keepers
+            </a>
             @can('inventory.edit')
             <a href="{{ route('inventory.bulk-adjust') }}" class="btn btn-warning btn-sm fw-semibold px-3" style="border-radius:8px;">
                 <i class="fa-solid fa-sliders me-1"></i> Manual Adjustment

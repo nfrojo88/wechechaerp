@@ -2019,8 +2019,13 @@ Route::middleware(['auth'])->group(function () {
         Route::post('slip-sequences/{slipSequence}/deactivate', [App\Http\Controllers\SlipSequenceController::class, 'deactivate'])->name('slip-sequences.deactivate');
         Route::post('slip-sequences/{slipSequence}/reactivate', [App\Http\Controllers\SlipSequenceController::class, 'reactivate'])->name('slip-sequences.reactivate');
         Route::post('slip-sequences/{slipSequence}/reset', [App\Http\Controllers\SlipSequenceController::class, 'reset'])->name('slip-sequences.reset');
-        Route::get('api/slip-sequences/{storeId}/{slipType}', [App\Http\Controllers\SlipSequenceController::class, 'getNextSlip']);
-        
+        // Store Keeper Assignment Hub
+        Route::get('assign-store-keeper', [App\Http\Controllers\StoreManagerController::class, 'assignStoreKeepersIndex'])->name('store-keepers.index');
+        Route::post('assign-store-keeper', [App\Http\Controllers\StoreManagerController::class, 'updateStoreKeeperAssignment'])->name('store-keepers.update');
+        Route::post('stores/quick-create', [App\Http\Controllers\StoreManagerController::class, 'quickCreateStore'])->name('stores.quick-create');
+        Route::post('stores/{store}/quick-update', [App\Http\Controllers\StoreManagerController::class, 'quickUpdateStore'])->name('stores.quick-update');
+        Route::post('stores/{store}/unassign/{user}', [App\Http\Controllers\StoreManagerController::class, 'unassignStoreKeeper'])->name('stores.unassign');
+
         // Inventory - All stores
         Route::get('inventory/all', [App\Http\Controllers\StoreManagerController::class, 'allInventory'])->name('inventory.all');
         

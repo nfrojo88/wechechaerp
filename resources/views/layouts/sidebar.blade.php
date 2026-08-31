@@ -455,6 +455,12 @@
                 <span>All Store Inventory</span>
             </a>
         </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('store-manager.store-keepers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.store-keepers.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-users-gear text-success"></i>
+                <span>Assign Store Keepers</span>
+            </a>
+        </li>
 
         <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.fixed-assets.*') ? 'active' : '' }}">

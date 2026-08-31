@@ -11,6 +11,8 @@ use App\Models\Product;
 use App\Models\Store;
 use App\Models\DeliveryReceipt;
 use App\Models\SlipSequence;
+use App\Models\User;
+use App\Models\Project;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
@@ -1238,6 +1240,250 @@ class StoreManagerController extends Controller
         $stores = Store::where('is_active', true)->orderBy('name')->get();
 
         return view('store-manager.issued.index', compact('issued', 'stores'));
+    }
+
+    /**
+     * Store Keeper Assignment Hub for Store Manager
+     */
+    public function assignStoreKeepersIndex(Request $request)
+    {
+        $search = $request->input('search');
+        $type = $request->input('type');
+        $projectId = $request->input('project_id');
+        $assignmentStatus = $request->input('status'); // 'assigned', 'unassigned', 'all'
+
+        $storesQuery = Store::with(['project', 'manager.roles', 'users.roles'])
+            ->withCount(['inventory', 'users'])
+            ->latest();
+
+        if ($search) {
+            $storesQuery->where(function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('code', 'like', "%{$search}%")
+                  ->orWhere('address', 'like', "%{$search}%")
+                  ->orWhereHas('manager', function($mq) use ($search) {
+                      $mq->where('name', 'like', "%{$search}%")
+                         ->orWhere('email', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        if ($type) {
+            $storesQuery->where('type', $type);
+        }
+
+        if ($projectId) {
+            $storesQuery->where('project_id', $projectId);
+        }
+
+        if ($assignmentStatus === 'assigned') {
+            $storesQuery->where(function($q) {
+                $q->whereNotNull('manager_id')->orWhereHas('users');
+            });
+        } elseif ($assignmentStatus === 'unassigned') {
+            $storesQuery->whereNull('manager_id')->whereDoesntHave('users');
+        }
+
+        $stores = $storesQuery->get();
+
+        // Projects for filters & create modal
+        $projects = Project::where('status', 'active')->orderBy('name')->get();
+
+        // Candidates for Store Keepers (users with store_keeper role or all active users)
+        $storeKeepers = User::with(['store', 'roles'])
+            ->where('is_active', true)
+            ->where(function($q) {
+                $q->whereHas('roles', function($rq) {
+                    $rq->whereIn('name', ['store_keeper', 'storekeeper', 'Store Keeper']);
+                })
+                ->orWhereNotNull('store_id');
+            })
+            ->orderBy('name')
+            ->get();
+
+        // All active users list for assignment dropdown (if store manager wants to assign someone else)
+        $allActiveUsers = User::where('is_active', true)
+            ->orderBy('name')
+            ->select('id', 'name', 'email', 'store_id')
+            ->get();
+
+        // Metrics
+        $totalStoresCount = Store::count();
+        $assignedStoresCount = Store::where(function($q) {
+            $q->whereNotNull('manager_id')->orWhereHas('users');
+        })->count();
+        $unassignedStoresCount = $totalStoresCount - $assignedStoresCount;
+        $totalStoreKeepersCount = $storeKeepers->count();
+
+        return view('store-manager.store-keepers.index', compact(
+            'stores',
+            'projects',
+            'storeKeepers',
+            'allActiveUsers',
+            'totalStoresCount',
+            'assignedStoresCount',
+            'unassignedStoresCount',
+            'totalStoreKeepersCount'
+        ));
+    }
+
+    /**
+     * Assign or reassign store keeper(s) to a store
+     */
+    public function updateStoreKeeperAssignment(Request $request)
+    {
+        $validated = $request->validate([
+            'store_id'            => 'required|exists:stores,id',
+            'primary_keeper_id'   => 'nullable|exists:users,id',
+            'additional_keeper_ids' => 'nullable|array',
+            'additional_keeper_ids.*' => 'exists:users,id',
+            'assignment_notes'    => 'nullable|string|max:500',
+        ]);
+
+        $store = Store::findOrFail($validated['store_id']);
+        $primaryKeeperId = $validated['primary_keeper_id'] ?? null;
+        $additionalKeeperIds = $validated['additional_keeper_ids'] ?? [];
+
+        // All selected keeper IDs for this store
+        $allKeeperIds = collect([$primaryKeeperId])->concat($additionalKeeperIds)->filter()->unique()->values()->all();
+
+        DB::transaction(function() use ($store, $primaryKeeperId, $allKeeperIds) {
+            // 1. Update store's primary manager/keeper
+            $store->update([
+                'manager_id' => $primaryKeeperId,
+            ]);
+
+            // 2. Clear store_id for users previously assigned to this store who are not in new list
+            User::where('store_id', $store->id)
+                ->whereNotIn('id', $allKeeperIds)
+                ->update(['store_id' => null]);
+
+            // 3. Assign store_id to all selected users and ensure role
+            if (!empty($allKeeperIds)) {
+                User::whereIn('id', $allKeeperIds)->update(['store_id' => $store->id]);
+
+                // Ensure they have store_keeper role
+                $users = User::whereIn('id', $allKeeperIds)->get();
+                foreach ($users as $user) {
+                    if (!$user->hasRole('store_keeper')) {
+                        try {
+                            $user->assignRole('store_keeper');
+                        } catch (\Throwable $e) {}
+                    }
+                }
+            }
+
+            // Log activity
+            \App\Models\ActivityLog::log(
+                'store_keeper_assigned',
+                "Store Keepers updated for [{$store->code}] {$store->name}. Primary Keeper: " . ($store->fresh()->manager->name ?? 'Unassigned'),
+                'Store & Warehouse Management',
+                $store,
+                [
+                    'store_id' => $store->id,
+                    'store_code' => $store->code,
+                    'primary_keeper_id' => $primaryKeeperId,
+                    'total_assigned_keepers' => count($allKeeperIds),
+                ]
+            );
+        });
+
+        return redirect()->back()->with('success', "Store Keepers assigned to [{$store->code}] {$store->name} successfully!");
+    }
+
+    /**
+     * Unassign a store keeper from a store
+     */
+    public function unassignStoreKeeper(Request $request, Store $store, User $user)
+    {
+        DB::transaction(function() use ($store, $user) {
+            if ($store->manager_id == $user->id) {
+                $store->update(['manager_id' => null]);
+            }
+            if ($user->store_id == $store->id) {
+                $user->update(['store_id' => null]);
+            }
+
+            \App\Models\ActivityLog::log(
+                'store_keeper_unassigned',
+                "Store Keeper {$user->name} unassigned from [{$store->code}] {$store->name}",
+                'Store & Warehouse Management',
+                $store
+            );
+        });
+
+        return redirect()->back()->with('success', "Store Keeper {$user->name} unassigned from {$store->name}.");
+    }
+
+    /**
+     * Quick Create Store & assign keeper
+     */
+    public function quickCreateStore(Request $request)
+    {
+        $validated = $request->validate([
+            'name'                => 'required|string|max:255',
+            'code'                => 'required|string|max:50|unique:stores,code',
+            'type'                => 'required|in:site,warehouse,yard',
+            'project_id'          => 'nullable|exists:projects,id',
+            'address'             => 'nullable|string|max:255',
+            'primary_keeper_id'   => 'nullable|exists:users,id',
+            'notes'               => 'nullable|string|max:500',
+        ]);
+
+        $primaryKeeperId = $validated['primary_keeper_id'] ?? null;
+
+        $store = Store::create([
+            'name'       => $validated['name'],
+            'code'       => strtoupper(trim($validated['code'])),
+            'type'       => $validated['type'],
+            'project_id' => $validated['project_id'] ?? null,
+            'address'    => $validated['address'] ?? null,
+            'manager_id' => $primaryKeeperId,
+            'notes'      => $validated['notes'] ?? null,
+            'is_active'  => true,
+        ]);
+
+        if ($primaryKeeperId) {
+            $user = User::find($primaryKeeperId);
+            if ($user) {
+                $user->update(['store_id' => $store->id]);
+                if (!$user->hasRole('store_keeper')) {
+                    try {
+                        $user->assignRole('store_keeper');
+                    } catch (\Throwable $e) {}
+                }
+            }
+        }
+
+        return redirect()->back()->with('success', "New Store [{$store->code}] {$store->name} created successfully!");
+    }
+
+    /**
+     * Quick update store details
+     */
+    public function quickUpdateStore(Request $request, Store $store)
+    {
+        $validated = $request->validate([
+            'name'       => 'required|string|max:255',
+            'code'       => 'required|string|max:50|unique:stores,code,' . $store->id,
+            'type'       => 'required|in:site,warehouse,yard',
+            'project_id' => 'nullable|exists:projects,id',
+            'address'    => 'nullable|string|max:255',
+            'notes'      => 'nullable|string|max:500',
+            'is_active'  => 'nullable|boolean',
+        ]);
+
+        $store->update([
+            'name'       => $validated['name'],
+            'code'       => strtoupper(trim($validated['code'])),
+            'type'       => $validated['type'],
+            'project_id' => $validated['project_id'] ?? null,
+            'address'    => $validated['address'] ?? null,
+            'notes'      => $validated['notes'] ?? null,
+            'is_active'  => $request->has('is_active') ? (bool)$request->is_active : true,
+        ]);
+
+        return redirect()->back()->with('success', "Store [{$store->code}] {$store->name} updated successfully!");
     }
 
     /**
