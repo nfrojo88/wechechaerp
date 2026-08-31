@@ -254,6 +254,28 @@ class ExpenseRequest extends Model
         return $this->belongsTo(ChartOfAccount::class, 'coa_id')->with('manager');
     }
 
+    public function maintenanceRequest()
+    {
+        return $this->belongsTo(MaintenanceRequest::class, 'maintenance_request_id');
+    }
+
+    /**
+     * Resolve linked Petty Cash Replenishment (if this expense request was created for a PCR cycle).
+     */
+    public function getLinkedReplenishmentAttribute(): ?PettyCashReplenishment
+    {
+        $reqNo = (string)$this->request_number;
+        $cleanNo = str_replace('EXP-PCR-', '', $reqNo);
+        $cleanNo = str_replace('EXP-', '', $cleanNo);
+
+        return PettyCashReplenishment::with(['items', 'chartOfAccount.manager', 'requester.employee', 'auditor', 'sourceCoa'])
+            ->where('request_no', $cleanNo)
+            ->orWhere('request_no', 'PCR-' . $cleanNo)
+            ->orWhere('request_no', $reqNo)
+            ->orWhere('request_no', str_replace('EXP-PCR-', '', $reqNo))
+            ->first();
+    }
+
     /**
      * Resolve the effective chart of account (whichever FK is populated).
      */

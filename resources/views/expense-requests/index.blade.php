@@ -358,8 +358,9 @@
 
     {{-- GM Review Modal --}}
     @if($req->status === 'Pending (GM Review)' && $isGmUser)
+    @php $pcr = $req->linked_replenishment; @endphp
     <div class="modal fade" id="gmReviewModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered {{ $pcr ? 'modal-xl' : 'modal-lg' }}">
             <div class="modal-content shadow border-0">
                 <form method="POST" action="{{ route('expense-requests.gm-review', $req->id) }}">
                     @csrf
@@ -376,11 +377,11 @@
                                 </div>
                                 <div class="col-6">
                                     <span class="text-muted small">Category:</span>
-                                    <div class="fw-semibold text-dark">{{ $req->category }}</div>
+                                    <div class="fw-semibold text-dark">{{ $req->category }} @if($req->other_reason) ({{ $req->other_reason }}) @endif</div>
                                 </div>
-                                <div class="col-12">
-                                    <span class="text-muted small">Amount:</span>
-                                    <div class="fs-4 fw-bold text-success">ETB {{ number_format($req->amount, 2) }}</div>
+                                <div class="col-12 mt-2">
+                                    <span class="text-muted small">Amount to Authorize:</span>
+                                    <div class="fs-4 fw-bold text-success font-monospace">ETB {{ number_format($req->amount, 2) }}</div>
                                 </div>
                                 <div class="col-12">
                                     <span class="text-muted small">Description:</span>
@@ -390,15 +391,108 @@
                             @if($req->hrReviewer)
                                 <div class="mt-2 pt-2 border-top text-muted small"><i class="fa-solid fa-user-check text-success me-1"></i>Reviewed by HR: {{ $req->hrReviewer->name }} on {{ $req->hr_reviewed_at ? $req->hr_reviewed_at->format('M d, H:i') : 'N/A' }}</div>
                             @endif
-                            @if($req->attachment)
-                                <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small"><i class="fa-solid fa-paperclip text-primary me-1"></i> Attached Receipt / Proof:</span>
-                                    <a href="{{ route('expense-requests.attachment', $req->id) }}" target="_blank" class="btn btn-sm btn-primary py-1 px-2">
-                                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Open Attachment
-                                    </a>
-                                </div>
-                            @endif
                         </div>
+
+                        @if($pcr)
+                            {{-- Full Itemized Petty Cash Replenishment Statement & All Receipts for GM Review --}}
+                            <div class="card border border-primary border-opacity-25 rounded-3 mb-3 overflow-hidden shadow-xs">
+                                <div class="card-header bg-primary bg-opacity-10 py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="fa-solid fa-receipt text-primary fs-5"></i>
+                                        <div>
+                                            <strong class="text-dark">Petty Cash Statement &amp; Receipts (#{{ $pcr->request_no }})</strong>
+                                            <div class="text-muted small">Account: [{{ $pcr->chartOfAccount->code ?? '1010' }}] {{ $pcr->chartOfAccount->name ?? 'Petty Cash' }} &bull; Custodian: {{ $pcr->requester->name ?? 'Staff' }}</div>
+                                        </div>
+                                    </div>
+                                    @if($pcr->attachment_url)
+                                        <a href="{{ $pcr->attachment_url }}" target="_blank" class="btn btn-sm btn-primary rounded-pill px-3 shadow-xs">
+                                            <i class="fa-solid fa-file-invoice me-1"></i> View Scanned Receipts Booklet
+                                        </a>
+                                    @endif
+                                </div>
+                                <div class="card-body p-0">
+                                    @if($pcr->audited_by)
+                                        <div class="p-2 px-3 bg-success bg-opacity-10 border-bottom border-success border-opacity-25 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                            <div>
+                                                <i class="fa-solid fa-circle-check text-success me-1"></i>
+                                                <strong class="text-dark small">Audit Cleared by:</strong>
+                                                <span class="text-muted small">{{ $pcr->auditor->name ?? 'Auditor' }} ({{ optional($pcr->audited_at)->format('d M Y, H:i') }})</span>
+                                                @if($pcr->audit_notes)
+                                                    <span class="text-dark small ms-2"><em>"{{ $pcr->audit_notes }}"</em></span>
+                                                @endif
+                                            </div>
+                                            <span class="badge bg-success font-monospace">Audited</span>
+                                        </div>
+                                    @endif
+
+                                    <div class="row g-0 text-center border-bottom bg-light">
+                                        <div class="col-3 p-2 border-end">
+                                            <div class="text-muted small fw-bold">Start Balance</div>
+                                            <div class="fw-bold text-dark font-monospace">ETB {{ number_format($pcr->current_balance_at_request, 2) }}</div>
+                                        </div>
+                                        <div class="col-3 p-2 border-end">
+                                            <div class="text-muted small fw-bold">Total Spent</div>
+                                            <div class="fw-bold text-danger font-monospace">ETB {{ number_format($pcr->total_expenses_amount, 2) }}</div>
+                                        </div>
+                                        <div class="col-3 p-2 border-end">
+                                            <div class="text-muted small fw-bold">Replenishment Due</div>
+                                            <div class="fw-bold text-success font-monospace">ETB {{ number_format($pcr->requested_amount, 2) }}</div>
+                                        </div>
+                                        <div class="col-3 p-2">
+                                            <div class="text-muted small fw-bold">Vouchers</div>
+                                            <div class="fw-bold text-primary">{{ $pcr->items->count() }} Attached</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+                                        <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.85rem;">
+                                            <thead class="table-light text-muted small text-uppercase sticky-top">
+                                                <tr>
+                                                    <th class="ps-3 py-2" style="width: 40px;">#</th>
+                                                    <th class="py-2" style="width: 100px;">Date</th>
+                                                    <th class="py-2" style="width: 130px;">Voucher / Ref #</th>
+                                                    <th class="py-2">Description / Payee</th>
+                                                    <th class="py-2">Target Account</th>
+                                                    <th class="py-2 pe-3 text-end" style="width: 120px;">Amount (ETB)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @forelse($pcr->items as $idx => $receiptItem)
+                                                    <tr>
+                                                        <td class="ps-3 text-muted">{{ $idx + 1 }}</td>
+                                                        <td>{{ optional($receiptItem->entry_date)->format('M d, Y') ?? '—' }}</td>
+                                                        <td><span class="badge bg-light text-dark border font-monospace">{{ $receiptItem->reference ?: 'Voucher' }}</span></td>
+                                                        <td><div class="fw-semibold text-dark">{{ $receiptItem->description }}</div></td>
+                                                        <td><span class="badge bg-secondary bg-opacity-10 text-dark">{{ $receiptItem->target_account_name ?: 'General' }}</span></td>
+                                                        <td class="pe-3 text-end fw-bold font-monospace text-dark">ETB {{ number_format($receiptItem->amount, 2) }}</td>
+                                                    </tr>
+                                                @empty
+                                                    <tr><td colspan="6" class="text-center py-3 text-muted">No individual line vouchers recorded.</td></tr>
+                                                @endforelse
+                                            </tbody>
+                                            <tfoot class="table-light">
+                                                <tr class="fw-bold">
+                                                    <td colspan="5" class="text-end pe-2">Total Verified Receipts:</td>
+                                                    <td class="pe-3 text-end font-monospace text-success">ETB {{ number_format($pcr->items->sum('amount') ?: $pcr->requested_amount, 2) }}</td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
+
+                        @if($req->attachment)
+                            <div class="mb-3 p-3 bg-light rounded-3 border d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong class="text-dark d-block"><i class="fa-solid fa-paperclip text-primary me-1"></i> Attached Supporting Invoice / Receipt Document</strong>
+                                    <small class="text-muted">Direct proof / voucher uploaded by applicant</small>
+                                </div>
+                                <a href="{{ route('expense-requests.attachment', $req->id) }}" target="_blank" class="btn btn-sm btn-primary rounded-pill px-3 shadow-xs">
+                                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Open Attachment
+                                </a>
+                            </div>
+                        @endif
 
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-uppercase small text-muted">Rejection Reason (Optional)</label>
@@ -554,8 +648,9 @@
     @endif
 
     {{-- Details Modal --}}
+    @php $pcr = $req->linked_replenishment; @endphp
     <div class="modal fade" id="detailsModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-dialog {{ $pcr ? 'modal-xl' : 'modal-lg' }} modal-dialog-centered">
             <div class="modal-content shadow border-0">
                 <div class="modal-header bg-dark text-white">
                     <h5 class="modal-title fw-bold"><i class="fa-solid fa-file-invoice me-2"></i>Request Details — #{{ $req->request_number }}</h5>
@@ -618,6 +713,110 @@
                         <label class="fw-bold">Description:</label>
                         <div class="p-3 bg-light rounded border">{{ $req->description }}</div>
                     </div>
+
+                    @if($pcr)
+                        {{-- Detailed Itemized Statement & Receipts Breakdown --}}
+                        <div class="card border border-primary border-opacity-25 rounded-3 mb-3 overflow-hidden shadow-xs">
+                            <div class="card-header bg-primary bg-opacity-10 py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-receipt text-primary fs-5"></i>
+                                    <div>
+                                        <strong class="text-dark">Petty Cash Replenishment Statement &amp; All Receipts (#{{ $pcr->request_no }})</strong>
+                                        <div class="text-muted small">Account: [{{ $pcr->chartOfAccount->code ?? '1010' }}] {{ $pcr->chartOfAccount->name ?? 'Petty Cash' }} &bull; Custodian: {{ $pcr->requester->name ?? 'Staff' }}</div>
+                                    </div>
+                                </div>
+                                @if($pcr->attachment_url)
+                                    <a href="{{ $pcr->attachment_url }}" target="_blank" class="btn btn-sm btn-primary rounded-pill px-3 shadow-xs">
+                                        <i class="fa-solid fa-file-invoice me-1"></i> View Scanned Receipts Document
+                                    </a>
+                                @endif
+                            </div>
+                            <div class="card-body p-0">
+                                @if($pcr->audited_by)
+                                    <div class="p-2 px-3 bg-success bg-opacity-10 border-bottom border-success border-opacity-25 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                        <div>
+                                            <i class="fa-solid fa-circle-check text-success me-1"></i>
+                                            <strong class="text-dark small">Audit Cleared by:</strong>
+                                            <span class="text-muted small">{{ $pcr->auditor->name ?? 'Auditor' }} ({{ optional($pcr->audited_at)->format('d M Y, H:i') }})</span>
+                                            @if($pcr->audit_notes)
+                                                <span class="text-dark small ms-2"><em>"{{ $pcr->audit_notes }}"</em></span>
+                                            @endif
+                                        </div>
+                                        <span class="badge bg-success font-monospace">Audit Cleared</span>
+                                    </div>
+                                @endif
+
+                                <div class="row g-0 text-center border-bottom bg-light">
+                                    <div class="col-3 p-2 border-end">
+                                        <div class="text-muted small fw-bold">Start Balance</div>
+                                        <div class="fw-bold text-dark font-monospace">ETB {{ number_format($pcr->current_balance_at_request, 2) }}</div>
+                                    </div>
+                                    <div class="col-3 p-2 border-end">
+                                        <div class="text-muted small fw-bold">Total Reconciled Spent</div>
+                                        <div class="fw-bold text-danger font-monospace">ETB {{ number_format($pcr->total_expenses_amount, 2) }}</div>
+                                    </div>
+                                    <div class="col-3 p-2 border-end">
+                                        <div class="text-muted small fw-bold">Replenishment Due</div>
+                                        <div class="fw-bold text-success font-monospace">ETB {{ number_format($pcr->requested_amount, 2) }}</div>
+                                    </div>
+                                    <div class="col-3 p-2">
+                                        <div class="text-muted small fw-bold">Vouchers</div>
+                                        <div class="fw-bold text-primary">{{ $pcr->items->count() }} Attached</div>
+                                    </div>
+                                </div>
+
+                                <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+                                    <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.85rem;">
+                                        <thead class="table-light text-muted small text-uppercase sticky-top">
+                                            <tr>
+                                                <th class="ps-3 py-2" style="width: 40px;">#</th>
+                                                <th class="py-2" style="width: 100px;">Date</th>
+                                                <th class="py-2" style="width: 130px;">Voucher / Ref #</th>
+                                                <th class="py-2">Description / Payee</th>
+                                                <th class="py-2">Target Account</th>
+                                                <th class="py-2 pe-3 text-end" style="width: 120px;">Amount (ETB)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @forelse($pcr->items as $idx => $receiptItem)
+                                                <tr>
+                                                    <td class="ps-3 text-muted">{{ $idx + 1 }}</td>
+                                                    <td>{{ optional($receiptItem->entry_date)->format('M d, Y') ?? '—' }}</td>
+                                                    <td><span class="badge bg-light text-dark border font-monospace">{{ $receiptItem->reference ?: 'Voucher' }}</span></td>
+                                                    <td><div class="fw-semibold text-dark">{{ $receiptItem->description }}</div></td>
+                                                    <td><span class="badge bg-secondary bg-opacity-10 text-dark">{{ $receiptItem->target_account_name ?: 'General' }}</span></td>
+                                                    <td class="pe-3 text-end fw-bold font-monospace text-dark">ETB {{ number_format($receiptItem->amount, 2) }}</td>
+                                                </tr>
+                                            @empty
+                                                <tr><td colspan="6" class="text-center py-3 text-muted">No individual line vouchers recorded.</td></tr>
+                                            @endforelse
+                                        </tbody>
+                                        <tfoot class="table-light">
+                                            <tr class="fw-bold">
+                                                <td colspan="5" class="text-end pe-2">Total Verified Receipts:</td>
+                                                <td class="pe-3 text-end font-monospace text-success">ETB {{ number_format($pcr->items->sum('amount') ?: $pcr->requested_amount, 2) }}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if($req->maintenanceRequest)
+                        <div class="card border border-warning border-opacity-25 rounded-3 mb-3 overflow-hidden shadow-xs">
+                            <div class="card-header bg-warning bg-opacity-10 py-2 px-3">
+                                <strong class="text-dark"><i class="fa-solid fa-screwdriver-wrench text-warning me-2"></i>Linked Maintenance Request: {{ $req->maintenanceRequest->request_no }}</strong>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="row g-2 small">
+                                    <div class="col-md-6"><strong>Asset:</strong> {{ $req->maintenanceRequest->asset_name }} ({{ $req->maintenanceRequest->asset_code ?? 'Tag' }})</div>
+                                    <div class="col-md-6"><strong>Issue:</strong> {{ $req->maintenanceRequest->issue_type_label }}</div>
+                                    <div class="col-12 mt-2"><strong>Fault Description:</strong> {{ $req->maintenanceRequest->description }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
 
                     {{-- Workflow Timeline --}}
                     <div class="mb-3">
