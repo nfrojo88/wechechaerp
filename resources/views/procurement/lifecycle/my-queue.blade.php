@@ -75,23 +75,7 @@
                 </div>
             </a>
         </div>
-        @endif
-
-        <div class="col-12 col-sm-6 col-xl">
-            <a href="#materialRequestsSection" class="text-decoration-none">
-                <div class="card border-0 shadow-sm text-white h-100" style="background: linear-gradient(135deg, #0284c7, #0369a1);">
-                    <div class="card-body p-3 d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="text-white-50 small font-weight-bold">Material &amp; Maintenance MRs</div>
-                            <div class="h2 mb-0 font-weight-bold">{{ $kpi['material_requests_queue'] ?? 0 }}</div>
-                        </div>
-                        <i class="fas fa-boxes-packing fa-2x text-white-50"></i>
-                    </div>
-                </div>
-            </a>
-        </div>
-
-        <div class="col-12 col-sm-6 col-xl">
+        @endif        <div class="col-12 col-sm-6 col-xl">
             <div class="card border-0 shadow-sm bg-danger text-white h-100">
                 <div class="card-body p-3 d-flex align-items-center justify-content-between">
                     <div>
@@ -141,126 +125,6 @@
                     <a href="{{ route('procurement.my-queue') }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-undo me-1"></i> Reset</a>
                 </div>
             </form>
-        </div>
-    </div>
-
-    <!-- Material & Maintenance Requests Section (Store & Procurement Phase) -->
-    <div class="card border-0 shadow-sm mb-4" id="materialRequestsSection" style="border-left: 5px solid #0284c7 !important;">
-        <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div>
-                <h5 class="mb-0 text-dark font-weight-bold">
-                    <i class="fas fa-boxes-stacked text-primary me-2"></i>Material &amp; Maintenance Requisitions (Store &amp; Procurement Phase)
-                </h5>
-                <small class="text-muted">Requisitions from Maintenance Tickets and Project Stores awaiting store issue, transfer, or PR buying phase.</small>
-            </div>
-            <span class="badge bg-primary px-3 py-2">{{ isset($materialRequestsQueue) ? $materialRequestsQueue->count() : 0 }} Active</span>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th class="ps-3">Ref No / Source</th>
-                            <th>Project &amp; Store</th>
-                            <th>Requested Items</th>
-                            <th>Required Date</th>
-                            <th>Current Phase</th>
-                            <th class="text-end pe-3">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse($materialRequestsQueue ?? [] as $mr)
-                        <tr>
-                            <td class="ps-3">
-                                <strong class="font-monospace text-primary d-block">{{ $mr->reference_number }}</strong>
-                                @if($mr->maintenance_request_id && $mr->maintenanceRequest)
-                                    <a href="{{ route('general-service.maintenance.show', $mr->maintenanceRequest) }}" class="badge bg-warning text-dark text-decoration-none border shadow-xs" title="View linked maintenance ticket">
-                                        <i class="fa-solid fa-screwdriver-wrench me-1"></i>{{ $mr->maintenanceRequest->request_no }}
-                                    </a>
-                                @else
-                                    <small class="badge bg-light text-dark border">{{ $mr->source ?? 'Site Requisition' }}</small>
-                                @endif
-                                <small class="text-muted d-block" style="font-size: 0.72rem;">{{ $mr->created_at->format('d M Y, H:i') }}</small>
-                            </td>
-                            <td>
-                                <div class="fw-semibold text-dark small">{{ $mr->project?->name ?? 'General Store' }}</div>
-                                <small class="text-muted"><i class="fa-solid fa-warehouse me-1"></i>{{ $mr->store?->name ?? 'Default Store' }}</small>
-                            </td>
-                            <td>
-                                <div class="d-flex flex-column gap-1">
-                                    @foreach($mr->items as $item)
-                                        <div class="small">
-                                            <span class="fw-semibold text-dark">{{ $item->product->name ?? 'Material' }}</span>:
-                                            <span class="badge bg-secondary bg-opacity-10 text-dark fw-bold font-monospace">{{ (float)$item->quantity_requested }} {{ $item->product->unit ?? '' }}</span>
-                                        </div>
-                                    @endforeach
-                                </div>
-                            </td>
-                            <td>
-                                <small class="{{ optional($mr->required_date)->isPast() ? 'text-danger fw-bold' : 'text-muted' }}">
-                                    {{ optional($mr->required_date)->format('d M Y') ?? '—' }}
-                                </small>
-                            </td>
-                            <td>
-                                @php
-                                    $mrBadge = match($mr->status) {
-                                        'sent_to_store_manager' => ['class' => 'bg-warning text-dark', 'label' => 'Sent to Store Manager', 'icon' => 'fa-warehouse'],
-                                        'pending', 'pending_planning' => ['class' => 'bg-warning text-dark', 'label' => 'Pending Planning', 'icon' => 'fa-hourglass-half'],
-                                        'planning_approved'     => ['class' => 'bg-info text-dark',    'label' => 'Planning Approved',     'icon' => 'fa-check'],
-                                        'issued'                => ['class' => 'bg-success',           'label' => 'Issued from Store',     'icon' => 'fa-check-double'],
-                                        'processed'             => ['class' => 'bg-info text-dark',    'label' => 'Processed',             'icon' => 'fa-boxes-packing'],
-                                        'needs_purchase', 'sent_to_pr' => ['class' => 'bg-primary',   'label' => 'In Procurement (PR)',   'icon' => 'fa-cart-shopping'],
-                                        default                 => ['class' => 'bg-secondary',         'label' => ucfirst(str_replace('_', ' ', $mr->status)), 'icon' => 'fa-circle-dot'],
-                                    };
-                                @endphp
-                                <span class="badge {{ $mrBadge['class'] }} px-2 py-1">
-                                    <i class="fa-solid {{ $mrBadge['icon'] }} me-1"></i>{{ $mrBadge['label'] }}
-                                </span>
-
-                                @if($mr->purchaseRequests && $mr->purchaseRequests->isNotEmpty())
-                                    <div class="mt-1">
-                                        @foreach($mr->purchaseRequests as $linkedPr)
-                                            <a href="{{ route('purchase-requests.show', $linkedPr) }}" class="badge bg-primary text-decoration-none border shadow-xs" title="Linked Purchase Request">
-                                                <i class="fa-solid fa-file-invoice me-1"></i>{{ $linkedPr->pr_no }} ({{ $linkedPr->status_label }})
-                                            </a>
-                                        @endforeach
-                                    </div>
-                                @endif
-                            </td>
-                            <td class="text-end pe-3">
-                                <div class="d-flex justify-content-end gap-1 flex-wrap">
-                                    <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-primary" title="View Full Details">
-                                        <i class="fas fa-eye me-1"></i> View
-                                    </a>
-
-                                    @if(in_array($mr->status, ['sent_to_store_manager', 'planning_approved', 'pending']))
-                                        <form method="POST" action="{{ route('material-requests.send-to-pr', $mr) }}" class="d-inline">
-                                            @csrf
-                                            <button type="submit" class="btn btn-sm btn-primary shadow-sm" title="Route to Purchase Request (Buy)">
-                                                <i class="fas fa-cart-plus me-1"></i> Route to PR
-                                            </button>
-                                        </form>
-                                        <form method="POST" action="{{ route('material-requests.create-transfer', $mr) }}" class="d-inline">
-                                            @csrf
-                                            <button type="submit" class="btn btn-sm btn-outline-success" title="Create Transfer from other store">
-                                                <i class="fas fa-exchange-alt me-1"></i> Transfer
-                                            </button>
-                                        </form>
-                                    @endif
-                                </div>
-                            </td>
-                        </tr>
-                        @empty
-                        <tr>
-                            <td colspan="6" class="text-center py-4 text-muted">
-                                <i class="fas fa-boxes-stacked fa-2x mb-2 text-secondary d-block"></i>
-                                No active material or maintenance requisitions in this queue.
-                            </td>
-                        </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
         </div>
     </div>
 
@@ -331,10 +195,10 @@
     </div>
     @endif
 
-    <!-- Purchase Requests Queue Table -->
+    <!-- Merged Unified Purchase & Material Requests Queue Table -->
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
-            <h5 class="card-title mb-0 font-weight-bold"><i class="fas fa-list me-2 text-primary"></i>Purchase Requests Pending Role Action</h5>
+            <h5 class="card-title mb-0 font-weight-bold"><i class="fas fa-list me-2 text-primary"></i>Purchase &amp; Material Requests Pending Role Action</h5>
             @if(($kpi['pending_office_requests'] ?? 0) > 0)
                 <span class="badge bg-warning text-dark px-3 py-2">
                     <i class="fa-solid fa-boxes-stacked me-1"></i> {{ $kpi['pending_office_requests'] }} Office Supply {{ \Illuminate\Support\Str::plural('Request', $kpi['pending_office_requests']) }} Pending Decision
@@ -346,8 +210,8 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>PR Number</th>
-                            <th>Project / Purpose</th>
+                            <th>PR / Ref Number</th>
+                            <th>Project / Purpose / Store</th>
                             <th>Channel Source</th>
                             <th>Priority</th>
                             <th>Stage / Status</th>
@@ -357,6 +221,91 @@
                         </tr>
                     </thead>
                     <tbody>
+                        {{-- 1. Merged Material & Maintenance Requisitions --}}
+                        @foreach($materialRequestsQueue ?? [] as $mr)
+                        <tr class="table-light bg-opacity-25">
+                            <td>
+                                <a href="{{ route('material-requests.show', $mr) }}" class="fw-bold text-decoration-none text-primary font-monospace">
+                                    {{ $mr->reference_number }}
+                                </a>
+                                @if($mr->maintenance_request_id && $mr->maintenanceRequest)
+                                    <div class="mt-1">
+                                        <a href="{{ route('general-service.maintenance.show', $mr->maintenanceRequest) }}" class="badge bg-warning text-dark text-decoration-none border shadow-xs" title="View linked maintenance ticket">
+                                            <i class="fa-solid fa-screwdriver-wrench me-1"></i>{{ $mr->maintenanceRequest->request_no }}
+                                        </a>
+                                    </div>
+                                @endif
+                            </td>
+                            <td>
+                                <div class="fw-semibold text-dark">{{ $mr->project?->name ?? 'General Store' }}</div>
+                                <small class="text-muted d-block"><i class="fa-solid fa-warehouse me-1"></i>{{ $mr->store?->name ?? 'Default Store' }}</small>
+                                <div class="small mt-1">
+                                    @foreach($mr->items as $item)
+                                        <span class="text-secondary">{{ $item->product->name ?? 'Material' }}: <strong>{{ (float)$item->quantity_requested }} {{ $item->product->unit ?? '' }}</strong></span>@if(!$loop->last), @endif
+                                    @endforeach
+                                </div>
+                            </td>
+                            <td>
+                                @if($mr->maintenance_request_id)
+                                    <span class="badge bg-warning text-dark border border-warning">
+                                        <i class="fa-solid fa-screwdriver-wrench me-1"></i> Maintenance MR
+                                    </span>
+                                @else
+                                    <span class="badge bg-info text-dark border border-info">
+                                        <i class="fa-solid fa-hard-hat me-1"></i> Site Requisition
+                                    </span>
+                                @endif
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ optional($mr->required_date)->isPast() ? 'danger' : 'warning' }}">
+                                    {{ optional($mr->required_date)->isPast() ? 'Urgent' : 'High' }}
+                                </span>
+                            </td>
+                            <td>
+                                @php
+                                    $mrBadge = match($mr->status) {
+                                        'sent_to_store_manager' => ['class' => 'bg-warning text-dark', 'label' => 'Sent to Store Manager', 'icon' => 'fa-warehouse'],
+                                        'pending', 'pending_planning' => ['class' => 'bg-warning text-dark', 'label' => 'Pending Planning', 'icon' => 'fa-hourglass-half'],
+                                        'planning_approved'     => ['class' => 'bg-info text-dark',    'label' => 'Planning Approved',     'icon' => 'fa-check'],
+                                        'issued'                => ['class' => 'bg-success',           'label' => 'Issued from Store',     'icon' => 'fa-check-double'],
+                                        'processed'             => ['class' => 'bg-info text-dark',    'label' => 'Processed',             'icon' => 'fa-boxes-packing'],
+                                        'needs_purchase', 'sent_to_pr' => ['class' => 'bg-primary',   'label' => 'In Procurement (PR)',   'icon' => 'fa-cart-shopping'],
+                                        default                 => ['class' => 'bg-secondary',         'label' => ucfirst(str_replace('_', ' ', $mr->status)), 'icon' => 'fa-circle-dot'],
+                                    };
+                                @endphp
+                                <span class="badge {{ $mrBadge['class'] }}">
+                                    <i class="fa-solid {{ $mrBadge['icon'] }} me-1"></i>{{ $mrBadge['label'] }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary bg-opacity-10 text-dark">
+                                    <i class="fas fa-warehouse me-1"></i> Store Manager
+                                </span>
+                            </td>
+                            <td>{{ $mr->created_at->format('M d, Y') }}</td>
+                            <td class="text-end">
+                                <div class="d-flex justify-content-end gap-1 flex-wrap">
+                                    @if(in_array($mr->status, ['sent_to_store_manager', 'planning_approved', 'pending']))
+                                        <form method="POST" action="{{ route('material-requests.send-to-pr', $mr) }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-primary shadow-sm" title="Route to Purchase Request (Buy)">
+                                                <i class="fas fa-cart-plus me-1"></i> Route to PR
+                                            </button>
+                                        </form>
+                                        <form method="POST" action="{{ route('material-requests.create-transfer', $mr) }}" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-success" title="Create Transfer from other store">
+                                                <i class="fas fa-exchange-alt me-1"></i> Transfer
+                                            </button>
+                                        </form>
+                                    @endif
+                                    <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-secondary" title="View Full Details">
+                                        <i class="fas fa-eye me-1"></i> View
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        @endforeachody>
                         @forelse($myPrs as $pr)
                         <tr class="{{ $pr->is_office_request && $pr->status === 'pending_hr_approval' ? 'table-warning bg-opacity-25' : '' }}">
                             <td>
@@ -473,20 +422,22 @@
                                         @endif
                                     @else
                                         <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-primary">
-                                            <i class="fas fa-eye me-1"></i> View & Review
+                                            <i class="fas fa-eye me-1"></i> View &amp; Review
                                         </a>
                                     @endif
                                 </div>
-                             </td>
+                            </td>
                         </tr>
-                        @empty
+                        @endforeach
+
+                        @if(($materialRequestsQueue->isEmpty() ?? true) && $myPrs->isEmpty())
                         <tr>
                             <td colspan="8" class="text-center py-5 text-muted">
                                 <i class="fas fa-check-circle fa-3x mb-3 text-success d-block"></i>
-                                No pending procurement items awaiting your action right now!
+                                No pending procurement or requisition items awaiting your action right now!
                             </td>
                         </tr>
-                        @endforelse
+                        @endif
                     </tbody>
                 </table>
             </div>

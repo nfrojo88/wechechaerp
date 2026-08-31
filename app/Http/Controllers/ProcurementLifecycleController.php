@@ -105,7 +105,7 @@ class ProcurementLifecycleController extends Controller
 
         // 5. Summary Counters
         $kpi = [
-            'my_pending'                     => $myPrs->total(),
+            'my_pending'                     => $myPrs->total() + $materialRequestsQueue->count(),
             'emergency_mrs'                  => $emergencyMrs->count(),
             'material_requests_queue'        => $materialRequestsQueue->count(),
             'pending_office_requests'        => $pendingOfficeCount,
