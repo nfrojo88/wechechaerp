@@ -254,11 +254,6 @@ class ExpenseRequest extends Model
         return $this->belongsTo(ChartOfAccount::class, 'coa_id')->with('manager');
     }
 
-    public function maintenanceRequest()
-    {
-        return $this->belongsTo(MaintenanceRequest::class, 'maintenance_request_id');
-    }
-
     /**
      * Resolve linked Petty Cash Replenishment (if this expense request was created for a PCR cycle).
      */
