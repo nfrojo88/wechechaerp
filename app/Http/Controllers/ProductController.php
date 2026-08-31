@@ -135,6 +135,18 @@ class ProductController extends Controller
             'purchase_threshold' => ['nullable', 'numeric', 'min:0'],
         ]);
 
+        $validated['unit_price']         = $validated['unit_price'] ?? ($product->unit_price ?? 0);
+        $validated['selling_price']      = $validated['selling_price'] ?? ($product->selling_price ?? 0);
+        $validated['max_stock']          = $validated['max_stock'] ?? ($product->max_stock ?? 100);
+        $validated['reorder_level']      = $validated['reorder_level'] ?? ($product->reorder_level ?? 20);
+        $validated['standard_length']    = $validated['standard_length'] ?? ($product->standard_length ?? 0);
+        $validated['standard_width']     = $validated['standard_width'] ?? ($product->standard_width ?? 0);
+        $validated['equipment_condition']= $validated['equipment_condition'] ?? ($product->equipment_condition ?? 'Good');
+        $validated['assigned_to']        = $validated['assigned_to'] ?? ($product->assigned_to ?? 'Unassigned');
+        $validated['current_location']   = $validated['current_location'] ?? ($product->current_location ?? 'Main Store');
+        $validated['asset_status']       = $validated['asset_status'] ?? ($product->asset_status ?? 'Available');
+        $validated['purchase_threshold'] = $validated['purchase_threshold'] ?? ($product->purchase_threshold ?? 5);
+
         $product->update($validated);
 
         return redirect()->route('products.index')->with('success', 'Product updated successfully.');
