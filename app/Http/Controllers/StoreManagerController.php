@@ -309,6 +309,13 @@ class StoreManagerController extends Controller
      */
     public function createTransfer()
     {
+        $user = Auth::user();
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        if (in_array('store_keeper', $rawUserRoles) && !in_array('store_manager', $rawUserRoles) && !in_array('admin', $rawUserRoles) && !in_array('global_admin', $rawUserRoles)) {
+            return redirect()->route('store-manager.transfers.index')
+                ->with('error', 'Store Keepers cannot create inter-store transfers. Transfers must be initiated by Store Managers or Coordinators. Store Keepers handle Outgoing Dispatch and Incoming Receiving.');
+        }
+
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $products = Product::where('is_active', true)->orderBy('name')->get();
 
@@ -320,6 +327,13 @@ class StoreManagerController extends Controller
      */
     public function storeTransfer(Request $request)
     {
+        $user = Auth::user();
+        $rawUserRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        if (in_array('store_keeper', $rawUserRoles) && !in_array('store_manager', $rawUserRoles) && !in_array('admin', $rawUserRoles) && !in_array('global_admin', $rawUserRoles)) {
+            return redirect()->route('store-manager.transfers.index')
+                ->with('error', 'Store Keepers cannot create inter-store transfers. Transfers must be initiated by Store Managers or Coordinators. Store Keepers handle Outgoing Dispatch and Incoming Receiving.');
+        }
+
         $request->validate([
             'from_store_id'       => 'required|exists:stores,id',
             'to_store_id'         => 'required|exists:stores,id|different:from_store_id',

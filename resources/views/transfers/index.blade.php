@@ -4,6 +4,7 @@
     $authUser = auth()->user();
     $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
     $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
+    $isStoreKeeper = in_array('store_keeper', $rawUserRoles);
 @endphp
 
 @section('title', $isAuditorUser ? 'Store Transfers (Read-Only)' : 'Store Transfers')
@@ -16,9 +17,9 @@
                 <small class="text-muted">Internal Audit inspection of all inter-site store transfers and status movements</small>
             @endif
         </div>
-        @if(!$isAuditorUser)
+        @if(!$isAuditorUser && !$isStoreKeeper)
             <a href="{{ route('transfers.create') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>New Transfer</a>
-        @else
+        @elseif($isAuditorUser)
             <span class="badge bg-info text-dark px-3 py-2 fs-6 rounded-pill fw-bold"><i class="fa-solid fa-eye me-1"></i>Read-Only Audit Stream</span>
         @endif
     </div>

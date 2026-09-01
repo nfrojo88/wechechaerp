@@ -22,16 +22,17 @@
             </p>
         </div>
         <div class="d-flex gap-2">
-            @if(!$isAuditorUser)
+            @if(!$isAuditorUser && !$isStoreKeeper)
             <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm shadow-sm">
                 <i class="fas fa-plus me-1"></i>New Transfer Request
             </a>
+            @endif
             @if($isStoreKeeper)
             <a href="{{ route('dashboard.store-keeper') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="fa-solid fa-arrow-left me-1"></i>Store Dashboard
             </a>
             @endif
-            @else
+            @if($isAuditorUser)
             <span class="badge bg-info text-dark px-3 py-2 fs-6 rounded-pill fw-bold">
                 <i class="fa-solid fa-eye me-1"></i> Read-Only Audit Stream
             </span>
