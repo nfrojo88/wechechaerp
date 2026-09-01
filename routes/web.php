@@ -79,6 +79,24 @@ Route::get('/deploy-from-github', function () {
         }
     } catch (\Throwable $e) {}
 
+    // Ensure employee_experience start_date is nullable
+    try {
+        if (\Illuminate\Support\Facades\Schema::hasTable('employee_experience')) {
+            \Illuminate\Support\Facades\DB::statement("ALTER TABLE `employee_experience` MODIFY `start_date` DATE NULL;");
+        }
+    } catch (\Throwable $e) {}
+
+        // Ensure subcon_agreements columns exist
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('subcon_agreements')) {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('subcon_agreements', 'agreement_file')) {
+                    \Illuminate\Support\Facades\Schema::table('subcon_agreements', function (\Illuminate\Database\Schema\Blueprint $table) {
+                        $table->string('agreement_file', 500)->nullable();
+                    });
+                }
+            }
+        } catch (\Throwable $e) {}
+
     $color = ($return === 0) ? 'green' : 'red';
     $icon  = ($return === 0) ? '✅' : '❌';
 
