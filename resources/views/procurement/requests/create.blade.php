@@ -298,8 +298,15 @@
             const allStoreOptions = Array.from(storeSelect.querySelectorAll('option')).filter(opt => opt.value !== '');
 
             function syncProjectAndStore() {
-                if (!projectSelect.value && projectSelect.options.length === 2) {
-                    projectSelect.selectedIndex = 1;
+                // If project is not selected yet, auto-select the assigned or first valid project
+                if (!projectSelect.value && projectSelect.options.length > 1) {
+                    let chosenOpt = Array.from(projectSelect.options).find(opt => opt.value !== '' && opt.hasAttribute('selected'));
+                    if (!chosenOpt) {
+                        chosenOpt = Array.from(projectSelect.options).find(opt => opt.value !== '');
+                    }
+                    if (chosenOpt) {
+                        projectSelect.value = chosenOpt.value;
+                    }
                 }
 
                 const selectedProjectId = projectSelect.value;
@@ -325,7 +332,7 @@
                     storeSelect.value = currentSelectedStoreId;
                 } else if (exactMatchedStoreId) {
                     storeSelect.value = exactMatchedStoreId;
-                } else if (matchingStoreCount === 1) {
+                } else if (matchingStoreCount >= 1) {
                     storeSelect.selectedIndex = 1;
                 }
             }

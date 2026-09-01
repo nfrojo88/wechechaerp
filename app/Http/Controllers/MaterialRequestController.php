@@ -70,25 +70,50 @@ class MaterialRequestController extends Controller
         $user = auth()->user();
         $isSiteEngineer = $user && $user->hasRole('site_engineer') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'purchase_manager', 'coordinator', 'planning_manager']);
 
-        $projectsQuery = Project::where('status', '!=', 'cancelled')->with('stores');
-        if ($isSiteEngineer) {
-            $assignedProjectIds = $user->projects()->pluck('projects.id');
-            if ($user->employee?->project_id) {
+        // Thoroughly resolve all assigned project IDs for the user
+        $assignedProjectIds = collect();
+        if ($user) {
+            if ($user->projects()->exists()) {
+                $assignedProjectIds = $assignedProjectIds->concat($user->projects()->pluck('projects.id'));
+            }
+            if (!empty($user->project_id)) {
+                $assignedProjectIds->push($user->project_id);
+            }
+            if ($user->employee && !empty($user->employee->project_id)) {
                 $assignedProjectIds->push($user->employee->project_id);
             }
-            if ($user->store && $user->store->project_id) {
+            if ($user->store && !empty($user->store->project_id)) {
                 $assignedProjectIds->push($user->store->project_id);
             }
-            $projectsQuery->whereIn('id', $assignedProjectIds->unique());
+            if (!empty($user->store_id)) {
+                $userStore = Store::find($user->store_id);
+                if ($userStore && !empty($userStore->project_id)) {
+                    $assignedProjectIds->push($userStore->project_id);
+                }
+            }
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('project_user')) {
+                    $pu = \Illuminate\Support\Facades\DB::table('project_user')->where('user_id', $user->id)->pluck('project_id');
+                    $assignedProjectIds = $assignedProjectIds->concat($pu);
+                }
+            } catch (\Throwable $e) {}
+        }
+        $assignedProjectIds = $assignedProjectIds->filter()->unique();
+
+        $projectsQuery = Project::where('status', '!=', 'cancelled')->with('stores');
+        if ($isSiteEngineer && $assignedProjectIds->isNotEmpty()) {
+            $projectsQuery->whereIn('id', $assignedProjectIds);
         }
         $projects = $projectsQuery->get();
+        if ($projects->isEmpty()) {
+            $projects = Project::where('status', '!=', 'cancelled')->with('stores')->get();
+        }
 
         $storesQuery = Store::where('is_active', true);
-        if ($isSiteEngineer) {
-            $projectIds = $projects->pluck('id')->toArray();
-            $storesQuery->where(function($q) use ($user, $projectIds) {
-                $q->whereIn('project_id', $projectIds);
-                if ($user->store_id) {
+        if ($isSiteEngineer && $assignedProjectIds->isNotEmpty()) {
+            $storesQuery->where(function($q) use ($user, $assignedProjectIds) {
+                $q->whereIn('project_id', $assignedProjectIds);
+                if ($user && $user->store_id) {
                     $q->orWhere('id', $user->store_id);
                 }
             });
@@ -96,26 +121,36 @@ class MaterialRequestController extends Controller
             $storesQuery->where('id', $user->store_id);
         }
         $stores = $storesQuery->get();
+        if ($stores->isEmpty()) {
+            $stores = Store::where('is_active', true)->get();
+        }
 
+        // Determine default auto-selected project:
         $selectedProjectId = $request->query('project_id');
+        if (!$selectedProjectId && $assignedProjectIds->isNotEmpty()) {
+            $selectedProjectId = $assignedProjectIds->first();
+        }
         if (!$selectedProjectId && $user) {
-            $selectedProjectId = $user->projects()->pluck('projects.id')->first()
+            $selectedProjectId = $user->project_id
                 ?? $user->employee?->project_id
                 ?? $user->store?->project_id;
         }
-        if (!$selectedProjectId && $projects->count() >= 1) {
+        if (!$selectedProjectId && $projects->isNotEmpty()) {
             $selectedProjectId = $projects->first()->id;
         }
 
+        // Determine default auto-selected destination store:
         $selectedStoreId = $request->query('destination_store_id');
-        if (!$selectedStoreId && $selectedProjectId) {
-            $selectedStoreId = $stores->where('project_id', $selectedProjectId)->first()?->id
-                ?? $projects->where('id', $selectedProjectId)->first()?->stores->first()?->id;
-        }
         if (!$selectedStoreId && $user && $user->store_id) {
             $selectedStoreId = $user->store_id;
         }
-        if (!$selectedStoreId && $stores->count() >= 1) {
+        if (!$selectedStoreId && $selectedProjectId) {
+            $selectedStoreId = $stores->where('project_id', $selectedProjectId)->first()?->id
+                ?? $projects->where('id', $selectedProjectId)->first()?->default_store_id
+                ?? $projects->where('id', $selectedProjectId)->first()?->stores->first()?->id
+                ?? Store::where('project_id', $selectedProjectId)->where('is_active', true)->first()?->id;
+        }
+        if (!$selectedStoreId && $stores->isNotEmpty()) {
             $selectedStoreId = $stores->first()->id;
         }
 
