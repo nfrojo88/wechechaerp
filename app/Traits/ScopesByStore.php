@@ -21,7 +21,10 @@ trait ScopesByStore
         if ($user && $user->roles && in_array($user->roles->first()?->name ?? '', config('erp.store_scoped_roles', ['store_keeper', 'site_engineer']))) {
             static::addGlobalScope('store', function (Builder $query) use ($user) {
                 if ($user->store_id) {
-                    $query->where('store_id', $user->store_id);
+                    $table = $query->getModel()->getTable();
+                    if (\Illuminate\Support\Facades\Schema::hasColumn($table, 'store_id')) {
+                        $query->where($table . '.store_id', $user->store_id);
+                    }
                 }
             });
         }

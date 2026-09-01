@@ -4,11 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Traits\ScopesByStore;
 
 class Transfer extends Model
 {
-    use SoftDeletes, ScopesByStore;
+    use SoftDeletes;
 
     const STATUS_DRAFT            = 'draft';
     const STATUS_PENDING_APPROVAL = 'pending_approval';
