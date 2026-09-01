@@ -426,5 +426,53 @@ class ExpenseRequest extends Model
         }
         return \App\Services\FileUploadService::url($this->withholding_receipt);
     }
+
+    /**
+     * Get the accurate 3% Withholding Tax deduction.
+     */
+    public function getCalculatedWithholdingAmountAttribute(): float
+    {
+        if (!$this->has_withholding && (float)($this->withholding_amount ?? 0) <= 0) {
+            return 0.0;
+        }
+
+        $gross = (float)($this->gross_amount > 0 ? $this->gross_amount : $this->amount);
+        $vatRate = (float)($this->vat_rate ?? 15.00);
+        $vatType = $this->vat_type ?? 'none';
+
+        // In Ethiopian tax regulations, 3% WHT is calculated on the taxable base before VAT
+        $taxableBase = in_array($vatType, ['inclusive', 'vat_b'])
+            ? round($gross / (1 + ($vatRate / 100)), 2)
+            : $gross;
+
+        return round($taxableBase * 0.03, 2);
+    }
+
+    /**
+     * Get effective payable / net amount with strict 3% WHT and VAT.
+     */
+    public function getEffectivePayableAmountAttribute(): float
+    {
+        $gross = (float)($this->gross_amount > 0 ? $this->gross_amount : $this->amount);
+
+        if ($this->has_withholding || (float)($this->withholding_amount ?? 0) > 0) {
+            $vatRate = (float)($this->vat_rate ?? 15.00);
+            $vatType = $this->vat_type ?? 'none';
+            $vatAmount = (float)($this->vat_amount ?? 0);
+            $wht = $this->calculated_withholding_amount;
+
+            if ($vatType === 'exclusive') {
+                return round(($gross + $vatAmount) - $wht, 2);
+            }
+            return round($gross - $wht, 2);
+        }
+
+        if ((float)($this->net_amount ?? 0) > 0) {
+            return (float)$this->net_amount;
+        }
+
+        return (float)($this->gross_amount > 0 ? $this->gross_amount : $this->amount);
+    }
 }
+
 

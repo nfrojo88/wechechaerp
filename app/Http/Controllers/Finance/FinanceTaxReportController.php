@@ -101,14 +101,28 @@ class FinanceTaxReportController extends Controller
         $totalGrossBase = $allTaxItems->sum(function ($item) {
             return (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
         });
-        $totalVatAmount = $allTaxItems->sum('vat_amount');
-        $totalWithholdingAmount = $allTaxItems->sum('withholding_amount');
+        $totalVatAmount = $allTaxItems->sum(function ($item) {
+            if ((float)$item->vat_amount > 0) return (float)$item->vat_amount;
+            $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
+            $vatType = $item->vat_type ?? 'none';
+            $vatRate = (float)($item->vat_rate ?? 15.00);
+            if (in_array($vatType, ['inclusive', 'vat_b'])) {
+                $base = round($gross / (1 + ($vatRate / 100)), 2);
+                return round($gross - $base, 2);
+            } elseif ($vatType === 'exclusive') {
+                return round($gross * ($vatRate / 100), 2);
+            }
+            return 0.0;
+        });
+        $totalWithholdingAmount = $allTaxItems->sum(function ($item) {
+            return (float)$item->calculated_withholding_amount;
+        });
         $totalNetDisbursed = $allTaxItems->sum(function ($item) {
-            return (float)($item->net_amount > 0 ? $item->net_amount : $item->amount);
+            return (float)$item->effective_payable_amount;
         });
 
-        $totalWhtTransactions = $allTaxItems->where('has_withholding', true)->count();
-        $slipsAttachedCount = $allTaxItems->where('has_withholding', true)->whereNotNull('withholding_receipt')->count();
+        $totalWhtTransactions = $allTaxItems->filter(fn($item) => $item->has_withholding || (float)$item->withholding_amount > 0)->count();
+        $slipsAttachedCount = $allTaxItems->filter(fn($item) => ($item->has_withholding || (float)$item->withholding_amount > 0) && !empty($item->withholding_receipt))->count();
         $missingSlipsCount = $totalWhtTransactions - $slipsAttachedCount;
 
         // Paginated records
@@ -221,7 +235,8 @@ class FinanceTaxReportController extends Controller
 
             foreach ($records as $item) {
                 $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
-                $net = (float)($item->net_amount > 0 ? $item->net_amount : $item->amount);
+                $wht = (float)$item->calculated_withholding_amount;
+                $net = (float)$item->effective_payable_amount;
                 $vatLabel = match ($item->vat_type) {
                     'exclusive' => '15% VAT Added',
                     'inclusive', 'vat_b' => '15% VAT B Included',
@@ -238,7 +253,7 @@ class FinanceTaxReportController extends Controller
                     $vatLabel,
                     number_format((float)($item->vat_rate ?? 15.00), 2, '.', ''),
                     number_format((float)($item->vat_amount ?? 0), 2, '.', ''),
-                    number_format((float)($item->withholding_amount ?? 0), 2, '.', ''),
+                    number_format($wht, 2, '.', ''),
                     number_format($net, 2, '.', ''),
                     $item->payment_reference ?? 'N/A',
                     optional($item->paid_at)->format('Y-m-d H:i') ?? 'Pending',

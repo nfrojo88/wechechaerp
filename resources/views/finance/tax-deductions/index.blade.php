@@ -206,8 +206,9 @@
                     @forelse($records as $item)
                         @php
                             $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
-                            $net = (float)($item->net_amount > 0 ? $item->net_amount : $item->amount);
-                            $hasWht = (bool)($item->has_withholding || $item->withholding_amount > 0);
+                            $wht = (float)$item->calculated_withholding_amount;
+                            $net = (float)$item->effective_payable_amount;
+                            $hasWht = (bool)($item->has_withholding || $item->withholding_amount > 0 || $wht > 0);
                         @endphp
                         <tr>
                             {{-- Ref / Voucher # --}}
@@ -267,8 +268,8 @@
 
                             {{-- 3% Withholding Tax --}}
                             <td class="text-end">
-                                @if($item->withholding_amount > 0)
-                                    <div class="fw-bold text-danger">- ETB {{ number_format($item->withholding_amount, 2) }}</div>
+                                @if($wht > 0)
+                                    <div class="fw-bold text-danger">- ETB {{ number_format($wht, 2) }}</div>
                                     <span class="badge bg-danger-subtle text-danger" style="font-size:0.65rem;">
                                         3% WHT Deducted
                                     </span>
@@ -357,8 +358,9 @@
 @foreach($records as $item)
     @php
         $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
-        $net = (float)($item->net_amount > 0 ? $item->net_amount : $item->amount);
-        $hasWht = (bool)($item->has_withholding || $item->withholding_amount > 0);
+        $wht = (float)$item->calculated_withholding_amount;
+        $net = (float)$item->effective_payable_amount;
+        $hasWht = (bool)($item->has_withholding || $item->withholding_amount > 0 || $wht > 0);
     @endphp
     <div class="modal fade" id="taxDetailModal{{ $item->id }}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -389,7 +391,7 @@
                             </div>
                             <div class="col-3 border-end">
                                 <span class="text-muted small d-block">3% Withholding Tax</span>
-                                <strong class="fs-6 text-danger">- ETB {{ number_format($item->withholding_amount ?? 0, 2) }}</strong>
+                                <strong class="fs-6 text-danger">- ETB {{ number_format($wht, 2) }}</strong>
                             </div>
                             <div class="col-3">
                                 <span class="text-muted small d-block">Net Payable / Paid</span>

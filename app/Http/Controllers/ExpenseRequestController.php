@@ -399,7 +399,7 @@ class ExpenseRequestController extends Controller
         $vatType = $request->input('vat_type', 'none');
         $vatRate = (float)$request->input('vat_rate', 15.00);
         $hasWithholding = $request->boolean('has_withholding');
-        $withholdingRate = (float)($validated['withholding_rate'] ?? $request->input('withholding_rate', 3.00));
+        $withholdingRate = 3.00; // Strict 3.00% Withholding Tax per Ethiopian Tax Regulation
 
 
         $vatAmount = 0.0;
@@ -681,7 +681,7 @@ class ExpenseRequestController extends Controller
             $vatType = $validated['vat_type'] ?? ($expenseRequest->vat_type ?? 'none');
             $vatRate = isset($validated['vat_rate']) ? (float)$validated['vat_rate'] : (float)($expenseRequest->vat_rate ?? 15.00);
             $hasWithholding = isset($validated['has_withholding']) ? $request->boolean('has_withholding') : (bool)($expenseRequest->has_withholding ?? false);
-            $withholdingRate = isset($validated['withholding_rate']) ? (float)$validated['withholding_rate'] : (float)($expenseRequest->withholding_rate ?? 3.00);
+            $withholdingRate = 3.00; // Strict 3.00% Withholding Tax per Ethiopian Tax Regulation
 
 
             $vatAmount = 0.0;
