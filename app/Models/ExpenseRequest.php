@@ -147,17 +147,6 @@ class ExpenseRequest extends Model
         ];
     }
 
-    /**
-     * Get effective payable / disbursed amount (net_amount if taxes applied, otherwise amount).
-     */
-    public function getEffectivePayableAmountAttribute(): float
-    {
-        if ($this->net_amount !== null && (float)$this->net_amount > 0) {
-            return (float)$this->net_amount;
-        }
-        return (float)$this->amount;
-    }
-
 
     /**
      * User who submitted the request.
