@@ -23,8 +23,12 @@ class PlanningManagerController extends Controller
 
     public function emergencyRequests()
     {
-        $materialRequests = MaterialRequest::with(['project', 'store', 'creator'])
-            ->where('status', 'submitted')
+        $materialRequests = MaterialRequest::with(['project', 'store', 'creator', 'items.product'])
+            ->where(function($q) {
+                $q->where('planning_approval_status', 'pending')
+                  ->orWhereIn('status', ['pending_planning', 'submitted', 'pending']);
+            })
+            ->whereNotIn('status', ['planning_approved', 'approved', 'rejected', 'cancelled'])
             ->latest()
             ->get();
 
@@ -38,29 +42,38 @@ class PlanningManagerController extends Controller
 
     public function approveMaterial(Request $request, MaterialRequest $materialRequest)
     {
-        $action = $request->input('action', 'approved');
-        $materialRequest->update([
-            'status' => $action === 'approve' ? 'approved' : 'rejected',
-            'approved_by' => Auth::id(),
-            'approved_at' => now(),
-        ]);
+        $action = $request->input('action', 'approve');
+        if ($action === 'approve') {
+            $materialRequest->update([
+                'status'                   => 'planning_approved',
+                'planning_approval_status' => 'approved',
+                'planning_approved_by'     => Auth::id(),
+                'planning_approved_at'     => now(),
+            ]);
 
-        return back()->with('success', 'Material request updated successfully.');
+            return back()->with('success', "Emergency Material Request #{$materialRequest->reference_number} approved and sent directly to Coordinator in Procurement Queue.");
+        } else {
+            $materialRequest->update([
+                'status'                   => 'rejected',
+                'planning_approval_status' => 'rejected',
+                'planning_approved_by'     => Auth::id(),
+                'planning_approved_at'     => now(),
+                'planning_rejection_reason'=> $request->input('rejection_reason', 'Rejected by Planning Manager.'),
+            ]);
+
+            return back()->with('success', "Emergency Material Request #{$materialRequest->reference_number} has been rejected.");
+        }
     }
 
     public function approveManpower(Request $request, ManpowerRequest $manpowerRequest)
     {
-        $action = $request->input('action', 'approved');
+        $action = $request->input('action', 'approve');
         $manpowerRequest->update([
             'status' => $action === 'approve' ? 'approved' : 'rejected',
         ]);
 
         return back()->with('success', 'Manpower request updated successfully.');
     }
-
-
-
-
 
     public function resourceReport()
     {

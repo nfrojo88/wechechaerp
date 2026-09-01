@@ -153,9 +153,13 @@ class MaterialRequestController extends Controller
         $validated['source'] = $request->input('source', 'Manual Creation');
         $validated['created_by'] = auth()->id();
         $validated['status'] = 'pending_planning';
+        $validated['planning_approval_status'] = 'pending';
 
         if (!\Illuminate\Support\Facades\Schema::hasColumn('material_requests', 'source')) {
             unset($validated['source']);
+        }
+        if (!\Illuminate\Support\Facades\Schema::hasColumn('material_requests', 'planning_approval_status')) {
+            unset($validated['planning_approval_status']);
         }
         
         $materialName = $request->input('material_name');

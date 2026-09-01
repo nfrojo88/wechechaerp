@@ -340,6 +340,10 @@
                                     <span class="badge bg-secondary bg-opacity-10 text-dark">
                                         <i class="fas fa-user-tag me-1"></i> {{ ucfirst(str_replace('_', ' ', $linkedPr->current_owner_role ?? 'Purchase')) }}
                                     </span>
+                                @elseif($mr->status === 'planning_approved')
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                                        <i class="fa-solid fa-users-viewfinder me-1"></i> Coordinator
+                                    </span>
                                 @elseif(in_array($mr->status, ['needs_purchase', 'sent_to_pr']))
                                     <span class="badge bg-secondary bg-opacity-10 text-dark">
                                         <i class="fas fa-user-tag me-1"></i> Purchase
@@ -354,7 +358,8 @@
                             <td class="text-end">
                                 <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                     @php
-                                        $canActOnMr = !$isAuditorUser && ($isGlobalAdmin || ($isStoreManagerUser && in_array($mr->status, ['sent_to_store_manager', 'planning_approved', 'pending'])));
+                                        $canCoordinatorAct = !$isAuditorUser && ($isGlobalAdmin || $isCoordinatorUser) && $mr->status === 'planning_approved';
+                                        $canStoreManagerAct = !$isAuditorUser && ($isGlobalAdmin || $isStoreManagerUser) && in_array($mr->status, ['sent_to_store_manager', 'pending', 'planning_approved']);
                                     @endphp
 
                                     @if($isAuditorUser)
@@ -383,7 +388,29 @@
                                                     <i class="fas fa-eye me-1"></i> View
                                                 </a>
                                             @endif
-                                        @elseif($canActOnMr)
+                                        @elseif($canCoordinatorAct)
+                                            <form method="POST" action="{{ route('material-requests.coordinator-dispatch', $mr) }}" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-outline-primary fw-bold" title="Dispatch to Store Manager">
+                                                    <i class="fa-solid fa-truck-ramp-box me-1"></i> Dispatch to Store
+                                                </button>
+                                            </form>
+                                            <form method="POST" action="{{ route('material-requests.send-to-pr', $mr) }}" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-primary shadow-sm fw-bold" title="Route to Purchase Request (Buy)">
+                                                    <i class="fas fa-cart-plus me-1"></i> Route to PR
+                                                </button>
+                                            </form>
+                                            <form method="POST" action="{{ route('material-requests.create-transfer', $mr) }}" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-outline-success fw-bold" title="Create Transfer from other store">
+                                                    <i class="fas fa-exchange-alt me-1"></i> Transfer
+                                                </button>
+                                            </form>
+                                            <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-light border" title="View Full Details">
+                                                <i class="fas fa-eye me-1"></i> View
+                                            </a>
+                                        @elseif($canStoreManagerAct)
                                             <form method="POST" action="{{ route('material-requests.send-to-pr', $mr) }}" class="d-inline">
                                                 @csrf
                                                 <button type="submit" class="btn btn-sm btn-primary shadow-sm fw-bold" title="Route to Purchase Request (Buy)">
@@ -400,7 +427,11 @@
                                                 <i class="fas fa-eye me-1"></i> View
                                             </a>
                                         @else
-                                            <span class="badge bg-light text-muted border py-1.5 px-2"><i class="fas fa-lock text-secondary me-1"></i> Store Manager Locked</span>
+                                            @if($mr->status === 'planning_approved')
+                                                <span class="badge bg-light text-muted border py-1.5 px-2"><i class="fas fa-lock text-secondary me-1"></i> Coordinator Action Pending</span>
+                                            @else
+                                                <span class="badge bg-light text-muted border py-1.5 px-2"><i class="fas fa-lock text-secondary me-1"></i> Store Manager Locked</span>
+                                            @endif
                                             <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-secondary" title="View Full Details">
                                                 <i class="fas fa-eye me-1"></i> View
                                             </a>

@@ -21,11 +21,16 @@ class MaterialRequest extends Model
         'created_by',
         'approved_by',
         'approved_at',
+        'planning_approval_status',
+        'planning_approved_by',
+        'planning_approved_at',
+        'planning_rejection_reason',
     ];
 
     protected $casts = [
-        'required_date' => 'date',
-        'approved_at' => 'datetime',
+        'required_date'        => 'date',
+        'approved_at'          => 'datetime',
+        'planning_approved_at' => 'datetime',
     ];
 
     public function project()
@@ -56,6 +61,11 @@ class MaterialRequest extends Model
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function planningApprover()
+    {
+        return $this->belongsTo(User::class, 'planning_approved_by');
     }
 
     public function purchaseRequests()

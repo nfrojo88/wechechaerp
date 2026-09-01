@@ -64,30 +64,58 @@
                                     </small>
                                 </div>
                             </div>
+                            @if($mr->items->isNotEmpty())
+                            <div class="ms-5 ps-2 mb-2">
+                                @foreach($mr->items as $item)
+                                    <span class="badge bg-light text-dark border me-1 mb-1">
+                                        <i class="fa-solid fa-cube text-secondary me-1"></i>{{ $item->product->name ?? 'Item' }}: <strong>{{ (float)$item->quantity_requested }} {{ $item->product->unit ?? '' }}</strong>
+                                    </span>
+                                @endforeach
+                            </div>
+                            @endif
                             @if($mr->notes)
-                            <p class="text-muted small mb-0 ms-5 ps-2">{{ $mr->notes }}</p>
+                            <p class="text-muted small mb-0 ms-5 ps-2"><i class="fa-solid fa-quote-left text-muted me-1"></i>{{ $mr->notes }}</p>
                             @endif
                         </div>
                         <div class="col-md-5 text-md-end mt-3 mt-md-0">
                             <span class="badge bg-warning text-dark me-2 px-3 py-2">
-                                <i class="fa-solid fa-clock me-1"></i>Submitted
+                                <i class="fa-solid fa-clock me-1"></i>Pending Planning
                             </span>
                             <form method="POST" action="{{ route('planning-manager.emergency-requests.material.approve', $mr) }}" class="d-inline">
                                 @csrf
                                 <input type="hidden" name="action" value="approve">
-                                <button type="submit" class="btn btn-success btn-sm px-3"
-                                    onclick="return confirm('Approve this material request?')">
-                                    <i class="fa-solid fa-check me-1"></i>Approve
+                                <button type="submit" class="btn btn-success btn-sm px-3 shadow-sm fw-semibold"
+                                    onclick="return confirm('Approve Emergency Material Request {{ $mr->reference_number }} and send directly to Coordinator in Procurement Queue?')">
+                                    <i class="fa-solid fa-check me-1"></i>Approve &amp; Send to Coordinator
                                 </button>
                             </form>
-                            <form method="POST" action="{{ route('planning-manager.emergency-requests.material.approve', $mr) }}" class="d-inline ms-1">
-                                @csrf
-                                <input type="hidden" name="action" value="reject">
-                                <button type="submit" class="btn btn-outline-danger btn-sm px-3"
-                                    onclick="return confirm('Reject this material request?')">
-                                    <i class="fa-solid fa-xmark me-1"></i>Reject
-                                </button>
-                            </form>
+                            <button type="button" class="btn btn-outline-danger btn-sm px-3 ms-1" data-bs-toggle="modal" data-bs-target="#rejectMrModal{{ $mr->id }}">
+                                <i class="fa-solid fa-xmark me-1"></i>Reject
+                            </button>
+
+                            <!-- Reject Reason Modal -->
+                            <div class="modal fade text-start" id="rejectMrModal{{ $mr->id }}" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <form method="POST" action="{{ route('planning-manager.emergency-requests.material.approve', $mr) }}" class="modal-content border-0 shadow">
+                                        @csrf
+                                        <input type="hidden" name="action" value="reject">
+                                        <div class="modal-header bg-danger text-white">
+                                            <h6 class="modal-title fw-bold">
+                                                <i class="fa-solid fa-ban me-2"></i>Reject Material Request {{ $mr->reference_number }}
+                                            </h6>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body p-4">
+                                            <label class="form-label fw-semibold text-dark">Rejection Reason <span class="text-danger">*</span></label>
+                                            <textarea name="rejection_reason" class="form-control" rows="3" placeholder="Provide reason for rejecting this urgent request..." required></textarea>
+                                        </div>
+                                        <div class="modal-footer bg-light">
+                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-danger btn-sm">Confirm Rejection</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
