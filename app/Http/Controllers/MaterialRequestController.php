@@ -129,11 +129,13 @@ class MaterialRequestController extends Controller
         if ($rawSource) {
             $source = $rawSource;
         } else {
-            $source = 'Manual Creation';
+            $source = 'Emergency';
         }
+
+        $products = \App\Models\Product::where('is_active', true)->orderBy('name')->get();
         
         return view('procurement.requests.create', compact(
-            'projects', 'stores', 'selectedProjectId', 'selectedStoreId', 'dateNeeded', 'materialName', 'quantity', 'unit', 'source', 'redirectBack'
+            'projects', 'stores', 'products', 'selectedProjectId', 'selectedStoreId', 'dateNeeded', 'materialName', 'quantity', 'unit', 'source', 'redirectBack'
         ));
     }
 
@@ -142,15 +144,19 @@ class MaterialRequestController extends Controller
         Gate::authorize('create', MaterialRequest::class);
         
         $validated = $request->validate([
-            'project_id' => 'required|exists:projects,id',
+            'project_id'           => 'required|exists:projects,id',
             'destination_store_id' => 'required|exists:stores,id',
-            'reference_number' => 'required|string|unique:material_requests',
-            'source' => 'nullable|string|max:255',
-            'required_date' => 'required|date',
-            'notes' => 'nullable|string',
+            'reference_number'     => 'required|string|unique:material_requests,reference_number',
+            'source'               => 'nullable|string|max:255',
+            'required_date'        => 'required|date',
+            'notes'                => 'nullable|string',
+            'items'                => 'nullable|array',
+            'items.*.product_id'   => 'nullable|exists:products,id',
+            'items.*.quantity'     => 'nullable|numeric|min:0.001',
+            'items.*.notes'        => 'nullable|string',
         ]);
         
-        $validated['source'] = $request->input('source', 'Manual Creation');
+        $validated['source'] = $request->input('source', 'Emergency');
         $validated['created_by'] = auth()->id();
         $validated['status'] = 'pending_planning';
         $validated['planning_approval_status'] = 'pending';
@@ -162,28 +168,42 @@ class MaterialRequestController extends Controller
             unset($validated['planning_approval_status']);
         }
         
+        $mr = MaterialRequest::create($validated);
+
+        // Process dynamic items array
+        if ($request->has('items') && is_array($request->items)) {
+            foreach ($request->items as $itemData) {
+                if (empty($itemData['product_id']) || empty($itemData['quantity'])) {
+                    continue;
+                }
+                $mr->items()->create([
+                    'product_id'         => $itemData['product_id'],
+                    'quantity_requested' => (float)$itemData['quantity'],
+                    'notes'              => $itemData['notes'] ?? null,
+                ]);
+            }
+        }
+
+        // Single material name query fallback
         $materialName = $request->input('material_name');
         $quantity = $request->input('quantity');
         $unit = $request->input('unit');
-
-        $mr = MaterialRequest::create($validated);
-
-        if (!empty($materialName)) {
+        if (!empty($materialName) && $mr->items()->count() === 0) {
             $product = \App\Models\Product::where('name', 'like', "%{$materialName}%")->first();
             if ($product) {
                 $mr->items()->create([
-                    'product_id' => $product->id,
-                    'quantity_requested' => $quantity ?? 1,
-                    'notes' => 'Auto-added from Forecast Demand (' . ($unit ?? '') . ')'
+                    'product_id'         => $product->id,
+                    'quantity_requested' => (float)($quantity ?? 1),
+                    'notes'              => 'Auto-added from Demand Forecast (' . ($unit ?? '') . ')'
                 ]);
             }
         }
 
         if ($request->filled('redirect_back')) {
-            return redirect($request->input('redirect_back'))->with('success', 'Material Request created and sent directly to Planning Manager.');
+            return redirect($request->input('redirect_back'))->with('success', "Emergency Material Request #{$mr->reference_number} submitted directly to Planning Manager.");
         }
         
-        return redirect()->route('material-requests.show', $mr)->with('success', 'Material Request created and sent directly to Planning Manager.');
+        return redirect()->route('material-requests.show', $mr)->with('success', "Emergency Material Request #{$mr->reference_number} created with requested materials and sent directly to Planning Manager for urgent approval.");
     }
 
     public function show(MaterialRequest $materialRequest)
