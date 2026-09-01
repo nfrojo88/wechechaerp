@@ -1318,6 +1318,22 @@
                 <i class="fa-solid fa-envelope-open-text text-warning"></i>
                 <span>Employee Letters &amp; History</span>
             </a>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('subcon-agreements.index') }}" class="sidebar-nav-link {{ request()->routeIs('subcon-agreements.*') || request()->routeIs('hr.subcon-agreements.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-file-signature text-success"></i>
+                <span>Subcon Agreements</span>
+                @php
+                    $pendingSubconCount = 0;
+                    try {
+                        if (\Illuminate\Support\Facades\Schema::hasTable('subcon_agreements')) {
+                            $pendingSubconCount = \App\Models\SubconAgreement::whereIn('status', ['draft', 'pending'])->count();
+                        }
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingSubconCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingSubconCount }}</span>
+                @endif
+            </a>
         </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('departments.index') }}" class="sidebar-nav-link {{ request()->routeIs('departments.*') ? 'active' : '' }}">

@@ -1639,10 +1639,14 @@ Route::middleware(['auth'])->group(function () {
     Route::post('delivery-receipts/{deliveryReceipt}/verify', [App\Http\Controllers\DeliveryReceiptController::class, 'verifyDeliveryReceipt'])->name('delivery-receipts.verify');
     
     Route::resource('subcon-agreements', App\Http\Controllers\SubconAgreementController::class)->only(['index', 'create', 'store', 'show']);
+    Route::post('subcon-agreements/{subconAgreement}/upload-file', [App\Http\Controllers\SubconAgreementController::class, 'uploadFile'])->name('subcon-agreements.upload-file');
+    Route::get('subcon-agreements/{subconAgreement}/download-file', [App\Http\Controllers\SubconAgreementController::class, 'downloadFile'])->name('subcon-agreements.download-file');
     Route::post('subcon-agreements/{subconAgreement}/approve', [App\Http\Controllers\SubconAgreementController::class, 'approve'])->name('subcon-agreements.approve');
     Route::post('subcon-agreements/{subconAgreement}/reject', [App\Http\Controllers\SubconAgreementController::class, 'reject'])->name('subcon-agreements.reject');
     Route::post('subcon-agreements/{subconAgreement}/activate', [App\Http\Controllers\SubconAgreementController::class, 'activate'])->name('subcon-agreements.activate');
     Route::get('subcon-agreements/{subconAgreement}/takeoff-items', [App\Http\Controllers\SubconAgreementController::class, 'getTakeoffItems'])->name('subcon-agreements.getTakeoffItems');
+    Route::get('hr/subcon-agreements', [App\Http\Controllers\SubconAgreementController::class, 'index'])->name('hr.subcon-agreements.index');
+    Route::get('hr/subcon-agreements/create', [App\Http\Controllers\SubconAgreementController::class, 'create'])->name('hr.subcon-agreements.create');
     Route::resource('ipcs', App\Http\Controllers\IpcRecordController::class)->only(['index', 'create', 'store', 'show']);
 
     // Material Requests
