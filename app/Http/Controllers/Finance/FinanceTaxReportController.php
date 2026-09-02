@@ -26,10 +26,17 @@ class FinanceTaxReportController extends Controller
         $toDate = $request->input('to_date');
         $accountId = $request->input('account_id');
 
-        // Base Query: ONLY records that have an uploaded Withholding / Tax receipt attached
-        $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount'])
-            ->whereNotNull('withholding_receipt')
-            ->where('withholding_receipt', '!=', '');
+        // Base Query: All records that have VAT, Withholding Tax, or an uploaded Withholding slip
+        $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount', 'letter', 'purchaseRequest'])
+            ->where(function ($q) {
+                $q->where('has_withholding', true)
+                  ->orWhere('withholding_amount', '>', 0)
+                  ->orWhere('vat_amount', '>', 0)
+                  ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b'])
+                  ->orWhere(function ($sq) {
+                      $sq->whereNotNull('withholding_receipt')->where('withholding_receipt', '!=', '');
+                  });
+            });
 
         // Tab Filtering
         if ($tab === 'withholding') {
@@ -159,10 +166,17 @@ class FinanceTaxReportController extends Controller
         $fromDate = $request->input('from_date');
         $toDate = $request->input('to_date');
 
-        // Base Query: ONLY records that have an uploaded Withholding / Tax receipt attached
-        $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount'])
-            ->whereNotNull('withholding_receipt')
-            ->where('withholding_receipt', '!=', '');
+        // Base Query: All records that have VAT, Withholding Tax, or an uploaded Withholding slip
+        $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount', 'letter', 'purchaseRequest'])
+            ->where(function ($q) {
+                $q->where('has_withholding', true)
+                  ->orWhere('withholding_amount', '>', 0)
+                  ->orWhere('vat_amount', '>', 0)
+                  ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b'])
+                  ->orWhere(function ($sq) {
+                      $sq->whereNotNull('withholding_receipt')->where('withholding_receipt', '!=', '');
+                  });
+            });
 
         if ($tab === 'withholding') {
             $query->where(function ($q) {

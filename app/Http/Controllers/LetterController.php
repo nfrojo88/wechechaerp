@@ -416,31 +416,94 @@ class LetterController extends Controller
         }
 
         $validated = $request->validate([
-            'closing_notes'        => 'required|string|max:1000',
-            'record_payment'       => 'nullable|boolean',
-            'payment_amount'       => 'nullable|numeric|min:0.01',
-            'payment_reference'    => 'nullable|string|max:100',
-            'chart_of_account_id'  => 'nullable|exists:chart_of_accounts,id',
-            'bank_account_id'      => 'nullable|exists:bank_accounts,id',
-            'expense_category'     => 'nullable|string|max:100',
-            'project_id'           => 'nullable|exists:projects,id',
-            'payment_voucher'      => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
+            'closing_notes'              => 'required|string|max:1000',
+            'record_payment'             => 'nullable|boolean',
+            'payment_amount'             => 'nullable|numeric|min:0.01',
+            'gross_amount'               => 'nullable|numeric|min:0.01',
+            'vat_type'                   => 'nullable|string|in:none,exclusive,inclusive,vat_b',
+            'vat_rate'                   => 'nullable|numeric|min:0',
+            'vat_amount'                 => 'nullable|numeric|min:0',
+            'has_withholding'            => 'nullable|boolean',
+            'withholding_rate'           => 'nullable|numeric|min:0',
+            'withholding_amount'         => 'nullable|numeric|min:0',
+            'withholding_receipt'        => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'withholding_receipt_number' => 'nullable|string|max:100',
+            'net_amount'                 => 'nullable|numeric|min:0',
+            'payment_reference'          => 'nullable|string|max:100',
+            'chart_of_account_id'        => 'nullable|exists:chart_of_accounts,id',
+            'bank_account_id'            => 'nullable|exists:bank_accounts,id',
+            'expense_category'           => 'nullable|string|max:100',
+            'project_id'                 => 'nullable|exists:projects,id',
+            'payment_voucher'            => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
         ]);
 
-        $hasPayment = !empty($request->boolean('record_payment')) && !empty($validated['payment_amount']) && (float)$validated['payment_amount'] > 0;
-        $paymentAmount = $hasPayment ? (float)$validated['payment_amount'] : null;
+        $hasPayment = !empty($request->boolean('record_payment')) && (!empty($validated['payment_amount']) || !empty($validated['gross_amount']));
 
         DB::beginTransaction();
         try {
             $paidFromAccountName = null;
             $voucherPath = null;
+            $withholdingReceiptPath = null;
             $expenseRequestId = null;
             $expenseId = null;
 
             if ($hasPayment) {
+                // 1. Calculate Tax Breakdown
+                $gross = isset($validated['gross_amount']) && (float)$validated['gross_amount'] > 0
+                    ? (float)$validated['gross_amount']
+                    : (float)($validated['payment_amount'] ?? 0);
+
+                $vatType = $validated['vat_type'] ?? 'none';
+                $vatRate = isset($validated['vat_rate']) ? (float)$validated['vat_rate'] : 15.00;
+                $hasWithholding = $request->boolean('has_withholding');
+                $withholdingRate = 3.00;
+
+                $vatAmount = 0.0;
+                $baseAmount = $gross;
+                $withholdingAmount = 0.0;
+                $netAmount = $gross;
+
+                if ($vatType === 'exclusive') {
+                    $vatAmount = round($gross * ($vatRate / 100), 2);
+                    $baseAmount = $gross;
+                    $totalGrossWithVat = $gross + $vatAmount;
+                    if ($hasWithholding) {
+                        $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+                    }
+                    $netAmount = $totalGrossWithVat - $withholdingAmount;
+                } elseif ($vatType === 'inclusive' || $vatType === 'vat_b') {
+                    $baseAmount = round($gross / (1 + ($vatRate / 100)), 2);
+                    $vatAmount = round($gross - $baseAmount, 2);
+                    if ($hasWithholding) {
+                        $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+                    }
+                    $netAmount = $gross - $withholdingAmount;
+                } else {
+                    $baseAmount = $gross;
+                    $vatAmount = 0.0;
+                    if ($hasWithholding) {
+                        $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+                    }
+                    $netAmount = $gross - $withholdingAmount;
+                }
+
+                // Final net disbursed amount to deduct from funding account
+                $disbursedAmount = isset($validated['net_amount']) && (float)$validated['net_amount'] > 0
+                    ? (float)$validated['net_amount']
+                    : $netAmount;
+
+                if ($disbursedAmount <= 0) {
+                    $disbursedAmount = $gross;
+                }
+
                 // Upload payment voucher if present
                 if ($request->hasFile('payment_voucher')) {
                     $voucherPath = \App\Services\FileUploadService::upload($request->file('payment_voucher'), 'correspondence_vouchers');
+                }
+
+                // Upload withholding receipt if present
+                if ($request->hasFile('withholding_receipt')) {
+                    $withholdingReceiptPath = \App\Services\FileUploadService::upload($request->file('withholding_receipt'), 'expense_withholding_receipts');
                 }
 
                 // Resolve Chart of Account and deduct balance
@@ -448,28 +511,38 @@ class LetterController extends Controller
                     $coa = \App\Models\ChartOfAccount::find($validated['chart_of_account_id']);
                     if ($coa) {
                         $paidFromAccountName = "{$coa->code} - {$coa->name}";
-                        $coa->decrement('current_balance', $paymentAmount);
+                        $coa->decrement('current_balance', $disbursedAmount);
                     }
                 } elseif (!empty($validated['bank_account_id'])) {
                     $bankAcc = \App\Models\BankAccount::with('chartOfAccount')->find($validated['bank_account_id']);
                     if ($bankAcc) {
                         $paidFromAccountName = "{$bankAcc->bank_name} ({$bankAcc->account_number})";
                         if ($bankAcc->chartOfAccount) {
-                            $bankAcc->chartOfAccount->decrement('current_balance', $paymentAmount);
+                            $bankAcc->chartOfAccount->decrement('current_balance', $disbursedAmount);
                         }
                     }
                 }
 
-                // 1. Create official ExpenseRequest record (shows in "Ask Money" & Paid Expense history)
-                $categoryName = $validated['expense_category'] ?? \App\Models\ExpenseRequest::CATEGORY_OTHER;
+                // 2. Create official ExpenseRequest record (shows in "Ask Money", Paid Expense history, and VAT Report)
+                $categoryName = $validated['expense_category'] ?? \App\Models\ExpenseRequest::CATEGORY_SERVICE;
                 $expenseReq = \App\Models\ExpenseRequest::create([
                     'request_number'            => 'EXP-LTR-' . strtoupper(\Illuminate\Support\Str::random(4)) . '-' . $letter->id,
                     'user_id'                   => $letter->created_by ?: $user->id,
                     'employee_id'               => $user->employee->id ?? null,
+                    'letter_id'                 => $letter->id,
+                    'project_id'                => $validated['project_id'] ?? null,
                     'category'                  => $categoryName,
-                    'amount'                    => $paymentAmount,
-                    'gross_amount'              => $paymentAmount,
-                    'net_amount'                => $paymentAmount,
+                    'amount'                    => $disbursedAmount,
+                    'gross_amount'              => $gross,
+                    'vat_type'                  => $vatType,
+                    'vat_rate'                  => $vatRate,
+                    'vat_amount'                => $vatAmount,
+                    'has_withholding'           => $hasWithholding,
+                    'withholding_rate'          => $withholdingRate,
+                    'withholding_amount'        => $withholdingAmount,
+                    'withholding_receipt'       => $withholdingReceiptPath,
+                    'withholding_receipt_number'=> $validated['withholding_receipt_number'] ?? null,
+                    'net_amount'                => $disbursedAmount,
                     'description'               => "Direct Payment Settlement for Letter #{$letter->letter_number}: {$letter->subject}",
                     'status'                    => \App\Models\ExpenseRequest::STATUS_PAID,
                     'hr_reviewer_id'            => $user->id,
@@ -490,13 +563,13 @@ class LetterController extends Controller
                 ]);
                 $expenseRequestId = $expenseReq->id;
 
-                // 2. Also create Expense entry for project budget tracking if project or category provided
+                // 3. Also create Expense entry for project budget tracking if project or category provided
                 try {
                     $expense = \App\Models\Expense::create([
                         'project_id'   => $validated['project_id'] ?? null,
                         'category'     => strtolower($categoryName) === 'maintenance' ? 'equipment' : (in_array(strtolower($categoryName), ['labour','material','equipment','overhead','subcontractor']) ? strtolower($categoryName) : 'other'),
                         'description'  => "Settlement for Letter #{$letter->letter_number}: {$letter->subject}",
-                        'amount'       => $paymentAmount,
+                        'amount'       => $disbursedAmount,
                         'expense_date' => now()->toDateString(),
                         'status'       => 'approved',
                         'created_by'   => $user->id,
@@ -512,25 +585,39 @@ class LetterController extends Controller
 
             // Update letter
             $letter->update([
-                'status'               => Letter::STATUS_CLOSED,
-                'closed_by'            => $user->id,
-                'closed_at'            => now(),
-                'closing_notes'        => $validated['closing_notes'],
-                'payment_amount'       => $paymentAmount,
-                'payment_reference'    => $validated['payment_reference'] ?? null,
-                'paid_from_account'    => $paidFromAccountName,
-                'chart_of_account_id'  => $validated['chart_of_account_id'] ?? null,
-                'bank_account_id'      => $validated['bank_account_id'] ?? null,
-                'expense_request_id'   => $expenseRequestId,
-                'expense_id'           => $expenseId,
-                'payment_voucher_path' => $voucherPath,
-                'paid_at'              => $hasPayment ? now() : null,
-                'paid_by'              => $hasPayment ? $user->id : null,
+                'status'                    => Letter::STATUS_CLOSED,
+                'closed_by'                 => $user->id,
+                'closed_at'                 => now(),
+                'closing_notes'             => $validated['closing_notes'],
+                'payment_amount'            => $hasPayment ? $disbursedAmount : null,
+                'gross_amount'              => $hasPayment ? $gross : null,
+                'vat_type'                  => $hasPayment ? $vatType : 'none',
+                'vat_rate'                  => $hasPayment ? $vatRate : 15.00,
+                'vat_amount'                => $hasPayment ? $vatAmount : 0,
+                'has_withholding'           => $hasPayment ? $hasWithholding : false,
+                'withholding_rate'          => $hasPayment ? $withholdingRate : 3.00,
+                'withholding_amount'        => $hasPayment ? $withholdingAmount : 0,
+                'withholding_receipt'       => $withholdingReceiptPath,
+                'withholding_receipt_number'=> $validated['withholding_receipt_number'] ?? null,
+                'net_amount'                => $hasPayment ? $disbursedAmount : null,
+                'payment_reference'         => $validated['payment_reference'] ?? null,
+                'paid_from_account'         => $paidFromAccountName,
+                'chart_of_account_id'       => $validated['chart_of_account_id'] ?? null,
+                'bank_account_id'           => $validated['bank_account_id'] ?? null,
+                'expense_request_id'        => $expenseRequestId,
+                'expense_id'                => $expenseId,
+                'payment_voucher_path'      => $voucherPath,
+                'paid_at'                   => $hasPayment ? now() : null,
+                'paid_by'                   => $hasPayment ? $user->id : null,
             ]);
 
             // Log in routing table
+            $taxDetails = ($hasPayment && ($vatAmount > 0 || $withholdingAmount > 0))
+                ? (" [VAT: ETB " . number_format($vatAmount, 2) . ", WHT: ETB " . number_format($withholdingAmount, 2) . "]")
+                : "";
+
             $routingNotes = $hasPayment 
-                ? ("Payment Disbursed: ETB " . number_format($paymentAmount, 2) . ($paidFromAccountName ? " from {$paidFromAccountName}" : "") . ($validated['payment_reference'] ? " (Ref: {$validated['payment_reference']})" : "") . ". Final Decision: " . $validated['closing_notes'])
+                ? ("Payment Disbursed: ETB " . number_format($disbursedAmount, 2) . $taxDetails . ($paidFromAccountName ? " from {$paidFromAccountName}" : "") . ($validated['payment_reference'] ? " (Ref: {$validated['payment_reference']})" : "") . ". Final Decision: " . $validated['closing_notes'])
                 : ('Closed with decision/resolution: ' . $validated['closing_notes']);
 
             LetterRecipient::create([

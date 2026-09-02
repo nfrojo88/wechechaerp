@@ -19,6 +19,7 @@ class ExpenseRequest extends Model
         'employee_id',
         'maintenance_request_id',
         'purchase_request_id',
+        'letter_id',
         'project_id',
         'category',
         'other_reason',
@@ -180,6 +181,14 @@ class ExpenseRequest extends Model
     public function purchaseRequest()
     {
         return $this->belongsTo(\App\Models\PurchaseRequest::class, 'purchase_request_id');
+    }
+
+    /**
+     * Linked Letter (when financial settlement is recorded for a letter).
+     */
+    public function letter()
+    {
+        return $this->belongsTo(\App\Models\Letter::class, 'letter_id');
     }
 
     /**

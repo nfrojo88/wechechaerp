@@ -26,6 +26,16 @@ class Letter extends Model
         'closed_at',
         'closing_notes',
         'payment_amount',
+        'gross_amount',
+        'vat_type',
+        'vat_rate',
+        'vat_amount',
+        'has_withholding',
+        'withholding_rate',
+        'withholding_amount',
+        'withholding_receipt',
+        'withholding_receipt_number',
+        'net_amount',
         'payment_reference',
         'paid_from_account',
         'chart_of_account_id',
@@ -38,10 +48,17 @@ class Letter extends Model
     ];
 
     protected $casts = [
-        'date'           => 'date',
-        'closed_at'      => 'datetime',
-        'paid_at'        => 'datetime',
-        'payment_amount' => 'decimal:2',
+        'date'               => 'date',
+        'closed_at'          => 'datetime',
+        'paid_at'            => 'datetime',
+        'payment_amount'     => 'decimal:2',
+        'gross_amount'       => 'decimal:2',
+        'vat_rate'           => 'decimal:2',
+        'vat_amount'         => 'decimal:2',
+        'has_withholding'    => 'boolean',
+        'withholding_rate'   => 'decimal:2',
+        'withholding_amount' => 'decimal:2',
+        'net_amount'         => 'decimal:2',
     ];
 
     // Status Constants
