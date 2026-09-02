@@ -1652,6 +1652,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/verify-receipt', [App\Http\Controllers\PurchaseRequestController::class, 'verifyReceipt'])->name('purchase-requests.verify-receipt');
     Route::post('purchase-requests/{purchaseRequest}/book-driver', [App\Http\Controllers\PurchaseRequestController::class, 'bookDriver'])->name('purchase-requests.book-driver');
     Route::post('purchase-requests/{purchaseRequest}/store-intake', [App\Http\Controllers\PurchaseRequestController::class, 'storeIntake'])->name('purchase-requests.store-intake');
+    Route::post('purchase-requests/{purchaseRequest}/reactivate', [App\Http\Controllers\PurchaseRequestController::class, 'reactivate'])->name('purchase-requests.reactivate');
+    Route::post('purchase-requests/{purchaseRequest}/send-to-finance-direct', [App\Http\Controllers\PurchaseRequestController::class, 'sendToFinanceDirect'])->name('purchase-requests.send-to-finance-direct');
 
     // ── Office Material Requests (Secretary -> HR Money Approval -> Finance Assign -> Finance Pay) ──
     Route::get('office-requests', [App\Http\Controllers\OfficeSupplyRequestController::class, 'index'])->name('office-requests.index');

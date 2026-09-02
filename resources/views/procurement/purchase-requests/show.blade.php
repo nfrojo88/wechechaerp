@@ -989,7 +989,43 @@
                         <p class="small text-muted mb-0">This purchase request has completed all workflow stages.</p>
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_REJECTED)
                         <h6 class="fw-bold text-danger mb-1"><i class="fas fa-times-circle me-1"></i>Request Rejected</h6>
-                        <p class="small text-muted mb-0">This purchase request was rejected during the review cycle.</p>
+                        <p class="small text-muted mb-3">This purchase request was rejected during the review cycle.</p>
+
+                        @if(auth()->user()->hasAnyRole(['gm', 'general_manager', 'admin', 'global_admin']))
+                        <div class="alert alert-warning border-start border-4 border-warning text-start small mb-3">
+                            <i class="fas fa-shield-alt text-warning me-1"></i>
+                            <strong>Admin / GM Override:</strong> You can re-route this PR to Finance without re-running the full cycle.
+                        </div>
+                        <div class="d-flex flex-column gap-2">
+                            {{-- Option 1: Send directly to Finance (quick fix) --}}
+                            <form method="POST" action="{{ route('purchase-requests.send-to-finance-direct', $purchaseRequest) }}"
+                                  onsubmit="return confirm('Send PR #{{ $purchaseRequest->pr_no }} directly to Finance Head for payment? This will create an Expense Request and show it in the Finance section immediately.')">
+                                @csrf
+                                <input type="hidden" name="notes" value="Overridden by {{ auth()->user()->name }} — sent to Finance despite prior rejection.">
+                                <button type="submit" class="btn btn-success w-100 fw-bold shadow-sm">
+                                    <i class="fas fa-paper-plane me-2"></i>Send to Finance Head Now
+                                    <div class="small fw-normal opacity-75">
+                                        @php
+                                            $sp = $purchaseRequest->proformaInvoices()->where('gm_selected', true)->first()
+                                                ?? $purchaseRequest->proformaInvoices()->orderBy('grand_total','asc')->first();
+                                            $amt = $sp ? $sp->grand_total : ($purchaseRequest->direct_buy_amount ?? 0);
+                                            $sup = $sp ? ($sp->supplier->name ?? $sp->supplier_name ?? '—') : ($purchaseRequest->supplier->name ?? '—');
+                                        @endphp
+                                        ETB {{ number_format($amt, 2) }} &bull; {{ $sup }}
+                                    </div>
+                                </button>
+                            </form>
+
+                            {{-- Option 2: Restore to GM stage to re-decide --}}
+                            <form method="POST" action="{{ route('purchase-requests.reactivate', $purchaseRequest) }}"
+                                  onsubmit="return confirm('Re-activate PR #{{ $purchaseRequest->pr_no }} and return it to GM Decision stage?')">
+                                @csrf
+                                <button type="submit" class="btn btn-outline-secondary w-100 btn-sm">
+                                    <i class="fas fa-undo me-1"></i>Re-activate (Return to GM Stage)
+                                </button>
+                            </form>
+                        </div>
+                        @endif
                     @else
                         <h6 class="fw-bold text-dark mb-1">Stage Controls Locked (Sent)</h6>
                         <p class="small text-muted mb-3">

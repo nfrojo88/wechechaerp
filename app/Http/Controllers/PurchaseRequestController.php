@@ -1125,6 +1125,123 @@ class PurchaseRequestController extends Controller
         return back()->with('success', "GM decision recorded: {$decisionLabel}.");
     }
 
+    // ─── GM/Admin: Re-activate a Rejected PR (send back to GM decision stage) ────────────
+    public function reactivate(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['gm', 'general_manager', 'admin', 'global_admin']);
+
+        if (!in_array($purchaseRequest->status, [PurchaseRequest::STATUS_REJECTED, PurchaseRequest::STATUS_CANCELLED])) {
+            return back()->with('error', 'Only rejected or cancelled requests can be re-activated.');
+        }
+
+        $from = $purchaseRequest->status;
+        $purchaseRequest->update([
+            'status'           => PurchaseRequest::STATUS_PENDING_GM,
+            'current_owner_role' => 'gm',
+            'rejection_reason' => null,
+        ]);
+
+        \App\Models\PrWorkflowLog::create([
+            'purchase_request_id' => $purchaseRequest->id,
+            'from_status'         => $from,
+            'to_status'           => PurchaseRequest::STATUS_PENDING_GM,
+            'action'              => 'reactivated',
+            'performed_by_role'   => 'admin',
+            'notes'               => 'Re-activated by ' . auth()->user()->name . ': ' . ($request->input('notes') ?? 'Override rejection'),
+            'performed_by'        => auth()->id(),
+            'performed_at'        => now(),
+        ]);
+
+        return back()->with('success', "PR #{$purchaseRequest->pr_no} has been re-activated and returned to GM Decision stage. Please make your GM decision (Approve → Pay & Buy) to send it to Finance.");
+    }
+
+    // ─── GM/Admin: Send Rejected PR directly to Finance (pending_payment) ────────────────
+    public function sendToFinanceDirect(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['gm', 'general_manager', 'admin', 'global_admin']);
+
+        if (!in_array($purchaseRequest->status, [PurchaseRequest::STATUS_REJECTED, PurchaseRequest::STATUS_CANCELLED, PurchaseRequest::STATUS_PENDING_GM])) {
+            return back()->with('error', 'This action is only available for rejected, cancelled, or GM-stage PRs.');
+        }
+
+        // Determine amount from selected proforma or direct_buy_amount
+        $selectedProforma = $purchaseRequest->proformaInvoices()->where('gm_selected', true)->first()
+            ?? $purchaseRequest->proformaInvoices()->orderBy('grand_total', 'asc')->first();
+
+        $finalAmount = $selectedProforma
+            ? (float)$selectedProforma->grand_total
+            : (float)($purchaseRequest->direct_buy_amount ?? 0);
+
+        if ($finalAmount <= 0) {
+            $finalAmount = (float)$purchaseRequest->items->sum(
+                fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0)
+            );
+        }
+
+        $supplierName = $selectedProforma
+            ? ($selectedProforma->supplier->name ?? $selectedProforma->supplier_name ?? null)
+            : ($purchaseRequest->supplier->name ?? null);
+
+        // Update proforma selection
+        if ($selectedProforma) {
+            $purchaseRequest->proformaInvoices()->update(['gm_selected' => false]);
+            $selectedProforma->update(['gm_selected' => true]);
+        }
+
+        $purchaseRequest->update([
+            'status'             => PurchaseRequest::STATUS_PENDING_PAYMENT,
+            'current_owner_role' => 'finance_head',
+            'rejection_reason'   => null,
+            'direct_buy_amount'  => $finalAmount,
+        ]);
+
+        // Ensure ProcurementPayment record exists
+        \App\Models\ProcurementPayment::updateOrCreate(
+            ['purchase_request_id' => $purchaseRequest->id],
+            [
+                'method'     => 'cash',
+                'amount'     => $finalAmount,
+                'notes'      => $request->input('notes') ?? 'Sent to Finance directly by ' . auth()->user()->name,
+                'status'     => 'pending_assignment',
+                'created_by' => auth()->id(),
+            ]
+        );
+
+        // Auto-create ExpenseRequest so Finance Head sees it immediately
+        try {
+            \App\Models\ExpenseRequest::updateOrCreate(
+                ['purchase_request_id' => $purchaseRequest->id],
+                [
+                    'request_number' => 'EXP-PR-' . $purchaseRequest->pr_no,
+                    'user_id'        => auth()->id(),
+                    'project_id'     => $purchaseRequest->project_id,
+                    'category'       => 'Material',
+                    'description'    => "GM Approved Purchase Request #{$purchaseRequest->pr_no}"
+                        . ($supplierName ? " — Supplier: {$supplierName}" : '')
+                        . ($request->input('notes') ? ". Notes: " . $request->input('notes') : ''),
+                    'amount'         => $finalAmount,
+                    'gross_amount'   => $finalAmount,
+                    'status'         => \App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('sendToFinanceDirect: ExpenseRequest creation failed: ' . $e->getMessage());
+        }
+
+        \App\Models\PrWorkflowLog::create([
+            'purchase_request_id' => $purchaseRequest->id,
+            'from_status'         => PurchaseRequest::STATUS_REJECTED,
+            'to_status'           => PurchaseRequest::STATUS_PENDING_PAYMENT,
+            'action'              => 'send_to_finance_direct',
+            'performed_by_role'   => 'admin',
+            'notes'               => 'Sent directly to Finance by ' . auth()->user()->name . '. Amount: ' . number_format($finalAmount, 2) . ' ETB',
+            'performed_by'        => auth()->id(),
+            'performed_at'        => now(),
+        ]);
+
+        return back()->with('success', "PR #{$purchaseRequest->pr_no} (ETB " . number_format($finalAmount, 2) . ") sent directly to Finance Head for payment assignment. It now appears in the Expense section.");
+    }
+
     // ─── STAGE 7a: Finance Head — Credit Path ───────────────────────────────
     public function financeCreditApprove(Request $request, PurchaseRequest $purchaseRequest)
     {
