@@ -446,6 +446,16 @@ class LetterController extends Controller
             $withholdingReceiptPath = null;
             $expenseRequestId = null;
             $expenseId = null;
+            $disbursedAmount = null;
+            $paymentAmount = null;
+            $gross = null;
+            $vatType = 'none';
+            $vatRate = 15.00;
+            $vatAmount = 0.0;
+            $hasWithholding = false;
+            $withholdingRate = 3.00;
+            $withholdingAmount = 0.0;
+            $netAmount = null;
 
             if ($hasPayment) {
                 // 1. Calculate Tax Breakdown
