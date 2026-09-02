@@ -193,21 +193,29 @@
         <!-- Quick Actions -->
         <div class="col-lg-4">
             <div class="card shadow mb-4">
-                <div class="card-header py-3">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
                     <h6 class="m-0 font-weight-bold text-primary">Quick Actions</h6>
+                    <span class="badge bg-primary bg-opacity-10 text-primary small">HR Operations</span>
                 </div>
                 <div class="card-body d-flex flex-column gap-2">
-                    <a href="{{ route('payrolls.create') }}" class="btn btn-primary w-100">
-                        <i class="fas fa-plus me-2"></i>Generate Payroll
+                    <a href="{{ route('employee-letters.create') }}" class="btn btn-primary w-100 shadow-sm fw-bold py-2">
+                        <i class="fas fa-file-signature me-2"></i>Record Official Letter
                     </a>
-                    <a href="{{ route('employees.create') }}" class="btn btn-success w-100">
+                    <a href="{{ route('employee-letters.index') }}" class="btn btn-outline-primary w-100 py-1.5">
+                        <i class="fas fa-folder-open me-2"></i>Employee Letter Archive
+                    </a>
+                    <hr class="my-1">
+                    <a href="{{ route('payrolls.create') }}" class="btn btn-outline-secondary w-100 text-start">
+                        <i class="fas fa-plus me-2 text-primary"></i>Generate Payroll
+                    </a>
+                    <a href="{{ route('employees.create') }}" class="btn btn-outline-success w-100 text-start">
                         <i class="fas fa-user-plus me-2"></i>Add Employee
                     </a>
-                    <a href="{{ route('attendance.create') }}" class="btn btn-info w-100 text-white">
-                        <i class="fas fa-clipboard-user me-2"></i>Mark Attendance
+                    <a href="{{ route('attendance.create') }}" class="btn btn-outline-info w-100 text-start text-dark">
+                        <i class="fas fa-clipboard-user me-2 text-info"></i>Mark Attendance
                     </a>
-                    <a href="{{ route('manpower-requests.create') }}" class="btn btn-warning w-100">
-                        <i class="fas fa-person-circle-plus me-2"></i>Manpower Request
+                    <a href="{{ route('manpower-requests.create') }}" class="btn btn-outline-warning text-dark w-100 text-start">
+                        <i class="fas fa-person-circle-plus me-2 text-warning"></i>Manpower Request
                     </a>
                 </div>
             </div>
@@ -533,20 +541,38 @@
         </div>
 
         <!-- Subcon Agreements -->
-        <div class="col-lg-3 col-md-6 mb-3">
+        <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
             <a href="{{ route('subcon-agreements.index') }}" class="text-decoration-none">
                 <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden quick-module-card">
-                    <div class="card-body p-4 d-flex align-items-center gap-3">
-                        <div class="rounded-3 p-3 flex-shrink-0" style="background: linear-gradient(135deg, #8b5cf6 0%, #5b21b6 100%);">
+                    <div class="card-body p-3 d-flex align-items-center gap-2">
+                        <div class="rounded-3 p-2 flex-shrink-0" style="background: linear-gradient(135deg, #8b5cf6 0%, #5b21b6 100%);">
                             <i class="fa-solid fa-handshake fa-lg text-white"></i>
                         </div>
                         <div>
-                            <div class="fw-bold text-gray-900 fs-6 mb-0">Subcon Agreements</div>
-                            <small class="text-muted">View subcontractor agreements</small>
+                            <div class="fw-bold text-gray-900 small mb-0">Subcon</div>
+                            <small class="text-muted" style="font-size: 11px;">Agreements</small>
                         </div>
-                        <i class="fa-solid fa-arrow-right ms-auto text-muted small"></i>
                     </div>
                     <div style="height: 4px; background: linear-gradient(90deg, #8b5cf6, #5b21b6);"></div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Employee Letters -->
+        <div class="col-lg-4 col-md-4 col-sm-6 mb-3">
+            <a href="{{ route('employee-letters.index') }}" class="text-decoration-none">
+                <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden quick-module-card">
+                    <div class="card-body p-3 d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 flex-shrink-0" style="background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);">
+                            <i class="fa-solid fa-file-signature fa-lg text-white"></i>
+                        </div>
+                        <div>
+                            <div class="fw-bold text-gray-900 fs-6 mb-0">Official Letters &amp; Notices</div>
+                            <small class="text-muted">Issue &amp; record warnings, appreciations, guarantees</small>
+                        </div>
+                        <span class="badge bg-indigo text-white ms-auto">{{ $statistics['total_employee_letters'] ?? 0 }}</span>
+                    </div>
+                    <div style="height: 4px; background: linear-gradient(90deg, #6366f1, #4338ca);"></div>
                 </div>
             </a>
         </div>
@@ -561,7 +587,110 @@
         transform: translateY(-3px);
         box-shadow: 0 8px 24px rgba(0,0,0,0.12) !important;
     }
+    .bg-indigo {
+        background-color: #6366f1 !important;
+    }
     </style>
+
+    <!-- ── Official Employee Letters & Disciplinary Records ── -->
+    <div class="row mb-4">
+        <div class="col-lg-12">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h6 class="m-0 font-weight-bold text-primary">
+                            <i class="fas fa-file-contract me-2"></i>Official Employee Letters &amp; Notices
+                        </h6>
+                        <small class="text-muted">Recorded disciplinary warnings, appreciations, promotions, and guarantee letters</small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{{ route('employee-letters.create') }}" class="btn btn-sm btn-primary shadow-sm fw-bold">
+                            <i class="fas fa-plus me-1"></i> Issue / Record Letter
+                        </a>
+                        <a href="{{ route('employee-letters.index') }}" class="btn btn-sm btn-outline-primary">
+                            View All Letters ({{ $statistics['total_employee_letters'] ?? 0 }})
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Ref Number &amp; Date</th>
+                                    <th>Employee</th>
+                                    <th>Letter Type</th>
+                                    <th>Title / Subject</th>
+                                    <th>Issuer (HR)</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($recentEmployeeLetters ?? [] as $ltr)
+                                <tr>
+                                    <td>
+                                        <div class="font-monospace fw-bold text-primary small">{{ $ltr->reference_number ?: 'LTR-#'.$ltr->id }}</div>
+                                        <small class="text-muted">{{ optional($ltr->issued_date)->format('M d, Y') }}</small>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold">{{ $ltr->employee->full_name ?? 'N/A' }}</div>
+                                        <small class="text-muted font-monospace">{{ $ltr->employee->employee_code ?? '' }}</small>
+                                        @if($ltr->employee->role_title)
+                                            <span class="text-muted small">&bull; {{ $ltr->employee->role_title }}</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <span class="badge {{ $ltr->badge_class }} px-2 py-1">
+                                            <i class="{{ $ltr->icon }} me-1"></i>{{ $ltr->type_label }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="fw-semibold text-dark text-truncate d-inline-block" style="max-width: 260px;" title="{{ $ltr->title }}">
+                                            {{ $ltr->title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ $ltr->issuer->name ?? 'HR Officer' }}</small>
+                                    </td>
+                                    <td>
+                                        @if($ltr->attachment_path)
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success small">
+                                                <i class="fas fa-paperclip me-1"></i>Attachment
+                                            </span>
+                                        @else
+                                            <span class="badge bg-light text-muted border small">Generated</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ route('employee-letters.show', $ltr) }}" class="btn btn-outline-primary" title="View Full Letter">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="{{ route('employee-letters.print', $ltr) }}" target="_blank" class="btn btn-outline-secondary" title="Print Letterhead">
+                                                <i class="fas fa-print"></i>
+                                            </a>
+                                            <a href="{{ route('employee-letters.edit', $ltr) }}" class="btn btn-outline-warning" title="Edit Letter">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @empty
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        <i class="fas fa-folder-open fa-2x mb-2 d-block opacity-25"></i>
+                                        No official employee letters recorded yet. Click <strong>"Issue / Record Letter"</strong> to record warnings, appreciations, or agreements.
+                                    </td>
+                                </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- ── Recent Activities ── -->
     <div class="row">

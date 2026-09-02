@@ -633,15 +633,18 @@ class DashboardController extends Controller
     public function hr()
     {
         $kpi = [
-            'total_employees'  => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count()),
-            'present_today'    => $this->safe(fn() => \App\Models\Attendance::whereDate('attendance_date', now())->where('status', 'present')->count()),
-            'pending_payroll'  => $this->safe(fn() => \App\Models\Payroll::where('status', 'pending')->count()),
-            'open_requests'    => $this->safe(fn() => \App\Models\ManpowerRequest::where('status', 'pending')->count()),
+            'total_employees'  => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count(), 0),
+            'present_today'    => $this->safe(fn() => \App\Models\Attendance::whereDate('attendance_date', now())->where('status', 'present')->count(), 0),
+            'pending_payroll'  => $this->safe(fn() => \App\Models\Payroll::where('status', 'pending')->count(), 0),
+            'open_requests'    => $this->safe(fn() => \App\Models\ManpowerRequest::where('status', 'pending')->count(), 0),
+            'total_letters'    => $this->safe(fn() => \App\Models\EmployeeLetter::count(), 0),
+            'warning_letters'  => $this->safe(fn() => \App\Models\EmployeeLetter::whereIn('letter_type', ['first_warning', 'second_warning', 'final_warning', 'show_cause'])->count(), 0),
         ];
 
         $recentPayrolls = $this->safe(fn() => \App\Models\Payroll::with('employee')->latest()->take(5)->get(), collect());
+        $recentLetters  = $this->safe(fn() => \App\Models\EmployeeLetter::with(['employee', 'issuer'])->latest('issued_date')->take(6)->get(), collect());
 
-        return view('dashboard.hr', compact('kpi', 'recentPayrolls'));
+        return view('dashboard.hr', compact('kpi', 'recentPayrolls', 'recentLetters'));
     }
 
     // ─── Finance / Finance Head ─────────────────────────────────────────────────

@@ -120,6 +120,12 @@ class HRManagerController extends Controller
             collect()
         );
 
+        // Get recent official employee letters
+        $recentEmployeeLetters = $this->safe(
+            fn() => \App\Models\EmployeeLetter::with(['employee', 'issuer'])->latest('issued_date')->take(8)->get(),
+            collect()
+        );
+
         return view('dashboard.hr-manager', compact(
             'statistics',
             'kpi',
@@ -130,7 +136,8 @@ class HRManagerController extends Controller
             'subconAgreements',
             'recentActivities',
             'pendingManpowerRequests',
-            'pendingLeaveRequests'
+            'pendingLeaveRequests',
+            'recentEmployeeLetters'
         ));
     }
 
@@ -197,6 +204,11 @@ class HRManagerController extends Controller
 
             // Attendance rate this month (approved records)
             'attendance_rate_this_month' => $this->getMonthlyAttendanceRate(),
+
+            // Employee Letters & Records
+            'total_employee_letters'     => $this->safe(fn() => \App\Models\EmployeeLetter::count(), 0),
+            'warning_letters'            => $this->safe(fn() => \App\Models\EmployeeLetter::whereIn('letter_type', ['first_warning', 'second_warning', 'final_warning', 'show_cause'])->count(), 0),
+            'appreciation_letters'       => $this->safe(fn() => \App\Models\EmployeeLetter::whereIn('letter_type', ['thanks_letter', 'appreciation', 'promotion'])->count(), 0),
 
             // Employees absent today
             'absent_today' => $this->safe(
