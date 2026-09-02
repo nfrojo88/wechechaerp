@@ -593,6 +593,21 @@
                 <span>Emergency Approvals</span>
             </a>
         </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('planning-manager.manpower-reports') }}"
+               class="sidebar-nav-link {{ request()->routeIs('planning-manager.manpower-reports*') ? 'active' : '' }}">
+                <i class="fa-solid fa-users-line" style="color:#60a5fa;"></i>
+                <span>Morning Manpower Reports</span>
+                @php
+                    try {
+                        $pendingMpCount = \App\Models\ManpowerDailyReport::where('status', 'pending')->count();
+                    } catch (\Throwable $e) { $pendingMpCount = 0; }
+                @endphp
+                @if($pendingMpCount > 0)
+                    <span class="badge bg-warning text-dark ms-auto rounded-pill">{{ $pendingMpCount }}</span>
+                @endif
+            </a>
+        </li>
         @role('planning_manager')
         <li class="sidebar-nav-item">
             <a href="{{ route('planning.team.index') }}"
@@ -926,9 +941,27 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('manpower-daily-report.create') }}" class="sidebar-nav-link {{ request()->routeIs('manpower-daily-report.create') ? 'active' : '' }}">
+                <i class="fa-solid fa-users-line text-primary"></i>
+                <span>Submit Manpower Report</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('manpower-daily-report.index') }}" class="sidebar-nav-link {{ request()->routeIs('manpower-daily-report.index') || request()->routeIs('manpower-daily-report.show') ? 'active' : '' }}">
+                <i class="fa-solid fa-clipboard-user text-info"></i>
+                <span>My Manpower Reports</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('material-requests.create', ['source' => 'Emergency']) }}" class="sidebar-nav-link {{ request()->fullUrlIs('*source=Emergency*') ? 'active' : '' }}">
                 <i class="fa-solid fa-bolt text-danger"></i>
-                <span>Ask Emergency Material Request</span>
+                <span>Ask Emergency MR</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('eng-schedule.my') }}" class="sidebar-nav-link {{ request()->routeIs('eng-schedule.my') ? 'active' : '' }}">
+                <i class="fa-solid fa-calendar-check text-success"></i>
+                <span>My Work Schedule</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -947,6 +980,18 @@
             <a href="{{ route('weekly-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('weekly-reports.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-chart-bar text-primary"></i>
                 <span>Weekly Reports</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('attendance.index') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-user-check text-warning"></i>
+                <span>Site Attendance</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('issues.index') }}" class="sidebar-nav-link {{ request()->routeIs('issues.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-triangle-exclamation text-danger"></i>
+                <span>Site Issues</span>
             </a>
         </li>
         <li class="sidebar-nav-item">

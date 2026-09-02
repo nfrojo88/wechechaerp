@@ -319,34 +319,34 @@ class DashboardController extends Controller
         if ($user && $user->store && $user->store->project_id) {
             $assignedProjectIds->push($user->store->project_id);
         }
-        $assignedProjectIds = $assignedProjectIds->unique();
+        $assignedProjectIds = $assignedProjectIds->filter()->unique();
 
-        $kpi = [
-            'my_material_requests' => $this->safe(function() use ($user, $assignedProjectIds) {
-                return \App\Models\MaterialRequest::where('requested_by', auth()->id())
-                    ->when($assignedProjectIds->isNotEmpty(), fn($q) => $q->whereIn('project_id', $assignedProjectIds))
-                    ->count();
-            }),
-            'issues_reported' => $this->safe(function() use ($user, $assignedProjectIds) {
-                return \App\Models\Issue::where('reported_by', auth()->id())
-                    ->when($assignedProjectIds->isNotEmpty(), fn($q) => $q->whereIn('project_id', $assignedProjectIds))
-                    ->count();
-            }),
-            'attendance_today' => $this->safe(function() use ($user) {
-                return \App\Models\Attendance::whereDate('attendance_date', now())
-                    ->where('status', 'present')
-                    ->when($user && $user->store_id, fn($q) => $q->where('store_id', $user->store_id))
-                    ->count();
-            }),
-            'waste_recorded' => $this->safe(function() use ($user, $assignedProjectIds) {
-                return \App\Models\Waste::whereMonth('waste_date', now()->month)
-                    ->when($assignedProjectIds->isNotEmpty(), fn($q) => $q->whereIn('project_id', $assignedProjectIds))
-                    ->count();
-            }),
-        ];
+        $todayManpowerReport = $this->safe(function() use ($user) {
+            return \App\Models\ManpowerDailyReport::where('submitted_by', $user->id)
+                ->whereDate('report_date', today())
+                ->with(['project', 'reviewer'])
+                ->first();
+        });
+
+        $recentManpowerReports = $this->safe(function() use ($user) {
+            return \App\Models\ManpowerDailyReport::where('submitted_by', $user->id)
+                ->with(['project', 'reviewer'])
+                ->orderByDesc('report_date')
+                ->take(5)
+                ->get();
+        }, collect());
+
+        $assignedWorkOrders = $this->safe(function() use ($user) {
+            return \App\Models\EngWorkOrder::forEngineer($user->id)
+                ->with(['project', 'assignedBy'])
+                ->whereNotIn('status', ['cancelled'])
+                ->latest('start_datetime')
+                ->take(5)
+                ->get();
+        }, collect());
 
         $recentMR = $this->safe(function() use ($user, $assignedProjectIds) {
-            return \App\Models\MaterialRequest::where('requested_by', auth()->id())
+            return \App\Models\MaterialRequest::where('requested_by', $user->id)
                 ->when($assignedProjectIds->isNotEmpty(), fn($q) => $q->whereIn('project_id', $assignedProjectIds))
                 ->with('project')
                 ->latest()
@@ -354,7 +354,68 @@ class DashboardController extends Controller
                 ->get();
         }, collect());
 
-        return view('dashboard.site-engineer', compact('kpi', 'recentMR'));
+        $recentIssues = $this->safe(function() use ($user, $assignedProjectIds) {
+            return \App\Models\Issue::where('reported_by', $user->id)
+                ->orWhere(fn($q) => $q->when($assignedProjectIds->isNotEmpty(), fn($sq) => $sq->whereIn('project_id', $assignedProjectIds)))
+                ->with(['project'])
+                ->latest()
+                ->take(5)
+                ->get();
+        }, collect());
+
+        $kpi = [
+            'today_manpower_count' => $this->safe(function() use ($todayManpowerReport, $user) {
+                if ($todayManpowerReport) {
+                    return (int)$todayManpowerReport->total_present;
+                }
+                return (int)\App\Models\Attendance::whereDate('attendance_date', now())
+                    ->where('status', 'present')
+                    ->when($user && $user->store_id, fn($q) => $q->where('store_id', $user->store_id))
+                    ->count();
+            }, 0),
+            'manpower_status' => $todayManpowerReport ? $todayManpowerReport->status : 'not_submitted',
+            'my_material_requests' => $this->safe(function() use ($user, $assignedProjectIds) {
+                return \App\Models\MaterialRequest::where('requested_by', $user->id)
+                    ->when($assignedProjectIds->isNotEmpty(), fn($q) => $q->whereIn('project_id', $assignedProjectIds))
+                    ->count();
+            }, 0),
+            'pending_mr_count' => $this->safe(function() use ($user, $assignedProjectIds) {
+                return \App\Models\MaterialRequest::where('requested_by', $user->id)
+                    ->where('status', 'pending')
+                    ->when($assignedProjectIds->isNotEmpty(), fn($q) => $q->whereIn('project_id', $assignedProjectIds))
+                    ->count();
+            }, 0),
+            'assigned_work_orders_count' => $this->safe(function() use ($user) {
+                return \App\Models\EngWorkOrder::forEngineer($user->id)
+                    ->whereIn('status', ['assigned', 'in_progress'])
+                    ->count();
+            }, 0),
+            'open_issues_count' => $this->safe(function() use ($user, $assignedProjectIds) {
+                return \App\Models\Issue::where('status', 'open')
+                    ->when($assignedProjectIds->isNotEmpty(), fn($q) => $q->whereIn('project_id', $assignedProjectIds))
+                    ->count();
+            }, 0),
+            'attendance_today' => $this->safe(function() use ($user) {
+                return \App\Models\Attendance::whereDate('attendance_date', now())
+                    ->where('status', 'present')
+                    ->when($user && $user->store_id, fn($q) => $q->where('store_id', $user->store_id))
+                    ->count();
+            }, 0),
+            'waste_recorded' => $this->safe(function() use ($user, $assignedProjectIds) {
+                return \App\Models\Waste::whereMonth('waste_date', now()->month)
+                    ->when($assignedProjectIds->isNotEmpty(), fn($q) => $q->whereIn('project_id', $assignedProjectIds))
+                    ->count();
+            }, 0),
+        ];
+
+        return view('dashboard.site-engineer', compact(
+            'kpi',
+            'todayManpowerReport',
+            'recentManpowerReports',
+            'assignedWorkOrders',
+            'recentMR',
+            'recentIssues'
+        ));
     }
 
     // ─── Foreman ────────────────────────────────────────────────────────────────

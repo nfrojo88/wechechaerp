@@ -2107,10 +2107,21 @@ Route::middleware(['auth'])->group(function () {
         Route::post('emergency-requests/material/{materialRequest}/approve', [App\Http\Controllers\PlanningManagerController::class, 'approveMaterial'])->name('emergency-requests.material.approve');
         Route::post('emergency-requests/manpower/{manpowerRequest}/approve', [App\Http\Controllers\PlanningManagerController::class, 'approveManpower'])->name('emergency-requests.manpower.approve');
 
+        // ─── Morning Manpower Reports Review ────────────────────────────────────
+        Route::get('manpower-reports', [App\Http\Controllers\ManpowerDailyReportController::class, 'planningIndex'])->name('manpower-reports');
+        Route::post('manpower-reports/{manpowerDailyReport}/review', [App\Http\Controllers\ManpowerDailyReportController::class, 'review'])->name('manpower-report.review');
 
         Route::get('resource-report', [App\Http\Controllers\PlanningManagerController::class, 'resourceReport'])->name('resource-report');
         Route::get('weekly-plan-setup', [App\Http\Controllers\PlanningManagerController::class, 'weeklyPlanSetup'])->name('weekly-plan-setup');
         Route::post('weekly-plan-setup', [App\Http\Controllers\PlanningManagerController::class, 'storeWeeklyPlan'])->name('weekly-plan-setup.store');
+    });
+
+    // ─── Site Engineer: Morning Manpower Report ──────────────────────────────────
+    Route::prefix('manpower-daily-report')->name('manpower-daily-report.')->group(function () {
+        Route::get('/',       [App\Http\Controllers\ManpowerDailyReportController::class, 'index'])->name('index');
+        Route::get('/create', [App\Http\Controllers\ManpowerDailyReportController::class, 'create'])->name('create');
+        Route::post('/',      [App\Http\Controllers\ManpowerDailyReportController::class, 'store'])->name('store');
+        Route::get('/{manpowerDailyReport}', [App\Http\Controllers\ManpowerDailyReportController::class, 'show'])->name('show');
     });
 
     // ─── Engineer Work Scheduling Module ────────────────────────────────────────
