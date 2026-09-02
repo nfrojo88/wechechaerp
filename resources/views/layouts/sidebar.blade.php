@@ -139,33 +139,9 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-sitemap text-secondary"></i>
-                <span>Chart of Accounts (COA)</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-envelope-open-text text-primary"></i>
-                <span>Letters &amp; Correspondence</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ url('/expense-requests') }}" class="sidebar-nav-link {{ request()->is('expense-requests*') ? 'active' : '' }}">
-                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
-                <span>Ask Money (Expense Request)</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
             <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-plus text-info"></i>
                 <span>Ask / Request Leave</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('tickets.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-headset text-success"></i>
-                <span>Open Support Ticket</span>
             </a>
         </li>
         @endif
@@ -320,12 +296,7 @@
                 <span>Payroll Approvals</span>
             </a>
         </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-receipt text-danger"></i>
-                <span>VAT &amp; Withholding Tax</span>
-            </a>
-        </li>
+
 
         <li class="sidebar-nav-item">
             <a href="{{ route('payroll.advances') }}?status=pending" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') && request('status') === 'pending' ? 'active' : '' }}">
@@ -958,12 +929,7 @@
                 <span>Ask Emergency MR</span>
             </a>
         </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('eng-schedule.my') }}" class="sidebar-nav-link {{ request()->routeIs('eng-schedule.my') ? 'active' : '' }}">
-                <i class="fa-solid fa-calendar-check text-success"></i>
-                <span>My Work Schedule</span>
-            </a>
-        </li>
+
         <li class="sidebar-nav-item">
             <a href="{{ route('dispatches.index') }}" class="sidebar-nav-link {{ request()->routeIs('dispatches.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-week text-info"></i>
@@ -1554,12 +1520,7 @@
                 <span>Employee Ratings</span>
             </a>
         </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('admin.activity-logs') }}" class="sidebar-nav-link {{ request()->routeIs('admin.activity-logs') ? 'active' : '' }}">
-                <i class="fa-solid fa-list-ol text-primary"></i>
-                <span>Activity Logs</span>
-            </a>
-        </li>
+
         <li class="sidebar-nav-item">
             <a href="{{ route('admin.tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.tickets.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-ticket text-danger"></i>
@@ -1615,18 +1576,7 @@
                 <span>Expense &amp; Payment Audit</span>
             </a>
         </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-receipt text-danger"></i>
-                <span>VAT &amp; Withholding Tax</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-sitemap text-secondary"></i>
-                <span>Chart of Accounts (COA)</span>
-            </a>
-        </li>
+
 
         @endif
 
