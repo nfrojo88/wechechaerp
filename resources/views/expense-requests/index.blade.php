@@ -818,6 +818,123 @@
                         </div>
                     @endif
 
+                    @php $linkedPr = $req->purchaseRequest; @endphp
+                    @if($linkedPr)
+                        <div class="card border border-success border-opacity-25 rounded-3 mb-3 overflow-hidden shadow-sm">
+                            <div class="card-header bg-success bg-opacity-10 py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-cart-shopping text-success fs-5"></i>
+                                    <div>
+                                        <strong class="text-dark">Procurement &amp; Purchase Request Statement</strong>
+                                        <div class="text-muted small">PR #{{ $linkedPr->pr_no }} &bull; Originated from GM-Approved Purchase Request</div>
+                                    </div>
+                                </div>
+                                <a href="{{ url('/purchase-requests/' . $linkedPr->id) }}" target="_blank" class="btn btn-sm btn-success rounded-pill px-3">
+                                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> View Full PR
+                                </a>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-4">
+                                        <div class="p-2 bg-light rounded border">
+                                            <div class="text-muted small fw-bold">PR Number</div>
+                                            <div class="fw-bold text-dark font-monospace">{{ $linkedPr->pr_no }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-2 bg-light rounded border">
+                                            <div class="text-muted small fw-bold">Project</div>
+                                            <div class="fw-bold text-dark">{{ $linkedPr->project->name ?? '—' }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-2 bg-light rounded border">
+                                            <div class="text-muted small fw-bold">Supplier</div>
+                                            @php
+                                                $prSupplier = $linkedPr->proformaInvoices()->where('gm_selected', true)->first();
+                                                $supplierLabel = $prSupplier ? ($prSupplier->supplier->name ?? $prSupplier->supplier_name ?? '—') : ($linkedPr->supplier->name ?? '—');
+                                            @endphp
+                                            <div class="fw-bold text-dark">{{ $supplierLabel }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-2 bg-light rounded border">
+                                            <div class="text-muted small fw-bold">Total Amount</div>
+                                            <div class="fw-bold text-success fs-6 font-monospace">ETB {{ number_format($linkedPr->direct_buy_amount ?? $req->amount, 2) }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-2 bg-light rounded border">
+                                            <div class="text-muted small fw-bold">Sourcing Method</div>
+                                            <div class="fw-bold text-dark">{{ ucwords(str_replace('_', ' ', $linkedPr->sourcing_method ?? 'proforma')) }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="p-2 bg-light rounded border">
+                                            <div class="text-muted small fw-bold">PR Status</div>
+                                            <div><span class="badge bg-warning text-dark">{{ ucwords(str_replace('_', ' ', $linkedPr->status)) }}</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                @php $gmDecision = $linkedPr->gmDecisions()->latest()->first(); @endphp
+                                @if($gmDecision && $gmDecision->notes)
+                                <div class="alert alert-info border-start border-4 border-info py-2 px-3 mb-3 small">
+                                    <i class="fa-solid fa-user-shield text-info me-1"></i>
+                                    <strong>GM Approval Notes:</strong> {{ $gmDecision->notes }}
+                                </div>
+                                @endif
+
+                                @if($linkedPr->items && $linkedPr->items->count() > 0)
+                                <div>
+                                    <strong class="d-block mb-2 small text-muted text-uppercase"><i class="fa-solid fa-list-ul me-1"></i>Requested Items</strong>
+                                    <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
+                                        <table class="table table-sm table-bordered align-middle mb-0" style="font-size: 0.82rem;">
+                                            <thead class="table-dark small text-uppercase">
+                                                <tr>
+                                                    <th class="ps-2">#</th>
+                                                    <th>Item / Material</th>
+                                                    <th class="text-center">Qty</th>
+                                                    <th class="text-center">Unit</th>
+                                                    <th class="text-end pe-2">Unit Price</th>
+                                                    <th class="text-end pe-2">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($linkedPr->items as $idx => $prItem)
+                                                <tr>
+                                                    <td class="ps-2 text-muted">{{ $idx + 1 }}</td>
+                                                    <td>
+                                                        <div class="fw-semibold text-dark">{{ $prItem->description ?? $prItem->item_name ?? 'Material' }}</div>
+                                                        @if($prItem->specification ?? false)
+                                                            <div class="text-muted small">{{ $prItem->specification }}</div>
+                                                        @endif
+                                                    </td>
+                                                    <td class="text-center fw-bold">{{ $prItem->quantity }}</td>
+                                                    <td class="text-center text-muted">{{ $prItem->unit ?? 'pcs' }}</td>
+                                                    <td class="text-end pe-2 font-monospace">{{ number_format($prItem->estimated_unit_price ?? $prItem->unit_price ?? 0, 2) }}</td>
+                                                    <td class="text-end pe-2 fw-bold font-monospace text-success">
+                                                        {{ number_format((float)$prItem->quantity * (float)($prItem->estimated_unit_price ?? $prItem->unit_price ?? 0), 2) }}
+                                                    </td>
+                                                </tr>
+                                                @endforeach
+                                            </tbody>
+                                            <tfoot class="table-light">
+                                                <tr class="fw-bold">
+                                                    <td colspan="5" class="text-end pe-2">Grand Total:</td>
+                                                    <td class="text-end pe-2 font-monospace text-success">
+                                                        ETB {{ number_format($linkedPr->direct_buy_amount ?? $linkedPr->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0)), 2) }}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
+
                     {{-- Workflow Timeline --}}
                     <div class="mb-3">
                         <label class="fw-bold mb-2"><i class="fa-solid fa-timeline me-1"></i>Approval & Payment Timeline:</label>

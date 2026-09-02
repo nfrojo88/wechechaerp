@@ -18,6 +18,8 @@ class ExpenseRequest extends Model
         'user_id',
         'employee_id',
         'maintenance_request_id',
+        'purchase_request_id',
+        'project_id',
         'category',
         'other_reason',
         'amount',
@@ -170,6 +172,22 @@ class ExpenseRequest extends Model
     public function maintenanceRequest()
     {
         return $this->belongsTo(MaintenanceRequest::class, 'maintenance_request_id');
+    }
+
+    /**
+     * Linked Purchase Request (when PR is sent to Finance for payment).
+     */
+    public function purchaseRequest()
+    {
+        return $this->belongsTo(\App\Models\PurchaseRequest::class, 'purchase_request_id');
+    }
+
+    /**
+     * Linked Project.
+     */
+    public function project()
+    {
+        return $this->belongsTo(\App\Models\Project::class, 'project_id');
     }
 
     /**

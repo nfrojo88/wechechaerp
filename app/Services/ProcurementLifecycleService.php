@@ -14,6 +14,7 @@ use App\Models\JournalEntryLine;
 use App\Models\ChartOfAccount;
 use App\Models\CreditStoreLedger;
 use App\Models\CreditStorePayment;
+use App\Models\ExpenseRequest;
 use App\Models\User;
 use App\Models\Inventory;
 use App\Models\InventoryMovement;
@@ -314,6 +315,26 @@ class ProcurementLifecycleService
                         'created_by'     => Auth::id(),
                     ]
                 );
+
+                // Auto-create ExpenseRequest so Finance Head sees it in Expense section
+                try {
+                    $expNo = 'EXP-PR-' . $pr->pr_no;
+                    ExpenseRequest::updateOrCreate(
+                        ['purchase_request_id' => $pr->id],
+                        [
+                            'request_number'        => $expNo,
+                            'user_id'               => Auth::id(),
+                            'project_id'            => $pr->project_id,
+                            'category'              => 'Material',
+                            'description'           => "GM Approved Purchase Request #{$pr->pr_no}" . ($supplierName ? " — Supplier: {$supplierName}" : '') . ($notes ? ". Notes: {$notes}" : ''),
+                            'amount'                => $finalAmount,
+                            'gross_amount'          => $finalAmount,
+                            'status'                => ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+                        ]
+                    );
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('Could not create ExpenseRequest for PR: ' . $e->getMessage());
+                }
 
                 $nextStatus   = PurchaseRequest::STATUS_PENDING_PAYMENT;
                 $nextRole     = 'finance_head';

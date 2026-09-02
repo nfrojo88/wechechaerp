@@ -7,6 +7,7 @@ use App\Models\BankTransaction;
 use App\Models\ChartOfAccount;
 use App\Models\ExpenseRequest;
 use App\Models\PettyCashReplenishment;
+use App\Models\PurchaseRequest;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\ActivityLog;
@@ -183,6 +184,11 @@ class ExpenseRequestController extends Controller
             'chartOfAccount',
             'coa.manager',
             'maintenanceRequest',
+            'purchaseRequest.items',
+            'purchaseRequest.project',
+            'purchaseRequest.supplier',
+            'purchaseRequest.proformaInvoices.supplier',
+            'purchaseRequest.gmDecisions',
         ])->where('user_id', $user->id);
 
         switch ($tab) {
@@ -620,6 +626,30 @@ class ExpenseRequestController extends Controller
             'finance_assigned_at' => now(),
         ]);
 
+        // If linked to a Purchase Request, sync ProcurementPayment assignment
+        if ($expenseRequest->purchase_request_id) {
+            try {
+                $lifecycle = app(\App\Services\ProcurementLifecycleService::class);
+                $pr = $expenseRequest->purchaseRequest;
+                if ($pr) {
+                    \App\Models\ProcurementPayment::updateOrCreate(
+                        ['purchase_request_id' => $pr->id],
+                        [
+                            'method'                    => 'cash',
+                            'coa_account_id'            => $coa->id,
+                            'amount'                    => $expenseRequest->amount,
+                            'assigned_finance_staff_id' => $assignedStaffId,
+                            'notes'                     => "Assigned via Expense Request #{$expenseRequest->request_number}",
+                            'status'                    => 'pending_payment',
+                            'created_by'                => auth()->id(),
+                        ]
+                    );
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('PR ProcurementPayment sync failed: ' . $e->getMessage());
+            }
+        }
+
         $assignedStaff = User::find($assignedStaffId);
         $staffName = $assignedStaff ? $assignedStaff->name : 'Finance Staff';
 
@@ -796,6 +826,19 @@ class ExpenseRequestController extends Controller
             }
 
             DB::commit();
+
+            // If linked to a Purchase Request, advance the PR lifecycle
+            if ($expenseRequest->purchase_request_id) {
+                try {
+                    $pr = $expenseRequest->purchaseRequest;
+                    if ($pr && $pr->status === PurchaseRequest::STATUS_PENDING_PAYMENT) {
+                        $lifecycle = app(\App\Services\ProcurementLifecycleService::class);
+                        $lifecycle->financeStaffPay($pr, $validated['payment_notes'] ?? 'Paid via Expense Request');
+                    }
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::warning('PR lifecycle financeStaffPay sync failed: ' . $e->getMessage());
+                }
+            }
 
             return back()->with('success', "Payment of ETB " . number_format($disbursedAmount, 2) . " processed successfully for Request #{$expenseRequest->request_number}" . ($isPettyCash ? " and credited to the Petty Cash Account!" : "!"));
         } catch (\Throwable $e) {
