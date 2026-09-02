@@ -172,6 +172,24 @@ class ProcurementLifecycleService
     // STAGE 5b — Proforma Selection
     // ═══════════════════════════════════════════════════════════════════
 
+    public function sendProformasToGm(PurchaseRequest $pr, array $proformaIds, ?string $notes = null): void
+    {
+        $from = $pr->status;
+
+        // Reset previous selections and mark the selected proformas for GM review
+        $pr->proformaInvoices()->update(['gm_selected' => false]);
+        $pr->proformaInvoices()->whereIn('id', $proformaIds)->update(['gm_selected' => true]);
+
+        $pr->update([
+            'status'             => PurchaseRequest::STATUS_PENDING_GM,
+            'current_owner_role' => 'gm',
+        ]);
+
+        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_GM, 'send_proformas_to_gm', 'purchase_manager', $notes);
+        $this->sms->notifyRole($pr->id, 'gm',
+            "ConstructPro: PR #{$pr->pr_no} awaits your decision with " . count($proformaIds) . " selected proforma quote(s). Open: " . url("/purchase-requests/{$pr->id}"));
+    }
+
     public function gmDecide(
         PurchaseRequest $pr,
         string $decision,
