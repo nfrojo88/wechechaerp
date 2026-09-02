@@ -203,6 +203,14 @@
                             You can forward this letter to another colleague/department or record a decision and close it.
                         @endif
                     </p>
+
+                    @if($isRedirectedToFinance || $isFinanceOrAdmin)
+                        <div class="alert alert-warning border-0 shadow-sm rounded-3 py-2 px-3 small mb-3">
+                            <i class="fa-solid fa-hand-holding-dollar text-warning fa-lg me-1"></i>
+                            <strong>Finance Action:</strong> You can give a final decision and optionally process payment disbursement &amp; expense booking directly.
+                        </div>
+                    @endif
+
                     <div class="d-grid gap-2">
                         <button type="button" class="btn btn-outline-primary py-2 fw-semibold" data-bs-toggle="modal" data-bs-target="#redirectModal">
                             <i class="fa-solid fa-share me-1"></i> Redirect / Forward Letter
@@ -210,27 +218,83 @@
 
                         @if(!$isSecretaryOnly)
                             <button type="button" class="btn btn-success py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
-                                <i class="fa-solid fa-check-double me-1"></i> Give Decision & Close Letter
+                                <i class="fa-solid fa-check-double me-1"></i> Give Decision &amp; Close Letter
                             </button>
                         @else
                             <div class="alert alert-info py-2 px-3 mb-0 small border-0 bg-info bg-opacity-10 text-dark rounded-3">
                                 <i class="fa-solid fa-shield-halved text-info me-1"></i>
-                                <strong>Secretary Access:</strong> You can create and forward letters. Official decisions & closure are reserved for assigned managers.
+                                <strong>Secretary Access:</strong> You can create and forward letters. Official decisions &amp; closure are reserved for assigned managers.
                             </div>
                         @endif
                     </div>
                 </div>
             </div>
             @else
+            {{-- Letter Closed / Final Decision Card --}}
             <div class="card border-0 shadow-sm rounded-3 mb-4 bg-success bg-opacity-10 border border-success border-opacity-25">
                 <div class="card-body p-3">
-                    <div class="d-flex align-items-center gap-2 text-success fw-bold mb-1">
-                        <i class="fa-solid fa-circle-check fa-lg"></i> Letter Closed
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <div class="d-flex align-items-center gap-2 text-success fw-bold">
+                            <i class="fa-solid fa-circle-check fa-lg"></i> Letter Closed / Final Decision Recorded
+                        </div>
+                        @if($letter->payment_amount > 0)
+                            <span class="badge bg-success shadow-sm px-2 py-1">
+                                <i class="fa-solid fa-money-bill-wave me-1"></i>ETB {{ number_format($letter->payment_amount, 2) }} Paid
+                            </span>
+                        @endif
                     </div>
-                    <p class="small text-muted mb-1">Closed by <strong>{{ $letter->closer->name ?? 'Staff' }}</strong> on {{ $letter->closed_at ? $letter->closed_at->format('M d, Y H:i') : '' }}.</p>
+                    <p class="small text-muted mb-1">Decided &amp; closed by <strong>{{ $letter->closer->name ?? 'Staff' }}</strong> on {{ $letter->closed_at ? $letter->closed_at->format('M d, Y H:i') : '' }}.</p>
                     @if($letter->closing_notes)
                         <div class="small p-2 bg-white rounded border text-dark mt-2">
                             <strong>Decision / Closing Notes:</strong> {{ $letter->closing_notes }}
+                        </div>
+                    @endif
+
+                    {{-- Financial Settlement Details --}}
+                    @if($letter->payment_amount > 0)
+                        <div class="card border-0 rounded-3 mt-3 shadow-sm" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac !important;">
+                            <div class="card-body p-3">
+                                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom border-success border-opacity-25">
+                                    <div class="fw-bold text-success">
+                                        <i class="fa-solid fa-receipt me-1"></i> Financial Payment &amp; Expense Settlement
+                                    </div>
+                                    <span class="badge bg-success text-white">Disbursed</span>
+                                </div>
+                                <div class="row g-2 small text-dark">
+                                    <div class="col-sm-6">
+                                        <div class="text-muted" style="font-size: 0.78rem;">Amount Disbursed:</div>
+                                        <div class="fw-bold text-success fs-6">ETB {{ number_format($letter->payment_amount, 2) }}</div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <div class="text-muted" style="font-size: 0.78rem;">Paid From Account:</div>
+                                        <div class="fw-bold">{{ $letter->paid_from_account ?? ($letter->chartOfAccount->name ?? 'Company Account') }}</div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <div class="text-muted" style="font-size: 0.78rem;">Reference / Cheque:</div>
+                                        <div class="fw-semibold font-monospace">{{ $letter->payment_reference ?? 'N/A' }}</div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <div class="text-muted" style="font-size: 0.78rem;">Paid By / Date:</div>
+                                        <div>{{ $letter->payer->name ?? 'Finance Officer' }} on {{ optional($letter->paid_at)->format('M d, Y') }}</div>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex gap-2 mt-3 pt-2 border-top border-success border-opacity-25 flex-wrap">
+                                    @if($letter->expense_request_id)
+                                        <a href="{{ route('expense-requests.show', $letter->expense_request_id) }}" class="btn btn-sm btn-outline-success bg-white shadow-sm">
+                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i> View Expense Request
+                                        </a>
+                                    @endif
+                                    @if($letter->payment_voucher_path)
+                                        <a href="{{ asset('storage/' . $letter->payment_voucher_path) }}" target="_blank" class="btn btn-sm btn-outline-primary bg-white shadow-sm">
+                                            <i class="fa-solid fa-paperclip me-1"></i> View Payment Voucher
+                                        </a>
+                                    @endif
+                                    <a href="{{ route('expense-requests.history') }}" class="btn btn-sm btn-link text-success text-decoration-none ms-auto">
+                                        Company Expense History &rarr;
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                     @endif
                 </div>
@@ -241,7 +305,7 @@
             <div class="card border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-3 border-bottom">
                     <h5 class="fw-bold mb-0">
-                        <i class="fa-solid fa-timeline text-primary me-2"></i>Routing History & Audit Trail
+                        <i class="fa-solid fa-timeline text-primary me-2"></i>Routing History &amp; Audit Trail
                     </h5>
                 </div>
                 <div class="card-body p-3">
@@ -355,28 +419,96 @@
     </div>
 </div>
 
-{{-- Modal 2: Mark Reviewed / Closed --}}
+{{-- Modal 2: Mark Reviewed / Closed / Payment Settlement --}}
 <div class="modal fade" id="closeModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-success text-white">
-                <h5 class="modal-title fw-bold"><i class="fa-solid fa-check-double me-2"></i>Mark as Reviewed & Closed</h5>
+                <h5 class="modal-title fw-bold">
+                    <i class="fa-solid fa-check-double me-2"></i>Give Final Decision &amp; Close Letter
+                </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="{{ route('letters.close', $letter->id) }}" method="POST">
+            <form action="{{ route('letters.close', $letter->id) }}" method="POST" enctype="multipart/form-data">
                 @csrf
                 <div class="modal-body p-4">
-                    <p class="small text-muted mb-3">Provide a summary of the action taken or resolution for this letter to mark it officially closed.</p>
+                    <p class="small text-muted mb-3">Provide a summary of the action taken, resolution, or financial settlement for this letter to mark it officially closed.</p>
+                    
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Resolution Notes / Action Taken <span class="text-danger">*</span></label>
-                        <textarea name="closing_notes" class="form-control" rows="4" 
-                                  placeholder="e.g., Letter reviewed, site inspection conducted, and approval letter sent to client." required></textarea>
+                        <label class="form-label fw-bold">Resolution Notes / Decision Summary <span class="text-danger">*</span></label>
+                        <textarea name="closing_notes" class="form-control" rows="3" 
+                                  placeholder="e.g., Payment approved and disbursed to vendor according to attached invoice and contract terms." required></textarea>
+                    </div>
+
+                    {{-- Financial Payment Option Card --}}
+                    <div class="card border rounded-3 p-3 mb-3 bg-light">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" role="switch" name="record_payment" id="recordPaymentSwitch" value="1" onchange="togglePaymentFields()" {{ ($isRedirectedToFinance || $isFinanceOrAdmin) ? 'checked' : '' }}>
+                            <label class="form-check-label fw-bold text-dark" for="recordPaymentSwitch">
+                                <i class="fa-solid fa-coins text-warning me-1"></i> Disburse Payment &amp; Record Company Expense (ክፍያ ይፈጽሙና ወጪ ይመዝገቡ)
+                            </label>
+                        </div>
+                        <small class="text-muted">Enable this if this letter entails money to be paid/disbursed. This will record an official Expense in Finance records and deduct the money from the chosen Cash/Bank account.</small>
+
+                        {{-- Collapsible Payment Fields --}}
+                        <div id="paymentFieldsContainer" class="mt-3 pt-3 border-top {{ ($isRedirectedToFinance || $isFinanceOrAdmin) ? '' : 'd-none' }}">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold text-dark">Payment Amount (ETB) <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white fw-bold">ETB</span>
+                                        <input type="number" step="0.01" min="0.01" name="payment_amount" id="modalPaymentAmount" class="form-control" placeholder="0.00">
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold text-dark">Paid From (Cash / Bank Account) <span class="text-danger">*</span></label>
+                                    <select name="chart_of_account_id" id="modalCoaId" class="form-select">
+                                        <option value="">-- Select Cash / Bank Account --</option>
+                                        @foreach($cashAndBankAccounts ?? [] as $coa)
+                                            <option value="{{ $coa->id }}">
+                                                {{ $coa->code }} - {{ $coa->name }} (Bal: ETB {{ number_format($coa->current_balance ?? 0, 2) }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold text-dark">Expense Category</label>
+                                    <select name="expense_category" class="form-select">
+                                        @foreach($expenseCategories ?? [] as $key => $label)
+                                            <option value="{{ $key }}" {{ $key === 'Service' ? 'selected' : '' }}>{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold text-dark">Related Project (Optional)</label>
+                                    <select name="project_id" class="form-select">
+                                        <option value="">-- General / Head Office Expense --</option>
+                                        @foreach($projects ?? [] as $proj)
+                                            <option value="{{ $proj->id }}">{{ $proj->name ?? $proj->project_name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold text-dark">Payment Reference / Cheque #</label>
+                                    <input type="text" name="payment_reference" class="form-control font-monospace" placeholder="e.g. CHQ-10492 or FT-88219">
+                                </div>
+
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold text-dark">Payment Voucher / Receipt Attachment</label>
+                                    <input type="file" name="payment_voucher" class="form-control" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-success fw-bold px-4">
-                        <i class="fa-solid fa-check-double me-1"></i> Confirm & Close Letter
+                        <i class="fa-solid fa-check-double me-1"></i> Confirm Decision &amp; Settle
                     </button>
                 </div>
             </form>
@@ -404,5 +536,28 @@ function toggleModalTarget() {
         roleSelect.removeAttribute('required');
     }
 }
+
+function togglePaymentFields() {
+    const isChecked = document.getElementById('recordPaymentSwitch').checked;
+    const container = document.getElementById('paymentFieldsContainer');
+    const amountInput = document.getElementById('modalPaymentAmount');
+    const coaSelect = document.getElementById('modalCoaId');
+
+    if (isChecked) {
+        container.classList.remove('d-none');
+        amountInput.setAttribute('required', 'required');
+        coaSelect.setAttribute('required', 'required');
+    } else {
+        container.classList.add('d-none');
+        amountInput.removeAttribute('required');
+        coaSelect.removeAttribute('required');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('recordPaymentSwitch')) {
+        togglePaymentFields();
+    }
+});
 </script>
 @endsection

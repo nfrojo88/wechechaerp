@@ -25,11 +25,23 @@ class Letter extends Model
         'closed_by',
         'closed_at',
         'closing_notes',
+        'payment_amount',
+        'payment_reference',
+        'paid_from_account',
+        'chart_of_account_id',
+        'bank_account_id',
+        'expense_request_id',
+        'expense_id',
+        'payment_voucher_path',
+        'paid_at',
+        'paid_by',
     ];
 
     protected $casts = [
-        'date' => 'date',
-        'closed_at' => 'datetime',
+        'date'           => 'date',
+        'closed_at'      => 'datetime',
+        'paid_at'        => 'datetime',
+        'payment_amount' => 'decimal:2',
     ];
 
     // Status Constants
@@ -60,6 +72,46 @@ class Letter extends Model
     public function closer()
     {
         return $this->belongsTo(User::class, 'closed_by');
+    }
+
+    /**
+     * Relationship: Payer (Finance staff who paid)
+     */
+    public function payer()
+    {
+        return $this->belongsTo(User::class, 'paid_by');
+    }
+
+    /**
+     * Relationship: Chart of Account from which payment was deducted
+     */
+    public function chartOfAccount()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'chart_of_account_id');
+    }
+
+    /**
+     * Relationship: Bank Account used
+     */
+    public function bankAccount()
+    {
+        return $this->belongsTo(BankAccount::class, 'bank_account_id');
+    }
+
+    /**
+     * Relationship: Linked Expense Request (Ask Money)
+     */
+    public function expenseRequest()
+    {
+        return $this->belongsTo(ExpenseRequest::class, 'expense_request_id');
+    }
+
+    /**
+     * Relationship: Linked General / Project Expense
+     */
+    public function expense()
+    {
+        return $this->belongsTo(Expense::class, 'expense_id');
     }
 
     /**

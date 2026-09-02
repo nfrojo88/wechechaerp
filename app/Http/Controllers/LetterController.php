@@ -252,6 +252,11 @@ class LetterController extends Controller
         $letter->load([
             'creator',
             'closer',
+            'payer',
+            'chartOfAccount',
+            'bankAccount',
+            'expenseRequest',
+            'expense',
             'attachments.uploader',
             'recipients.fromUser',
             'recipients.toUser',
@@ -292,7 +297,49 @@ class LetterController extends Controller
             $roles = ['admin', 'manager', 'secretary', 'finance', 'site_engineer', 'hr', 'planning', 'store_manager'];
         }
 
-        return view('letters.show', compact('letter', 'users', 'roles'));
+        // Cash and Bank accounts from Chart of Accounts for payment disbursement
+        $cashAndBankAccounts = \App\Models\ChartOfAccount::where('is_active', true)
+            ->where(function($q) {
+                $q->where('subtype', 'Cash and Bank')
+                  ->orWhere('subtype', 'like', '%Cash%')
+                  ->orWhere('subtype', 'like', '%Bank%')
+                  ->orWhere('type', 'Asset');
+            })
+            ->orderBy('name')
+            ->get();
+
+        $bankAccounts = \App\Models\BankAccount::where('is_active', true)->orderBy('bank_name')->get();
+
+        $expenseCategories = [
+            'Service'            => 'Service (አገልግሎት)',
+            'Transport'          => 'Transport (ትራንስፖርት)',
+            'Loading & Unloading'=> 'Loading & Unloading (መጫን እና ማውረድ)',
+            'Contract Work'      => 'Contract Work (የኮንትራት ስራ)',
+            'Office Material'    => 'Office Material (የቢሮ እቃ)',
+            'Maintenance'        => 'Maintenance & Repairs (ጥገና)',
+            'Other'              => 'Other Expense (ሌሎች ወጪዎች)',
+        ];
+
+        $projects = \App\Models\Project::where('status', '!=', 'cancelled')->orderBy('name')->get();
+
+        $isFinanceOrAdmin = $user->hasAnyRole([
+            'admin', 'global_admin', 'gm', 'finance_head', 'finance_manager', 
+            'finance', 'finance_staff', 'accountant', 'cashier'
+        ]);
+
+        $isRedirectedToFinance = $letter->recipients()
+            ->where(function($q) {
+                $q->where('to_role_name', 'like', '%finance%')
+                  ->orWhere('to_role_name', 'like', '%cashier%')
+                  ->orWhere('to_role_name', 'like', '%accountant%');
+            })
+            ->exists();
+
+        return view('letters.show', compact(
+            'letter', 'users', 'roles', 'cashAndBankAccounts',
+            'bankAccounts', 'expenseCategories', 'projects',
+            'isFinanceOrAdmin', 'isRedirectedToFinance'
+        ));
     }
 
     /**
@@ -369,42 +416,153 @@ class LetterController extends Controller
         }
 
         $validated = $request->validate([
-            'closing_notes' => 'required|string|max:1000',
+            'closing_notes'        => 'required|string|max:1000',
+            'record_payment'       => 'nullable|boolean',
+            'payment_amount'       => 'nullable|numeric|min:0.01',
+            'payment_reference'    => 'nullable|string|max:100',
+            'chart_of_account_id'  => 'nullable|exists:chart_of_accounts,id',
+            'bank_account_id'      => 'nullable|exists:bank_accounts,id',
+            'expense_category'     => 'nullable|string|max:100',
+            'project_id'           => 'nullable|exists:projects,id',
+            'payment_voucher'      => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
         ]);
+
+        $hasPayment = !empty($request->boolean('record_payment')) && !empty($validated['payment_amount']) && (float)$validated['payment_amount'] > 0;
+        $paymentAmount = $hasPayment ? (float)$validated['payment_amount'] : null;
 
         DB::beginTransaction();
         try {
+            $paidFromAccountName = null;
+            $voucherPath = null;
+            $expenseRequestId = null;
+            $expenseId = null;
+
+            if ($hasPayment) {
+                // Upload payment voucher if present
+                if ($request->hasFile('payment_voucher')) {
+                    $voucherPath = \App\Services\FileUploadService::upload($request->file('payment_voucher'), 'correspondence_vouchers');
+                }
+
+                // Resolve Chart of Account and deduct balance
+                if (!empty($validated['chart_of_account_id'])) {
+                    $coa = \App\Models\ChartOfAccount::find($validated['chart_of_account_id']);
+                    if ($coa) {
+                        $paidFromAccountName = "{$coa->code} - {$coa->name}";
+                        $coa->decrement('current_balance', $paymentAmount);
+                    }
+                } elseif (!empty($validated['bank_account_id'])) {
+                    $bankAcc = \App\Models\BankAccount::with('chartOfAccount')->find($validated['bank_account_id']);
+                    if ($bankAcc) {
+                        $paidFromAccountName = "{$bankAcc->bank_name} ({$bankAcc->account_number})";
+                        if ($bankAcc->chartOfAccount) {
+                            $bankAcc->chartOfAccount->decrement('current_balance', $paymentAmount);
+                        }
+                    }
+                }
+
+                // 1. Create official ExpenseRequest record (shows in "Ask Money" & Paid Expense history)
+                $categoryName = $validated['expense_category'] ?? \App\Models\ExpenseRequest::CATEGORY_OTHER;
+                $expenseReq = \App\Models\ExpenseRequest::create([
+                    'request_number'            => 'EXP-LTR-' . strtoupper(\Illuminate\Support\Str::random(4)) . '-' . $letter->id,
+                    'user_id'                   => $letter->created_by ?: $user->id,
+                    'employee_id'               => $user->employee->id ?? null,
+                    'category'                  => $categoryName,
+                    'amount'                    => $paymentAmount,
+                    'gross_amount'              => $paymentAmount,
+                    'net_amount'                => $paymentAmount,
+                    'description'               => "Direct Payment Settlement for Letter #{$letter->letter_number}: {$letter->subject}",
+                    'status'                    => \App\Models\ExpenseRequest::STATUS_PAID,
+                    'hr_reviewer_id'            => $user->id,
+                    'hr_reviewed_at'            => now(),
+                    'gm_reviewer_id'            => $user->id,
+                    'gm_approver_id'            => $user->id,
+                    'gm_reviewed_at'            => now(),
+                    'gm_approved_at'            => now(),
+                    'finance_head_id'           => $user->id,
+                    'paid_by'                   => $user->id,
+                    'paid_at'                   => now(),
+                    'chart_of_account_id'       => $validated['chart_of_account_id'] ?? null,
+                    'coa_id'                    => $validated['chart_of_account_id'] ?? null,
+                    'bank_account_id'           => $validated['bank_account_id'] ?? null,
+                    'payment_reference'         => $validated['payment_reference'] ?? ('LTR-' . $letter->id),
+                    'payment_notes'             => $validated['closing_notes'],
+                    'attachment'                => $voucherPath,
+                ]);
+                $expenseRequestId = $expenseReq->id;
+
+                // 2. Also create Expense entry for project budget tracking if project or category provided
+                try {
+                    $expense = \App\Models\Expense::create([
+                        'project_id'   => $validated['project_id'] ?? null,
+                        'category'     => strtolower($categoryName) === 'maintenance' ? 'equipment' : (in_array(strtolower($categoryName), ['labour','material','equipment','overhead','subcontractor']) ? strtolower($categoryName) : 'other'),
+                        'description'  => "Settlement for Letter #{$letter->letter_number}: {$letter->subject}",
+                        'amount'       => $paymentAmount,
+                        'expense_date' => now()->toDateString(),
+                        'status'       => 'approved',
+                        'created_by'   => $user->id,
+                        'approved_by'  => $user->id,
+                        'approved_at'  => now(),
+                        'notes'        => "Payment disbursed for Letter #{$letter->letter_number}. Ref: " . ($validated['payment_reference'] ?? 'N/A'),
+                    ]);
+                    $expenseId = $expense->id;
+                } catch (\Throwable $ex) {
+                    \Illuminate\Support\Facades\Log::warning("Expense model creation fallback: " . $ex->getMessage());
+                }
+            }
+
             // Update letter
             $letter->update([
-                'status'        => Letter::STATUS_CLOSED,
-                'closed_by'     => $user->id,
-                'closed_at'     => now(),
-                'closing_notes' => $validated['closing_notes'],
+                'status'               => Letter::STATUS_CLOSED,
+                'closed_by'            => $user->id,
+                'closed_at'            => now(),
+                'closing_notes'        => $validated['closing_notes'],
+                'payment_amount'       => $paymentAmount,
+                'payment_reference'    => $validated['payment_reference'] ?? null,
+                'paid_from_account'    => $paidFromAccountName,
+                'chart_of_account_id'  => $validated['chart_of_account_id'] ?? null,
+                'bank_account_id'      => $validated['bank_account_id'] ?? null,
+                'expense_request_id'   => $expenseRequestId,
+                'expense_id'           => $expenseId,
+                'payment_voucher_path' => $voucherPath,
+                'paid_at'              => $hasPayment ? now() : null,
+                'paid_by'              => $hasPayment ? $user->id : null,
             ]);
 
             // Log in routing table
+            $routingNotes = $hasPayment 
+                ? ("Payment Disbursed: ETB " . number_format($paymentAmount, 2) . ($paidFromAccountName ? " from {$paidFromAccountName}" : "") . ($validated['payment_reference'] ? " (Ref: {$validated['payment_reference']})" : "") . ". Final Decision: " . $validated['closing_notes'])
+                : ('Closed with decision/resolution: ' . $validated['closing_notes']);
+
             LetterRecipient::create([
                 'letter_id'    => $letter->id,
                 'from_user_id' => $user->id,
                 'to_user_id'   => null,
                 'to_role_name' => null,
                 'action'       => 'closed',
-                'notes'        => 'Closed with decision/resolution: ' . $validated['closing_notes'],
+                'notes'        => $routingNotes,
                 'status'       => Letter::STATUS_CLOSED,
             ]);
 
             // Notify Creator
             if ($letter->created_by && $letter->created_by !== $user->id) {
+                $notifMsg = $hasPayment 
+                    ? "Letter {$letter->letter_number} was finalized by {$user->name} with an authorized payment disbursement of ETB " . number_format($paymentAmount, 2) . "."
+                    : "Letter {$letter->letter_number} decision was recorded and marked as Closed by {$user->name}.";
+
                 LetterNotification::create([
                     'user_id'   => $letter->created_by,
                     'letter_id' => $letter->id,
-                    'message'   => "Letter {$letter->letter_number} decision was recorded and marked as Closed by {$user->name}.",
+                    'message'   => $notifMsg,
                 ]);
             }
 
             DB::commit();
 
-            return back()->with('success', 'Letter decision recorded and marked as Reviewed & Closed.');
+            $successMsg = $hasPayment 
+                ? "Payment of ETB " . number_format($paymentAmount, 2) . " disbursed and letter closed successfully! Expense recorded in Company Expenses."
+                : 'Letter decision recorded and marked as Reviewed & Closed.';
+
+            return back()->with('success', $successMsg);
         } catch (\Throwable $e) {
             DB::rollBack();
             return back()->with('error', 'Failed to close letter: ' . $e->getMessage());

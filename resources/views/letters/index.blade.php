@@ -228,6 +228,13 @@
                                     };
                                 @endphp
                                 <span class="badge {{ $badgeClass }}">{{ ucfirst($letter->status) }}</span>
+                                @if($letter->payment_amount > 0)
+                                    <div class="mt-1">
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-semibold" style="font-size: 0.68rem;">
+                                            <i class="fa-solid fa-coins me-1"></i>ETB {{ number_format($letter->payment_amount, 2) }}
+                                        </span>
+                                    </div>
+                                @endif
                             </td>
 
                             {{-- Action --}}
