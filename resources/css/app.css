@@ -129,3 +129,100 @@ body {
     padding: 2rem;
     box-shadow: 0 10px 25px rgba(0,0,0,0.1);
 }
+
+/* ─────────────────────────────────────────
+   Admin Accordion / Collapsible Sidebar
+───────────────────────────────────────── */
+.sidebar-group-toggle {
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.sidebar-group-toggle:not(.collapsed) {
+    color: #fff;
+    background: rgba(59, 130, 246, 0.18);
+}
+
+.sidebar-chevron {
+    font-size: 0.65rem;
+    transition: transform 0.25s ease;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.sidebar-group-toggle:not(.collapsed) .sidebar-chevron {
+    transform: rotate(180deg);
+}
+
+.sidebar-sub-nav {
+    list-style: none;
+    padding: 0 0 0.25rem 0;
+    margin: 0;
+    background: rgba(0, 0, 0, 0.18);
+    border-left: 2px solid rgba(59, 130, 246, 0.35);
+    margin-left: 1.5rem;
+    margin-right: 0.5rem;
+    border-radius: 0 0 6px 6px;
+}
+
+.sidebar-sub-nav li {
+    padding: 0.05rem 0.5rem;
+}
+
+.sidebar-sub-nav .sidebar-nav-link {
+    font-size: 0.8rem;
+    padding: 0.38rem 0.75rem;
+    border-radius: 5px;
+    gap: 0.6rem;
+    color: #94a3b8;
+}
+
+.sidebar-sub-nav .sidebar-nav-link:hover {
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+}
+
+.sidebar-sub-nav .sidebar-nav-link.active {
+    background: rgba(59,130,246,0.8);
+    color: #fff;
+}
+
+.sidebar-group-label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    border-radius: var(--cp-radius);
+    transition: var(--cp-transition);
+    text-decoration: none;
+}
+
+.sidebar-group-label .group-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+}
+
+.sidebar-section-divider {
+    border: 0;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    margin: 0.25rem 1rem;
+}
+
+.sidebar-nav-item.group-item {
+    padding: 0.15rem 0.75rem;
+}
+
