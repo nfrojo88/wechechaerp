@@ -1149,7 +1149,7 @@
                             </div>
 
                             <!-- Service Tax / Deduction Options (VAT & Withholding) -->
-                            <div class="card border border-primary-subtle bg-light-subtle rounded-3 p-3 mb-3" id="serviceTaxPanel{{ $req->id }}" style="{{ in_array($req->category, ['Service', 'Contract Work']) ? '' : 'display:none;' }}">
+                            <div class="card border border-primary-subtle bg-light-subtle rounded-3 p-3 mb-3" id="serviceTaxPanel{{ $req->id }}">
                                 <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
                                     <strong class="text-primary small text-uppercase">
                                         <i class="fa-solid fa-receipt me-1"></i>Service Tax &amp; Deduction Config (VAT &amp; Withholding)
@@ -1548,18 +1548,9 @@ function autoSelectFinanceStaff(selectEl, requestId) {
  * Toggle tax section when Service or Contract Work is chosen
  */
 function toggleDisburseTaxSection(reqId) {
-    const catSelect = document.getElementById('modalCategory' + reqId);
     const taxPanel = document.getElementById('serviceTaxPanel' + reqId);
-    if (!catSelect || !taxPanel) return;
-
-    if (catSelect.value === 'Service' || catSelect.value === 'Contract Work') {
+    if (taxPanel) {
         taxPanel.style.display = 'block';
-    } else {
-        taxPanel.style.display = 'none';
-        const vatType = document.getElementById('modalVatType' + reqId);
-        const whtToggle = document.getElementById('modalWithholdingToggle' + reqId);
-        if (vatType) vatType.value = 'none';
-        if (whtToggle) whtToggle.checked = false;
     }
     recalculateDisbursement(reqId);
 }
