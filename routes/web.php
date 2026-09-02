@@ -901,6 +901,38 @@ Route::get('/fix-storage-link', function () {
     return $html;
 });
 
+// Public Deployment & Cache Refresh Tools
+Route::get('/clear-cache', function () {
+    try {
+        \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+        \Illuminate\Support\Facades\Artisan::call('route:clear');
+        \Illuminate\Support\Facades\Artisan::call('config:clear');
+        \Illuminate\Support\Facades\Artisan::call('view:clear');
+        return "<div style='font-family:sans-serif;max-width:700px;margin:40px auto;padding:24px;border-radius:10px;background:#ecfdf5;border:2px solid #10b981;color:#065f46;'>"
+             . "<h2>✅ Cache Cleared Successfully!</h2>"
+             . "<p>Route cache, view cache, and config cache have been cleared.</p>"
+             . "<a href='/dashboard/site-engineer' style='display:inline-block;padding:10px 18px;background:#059669;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;'>Go to Site Engineer Dashboard</a>"
+             . "</div>";
+    } catch (\Throwable $e) {
+        return "<div style='color:red;padding:20px;'>Error: " . htmlspecialchars($e->getMessage()) . "</div>";
+    }
+});
+
+Route::get('/run-migrations', function () {
+    try {
+        \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+        $output = \Illuminate\Support\Facades\Artisan::output();
+        \Illuminate\Support\Facades\Artisan::call('optimize:clear');
+        return "<div style='font-family:sans-serif;max-width:700px;margin:40px auto;padding:24px;border-radius:10px;background:#ecfdf5;border:2px solid #10b981;color:#065f46;'>"
+             . "<h2>✅ Migrations Run & Cache Cleared!</h2>"
+             . "<pre style='background:#f0fdf4;padding:12px;border-radius:6px;'>" . htmlspecialchars($output) . "</pre>"
+             . "<a href='/dashboard/site-engineer' style='display:inline-block;padding:10px 18px;background:#059669;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;'>Go to Site Engineer Dashboard</a>"
+             . "</div>";
+    } catch (\Throwable $e) {
+        return "<div style='color:red;padding:20px;'>Error: " . htmlspecialchars($e->getMessage()) . "</div>";
+    }
+});
+
 Route::get('/migrate-material-prices', function () {
     return redirect('/run-migrations');
 });
