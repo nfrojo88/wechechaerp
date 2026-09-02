@@ -2228,6 +2228,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{letter}/redirect',                [App\Http\Controllers\LetterController::class, 'redirectLetter'])->name('redirect');
         Route::post('/{letter}/close',                   [App\Http\Controllers\LetterController::class, 'closeLetter'])->name('close');
         Route::get('/attachments/{attachment}/preview',  [App\Http\Controllers\LetterController::class, 'previewAttachment'])->name('attachments.preview');
+        Route::get('/attachments/{attachment}/download', [App\Http\Controllers\LetterController::class, 'downloadAttachment'])->name('attachments.download');
     });
 });
 
