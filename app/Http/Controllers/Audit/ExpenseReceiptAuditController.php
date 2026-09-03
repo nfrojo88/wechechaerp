@@ -335,7 +335,7 @@ class ExpenseReceiptAuditController extends Controller
         $totalExpensesCount = $items->count();
         $totalExpensesAmount = $items->sum('amount');
         
-        $missingReceiptItems = $items->filter(fn($i) => !$i->has_receipt && $i->audit_status !== 'requested');
+        $missingReceiptItems = $items->filter(fn($i) => !$i->has_receipt && !in_array($i->audit_status, ['requested', 'clarification_needed', 'verified_no_receipt']));
         $missingReceiptCount = $missingReceiptItems->count();
         $missingReceiptAmount = $missingReceiptItems->sum('amount');
 
@@ -347,18 +347,24 @@ class ExpenseReceiptAuditController extends Controller
         $attachedReceiptCount = $attachedReceiptItems->count();
         $attachedReceiptAmount = $attachedReceiptItems->sum('amount');
 
-        $verifiedCount = $items->filter(fn($i) => !empty($i->audit_verified_at) || $i->audit_status === 'verified')->count();
+        $verifiedNoReceiptItems = $items->filter(fn($i) => $i->audit_status === 'verified_no_receipt');
+        $verifiedNoReceiptCount = $verifiedNoReceiptItems->count();
+        $verifiedNoReceiptAmount = $verifiedNoReceiptItems->sum('amount');
+
+        $verifiedCount = $items->filter(fn($i) => !empty($i->audit_verified_at) || in_array($i->audit_status, ['verified', 'verified_no_receipt']))->count();
 
         // Filter by Tab
         $tab = $request->input('tab', 'all');
         if ($tab === 'missing') {
-            $items = $items->filter(fn($i) => !$i->has_receipt && $i->audit_status !== 'requested');
+            $items = $items->filter(fn($i) => !$i->has_receipt && !in_array($i->audit_status, ['requested', 'clarification_needed', 'verified_no_receipt']));
         } elseif ($tab === 'requested') {
             $items = $items->filter(fn($i) => $i->audit_status === 'requested' || $i->audit_status === 'clarification_needed');
         } elseif ($tab === 'attached') {
             $items = $items->filter(fn($i) => $i->has_receipt);
+        } elseif ($tab === 'verified_no_receipt') {
+            $items = $items->filter(fn($i) => $i->audit_status === 'verified_no_receipt');
         } elseif ($tab === 'verified') {
-            $items = $items->filter(fn($i) => !empty($i->audit_verified_at) || $i->audit_status === 'verified');
+            $items = $items->filter(fn($i) => !empty($i->audit_verified_at) || in_array($i->audit_status, ['verified', 'verified_no_receipt']));
         }
 
         // Search Filter
@@ -413,6 +419,8 @@ class ExpenseReceiptAuditController extends Controller
             'requestedReceiptAmount'=> $requestedReceiptAmount,
             'attachedReceiptCount'  => $attachedReceiptCount,
             'attachedReceiptAmount' => $attachedReceiptAmount,
+            'verifiedNoReceiptCount'=> $verifiedNoReceiptCount,
+            'verifiedNoReceiptAmount'=> $verifiedNoReceiptAmount,
             'verifiedCount'         => $verifiedCount,
         ]);
     }
@@ -625,4 +633,76 @@ class ExpenseReceiptAuditController extends Controller
 
         return redirect()->back()->with('success', "Receipt verified successfully for {$refNo}.");
     }
+
+    /**
+     * Auditor verifies an expense without requiring a physical receipt (e.g. taxi, loading/unloading, parking, minor petty cash)
+     */
+    public function verifyWithoutReceipt(Request $request)
+    {
+        $this->authorizeAuditor();
+        self::ensureSchema();
+
+        $request->validate([
+            'source_type'   => 'required|in:expense_request,purchase_request,office_material_request,expense',
+            'source_id'     => 'required|integer',
+            'justification' => 'nullable|string|max:1000',
+        ]);
+
+        $user = Auth::user();
+        $sourceType = $request->source_type;
+        $sourceId = $request->source_id;
+        $notes = $request->justification ?: 'Verified by Auditor without physical receipt (operational cash expense waiver).';
+        $refNo = '';
+
+        if ($sourceType === 'expense_request') {
+            $item = ExpenseRequest::findOrFail($sourceId);
+            $item->update([
+                'audit_receipt_status'      => 'verified_no_receipt',
+                'audit_receipt_notes'       => $notes,
+                'audit_receipt_verified_at' => now(),
+                'audit_receipt_verified_by' => $user->id,
+            ]);
+            $refNo = $item->request_number;
+        } elseif ($sourceType === 'purchase_request') {
+            $pr = PurchaseRequest::findOrFail($sourceId);
+            $receipt = ProcurementReceipt::firstOrCreate(
+                ['purchase_request_id' => $pr->id],
+                ['verification_status' => 'verified_no_receipt', 'verification_notes' => $notes]
+            );
+            $receipt->update([
+                'verification_status' => 'verified_no_receipt',
+                'verification_notes'  => $notes,
+                'verified_by'         => $user->id,
+                'verified_at'         => now(),
+            ]);
+            $refNo = $pr->pr_no;
+        } elseif ($sourceType === 'office_material_request') {
+            $item = OfficeMaterialRequest::findOrFail($sourceId);
+            $item->update([
+                'audit_receipt_status'      => 'verified_no_receipt',
+                'audit_receipt_notes'       => $notes,
+                'audit_receipt_verified_at' => now(),
+                'audit_receipt_verified_by' => $user->id,
+            ]);
+            $refNo = $item->request_no;
+        } elseif ($sourceType === 'expense') {
+            $item = Expense::findOrFail($sourceId);
+            $item->update([
+                'audit_receipt_status'      => 'verified_no_receipt',
+                'audit_receipt_notes'       => $notes,
+                'audit_receipt_verified_at' => now(),
+                'audit_receipt_verified_by' => $user->id,
+            ]);
+            $refNo = 'EXP-' . $item->id;
+        }
+
+        ActivityLog::log(
+            'receipt_verified_without_attachment',
+            "Auditor {$user->name} verified expense [{$refNo}] without physical receipt. Reason: {$notes}",
+            'Expense Audit & Compliance'
+        );
+
+        return redirect()->back()->with('success', "Expense {$refNo} verified without receipt (audit waiver applied).");
+    }
 }
+

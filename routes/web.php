@@ -1881,6 +1881,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/audit/expense-receipts/ask', [App\Http\Controllers\Audit\ExpenseReceiptAuditController::class, 'askReceipt'])->name('audit.expense-receipts.ask');
     Route::post('/audit/expense-receipts/attach', [App\Http\Controllers\Audit\ExpenseReceiptAuditController::class, 'attachReceipt'])->name('audit.expense-receipts.attach');
     Route::post('/audit/expense-receipts/verify', [App\Http\Controllers\Audit\ExpenseReceiptAuditController::class, 'verifyReceipt'])->name('audit.expense-receipts.verify');
+    Route::post('/audit/expense-receipts/verify-no-receipt', [App\Http\Controllers\Audit\ExpenseReceiptAuditController::class, 'verifyWithoutReceipt'])->name('audit.expense-receipts.verify-no-receipt');
 
 
 

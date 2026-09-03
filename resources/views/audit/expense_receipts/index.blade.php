@@ -145,6 +145,13 @@
                         <span class="badge bg-success ms-1 rounded-pill">{{ $attachedReceiptCount }}</span>
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link fw-semibold rounded-top-3 px-3 py-2 {{ $tab === 'verified_no_receipt' ? 'active bg-light border-bottom-0 text-info fw-bold' : 'text-secondary' }}" 
+                       href="{{ request()->fullUrlWithQuery(['tab' => 'verified_no_receipt', 'page' => 1]) }}">
+                        <i class="fa-solid fa-check-double me-1 text-info"></i> Verified (No Receipt) 
+                        <span class="badge bg-info ms-1 rounded-pill">{{ $verifiedNoReceiptCount ?? 0 }}</span>
+                    </a>
+                </li>
             </ul>
         </div>
 
@@ -254,7 +261,14 @@
 
                             <!-- Receipt Status -->
                             <td class="py-3 text-center" style="white-space: nowrap;">
-                                @if($item->has_receipt)
+                                @if($item->audit_status === 'verified_no_receipt')
+                                    <div class="d-inline-flex flex-column align-items-center">
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-1 rounded-pill">
+                                            <i class="fa-solid fa-check-double me-1"></i> Verified (No Receipt)
+                                        </span>
+                                        <small class="text-muted mt-1" style="font-size:0.68rem;" title="{{ $item->audit_notes }}"><i class="fa-solid fa-shield-check me-1"></i>Waived / Approved</small>
+                                    </div>
+                                @elseif($item->has_receipt)
                                     <div class="d-inline-flex flex-column align-items-center">
                                         <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1 rounded-pill">
                                             <i class="fa-solid fa-check-circle me-1"></i> Receipt Attached
@@ -294,7 +308,14 @@
                                         <i class="fa-solid fa-upload me-1"></i> Add Receipt
                                     </button>
 
-                                    <!-- 4. Verify Receipt -->
+                                    <!-- 4. Verify Without Receipt Modal Trigger -->
+                                    @if(!$item->has_receipt && $item->audit_status !== 'verified_no_receipt')
+                                        <button type="button" class="btn btn-outline-info text-dark" data-bs-toggle="modal" data-bs-target="#verifyNoReceiptModal_{{ $item->unique_key }}" title="Verify without receipt (e.g. taxi, loading/unloading, parking, petty cash)">
+                                            <i class="fa-solid fa-check-double me-1 text-info"></i> No Receipt
+                                        </button>
+                                    @endif
+
+                                    <!-- 5. Verify Receipt Stamp -->
                                     @if($item->has_receipt && !$item->audit_verified_at)
                                         <form method="POST" action="{{ route('audit.expense-receipts.verify') }}" class="d-inline" onsubmit="return confirm('Verify this receipt as audit-compliant?')">
                                             @csrf
@@ -394,6 +415,53 @@
                                             <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
                                             <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
                                                 <i class="fa-solid fa-cloud-arrow-up me-1"></i> Upload &amp; Verify Receipt
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Modal: Verify Without Receipt -->
+                        <div class="modal fade" id="verifyNoReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content rounded-4 border-0 shadow-lg">
+                                    <form method="POST" action="{{ route('audit.expense-receipts.verify-no-receipt') }}">
+                                        @csrf
+                                        <input type="hidden" name="source_type" value="{{ $item->source_type }}">
+                                        <input type="hidden" name="source_id" value="{{ $item->source_id }}">
+
+                                        <div class="modal-header bg-info text-white border-0 py-3 px-4">
+                                            <h5 class="modal-title fw-bold">
+                                                <i class="fa-solid fa-check-double me-2"></i>Verify Without Receipt: {{ $item->reference_no }}
+                                            </h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body p-4 bg-white">
+                                            <div class="p-3 bg-light rounded-3 mb-3 border">
+                                                <div class="d-flex justify-content-between text-muted small mb-1">
+                                                    <span>Category / Description:</span>
+                                                    <strong class="text-dark">{{ $item->category }} &bull; {{ Str::limit($item->description, 35) }}</strong>
+                                                </div>
+                                                <div class="d-flex justify-content-between text-muted small">
+                                                    <span>Expense Amount:</span>
+                                                    <strong class="text-success fs-6">ETB {{ number_format($item->amount, 2) }}</strong>
+                                                </div>
+                                            </div>
+
+                                            <div class="alert alert-info border-0 rounded-3 small py-2 px-3 mb-3">
+                                                <i class="fa-solid fa-circle-info me-1"></i> Use this option for operational expenses where a formal receipt cannot be obtained (e.g. taxi/transport, parking, loading/unloading, casual day labor).
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold text-dark small text-uppercase">Verification Reason / Waiver Note</label>
+                                                <input type="text" name="justification" class="form-control" placeholder="e.g. Minor transport / parking fee verified without formal receipt" value="{{ str_contains(strtolower($item->category), 'transport') ? 'Transport / travel cash fare verified without physical receipt' : (str_contains(strtolower($item->category), 'loading') ? 'Loading & unloading casual labor verified without receipt' : (str_contains(strtolower($item->category), 'parking') ? 'Parking fee verified without receipt' : 'Operational cash expense verified and approved without receipt')) }}">
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer bg-light border-0 py-3 px-4">
+                                            <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-info text-white rounded-pill px-4 fw-bold shadow-sm">
+                                                <i class="fa-solid fa-check-double me-1"></i> Confirm Verification
                                             </button>
                                         </div>
                                     </form>

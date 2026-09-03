@@ -528,7 +528,13 @@
                     $audMissingReceiptCount = 0;
                     try {
                         if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
-                            $audMissingReceiptCount = \App\Models\ExpenseRequest::whereNull('attachment')->where('status', \App\Models\ExpenseRequest::STATUS_PAID)->count();
+                            $audMissingReceiptCount = \App\Models\ExpenseRequest::whereNull('attachment')
+                                ->where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                                ->where(function ($q) {
+                                    $q->whereNull('audit_receipt_status')
+                                      ->orWhereNotIn('audit_receipt_status', ['verified_no_receipt', 'verified']);
+                                })
+                                ->count();
                         }
                     } catch (\Throwable $e) {}
                 @endphp
@@ -2083,7 +2089,13 @@
                     $audMissingReceiptCount2 = 0;
                     try {
                         if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
-                            $audMissingReceiptCount2 = \App\Models\ExpenseRequest::whereNull('attachment')->where('status', \App\Models\ExpenseRequest::STATUS_PAID)->count();
+                            $audMissingReceiptCount2 = \App\Models\ExpenseRequest::whereNull('attachment')
+                                ->where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                                ->where(function ($q) {
+                                    $q->whereNull('audit_receipt_status')
+                                      ->orWhereNotIn('audit_receipt_status', ['verified_no_receipt', 'verified']);
+                                })
+                                ->count();
                         }
                     } catch (\Throwable $e) {}
                 @endphp
