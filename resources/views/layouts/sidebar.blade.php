@@ -437,20 +437,18 @@
 
 @if($isGmUser)
 {{-- ════════════════════════════════════════════════════════════
-     GENERAL MANAGER (GM): EXECUTIVE & DEDICATED SIDEBAR (NO DUPLICATES)
+     GENERAL MANAGER (GM): REAL FLAT SIDE MENU (NO DROPDOWNS)
 ═══════════════════════════════════════════════════════════════ --}}
 
 {{-- ① Executive Dashboard --}}
-<li class="sidebar-nav-item" style="padding: 0.4rem 0.75rem 0.1rem;">
-    <a href="{{ route('dashboard.gm') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.gm') || request()->routeIs('dashboard') ? 'active' : '' }}" style="font-weight:600;">
+<li class="sidebar-nav-item">
+    <a href="{{ route('dashboard.gm') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.gm') || request()->routeIs('dashboard') ? 'active' : '' }}">
         <i class="fa-solid fa-gauge-high text-primary"></i>
         <span>GM Executive Dashboard</span>
     </a>
 </li>
 
-<hr class="sidebar-section-divider" style="margin: 0.35rem 0.75rem;">
-
-{{-- ② Executive Decisions & Approvals (Core GM Workflow) --}}
+{{-- ② Executive Decisions & Approvals --}}
 @php
     $gmPendingPrCount = 0;
     $gmPendingExpCount = 0;
@@ -474,187 +472,244 @@
             $gmPendingLeaveCount = \App\Models\LeaveRequest::where('status', 'pending')->count();
         }
     } catch (\Throwable $e) {}
-
-    $totalGmDecisions = $gmPendingPrCount + $gmPendingExpCount + $gmPendingPayrollCount + $gmPendingLoanCount + $gmPendingEmpCount + $gmPendingLeaveCount;
-    $approvalsActive = request()->routeIs('purchase-requests.*') || (request()->routeIs('expenses.*') && request('tab') === 'pending_gm') || request()->routeIs('finance.payroll.gm*') || request()->routeIs('payroll.advances*') || request()->routeIs('employees.pending-approval') || request()->routeIs('leave-requests.*');
 @endphp
 
-<li class="sidebar-nav-item group-item">
-    <a class="sidebar-nav-link sidebar-group-toggle {{ $approvalsActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#gmGroupApprovals" role="button"
-       aria-expanded="{{ $approvalsActive ? 'true' : 'false' }}">
-        <span class="group-icon" style="background:rgba(239,68,68,0.15);">
-            <i class="fa-solid fa-stamp" style="color:#ef4444;"></i>
-        </span>
-        <span>Executive Approvals</span>
-        @if($totalGmDecisions > 0)
-            <span class="badge bg-danger rounded-pill ms-auto me-1" style="font-size:0.65rem;">{{ $totalGmDecisions }}</span>
-        @else
-            <i class="fa-solid fa-chevron-down sidebar-chevron"></i>
+<hr class="sidebar-section-divider">
+<li style="padding: 0.35rem 0.9rem 0.1rem;">
+    <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+        Decisions &amp; Approvals
+    </small>
+</li>
+
+<li class="sidebar-nav-item">
+    <a href="{{ route('purchase-requests.index', ['status' => 'pending_gm']) }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.*') && request('status') === 'pending_gm' ? 'active' : '' }}">
+        <i class="fa-solid fa-cart-arrow-down text-danger"></i>
+        <span>PR GM Decisions</span>
+        @if($gmPendingPrCount > 0)
+            <span class="badge bg-danger rounded-pill ms-auto">{{ $gmPendingPrCount }}</span>
         @endif
     </a>
-    <div class="collapse {{ $approvalsActive ? 'show' : '' }}" id="gmGroupApprovals">
-        <ul class="sidebar-sub-nav">
-            <li>
-                <a href="{{ route('purchase-requests.index', ['status' => 'pending_gm']) }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.*') && request('status') === 'pending_gm' ? 'active' : '' }}">
-                    <i class="fa-solid fa-cart-arrow-down text-danger"></i>
-                    <span>PR GM Decisions</span>
-                    @if($gmPendingPrCount > 0)
-                        <span class="badge bg-danger rounded-pill ms-auto">{{ $gmPendingPrCount }}</span>
-                    @endif
-                </a>
-            </li>
-            <li>
-                <a href="{{ route('expenses.index', ['tab' => 'pending_gm']) }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') && request('tab') === 'pending_gm' ? 'active' : '' }}">
-                    <i class="fa-solid fa-file-invoice-dollar text-warning"></i>
-                    <span>Expense Approvals</span>
-                    @if($gmPendingExpCount > 0)
-                        <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $gmPendingExpCount }}</span>
-                    @endif
-                </a>
-            </li>
-            <li>
-                <a href="{{ route('finance.payroll.gm') }}" class="sidebar-nav-link {{ request()->routeIs('finance.payroll.gm*') ? 'active' : '' }}">
-                    <i class="fa-solid fa-file-signature text-info"></i>
-                    <span>Payroll Approvals</span>
-                    @if($gmPendingPayrollCount > 0)
-                        <span class="badge bg-info text-dark rounded-pill ms-auto">{{ $gmPendingPayrollCount }}</span>
-                    @endif
-                </a>
-            </li>
-            <li>
-                <a href="{{ route('payroll.advances', ['status' => 'pending']) }}" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') ? 'active' : '' }}">
-                    <i class="fa-solid fa-hand-holding-dollar text-success"></i>
-                    <span>Loan Approvals</span>
-                    @if($gmPendingLoanCount > 0)
-                        <span class="badge bg-danger rounded-pill ms-auto">{{ $gmPendingLoanCount }}</span>
-                    @endif
-                </a>
-            </li>
-            <li>
-                <a href="{{ route('employees.pending-approval') }}" class="sidebar-nav-link {{ request()->routeIs('employees.pending-approval') ? 'active' : '' }}">
-                    <i class="fa-solid fa-user-check text-primary"></i>
-                    <span>Employee Approvals</span>
-                    @if($gmPendingEmpCount > 0)
-                        <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $gmPendingEmpCount }}</span>
-                    @endif
-                </a>
-            </li>
-            <li>
-                <a href="{{ route('leave-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.index') ? 'active' : '' }}">
-                    <i class="fa-solid fa-calendar-check text-secondary"></i>
-                    <span>Leave Decisions</span>
-                    @if($gmPendingLeaveCount > 0)
-                        <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $gmPendingLeaveCount }}</span>
-                    @endif
-                </a>
-            </li>
-        </ul>
-    </div>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('expenses.index', ['tab' => 'pending_gm']) }}" class="sidebar-nav-link {{ (request()->routeIs('expenses.*') || request()->routeIs('approvals.*')) && request('tab') === 'pending_gm' ? 'active' : '' }}">
+        <i class="fa-solid fa-file-invoice-dollar text-warning"></i>
+        <span>Expense Approvals</span>
+        @if($gmPendingExpCount > 0)
+            <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $gmPendingExpCount }}</span>
+        @endif
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('finance.payroll.gm') }}" class="sidebar-nav-link {{ request()->routeIs('finance.payroll.gm*') ? 'active' : '' }}">
+        <i class="fa-solid fa-file-signature text-info"></i>
+        <span>Payroll Approvals</span>
+        @if($gmPendingPayrollCount > 0)
+            <span class="badge bg-info text-dark rounded-pill ms-auto">{{ $gmPendingPayrollCount }}</span>
+        @endif
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('payroll.advances', ['status' => 'pending']) }}" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') ? 'active' : '' }}">
+        <i class="fa-solid fa-hand-holding-dollar text-success"></i>
+        <span>Loan Approvals</span>
+        @if($gmPendingLoanCount > 0)
+            <span class="badge bg-danger rounded-pill ms-auto">{{ $gmPendingLoanCount }}</span>
+        @endif
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('employees.pending-approval') }}" class="sidebar-nav-link {{ request()->routeIs('employees.pending-approval') ? 'active' : '' }}">
+        <i class="fa-solid fa-user-check text-primary"></i>
+        <span>Employee Approvals</span>
+        @if($gmPendingEmpCount > 0)
+            <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $gmPendingEmpCount }}</span>
+        @endif
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('leave-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.index') ? 'active' : '' }}">
+        <i class="fa-solid fa-calendar-check text-secondary"></i>
+        <span>Leave Decisions</span>
+        @if($gmPendingLeaveCount > 0)
+            <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $gmPendingLeaveCount }}</span>
+        @endif
+    </a>
 </li>
 
-{{-- ③ Projects & Operational Oversight --}}
-@php
-    $projectsActive = request()->routeIs('projects.*') || request()->routeIs('budgets.*') || request()->routeIs('material-usages.*') || request()->routeIs('takeoff.*') || request()->routeIs('boqs.*') || request()->routeIs('schedules.*') || request()->routeIs('issues.*');
-@endphp
-<li class="sidebar-nav-item group-item">
-    <a class="sidebar-nav-link sidebar-group-toggle {{ $projectsActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#gmGroupProjects" role="button"
-       aria-expanded="{{ $projectsActive ? 'true' : 'false' }}">
-        <span class="group-icon" style="background:rgba(99,102,241,0.15);">
-            <i class="fa-solid fa-diagram-project" style="color:#6366f1;"></i>
-        </span>
-        <span>Projects &amp; Operations</span>
-        <i class="fa-solid fa-chevron-down sidebar-chevron"></i>
+{{-- ③ Projects & Operations --}}
+<hr class="sidebar-section-divider">
+<li style="padding: 0.35rem 0.9rem 0.1rem;">
+    <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+        Projects &amp; Operations
+    </small>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('projects.index') }}" class="sidebar-nav-link {{ request()->routeIs('projects.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-building text-primary"></i>
+        <span>Projects Directory</span>
     </a>
-    <div class="collapse {{ $projectsActive ? 'show' : '' }}" id="gmGroupProjects">
-        <ul class="sidebar-sub-nav">
-            <li><a href="{{ route('projects.index') }}" class="sidebar-nav-link {{ request()->routeIs('projects.*') ? 'active' : '' }}"><i class="fa-solid fa-building"></i><span>Projects Directory</span></a></li>
-            <li><a href="{{ route('budgets.index') }}" class="sidebar-nav-link {{ request()->routeIs('budgets.*') ? 'active' : '' }}"><i class="fa-solid fa-sack-dollar text-warning"></i><span>Project Budgets</span></a></li>
-            <li><a href="{{ route('dashboard.gm') }}#project-expenses" class="sidebar-nav-link"><i class="fa-solid fa-chart-bar text-danger"></i><span>Project Expenses</span></a></li>
-            <li><a href="{{ route('material-usages.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-usages.*') ? 'active' : '' }}"><i class="fa-solid fa-boxes-packing text-success"></i><span>Material Consumption</span></a></li>
-            <li><a href="{{ route('takeoff.index') }}" class="sidebar-nav-link {{ request()->routeIs('takeoff.*') ? 'active' : '' }}"><i class="fa-solid fa-ruler-combined text-info"></i><span>Quantity Takeoff</span></a></li>
-            <li><a href="{{ route('boqs.index') }}" class="sidebar-nav-link {{ request()->routeIs('boqs.*') ? 'active' : '' }}"><i class="fa-solid fa-file-invoice-dollar"></i><span>BOQ</span></a></li>
-            <li><a href="{{ route('schedules.index') }}" class="sidebar-nav-link {{ request()->routeIs('schedules.*') ? 'active' : '' }}"><i class="fa-solid fa-calendar-days"></i><span>Schedules</span></a></li>
-            <li><a href="{{ route('issues.index') }}" class="sidebar-nav-link {{ request()->routeIs('issues.*') ? 'active' : '' }}"><i class="fa-solid fa-triangle-exclamation text-danger"></i><span>Site Issues</span></a></li>
-        </ul>
-    </div>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('budgets.index') }}" class="sidebar-nav-link {{ request()->routeIs('budgets.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-sack-dollar text-warning"></i>
+        <span>Project Budgets</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('dashboard.gm') }}#project-expenses" class="sidebar-nav-link">
+        <i class="fa-solid fa-chart-pie text-danger"></i>
+        <span>Project Expenses</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('material-usages.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-usages.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-boxes-packing text-success"></i>
+        <span>Material Consumption</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('takeoff.index') }}" class="sidebar-nav-link {{ request()->routeIs('takeoff.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-ruler-combined text-info"></i>
+        <span>Quantity Takeoff</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('boqs.index') }}" class="sidebar-nav-link {{ request()->routeIs('boqs.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-file-invoice-dollar text-primary"></i>
+        <span>BOQ</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('schedules.index') }}" class="sidebar-nav-link {{ request()->routeIs('schedules.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-calendar-days text-secondary"></i>
+        <span>Schedules</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('issues.index') }}" class="sidebar-nav-link {{ request()->routeIs('issues.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-triangle-exclamation text-danger"></i>
+        <span>Site Issues</span>
+    </a>
 </li>
 
-{{-- ④ Procurement & Inventory (Consolidated - ZERO Duplicates) --}}
-@php
-    $procActive = (request()->routeIs('purchase-requests.*') && request('status') !== 'pending_gm') || request()->routeIs('procurement.*') || request()->routeIs('products.*') || request()->routeIs('inventory.*') || request()->routeIs('suppliers.*') || request()->routeIs('price-intelligence.*');
-@endphp
-<li class="sidebar-nav-item group-item">
-    <a class="sidebar-nav-link sidebar-group-toggle {{ $procActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#gmGroupProcurement" role="button"
-       aria-expanded="{{ $procActive ? 'true' : 'false' }}">
-        <span class="group-icon" style="background:rgba(14,165,233,0.15);">
-            <i class="fa-solid fa-cart-flatbed" style="color:#0ea5e9;"></i>
-        </span>
-        <span>Procurement &amp; Stores</span>
-        <i class="fa-solid fa-chevron-down sidebar-chevron"></i>
+{{-- ④ Procurement & Stores --}}
+<hr class="sidebar-section-divider">
+<li style="padding: 0.35rem 0.9rem 0.1rem;">
+    <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+        Procurement &amp; Stores
+    </small>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('purchase-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.*') && request('status') !== 'pending_gm' ? 'active' : '' }}">
+        <i class="fa-solid fa-list-check text-primary"></i>
+        <span>All Purchase Requests</span>
     </a>
-    <div class="collapse {{ $procActive ? 'show' : '' }}" id="gmGroupProcurement">
-        <ul class="sidebar-sub-nav">
-            <li><a href="{{ route('purchase-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.*') && request('status') !== 'pending_gm' ? 'active' : '' }}"><i class="fa-solid fa-list-check text-primary"></i><span>All Purchase Requests</span></a></li>
-            <li><a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') ? 'active' : '' }}"><i class="fa-solid fa-arrows-split-up-and-left text-warning"></i><span>Procurement Queue</span></a></li>
-            <li><a href="{{ route('products.index') }}" class="sidebar-nav-link {{ request()->routeIs('products.*') ? 'active' : '' }}"><i class="fa-solid fa-boxes-stacked text-success"></i><span>Material Catalog</span></a></li>
-            <li><a href="{{ route('inventory.index') }}" class="sidebar-nav-link {{ request()->routeIs('inventory.*') ? 'active' : '' }}"><i class="fa-solid fa-warehouse text-info"></i><span>All Stores &amp; Stock</span></a></li>
-            <li><a href="{{ route('suppliers.index') }}" class="sidebar-nav-link {{ request()->routeIs('suppliers.*') ? 'active' : '' }}"><i class="fa-solid fa-truck text-secondary"></i><span>Suppliers Directory</span></a></li>
-            <li><a href="{{ route('price-intelligence.index') }}" class="sidebar-nav-link {{ request()->routeIs('price-intelligence.*') ? 'active' : '' }}"><i class="fa-solid fa-arrow-trend-up text-primary"></i><span>Price Intelligence</span></a></li>
-        </ul>
-    </div>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-arrows-split-up-and-left text-warning"></i>
+        <span>Procurement Queue</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('products.index') }}" class="sidebar-nav-link {{ request()->routeIs('products.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-boxes-stacked text-success"></i>
+        <span>Material Catalog</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('inventory.index') }}" class="sidebar-nav-link {{ request()->routeIs('inventory.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-warehouse text-info"></i>
+        <span>All Stores &amp; Stock</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('suppliers.index') }}" class="sidebar-nav-link {{ request()->routeIs('suppliers.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-truck text-secondary"></i>
+        <span>Suppliers Directory</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('price-intelligence.index') }}" class="sidebar-nav-link {{ request()->routeIs('price-intelligence.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-arrow-trend-up text-primary"></i>
+        <span>Price Intelligence</span>
+    </a>
 </li>
 
-{{-- ⑤ Financial Intelligence --}}
-@php
-    $finActive = request()->routeIs('coa.*') || request()->routeIs('reports.index') || request()->routeIs('reports.*') || request()->routeIs('emergency-funds.*') || request()->routeIs('finance.replenishments.*');
-@endphp
-<li class="sidebar-nav-item group-item">
-    <a class="sidebar-nav-link sidebar-group-toggle {{ $finActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#gmGroupFinance" role="button"
-       aria-expanded="{{ $finActive ? 'true' : 'false' }}">
-        <span class="group-icon" style="background:rgba(16,185,129,0.15);">
-            <i class="fa-solid fa-file-invoice-dollar" style="color:#10b981;"></i>
-        </span>
-        <span>Finance &amp; Audit</span>
-        <i class="fa-solid fa-chevron-down sidebar-chevron"></i>
+{{-- ⑤ Finance & Audit --}}
+<hr class="sidebar-section-divider">
+<li style="padding: 0.35rem 0.9rem 0.1rem;">
+    <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+        Finance &amp; Audit
+    </small>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-book-journal-whills text-primary"></i>
+        <span>Chart of Accounts</span>
     </a>
-    <div class="collapse {{ $finActive ? 'show' : '' }}" id="gmGroupFinance">
-        <ul class="sidebar-sub-nav">
-            <li><a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') ? 'active' : '' }}"><i class="fa-solid fa-book-journal-whills text-primary"></i><span>Chart of Accounts</span></a></li>
-            <li><a href="{{ route('reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('reports.index') ? 'active' : '' }}"><i class="fa-solid fa-chart-pie text-success"></i><span>Financial Reports</span></a></li>
-            <li><a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-receipt text-warning"></i><span>All Expense Requests</span></a></li>
-            <li><a href="{{ route('emergency-funds.index') }}" class="sidebar-nav-link {{ request()->routeIs('emergency-funds.*') ? 'active' : '' }}"><i class="fa-solid fa-kit-medical text-danger"></i><span>Emergency Funds</span></a></li>
-            <li><a href="{{ route('finance.replenishments.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.replenishments.*') ? 'active' : '' }}"><i class="fa-solid fa-shield-halved text-warning"></i><span>Petty Cash Audit</span></a></li>
-        </ul>
-    </div>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('reports.index') ? 'active' : '' }}">
+        <i class="fa-solid fa-chart-pie text-success"></i>
+        <span>Financial Reports</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-receipt text-warning"></i>
+        <span>All Expense Requests</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('emergency-funds.index') }}" class="sidebar-nav-link {{ request()->routeIs('emergency-funds.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-kit-medical text-danger"></i>
+        <span>Emergency Funds</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('finance.replenishments.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.replenishments.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-shield-halved text-warning"></i>
+        <span>Petty Cash Audit</span>
+    </a>
 </li>
 
 {{-- ⑥ Workforce & Administration --}}
-@php
-    $hrActive = (request()->routeIs('employees.*') && !request()->routeIs('employees.pending-approval')) || request()->routeIs('departments.*') || request()->routeIs('reports.attendance') || request()->routeIs('gm.hr-reports') || request()->routeIs('letters.*');
-@endphp
-<li class="sidebar-nav-item group-item">
-    <a class="sidebar-nav-link sidebar-group-toggle {{ $hrActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#gmGroupHr" role="button"
-       aria-expanded="{{ $hrActive ? 'true' : 'false' }}">
-        <span class="group-icon" style="background:rgba(139,92,246,0.15);">
-            <i class="fa-solid fa-users" style="color:#8b5cf6;"></i>
-        </span>
-        <span>Workforce &amp; HR</span>
-        <i class="fa-solid fa-chevron-down sidebar-chevron"></i>
+<hr class="sidebar-section-divider">
+<li style="padding: 0.35rem 0.9rem 0.1rem;">
+    <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+        Workforce &amp; HR
+    </small>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') && !request()->routeIs('employees.pending-approval') ? 'active' : '' }}">
+        <i class="fa-solid fa-id-badge text-primary"></i>
+        <span>Employee Directory</span>
     </a>
-    <div class="collapse {{ $hrActive ? 'show' : '' }}" id="gmGroupHr">
-        <ul class="sidebar-sub-nav">
-            <li><a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') && !request()->routeIs('employees.pending-approval') ? 'active' : '' }}"><i class="fa-solid fa-id-badge text-primary"></i><span>Employee Directory</span></a></li>
-            <li><a href="{{ route('departments.index') }}" class="sidebar-nav-link {{ request()->routeIs('departments.*') ? 'active' : '' }}"><i class="fa-solid fa-sitemap text-secondary"></i><span>Departments</span></a></li>
-            <li><a href="{{ route('reports.attendance') }}" class="sidebar-nav-link {{ request()->routeIs('reports.attendance') ? 'active' : '' }}"><i class="fa-solid fa-user-clock text-info"></i><span>Attendance Summary</span></a></li>
-            <li><a href="{{ route('gm.hr-reports') }}" class="sidebar-nav-link {{ request()->routeIs('gm.hr-reports') ? 'active' : '' }}"><i class="fa-solid fa-file-waveform text-warning"></i><span>Submitted HR Reports</span></a></li>
-            <li><a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}"><i class="fa-solid fa-envelope-open-text text-success"></i><span>Letters &amp; Dispatches</span></a></li>
-        </ul>
-    </div>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('departments.index') }}" class="sidebar-nav-link {{ request()->routeIs('departments.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-sitemap text-secondary"></i>
+        <span>Departments</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('reports.attendance') }}" class="sidebar-nav-link {{ request()->routeIs('reports.attendance') ? 'active' : '' }}">
+        <i class="fa-solid fa-user-clock text-info"></i>
+        <span>Attendance Summary</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('gm.hr-reports') }}" class="sidebar-nav-link {{ request()->routeIs('gm.hr-reports') ? 'active' : '' }}">
+        <i class="fa-solid fa-file-waveform text-warning"></i>
+        <span>Submitted HR Reports</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-envelope-open-text text-success"></i>
+        <span>Letters &amp; Dispatches</span>
+    </a>
 </li>
 
 @else
