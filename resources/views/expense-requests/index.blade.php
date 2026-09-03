@@ -244,8 +244,8 @@
                                     );
                                 @endphp
                                 @if($req->status === 'Pending (Employee Approval)' && $canEmployeeApprove)
-                                    <button type="button" class="btn btn-sm btn-primary fw-bold py-1 px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#employeeApproveModal{{ $req->id }}" title="Employee Confirmation">
-                                        <i class="fa-solid fa-signature me-1"></i>Confirm as Employee
+                                    <button type="button" class="btn btn-sm btn-success fw-bold py-1 px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#employeeApproveModal{{ $req->id }}" title="Employee Approval / Rejection">
+                                        <i class="fa-solid fa-check-double me-1"></i>Approve / Reject
                                     </button>
                                 @endif
 
