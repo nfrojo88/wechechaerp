@@ -110,6 +110,7 @@
         <ul class="sidebar-sub-nav">
             <li><a href="{{ route('stores.index') }}" class="sidebar-nav-link {{ request()->routeIs('stores.*') ? 'active' : '' }}"><i class="fa-solid fa-warehouse text-info"></i><span>Stores</span></a></li>
             <li><a href="{{ route('store-manager.inventory.all') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.inventory.*') ? 'active' : '' }}"><i class="fa-solid fa-boxes-stacked text-primary"></i><span>All Inventory</span></a></li>
+            <li><a href="{{ route('material-usages.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-usages.*') ? 'active' : '' }}"><i class="fa-solid fa-boxes-packing text-success"></i><span>Daily Consumption</span></a></li>
             <li><a href="{{ route('products.index') }}" class="sidebar-nav-link {{ request()->routeIs('products.*') ? 'active' : '' }}"><i class="fa-solid fa-book"></i><span>Material Catalog</span></a></li>
             <li><a href="{{ route('store-manager.fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.fixed-assets.*') ? 'active' : '' }}"><i class="fa-solid fa-truck-monster text-warning"></i><span>Fixed Assets</span></a></li>
             <li><a href="{{ route('store-manager.material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-clipboard-list text-danger"></i><span>Material Requests</span></a></li>
@@ -793,6 +794,12 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('material-usages.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-usages.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-boxes-packing text-primary"></i>
+                <span>Daily Consumption (ዕለታዊ ፍጆታ)</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.material-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-clipboard-list text-danger"></i>
                 <span>Material Requests</span>
@@ -850,6 +857,12 @@
             <a href="{{ route('store-manager.inventory.all') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.inventory.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-warehouse text-info"></i>
                 <span>All Store Inventory</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('material-usages.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-usages.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-boxes-packing text-primary"></i>
+                <span>Daily Consumption</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
