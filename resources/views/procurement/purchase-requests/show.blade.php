@@ -118,6 +118,23 @@
         </div>
     @endif
 
+    @if($purchaseRequest->current_owner_role === 'global_admin')
+        <div class="alert alert-warning border-start border-4 border-warning shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <div class="p-2 rounded-circle bg-warning bg-opacity-25 text-dark">
+                    <i class="fa-solid fa-user-shield fa-lg"></i>
+                </div>
+                <div>
+                    <strong class="d-block text-dark">Assigned to Global Admin (No User in Target Role)</strong>
+                    <span class="text-muted small">This purchase request stage was automatically routed to Global Admin because no active user is currently assigned to the required role for this lifecycle stage. As Global Admin, you can review and take action directly below.</span>
+                </div>
+            </div>
+            <span class="badge bg-warning text-dark px-3 py-2 fw-semibold">
+                <i class="fa-solid fa-bolt me-1"></i> Admin Action Required
+            </span>
+        </div>
+    @endif
+
     <div class="row g-4">
         <!-- Left Panel: Summary & Details -->
         <div class="col-lg-4">
@@ -129,7 +146,13 @@
                 <div class="card-body p-0">
                     <table class="table table-sm table-borderless mb-0 align-middle">
                         <tr><th width="40%" class="ps-3 text-muted">Status</th><td><span class="badge bg-{{ \App\Models\PurchaseRequest::statusBadgeClass($purchaseRequest->status) }}">{{ $purchaseRequest->status_label }}</span></td></tr>
-                        <tr><th class="ps-3 text-muted">Current Role Owner</th><td><span class="badge bg-secondary bg-opacity-10 text-dark"><i class="fas fa-user-tag me-1"></i>{{ ucfirst(str_replace('_', ' ', $purchaseRequest->current_owner_role ?? 'Completed')) }}</span></td></tr>
+                        <tr><th class="ps-3 text-muted">Current Role Owner</th><td>
+                            @if($purchaseRequest->current_owner_role === 'global_admin')
+                                <span class="badge bg-warning text-dark"><i class="fas fa-user-shield me-1"></i>Global Admin (Unassigned Role)</span>
+                            @else
+                                <span class="badge bg-secondary bg-opacity-10 text-dark"><i class="fas fa-user-tag me-1"></i>{{ ucfirst(str_replace('_', ' ', $purchaseRequest->current_owner_role ?? 'Completed')) }}</span>
+                            @endif
+                        </td></tr>
                         <tr><th class="ps-3 text-muted">Priority</th><td><span class="badge bg-{{ $purchaseRequest->priority === 'urgent' ? 'danger' : ($purchaseRequest->priority === 'high' ? 'warning' : 'secondary') }}">{{ ucfirst($purchaseRequest->priority) }}</span></td></tr>
                         <tr><th class="ps-3 text-muted">Requested By</th><td>{{ $purchaseRequest->requestedBy?->name ?? 'N/A' }}</td></tr>
                         <tr><th class="ps-3 text-muted">Required Date</th><td>{{ optional($purchaseRequest->required_date)->format('M d, Y') ?? '-' }}</td></tr>

@@ -106,8 +106,9 @@ class PurchaseRequestController extends Controller
                 'required_date'       => $request->required_date,
                 'justification'       => $request->justification,
                 'status'              => PurchaseRequest::STATUS_DRAFT,
-                'current_owner_role'  => 'coordinator',
+                'current_owner_role'  => 'coordinator', // Will be resolved if needed
             ]);
+            $pr->update(['current_owner_role' => $this->lifecycle->resolveOwnerRole('coordinator', $pr)]);
 
             foreach ($request->items as $item) {
                 $prod = Product::find($item['product_id']);
@@ -454,7 +455,7 @@ class PurchaseRequestController extends Controller
         $this->authorizeStageRole($purchaseRequest, ['coordinator', 'site_engineer', 'requester', 'store_manager']);
         $purchaseRequest->update([
             'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
-            'current_owner_role' => 'store_manager',
+            'current_owner_role' => $this->lifecycle->resolveOwnerRole('store_manager', $purchaseRequest),
         ]);
         return back()->with('success', 'Purchase Request submitted to Store Manager.');
     }
@@ -792,7 +793,7 @@ class PurchaseRequestController extends Controller
                 'justification'       => "Returned to Store Manager from PR #{$purchaseRequest->pr_no}: " . ($request->reason ?: $purchaseRequest->justification),
                 'pm_sendback_reason'  => $request->reason,
                 'status'              => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
-                'current_owner_role'  => 'store_manager',
+                'current_owner_role'  => $this->lifecycle->resolveOwnerRole('store_manager', $purchaseRequest),
             ]);
 
             // Move selected items to new PR
@@ -830,7 +831,7 @@ class PurchaseRequestController extends Controller
             ]);
         });
 
-        return back()->with('success', "Selected " . count($itemIds) . " item(s) split into PR #{$newPr->pr_no} and returned to Store Manager to decide fulfillment/purchase! Remaining items stay on PR #{$purchaseRequest->pr_no}.");
+        return back()->with('success', "Selected " . count($itemIds) . " item(s) split into PR #{$newPr->pr_no} and returned to Store Manager!");
     }
 
     public function sendToProcurementTeam(Request $request, PurchaseRequest $purchaseRequest)
@@ -860,14 +861,11 @@ class PurchaseRequestController extends Controller
         $allItemsCount = $purchaseRequest->items()->count();
 
         if (empty($itemIds) || count($itemIds) >= $allItemsCount) {
-            // Send entire PR to Procurement Team
             $this->lifecycle->sendToProcurementTeam($purchaseRequest, $method, $request->notes);
             return back()->with('success', 'Routed to Procurement Team for ' . ($method === 'direct_buy' ? 'Direct Buy material pricing.' : 'Proforma quotes collection.'));
         }
 
-        // Partial selection: split selected items into a new PR sent to Procurement Team
-        $newPr = null;
-        DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request, &$newPr) {
+        return DB::transaction(function () use ($purchaseRequest, $itemIds, $method, $request) {
             $newPrNo = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
 
             $newPr = PurchaseRequest::create([
@@ -882,7 +880,7 @@ class PurchaseRequestController extends Controller
                 'justification'       => "Split for {$method} from PR #{$purchaseRequest->pr_no}: " . ($purchaseRequest->justification ?? ''),
                 'sourcing_method'     => $method,
                 'status'              => PurchaseRequest::STATUS_PENDING_PROC_TEAM,
-                'current_owner_role'  => 'purchase',
+                'current_owner_role'  => $this->lifecycle->resolveOwnerRole('purchase', $purchaseRequest),
             ]);
 
             // Move selected items to new PR
@@ -1137,7 +1135,7 @@ class PurchaseRequestController extends Controller
         $from = $purchaseRequest->status;
         $purchaseRequest->update([
             'status'           => PurchaseRequest::STATUS_PENDING_GM,
-            'current_owner_role' => 'gm',
+            'current_owner_role' => $this->lifecycle->resolveOwnerRole('gm', $purchaseRequest),
             'rejection_reason' => null,
         ]);
 
@@ -1190,7 +1188,7 @@ class PurchaseRequestController extends Controller
 
         $purchaseRequest->update([
             'status'             => PurchaseRequest::STATUS_PENDING_PAYMENT,
-            'current_owner_role' => 'finance_head',
+            'current_owner_role' => $this->lifecycle->resolveOwnerRole('finance_head', $purchaseRequest),
             'rejection_reason'   => null,
             'direct_buy_amount'  => $finalAmount,
         ]);

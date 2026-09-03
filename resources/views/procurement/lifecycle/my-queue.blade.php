@@ -336,7 +336,11 @@
                                 @endif
                             </td>
                             <td>
-                                @if($linkedPr)
+                                @if($linkedPr && $linkedPr->current_owner_role === 'global_admin')
+                                    <span class="badge bg-warning text-dark border border-warning">
+                                        <i class="fas fa-user-shield me-1"></i> Global Admin (Unassigned)
+                                    </span>
+                                @elseif($linkedPr)
                                     <span class="badge bg-secondary bg-opacity-10 text-dark">
                                         <i class="fas fa-user-tag me-1"></i> {{ ucfirst(str_replace('_', ' ', $linkedPr->current_owner_role ?? 'Purchase')) }}
                                     </span>
@@ -547,6 +551,10 @@
                                 @elseif($pr->is_office_request && $pr->status === 'pending_finance')
                                     <span class="badge text-white" style="background:#7c3aed;">
                                         <i class="fas fa-coins me-1"></i> Finance Head
+                                    </span>
+                                @elseif($pr->current_owner_role === 'global_admin')
+                                    <span class="badge bg-warning text-dark border border-warning">
+                                        <i class="fas fa-user-shield me-1"></i> Global Admin (Unassigned)
                                     </span>
                                 @else
                                     <span class="badge bg-secondary bg-opacity-10 text-dark">
