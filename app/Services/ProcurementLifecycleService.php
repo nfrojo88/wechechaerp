@@ -497,23 +497,51 @@ class ProcurementLifecycleService
     // STAGE 7b continued — Finance Staff Executes Payment
     // ═══════════════════════════════════════════════════════════════════
 
-    public function financeStaffPay(PurchaseRequest $pr, string $notes = null): void
+    public function financeStaffPay(PurchaseRequest $pr, string $notes = null, array $taxData = []): void
     {
         $from    = $pr->status;
         $payment = $pr->payment;
 
-        $payment->update([
-            'status'  => 'paid',
-            'paid_by' => Auth::id(),
-            'paid_at' => now(),
-            'notes'   => $notes ?? $payment->notes,
-        ]);
+        $disbursedAmount = isset($taxData['net_amount']) && (float)$taxData['net_amount'] > 0
+            ? (float)$taxData['net_amount']
+            : (float)($payment ? $payment->amount : 0);
 
-        // Create journal entry: Debit → Procurement Expense; Credit → Cash/Bank COA
-        $this->createJournalEntry($pr, $payment->coa_account_id, $payment->amount, 'cash');
+        if ($payment) {
+            $updateData = [
+                'status'  => 'paid',
+                'paid_by' => Auth::id(),
+                'paid_at' => now(),
+                'notes'   => $notes ?? $payment->notes,
+            ];
+
+            // Safely populate tax attributes if columns exist
+            $taxColumns = [
+                'gross_amount', 'vat_type', 'vat_rate', 'vat_amount',
+                'has_withholding', 'withholding_rate', 'withholding_amount',
+                'withholding_receipt', 'withholding_receipt_number', 'net_amount'
+            ];
+            foreach ($taxColumns as $col) {
+                if (isset($taxData[$col]) && \Illuminate\Support\Facades\Schema::hasColumn('procurement_payments', $col)) {
+                    $updateData[$col] = $taxData[$col];
+                }
+            }
+
+            $payment->update($updateData);
+
+            // Create journal entry: Debit → Procurement Expense; Credit → Cash/Bank COA
+            $this->createJournalEntry($pr, $payment->coa_account_id, $disbursedAmount, 'cash', $taxData);
+        }
 
         // Update Expense record to approved
         try {
+            $taxNote = '';
+            if (!empty($taxData['vat_amount']) && (float)$taxData['vat_amount'] > 0) {
+                $taxNote .= " [VAT: +{$taxData['vat_amount']}]";
+            }
+            if (!empty($taxData['withholding_amount']) && (float)$taxData['withholding_amount'] > 0) {
+                $taxNote .= " [WHT: -{$taxData['withholding_amount']}]";
+            }
+
             \App\Models\Expense::updateOrCreate(
                 [
                     'project_id'  => $pr->project_id,
@@ -521,13 +549,13 @@ class ProcurementLifecycleService
                 ],
                 [
                     'category'     => 'material',
-                    'amount'       => $payment->amount,
+                    'amount'       => $disbursedAmount,
                     'expense_date' => now()->toDateString(),
                     'status'       => 'approved',
-                    'created_by'   => $payment->assigned_finance_staff_id ?: Auth::id(),
+                    'created_by'   => ($payment ? $payment->assigned_finance_staff_id : null) ?: Auth::id(),
                     'approved_by'  => Auth::id(),
                     'approved_at'  => now(),
-                    'notes'        => "Payment executed by Finance Staff. PR #{$pr->pr_no}",
+                    'notes'        => "Payment executed by Finance Staff. PR #{$pr->pr_no}{$taxNote}",
                 ]
             );
         } catch (\Throwable $e) {}
@@ -536,12 +564,25 @@ class ProcurementLifecycleService
         try {
             $expReq = \App\Models\ExpenseRequest::where('purchase_request_id', $pr->id)->first();
             if ($expReq && $expReq->status !== \App\Models\ExpenseRequest::STATUS_PAID) {
-                $expReq->update([
+                $expUpdate = [
                     'status'            => \App\Models\ExpenseRequest::STATUS_PAID,
                     'paid_by'           => Auth::id(),
                     'paid_at'           => now(),
-                    'payment_reference' => $notes ?? $payment->notes,
-                ]);
+                    'payment_reference' => $notes ?? ($payment ? $payment->notes : null),
+                ];
+                if (!empty($taxData)) {
+                    if (isset($taxData['gross_amount'])) $expUpdate['gross_amount'] = $taxData['gross_amount'];
+                    if (isset($taxData['vat_type'])) $expUpdate['vat_type'] = $taxData['vat_type'];
+                    if (isset($taxData['vat_rate'])) $expUpdate['vat_rate'] = $taxData['vat_rate'];
+                    if (isset($taxData['vat_amount'])) $expUpdate['vat_amount'] = $taxData['vat_amount'];
+                    if (isset($taxData['has_withholding'])) $expUpdate['has_withholding'] = $taxData['has_withholding'];
+                    if (isset($taxData['withholding_rate'])) $expUpdate['withholding_rate'] = $taxData['withholding_rate'];
+                    if (isset($taxData['withholding_amount'])) $expUpdate['withholding_amount'] = $taxData['withholding_amount'];
+                    if (isset($taxData['withholding_receipt'])) $expUpdate['withholding_receipt'] = $taxData['withholding_receipt'];
+                    if (isset($taxData['withholding_receipt_number'])) $expUpdate['withholding_receipt_number'] = $taxData['withholding_receipt_number'];
+                    if (isset($taxData['net_amount'])) $expUpdate['net_amount'] = $taxData['net_amount'];
+                }
+                $expReq->update($expUpdate);
             }
         } catch (\Throwable $e) {}
 
@@ -551,7 +592,7 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD, 'finance_staff_paid', 'finance', $notes);
         $this->sms->notifyRole($pr->id, 'purchase',
-            "ConstructPro: PR #{$pr->pr_no} payment completed (" . number_format($payment->amount, 2) . " ETB) — please upload vendor purchase receipt. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} payment completed (" . number_format($disbursedAmount, 2) . " ETB) — please upload vendor purchase receipt. Open: " . url("/purchase-requests/{$pr->id}"));
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -833,18 +874,26 @@ class ProcurementLifecycleService
      * Debit: Procurement Expense account (passed coaAccountId)
      * Credit: Cash/Payable (same COA — Finance Head decides)
      */
-    private function createJournalEntry(PurchaseRequest $pr, int $coaAccountId, float $amount, string $method): void
+    private function createJournalEntry(PurchaseRequest $pr, int $coaAccountId, float $amount, string $method, array $taxData = []): void
     {
         try {
-            DB::transaction(function () use ($pr, $coaAccountId, $amount, $method) {
+            DB::transaction(function () use ($pr, $coaAccountId, $amount, $method, $taxData) {
                 $entryNo = 'PROC-' . date('Ymd') . '-' . str_pad(JournalEntry::count() + 1, 5, '0', STR_PAD_LEFT);
+
+                $taxDesc = '';
+                if (!empty($taxData['vat_amount']) && (float)$taxData['vat_amount'] > 0) {
+                    $taxDesc .= " [VAT: +{$taxData['vat_amount']}]";
+                }
+                if (!empty($taxData['withholding_amount']) && (float)$taxData['withholding_amount'] > 0) {
+                    $taxDesc .= " [WHT: -{$taxData['withholding_amount']}]";
+                }
 
                 $entry = JournalEntry::create([
                     'entry_no'       => $entryNo,
                     'entry_date'     => now()->toDateString(),
                     'reference_type' => 'procurement_payment',
                     'reference_id'   => $pr->id,
-                    'description'    => "Procurement payment for PR #{$pr->pr_no} ({$method})",
+                    'description'    => "Procurement payment for PR #{$pr->pr_no} ({$method}){$taxDesc}",
                     'status'         => 'posted',
                     'created_by'     => Auth::id(),
                     'posted_at'      => now(),
@@ -856,7 +905,7 @@ class ProcurementLifecycleService
                     'account_id'       => $coaAccountId,
                     'side'             => 'debit',
                     'amount'           => $amount,
-                    'description'      => "PR #{$pr->pr_no} — procurement debit",
+                    'description'      => "PR #{$pr->pr_no} — procurement debit{$taxDesc}",
                 ]);
 
                 // Credit the same COA balance (Finance Head's selection represents the funding source)
@@ -868,7 +917,7 @@ class ProcurementLifecycleService
                     'description'      => "PR #{$pr->pr_no} — procurement credit ({$method})",
                 ]);
 
-                // Update COA current_balance
+                // Update COA current_balance with disbursed net amount
                 \App\Models\ChartOfAccount::where('id', $coaAccountId)
                     ->decrement('current_balance', $amount);
 

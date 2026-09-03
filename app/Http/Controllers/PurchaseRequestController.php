@@ -1300,8 +1300,18 @@ class PurchaseRequestController extends Controller
         }
 
         $request->validate([
-            'transaction_reference' => 'nullable|string|max:100',
-            'notes'                 => 'nullable|string|max:500',
+            'transaction_reference'      => 'nullable|string|max:100',
+            'notes'                      => 'nullable|string|max:500',
+            'gross_amount'               => 'nullable|numeric|min:0.01',
+            'vat_type'                   => 'nullable|string|in:none,exclusive,inclusive,vat_b',
+            'vat_rate'                   => 'nullable|numeric|min:0',
+            'vat_amount'                 => 'nullable|numeric|min:0',
+            'has_withholding'            => 'nullable|boolean',
+            'withholding_rate'           => 'nullable|numeric|min:0',
+            'withholding_amount'         => 'nullable|numeric|min:0',
+            'withholding_receipt'        => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:5120',
+            'withholding_receipt_number' => 'nullable|string|max:100',
+            'net_amount'                 => 'nullable|numeric|min:0.01',
         ]);
 
         $ref = trim((string)($request->input('transaction_reference') ?: $request->input('notes')));
@@ -1312,7 +1322,26 @@ class PurchaseRequestController extends Controller
         $extraNotes = trim((string)$request->input('notes'));
         $combinedNotes = 'Ref: ' . $ref . ($extraNotes && $extraNotes !== $ref ? ' | ' . $extraNotes : '');
 
-        $this->lifecycle->financeStaffPay($purchaseRequest, $combinedNotes);
+        // Upload withholding receipt if provided
+        $withholdingReceiptPath = null;
+        if ($request->hasFile('withholding_receipt')) {
+            $withholdingReceiptPath = \App\Services\FileUploadService::upload($request->file('withholding_receipt'), 'procurement_receipts');
+        }
+
+        $taxData = [
+            'gross_amount'               => $request->filled('gross_amount') ? (float)$request->gross_amount : null,
+            'vat_type'                   => $request->input('vat_type', 'none'),
+            'vat_rate'                   => $request->filled('vat_rate') ? (float)$request->vat_rate : 15.00,
+            'vat_amount'                 => $request->filled('vat_amount') ? (float)$request->vat_amount : 0.00,
+            'has_withholding'            => $request->boolean('has_withholding'),
+            'withholding_rate'           => $request->filled('withholding_rate') ? (float)$request->withholding_rate : 2.00,
+            'withholding_amount'         => $request->filled('withholding_amount') ? (float)$request->withholding_amount : 0.00,
+            'withholding_receipt'        => $withholdingReceiptPath,
+            'withholding_receipt_number' => $request->input('withholding_receipt_number'),
+            'net_amount'                 => $request->filled('net_amount') ? (float)$request->net_amount : null,
+        ];
+
+        $this->lifecycle->financeStaffPay($purchaseRequest, $combinedNotes, $taxData);
         return back()->with('success', 'Payment executed. Transaction ref: ' . $ref . '. COA balance updated.');
     }
 

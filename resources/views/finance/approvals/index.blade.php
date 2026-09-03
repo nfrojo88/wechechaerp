@@ -1280,9 +1280,9 @@
 
     @if($item->type === 'purchase_request' && $item->status_key === 'finance_queue')
     <div class="modal fade" id="payPrModal{{ $item->id_raw }}" tabindex="-1" aria-labelledby="payPrModalLabel{{ $item->id_raw }}" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                <form method="POST" action="{{ route('purchase-requests.execute-payment', $item->id_raw) }}">
+                <form method="POST" action="{{ route('purchase-requests.execute-payment', $item->id_raw) }}" enctype="multipart/form-data">
                     @csrf
                     <div class="modal-header bg-success text-white py-3 px-4">
                         <div class="d-flex align-items-center gap-2">
@@ -1310,6 +1310,111 @@
                             </div>
                             @endif
                         </div>
+
+                        <!-- Gross / Base Invoice Amount -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-12">
+                                <label class="form-label small fw-bold text-dark text-uppercase">
+                                    <i class="fa-solid fa-calculator text-success me-1"></i>Gross / Base Invoice Amount (ETB) <span class="text-danger">*</span>
+                                </label>
+                                <input type="number" step="0.01" min="0.01" name="gross_amount" id="modalPrGrossAmount{{ $item->id_raw }}" 
+                                       class="form-control form-control-sm fw-bold fs-6 text-dark" 
+                                       value="{{ $item->net_amount }}"
+                                       oninput="recalculatePrDisbursement('{{ $item->id_raw }}')">
+                            </div>
+                        </div>
+
+                        <!-- Service & Material Tax / Deduction Options (VAT & Withholding) -->
+                        <div class="card border border-primary-subtle bg-light-subtle rounded-3 p-3 mb-3" id="prTaxPanel{{ $item->id_raw }}">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                                <strong class="text-primary small text-uppercase">
+                                    <i class="fa-solid fa-receipt me-1"></i>Tax &amp; Deduction Config (VAT &amp; Withholding)
+                                </strong>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0">Tax Calculation</span>
+                            </div>
+
+                            <div class="row g-3">
+                                <!-- VAT Option -->
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold mb-1">VAT Option (ቫት)</label>
+                                    <select name="vat_type" id="modalPrVatType{{ $item->id_raw }}" class="form-select form-select-sm" onchange="recalculatePrDisbursement('{{ $item->id_raw }}')">
+                                        <option value="none" selected>No VAT (0% / ያለ ቫት)</option>
+                                        <option value="exclusive">15% VAT Added (+15% ተጨማሪ ቫት)</option>
+                                        <option value="vat_b">15% VAT Included / VAT B (ከቫት 15% ጋር የተካተተ - ቫት ቢ)</option>
+                                    </select>
+                                    <input type="hidden" name="vat_rate" id="modalPrVatRate{{ $item->id_raw }}" value="15.00">
+                                    <input type="hidden" name="vat_amount" id="modalPrVatAmount{{ $item->id_raw }}" value="0">
+                                </div>
+
+                                <!-- Withholding Tax -->
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር)</label>
+                                    <div class="form-check form-switch mt-1">
+                                        <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" 
+                                               id="modalPrWithholdingToggle{{ $item->id_raw }}" 
+                                               onchange="recalculatePrDisbursement('{{ $item->id_raw }}')">
+                                        <label class="form-check-label small" for="modalPrWithholdingToggle{{ $item->id_raw }}">
+                                            Apply Withholding Deduction
+                                        </label>
+                                    </div>
+                                    <div class="mt-2" id="prWhtRateGroup{{ $item->id_raw }}" style="display: none;">
+                                        <select name="withholding_rate" id="modalPrWithholdingRate{{ $item->id_raw }}" class="form-select form-select-sm" onchange="recalculatePrDisbursement('{{ $item->id_raw }}')">
+                                            <option value="2.00" selected>2% Goods &amp; Material Supply (የእቃ አቅርቦት 2%)</option>
+                                            <option value="3.00">3% Services &amp; Contracts (የአገልግሎት 3%)</option>
+                                        </select>
+                                    </div>
+                                    <input type="hidden" name="withholding_amount" id="modalPrWithholdingAmount{{ $item->id_raw }}" value="0">
+                                    <input type="hidden" name="net_amount" id="modalPrNetAmount{{ $item->id_raw }}" value="{{ $item->net_amount }}">
+                                </div>
+                            </div>
+
+                            <!-- Real-time Breakdown Summary Table -->
+                            <div class="mt-3 p-2 bg-white rounded border shadow-sm">
+                                <div class="row text-center g-2 small">
+                                    <div class="col-3 border-end">
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">Base Amount</span>
+                                        <strong class="text-dark" id="displayPrBaseAmount{{ $item->id_raw }}">ETB {{ number_format($item->net_amount, 2) }}</strong>
+                                    </div>
+                                    <div class="col-3 border-end">
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">VAT (15%)</span>
+                                        <strong class="text-info" id="displayPrVatAmount{{ $item->id_raw }}">+ ETB 0.00</strong>
+                                    </div>
+                                    <div class="col-3 border-end">
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">Withholding</span>
+                                        <strong class="text-danger" id="displayPrWhtAmount{{ $item->id_raw }}">- ETB 0.00</strong>
+                                    </div>
+                                    <div class="col-3">
+                                        <span class="text-muted d-block" style="font-size:0.75rem;">Net Payable</span>
+                                        <strong class="text-success" id="displayPrNetAmount{{ $item->id_raw }}">ETB {{ number_format($item->net_amount, 2) }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Withholding Tax Receipt & Voucher Upload Section (Visible when WHT is ON) -->
+                            <div id="prWithholdingReceiptSection{{ $item->id_raw }}" class="mt-3 p-3 bg-white rounded-3 border border-danger-subtle shadow-sm" style="display:none;">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <label class="form-label small fw-bold text-danger text-uppercase mb-0">
+                                        <i class="fa-solid fa-file-invoice-dollar me-1"></i>Withholding Tax Receipt / Slip Upload (የቅድመ ግብር ደረሰኝ)
+                                    </label>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0">Withholding Document</span>
+                                </div>
+                                <div class="row g-2 align-items-center">
+                                    <div class="col-md-7">
+                                        <input type="file" name="withholding_receipt" id="modalPrWithholdingReceipt{{ $item->id_raw }}" 
+                                               class="form-control form-control-sm" 
+                                               accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
+                                        <small class="text-muted" style="font-size:0.75rem;">Upload official Withholding receipt image or PDF (optional at payout).</small>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <input type="text" name="withholding_receipt_number" id="modalPrWithholdingReceiptNo{{ $item->id_raw }}" 
+                                               class="form-control form-control-sm" 
+                                               placeholder="WHT Receipt / Voucher #">
+                                        <small class="text-muted" style="font-size:0.75rem;">Voucher / Receipt Serial #</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label small fw-bold text-dark text-uppercase">
                                 Bank Transaction No. / Cheque Reference No. <span class="text-danger">*</span>
@@ -1330,7 +1435,7 @@
                     <div class="modal-footer bg-light border-0 py-3 px-4">
                         <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm">
-                            <i class="fa-solid fa-check-double me-1"></i> Confirm & Execute Payment (ETB {{ number_format($item->net_amount, 2) }})
+                            <i class="fa-solid fa-check-double me-1"></i> <span id="btnPrPayLabel{{ $item->id_raw }}">Confirm &amp; Execute Payment (<span id="btnPrPaySpan{{ $item->id_raw }}">ETB {{ number_format($item->net_amount, 2) }}</span>)</span>
                         </button>
                     </div>
                 </form>
@@ -1653,6 +1758,82 @@ function recalculateDisbursement(reqId) {
     }
 }
 
+/**
+ * Real-time VAT and Withholding Tax calculation for Purchase Requests
+ */
+function recalculatePrDisbursement(prId) {
+    const grossInput = document.getElementById('modalPrGrossAmount' + prId);
+    const vatTypeSelect = document.getElementById('modalPrVatType' + prId);
+    const whtToggle = document.getElementById('modalPrWithholdingToggle' + prId);
+    const whtRateSelect = document.getElementById('modalPrWithholdingRate' + prId);
+    
+    if (!grossInput) return;
+    const gross = parseFloat(grossInput.value) || 0;
+    const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
+    const vatRate = 15.00;
+    const hasWht = whtToggle ? whtToggle.checked : false;
+    const whtRate = whtRateSelect ? (parseFloat(whtRateSelect.value) || 2.00) : 2.00;
+
+    let vatAmount = 0.0;
+    let baseAmount = gross;
+    let whtAmount = 0.0;
+    let netAmount = gross;
+
+    if (vatType === 'exclusive') {
+        vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
+        baseAmount = gross;
+        const totalGrossWithVat = gross + vatAmount;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
+    } else if (vatType === 'inclusive' || vatType === 'vat_b') {
+        baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
+        vatAmount = Math.round((gross - baseAmount) * 100) / 100;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((gross - whtAmount) * 100) / 100;
+    } else {
+        baseAmount = gross;
+        vatAmount = 0.0;
+        if (hasWht) {
+            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+        }
+        netAmount = Math.round((gross - whtAmount) * 100) / 100;
+    }
+
+    // Set hidden inputs
+    const hiddenVat = document.getElementById('modalPrVatAmount' + prId);
+    const hiddenWht = document.getElementById('modalPrWithholdingAmount' + prId);
+    const hiddenNet = document.getElementById('modalPrNetAmount' + prId);
+
+    if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
+    if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
+    if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
+
+    // Update display labels
+    const dispBase = document.getElementById('displayPrBaseAmount' + prId);
+    const dispVat = document.getElementById('displayPrVatAmount' + prId);
+    const dispWht = document.getElementById('displayPrWhtAmount' + prId);
+    const dispNet = document.getElementById('displayPrNetAmount' + prId);
+    const btnPaySpan = document.getElementById('btnPrPaySpan' + prId);
+
+    const fmt = num => 'ETB ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    if (dispBase) dispBase.innerText = fmt(baseAmount);
+    if (dispVat) dispVat.innerText = (vatAmount > 0 ? '+ ' : '') + fmt(vatAmount);
+    if (dispWht) dispWht.innerText = (whtAmount > 0 ? '- ' : '') + fmt(whtAmount);
+    if (dispNet) dispNet.innerText = fmt(netAmount);
+    if (btnPaySpan) btnPaySpan.innerText = fmt(netAmount);
+
+    // Toggle Withholding Rate Dropdown & Receipt Upload
+    const whtRateGroup = document.getElementById('prWhtRateGroup' + prId);
+    const whtReceiptGroup = document.getElementById('prWithholdingReceiptSection' + prId);
+    if (whtRateGroup) whtRateGroup.style.display = hasWht ? 'block' : 'none';
+    if (whtReceiptGroup) whtReceiptGroup.style.display = hasWht ? 'block' : 'none';
+}
+
 
 // Auto-trigger on modal open to reflect current COA custodian and tax state
 document.addEventListener('DOMContentLoaded', function () {
@@ -1670,6 +1851,13 @@ document.addEventListener('DOMContentLoaded', function () {
         modal.addEventListener('shown.bs.modal', function () {
             const reqId = modal.id.replace('payModal', '');
             recalculateDisbursement(reqId);
+        });
+    });
+
+    document.querySelectorAll('[id^="payPrModal"]').forEach(function (modal) {
+        modal.addEventListener('shown.bs.modal', function () {
+            const prId = modal.id.replace('payPrModal', '');
+            recalculatePrDisbursement(prId);
         });
     });
 });
