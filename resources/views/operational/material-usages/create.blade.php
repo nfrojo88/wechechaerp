@@ -75,7 +75,7 @@
                         <label class="form-label fw-bold small text-secondary text-uppercase">
                             Issuing Store <span class="text-danger">*</span>
                         </label>
-                        <select name="store_id" id="storeSelect" class="form-select fw-semibold" required onchange="loadStoreInventory(this.value)">
+                        <select name="store_id" id="storeSelect" class="form-select fw-semibold" required onchange="loadStoreInventoryAndRebuild(this.value)">
                             <option value="">-- Choose Store --</option>
                             @foreach($stores as $st)
                                 <option value="{{ $st->id }}" {{ old('store_id', $selectedStoreId) == $st->id ? 'selected' : '' }}>
@@ -165,24 +165,17 @@
                             </tr>
                         </thead>
                         <tbody id="consumptionItemsTbody">
-                            {{-- Row 0 --}}
+                            {{-- Row 0: options populated dynamically by JS after store inventory loads --}}
                             <tr class="consumption-row" data-row-index="0">
                                 <td>
                                     <select name="items[0][product_id]" class="form-select product-select fw-semibold" required onchange="onProductSelectChange(this, 0)">
-                                        <option value="">-- Choose Material / Product --</option>
-                                        @foreach($allProducts as $p)
-                                            <option value="{{ $p->id }}" data-unit="{{ $p->unit ?? 'pcs' }}">
-                                                📦 {{ $p->name }} ({{ $p->item_code ?? 'PRD' }}) [{{ $p->unit ?? 'pcs' }}]
-                                            </option>
-                                        @endforeach
+                                        <option value="">-- Select Store First --</option>
                                     </select>
                                 </td>
                                 <td>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="badge bg-light text-dark border stock-badge px-2 py-1 font-monospace" id="stockBadge_0">
-                                            Select Store
-                                        </span>
-                                    </div>
+                                    <span class="badge bg-light text-dark border stock-badge px-2 py-1 font-monospace" id="stockBadge_0">
+                                        Select Store
+                                    </span>
                                 </td>
                                 <td>
                                     <div class="input-group input-group-sm">
@@ -230,9 +223,8 @@
 <script>
     let currentRowIndex = 1;
     let storeInventoryCache = {};
-
-    // Initial products data
-    const allProductsCatalog = {!! json_encode($allProductsCatalog ?? []) !!};
+    // currentStoreProducts = products currently in stock at the selected store
+    let currentStoreProducts = [];
 
     document.addEventListener('DOMContentLoaded', function() {
         const storeSelect = document.getElementById('storeSelect');
@@ -241,37 +233,96 @@
         }
     });
 
+    /**
+     * Fetch store inventory via AJAX, cache it, then rebuild all product dropdowns.
+     */
     function loadStoreInventory(storeId) {
-        if (!storeId) return;
+        if (!storeId) {
+            currentStoreProducts = [];
+            rebuildAllProductSelects();
+            return;
+        }
+
+        if (storeInventoryCache[storeId]) {
+            currentStoreProducts = storeInventoryCache[storeId];
+            rebuildAllProductSelects();
+            return;
+        }
+
+        // Show loading state on all dropdowns
+        document.querySelectorAll('.product-select').forEach(sel => {
+            sel.innerHTML = '<option value="">⏳ Loading store inventory...</option>';
+            sel.disabled = true;
+        });
 
         fetch(`/material-usages/store-products/${storeId}`)
             .then(res => res.json())
             .then(data => {
                 storeInventoryCache[storeId] = data.products || [];
-                updateAllRowsInventoryInfo();
+                currentStoreProducts = storeInventoryCache[storeId];
+                rebuildAllProductSelects();
             })
             .catch(err => {
                 console.warn('Store inventory fetch error:', err);
+                currentStoreProducts = [];
+                rebuildAllProductSelects();
             });
     }
 
-    function updateAllRowsInventoryInfo() {
-        const storeId = document.getElementById('storeSelect').value;
-        const productsInStore = storeInventoryCache[storeId] || [];
-
-        const rows = document.querySelectorAll('.consumption-row');
-        rows.forEach(row => {
-            const index = row.dataset.rowIndex;
-            const select = row.querySelector('.product-select');
-            if (select) {
-                onProductSelectChange(select, index);
-            }
+    /**
+     * Build <option> HTML for a single product from store inventory.
+     */
+    function buildProductOptions(selectedProductId = null) {
+        let html = '<option value="">-- Choose Available Material --</option>';
+        if (currentStoreProducts.length === 0) {
+            html = '<option value="">⚠️ No items in stock at this store</option>';
+            return html;
+        }
+        currentStoreProducts.forEach(p => {
+            const stockLabel = p.stock_on_hand > 0
+                ? `✅ In Stock: ${parseFloat(p.stock_on_hand).toLocaleString()} ${p.unit}`
+                : `⚠️ Out of Stock`;
+            const selected = selectedProductId && parseInt(selectedProductId) === p.id ? 'selected' : '';
+            html += `<option value="${p.id}" data-unit="${p.unit}" data-stock="${p.stock_on_hand}" ${selected}>📦 ${p.name} (${p.item_code || 'PRD'}) [${p.unit}] — ${stockLabel}</option>`;
         });
+        return html;
+    }
+
+    /**
+     * Rebuild all existing product dropdowns with only store-inventory items.
+     */
+    function rebuildAllProductSelects() {
+        document.querySelectorAll('.consumption-row').forEach(row => {
+            const idx = row.dataset.rowIndex;
+            const select = row.querySelector('.product-select');
+            if (!select) return;
+
+            const prevSelected = select.value;
+            select.innerHTML = buildProductOptions(prevSelected);
+            select.disabled = false;
+
+            // Update stock badge for current selection
+            onProductSelectChange(select, idx);
+        });
+    }
+
+    /**
+     * When the store dropdown changes, reload inventory and rebuild all product dropdowns.
+     */
+    function loadStoreInventoryAndRebuild(storeId) {
+        // Reset selections in all rows
+        document.querySelectorAll('.product-select').forEach(sel => {
+            sel.value = '';
+        });
+        document.querySelectorAll('.stock-badge').forEach(badge => {
+            badge.className = 'badge bg-light text-dark border stock-badge px-2 py-1 font-monospace';
+            badge.innerText = storeId ? '⏳ Loading...' : 'Select Store';
+        });
+        loadStoreInventory(storeId);
     }
 
     function onProductSelectChange(selectElem, rowIndex) {
         const productId = parseInt(selectElem.value);
-        const storeId = document.getElementById('storeSelect').value;
         const stockBadge = document.getElementById('stockBadge_' + rowIndex);
         const unitLabel = document.getElementById('unitLabel_' + rowIndex);
 
@@ -279,6 +330,7 @@
             if (stockBadge) {
                 stockBadge.className = 'badge bg-light text-dark border stock-badge px-2 py-1 font-monospace';
                 stockBadge.innerText = 'Select Material';
+                stockBadge.dataset.availableQty = '0';
             }
             if (unitLabel) unitLabel.innerText = 'pcs';
             return;
@@ -286,21 +338,19 @@
 
         const selectedOption = selectElem.options[selectElem.selectedIndex];
         const unit = selectedOption ? (selectedOption.dataset.unit || 'pcs') : 'pcs';
+        const stockOnHand = selectedOption ? parseFloat(selectedOption.dataset.stock || 0) : 0;
+
         if (unitLabel) unitLabel.innerText = unit;
 
-        const storeProducts = storeInventoryCache[storeId] || [];
-        const found = storeProducts.find(p => p.id === productId);
-        const availableQty = found ? parseFloat(found.stock_on_hand) : 0;
-
         if (stockBadge) {
-            if (availableQty > 0) {
+            stockBadge.dataset.availableQty = stockOnHand;
+            if (stockOnHand > 0) {
                 stockBadge.className = 'badge bg-success-subtle text-success border border-success-subtle stock-badge px-2 py-1 font-monospace';
-                stockBadge.innerHTML = `<i class="fa-solid fa-boxes-stacked me-1"></i>${availableQty.toLocaleString()} ${unit} in Stock`;
+                stockBadge.innerHTML = `<i class="fa-solid fa-boxes-stacked me-1"></i>${stockOnHand.toLocaleString()} ${unit} in Stock`;
             } else {
                 stockBadge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle stock-badge px-2 py-1 font-monospace';
                 stockBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation me-1"></i>0 ${unit} (Out of Stock)`;
             }
-            stockBadge.dataset.availableQty = availableQty;
         }
 
         validateRowQty(rowIndex);
@@ -329,15 +379,18 @@
     }
 
     function addConsumptionRow() {
+        const storeId = document.getElementById('storeSelect').value;
+        if (!storeId) {
+            alert('Please select a store first before adding items.');
+            return;
+        }
+
         const tbody = document.getElementById('consumptionItemsTbody');
         const tr = document.createElement('tr');
         tr.className = 'consumption-row';
         tr.dataset.rowIndex = currentRowIndex;
 
-        let optionsHtml = '<option value="">-- Choose Material / Product --</option>';
-        allProductsCatalog.forEach(p => {
-            optionsHtml += `<option value="${p.id}" data-unit="${p.unit}">📦 ${p.name} (${p.item_code || 'PRD'}) [${p.unit}]</option>`;
-        });
+        const optionsHtml = buildProductOptions();
 
         tr.innerHTML = `
             <td>
@@ -346,7 +399,7 @@
                 </select>
             </td>
             <td>
-                <span class="badge bg-light text-dark border stock-badge px-2 py-1 font-monospace" id="stockBadge_${currentRowIndex}">
+                <span class="badge bg-light text-dark border stock-badge px-2 py-1 font-monospace" id="stockBadge_${currentRowIndex}" data-available-qty="0">
                     Select Material
                 </span>
             </td>
@@ -381,3 +434,4 @@
     }
 </script>
 @endsection
+
