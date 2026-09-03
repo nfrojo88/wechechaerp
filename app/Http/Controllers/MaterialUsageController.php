@@ -200,6 +200,14 @@ class MaterialUsageController extends Controller
         // Fallback to all active products
         $allProducts = Product::where(fn($q) => $q->where('is_active', true)->orWhereNull('is_active'))->orderBy('name')->get();
 
+        // Formatted products catalog for frontend javascript
+        $allProductsCatalog = $allProducts->map(fn($p) => [
+            'id' => $p->id,
+            'name' => $p->name,
+            'item_code' => $p->item_code ?? '',
+            'unit' => $p->unit ?? 'pcs',
+        ])->values()->all();
+
         return view('operational.material-usages.create', compact(
             'stores',
             'projects',
@@ -207,6 +215,7 @@ class MaterialUsageController extends Controller
             'selectedStoreId',
             'storeProducts',
             'allProducts',
+            'allProductsCatalog',
             'userStoreId'
         ));
     }

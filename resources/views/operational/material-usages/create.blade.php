@@ -232,12 +232,7 @@
     let storeInventoryCache = {};
 
     // Initial products data
-    const allProductsCatalog = @json($allProducts->map(fn($p) => [
-        'id' => $p->id,
-        'name' => $p->name,
-        'item_code' => $p->item_code ?? '',
-        'unit' => $p->unit ?? 'pcs',
-    ]));
+    const allProductsCatalog = {!! json_encode($allProductsCatalog ?? []) !!};
 
     document.addEventListener('DOMContentLoaded', function() {
         const storeSelect = document.getElementById('storeSelect');
