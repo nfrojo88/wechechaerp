@@ -413,7 +413,7 @@
             <li><a href="{{ \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.audit') ? 'active' : '' }}"><i class="fa-solid fa-chart-pie text-info"></i><span>Audit Dashboard</span></a></li>
             <li><a href="{{ route('admin.activity-logs') }}" class="sidebar-nav-link {{ request()->routeIs('admin.activity-logs') ? 'active' : '' }}"><i class="fa-solid fa-list-ol text-primary"></i><span>Activity Logs</span></a></li>
             <li><a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}"><i class="fa-solid fa-receipt text-danger"></i><span>VAT & Tax Audit</span></a></li>
-            <li><a href="{{ route('audit.expense-receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('audit.expense-receipts.*') ? 'active' : '' }}"><i class="fa-solid fa-file-invoice text-warning"></i><span>Expense Receipt Audit</span></a></li>
+            <li><a href="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index') : url('/audit/expense-receipts') }}" class="sidebar-nav-link {{ request()->routeIs('audit.expense-receipts.*') ? 'active' : '' }}"><i class="fa-solid fa-file-invoice text-warning"></i><span>Expense Receipt Audit</span></a></li>
             <li><a href="{{ \Illuminate\Support\Facades\Route::has('finance.replenishments.index') ? route('finance.replenishments.index') : url('/finance/replenishments') }}" class="sidebar-nav-link {{ request()->is('finance/replenishments*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding-dollar text-warning"></i><span>Petty Cash Audit</span></a></li>
             <hr class="sidebar-section-divider" style="margin: 0.3rem 0.5rem;">
             <li style="padding-top:0.1rem;"><small style="color:#475569; font-size:0.65rem; padding: 0 0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Developer Tools</small></li>
@@ -521,7 +521,7 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('audit.expense-receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('audit.expense-receipts.*') ? 'active' : '' }}">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index') : url('/audit/expense-receipts') }}" class="sidebar-nav-link {{ request()->routeIs('audit.expense-receipts.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-receipt text-warning"></i>
                 <span>Expense Receipt Audit</span>
                 @php
@@ -2082,7 +2082,7 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('audit.expense-receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('audit.expense-receipts.*') ? 'active' : '' }}">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index') : url('/audit/expense-receipts') }}" class="sidebar-nav-link {{ request()->routeIs('audit.expense-receipts.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-receipt text-warning"></i>
                 <span>Expense Receipt Audit</span>
                 @php

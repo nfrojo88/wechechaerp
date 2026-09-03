@@ -157,7 +157,7 @@
 
         <!-- Filter & Search Bar -->
         <div class="card-body p-3 bg-light border-bottom">
-            <form method="GET" action="{{ route('audit.expense-receipts.index') }}" class="row g-2 align-items-center">
+            <form method="GET" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index') : url('/audit/expense-receipts') }}" class="row g-2 align-items-center">
                 <input type="hidden" name="tab" value="{{ $tab }}">
 
                 <div class="col-md-3">
@@ -190,7 +190,7 @@
                         <i class="fa-solid fa-filter me-1"></i> Filter
                     </button>
                     @if(request('search') || request('type') || request('start_date') || request('end_date'))
-                        <a href="{{ route('audit.expense-receipts.index', ['tab' => $tab]) }}" class="btn btn-sm btn-outline-danger px-3 rounded-pill">
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index', ['tab' => $tab]) : url('/audit/expense-receipts?tab=' . $tab) }}" class="btn btn-sm btn-outline-danger px-3 rounded-pill">
                             <i class="fa-solid fa-xmark me-1"></i> Clear
                         </a>
                     @endif
@@ -317,7 +317,7 @@
 
                                     <!-- 5. Verify Receipt Stamp -->
                                     @if($item->has_receipt && !$item->audit_verified_at)
-                                        <form method="POST" action="{{ route('audit.expense-receipts.verify') }}" class="d-inline" onsubmit="return confirm('Verify this receipt as audit-compliant?')">
+                                        <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.verify') ? route('audit.expense-receipts.verify') : url('/audit/expense-receipts/verify') }}" class="d-inline" onsubmit="return confirm('Verify this receipt as audit-compliant?')">
                                             @csrf
                                             <input type="hidden" name="source_type" value="{{ $item->source_type }}">
                                             <input type="hidden" name="source_id" value="{{ $item->source_id }}">
@@ -334,7 +334,7 @@
                         <div class="modal fade" id="askReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-hidden="true">
                             <div class="modal-dialog modal-dialog-centered">
                                 <div class="modal-content rounded-4 border-0 shadow-lg">
-                                    <form method="POST" action="{{ route('audit.expense-receipts.ask') }}">
+                                    <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.ask') ? route('audit.expense-receipts.ask') : url('/audit/expense-receipts/ask') }}">
                                         @csrf
                                         <input type="hidden" name="source_type" value="{{ $item->source_type }}">
                                         <input type="hidden" name="source_id" value="{{ $item->source_id }}">
@@ -377,7 +377,7 @@
                         <div class="modal fade" id="attachReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-hidden="true">
                             <div class="modal-dialog modal-dialog-centered">
                                 <div class="modal-content rounded-4 border-0 shadow-lg">
-                                    <form method="POST" action="{{ route('audit.expense-receipts.attach') }}" enctype="multipart/form-data">
+                                    <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.attach') ? route('audit.expense-receipts.attach') : url('/audit/expense-receipts/attach') }}" enctype="multipart/form-data">
                                         @csrf
                                         <input type="hidden" name="source_type" value="{{ $item->source_type }}">
                                         <input type="hidden" name="source_id" value="{{ $item->source_id }}">
@@ -426,7 +426,7 @@
                         <div class="modal fade" id="verifyNoReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-hidden="true">
                             <div class="modal-dialog modal-dialog-centered">
                                 <div class="modal-content rounded-4 border-0 shadow-lg">
-                                    <form method="POST" action="{{ route('audit.expense-receipts.verify-no-receipt') }}">
+                                    <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.verify-no-receipt') ? route('audit.expense-receipts.verify-no-receipt') : url('/audit/expense-receipts/verify-no-receipt') }}">
                                         @csrf
                                         <input type="hidden" name="source_type" value="{{ $item->source_type }}">
                                         <input type="hidden" name="source_id" value="{{ $item->source_id }}">
