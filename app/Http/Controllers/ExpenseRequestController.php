@@ -125,10 +125,9 @@ class ExpenseRequestController extends Controller
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'net_amount')) {
                         $table->decimal('net_amount', 14, 2)->nullable();
                     }
-                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'service_type')) {
-                        $table->string('service_type', 100)->nullable();
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'employee_approved_at')) {
+                        $table->timestamp('employee_approved_at')->nullable();
                     }
-
                 });
             }
         } catch (\Throwable $e) {
@@ -150,26 +149,40 @@ class ExpenseRequestController extends Controller
             return redirect()->route('login');
         }
 
+        $employee = $user->employee ?? null;
+        $userEmpId = $employee ? $employee->id : null;
+
         $userRoleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
         $isHr = $user->can('hr.view') || str_contains($userRoleNames, 'hr') || str_contains($userRoleNames, 'coordinator') || $user->hasAnyRole(['admin', 'global_admin', 'coordinator', 'Coordinator']);
         $isGm = str_contains($userRoleNames, 'gm') || $user->hasAnyRole(['gm', 'admin', 'global_admin']);
         $isFinanceHead = str_contains($userRoleNames, 'finance_head') || str_contains($userRoleNames, 'finance_manager') || $user->hasAnyRole(['finance_head', 'admin', 'global_admin']);
         $isFinanceStaff = str_contains($userRoleNames, 'finance') || str_contains($userRoleNames, 'cashier') || str_contains($userRoleNames, 'accountant') || $user->hasAnyRole(['admin', 'global_admin']);
 
-        // Tab selection (strictly personal requests for Ask Money portal)
+        // Tab selection
         $tab = $request->query('tab', 'my_requests');
         if (!in_array($tab, ['my_requests', 'paid_history', 'rejected_history'])) {
             $tab = 'my_requests';
         }
 
+        // Scope to match requests submitted by this user OR assigned to this employee profile
+        $baseUserScope = function ($q) use ($user, $userEmpId) {
+            $q->where('user_id', $user->id);
+            if ($userEmpId) {
+                $q->orWhere('employee_id', $userEmpId);
+            }
+            $q->orWhereHas('employee', function ($e) use ($user) {
+                $e->where('user_id', $user->id);
+            });
+        };
+
         // Counters for personal badges
         $counters = [
-            'my_requests'      => ExpenseRequest::where('user_id', $user->id)->whereNotIn('status', [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED])->count(),
-            'paid_history'     => ExpenseRequest::where('user_id', $user->id)->where('status', ExpenseRequest::STATUS_PAID)->count(),
-            'rejected_history' => ExpenseRequest::where('user_id', $user->id)->where('status', ExpenseRequest::STATUS_REJECTED)->count(),
+            'my_requests'      => ExpenseRequest::where($baseUserScope)->whereNotIn('status', [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED])->count(),
+            'paid_history'     => ExpenseRequest::where($baseUserScope)->where('status', ExpenseRequest::STATUS_PAID)->count(),
+            'rejected_history' => ExpenseRequest::where($baseUserScope)->where('status', ExpenseRequest::STATUS_REJECTED)->count(),
         ];
 
-        // Build query for logged-in user's own requests
+        // Build query for logged-in user's own requests and assigned requests
         $query = ExpenseRequest::with([
             'user',
             'employee',
@@ -189,7 +202,7 @@ class ExpenseRequestController extends Controller
             'purchaseRequest.supplier',
             'purchaseRequest.proformaInvoices.supplier',
             'purchaseRequest.gmDecisions',
-        ])->where('user_id', $user->id);
+        ])->where($baseUserScope);
 
         switch ($tab) {
             case 'paid_history':
@@ -448,6 +461,20 @@ class ExpenseRequestController extends Controller
 
         $finalAmount = $netAmount > 0 ? $netAmount : $rawAmount;
 
+        // Workflow Determination:
+        // If an employee is selected AND that employee is different from the current submitter:
+        // The request MUST FIRST go to the selected employee for confirmation/approval!
+        $needsEmployeeApproval = false;
+        if ($targetEmployeeId) {
+            if (!$employee || $employee->id != $targetEmployeeId) {
+                $needsEmployeeApproval = true;
+            }
+        }
+
+        $initialStatus = $needsEmployeeApproval 
+            ? ExpenseRequest::STATUS_PENDING_EMPLOYEE 
+            : ExpenseRequest::STATUS_PENDING_HR;
+
         $expenseRequest = ExpenseRequest::create([
             'request_number' => $requestNumber,
             'user_id' => $user->id,
@@ -469,12 +496,64 @@ class ExpenseRequestController extends Controller
             'net_amount' => $netAmount,
             'description' => $validated['description'],
             'attachment' => $attachmentUrl,
-            'status' => ExpenseRequest::STATUS_PENDING_HR,
+            'status' => $initialStatus,
         ]);
 
+        $successMsg = $needsEmployeeApproval
+            ? "Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " submitted! Sent to the assigned employee for confirmation before HR/Coordinator review."
+            : "Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " submitted successfully and sent to HR / Coordinator for review!";
 
-        return redirect('/expense-requests?tab=my_requests')
-            ->with('success', "Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " submitted successfully and sent to HR / Coordinator for review!");
+        return redirect('/expense-requests?tab=my_requests')->with('success', $successMsg);
+    }
+
+
+    /**
+     * Step 0 — Selected Employee Confirmation (Approve or Reject).
+     * Once the employee approves, the request advances to Pending (HR Review) for HR or Coordinator.
+     */
+    public function employeeApprove(Request $request, ExpenseRequest $expenseRequest)
+    {
+        $user = auth()->user();
+        $userEmployeeId = $user->employee?->id;
+        
+        // Authorization: Current user must be the selected employee, or linked employee user, or admin/global_admin
+        $isAssignedEmployee = (
+            ($userEmployeeId && $expenseRequest->employee_id == $userEmployeeId) ||
+            ($expenseRequest->employee && $expenseRequest->employee->user_id == $user->id) ||
+            $user->hasAnyRole(['admin', 'global_admin'])
+        );
+
+        if (!$isAssignedEmployee) {
+            return back()->with('error', 'Unauthorized. Only the designated employee can confirm this request.');
+        }
+
+        $validated = $request->validate([
+            'action' => 'required|in:approve,reject',
+            'rejection_reason' => 'nullable|string|max:1000',
+        ]);
+
+        if ($expenseRequest->status !== ExpenseRequest::STATUS_PENDING_EMPLOYEE) {
+            return back()->with('error', 'Request is not in pending employee confirmation state.');
+        }
+
+        if ($validated['action'] === 'reject') {
+            $reason = !empty($validated['rejection_reason']) ? $validated['rejection_reason'] : 'Declined by the assigned employee';
+            $expenseRequest->update([
+                'status' => ExpenseRequest::STATUS_REJECTED,
+                'rejection_reason' => $reason,
+            ]);
+
+            return back()->with('success', "Request #{$expenseRequest->request_number} has been declined.");
+        }
+
+        // Advance to HR / Coordinator Review
+        $expenseRequest->update([
+            'status' => ExpenseRequest::STATUS_PENDING_HR,
+            'employee_approved_at' => now(),
+        ]);
+
+        $employeeName = $expenseRequest->employee ? $expenseRequest->employee->full_name : $user->name;
+        return back()->with('success', "Request #{$expenseRequest->request_number} confirmed by employee ({$employeeName}) and forwarded to HR / Coordinator for review!");
     }
 
 

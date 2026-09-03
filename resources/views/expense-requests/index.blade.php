@@ -235,6 +235,20 @@
                                 {{ $req->created_at->format('M d, Y H:i') }}
                             </td>
                             <td class="pe-3 text-end">
+                                {{-- Employee Confirmation Action Button --}}
+                                @php
+                                    $canEmployeeApprove = auth()->check() && (
+                                        (auth()->user()->employee && auth()->user()->employee->id == $req->employee_id) ||
+                                        ($req->employee && $req->employee->user_id == auth()->id()) ||
+                                        auth()->user()->hasAnyRole(['admin', 'global_admin'])
+                                    );
+                                @endphp
+                                @if($req->status === 'Pending (Employee Approval)' && $canEmployeeApprove)
+                                    <button type="button" class="btn btn-sm btn-primary fw-bold py-1 px-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#employeeApproveModal{{ $req->id }}" title="Employee Confirmation">
+                                        <i class="fa-solid fa-signature me-1"></i>Confirm as Employee
+                                    </button>
+                                @endif
+
                                 {{-- HR / Coordinator Action Button --}}
                                 @if($req->status === 'Pending (HR Review)' && $isHrUser)
                                     <button type="button" class="btn btn-sm btn-warning fw-bold py-1 px-2" data-bs-toggle="modal" data-bs-target="#hrReviewModal{{ $req->id }}" title="HR or Coordinator Review">
@@ -293,6 +307,71 @@
 
 {{-- Render ALL Modals OUTSIDE Table to ensure Bootstrap 5 Z-Index & Clickability --}}
 @foreach($requests as $req)
+
+    {{-- Employee Confirmation Modal --}}
+    @if($req->status === 'Pending (Employee Approval)')
+    <div class="modal fade" id="employeeApproveModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow border-0 rounded-4 overflow-hidden">
+                <form method="POST" action="{{ route('expense-requests.employee-approve', $req->id) }}">
+                    @csrf
+                    <div class="modal-header bg-primary bg-gradient text-white py-3 px-4">
+                        <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-check me-2"></i>Employee Confirmation — Request #{{ $req->request_number }}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <div class="alert alert-info border-0 rounded-3 mb-3 d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-circle-info fs-4"></i>
+                            <div class="small">
+                                <strong>Employee Confirmation Step:</strong> A money request has been submitted for you by <strong>{{ $req->user->name ?? 'Requester' }}</strong>. Please review and confirm. Once approved, it will automatically be sent to <strong>HR or Coordinator</strong> for approval.
+                            </div>
+                        </div>
+
+                        <div class="bg-light p-3 rounded-3 mb-3 border">
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <span class="text-muted small">Assigned Employee:</span>
+                                    <div class="fw-bold text-dark">{{ $req->employee->full_name ?? 'N/A' }}</div>
+                                    @if($req->employee)
+                                        <small class="text-muted">{{ $req->employee->department ?? '' }} ({{ $req->employee->role_title ?? 'Staff' }})</small>
+                                    @endif
+                                </div>
+                                <div class="col-6">
+                                    <span class="text-muted small">Requested Amount:</span>
+                                    <div class="fw-bold text-success fs-5">ETB {{ number_format($req->amount, 2) }}</div>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <span class="text-muted small">Category &amp; Reason:</span>
+                                    <div class="fw-semibold text-dark"><span class="badge bg-secondary me-1">{{ $req->category }}</span> {{ $req->other_reason }}</div>
+                                </div>
+                                <div class="col-12 mt-2">
+                                    <span class="text-muted small">Description:</span>
+                                    <div class="text-dark small bg-white p-2 rounded border">{{ $req->description }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Optional Notes / Reason (if declining)</label>
+                            <textarea name="rejection_reason" class="form-control" rows="2" placeholder="Provide note or reason if declining..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light py-2 px-4 d-flex justify-content-between">
+                        <button type="submit" name="action" value="reject" class="btn btn-outline-danger btn-sm rounded-pill px-3" onclick="return confirm('Are you sure you want to decline this request?')">
+                            <i class="fa-solid fa-times me-1"></i>Decline Request
+                        </button>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" name="action" value="approve" class="btn btn-primary fw-bold btn-sm rounded-pill px-4 shadow-sm">
+                                <i class="fa-solid fa-check-double me-1"></i>Confirm &amp; Send to HR / Coordinator
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    @endif
 
     {{-- HR / Coordinator Review Modal --}}
     @if($req->status === 'Pending (HR Review)' && $isHrUser)

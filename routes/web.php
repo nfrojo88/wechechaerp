@@ -2213,6 +2213,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/history',                          [App\Http\Controllers\ExpenseRequestController::class, 'history'])->name('history');
         Route::get('/{expenseRequest}',                 [App\Http\Controllers\ExpenseRequestController::class, 'show'])->name('show');
         Route::get('/{expenseRequest}/attachment',      [App\Http\Controllers\ExpenseRequestController::class, 'viewAttachment'])->name('attachment');
+        Route::post('/{expenseRequest}/employee-approve', [App\Http\Controllers\ExpenseRequestController::class, 'employeeApprove'])->name('employee-approve');
         Route::post('/{expenseRequest}/hr-review',      [App\Http\Controllers\ExpenseRequestController::class, 'hrReview'])->name('hr-review');
         Route::post('/{expenseRequest}/gm-review',      [App\Http\Controllers\ExpenseRequestController::class, 'gmReview'])->name('gm-review');
         Route::post('/{expenseRequest}/finance-assign', [App\Http\Controllers\ExpenseRequestController::class, 'financeAssign'])->name('finance-assign');

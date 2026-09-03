@@ -41,7 +41,8 @@ class ApprovalHubController extends Controller
 
             // Map status into uniform labels & keys
             [$statusLabel, $statusKey, $badgeColor] = match($statusRaw) {
-                ExpenseRequest::STATUS_PENDING_HR           => ['Pending HR / Coordinator Review', 'pending_hr', 'warning'],
+                ExpenseRequest::STATUS_PENDING_EMPLOYEE     => ['Pending Employee Confirmation', 'pending_employee', 'warning'],
+                ExpenseRequest::STATUS_PENDING_HR           => ['Pending HR / Coordinator Review', 'pending_hr', 'info'],
                 ExpenseRequest::STATUS_PENDING_GM           => ['Pending GM Review', 'pending_gm', 'info'],
                 ExpenseRequest::STATUS_APPROVED_ASSIGNED,
                 ExpenseRequest::STATUS_ASSIGNED             => ['Assigned to Finance', 'finance_queue', 'primary'],

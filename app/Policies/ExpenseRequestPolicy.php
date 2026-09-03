@@ -47,6 +47,21 @@ class ExpenseRequestPolicy
     }
 
     /**
+     * Determine whether the user can perform Employee Confirmation.
+     */
+    public function employeeApprove(User $user, ExpenseRequest $expenseRequest): bool
+    {
+        $userEmployeeId = $user->employee?->id;
+        $isAssignedEmployee = (
+            ($userEmployeeId && $expenseRequest->employee_id == $userEmployeeId) ||
+            ($expenseRequest->employee && $expenseRequest->employee->user_id == $user->id) ||
+            $user->hasAnyRole(['admin', 'global_admin'])
+        );
+
+        return $isAssignedEmployee && $expenseRequest->status === ExpenseRequest::STATUS_PENDING_EMPLOYEE;
+    }
+
+    /**
      * Determine whether the user can perform HR / Coordinator Review (Approve/Reject).
      */
     public function hrReview(User $user, ExpenseRequest $expenseRequest): bool

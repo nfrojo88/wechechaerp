@@ -54,6 +54,7 @@ class ExpenseRequest extends Model
         'finance_assigned_at',
         'paid_by',
         'paid_at',
+        'employee_approved_at',
         'payment_reference',
         'payment_notes',
     ];
@@ -68,6 +69,7 @@ class ExpenseRequest extends Model
         'withholding_rate' => 'decimal:2',
         'withholding_amount' => 'decimal:2',
         'net_amount' => 'decimal:2',
+        'employee_approved_at' => 'datetime',
         'hr_reviewed_at' => 'datetime',
         'gm_reviewed_at' => 'datetime',
         'gm_approved_at' => 'datetime',
@@ -76,6 +78,7 @@ class ExpenseRequest extends Model
     ];
 
     // Status Constants
+    public const STATUS_PENDING_EMPLOYEE = 'Pending (Employee Approval)';
     public const STATUS_PENDING_HR = 'Pending (HR Review)';
     public const STATUS_PENDING_GM = 'Pending (GM Review)';
     public const STATUS_APPROVED_ASSIGNED = 'Approved - Assigned to Finance';
@@ -386,8 +389,10 @@ class ExpenseRequest extends Model
     public function getStatusBadgeAttribute()
     {
         switch ($this->status) {
+            case self::STATUS_PENDING_EMPLOYEE:
+                return '<span class="badge bg-warning text-dark"><i class="fa-solid fa-user-clock me-1"></i>Pending (Employee Approval)</span>';
             case self::STATUS_PENDING_HR:
-                return '<span class="badge bg-warning text-dark"><i class="fa-solid fa-hourglass-half me-1"></i>Pending (HR / Coordinator Review)</span>';
+                return '<span class="badge bg-info text-white"><i class="fa-solid fa-hourglass-half me-1"></i>Pending (HR / Coordinator Review)</span>';
             case self::STATUS_PENDING_GM:
                 return '<span class="badge bg-info text-white"><i class="fa-solid fa-user-shield me-1"></i>Pending (GM Review)</span>';
             case self::STATUS_APPROVED_ASSIGNED:
