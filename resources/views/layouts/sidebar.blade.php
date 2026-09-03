@@ -45,35 +45,6 @@
         @endif
     </a>
 </li>
-
-{{-- Quick Action: Expense Approvals --}}
-@php
-    $adminPendingApprovalCount = 0;
-    try {
-        $adminPendingApprovalCount = \App\Models\ExpenseRequest::whereIn('status', [
-            \App\Models\ExpenseRequest::STATUS_PENDING_HR,
-            \App\Models\ExpenseRequest::STATUS_PENDING_GM,
-            \App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED,
-            \App\Models\ExpenseRequest::STATUS_ASSIGNED,
-            'Pending (HR Review)',
-            'Pending (GM Review)',
-            'Assigned to Finance',
-            'Approved - Assigned to Finance'
-        ])->count();
-        if (\Illuminate\Support\Facades\Schema::hasTable('purchase_requests')) {
-            $adminPendingApprovalCount += \App\Models\PurchaseRequest::where('status', \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT)->count();
-        }
-    } catch (\Exception $e) {}
-@endphp
-<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
-    <a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') || request()->is('expenses*') || request()->routeIs('approvals.*') ? 'active' : '' }}" style="font-weight:600;">
-        <i class="fa-solid fa-file-invoice-dollar text-warning"></i>
-        <span>Expense Approvals</span>
-        @if($adminPendingApprovalCount > 0)
-            <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.65rem;">{{ $adminPendingApprovalCount }}</span>
-        @endif
-    </a>
-</li>
 <hr class="sidebar-section-divider">
 
 {{-- ② Projects & Planning --}}
@@ -216,7 +187,7 @@
             <li><a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') && !request()->routeIs('coa-transfers.*') ? 'active' : '' }}"><i class="fa-solid fa-sitemap"></i><span>Chart of Accounts</span></a></li>
             <li><a href="{{ route('coa-transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa-transfers.*') ? 'active' : '' }}"><i class="fa-solid fa-money-bill-transfer text-success"></i><span>COA Transfers</span></a></li>
             <li><a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') || request()->is('expense-requests*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding-dollar text-success"></i><span>Ask Money (Expenses)</span></a></li>
-            <li><a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') || request()->is('expenses*') || request()->routeIs('approvals.*') ? 'active' : '' }}"><i class="fa-solid fa-file-invoice-dollar text-warning"></i><span>Expense Approvals</span>@if(($adminPendingApprovalCount ?? 0) > 0)<span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.6rem;">{{ $adminPendingApprovalCount }}</span>@endif</a></li>
+            <li><a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') ? 'active' : '' }}"><i class="fa-solid fa-arrow-trend-down text-danger"></i><span>Expenses</span></a></li>
             <li><a href="{{ route('income.index') }}" class="sidebar-nav-link {{ request()->routeIs('income.*') ? 'active' : '' }}"><i class="fa-solid fa-arrow-trend-up"></i><span>Company Income</span></a></li>
             <li><a href="{{ route('finance.payroll.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.payroll.*') ? 'active' : '' }}"><i class="fa-solid fa-money-bill-wave text-success"></i><span>Payroll Management</span></a></li>
             <li><a href="{{ route('payroll.advances') }}" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding-dollar text-warning"></i><span>Salary Advance Loans</span></a></li>
@@ -1720,11 +1691,11 @@
             </a>
         </li>
         @endif
-        <!-- Expenses Approvals -->
+        <!-- Expenses -->
         <li class="sidebar-nav-item">
-            <a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') || request()->is('expenses*') || request()->routeIs('approvals.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-file-invoice-dollar text-warning"></i>
-                <span>Expense Approvals</span>
+            <a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-arrow-trend-down text-danger"></i>
+                <span>Expenses</span>
             </a>
         </li>
 
