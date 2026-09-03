@@ -1209,10 +1209,11 @@ class PurchaseRequestController extends Controller
 
         // Auto-create ExpenseRequest so Finance Head sees it immediately
         try {
+            $expReqNo = str_starts_with((string)$purchaseRequest->pr_no, 'PR-') ? 'EXP-' . $purchaseRequest->pr_no : 'EXP-PR-' . $purchaseRequest->pr_no;
             \App\Models\ExpenseRequest::updateOrCreate(
                 ['purchase_request_id' => $purchaseRequest->id],
                 [
-                    'request_number' => 'EXP-PR-' . $purchaseRequest->pr_no,
+                    'request_number' => $expReqNo,
                     'user_id'        => auth()->id(),
                     'project_id'     => $purchaseRequest->project_id,
                     'category'       => 'Material',

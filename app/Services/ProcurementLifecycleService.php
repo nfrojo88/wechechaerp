@@ -318,7 +318,7 @@ class ProcurementLifecycleService
 
                 // Auto-create ExpenseRequest so Finance Head sees it in Expense section
                 try {
-                    $expNo = 'EXP-PR-' . $pr->pr_no;
+                    $expNo = str_starts_with((string)$pr->pr_no, 'PR-') ? 'EXP-' . $pr->pr_no : 'EXP-PR-' . $pr->pr_no;
                     ExpenseRequest::updateOrCreate(
                         ['purchase_request_id' => $pr->id],
                         [
@@ -530,6 +530,19 @@ class ProcurementLifecycleService
                     'notes'        => "Payment executed by Finance Staff. PR #{$pr->pr_no}",
                 ]
             );
+        } catch (\Throwable $e) {}
+
+        // Mark any linked ExpenseRequest record as paid so it stays synchronized
+        try {
+            $expReq = \App\Models\ExpenseRequest::where('purchase_request_id', $pr->id)->first();
+            if ($expReq && $expReq->status !== \App\Models\ExpenseRequest::STATUS_PAID) {
+                $expReq->update([
+                    'status'            => \App\Models\ExpenseRequest::STATUS_PAID,
+                    'paid_by'           => Auth::id(),
+                    'paid_at'           => now(),
+                    'payment_reference' => $notes ?? $payment->notes,
+                ]);
+            }
         } catch (\Throwable $e) {}
 
         $pr->update([

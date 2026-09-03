@@ -25,6 +25,7 @@ class ApprovalHubController extends Controller
         $user = Auth::user();
 
         // 1. Fetch Expense Requests (Employee "Ask Money" Requests)
+        // Exclude expense requests linked to Purchase Requests, which are tracked natively in Section 5
         $expenseRequests = ExpenseRequest::with([
             'user',
             'employee',
@@ -36,7 +37,12 @@ class ApprovalHubController extends Controller
             'chartOfAccount',
             'coa',
             'bankAccount'
-        ])->latest()->get()->map(function ($req) {
+        ])
+        ->whereNull('purchase_request_id')
+        ->where('request_number', 'not like', 'EXP-PR-%')
+        ->latest()
+        ->get()
+        ->map(function ($req) {
             $statusRaw = $req->status;
 
             // Map status into uniform labels & keys
@@ -88,7 +94,12 @@ class ApprovalHubController extends Controller
         $items = $items->concat($expenseRequests);
 
         // 2. Fetch Direct Expenses
-        $expenses = Expense::with(['project'])->latest()->get()->map(function ($exp) {
+        // Exclude direct expenses auto-generated for Purchase Requests
+        $expenses = Expense::with(['project'])
+            ->where('description', 'not like', 'Material Purchase for PR #%')
+            ->latest()
+            ->get()
+            ->map(function ($exp) {
             $statusRaw = strtolower($exp->status ?? 'pending');
             $statusKey = match($statusRaw) {
                 'approved' => 'paid',

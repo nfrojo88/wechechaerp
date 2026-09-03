@@ -329,6 +329,12 @@
                                             @elseif($item->type === 'purchase_request')
                                                 @if($item->status_key === 'finance_queue')
                                                     @php
+                                                        $prAuthUser = auth()->user();
+                                                        $prAuthRoleNames = strtolower(implode(' ', $prAuthUser ? $prAuthUser->getRoleNames()->toArray() : []));
+                                                        $prIsFinHeadOrAdmin = $prAuthUser && ($prAuthUser->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']) 
+                                                            || str_contains($prAuthRoleNames, 'finance_head') 
+                                                            || str_contains($prAuthRoleNames, 'finance_manager') 
+                                                            || str_contains($prAuthRoleNames, 'admin'));
                                                         $prPayment = $item->raw_model->payment;
                                                         $prCoa = $item->raw_model->chartOfAccount ?? null;
                                                         $isAssignedToMe = (
@@ -337,7 +343,7 @@
                                                         );
                                                     @endphp
 
-                                                    @if($isAssignedToMe)
+                                                    @if($isAssignedToMe || $prIsFinHeadOrAdmin)
                                                         <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
                                                                 data-bs-toggle="modal" 
                                                                 data-bs-target="#payPrModal{{ $item->id_raw }}"
