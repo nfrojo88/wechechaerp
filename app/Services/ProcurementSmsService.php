@@ -81,43 +81,53 @@ class ProcurementSmsService
      */
     public function notifyRole(int $purchaseRequestId, string $roleName, string $message): void
     {
-        $aliases = [
-            'purchase_manager' => ['purchase_manager', 'Purchase Manager', 'Procurement Manager', 'procurement_manager'],
-            'purchase'         => ['purchase', 'Purchase', 'procurement', 'Procurement', 'procurement_officer', 'procurement_team'],
-            'market_research'  => ['market_research', 'Market Research', 'marketing', 'Marketing', 'marketing_officer'],
-            'gm'               => ['gm', 'GM', 'general_manager', 'General Manager'],
-            'store_manager'    => ['store_manager', 'Store Manager', 'store', 'Store'],
-            'finance_head'     => ['finance_head', 'Finance Head', 'finance_manager', 'Finance Manager', 'cfo', 'CFO'],
-            'finance'          => ['finance', 'Finance', 'accountant', 'Accountant', 'finance_staff'],
-            'general_service'  => ['general_service', 'General Service', 'dispatcher', 'fleet_manager'],
-            'coordinator'      => ['coordinator', 'Coordinator', 'project_coordinator', 'site_coordinator'],
-            'planning'         => ['planning', 'Planning', 'planning_manager', 'Planning Manager'],
-            'global_admin'     => ['global_admin', 'admin', 'Global Admin', 'Admin'],
-        ];
+        try {
+            $aliases = [
+                'purchase_manager' => ['purchase_manager', 'Purchase Manager', 'Procurement Manager', 'procurement_manager'],
+                'purchase'         => ['purchase', 'Purchase', 'procurement', 'Procurement', 'procurement_officer', 'procurement_team'],
+                'market_research'  => ['market_research', 'Market Research', 'marketing', 'Marketing', 'marketing_officer'],
+                'gm'               => ['gm', 'GM', 'general_manager', 'General Manager'],
+                'store_manager'    => ['store_manager', 'Store Manager', 'store', 'Store'],
+                'finance_head'     => ['finance_head', 'Finance Head', 'finance_manager', 'Finance Manager', 'cfo', 'CFO'],
+                'finance'          => ['finance', 'Finance', 'accountant', 'Accountant', 'finance_staff'],
+                'general_service'  => ['general_service', 'General Service', 'dispatcher', 'fleet_manager'],
+                'coordinator'      => ['coordinator', 'Coordinator', 'project_coordinator', 'site_coordinator'],
+                'planning'         => ['planning', 'Planning', 'planning_manager', 'Planning Manager'],
+                'global_admin'     => ['global_admin', 'admin', 'Global Admin', 'Admin'],
+            ];
 
-        $rolesToCheck = $aliases[$roleName] ?? [$roleName];
+            $rolesToCheck = $aliases[$roleName] ?? [$roleName];
 
-        $users = \App\Models\User::whereHas('roles', fn($q) => $q->whereIn('name', $rolesToCheck))
-            ->where(function ($query) {
-                $query->whereHas('employee', fn($q) => $q->whereNotNull('phone')->where('phone', '!=', ''))
-                      ->orWhere(fn($q) => $q->whereNotNull('phone')->where('phone', '!=', ''));
-            })
-            ->with('employee:id,user_id,phone')
-            ->get();
+            $hasAssignedUsers = \App\Models\User::whereHas('roles', fn($q) => $q->whereIn('name', $rolesToCheck))->exists();
 
-        // If no user found for this role and not already admin, fall back to global_admin
-        if ($users->isEmpty() && !in_array($roleName, ['global_admin', 'admin'])) {
-            Log::info("ProcurementSMS: No users found for role [{$roleName}] on PR #{$purchaseRequestId}. Falling back to global_admin.");
-            $this->notifyRole($purchaseRequestId, 'global_admin', "[Role '{$roleName}' unassigned] " . $message);
-            return;
-        }
-
-        foreach ($users as $user) {
-            $phone = $user->employee?->phone ?? $user->phone ?? null;
-            if ($phone) {
-                $phone = $this->normalizePhone($phone);
-                $this->send($purchaseRequestId, $phone, $roleName, $message);
+            // If no user is assigned to this role at all, and it's not global_admin, notify global_admin
+            if (!$hasAssignedUsers && !in_array($roleName, ['global_admin', 'admin'])) {
+                Log::info("ProcurementSMS: No users assigned to role [{$roleName}] for PR #{$purchaseRequestId}. Falling back to global_admin.");
+                $this->notifyRole($purchaseRequestId, 'global_admin', "[Role '{$roleName}' unassigned] " . $message);
+                return;
             }
+
+            $users = \App\Models\User::whereHas('roles', fn($q) => $q->whereIn('name', $rolesToCheck))
+                ->whereHas('employee', fn($q) => $q->whereNotNull('phone')->where('phone', '!=', ''))
+                ->with('employee:id,user_id,phone')
+                ->get();
+
+            // If users exist for the role but none have a phone number, attempt global_admin fallback
+            if ($users->isEmpty() && !in_array($roleName, ['global_admin', 'admin'])) {
+                Log::info("ProcurementSMS: Users in role [{$roleName}] have no phone numbers for PR #{$purchaseRequestId}. Routing notification to global_admin.");
+                $this->notifyRole($purchaseRequestId, 'global_admin', "[No phone for role '{$roleName}'] " . $message);
+                return;
+            }
+
+            foreach ($users as $user) {
+                $phone = $user->employee?->phone ?? null;
+                if ($phone) {
+                    $phone = $this->normalizePhone($phone);
+                    $this->send($purchaseRequestId, $phone, $roleName, $message);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error("ProcurementSMS notifyRole failed: " . $e->getMessage());
         }
     }
 
