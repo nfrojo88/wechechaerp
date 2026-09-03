@@ -387,7 +387,7 @@ class ExpenseRequest extends Model
     {
         switch ($this->status) {
             case self::STATUS_PENDING_HR:
-                return '<span class="badge bg-warning text-dark"><i class="fa-solid fa-hourglass-half me-1"></i>Pending (HR Review)</span>';
+                return '<span class="badge bg-warning text-dark"><i class="fa-solid fa-hourglass-half me-1"></i>Pending (HR / Coordinator Review)</span>';
             case self::STATUS_PENDING_GM:
                 return '<span class="badge bg-info text-white"><i class="fa-solid fa-user-shield me-1"></i>Pending (GM Review)</span>';
             case self::STATUS_APPROVED_ASSIGNED:

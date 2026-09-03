@@ -57,7 +57,7 @@ class ExpenseRequestPolicy
             || str_contains($roleNames, 'coordinator') 
             || $user->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']);
 
-        return $isHrOrCoordinator && $expenseRequest->status === 'Pending (HR Review)';
+        return $isHrOrCoordinator && in_array($expenseRequest->status, [ExpenseRequest::STATUS_PENDING_HR, 'Pending (HR Review)']);
     }
 
     /**

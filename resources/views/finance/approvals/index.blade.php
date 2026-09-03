@@ -720,8 +720,8 @@
                                     <i class="fa-solid fa-user-check"></i>
                                 </span>
                                 <div>
-                                    <h5 class="modal-title fw-bold text-dark mb-0">HR Review: {{ $req->request_number }}</h5>
-                                    <span class="text-muted small">Employee Expense Verification</span>
+                                    <h5 class="modal-title fw-bold text-dark mb-0">HR / Coordinator Review: {{ $req->request_number }}</h5>
+                                    <span class="text-muted small">Employee Expense &amp; Transport Verification</span>
                                 </div>
                             </div>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -729,9 +729,15 @@
                         <div class="modal-body p-4 bg-white">
                             <div class="p-3 bg-light rounded-3 mb-3 border">
                                 <div class="d-flex justify-content-between">
-                                    <span class="text-muted small">Requester:</span>
-                                    <span class="fw-bold text-dark">{{ $item->applicant_name }}</span>
+                                    <span class="text-muted small">Employee / Beneficiary:</span>
+                                    <span class="fw-bold text-dark">{{ $req->employee->full_name ?? $item->applicant_name }}</span>
                                 </div>
+                                @if($req->category)
+                                <div class="d-flex justify-content-between mt-1">
+                                    <span class="text-muted small">Category:</span>
+                                    <span class="badge bg-secondary text-white">{{ $req->category }}</span>
+                                </div>
+                                @endif
                                 <div class="d-flex justify-content-between mt-1">
                                     <span class="text-muted small">Amount:</span>
                                     <span class="fw-bold text-success">ETB {{ number_format($req->amount, 2) }}</span>

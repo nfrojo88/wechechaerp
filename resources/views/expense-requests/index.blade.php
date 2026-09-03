@@ -149,11 +149,14 @@
                             <td>
                                 <div class="d-flex align-items-center">
                                     <div class="avatar-sm bg-light rounded-circle text-primary fw-bold me-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
-                                        {{ strtoupper(substr($req->user->name ?? 'E', 0, 1)) }}
+                                        {{ strtoupper(substr($req->employee->full_name ?? $req->user->name ?? 'E', 0, 1)) }}
                                     </div>
                                     <div>
-                                        <div class="fw-semibold text-dark">{{ $req->user->name ?? 'Employee' }}</div>
+                                        <div class="fw-semibold text-dark">{{ $req->employee->full_name ?? $req->user->name ?? 'Employee' }}</div>
                                         <small class="text-muted">{{ $req->employee->role_title ?? $req->employee->department ?? 'Staff' }}</small>
+                                        @if($req->employee && $req->user && $req->user->name !== $req->employee->full_name)
+                                            <div class="text-muted" style="font-size: 0.72rem;"><i class="fa-solid fa-user-pen me-1"></i>By: {{ $req->user->name }}</div>
+                                        @endif
                                     </div>
                                 </div>
                             </td>
@@ -172,6 +175,13 @@
                                     <i class="fa-solid {{ $catIcon }} me-1 text-primary"></i>
                                     {{ $req->category }}
                                 </span>
+                                @if($req->category === 'Transport' && $req->employee)
+                                    <div class="mt-1">
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle" style="font-size: 0.70rem;" title="Assigned Transport Beneficiary">
+                                            <i class="fa-solid fa-id-badge me-1"></i>{{ $req->employee->full_name }}
+                                        </span>
+                                    </div>
+                                @endif
                                 @if($req->category === 'Other' && $req->other_reason)
                                     <div class="small text-muted text-truncate" style="max-width: 150px;" title="{{ $req->other_reason }}">
                                         Reason: {{ $req->other_reason }}
@@ -225,10 +235,10 @@
                                 {{ $req->created_at->format('M d, Y H:i') }}
                             </td>
                             <td class="pe-3 text-end">
-                                {{-- HR Action Button --}}
+                                {{-- HR / Coordinator Action Button --}}
                                 @if($req->status === 'Pending (HR Review)' && $isHrUser)
-                                    <button type="button" class="btn btn-sm btn-warning fw-bold py-1 px-2" data-bs-toggle="modal" data-bs-target="#hrReviewModal{{ $req->id }}">
-                                        <i class="fa-solid fa-user-check me-1"></i>HR Review
+                                    <button type="button" class="btn btn-sm btn-warning fw-bold py-1 px-2" data-bs-toggle="modal" data-bs-target="#hrReviewModal{{ $req->id }}" title="HR or Coordinator Review">
+                                        <i class="fa-solid fa-user-check me-1"></i>HR/Coord Review
                                     </button>
                                 @endif
 
@@ -284,7 +294,7 @@
 {{-- Render ALL Modals OUTSIDE Table to ensure Bootstrap 5 Z-Index & Clickability --}}
 @foreach($requests as $req)
 
-    {{-- HR Review Modal --}}
+    {{-- HR / Coordinator Review Modal --}}
     @if($req->status === 'Pending (HR Review)' && $isHrUser)
     <div class="modal fade" id="hrReviewModal{{ $req->id }}" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -292,15 +302,18 @@
                 <form method="POST" action="{{ route('expense-requests.hr-review', $req->id) }}">
                     @csrf
                     <div class="modal-header bg-warning bg-gradient text-dark">
-                        <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-tie me-2"></i>HR Review — Request #{{ $req->request_number }}</h5>
+                        <h5 class="modal-title fw-bold"><i class="fa-solid fa-user-check me-2"></i>HR / Coordinator Review — Request #{{ $req->request_number }}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body p-4">
                         <div class="bg-light p-3 rounded-3 mb-3 border">
                             <div class="row g-2">
                                 <div class="col-6">
-                                    <span class="text-muted small">Employee:</span>
-                                    <div class="fw-bold text-dark">{{ $req->user->name ?? 'N/A' }}</div>
+                                    <span class="text-muted small">Employee / Beneficiary:</span>
+                                    <div class="fw-bold text-dark">{{ $req->employee->full_name ?? $req->user->name ?? 'N/A' }}</div>
+                                    @if($req->employee)
+                                        <small class="text-muted">{{ $req->employee->department ?? '' }} ({{ $req->employee->role_title ?? 'Staff' }})</small>
+                                    @endif
                                 </div>
                                 <div class="col-6">
                                     <span class="text-muted small">Category:</span>
@@ -311,6 +324,10 @@
                                     <div class="fs-5 fw-bold text-success">ETB {{ number_format($req->amount, 2) }}</div>
                                 </div>
                                 <div class="col-6">
+                                    <span class="text-muted small">Requester Account:</span>
+                                    <div class="fw-semibold text-dark">{{ $req->user->name ?? 'N/A' }}</div>
+                                </div>
+                                <div class="col-12">
                                     <span class="text-muted small">Reason / Purpose:</span>
                                     <div class="fw-normal text-dark text-break">{{ $req->description }}</div>
                                 </div>
@@ -328,12 +345,12 @@
                         @if($req->amount <= 5000)
                             <div class="alert alert-info py-2 px-3 small border-0 bg-info bg-opacity-10 text-dark rounded-3 d-flex align-items-center">
                                 <i class="fa-solid fa-circle-info fa-lg me-2 text-info"></i>
-                                <div><strong>Amount is 5,000 ETB or less.</strong> Approving will automatically skip GM and send directly to Finance Head.</div>
+                                <div><strong>Amount is 5,000 ETB or less.</strong> HR / Coordinator approval will automatically route directly to Finance Head.</div>
                             </div>
                         @else
                             <div class="alert alert-warning py-2 px-3 small border-0 bg-warning bg-opacity-10 text-dark rounded-3 d-flex align-items-center">
                                 <i class="fa-solid fa-triangle-exclamation fa-lg me-2 text-warning"></i>
-                                <div><strong>Amount exceeds 5,000 ETB.</strong> Approving will forward this request to General Manager (GM) for sign-off.</div>
+                                <div><strong>Amount exceeds 5,000 ETB.</strong> Approval by HR / Coordinator will forward this request to General Manager (GM) for sign-off.</div>
                             </div>
                         @endif
 
@@ -1177,6 +1194,33 @@
                             </div>
                         </div>
 
+                        {{-- Employee Selection for Transport / Expense --}}
+                        <div class="col-12" id="employeeSelectGroup" style="display: none;">
+                            <div class="p-3 bg-light border border-info border-2 rounded-3 shadow-sm position-relative overflow-hidden">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="form-label fw-bold text-dark mb-0 fs-6">
+                                        <i class="fa-solid fa-user-tag text-info me-1"></i>Assign Employee / Driver (ተጠቃሚ ሰራተኛ / አሽከርካሪ ይምረጡ) <span class="text-danger" id="employeeRequiredAsterisk">*</span>
+                                    </label>
+                                    <span class="badge bg-info text-white px-2 py-1"><i class="fa-solid fa-truck-ramp-box me-1"></i>Transport Money Allocation</span>
+                                </div>
+                                <select name="employee_id" id="employeeSelect" class="form-select form-select-lg fw-semibold mt-1 border-info">
+                                    <option value="">-- Choose Employee / Driver --</option>
+                                    @foreach($employees ?? [] as $emp)
+                                        <option value="{{ $emp->id }}" {{ (auth()->user()->employee && auth()->user()->employee->id == $emp->id) ? 'selected' : '' }}>
+                                            👤 {{ $emp->full_name }} ({{ $emp->employee_code ?? 'EMP' }}) — {{ $emp->role_title ?? $emp->department ?? 'Staff' }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <div class="mt-2 p-2 bg-white rounded border border-info-subtle small d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-shield-halved text-success fs-5"></i>
+                                    <div>
+                                        <strong class="text-dark d-block">First Approval Destination: HR or Coordinator</strong>
+                                        <span class="text-muted" style="font-size: 0.8rem;">This transport request will first go to <strong>HR or Coordinator</strong> for initial review and sign-off before routing to GM/Finance.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         {{-- Service Tax & Deduction Section (VAT & Withholding) --}}
                         <div class="col-12" id="createTaxSection">
                             <div class="card border border-primary-subtle bg-light rounded-3 p-3">
@@ -1283,7 +1327,7 @@
 
                     <div class="alert alert-light border border-start border-4 border-success mt-3 mb-0 small">
                         <i class="fa-solid fa-circle-info text-success me-1"></i>
-                        <strong>Workflow Notice:</strong> Requests 5,000 ETB or less will be directly reviewed by HR. Requests over 5,000 ETB will automatically require General Manager (GM) sign-off.
+                        <strong>Workflow Notice:</strong> Every Transport and Ask Money request is first reviewed &amp; approved by <strong>HR or Coordinator</strong>. Requests over 5,000 ETB will automatically require General Manager (GM) sign-off.
                     </div>
                 </div>
                 <div class="modal-footer bg-light border-top-0 py-3 px-4">
@@ -1304,6 +1348,8 @@ function toggleCategoryOptions() {
     const group = document.getElementById('otherReasonGroup');
     const input = document.getElementById('otherReasonInput');
     const taxSection = document.getElementById('createTaxSection');
+    const employeeGroup = document.getElementById('employeeSelectGroup');
+    const employeeSelect = document.getElementById('employeeSelect');
 
     if (category === 'Other') {
         if (group) group.style.display = 'block';
@@ -1311,6 +1357,19 @@ function toggleCategoryOptions() {
     } else {
         if (group) group.style.display = 'none';
         if (input) input.required = false;
+    }
+
+    if (category === 'Transport') {
+        if (employeeGroup) employeeGroup.style.display = 'block';
+        if (employeeSelect) {
+            // Require an employee selection for Transport requests
+            if (!employeeSelect.value && employeeSelect.options.length > 1) {
+                employeeSelect.required = true;
+            }
+        }
+    } else {
+        if (employeeGroup) employeeGroup.style.display = 'none';
+        if (employeeSelect) employeeSelect.required = false;
     }
 
     if (taxSection) {
@@ -1538,6 +1597,16 @@ function recalculatePaymentTax(reqId) {
 
 document.addEventListener('DOMContentLoaded', function() {
     toggleCategoryOptions();
+
+    const createModalEl = document.getElementById('createRequestModal');
+    if (createModalEl) {
+        createModalEl.addEventListener('show.bs.modal', function () {
+            toggleCategoryOptions();
+        });
+        createModalEl.addEventListener('shown.bs.modal', function () {
+            toggleCategoryOptions();
+        });
+    }
 
     // Auto-calculate payment modals when opened
     document.querySelectorAll('[id^="markPaidModal"]').forEach(function (modal) {

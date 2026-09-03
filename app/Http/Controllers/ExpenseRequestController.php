@@ -252,6 +252,12 @@ class ExpenseRequestController extends Controller
             $financeStaff = User::where('is_active', true)->get();
         }
 
+        // Fetch active employees for Transport & expense request employee assignment
+        $employees = \App\Models\Employee::where('status', 'active')->orderBy('full_name')->get();
+        if ($employees->isEmpty()) {
+            $employees = \App\Models\Employee::orderBy('full_name')->get();
+        }
+
         return view('expense-requests.index', compact(
             'requests',
             'counters',
@@ -259,7 +265,8 @@ class ExpenseRequestController extends Controller
             'bankAccounts',
             'chartOfAccounts',
             'financeStaff',
-            'coaBankAccounts'
+            'coaBankAccounts',
+            'employees'
         ));
     }
 
@@ -344,6 +351,7 @@ class ExpenseRequestController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'employee_id' => 'nullable|exists:employees,id',
             'category' => 'required|string|in:Service,Transport,Office Material,Loading & Unloading,Loading / Unloading,Loading Unloading,Contract Work,Maintenance,Other',
             'other_reason' => 'required_if:category,Other|nullable|string|max:255',
             'service_type' => 'nullable|string|max:100',
@@ -365,6 +373,7 @@ class ExpenseRequestController extends Controller
 
         $user = auth()->user();
         $employee = $user->employee ?? null;
+        $targetEmployeeId = $request->filled('employee_id') ? $request->input('employee_id') : ($employee ? $employee->id : null);
 
         // Auto-generate request number REQ-YYYYMMDD-XXXX
         $requestNumber = 'REQ-' . date('Ymd') . '-' . strtoupper(Str::random(4));
@@ -442,7 +451,7 @@ class ExpenseRequestController extends Controller
         $expenseRequest = ExpenseRequest::create([
             'request_number' => $requestNumber,
             'user_id' => $user->id,
-            'employee_id' => $employee ? $employee->id : null,
+            'employee_id' => $targetEmployeeId,
             'maintenance_request_id' => $request->input('maintenance_request_id'),
             'category' => $category,
             'service_type' => $validated['service_type'] ?? null,
@@ -465,12 +474,12 @@ class ExpenseRequestController extends Controller
 
 
         return redirect('/expense-requests?tab=my_requests')
-            ->with('success', "Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " submitted successfully!");
+            ->with('success', "Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " submitted successfully and sent to HR / Coordinator for review!");
     }
 
 
     /**
-     * Step 1 — HR Review (Approve or Reject).
+     * Step 1 — HR / Coordinator Review (Approve or Reject).
      * If <= 5000 -> Approved - Assigned to Finance
      * If > 5000  -> Pending (GM Review)
      */
@@ -484,13 +493,13 @@ class ExpenseRequestController extends Controller
         ]);
 
         if ($expenseRequest->status !== ExpenseRequest::STATUS_PENDING_HR) {
-            return back()->with('error', 'Request is not in HR review state.');
+            return back()->with('error', 'Request is not in HR / Coordinator review state.');
         }
 
         $user = auth()->user();
 
         if ($validated['action'] === 'reject') {
-            $reason = !empty($validated['rejection_reason']) ? $validated['rejection_reason'] : 'Rejected by HR reviewer';
+            $reason = !empty($validated['rejection_reason']) ? $validated['rejection_reason'] : 'Rejected by HR / Coordinator reviewer';
             $expenseRequest->update([
                 'status' => ExpenseRequest::STATUS_REJECTED,
                 'hr_reviewer_id' => $user->id,
@@ -509,7 +518,7 @@ class ExpenseRequestController extends Controller
                 'hr_reviewed_at' => now(),
             ]);
 
-            $message = "Request #{$expenseRequest->request_number} (ETB " . number_format($expenseRequest->amount, 2) . ") approved by HR and routed to Finance Head.";
+            $message = "Request #{$expenseRequest->request_number} (ETB " . number_format($expenseRequest->amount, 2) . ") approved by HR / Coordinator and routed to Finance Head.";
         } else {
             $expenseRequest->update([
                 'status' => ExpenseRequest::STATUS_PENDING_GM,
@@ -517,7 +526,7 @@ class ExpenseRequestController extends Controller
                 'hr_reviewed_at' => now(),
             ]);
 
-            $message = "Request #{$expenseRequest->request_number} exceeds 5,000 ETB. Forwarded to General Manager (GM) for approval.";
+            $message = "Request #{$expenseRequest->request_number} exceeds 5,000 ETB. Approved by HR / Coordinator and forwarded to General Manager (GM) for sign-off.";
         }
 
         return back()->with('success', $message);
