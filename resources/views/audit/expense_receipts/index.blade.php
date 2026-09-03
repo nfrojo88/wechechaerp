@@ -14,7 +14,7 @@
                 </div>
                 <div>
                     <h3 class="fw-bold text-dark mb-0">Expense Receipt Audit Center</h3>
-                    <p class="text-muted small mb-0">Single-pane audit compliance: inspect all company expenses, identify missing receipts, issue inquiries, and attach valid vouchers.</p>
+                    <p class="text-muted small mb-0">Single-pane audit compliance: inspect all paid company expenses, verify receipts, issue inquiries, or waive non-receiptable costs.</p>
                 </div>
             </div>
         </div>
@@ -47,14 +47,14 @@
 
     <!-- Metric Cards -->
     <div class="row g-3 mb-4">
-        <!-- 1. Total Expenses Audited -->
+        <!-- 1. Total Paid Expenses Audited -->
         <div class="col-xl-3 col-md-6">
             <div class="card shadow-sm border-0 rounded-4 h-100 bg-white">
                 <div class="card-body p-4 d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase small fw-bold text-muted">Total Expenses Audited</span>
+                        <span class="text-uppercase small fw-bold text-muted">Total Paid Expenses</span>
                         <h3 class="fw-bold text-dark mb-0 mt-1">ETB {{ number_format($totalExpensesAmount, 2) }}</h3>
-                        <small class="text-muted"><i class="fa-solid fa-list-check me-1"></i>{{ number_format($totalExpensesCount) }} total transactions</small>
+                        <small class="text-muted"><i class="fa-solid fa-list-check me-1"></i>{{ number_format($totalExpensesCount) }} paid transactions</small>
                     </div>
                     <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 52px; height: 52px; background:#eff6ff; color:#2563eb;">
                         <i class="fa-solid fa-file-invoice-dollar fa-2x"></i>
@@ -256,7 +256,7 @@
                             <!-- Amount -->
                             <td class="py-3 text-end fw-bold" style="white-space: nowrap;">
                                 <div class="fs-6 text-dark">ETB {{ number_format($item->amount, 2) }}</div>
-                                <span class="badge bg-light text-muted border" style="font-size:0.7rem;">{{ $item->payment_status }}</span>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.7rem;">{{ $item->payment_status }}</span>
                             </td>
 
                             <!-- Receipt Status -->
@@ -290,27 +290,39 @@
 
                             <!-- Audit Actions -->
                             <td class="pe-4 py-3 text-end" style="white-space: nowrap;">
-                                <div class="btn-group btn-group-sm">
+                                <div class="d-inline-flex gap-1">
                                     <!-- 1. View Attached Receipt -->
                                     @if($item->has_receipt && $item->receipt_url)
-                                        <a href="{{ $item->receipt_url }}" target="_blank" class="btn btn-outline-success" title="View attached receipt document">
+                                        <a href="{{ $item->receipt_url }}" target="_blank" class="btn btn-outline-success btn-sm rounded-3 px-2" title="View attached receipt document">
                                             <i class="fa-solid fa-eye me-1"></i> Receipt
                                         </a>
                                     @endif
 
                                     <!-- 2. Ask For Receipt Modal Trigger -->
-                                    <button type="button" class="btn btn-outline-warning text-dark" data-bs-toggle="modal" data-bs-target="#askReceiptModal_{{ $item->unique_key }}" title="Request missing receipt / send inquiry">
+                                    <button type="button" class="btn btn-outline-warning text-dark btn-sm rounded-3 px-2" 
+                                            onclick="openAuditModal('askReceiptModal_{{ $item->unique_key }}')" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#askReceiptModal_{{ $item->unique_key }}" 
+                                            title="Request missing receipt / send inquiry">
                                         <i class="fa-solid fa-envelope-open-text me-1"></i> Ask Receipt
                                     </button>
 
                                     <!-- 3. Add / Upload Receipt Modal Trigger -->
-                                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#attachReceiptModal_{{ $item->unique_key }}" title="Directly upload and attach receipt voucher">
+                                    <button type="button" class="btn btn-primary btn-sm rounded-3 px-2 fw-semibold" 
+                                            onclick="openAuditModal('attachReceiptModal_{{ $item->unique_key }}')" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#attachReceiptModal_{{ $item->unique_key }}" 
+                                            title="Directly upload and attach receipt voucher">
                                         <i class="fa-solid fa-upload me-1"></i> Add Receipt
                                     </button>
 
                                     <!-- 4. Verify Without Receipt Modal Trigger -->
                                     @if(!$item->has_receipt && $item->audit_status !== 'verified_no_receipt')
-                                        <button type="button" class="btn btn-outline-info text-dark" data-bs-toggle="modal" data-bs-target="#verifyNoReceiptModal_{{ $item->unique_key }}" title="Verify without receipt (e.g. taxi, loading/unloading, parking, petty cash)">
+                                        <button type="button" class="btn btn-outline-info text-dark btn-sm rounded-3 px-2" 
+                                                onclick="openAuditModal('verifyNoReceiptModal_{{ $item->unique_key }}')" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#verifyNoReceiptModal_{{ $item->unique_key }}" 
+                                                title="Verify without receipt (e.g. taxi, loading/unloading, parking, petty cash)">
                                             <i class="fa-solid fa-check-double me-1 text-info"></i> No Receipt
                                         </button>
                                     @endif
@@ -321,7 +333,7 @@
                                             @csrf
                                             <input type="hidden" name="source_type" value="{{ $item->source_type }}">
                                             <input type="hidden" name="source_id" value="{{ $item->source_id }}">
-                                            <button type="submit" class="btn btn-outline-secondary" title="Mark as Audit-Verified">
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm rounded-3 px-2" title="Mark as Audit-Verified">
                                                 <i class="fa-solid fa-stamp"></i>
                                             </button>
                                         </form>
@@ -329,146 +341,6 @@
                                 </div>
                             </td>
                         </tr>
-
-                        <!-- Modal: Ask for Receipt -->
-                        <div class="modal fade" id="askReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-hidden="true">
-                            <div class="modal-dialog modal-dialog-centered">
-                                <div class="modal-content rounded-4 border-0 shadow-lg">
-                                    <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.ask') ? route('audit.expense-receipts.ask') : url('/audit/expense-receipts/ask') }}">
-                                        @csrf
-                                        <input type="hidden" name="source_type" value="{{ $item->source_type }}">
-                                        <input type="hidden" name="source_id" value="{{ $item->source_id }}">
-
-                                        <div class="modal-header bg-warning text-dark border-0 py-3 px-4">
-                                            <h5 class="modal-title fw-bold">
-                                                <i class="fa-solid fa-envelope-open-text me-2"></i>Request Receipt: {{ $item->reference_no }}
-                                            </h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                        </div>
-                                        <div class="modal-body p-4 bg-white">
-                                            <div class="p-3 bg-light rounded-3 mb-3 border">
-                                                <div class="d-flex justify-content-between text-muted small mb-1">
-                                                    <span>Requester / Department:</span>
-                                                    <strong class="text-dark">{{ $item->requester }} ({{ $item->department }})</strong>
-                                                </div>
-                                                <div class="d-flex justify-content-between text-muted small">
-                                                    <span>Disbursed Amount:</span>
-                                                    <strong class="text-danger">ETB {{ number_format($item->amount, 2) }}</strong>
-                                                </div>
-                                            </div>
-
-                                            <div class="mb-3">
-                                                <label class="form-label fw-bold text-dark small text-uppercase">Audit Receipt Inquiry / Instructions <span class="text-danger">*</span></label>
-                                                <textarea name="inquiry_note" class="form-control" rows="3" required placeholder="State required receipt documentation (e.g. Please attach the official VAT sales invoice or signed voucher for this payment)...">{{ $item->audit_notes ?: "Official VAT receipt / sales invoice required for audit verification of this ETB " . number_format($item->amount, 2) . " expense." }}</textarea>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer bg-light border-0 py-3 px-4">
-                                            <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold shadow-sm">
-                                                <i class="fa-solid fa-paper-plane me-1"></i> Send Request
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Modal: Add / Upload Receipt -->
-                        <div class="modal fade" id="attachReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-hidden="true">
-                            <div class="modal-dialog modal-dialog-centered">
-                                <div class="modal-content rounded-4 border-0 shadow-lg">
-                                    <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.attach') ? route('audit.expense-receipts.attach') : url('/audit/expense-receipts/attach') }}" enctype="multipart/form-data">
-                                        @csrf
-                                        <input type="hidden" name="source_type" value="{{ $item->source_type }}">
-                                        <input type="hidden" name="source_id" value="{{ $item->source_id }}">
-
-                                        <div class="modal-header bg-primary text-white border-0 py-3 px-4">
-                                            <h5 class="modal-title fw-bold">
-                                                <i class="fa-solid fa-upload me-2"></i>Attach Receipt: {{ $item->reference_no }}
-                                            </h5>
-                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                        </div>
-                                        <div class="modal-body p-4 bg-white">
-                                            <div class="p-3 bg-light rounded-3 mb-3 border">
-                                                <div class="d-flex justify-content-between text-muted small mb-1">
-                                                    <span>Expense Description:</span>
-                                                    <strong class="text-dark">{{ Str::limit($item->description, 35) }}</strong>
-                                                </div>
-                                                <div class="d-flex justify-content-between text-muted small">
-                                                    <span>Amount:</span>
-                                                    <strong class="text-success fs-6">ETB {{ number_format($item->amount, 2) }}</strong>
-                                                </div>
-                                            </div>
-
-                                            <div class="mb-3">
-                                                <label class="form-label fw-bold text-dark small text-uppercase">Upload Receipt Document (PDF / Image) <span class="text-danger">*</span></label>
-                                                <input type="file" name="receipt_file" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.webp" required>
-                                                <small class="text-muted">Accepted formats: PDF, PNG, JPG, JPEG, WEBP (Max: 10MB)</small>
-                                            </div>
-
-                                            <div class="mb-3">
-                                                <label class="form-label fw-bold text-dark small text-uppercase">Audit Verification Notes (Optional)</label>
-                                                <input type="text" name="notes" class="form-control" placeholder="e.g. Verified official cash receipt #REC-8891 attached">
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer bg-light border-0 py-3 px-4">
-                                            <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
-                                                <i class="fa-solid fa-cloud-arrow-up me-1"></i> Upload &amp; Verify Receipt
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Modal: Verify Without Receipt -->
-                        <div class="modal fade" id="verifyNoReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-hidden="true">
-                            <div class="modal-dialog modal-dialog-centered">
-                                <div class="modal-content rounded-4 border-0 shadow-lg">
-                                    <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.verify-no-receipt') ? route('audit.expense-receipts.verify-no-receipt') : url('/audit/expense-receipts/verify-no-receipt') }}">
-                                        @csrf
-                                        <input type="hidden" name="source_type" value="{{ $item->source_type }}">
-                                        <input type="hidden" name="source_id" value="{{ $item->source_id }}">
-
-                                        <div class="modal-header bg-info text-white border-0 py-3 px-4">
-                                            <h5 class="modal-title fw-bold">
-                                                <i class="fa-solid fa-check-double me-2"></i>Verify Without Receipt: {{ $item->reference_no }}
-                                            </h5>
-                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                        </div>
-                                        <div class="modal-body p-4 bg-white">
-                                            <div class="p-3 bg-light rounded-3 mb-3 border">
-                                                <div class="d-flex justify-content-between text-muted small mb-1">
-                                                    <span>Category / Description:</span>
-                                                    <strong class="text-dark">{{ $item->category }} &bull; {{ Str::limit($item->description, 35) }}</strong>
-                                                </div>
-                                                <div class="d-flex justify-content-between text-muted small">
-                                                    <span>Expense Amount:</span>
-                                                    <strong class="text-success fs-6">ETB {{ number_format($item->amount, 2) }}</strong>
-                                                </div>
-                                            </div>
-
-                                            <div class="alert alert-info border-0 rounded-3 small py-2 px-3 mb-3">
-                                                <i class="fa-solid fa-circle-info me-1"></i> Use this option for operational expenses where a formal receipt cannot be obtained (e.g. taxi/transport, parking, loading/unloading, casual day labor).
-                                            </div>
-
-                                            <div class="mb-3">
-                                                <label class="form-label fw-bold text-dark small text-uppercase">Verification Reason / Waiver Note</label>
-                                                <input type="text" name="justification" class="form-control" placeholder="e.g. Minor transport / parking fee verified without formal receipt" value="{{ str_contains(strtolower($item->category), 'transport') ? 'Transport / travel cash fare verified without physical receipt' : (str_contains(strtolower($item->category), 'loading') ? 'Loading & unloading casual labor verified without receipt' : (str_contains(strtolower($item->category), 'parking') ? 'Parking fee verified without receipt' : 'Operational cash expense verified and approved without receipt')) }}">
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer bg-light border-0 py-3 px-4">
-                                            <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-info text-white rounded-pill px-4 fw-bold shadow-sm">
-                                                <i class="fa-solid fa-check-double me-1"></i> Confirm Verification
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-
                     @empty
                         <tr>
                             <td colspan="6" class="text-center py-5 text-muted">
@@ -476,7 +348,7 @@
                                     <div class="rounded-circle bg-light p-3 mb-3 text-secondary">
                                         <i class="fa-solid fa-receipt fa-3x opacity-50"></i>
                                     </div>
-                                    <h6 class="fw-bold">No audited expenses match the selected filters.</h6>
+                                    <h6 class="fw-bold">No audited paid expenses match the selected filters.</h6>
                                     <p class="small text-muted mb-0">Try clearing filters or switching between tabs above.</p>
                                 </div>
                             </td>
@@ -499,4 +371,207 @@
         @endif
     </div>
 </div>
+
+<!-- ========================================== -->
+<!-- MODALS RENDERED OUTSIDE TABLE (CLEAN DOM)  -->
+<!-- ========================================== -->
+@foreach($items as $item)
+    <!-- Modal 1: Ask for Receipt -->
+    <div class="modal fade" id="askReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-labelledby="askModalLabel_{{ $item->unique_key }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.ask') ? route('audit.expense-receipts.ask') : url('/audit/expense-receipts/ask') }}">
+                    @csrf
+                    <input type="hidden" name="source_type" value="{{ $item->source_type }}">
+                    <input type="hidden" name="source_id" value="{{ $item->source_id }}">
+
+                    <div class="modal-header bg-warning text-dark border-0 py-3 px-4">
+                        <h5 class="modal-title fw-bold" id="askModalLabel_{{ $item->unique_key }}">
+                            <i class="fa-solid fa-envelope-open-text me-2"></i>Request Receipt: {{ $item->reference_no }}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <div class="p-3 bg-light rounded-3 mb-3 border">
+                            <div class="d-flex justify-content-between text-muted small mb-1">
+                                <span>Requester / Department:</span>
+                                <strong class="text-dark">{{ $item->requester }} ({{ $item->department }})</strong>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted small">
+                                <span>Disbursed Amount:</span>
+                                <strong class="text-danger">ETB {{ number_format($item->amount, 2) }}</strong>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-dark small text-uppercase">Audit Receipt Inquiry / Instructions <span class="text-danger">*</span></label>
+                            <textarea name="inquiry_note" class="form-control" rows="3" required placeholder="State required receipt documentation (e.g. Please attach the official VAT sales invoice or signed voucher for this payment)...">{{ $item->audit_notes ?: "Official VAT receipt / sales invoice required for audit verification of this ETB " . number_format($item->amount, 2) . " expense." }}</textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 py-3 px-4">
+                        <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-paper-plane me-1"></i> Send Request
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Add / Upload Receipt -->
+    <div class="modal fade" id="attachReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-labelledby="attachModalLabel_{{ $item->unique_key }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.attach') ? route('audit.expense-receipts.attach') : url('/audit/expense-receipts/attach') }}" enctype="multipart/form-data">
+                    @csrf
+                    <input type="hidden" name="source_type" value="{{ $item->source_type }}">
+                    <input type="hidden" name="source_id" value="{{ $item->source_id }}">
+
+                    <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                        <h5 class="modal-title fw-bold" id="attachModalLabel_{{ $item->unique_key }}">
+                            <i class="fa-solid fa-upload me-2"></i>Attach Receipt: {{ $item->reference_no }}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <div class="p-3 bg-light rounded-3 mb-3 border">
+                            <div class="d-flex justify-content-between text-muted small mb-1">
+                                <span>Expense Description:</span>
+                                <strong class="text-dark">{{ Str::limit($item->description, 35) }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted small">
+                                <span>Amount:</span>
+                                <strong class="text-success fs-6">ETB {{ number_format($item->amount, 2) }}</strong>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-dark small text-uppercase">Upload Receipt Document (PDF / Image) <span class="text-danger">*</span></label>
+                            <input type="file" name="receipt_file" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.webp" required>
+                            <small class="text-muted">Accepted formats: PDF, PNG, JPG, JPEG, WEBP (Max: 10MB)</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-dark small text-uppercase">Audit Verification Notes (Optional)</label>
+                            <input type="text" name="notes" class="form-control" placeholder="e.g. Verified official cash receipt #REC-8891 attached">
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 py-3 px-4">
+                        <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-cloud-arrow-up me-1"></i> Upload &amp; Verify Receipt
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 3: Verify Without Receipt -->
+    <div class="modal fade" id="verifyNoReceiptModal_{{ $item->unique_key }}" tabindex="-1" aria-labelledby="verifyNoReceiptModalLabel_{{ $item->unique_key }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.verify-no-receipt') ? route('audit.expense-receipts.verify-no-receipt') : url('/audit/expense-receipts/verify-no-receipt') }}">
+                    @csrf
+                    <input type="hidden" name="source_type" value="{{ $item->source_type }}">
+                    <input type="hidden" name="source_id" value="{{ $item->source_id }}">
+
+                    <div class="modal-header bg-info text-white border-0 py-3 px-4">
+                        <h5 class="modal-title fw-bold" id="verifyNoReceiptModalLabel_{{ $item->unique_key }}">
+                            <i class="fa-solid fa-check-double me-2"></i>Verify Without Receipt: {{ $item->reference_no }}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <div class="p-3 bg-light rounded-3 mb-3 border">
+                            <div class="d-flex justify-content-between text-muted small mb-1">
+                                <span>Category / Description:</span>
+                                <strong class="text-dark">{{ $item->category }} &bull; {{ Str::limit($item->description, 35) }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted small">
+                                <span>Expense Amount:</span>
+                                <strong class="text-success fs-6">ETB {{ number_format($item->amount, 2) }}</strong>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info border-0 rounded-3 small py-2 px-3 mb-3">
+                            <i class="fa-solid fa-circle-info me-1"></i> Use this option for operational expenses where a formal receipt cannot be obtained (e.g. taxi/transport, parking, loading/unloading, casual day labor).
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-dark small text-uppercase">Verification Reason / Waiver Note</label>
+                            <input type="text" name="justification" class="form-control" placeholder="e.g. Minor transport / parking fee verified without formal receipt" value="{{ str_contains(strtolower($item->category), 'transport') ? 'Transport / travel cash fare verified without physical receipt' : (str_contains(strtolower($item->category), 'loading') ? 'Loading & unloading casual labor verified without receipt' : (str_contains(strtolower($item->category), 'parking') ? 'Parking fee verified without receipt' : 'Operational cash expense verified and approved without receipt')) }}">
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 py-3 px-4">
+                        <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-info text-white rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-check-double me-1"></i> Confirm Verification
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+@endforeach
+
+@push('scripts')
+<script>
+function openAuditModal(modalId) {
+    var modalEl = document.getElementById(modalId);
+    if (!modalEl) {
+        console.warn('Modal element not found:', modalId);
+        return;
+    }
+    try {
+        if (window.bootstrap && window.bootstrap.Modal) {
+            var instance = window.bootstrap.Modal.getOrCreateInstance(modalEl);
+            instance.show();
+            return;
+        }
+    } catch(e) {}
+
+    try {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            var instance = bootstrap.Modal.getOrCreateInstance(modalEl);
+            instance.show();
+            return;
+        }
+    } catch(e) {}
+
+    try {
+        if (typeof jQuery !== 'undefined' && typeof jQuery(modalEl).modal === 'function') {
+            jQuery(modalEl).modal('show');
+            return;
+        }
+        if (typeof $ !== 'undefined' && typeof $(modalEl).modal === 'function') {
+            $(modalEl).modal('show');
+            return;
+        }
+    } catch(e) {}
+
+    // Fallback: manual CSS display if no JS library caught it
+    modalEl.classList.add('show');
+    modalEl.style.display = 'block';
+    modalEl.removeAttribute('aria-hidden');
+    modalEl.setAttribute('aria-modal', 'true');
+    var backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop fade show';
+    backdrop.id = 'manual_backdrop_' + modalId;
+    document.body.appendChild(backdrop);
+    var closeButtons = modalEl.querySelectorAll('[data-bs-dismiss="modal"]');
+    closeButtons.forEach(function(btn) {
+        btn.onclick = function() {
+            modalEl.classList.remove('show');
+            modalEl.style.display = 'none';
+            modalEl.setAttribute('aria-hidden', 'true');
+            modalEl.removeAttribute('aria-modal');
+            var b = document.getElementById('manual_backdrop_' + modalId);
+            if (b) b.remove();
+        };
+    });
+}
+</script>
+@endpush
 @endsection
