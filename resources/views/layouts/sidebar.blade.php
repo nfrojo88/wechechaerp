@@ -72,7 +72,9 @@
             <li><a href="{{ route('standard-works.index') }}" class="sidebar-nav-link {{ request()->routeIs('standard-works.*') ? 'active' : '' }}"><i class="fa-solid fa-ruler-combined"></i><span>Standard Works</span></a></li>
             <li><a href="{{ route('takeoff.index') }}" class="sidebar-nav-link {{ request()->routeIs('takeoff.*') ? 'active' : '' }}"><i class="fa-solid fa-ruler-combined"></i><span>Quantity Takeoff</span></a></li>
             <li><a href="{{ route('dispatches.index') }}" class="sidebar-nav-link {{ request()->routeIs('dispatches.*') ? 'active' : '' }}"><i class="fa-solid fa-truck-fast"></i><span>Weekly Dispatches</span></a></li>
+            @if(\Illuminate\Support\Facades\Route::has('material-plans.index'))
             <li><a href="{{ route('material-plans.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-plans.*') ? 'active' : '' }}"><i class="fa-solid fa-list-check"></i><span>Material Plans</span></a></li>
+            @endif
             <li><a href="{{ route('eng-schedule.index') }}" class="sidebar-nav-link {{ request()->routeIs('eng-schedule.*') ? 'active' : '' }}"><i class="fa-solid fa-calendar-days text-primary"></i><span>Engineer Schedules</span></a></li>
             <li><a href="{{ route('daily-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('daily-reports.*') ? 'active' : '' }}"><i class="fa-solid fa-calendar-day"></i><span>Daily Reports</span></a></li>
             <li><a href="{{ route('weekly-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('weekly-reports.*') ? 'active' : '' }}"><i class="fa-solid fa-calendar-week"></i><span>Weekly Reports</span></a></li>

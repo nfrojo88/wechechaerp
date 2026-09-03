@@ -2012,7 +2012,10 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('payments', App\Http\Controllers\PaymentController::class)->only(['index','create','store','show']);
 
 
-    // ─── Phase 8 Operational / Daily Material Consumption ───────────────────
+    // ─── Phase 8 Operational ────────────────────────────────────────────────
+    Route::resource('material-plans', App\Http\Controllers\MaterialPlanController::class)->only(['index', 'create', 'store', 'show']);
+
+    // ─── Phase 8 Daily Material Consumption ─────────────────────────────────
     Route::get('material-usages/store-products/{store}', [App\Http\Controllers\MaterialUsageController::class, 'getStoreProducts'])->name('material-usages.store-products');
     Route::get('material-usages/{materialUsage}/print', [App\Http\Controllers\MaterialUsageController::class, 'printSlip'])->name('material-usages.print');
     Route::resource('material-usages', App\Http\Controllers\MaterialUsageController::class)->only(['index', 'create', 'store', 'show']);
