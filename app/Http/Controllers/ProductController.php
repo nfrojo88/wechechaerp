@@ -178,9 +178,9 @@ class ProductController extends Controller
         ];
     }
 
-    private function units(): array
+    private function units()
     {
-        return ['kg', 'm', 'm2', 'm3', 'pcs', 'liter', 'ton', 'bag', 'roll', 'set', 'pair', 'box', 'sheet', 'bundle'];
+        return \App\Models\UnitOfMeasurement::allUnits();
     }
 
     private function assetStatuses(): array

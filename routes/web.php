@@ -1508,6 +1508,11 @@ Route::middleware(['auth'])->group(function () {
     // Products
     Route::resource('products', ProductController::class);
 
+    // Units of Measurement
+    Route::get('units-of-measurement', [App\Http\Controllers\UnitOfMeasurementController::class, 'index'])->name('units-of-measurement.index');
+    Route::post('units-of-measurement', [App\Http\Controllers\UnitOfMeasurementController::class, 'store'])->name('units-of-measurement.store');
+    Route::delete('units-of-measurement/{id}', [App\Http\Controllers\UnitOfMeasurementController::class, 'destroy'])->name('units-of-measurement.destroy');
+
     // Inventory
     Route::prefix('inventory')->name('inventory.')->group(function () {
         Route::get('/', [InventoryController::class, 'index'])->name('index');

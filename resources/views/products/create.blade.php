@@ -37,13 +37,27 @@
                     @error('sku')<div class="invalid-feedback">{{ $message }}</div>@enderror
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Unit of Measurement <span class="text-danger">*</span></label>
-                    <select name="unit" class="form-select @error('unit') is-invalid @enderror" required>
-                        <option value="">— Select Unit —</option>
-                        @foreach($units as $unit)
-                        <option value="{{ $unit }}" @selected(old('unit') == $unit)>{{ $unit }}</option>
-                        @endforeach
-                    </select>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label mb-0">Unit of Measurement <span class="text-danger">*</span></label>
+                        <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 fw-semibold text-primary" data-bs-toggle="modal" data-bs-target="#manageUnitsModal" title="Manage Units">
+                            <i class="fas fa-cog me-1"></i>Manage
+                        </button>
+                    </div>
+                    <div class="input-group">
+                        <select name="unit" id="product_unit_select" class="form-select @error('unit') is-invalid @enderror" required>
+                            <option value="">— Select Unit —</option>
+                            @foreach($units as $unit)
+                                @php
+                                    $uCode = is_object($unit) ? $unit->code : $unit;
+                                    $uLabel = is_object($unit) ? ($unit->name . ' (' . $unit->code . ')') : $unit;
+                                @endphp
+                                <option value="{{ $uCode }}" @selected(old('unit') == $uCode)>{{ $uLabel }}</option>
+                            @endforeach
+                        </select>
+                        <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#manageUnitsModal" title="Add / Manage Units">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </div>
                     @error('unit')<div class="invalid-feedback">{{ $message }}</div>@enderror
                 </div>
 
@@ -200,4 +214,6 @@ function generateMainSku(name) {
     skuInput.value = prefix + '-' + num;
 }
 </script>
+
+@include('products.partials.manage_units_modal')
 @endsection
