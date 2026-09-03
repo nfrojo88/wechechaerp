@@ -148,8 +148,8 @@ class MaterialUsageController extends Controller
 
         $usages = $query->paginate(15)->withQueryString();
 
-        $stores = Store::where('status', 'active')->orderBy('name')->get();
-        $projects = Project::where('status', 'active')->orderBy('name')->get();
+        $stores = Store::where(fn($q) => $q->where('is_active', true)->orWhereNull('is_active'))->orderBy('name')->get();
+        $projects = Project::where('status', '!=', 'cancelled')->orderBy('name')->get();
 
         return view('operational.material-usages.index', compact(
             'usages',
@@ -171,8 +171,8 @@ class MaterialUsageController extends Controller
         $user = auth()->user();
         $userStoreId = $user->store_id ?? Store::where('manager_id', $user->id)->value('id');
 
-        $stores = Store::where('status', 'active')->orderBy('name')->get();
-        $projects = Project::where('status', 'active')->orderBy('name')->get();
+        $stores = Store::where(fn($q) => $q->where('is_active', true)->orWhereNull('is_active'))->orderBy('name')->get();
+        $projects = Project::where('status', '!=', 'cancelled')->orderBy('name')->get();
 
         // Suggested Consumption No: DC-YYYYMMDD-XXXX
         $suggestedUsageNo = 'DC-' . date('Ymd') . '-' . strtoupper(Str::random(4));
@@ -197,8 +197,8 @@ class MaterialUsageController extends Controller
                 ])->values()->all();
         }
 
-        // Fallback to all products if no store inventory yet
-        $allProducts = Product::where('status', 'active')->orderBy('name')->get();
+        // Fallback to all active products
+        $allProducts = Product::where(fn($q) => $q->where('is_active', true)->orWhereNull('is_active'))->orderBy('name')->get();
 
         return view('operational.material-usages.create', compact(
             'stores',
