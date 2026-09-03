@@ -120,7 +120,7 @@
                 <li class="nav-item">
                     <a class="nav-link fw-semibold rounded-top-3 px-3 py-2 {{ $tab === 'all' ? 'active bg-light border-bottom-0 text-primary fw-bold' : 'text-secondary' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'all', 'page' => 1]) }}">
-                        <i class="fa-solid fa-list me-1"></i> All Audited Expenses 
+                        <i class="fa-solid fa-list me-1"></i> All Paid Expenses 
                         <span class="badge bg-secondary ms-1 rounded-pill">{{ $totalExpensesCount }}</span>
                     </a>
                 </li>

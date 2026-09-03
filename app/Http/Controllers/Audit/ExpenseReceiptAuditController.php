@@ -134,12 +134,13 @@ class ExpenseReceiptAuditController extends Controller
 
         $items = new Collection();
 
-        // 1. Fetch Expense Requests
+        // 1. Fetch Expense Requests (STRICTLY PAID ONLY - no rejected, no pending)
         try {
             $expenseRequests = ExpenseRequest::with(['user', 'employee', 'paidBy', 'chartOfAccount', 'coa'])
                 ->whereNull('purchase_request_id')
                 ->where('request_number', 'not like', 'EXP-PR-%')
-                ->latest()
+                ->where('status', ExpenseRequest::STATUS_PAID)
+                ->latest('paid_at')
                 ->get()
                 ->map(function ($req) {
                     $hasReceipt = !empty($req->attachment);
@@ -167,7 +168,7 @@ class ExpenseReceiptAuditController extends Controller
                         'category'         => $req->category . ($req->other_reason ? ' (' . $req->other_reason . ')' : ''),
                         'description'      => $req->description,
                         'amount'           => (float) ($req->net_amount > 0 ? $req->net_amount : $req->amount),
-                        'payment_status'   => $req->status,
+                        'payment_status'   => 'Paid',
                         'paid_at'          => $req->paid_at,
                         'paid_by_name'     => $req->paidBy->name ?? null,
                         'payment_ref'      => $req->payment_reference,
@@ -185,20 +186,29 @@ class ExpenseReceiptAuditController extends Controller
             $items = $items->concat($expenseRequests);
         } catch (\Throwable $e) {}
 
-        // 2. Fetch Purchase Requests (Procurement Cash / Direct Buys)
+        // 2. Fetch Purchase Requests (STRICTLY PAID Cash / Direct Buys ONLY)
         try {
             $prs = PurchaseRequest::with(['project', 'requestedBy', 'payment.coaAccount', 'payment.assignedStaff', 'payment.paidBy', 'receipt'])
                 ->whereNotNull('status')
-                ->whereIn('status', [
-                    PurchaseRequest::STATUS_PENDING_PAYMENT,
-                    PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
-                    PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY,
-                    PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
-                    PurchaseRequest::STATUS_INTAKE_COMPLETE,
-                    PurchaseRequest::STATUS_COMPLETED,
-                ])
+                ->where('status', '!=', PurchaseRequest::STATUS_REJECTED)
+                ->where(function ($q) {
+                    $q->whereHas('payment', function ($pq) {
+                        $pq->where('status', 'paid')->orWhereNotNull('paid_at');
+                    })->orWhereIn('status', [
+                        PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD,
+                        PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY,
+                        PurchaseRequest::STATUS_INTAKE_COMPLETE,
+                        PurchaseRequest::STATUS_COMPLETED,
+                    ]);
+                })
                 ->latest()
                 ->get()
+                ->filter(function ($pr) {
+                    // Exclude any unpaid or rejected PR payments
+                    $payment = $pr->payment;
+                    if ($payment && strtolower($payment->status) === 'rejected') return false;
+                    return true;
+                })
                 ->map(function ($pr) {
                     $payment = $pr->payment;
                     $receipt = $pr->receipt;
@@ -224,7 +234,7 @@ class ExpenseReceiptAuditController extends Controller
                         'category'         => 'Material Purchase',
                         'description'      => 'PR #' . $pr->pr_no . ($pr->justification ? ' - ' . $pr->justification : ''),
                         'amount'           => $amount,
-                        'payment_status'   => $payment?->status ? ucfirst(str_replace('_', ' ', $payment->status)) : ucfirst(str_replace('_', ' ', $pr->status)),
+                        'payment_status'   => 'Paid',
                         'paid_at'          => $payment?->paid_at,
                         'paid_by_name'     => $payment?->paidBy?->name ?? null,
                         'payment_ref'      => $payment?->notes,
@@ -242,11 +252,12 @@ class ExpenseReceiptAuditController extends Controller
             $items = $items->concat($prs);
         } catch (\Throwable $e) {}
 
-        // 3. Fetch Office Material Requests
+        // 3. Fetch Office Material Requests (STRICTLY PAID ONLY)
         try {
             if (Schema::hasTable('office_material_requests')) {
                 $officeRequests = OfficeMaterialRequest::with(['requestedBy', 'paidBy', 'coa'])
-                    ->latest()
+                    ->where('status', OfficeMaterialRequest::STATUS_PAID)
+                    ->latest('paid_at')
                     ->get()
                     ->map(function ($req) {
                         $hasReceipt = !empty($req->attachment);
@@ -268,7 +279,7 @@ class ExpenseReceiptAuditController extends Controller
                             'category'         => 'Office Material',
                             'description'      => $req->office_purpose ?? 'Office Supplies & Materials',
                             'amount'           => (float) ($req->amount ?? 0),
-                            'payment_status'   => ucfirst(str_replace('_', ' ', $req->status)),
+                            'payment_status'   => 'Paid',
                             'paid_at'          => $req->paid_at,
                             'paid_by_name'     => $req->paidBy?->name ?? null,
                             'payment_ref'      => $req->payment_reference,
@@ -287,10 +298,11 @@ class ExpenseReceiptAuditController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        // 4. Fetch Direct Expenses
+        // 4. Fetch Direct Expenses (STRICTLY PAID / POSTED ONLY - no rejected, no pending)
         try {
             $expenses = Expense::with(['project', 'creator', 'approver'])
                 ->where('description', 'not like', 'Material Purchase for PR #%')
+                ->whereNotIn('status', ['rejected', 'Rejected', 'pending', 'Pending'])
                 ->latest()
                 ->get()
                 ->map(function ($exp) {
@@ -313,7 +325,7 @@ class ExpenseReceiptAuditController extends Controller
                         'category'         => ucfirst($exp->category ?? 'Operational'),
                         'description'      => $exp->description,
                         'amount'           => (float) $exp->amount,
-                        'payment_status'   => ucfirst($exp->status ?? 'Posted'),
+                        'payment_status'   => 'Paid',
                         'paid_at'          => $exp->created_at,
                         'paid_by_name'     => $exp->creator?->name ?? null,
                         'payment_ref'      => 'VOUCHER-' . $exp->id,
