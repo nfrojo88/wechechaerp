@@ -131,7 +131,129 @@ class DashboardController extends Controller
         $recentExpenses = $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')
             ->orderByDesc('created_at')->take(5)->get(), collect());
 
-        return view('dashboard.gm', compact('kpi', 'projectStatus', 'recentProjects', 'pendingEmployees', 'recentExpenses'));
+        // ── Project Expenses (cash + material consumption per project) ────────────
+        $projectExpenses = $this->safe(function () {
+            return \App\Models\Project::select('projects.id', 'projects.name', 'projects.code',
+                    'projects.contract_value', 'projects.budget_allocated', 'projects.status')
+                ->get()
+                ->map(function ($project) {
+                    $cashExpenses = (float) \App\Models\ExpenseRequest::where('project_id', $project->id)
+                        ->whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'approved', 'assigned', 'reviewed'])
+                        ->sum('amount');
+
+                    $materialCost = (float) \Illuminate\Support\Facades\DB::table('material_usages')
+                        ->join('material_usage_items', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
+                        ->where('material_usages.project_id', $project->id)
+                        ->where('material_usages.status', 'confirmed')
+                        ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(material_usage_items.total_cost,
+                            material_usage_items.unit_cost * COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0), 0)'));
+
+                    $totalExpense     = $cashExpenses + $materialCost;
+                    $contractValue    = (float) $project->contract_value;
+                    $budgetAllocated  = (float) $project->budget_allocated;
+                    $utilization      = $budgetAllocated > 0 ? min(999, round(($totalExpense / $budgetAllocated) * 100, 1)) : 0;
+                    $budgetStatus     = $utilization >= 100 ? 'danger' : ($utilization >= 80 ? 'warning' : 'success');
+
+                    return [
+                        'id'               => $project->id,
+                        'name'             => $project->name,
+                        'code'             => $project->code,
+                        'status'           => $project->status,
+                        'contract_value'   => $contractValue,
+                        'budget_allocated' => $budgetAllocated,
+                        'cash_expenses'    => $cashExpenses,
+                        'material_cost'    => $materialCost,
+                        'total_expense'    => $totalExpense,
+                        'remaining_budget' => max(0, $budgetAllocated - $totalExpense),
+                        'utilization'      => $utilization,
+                        'budget_status'    => $budgetStatus,
+                    ];
+                })
+                ->sortByDesc('total_expense')
+                ->values();
+        }, collect());
+
+        // ── Material Consumption Report (top 20 materials by cost across all projects) ──
+        $materialConsumptionReport = $this->safe(function () {
+            return \Illuminate\Support\Facades\DB::table('material_usage_items')
+                ->join('material_usages', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
+                ->join('products', 'products.id', '=', 'material_usage_items.product_id')
+                ->join('projects', 'projects.id', '=', 'material_usages.project_id')
+                ->where('material_usages.status', 'confirmed')
+                ->whereNull('products.deleted_at')
+                ->select(
+                    'projects.id as project_id',
+                    'projects.name as project_name',
+                    'projects.code as project_code',
+                    'products.id as product_id',
+                    'products.name as product_name',
+                    'products.unit as product_unit',
+                    \Illuminate\Support\Facades\DB::raw('SUM(COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0)) as total_qty'),
+                    \Illuminate\Support\Facades\DB::raw('AVG(COALESCE(material_usage_items.unit_cost, 0)) as avg_unit_cost'),
+                    \Illuminate\Support\Facades\DB::raw('SUM(COALESCE(material_usage_items.total_cost,
+                        material_usage_items.unit_cost * COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0), 0)) as total_cost')
+                )
+                ->groupBy('projects.id', 'projects.name', 'projects.code', 'products.id', 'products.name', 'products.unit')
+                ->orderByDesc('total_cost')
+                ->limit(20)
+                ->get();
+        }, collect());
+
+        // ── Monthly Expense Trend (last 6 months) ─────────────────────────────────
+        $monthlyExpenseTrend = $this->safe(function () {
+            $months = [];
+            for ($i = 5; $i >= 0; $i--) {
+                $date = now()->subMonths($i);
+                $m = $date->month;
+                $y = $date->year;
+
+                $cashExp = (float) \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                    ->whereMonth('created_at', $m)->whereYear('created_at', $y)->sum('amount');
+
+                $matCost = (float) \Illuminate\Support\Facades\DB::table('material_usages')
+                    ->join('material_usage_items', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
+                    ->where('material_usages.status', 'confirmed')
+                    ->whereMonth('material_usages.usage_date', $m)
+                    ->whereYear('material_usages.usage_date', $y)
+                    ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(material_usage_items.total_cost,
+                        material_usage_items.unit_cost * COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0), 0)'));
+
+                $months[] = [
+                    'label'    => $date->format('M Y'),
+                    'cash'     => $cashExp,
+                    'material' => $matCost,
+                    'total'    => $cashExp + $matCost,
+                ];
+            }
+            return $months;
+        }, []);
+
+        // ── Expense Category Breakdown ────────────────────────────────────────────
+        $expenseCategoryBreakdown = $this->safe(function () {
+            return \App\Models\ExpenseRequest::whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'approved'])
+                ->select('category', \Illuminate\Support\Facades\DB::raw('SUM(amount) as total'), \Illuminate\Support\Facades\DB::raw('COUNT(*) as count'))
+                ->groupBy('category')
+                ->orderByDesc('total')
+                ->limit(8)
+                ->get();
+        }, collect());
+
+        // ── KPI totals for material & cash ────────────────────────────────────────
+        $kpi['total_material_cost'] = $this->safe(function () {
+            return (float) \Illuminate\Support\Facades\DB::table('material_usages')
+                ->join('material_usage_items', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
+                ->where('material_usages.status', 'confirmed')
+                ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(material_usage_items.total_cost,
+                    material_usage_items.unit_cost * COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0), 0)'));
+        }, 0);
+
+        $kpi['total_cash_expense'] = $this->safe(fn() =>
+            (float) \App\Models\ExpenseRequest::whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'approved'])->sum('amount'), 0);
+
+        return view('dashboard.gm', compact(
+            'kpi', 'projectStatus', 'recentProjects', 'pendingEmployees', 'recentExpenses',
+            'projectExpenses', 'materialConsumptionReport', 'monthlyExpenseTrend', 'expenseCategoryBreakdown'
+        ));
     }
 
     // ─── Planning (used by: planning, planning_manager, technical_manager) ───────

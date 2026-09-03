@@ -741,7 +741,71 @@
                 @endif
             </a>
         </li>
+
+        {{-- ── GM Expense & Cost Tracking ──────────────────────────────────── --}}
+        <hr class="sidebar-section-divider" style="margin:0.4rem 0.75rem;">
+        <li style="padding: 0.1rem 0.75rem 0.05rem;">
+            <small style="color:#64748b; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600;">
+                <i class="fa-solid fa-chart-pie me-1" style="color:#20c997;"></i>Expense Tracking
+            </small>
+        </li>
+
+        <li class="sidebar-nav-item">
+            <a href="{{ route('dashboard.gm') }}#project-expenses"
+               class="sidebar-nav-link {{ request()->routeIs('dashboard.gm') ? 'active' : '' }}"
+               title="View per-project expense breakdown: cash + material consumption">
+                <i class="fa-solid fa-chart-bar text-danger"></i>
+                <span>Project Expenses</span>
+                @php
+                    $totalProjExpCount = 0;
+                    try {
+                        $totalProjExpCount = \App\Models\Project::where('status', 'active')->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($totalProjExpCount > 0)
+                    <span class="badge rounded-pill ms-auto" style="background:rgba(220,53,69,0.15);color:#dc3545;font-size:0.6rem;">{{ $totalProjExpCount }}</span>
+                @endif
+            </a>
+        </li>
+
+        <li class="sidebar-nav-item">
+            <a href="{{ route('material-usages.index') }}"
+               class="sidebar-nav-link {{ request()->routeIs('material-usages.*') ? 'active' : '' }}"
+               title="Track material consumption priced by unit cost across all projects">
+                <i class="fa-solid fa-boxes me-1" style="color:#20c997;"></i>
+                <span>Material Consumption</span>
+                @php
+                    $pendingMatUsageCount = 0;
+                    try {
+                        $pendingMatUsageCount = \App\Models\MaterialUsage::where('status', 'draft')->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingMatUsageCount > 0)
+                    <span class="badge bg-secondary rounded-pill ms-auto" style="font-size:0.6rem;">{{ $pendingMatUsageCount }}</span>
+                @endif
+            </a>
+        </li>
+
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expense-requests.index') }}"
+               class="sidebar-nav-link {{ (request()->routeIs('expense-requests.*') && !request()->routeIs('expense-requests.create')) ? 'active' : '' }}"
+               title="All expense requests across all projects">
+                <i class="fa-solid fa-receipt text-warning"></i>
+                <span>All Expense Requests</span>
+                @php
+                    $allExpReqCount = 0;
+                    try {
+                        $allExpReqCount = \App\Models\ExpenseRequest::whereIn('status', ['pending', 'reviewed', 'approved', 'assigned'])->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($allExpReqCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.6rem;">{{ $allExpReqCount }}</span>
+                @endif
+            </a>
+        </li>
+
         @endif
+
         {{-- Masters --}}
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isStoreKeeper && !$isStoreManager && !$isAuditorUser))
