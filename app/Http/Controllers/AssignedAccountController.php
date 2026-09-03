@@ -1155,21 +1155,21 @@ class AssignedAccountController extends Controller
      */
     private function getUnreplenishedExpenses(ChartOfAccount $account, $cycleStartDate): \Illuminate\Support\Collection
     {
-        $isPettyCashAccount = (str_contains(strtolower($account->name), 'petty') || $account->code === '1010');
+        $linkedBankAccountId = \App\Models\BankAccount::where('coa_id', $account->id)->value('id');
 
-        // 1. Fetch Paid Expense Requests (Real expense vouchers paid out from petty cash)
+        // 1. Fetch Paid Expense Requests (Real expense vouchers paid out from this specific account)
         $paidExpenseRequests = ExpenseRequest::with(['user', 'employee', 'paidBy'])
             ->where(function ($q) {
                 $q->where('status', ExpenseRequest::STATUS_PAID)
                   ->orWhere('status', 'Paid')
                   ->orWhere('status', 'paid');
             })
-            ->where(function ($q) use ($account, $isPettyCashAccount) {
+            ->where(function ($q) use ($account, $linkedBankAccountId) {
                 $q->where('chart_of_account_id', $account->id)
                   ->orWhere('coa_id', $account->id);
 
-                if ($isPettyCashAccount) {
-                    $q->orWhereNull('bank_account_id');
+                if ($linkedBankAccountId) {
+                    $q->orWhere('bank_account_id', $linkedBankAccountId);
                 }
             })
             // STRICT FILTER: Exclude Replenishment Top-up Expense Requests
