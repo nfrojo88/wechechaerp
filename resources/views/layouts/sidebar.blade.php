@@ -1047,7 +1047,7 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('store-manager.products.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.products.*') ? 'active' : '' }}">
+            <a href="{{ route('products.index') }}" class="sidebar-nav-link {{ request()->routeIs('products.*') || request()->routeIs('store-manager.products.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-book text-primary"></i>
                 <span>Material Catalog</span>
             </a>

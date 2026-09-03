@@ -3,6 +3,7 @@
 @section('title', 'Add Product - Store Manager')
 
 @section('content')
+<script>window.location.replace("{{ route('products.create') }}");</script>
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col-12">

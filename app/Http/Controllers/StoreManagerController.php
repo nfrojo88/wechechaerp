@@ -942,29 +942,9 @@ class StoreManagerController extends Controller
         }
     }
 
-    /**
-     * Product Catalog
-     */
-    public function productCatalog(Request $request)
+    public function productsIndex(Request $request)
     {
-        $query = Product::with('inventory.store')->where('is_active', true);
-
-        if ($request->filled('search')) {
-            $query->where(function($q) use ($request) {
-                $q->where('name', 'like', '%' . $request->search . '%')
-                  ->orWhere('code', 'like', '%' . $request->search . '%')
-                  ->orWhere('category', 'like', '%' . $request->search . '%');
-            });
-        }
-
-        if ($request->filled('category')) {
-            $query->where('category', $request->category);
-        }
-
-        $products = $query->orderBy('name')->paginate(25)->withQueryString();
-        $categories = Product::distinct()->pluck('category')->filter()->sort();
-
-        return view('store-manager.products.index', compact('products', 'categories'));
+        return redirect()->route('products.index', $request->query());
     }
 
     /**
@@ -972,8 +952,10 @@ class StoreManagerController extends Controller
      */
     public function createProduct()
     {
-        return view('store-manager.products.create');
+        return redirect()->route('products.create');
     }
+
+
 
     /**
      * Store Product

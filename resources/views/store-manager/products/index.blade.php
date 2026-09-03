@@ -3,6 +3,7 @@
 @section('title', 'Material Catalog - Store Manager')
 
 @section('content')
+<script>window.location.replace("{{ route('products.index') }}");</script>
 <div class="container-fluid">
     {{-- ── Page Header ──────────────────────────────────────────── --}}
     <div class="d-sm-flex align-items-center justify-content-between mb-4">

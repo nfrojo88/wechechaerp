@@ -82,6 +82,9 @@
             <p>Real-time inventory values, stock movements, and financial summary</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ route('products.index') }}" class="btn btn-primary btn-sm px-3 shadow-sm" style="border-radius:8px;">
+                <i class="fa-solid fa-boxes-stacked me-1"></i> Material Catalog
+            </a>
             <a href="{{ route('store-manager.store-keepers.index') }}" class="btn btn-info text-white btn-sm fw-semibold px-3" style="border-radius:8px;">
                 <i class="fa-solid fa-users-gear me-1"></i> Assign Store Keepers
             </a>
@@ -149,15 +152,17 @@
 {{-- ── KPI Count Cards ───────────────────────────────────────── --}}
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-2">
-        <div class="kpi-card card h-100 p-3" style="border-left: 4px solid #2563eb;">
-            <div class="d-flex align-items-center gap-3">
-                <div class="kpi-icon" style="background:#eff6ff;color:#2563eb;"><i class="fas fa-boxes"></i></div>
-                <div>
-                    <div class="kpi-label text-muted">Items in Stock</div>
-                    <div class="kpi-value text-primary">{{ number_format((float)($kpi['total_items'] ?? 0)) }}</div>
+        <a href="{{ route('products.index') }}" class="text-decoration-none">
+            <div class="kpi-card card h-100 p-3" style="border-left: 4px solid #2563eb;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="kpi-icon" style="background:#eff6ff;color:#2563eb;"><i class="fas fa-boxes"></i></div>
+                    <div>
+                        <div class="kpi-label text-muted">Items in Stock</div>
+                        <div class="kpi-value text-primary">{{ number_format((float)($kpi['total_items'] ?? 0)) }}</div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </a>
     </div>
     <div class="col-6 col-md-2">
         <div class="kpi-card card h-100 p-3" style="border-left: 4px solid #f59e0b;">
@@ -307,8 +312,14 @@
             <a href="{{ route('store-manager.transfers.create') }}" class="qa-btn btn btn-primary">
                 <i class="fas fa-exchange-alt me-1"></i> Create Transfer
             </a>
-            <a href="{{ route('store-manager.products.create') }}" class="qa-btn btn btn-secondary">
-                <i class="fas fa-plus me-1"></i> Add Product
+            <a href="{{ route('products.index') }}" class="qa-btn btn btn-outline-primary fw-bold">
+                <i class="fa-solid fa-boxes-stacked me-1"></i> Material Catalog
+            </a>
+            <a href="{{ route('products.create') }}" class="qa-btn btn btn-success">
+                <i class="fas fa-plus me-1"></i> Add New Product
+            </a>
+            <a href="{{ route('store-manager.inventory.all') }}" class="qa-btn btn btn-secondary">
+                <i class="fas fa-boxes me-1"></i> All Inventory
             </a>
             @can('inventory.edit')
             <a href="{{ route('inventory.bulk-adjust') }}" class="qa-btn btn btn-warning">
