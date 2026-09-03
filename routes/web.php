@@ -1876,6 +1876,12 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/assigned-accounts/{id}/replenishments/{replenishmentId}/bulk-voucher-action', [App\Http\Controllers\AssignedAccountController::class, 'bulkVoucherAction'])->name('assigned-accounts.bulk-voucher-action');
     Route::get('/assigned-accounts/{id}/replenishments/{replenishmentId}/details', [App\Http\Controllers\AssignedAccountController::class, 'getReplenishmentDetails'])->name('assigned-accounts.replenishment-details');
 
+    // ─── Expense Receipt Audit Hub ─────────────────────────────────────────────
+    Route::get('/audit/expense-receipts', [App\Http\Controllers\Audit\ExpenseReceiptAuditController::class, 'index'])->name('audit.expense-receipts.index');
+    Route::post('/audit/expense-receipts/ask', [App\Http\Controllers\Audit\ExpenseReceiptAuditController::class, 'askReceipt'])->name('audit.expense-receipts.ask');
+    Route::post('/audit/expense-receipts/attach', [App\Http\Controllers\Audit\ExpenseReceiptAuditController::class, 'attachReceipt'])->name('audit.expense-receipts.attach');
+    Route::post('/audit/expense-receipts/verify', [App\Http\Controllers\Audit\ExpenseReceiptAuditController::class, 'verifyReceipt'])->name('audit.expense-receipts.verify');
+
 
 
     Route::delete('manpower-assignment/{manpowerAssignment}', [App\Http\Controllers\ManpowerForecastController::class, 'removeAssignment'])->name('manpower-assignment.remove');
