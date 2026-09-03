@@ -285,22 +285,21 @@
                                                             || str_contains($authRoleNames, 'admin');
 
                                                         $isAssignedToMe = (
-                                                            $req->assigned_finance_staff_id == $authUser->id ||
-                                                            $req->finance_staff_id == $authUser->id ||
-                                                            ($req->chartOfAccount && $req->chartOfAccount->assigned_to == $authUser->id) ||
-                                                            ($req->coa && $req->coa->assigned_to == $authUser->id)
+                                                            (int)$req->assigned_finance_staff_id === (int)$authUser->id ||
+                                                            (int)$req->finance_staff_id === (int)$authUser->id
                                                         );
                                                     @endphp
 
-                                                    @if($isAssignedToMe)
+                                                    @if($isAssignedToMe || $isFinHeadOrAdmin)
                                                         <button type="button" class="btn btn-success btn-sm text-white fw-bold shadow-sm" 
                                                                 data-bs-toggle="modal" 
                                                                 data-bs-target="#payModal{{ $req->id }}"
                                                                 title="Pay this assigned expense">
                                                             <i class="fa-solid fa-money-bill-wave me-1"></i> Pay
                                                         </button>
-                                                    @elseif($isFinHeadOrAdmin)
-                                                        <button type="button" class="btn btn-primary btn-sm text-white fw-semibold" 
+                                                    @endif
+                                                    @if($isFinHeadOrAdmin)
+                                                        <button type="button" class="btn btn-primary btn-sm text-white fw-semibold ms-1" 
                                                                 data-bs-toggle="modal" 
                                                                 data-bs-target="#financeAssignModal{{ $req->id }}"
                                                                 title="Assign Account &amp; Finance Custodian">
@@ -336,10 +335,8 @@
                                                             || str_contains($prAuthRoleNames, 'finance_manager') 
                                                             || str_contains($prAuthRoleNames, 'admin'));
                                                         $prPayment = $item->raw_model->payment;
-                                                        $prCoa = $item->raw_model->chartOfAccount ?? null;
                                                         $isAssignedToMe = (
-                                                            ($prPayment && (int)$prPayment->assigned_finance_staff_id === (int)auth()->id()) ||
-                                                            ($prCoa && (int)$prCoa->assigned_to === (int)auth()->id())
+                                                            $prPayment && (int)$prPayment->assigned_finance_staff_id === (int)auth()->id()
                                                         );
                                                     @endphp
 
@@ -363,7 +360,7 @@
                                             @elseif($item->type === 'office_supply_request')
                                                 @php
                                                     $officeReq = $item->raw_model;
-                                                    $isAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() || ($officeReq->coa && (int)$officeReq->coa->assigned_to === (int)auth()->id());
+                                                    $isAssignedToMe = (int)$item->assigned_staff_id === (int)auth()->id() || (int)($officeReq->assigned_finance_staff_id ?? 0) === (int)auth()->id();
                                                     $isFinHeadOrAdmin = !empty($isAdmin) || (!empty($isFinance) && (auth()->user()->hasAnyRole(['Finance head', 'finance_head', 'finance_manager']) || str_contains(strtolower(auth()->user()->roles->pluck('name')->implode(' ')), 'head')));
                                                 @endphp
 

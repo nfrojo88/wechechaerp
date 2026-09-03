@@ -100,20 +100,16 @@ class ExpenseRequestPolicy
         return $isFinanceHead && in_array($expenseRequest->status, ['Approved - Assigned to Finance', 'Assigned to Finance', ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED]);
     }
 
-    /**
-     * Determine whether the user can mark payment as Paid.
-     * Only the assigned finance staff or account custodian can disburse payment.
-     */
     public function markPaid(User $user, ExpenseRequest $expenseRequest): bool
     {
         $isAssignedStaff = (
-            $expenseRequest->assigned_finance_staff_id === $user->id || 
-            $expenseRequest->finance_staff_id === $user->id ||
-            ($expenseRequest->chartOfAccount && $expenseRequest->chartOfAccount->assigned_to === $user->id) ||
-            ($expenseRequest->coa && $expenseRequest->coa->assigned_to === $user->id)
+            (int)$expenseRequest->assigned_finance_staff_id === (int)$user->id || 
+            (int)$expenseRequest->finance_staff_id === (int)$user->id
         );
 
-        return $isAssignedStaff && in_array($expenseRequest->status, ['Approved - Assigned to Finance', 'Assigned to Finance', ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED]);
+        $isFinanceHead = $user->hasAnyRole(['Finance head', 'finance_head', 'finance_manager', 'admin', 'global_admin']);
+
+        return ($isAssignedStaff || $isFinanceHead) && in_array($expenseRequest->status, ['Approved - Assigned to Finance', 'Assigned to Finance', ExpenseRequest::STATUS_APPROVED_ASSIGNED, ExpenseRequest::STATUS_ASSIGNED]);
     }
 
 }

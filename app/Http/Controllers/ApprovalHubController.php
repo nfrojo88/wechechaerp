@@ -391,61 +391,40 @@ class ApprovalHubController extends Controller
         if ($isAuditor || $isAdmin) {
             // Auditor and Admin see all items across all stages for audit and oversight
         } elseif ($isFinance && !$isFinanceHead && !$isHR && !$isGM) {
-            // STRICT LAW: Regular Finance Staff ONLY see expenses assigned to their staff ID or their assigned COA/Bank account
-
+            // STRICT LAW: Regular Finance Staff ONLY see expenses assigned to their staff ID to pay, or paid/requested by them
             $userId = (int) $user->id;
             $items = $items->filter(function ($item) use ($userId) {
                 if (!in_array($item->status_key, ['finance_queue', 'paid', 'rejected'])) {
                     return false;
                 }
 
-                // 1. Direct assignment
+                $raw = $item->raw_model ?? null;
+
+                // 1. Direct assignment to this finance staff to pay
                 if ((int)($item->assigned_staff_id ?? 0) === $userId) {
                     return true;
                 }
-
-                $raw = $item->raw_model ?? null;
-                if (!$raw) return false;
-
-                if (isset($raw->assigned_finance_staff_id) && (int)$raw->assigned_finance_staff_id === $userId) {
+                if ($raw && isset($raw->assigned_finance_staff_id) && (int)$raw->assigned_finance_staff_id === $userId) {
                     return true;
                 }
-                if (isset($raw->finance_staff_id) && (int)$raw->finance_staff_id === $userId) {
+                if ($raw && isset($raw->finance_staff_id) && (int)$raw->finance_staff_id === $userId) {
                     return true;
                 }
-
-                // 2. Chart of Account custodian
-                if (isset($raw->coa) && $raw->coa && (int)$raw->coa->assigned_to === $userId) {
-                    return true;
-                }
-                if (isset($raw->chartOfAccount) && $raw->chartOfAccount && (int)$raw->chartOfAccount->assigned_to === $userId) {
-                    return true;
-                }
-                if (isset($raw->payment) && $raw->payment && isset($raw->payment->coaAccount) && (int)$raw->payment->coaAccount?->assigned_to === $userId) {
-                    return true;
-                }
-                if (isset($raw->payment) && $raw->payment && (int)($raw->payment->assigned_finance_staff_id ?? 0) === $userId) {
+                if ($raw && isset($raw->payment) && $raw->payment && (int)($raw->payment->assigned_finance_staff_id ?? 0) === $userId) {
                     return true;
                 }
 
-                // 3. Bank Account custodian
-                if (isset($raw->bankAccount) && $raw->bankAccount && (int)$raw->bankAccount->assigned_to === $userId) {
+                // 2. For paid / rejected history: items actually paid by this staff or submitted by this staff
+                if ($raw && isset($raw->paid_by) && (int)$raw->paid_by === $userId) {
                     return true;
                 }
-
-                // 4. Paid by this staff
-                if (isset($raw->paid_by) && (int)$raw->paid_by === $userId) {
+                if ($raw && isset($raw->payment) && $raw->payment && (int)$raw->payment->paid_by === $userId) {
                     return true;
                 }
-                if (isset($raw->payment) && $raw->payment && (int)$raw->payment->paid_by === $userId) {
+                if ($raw && isset($raw->user_id) && (int)$raw->user_id === $userId) {
                     return true;
                 }
-
-                // 5. Requested by this user
-                if (isset($raw->user_id) && (int)$raw->user_id === $userId) {
-                    return true;
-                }
-                if (isset($raw->requested_by) && (int)$raw->requested_by === $userId) {
+                if ($raw && isset($raw->requested_by) && (int)$raw->requested_by === $userId) {
                     return true;
                 }
 
