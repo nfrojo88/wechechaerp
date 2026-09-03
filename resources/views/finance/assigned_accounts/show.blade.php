@@ -241,13 +241,19 @@
                         <h5 class="fw-bold text-dark mb-0">
                             <i class="fas fa-hourglass-half text-warning me-2"></i>Active Cycle Payment History
                         </h5>
-                        <p class="text-muted small mb-0">Payments recorded since last fulfillment ({{ $lastFulfilled ? $lastFulfilled->fulfilled_at->format('M d, Y') : 'start' }}). These will be attached when you Ask Money.</p>
+                        <p class="text-muted small mb-0">Payments recorded since last fulfillment ({{ $lastFulfilled ? $lastFulfilled->fulfilled_at->format('M d, Y') : 'Account start' }}). These are attached to fund replenishments.</p>
                     </div>
-                    @if($unreplenishedCount > 0 && !$pendingReplenishment)
-                        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#requestReplenishmentModal">
-                            <i class="fas fa-paper-plane me-1"></i> Ask Money
-                        </button>
-                    @endif
+                    <div class="d-flex align-items-center gap-2">
+                        @if($pendingReplenishment)
+                            <button type="button" class="btn btn-sm btn-warning text-dark rounded-pill px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#viewReplenishmentModal_{{ $pendingReplenishment->id }}">
+                                <i class="fas fa-clock me-1"></i> Pending Cycle (#{{ $pendingReplenishment->request_no }})
+                            </button>
+                        @elseif($unreplenishedCount > 0)
+                            <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#requestReplenishmentModal">
+                                <i class="fas fa-paper-plane me-1"></i> Ask Money
+                            </button>
+                        @endif
+                    </div>
                 </div>
                 <div class="card-body p-0 mt-3">
                     <div class="table-responsive" style="max-height: 340px; overflow-y: auto;">
@@ -671,22 +677,36 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @forelse($rep->items as $item)
-                                    <tr class="{{ $item->status === 'rejected' ? 'table-danger opacity-75' : ($item->status === 'clarification_needed' ? 'table-warning' : '') }}">
-                                        <td class="px-3 py-2 text-muted text-nowrap">{{ $item->entry_date ? \Carbon\Carbon::parse($item->entry_date)->format('M d, Y') : ($item->created_at ? $item->created_at->format('M d, Y') : 'N/A') }}</td>
-                                        <td class="py-2 text-nowrap"><span class="badge bg-light text-primary border font-monospace">{{ $item->reference ?: ($item->journal_entry_line_id ? 'JL #' . $item->journal_entry_line_id : 'EXP-' . $item->id) }}</span></td>
-                                        <td class="py-2 text-nowrap"><span class="badge bg-secondary-subtle text-dark border">{{ $item->target_account_name ?: 'Petty Cash Expense' }}</span></td>
+                                @php
+                                    $displayItems = $rep->items;
+                                    if ($displayItems->isEmpty() && isset($unreplenishedExpenses) && $unreplenishedExpenses->isNotEmpty() && in_array($rep->status, ['pending', 'under_audit'])) {
+                                        $displayItems = $unreplenishedExpenses;
+                                    }
+                                @endphp
+                                @forelse($displayItems as $item)
+                                    @php
+                                        $itemDate = $item->entry_date ?? $item->date ?? $item->created_at ?? null;
+                                        $itemRef = $item->reference ?? ($item->journal_entry_line_id ? 'JL #' . $item->journal_entry_line_id : 'EXP-' . ($item->id ?? ''));
+                                        $itemCategory = $item->target_account_name ?? $item->category ?? $item->target_account ?? 'Petty Cash Expense';
+                                        $itemDesc = $item->description ?? '';
+                                        $itemAmount = (float) ($item->amount ?? 0);
+                                        $itemStatus = $item->status ?? 'approved';
+                                    @endphp
+                                    <tr class="{{ $itemStatus === 'rejected' ? 'table-danger opacity-75' : ($itemStatus === 'clarification_needed' ? 'table-warning' : '') }}">
+                                        <td class="px-3 py-2 text-muted text-nowrap">{{ $itemDate ? \Carbon\Carbon::parse($itemDate)->format('M d, Y') : 'N/A' }}</td>
+                                        <td class="py-2 text-nowrap"><span class="badge bg-light text-primary border font-monospace">{{ $itemRef }}</span></td>
+                                        <td class="py-2 text-nowrap"><span class="badge bg-secondary-subtle text-dark border">{{ $itemCategory }}</span></td>
                                         <td class="py-2">
                                             <div style="word-break: break-word; white-space: normal; line-height: 1.4;">
-                                                {{ $item->description }}
+                                                {{ $itemDesc }}
                                             </div>
-                                            @if($item->status === 'rejected' && $item->rejection_reason)
+                                            @if(!empty($item->rejection_reason))
                                                 <div class="text-danger small mt-1"><i class="fa-solid fa-ban me-1"></i><strong>Rejected:</strong> {{ $item->rejection_reason }}</div>
-                                            @elseif($item->status === 'clarification_needed' && $item->inquiry_note)
+                                            @elseif(!empty($item->inquiry_note))
                                                 <div class="text-dark small mt-1 p-1 bg-warning bg-opacity-25 rounded"><i class="fa-solid fa-circle-question text-warning me-1"></i><strong>Clarification Needed:</strong> {{ $item->inquiry_note }}</div>
                                             @endif
                                         </td>
-                                        <td class="px-3 py-2 text-end fw-bold {{ $item->status === 'rejected' ? 'text-decoration-line-through text-muted' : 'text-danger' }} font-monospace text-nowrap">ETB {{ number_format($item->amount, 2) }}</td>
+                                        <td class="px-3 py-2 text-end fw-bold {{ $itemStatus === 'rejected' ? 'text-decoration-line-through text-muted' : 'text-danger' }} font-monospace text-nowrap">ETB {{ number_format($itemAmount, 2) }}</td>
                                     </tr>
                                 @empty
                                     <tr><td colspan="5" class="text-center py-4 text-muted">No individual items attached.</td></tr>
@@ -695,10 +715,10 @@
                             </tbody>
                         </table>
                     </div>
-                    @if($rep->items->count() > 0)
+                    @if($displayItems->count() > 0)
                     <div class="d-flex justify-content-between align-items-center bg-light border border-top-0 rounded-bottom-3 px-3 py-2 fw-bold small">
-                        <span class="text-dark"><i class="fa-solid fa-receipt text-secondary me-1"></i> Total Vouchers: <span class="badge bg-dark rounded-pill">{{ $rep->items->count() }}</span></span>
-                        <span class="text-danger font-monospace fs-6">Grand Total: ETB {{ number_format($rep->items->sum('amount') ?: $rep->total_expenses_amount, 2) }}</span>
+                        <span class="text-dark"><i class="fa-solid fa-receipt text-secondary me-1"></i> Total Vouchers: <span class="badge bg-dark rounded-pill">{{ $displayItems->count() }}</span></span>
+                        <span class="text-danger font-monospace fs-6">Grand Total: ETB {{ number_format($displayItems->sum('amount') ?: $rep->total_expenses_amount, 2) }}</span>
                     </div>
                     @endif
                 </div>

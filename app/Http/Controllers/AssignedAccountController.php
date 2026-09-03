@@ -252,14 +252,18 @@ class AssignedAccountController extends Controller
 
         // ─────────────────────────────────────────────────────────────────────────────
         // IMPREST REPLENISHMENT CYCLE TRACKING
-        // "when they next ask next start from this"
+        // "show all paid from last fulfillment place"
         // ─────────────────────────────────────────────────────────────────────────────
         $lastFulfilled = PettyCashReplenishment::where('chart_of_account_id', $account->id)
             ->where('status', PettyCashReplenishment::STATUS_FULFILLED)
             ->latest('fulfilled_at')
             ->first();
 
-        $cycleStartDate = $lastFulfilled ? $lastFulfilled->fulfilled_at : now();
+        // If no past fulfillment exists, start from the beginning of time (null) to capture all unreplenished paid expenses
+        $cycleStartDate = $lastFulfilled ? $lastFulfilled->fulfilled_at : null;
+
+        // Auto-sync any pending replenishment (like PCR-20260903-0001) that was created with 0 or missing items
+        $this->syncPendingReplenishments($account, $cycleStartDate);
 
         $unreplenishedExpenses = $this->getUnreplenishedExpenses($account, $cycleStartDate);
         $unreplenishedExpensesTotal = $unreplenishedExpenses->sum('amount');
@@ -411,7 +415,8 @@ class AssignedAccountController extends Controller
             ->latest('fulfilled_at')
             ->first();
 
-        $cycleStartDate = $lastFulfilled ? $lastFulfilled->fulfilled_at : now();
+        // If no past fulfillment exists, start from beginning of time (null)
+        $cycleStartDate = $lastFulfilled ? $lastFulfilled->fulfilled_at : null;
 
         $unreplenishedExpenses = $this->getUnreplenishedExpenses($account, $cycleStartDate);
 
@@ -1003,6 +1008,25 @@ class AssignedAccountController extends Controller
             abort(403, 'Unauthorized. Only Finance Head, Auditor, or Admin can access the Replenishments Hub.');
         }
 
+        // Auto-sync any empty replenishment cycle (e.g. PCR-20260903-0001) so all paid items appear
+        try {
+            $emptyReps = PettyCashReplenishment::whereIn('status', [PettyCashReplenishment::STATUS_PENDING, 'under_audit', 'pending_approval'])
+                ->doesntHave('items')
+                ->get();
+
+            foreach ($emptyReps as $eRep) {
+                if ($eRep->chartOfAccount) {
+                    $lastFul = PettyCashReplenishment::where('chart_of_account_id', $eRep->chart_of_account_id)
+                        ->where('status', PettyCashReplenishment::STATUS_FULFILLED)
+                        ->where('id', '!=', $eRep->id)
+                        ->latest('fulfilled_at')
+                        ->first();
+                    $cStartDate = $lastFul ? $lastFul->fulfilled_at : null;
+                    $this->syncPendingReplenishments($eRep->chartOfAccount, $cStartDate);
+                }
+            }
+        } catch (\Throwable $e) {}
+
         $query = PettyCashReplenishment::with(['chartOfAccount.manager', 'requester', 'financeHead', 'reviewer', 'auditor', 'sourceCoa', 'items']);
 
         // Default tab: 'under_audit' for Auditor (their primary action queue), 'pending' for Finance Head
@@ -1151,14 +1175,65 @@ class AssignedAccountController extends Controller
     }
 
     /**
+     * Auto-sync any pending replenishment (like PCR-20260903-0001) that has 0 or missing items
+     */
+    private function syncPendingReplenishments(ChartOfAccount $account, $cycleStartDate): void
+    {
+        try {
+            $pendingReplenishments = PettyCashReplenishment::where('chart_of_account_id', $account->id)
+                ->whereIn('status', [PettyCashReplenishment::STATUS_PENDING, 'under_audit', 'pending_approval'])
+                ->get();
+
+            foreach ($pendingReplenishments as $rep) {
+                // If items are 0, backfill them with all unreplenished expenses
+                if ($rep->items()->count() === 0) {
+                    $expenses = $this->getUnreplenishedExpenses($account, $cycleStartDate);
+                    if ($expenses->isNotEmpty()) {
+                        foreach ($expenses as $item) {
+                            PettyCashReplenishmentItem::create([
+                                'petty_cash_replenishment_id' => $rep->id,
+                                'journal_entry_line_id'       => $item->source_type === 'journal_line' ? $item->source_id : null,
+                                'entry_date'                  => $item->date,
+                                'reference'                   => $item->reference,
+                                'description'                 => ($item->requester ? '[' . $item->requester . '] ' : '') . $item->description,
+                                'target_account_name'         => $item->category ?: $item->target_account,
+                                'amount'                      => $item->amount,
+                                'side'                        => 'credit',
+                            ]);
+                        }
+                        $total = (float) $expenses->sum('amount');
+                        $rep->update([
+                            'total_expenses_amount' => $total,
+                            'requested_amount'      => (float) ($rep->requested_amount > 0 ? $rep->requested_amount : $total),
+                        ]);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Failed to sync pending replenishment items: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Helper: Fetch active cycle expense payments paid out of this account (excluding replenishment top-ups)
      */
     private function getUnreplenishedExpenses(ChartOfAccount $account, $cycleStartDate): \Illuminate\Support\Collection
     {
         $linkedBankAccountId = \App\Models\BankAccount::where('coa_id', $account->id)->value('id');
 
+        // Exclude items that are already part of a fulfilled replenishment cycle
+        $fulfilledReferences = PettyCashReplenishmentItem::whereHas('replenishment', function ($q) use ($account) {
+            $q->where('chart_of_account_id', $account->id)
+              ->where('status', PettyCashReplenishment::STATUS_FULFILLED);
+        })->pluck('reference')->filter()->toArray();
+
+        $fulfilledJournalLineIds = PettyCashReplenishmentItem::whereHas('replenishment', function ($q) use ($account) {
+            $q->where('chart_of_account_id', $account->id)
+              ->where('status', PettyCashReplenishment::STATUS_FULFILLED);
+        })->whereNotNull('journal_entry_line_id')->pluck('journal_entry_line_id')->toArray();
+
         // 1. Fetch Paid Expense Requests (Real expense vouchers paid out from this specific account)
-        $paidExpenseRequests = ExpenseRequest::with(['user', 'employee', 'paidBy'])
+        $paidExpenseQuery = ExpenseRequest::with(['user', 'employee', 'paidBy'])
             ->where(function ($q) {
                 $q->where('status', ExpenseRequest::STATUS_PAID)
                   ->orWhere('status', 'Paid')
@@ -1170,6 +1245,18 @@ class AssignedAccountController extends Controller
 
                 if ($linkedBankAccountId) {
                     $q->orWhere('bank_account_id', $linkedBankAccountId);
+                }
+
+                // If account has an assigned custodian/staff, also capture expenses assigned to/paid by them
+                if ($account->assigned_to) {
+                    $q->orWhere(function ($sq) use ($account) {
+                        $sq->whereNull('chart_of_account_id')
+                           ->whereNull('coa_id')
+                           ->where(function ($ssq) use ($account) {
+                               $ssq->where('assigned_finance_staff_id', $account->assigned_to)
+                                   ->orWhere('paid_by', $account->assigned_to);
+                           });
+                    });
                 }
             })
             // STRICT FILTER: Exclude Replenishment Top-up Expense Requests
@@ -1185,26 +1272,42 @@ class AssignedAccountController extends Controller
             ->where(function ($q) {
                 $q->whereNull('description')
                   ->orWhere('description', 'not like', '%Petty Cash Replenishment%');
-            })
-            ->where(function ($q) use ($cycleStartDate) {
+            });
+
+        // Only filter by date if a previous fulfillment date exists
+        if ($cycleStartDate) {
+            $paidExpenseQuery->where(function ($q) use ($cycleStartDate) {
                 $q->where('paid_at', '>=', $cycleStartDate)
                   ->orWhere(function ($sq) use ($cycleStartDate) {
                       $sq->whereNull('paid_at')->where('updated_at', '>=', $cycleStartDate);
                   });
-            })
-            ->latest('paid_at')
-            ->get();
+            });
+        }
+
+        // Exclude items already fulfilled in past cycles
+        if (!empty($fulfilledReferences)) {
+            $paidExpenseQuery->whereNotIn('request_number', $fulfilledReferences);
+        }
+
+        $paidExpenseRequests = $paidExpenseQuery->latest('paid_at')->get();
 
         // 2. Fetch Direct Ledger Payments (Journal Entry Lines where funds were paid out of this account)
         $paymentSide = in_array($account->type, ['asset', 'expense']) ? 'credit' : 'debit';
-        $paymentLines = JournalEntryLine::with(['journalEntry.lines.account', 'journalEntry.creator'])
+        $paymentLinesQuery = JournalEntryLine::with(['journalEntry.lines.account', 'journalEntry.creator'])
             ->where('account_id', $account->id)
-            ->where('side', $paymentSide)
-            ->whereHas('journalEntry', function ($q) use ($cycleStartDate) {
+            ->where('side', $paymentSide);
+
+        if ($cycleStartDate) {
+            $paymentLinesQuery->whereHas('journalEntry', function ($q) use ($cycleStartDate) {
                 $q->where('created_at', '>=', $cycleStartDate);
-            })
-            ->orderBy('created_at', 'desc')
-            ->get();
+            });
+        }
+
+        if (!empty($fulfilledJournalLineIds)) {
+            $paymentLinesQuery->whereNotIn('id', $fulfilledJournalLineIds);
+        }
+
+        $paymentLines = $paymentLinesQuery->orderBy('created_at', 'desc')->get();
 
         // 3. Unify into a single structured collection of active cycle payment items
         $unreplenishedExpenses = collect();
