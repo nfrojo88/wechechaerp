@@ -192,7 +192,7 @@ class MaterialUsageController extends Controller
                     'name' => $inv->product->name ?? 'Unknown',
                     'item_code' => $inv->product->item_code ?? '',
                     'unit' => $inv->product->unit ?? 'pcs',
-                    'unit_cost' => (float) ($inv->unit_cost ?? $inv->product->unit_cost ?? 0),
+                    'unit_cost' => $this->resolveLatestUnitPrice((int) $inv->product_id, (int) $selectedStoreId),
                     'stock_on_hand' => (float) $inv->quantity_on_hand,
                 ])->values()->all();
         }
@@ -206,6 +206,7 @@ class MaterialUsageController extends Controller
             'name' => $p->name,
             'item_code' => $p->item_code ?? '',
             'unit' => $p->unit ?? 'pcs',
+            'unit_cost' => $this->resolveLatestUnitPrice((int) $p->id, (int) $selectedStoreId),
         ])->values()->all();
 
         return view('operational.material-usages.create', compact(
@@ -221,7 +222,68 @@ class MaterialUsageController extends Controller
     }
 
     /**
-     * AJAX endpoint to fetch products available at a specific store with live stock.
+     * Resolve the latest market / store price for a material product.
+     */
+    public function resolveLatestUnitPrice(int $productId, ?int $storeId = null): float
+    {
+        try {
+            // 1. Latest from material_prices table
+            if (Schema::hasTable('material_prices')) {
+                $price = \App\Models\MaterialPrice::where('product_id', $productId)
+                    ->orderByDesc('effective_date')
+                    ->orderByDesc('id')
+                    ->value('price');
+                if ($price && (float) $price > 0) {
+                    return (float) $price;
+                }
+            }
+
+            // 2. Specific store inventory unit_cost
+            if ($storeId && Schema::hasTable('inventory')) {
+                $storeCost = \App\Models\Inventory::where('product_id', $productId)
+                    ->where('store_id', $storeId)
+                    ->where('unit_cost', '>', 0)
+                    ->value('unit_cost');
+                if ($storeCost && (float) $storeCost > 0) {
+                    return (float) $storeCost;
+                }
+            }
+
+            // 3. Product catalog unit_price
+            $product = Product::find($productId);
+            if ($product && (float) $product->unit_price > 0) {
+                return (float) $product->unit_price;
+            }
+
+            // 4. Any inventory store unit_cost
+            if (Schema::hasTable('inventory')) {
+                $anyCost = \App\Models\Inventory::where('product_id', $productId)
+                    ->where('unit_cost', '>', 0)
+                    ->orderByDesc('updated_at')
+                    ->value('unit_cost');
+                if ($anyCost && (float) $anyCost > 0) {
+                    return (float) $anyCost;
+                }
+            }
+
+            // 5. Purchase request item estimated unit cost
+            if (Schema::hasTable('purchase_request_items')) {
+                $prCost = \Illuminate\Support\Facades\DB::table('purchase_request_items')
+                    ->where('product_id', $productId)
+                    ->where('estimated_unit_cost', '>', 0)
+                    ->latest('id')
+                    ->value('estimated_unit_cost');
+                if ($prCost && (float) $prCost > 0) {
+                    return (float) $prCost;
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        return 0.0;
+    }
+
+    /**
+     * AJAX endpoint to fetch products available at a specific store with live stock and latest price.
      */
     public function getStoreProducts(Store $store)
     {
@@ -233,7 +295,7 @@ class MaterialUsageController extends Controller
                 'name' => $inv->product->name ?? 'Item',
                 'item_code' => $inv->product->item_code ?? '',
                 'unit' => $inv->product->unit ?? 'pcs',
-                'unit_cost' => (float) ($inv->unit_cost ?? $inv->product->unit_cost ?? 0),
+                'unit_cost' => $this->resolveLatestUnitPrice((int) $inv->product_id, (int) $store->id),
                 'stock_on_hand' => (float) $inv->quantity_on_hand,
             ]);
 
@@ -309,7 +371,8 @@ class MaterialUsageController extends Controller
             foreach ($data['items'] as $itemData) {
                 $product = Product::find($itemData['product_id']);
                 $qty = (float) $itemData['quantity'];
-                $unitCost = (float) ($product->unit_cost ?? 0);
+                // Use latest price for accurate material consumption valuation
+                $unitCost = $this->resolveLatestUnitPrice((int) $itemData['product_id'], $storeId);
                 $totalCost = round($qty * $unitCost, 2);
 
                 $usageItem = $usage->items()->create([

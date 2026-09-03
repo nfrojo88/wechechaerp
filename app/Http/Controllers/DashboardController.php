@@ -23,6 +23,75 @@ class DashboardController extends Controller
         }
     }
 
+    /**
+     * Build latest market / product price map for all products.
+     * Priority:
+     * 1) Latest price from material_prices table (effective_date desc)
+     * 2) Unit price from products catalog (products.unit_price)
+     * 3) Inventory unit cost from stores (inventory.unit_cost)
+     * 4) Latest purchase request item estimated cost (purchase_request_items.estimated_unit_cost)
+     */
+    public function getLatestMaterialPriceMap(): array
+    {
+        $prices = [];
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('products')) {
+                $prices = \Illuminate\Support\Facades\DB::table('products')
+                    ->whereNull('deleted_at')
+                    ->pluck('unit_price', 'id')
+                    ->map(fn($v) => (float)$v)
+                    ->toArray();
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('material_prices')) {
+                $latestMatPrices = \Illuminate\Support\Facades\DB::table('material_prices')
+                    ->select('product_id', 'price')
+                    ->whereIn('id', function ($q) {
+                        $q->select(\Illuminate\Support\Facades\DB::raw('MAX(id)'))
+                          ->from('material_prices')
+                          ->groupBy('product_id');
+                    })
+                    ->get();
+
+                foreach ($latestMatPrices as $mp) {
+                    if ((float)$mp->price > 0) {
+                        $prices[$mp->product_id] = (float)$mp->price;
+                    }
+                }
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('inventory')) {
+                $invCosts = \Illuminate\Support\Facades\DB::table('inventory')
+                    ->select('product_id', \Illuminate\Support\Facades\DB::raw('MAX(unit_cost) as max_cost'))
+                    ->where('unit_cost', '>', 0)
+                    ->groupBy('product_id')
+                    ->pluck('max_cost', 'product_id');
+
+                foreach ($invCosts as $prodId => $cost) {
+                    if (empty($prices[$prodId]) || $prices[$prodId] <= 0) {
+                        $prices[$prodId] = (float)$cost;
+                    }
+                }
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('purchase_request_items')) {
+                $prCosts = \Illuminate\Support\Facades\DB::table('purchase_request_items')
+                    ->select('product_id', \Illuminate\Support\Facades\DB::raw('MAX(estimated_unit_cost) as pr_cost'))
+                    ->where('estimated_unit_cost', '>', 0)
+                    ->groupBy('product_id')
+                    ->pluck('pr_cost', 'product_id');
+
+                foreach ($prCosts as $prodId => $cost) {
+                    if (empty($prices[$prodId]) || $prices[$prodId] <= 0) {
+                        $prices[$prodId] = (float)$cost;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        return $prices;
+    }
+
     // ─── Admin ──────────────────────────────────────────────────────────────────
     public function admin()
     {
@@ -182,22 +251,41 @@ class DashboardController extends Controller
         $recentExpenses = $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')
             ->orderByDesc('created_at')->take(5)->get(), collect());
 
-        // ── Project Expenses (cash + material consumption per project) ────────────
-        $projectExpenses = $this->safe(function () {
+        // ── 1. Latest material price map across the catalog ─────────────────────
+        $latestPriceMap = $this->getLatestMaterialPriceMap();
+
+        // ── 2. Project Expenses (cash + daily material consumption @ latest price) ──
+        $projectExpenses = $this->safe(function () use ($latestPriceMap) {
+            $usagesByProject = collect();
+            if (\Illuminate\Support\Facades\Schema::hasTable('material_usages') && \Illuminate\Support\Facades\Schema::hasTable('material_usage_items')) {
+                $usagesByProject = \Illuminate\Support\Facades\DB::table('material_usages')
+                    ->join('material_usage_items', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
+                    ->whereNotIn('material_usages.status', ['cancelled', 'rejected'])
+                    ->select(
+                        'material_usages.project_id',
+                        'material_usage_items.product_id',
+                        'material_usage_items.unit_cost as stored_unit_cost',
+                        \Illuminate\Support\Facades\DB::raw('COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0) as qty')
+                    )
+                    ->get()
+                    ->groupBy('project_id');
+            }
+
             return \App\Models\Project::select('projects.id', 'projects.name', 'projects.code',
                     'projects.contract_value', 'projects.budget_allocated', 'projects.status')
                 ->get()
-                ->map(function ($project) {
+                ->map(function ($project) use ($usagesByProject, $latestPriceMap) {
                     $cashExpenses = (float) \App\Models\ExpenseRequest::where('project_id', $project->id)
                         ->whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'approved', 'assigned', 'reviewed'])
                         ->sum('amount');
 
-                    $materialCost = (float) \Illuminate\Support\Facades\DB::table('material_usages')
-                        ->join('material_usage_items', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
-                        ->where('material_usages.project_id', $project->id)
-                        ->where('material_usages.status', 'confirmed')
-                        ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(material_usage_items.total_cost,
-                            material_usage_items.unit_cost * COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0), 0)'));
+                    // Material consumption from daily consumption logs priced with latest price
+                    $projectItems = $usagesByProject->get($project->id, collect());
+                    $materialCost = (float) $projectItems->sum(function ($item) use ($latestPriceMap) {
+                        $qty = (float) $item->qty;
+                        $unitPrice = (float) ($latestPriceMap[$item->product_id] ?? ((float)$item->stored_unit_cost ?: 0));
+                        return $qty * $unitPrice;
+                    });
 
                     $totalExpense     = $cashExpenses + $materialCost;
                     $contractValue    = (float) $project->contract_value;
@@ -224,13 +312,17 @@ class DashboardController extends Controller
                 ->values();
         }, collect());
 
-        // ── Material Consumption Report (top 20 materials by cost across all projects) ──
-        $materialConsumptionReport = $this->safe(function () {
-            return \Illuminate\Support\Facades\DB::table('material_usage_items')
+        // ── 3. Material Consumption Report (top 20 materials across projects @ latest price) ──
+        $materialConsumptionReport = $this->safe(function () use ($latestPriceMap) {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('material_usages') || !\Illuminate\Support\Facades\Schema::hasTable('material_usage_items')) {
+                return collect();
+            }
+
+            $rawItems = \Illuminate\Support\Facades\DB::table('material_usage_items')
                 ->join('material_usages', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
                 ->join('products', 'products.id', '=', 'material_usage_items.product_id')
                 ->join('projects', 'projects.id', '=', 'material_usages.project_id')
-                ->where('material_usages.status', 'confirmed')
+                ->whereNotIn('material_usages.status', ['cancelled', 'rejected'])
                 ->whereNull('products.deleted_at')
                 ->select(
                     'projects.id as project_id',
@@ -239,19 +331,39 @@ class DashboardController extends Controller
                     'products.id as product_id',
                     'products.name as product_name',
                     'products.unit as product_unit',
-                    \Illuminate\Support\Facades\DB::raw('SUM(COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0)) as total_qty'),
-                    \Illuminate\Support\Facades\DB::raw('AVG(COALESCE(material_usage_items.unit_cost, 0)) as avg_unit_cost'),
-                    \Illuminate\Support\Facades\DB::raw('SUM(COALESCE(material_usage_items.total_cost,
-                        material_usage_items.unit_cost * COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0), 0)) as total_cost')
+                    'material_usage_items.unit_cost as stored_unit_cost',
+                    \Illuminate\Support\Facades\DB::raw('COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0) as qty')
                 )
-                ->groupBy('projects.id', 'projects.name', 'projects.code', 'products.id', 'products.name', 'products.unit')
-                ->orderByDesc('total_cost')
-                ->limit(20)
                 ->get();
+
+            return $rawItems
+                ->groupBy(fn($i) => $i->project_id . '-' . $i->product_id)
+                ->map(function ($group) use ($latestPriceMap) {
+                    $first = $group->first();
+                    $totalQty = (float) $group->sum('qty');
+                    $latestPrice = (float) ($latestPriceMap[$first->product_id] ?? ((float)$first->stored_unit_cost ?: 0));
+                    $totalCost = round($totalQty * $latestPrice, 2);
+
+                    return (object) [
+                        'project_id'   => $first->project_id,
+                        'project_name' => $first->project_name,
+                        'project_code' => $first->project_code,
+                        'product_id'   => $first->product_id,
+                        'product_name' => $first->product_name,
+                        'product_unit' => $first->product_unit,
+                        'total_qty'    => $totalQty,
+                        'avg_unit_cost'=> $latestPrice,
+                        'total_cost'   => $totalCost,
+                    ];
+                })
+                ->filter(fn($row) => $row->total_qty > 0)
+                ->sortByDesc('total_cost')
+                ->take(20)
+                ->values();
         }, collect());
 
-        // ── Monthly Expense Trend (last 6 months) ─────────────────────────────────
-        $monthlyExpenseTrend = $this->safe(function () {
+        // ── 4. Monthly Expense Trend (last 6 months, cash + daily material consumption @ latest price) ──
+        $monthlyExpenseTrend = $this->safe(function () use ($latestPriceMap) {
             $months = [];
             for ($i = 5; $i >= 0; $i--) {
                 $date = now()->subMonths($i);
@@ -261,13 +373,26 @@ class DashboardController extends Controller
                 $cashExp = (float) \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
                     ->whereMonth('created_at', $m)->whereYear('created_at', $y)->sum('amount');
 
-                $matCost = (float) \Illuminate\Support\Facades\DB::table('material_usages')
-                    ->join('material_usage_items', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
-                    ->where('material_usages.status', 'confirmed')
-                    ->whereMonth('material_usages.usage_date', $m)
-                    ->whereYear('material_usages.usage_date', $y)
-                    ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(material_usage_items.total_cost,
-                        material_usage_items.unit_cost * COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0), 0)'));
+                $matCost = 0;
+                if (\Illuminate\Support\Facades\Schema::hasTable('material_usages') && \Illuminate\Support\Facades\Schema::hasTable('material_usage_items')) {
+                    $matItems = \Illuminate\Support\Facades\DB::table('material_usages')
+                        ->join('material_usage_items', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
+                        ->whereNotIn('material_usages.status', ['cancelled', 'rejected'])
+                        ->whereMonth('material_usages.usage_date', $m)
+                        ->whereYear('material_usages.usage_date', $y)
+                        ->select(
+                            'material_usage_items.product_id',
+                            'material_usage_items.unit_cost as stored_unit_cost',
+                            \Illuminate\Support\Facades\DB::raw('COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0) as qty')
+                        )
+                        ->get();
+
+                    $matCost = (float) $matItems->sum(function ($item) use ($latestPriceMap) {
+                        $qty = (float) $item->qty;
+                        $unitPrice = (float) ($latestPriceMap[$item->product_id] ?? ((float)$item->stored_unit_cost ?: 0));
+                        return $qty * $unitPrice;
+                    });
+                }
 
                 $months[] = [
                     'label'    => $date->format('M Y'),
@@ -290,16 +415,13 @@ class DashboardController extends Controller
         }, collect());
 
         // ── KPI totals for material & cash ────────────────────────────────────────
-        $kpi['total_material_cost'] = $this->safe(function () {
-            return (float) \Illuminate\Support\Facades\DB::table('material_usages')
-                ->join('material_usage_items', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
-                ->where('material_usages.status', 'confirmed')
-                ->sum(\Illuminate\Support\Facades\DB::raw('COALESCE(material_usage_items.total_cost,
-                    material_usage_items.unit_cost * COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0), 0)'));
+        $kpi['total_material_cost'] = (float) $projectExpenses->sum('material_cost');
+        $kpi['total_cash_expense'] = (float) $projectExpenses->sum('cash_expenses');
+        $kpi['budget_utilization'] = $this->safe(function () use ($kpi, $projectExpenses) {
+            $contractValue = (float) ($kpi['total_contract_value'] ?? 0);
+            $totalSpend = (float) $projectExpenses->sum('total_expense');
+            return $contractValue > 0 ? round(($totalSpend / $contractValue) * 100, 1) : 0;
         }, 0);
-
-        $kpi['total_cash_expense'] = $this->safe(fn() =>
-            (float) \App\Models\ExpenseRequest::whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'approved'])->sum('amount'), 0);
 
         return view('dashboard.gm', compact(
             'kpi', 'projectStatus', 'recentProjects', 'pendingEmployees', 'recentExpenses',

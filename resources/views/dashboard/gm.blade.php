@@ -589,7 +589,7 @@
             <div class="card shadow-sm border-0" style="border-radius: 12px;">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-chart-pie me-2 text-danger"></i>Project Expenses Tracker
-                        <span class="badge bg-danger bg-opacity-10 text-danger ms-2 fw-normal" style="font-size:0.75rem;">Cash + Material Consumption</span>
+                        <span class="badge bg-success bg-opacity-10 text-success ms-2 fw-normal" style="font-size:0.75rem;"><i class="fas fa-boxes-packing me-1"></i>Cash + Daily Material Consumption (Latest Price)</span>
                     </h6>
                     <a href="{{ route('projects.index') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
                         <i class="fas fa-external-link-alt me-1"></i>All Projects
@@ -613,8 +613,9 @@
                                     <th class="text-end">
                                         <i class="fas fa-receipt me-1 text-warning"></i>Cash Expenses
                                     </th>
-                                    <th class="text-end">
+                                    <th class="text-end" title="Calculated live from daily material consumptions logged by store keepers, priced at latest product/market prices">
                                         <i class="fas fa-cubes me-1 text-success"></i>Material Cost
+                                        <span class="d-block text-muted" style="font-size:0.65rem; font-weight:normal;">Daily Usage @ Latest Price</span>
                                     </th>
                                     <th class="text-end fw-bold">Total Expense</th>
                                     <th class="text-end">Remaining</th>
@@ -651,7 +652,13 @@
                                         <span class="text-warning fw-semibold">{{ number_format($pe['cash_expenses'], 0) }}</span>
                                     </td>
                                     <td class="text-end">
-                                        <span class="text-success fw-semibold">{{ number_format($pe['material_cost'], 0) }}</span>
+                                        @if($pe['material_cost'] > 0)
+                                            <a href="{{ route('material-usages.index', ['project_id' => $pe['id']]) }}" class="text-success fw-bold text-decoration-none" title="View Daily Material Consumptions logged for {{ $pe['name'] }}">
+                                                {{ number_format($pe['material_cost'], 0) }} <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:0.65rem;"></i>
+                                            </a>
+                                        @else
+                                            <span class="text-muted">0</span>
+                                        @endif
                                     </td>
                                     <td class="text-end fw-bold text-dark">
                                         {{ number_format($pe['total_expense'], 0) }} <small class="text-muted fw-normal">ETB</small>
@@ -710,10 +717,10 @@
             <div class="card shadow-sm border-0" style="border-radius: 12px;">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-boxes me-2 text-success"></i>Material Consumption Report
-                        <span class="badge bg-success bg-opacity-10 text-success ms-2 fw-normal" style="font-size:0.75rem;">Priced by Unit Cost</span>
+                        <span class="badge bg-success bg-opacity-10 text-success ms-2 fw-normal" style="font-size:0.75rem;"><i class="fas fa-boxes-packing me-1"></i>Daily Consumption @ Latest Price</span>
                     </h6>
                     <div class="d-flex gap-2 align-items-center">
-                        <small class="text-muted">Top 20 by cost · Confirmed usages only</small>
+                        <small class="text-muted">Top 20 by cost · Store daily consumption logs</small>
                         <a href="{{ route('material-usages.index') }}" class="btn btn-sm btn-outline-success rounded-pill px-3">
                             <i class="fas fa-external-link-alt me-1"></i>All Usages
                         </a>
@@ -735,7 +742,7 @@
                                     <th>Project</th>
                                     <th class="text-end">Total Qty Used</th>
                                     <th class="text-end">Unit</th>
-                                    <th class="text-end">Avg Unit Cost (ETB)</th>
+                                    <th class="text-end">Latest Price (ETB)</th>
                                     <th class="text-end fw-bold">Total Cost (ETB)</th>
                                     <th>Cost Share</th>
                                 </tr>
