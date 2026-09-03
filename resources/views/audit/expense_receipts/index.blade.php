@@ -48,64 +48,80 @@
     <!-- Metric Cards -->
     <div class="row g-3 mb-4">
         <!-- 1. Total Paid Expenses Audited -->
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl col-md-4 col-sm-6">
             <div class="card shadow-sm border-0 rounded-4 h-100 bg-white">
-                <div class="card-body p-4 d-flex justify-content-between align-items-center">
+                <div class="card-body p-3 d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase small fw-bold text-muted">Total Paid Expenses</span>
-                        <h3 class="fw-bold text-dark mb-0 mt-1">ETB {{ number_format($totalExpensesAmount, 2) }}</h3>
-                        <small class="text-muted"><i class="fa-solid fa-list-check me-1"></i>{{ number_format($totalExpensesCount) }} paid transactions</small>
+                        <span class="text-uppercase small fw-bold text-muted" style="font-size:0.70rem;">Total Paid Expenses</span>
+                        <h4 class="fw-bold text-dark mb-0 mt-1">ETB {{ number_format($totalExpensesAmount, 2) }}</h4>
+                        <small class="text-muted" style="font-size:0.75rem;"><i class="fa-solid fa-list-check me-1"></i>{{ number_format($totalExpensesCount) }} transactions</small>
                     </div>
-                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 52px; height: 52px; background:#eff6ff; color:#2563eb;">
-                        <i class="fa-solid fa-file-invoice-dollar fa-2x"></i>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background:#eff6ff; color:#2563eb;">
+                        <i class="fa-solid fa-file-invoice-dollar fa-lg"></i>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- 2. Missing Receipts (Risk Highlight) -->
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl col-md-4 col-sm-6">
             <div class="card shadow-sm border-0 rounded-4 h-100 bg-white border-start border-danger border-4">
-                <div class="card-body p-4 d-flex justify-content-between align-items-center">
+                <div class="card-body p-3 d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase small fw-bold text-danger">Missing Receipts (Action Required)</span>
-                        <h3 class="fw-bold text-danger mb-0 mt-1">ETB {{ number_format($missingReceiptAmount, 2) }}</h3>
-                        <small class="text-danger fw-semibold"><i class="fa-solid fa-triangle-exclamation me-1"></i>{{ $missingReceiptCount }} expenses without receipt</small>
+                        <span class="text-uppercase small fw-bold text-danger" style="font-size:0.70rem;">Missing Receipts</span>
+                        <h4 class="fw-bold text-danger mb-0 mt-1">ETB {{ number_format($missingReceiptAmount, 2) }}</h4>
+                        <small class="text-danger fw-semibold" style="font-size:0.75rem;"><i class="fa-solid fa-triangle-exclamation me-1"></i>{{ $missingReceiptCount }} missing</small>
                     </div>
-                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 52px; height: 52px; background:#fee2e2; color:#dc2626;">
-                        <i class="fa-solid fa-receipt fa-2x"></i>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background:#fee2e2; color:#dc2626;">
+                        <i class="fa-solid fa-receipt fa-lg"></i>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 3. Receipts Inquired / Pending Upload -->
-        <div class="col-xl-3 col-md-6">
+        <!-- 3. Receipts Attached -->
+        <div class="col-xl col-md-4 col-sm-6">
             <div class="card shadow-sm border-0 rounded-4 h-100 bg-white">
-                <div class="card-body p-4 d-flex justify-content-between align-items-center">
+                <div class="card-body p-3 d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase small fw-bold text-warning">Receipt Inquiries Sent</span>
-                        <h3 class="fw-bold text-warning mb-0 mt-1">ETB {{ number_format($requestedReceiptAmount, 2) }}</h3>
-                        <small class="text-muted"><i class="fa-solid fa-clock-rotate-left me-1"></i>{{ $requestedReceiptCount }} awaiting staff upload</small>
+                        <span class="text-uppercase small fw-bold text-success" style="font-size:0.70rem;">Receipts Attached</span>
+                        <h4 class="fw-bold text-success mb-0 mt-1">ETB {{ number_format($attachedReceiptAmount, 2) }}</h4>
+                        <small class="text-success" style="font-size:0.75rem;"><i class="fa-solid fa-shield-check me-1"></i>{{ $attachedReceiptCount }} verified</small>
                     </div>
-                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 52px; height: 52px; background:#fef3c7; color:#d97706;">
-                        <i class="fa-solid fa-paper-plane fa-2x"></i>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background:#dcfce7; color:#16a34a;">
+                        <i class="fa-solid fa-circle-check fa-lg"></i>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 4. Verified Receipts Attached -->
-        <div class="col-xl-3 col-md-6">
-            <div class="card shadow-sm border-0 rounded-4 h-100 bg-white">
-                <div class="card-body p-4 d-flex justify-content-between align-items-center">
+        <!-- 4. Verified Without Receipt -->
+        <div class="col-xl col-md-6 col-sm-6">
+            <div class="card shadow-sm border-0 rounded-4 h-100 bg-white border-start border-info border-4">
+                <div class="card-body p-3 d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="text-uppercase small fw-bold text-success">Receipts Attached</span>
-                        <h3 class="fw-bold text-success mb-0 mt-1">ETB {{ number_format($attachedReceiptAmount, 2) }}</h3>
-                        <small class="text-success"><i class="fa-solid fa-shield-check me-1"></i>{{ $attachedReceiptCount }} verified / voucher present</small>
+                        <span class="text-uppercase small fw-bold text-info" style="font-size:0.70rem;">Verified Without Receipt</span>
+                        <h4 class="fw-bold text-info mb-0 mt-1">ETB {{ number_format($verifiedNoReceiptAmount ?? 0, 2) }}</h4>
+                        <small class="text-info fw-semibold" style="font-size:0.75rem;"><i class="fa-solid fa-check-double me-1"></i>{{ $verifiedNoReceiptCount ?? 0 }} waived costs</small>
                     </div>
-                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 52px; height: 52px; background:#dcfce7; color:#16a34a;">
-                        <i class="fa-solid fa-circle-check fa-2x"></i>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background:#e0f2fe; color:#0284c7;">
+                        <i class="fa-solid fa-check-double fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Receipts Inquired / Pending Upload -->
+        <div class="col-xl col-md-6 col-sm-6">
+            <div class="card shadow-sm border-0 rounded-4 h-100 bg-white">
+                <div class="card-body p-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-uppercase small fw-bold text-warning" style="font-size:0.70rem;">Inquiries Sent</span>
+                        <h4 class="fw-bold text-warning mb-0 mt-1">ETB {{ number_format($requestedReceiptAmount, 2) }}</h4>
+                        <small class="text-muted" style="font-size:0.75rem;"><i class="fa-solid fa-paper-plane me-1"></i>{{ $requestedReceiptCount }} pending</small>
+                    </div>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background:#fef3c7; color:#d97706;">
+                        <i class="fa-solid fa-envelope-open-text fa-lg"></i>
                     </div>
                 </div>
             </div>
@@ -148,7 +164,7 @@
                 <li class="nav-item">
                     <a class="nav-link fw-semibold rounded-top-3 px-3 py-2 {{ $tab === 'verified_no_receipt' ? 'active bg-light border-bottom-0 text-info fw-bold' : 'text-secondary' }}" 
                        href="{{ request()->fullUrlWithQuery(['tab' => 'verified_no_receipt', 'page' => 1]) }}">
-                        <i class="fa-solid fa-check-double me-1 text-info"></i> Verified (No Receipt) 
+                        <i class="fa-solid fa-check-double me-1 text-info"></i> Verified Without Receipt 
                         <span class="badge bg-info ms-1 rounded-pill">{{ $verifiedNoReceiptCount ?? 0 }}</span>
                     </a>
                 </li>
@@ -263,8 +279,8 @@
                             <td class="py-3 text-center" style="white-space: nowrap;">
                                 @if($item->audit_status === 'verified_no_receipt')
                                     <div class="d-inline-flex flex-column align-items-center">
-                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-1 rounded-pill">
-                                            <i class="fa-solid fa-check-double me-1"></i> Verified (No Receipt)
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-1 rounded-pill fw-bold">
+                                            <i class="fa-solid fa-check-double me-1"></i> Verified Without Receipt
                                         </span>
                                         <small class="text-muted mt-1" style="font-size:0.68rem;" title="{{ $item->audit_notes }}"><i class="fa-solid fa-shield-check me-1"></i>Waived / Approved</small>
                                     </div>
@@ -316,14 +332,22 @@
                                         <i class="fa-solid fa-upload me-1"></i> Add Receipt
                                     </button>
 
-                                    <!-- 4. Verify Without Receipt Modal Trigger -->
-                                    @if(!$item->has_receipt && $item->audit_status !== 'verified_no_receipt')
-                                        <button type="button" class="btn btn-outline-info text-dark btn-sm rounded-3 px-2" 
+                                    <!-- 4. Verify Without Receipt Action Button -->
+                                    @if($item->audit_status === 'verified_no_receipt')
+                                        <button type="button" class="btn btn-info text-white btn-sm rounded-3 px-2 fw-bold shadow-xs" 
+                                                onclick="openAuditModal('verifyNoReceiptModal_{{ $item->unique_key }}')" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#verifyNoReceiptModal_{{ $item->unique_key }}" 
+                                                title="Verified Without Receipt (Click to view or edit reason)">
+                                            <i class="fa-solid fa-check-double me-1"></i> Verified Without Receipt
+                                        </button>
+                                    @elseif(!$item->has_receipt)
+                                        <button type="button" class="btn btn-outline-info text-dark btn-sm rounded-3 px-2 fw-bold" 
                                                 onclick="openAuditModal('verifyNoReceiptModal_{{ $item->unique_key }}')" 
                                                 data-bs-toggle="modal" 
                                                 data-bs-target="#verifyNoReceiptModal_{{ $item->unique_key }}" 
                                                 title="Verify without receipt (e.g. taxi, loading/unloading, parking, petty cash)">
-                                            <i class="fa-solid fa-check-double me-1 text-info"></i> No Receipt
+                                            <i class="fa-solid fa-check-double me-1 text-info"></i> Verify Without Receipt
                                         </button>
                                     @endif
 
