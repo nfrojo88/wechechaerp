@@ -146,7 +146,7 @@ function handleCreateUom(event) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
         || document.querySelector('input[name="_token"]')?.value;
 
-    fetch('{{ route("units-of-measurement.store") }}', {
+    fetch('{{ url("units-of-measurement") }}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
