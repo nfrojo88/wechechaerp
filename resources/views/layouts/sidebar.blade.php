@@ -28,6 +28,23 @@
         <span>Dashboard</span>
     </a>
 </li>
+
+{{-- Quick Action: Ask Money --}}
+<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
+    <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') || request()->is('expense-requests*') ? 'active' : '' }}" style="font-weight:600;">
+        <i class="fa-solid fa-hand-holding-dollar text-success"></i>
+        <span>Ask Money</span>
+        @php
+            $adminPendingExpenseCount = 0;
+            try {
+                $adminPendingExpenseCount = \App\Models\ExpenseRequest::where('status', 'like', 'Pending%')->count();
+            } catch (\Exception $e) {}
+        @endphp
+        @if($adminPendingExpenseCount > 0)
+            <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.65rem;">{{ $adminPendingExpenseCount }}</span>
+        @endif
+    </a>
+</li>
 <hr class="sidebar-section-divider">
 
 {{-- ② Projects & Planning --}}
@@ -166,7 +183,7 @@
             <li><a href="{{ route('dashboard.finance') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.finance') ? 'active' : '' }}"><i class="fa-solid fa-gauge-high text-primary"></i><span>Finance Dashboard</span></a></li>
             <li><a href="{{ route('coa.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa.*') && !request()->routeIs('coa-transfers.*') ? 'active' : '' }}"><i class="fa-solid fa-sitemap"></i><span>Chart of Accounts</span></a></li>
             <li><a href="{{ route('coa-transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('coa-transfers.*') ? 'active' : '' }}"><i class="fa-solid fa-money-bill-transfer text-success"></i><span>COA Transfers</span></a></li>
-            <li><a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') || request()->is('expense-requests*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding-dollar text-warning"></i><span>Expense Requests</span></a></li>
+            <li><a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') || request()->is('expense-requests*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding-dollar text-success"></i><span>Ask Money (Expenses)</span></a></li>
             <li><a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') ? 'active' : '' }}"><i class="fa-solid fa-arrow-trend-down text-danger"></i><span>Expenses</span></a></li>
             <li><a href="{{ route('income.index') }}" class="sidebar-nav-link {{ request()->routeIs('income.*') ? 'active' : '' }}"><i class="fa-solid fa-arrow-trend-up"></i><span>Company Income</span></a></li>
             <li><a href="{{ route('finance.payroll.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.payroll.*') ? 'active' : '' }}"><i class="fa-solid fa-money-bill-wave text-success"></i><span>Payroll Management</span></a></li>
