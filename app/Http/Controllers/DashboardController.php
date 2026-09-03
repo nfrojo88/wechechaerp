@@ -103,20 +103,74 @@ class DashboardController extends Controller
     // ─── GM ─────────────────────────────────────────────────────────────────────
     public function gm()
     {
+        // 1. Pending GM Purchase Requests (Decisions needed)
+        $pendingGmPrs = $this->safe(function () {
+            return \App\Models\PurchaseRequest::with([
+                    'project', 'requestedBy', 'supplier',
+                    'proformaInvoices' => fn($q) => $q->where('gm_selected', true)->orWhere('is_selected', true),
+                    'marketingVariance', 'items'
+                ])
+                ->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_GM)
+                ->latest()
+                ->get();
+        }, collect());
+
+        // 2. Unassigned Lifecycle Stage PRs (Auto-escalated to Admin / GM)
+        $unassignedStagePrs = $this->safe(function () {
+            return \App\Models\PurchaseRequest::with(['project', 'requestedBy'])
+                ->where('current_owner_role', 'global_admin')
+                ->whereNotIn('status', [
+                    \App\Models\PurchaseRequest::STATUS_COMPLETED,
+                    \App\Models\PurchaseRequest::STATUS_CANCELLED,
+                    \App\Models\PurchaseRequest::STATUS_REJECTED
+                ])
+                ->latest()
+                ->take(8)
+                ->get();
+        }, collect());
+
+        // 3. Pending GM Expense Requests
+        $pendingGmExpenses = $this->safe(function () {
+            return \App\Models\ExpenseRequest::with(['project', 'requester'])
+                ->where('status', \App\Models\ExpenseRequest::STATUS_PENDING_GM)
+                ->latest()
+                ->take(10)
+                ->get();
+        }, collect());
+
+        // 4. Pending Employee Approvals
+        $pendingEmployees = $this->safe(function () {
+            return \App\Models\Employee::where(function($q) {
+                $q->where('is_approved_by_gm', false)->orWhereNull('is_approved_by_gm');
+            })->latest()->take(10)->get();
+        }, collect());
+
+        // 5. Pending Payroll, Loan Advances & Leaves
+        $pendingPayrollCount = $this->safe(fn() => \Illuminate\Support\Facades\DB::table('payrolls')->where('status', 'pending')->count(), 0);
+        $pendingLoansCount   = $this->safe(fn() => \App\Models\EmployeeAdvance::where('status', 'pending')->count(), 0);
+        $pendingLeavesCount  = $this->safe(fn() => \App\Models\LeaveRequest::where('status', 'pending')->count(), 0);
+
         $kpi = [
-            'active_projects'     => $this->safe(fn() => \App\Models\Project::where('status', 'active')->count()),
-            'total_contract_value'=> $this->safe(fn() => \App\Models\Project::sum('contract_value'), 0),
-            'budget_utilization'  => $this->safe(function() {
+            'active_projects'        => $this->safe(fn() => \App\Models\Project::where('status', 'active')->count()),
+            'total_contract_value'   => $this->safe(fn() => \App\Models\Project::sum('contract_value'), 0),
+            'budget_utilization'     => $this->safe(function() {
                 $contractValue = \App\Models\Project::sum('contract_value');
                 $expenseValue = (\Illuminate\Support\Facades\DB::table('expenses')->sum('amount') ?? 0)
                               + (\App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)->sum('amount') ?? 0);
                 return $contractValue > 0 ? round(($expenseValue / $contractValue) * 100, 1) : 0;
             }),
-            'pending_approvals'   => $this->safe(fn() => \App\Models\Employee::where('is_approved_by_gm', false)->orWhereNull('is_approved_by_gm')->count(), 0),
-            'total_employees'     => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count(), 0),
-            'pending_expenses'    => $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')->where('status', 'pending')->count() + \App\Models\ExpenseRequest::whereIn('status', ['pending', 'reviewed', 'approved', 'assigned'])->count(), 0),
-            'pending_payroll'     => $this->safe(fn() => \Illuminate\Support\Facades\DB::table('payrolls')->where('status', 'pending')->count(), 0),
-            'open_issues'         => $this->safe(fn() => \App\Models\Issue::where('status', 'open')->count(), 0),
+            'pending_gm_prs'         => $pendingGmPrs->count(),
+            'pending_gm_prs_amount'  => (float)$pendingGmPrs->sum(fn($pr) => (float)($pr->direct_buy_amount ?: $pr->items->sum('estimated_total'))),
+            'unassigned_prs_count'   => $unassignedStagePrs->count(),
+            'pending_gm_expenses'    => $pendingGmExpenses->count(),
+            'pending_gm_expenses_amount' => (float)$pendingGmExpenses->sum('amount'),
+            'pending_approvals'      => $pendingEmployees->count(),
+            'total_employees'        => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count(), 0),
+            'pending_expenses'       => $pendingGmExpenses->count(),
+            'pending_payroll'        => $pendingPayrollCount,
+            'pending_loans'          => $pendingLoansCount,
+            'pending_leaves'         => $pendingLeavesCount,
+            'open_issues'            => $this->safe(fn() => \App\Models\Issue::where('status', 'open')->count(), 0),
         ];
 
         $projectStatus = $this->safe(fn() =>
@@ -125,9 +179,6 @@ class DashboardController extends Controller
         );
 
         $recentProjects = $this->safe(fn() => Project::latest()->take(5)->get(), collect());
-        $pendingEmployees = $this->safe(fn() => \App\Models\Employee::where(function($q) {
-            $q->where('is_approved_by_gm', false)->orWhereNull('is_approved_by_gm');
-        })->latest()->take(5)->get(), collect());
         $recentExpenses = $this->safe(fn() => \Illuminate\Support\Facades\DB::table('expenses')
             ->orderByDesc('created_at')->take(5)->get(), collect());
 
@@ -252,7 +303,8 @@ class DashboardController extends Controller
 
         return view('dashboard.gm', compact(
             'kpi', 'projectStatus', 'recentProjects', 'pendingEmployees', 'recentExpenses',
-            'projectExpenses', 'materialConsumptionReport', 'monthlyExpenseTrend', 'expenseCategoryBreakdown'
+            'projectExpenses', 'materialConsumptionReport', 'monthlyExpenseTrend', 'expenseCategoryBreakdown',
+            'pendingGmPrs', 'unassignedStagePrs', 'pendingGmExpenses'
         ));
     }
 

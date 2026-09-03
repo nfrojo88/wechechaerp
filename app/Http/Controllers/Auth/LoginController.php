@@ -119,7 +119,7 @@ class LoginController extends Controller
         
         return match($role) {
             'global_admin', 'admin' => route('dashboard.admin'),
-            'gm'                  => route('dashboard.gm'),
+            'gm', 'general_manager' => route('dashboard.gm'),
             'planning'            => route('dashboard.planning'),
             'planning_manager'    => route('dashboard.planning'),
             'technical_manager'   => route('dashboard.planning'),

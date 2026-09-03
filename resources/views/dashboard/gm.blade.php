@@ -1,160 +1,505 @@
 @extends('layouts.app')
-@section('title', 'GM Dashboard')
+@section('title', 'GM Executive Dashboard')
 @section('content')
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+<div class="container-fluid py-2">
+    {{-- Top Executive Header --}}
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2 pb-2 border-bottom">
         <div>
-            <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-chart-line me-2 text-primary"></i>General Manager Dashboard</h1>
-            <small class="text-muted">{{ now()->format('l, F j, Y') }}</small>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-1 rounded-pill fw-semibold" style="font-size:0.8rem;">Executive Management</span>
+                <span class="badge bg-light text-muted border px-2 py-1 rounded-pill" style="font-size:0.75rem;"><i class="fa-regular fa-clock me-1"></i>{{ now()->format('l, F j, Y') }}</span>
+            </div>
+            <h1 class="h3 mb-0 text-gray-800 fw-bold mt-1">
+                <i class="fas fa-chart-line text-primary me-2"></i>General Manager Executive Dashboard
+            </h1>
         </div>
-        <div class="d-flex gap-2">
-            <a href="{{ route('gm.hr-reports') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm">
-                <i class="fa-solid fa-file-signature me-1"></i>Submitted HR Reports
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <a href="{{ route('purchase-requests.index', ['status' => 'pending_gm']) }}" class="btn btn-outline-danger btn-sm rounded-pill px-3 shadow-sm position-relative">
+                <i class="fa-solid fa-cart-arrow-down me-1"></i>PR Decisions
+                @if(($kpi['pending_gm_prs'] ?? 0) > 0)
+                    <span class="badge bg-danger rounded-pill ms-1">{{ $kpi['pending_gm_prs'] }}</span>
+                @endif
             </a>
-            <a href="{{ route('reports.attendance') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm">
-                <i class="fa-solid fa-calendar-check me-1"></i>HR Reports
+            <a href="{{ route('expenses.index', ['tab' => 'pending_gm']) }}" class="btn btn-outline-warning btn-sm rounded-pill px-3 shadow-sm position-relative">
+                <i class="fa-solid fa-file-invoice-dollar me-1"></i>Expense Approvals
+                @if(($kpi['pending_gm_expenses'] ?? 0) > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-1">{{ $kpi['pending_gm_expenses'] }}</span>
+                @endif
+            </a>
+            <a href="{{ route('employees.pending-approval') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm">
+                <i class="fa-solid fa-user-check me-1"></i>Employee Approvals
+                @if(($kpi['pending_approvals'] ?? 0) > 0)
+                    <span class="badge bg-primary rounded-pill ms-1">{{ $kpi['pending_approvals'] }}</span>
+                @endif
+            </a>
+            <a href="{{ route('finance.payroll.gm') }}" class="btn btn-outline-info btn-sm rounded-pill px-3 shadow-sm">
+                <i class="fa-solid fa-file-signature me-1"></i>Payroll Approvals
+            </a>
+            <a href="{{ route('gm.hr-reports') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm">
+                <i class="fa-solid fa-file-waveform me-1"></i>HR Reports
             </a>
         </div>
     </div>
 
-    <!-- KPI Row 1 -->
-    <div class="row g-3 mb-3">
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #4e73df !important;">
-                <div class="card-body">
+    {{-- ═══ EXECUTIVE KPI CARDS ════════════════════════════════════════════════ --}}
+    <div class="row g-3 mb-4">
+        {{-- Card 1: PR Decisions Pending GM --}}
+        <div class="col-xl-4 col-md-6">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #e74a3b !important; border-radius: 12px;">
+                <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
-                            <div class="text-xs fw-bold text-primary text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">Active Projects</div>
-                            <div class="h4 mb-0 fw-bold text-dark">{{ $kpi['active_projects'] }}</div>
+                            <div class="text-xs fw-bold text-danger text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">
+                                <i class="fa-solid fa-gavel me-1"></i>Procurement GM Decisions
+                            </div>
+                            <div class="h3 mb-0 fw-bold text-dark">{{ $kpi['pending_gm_prs'] ?? 0 }}</div>
+                            <small class="text-muted">
+                                @if(($kpi['pending_gm_prs'] ?? 0) > 0)
+                                    Est. Value: <strong class="text-danger">{{ number_format($kpi['pending_gm_prs_amount'] ?? 0, 2) }} ETB</strong>
+                                @else
+                                    <span class="text-success"><i class="fa-solid fa-check-circle me-1"></i>All caught up</span>
+                                @endif
+                            </small>
                         </div>
-                        <div class="bg-primary bg-opacity-10 rounded-circle p-3">
-                            <i class="fas fa-building fa-lg text-primary"></i>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(231,74,59,0.12); width:54px; height:54px;">
+                            <i class="fa-solid fa-cart-arrow-down fa-xl text-danger"></i>
                         </div>
+                    </div>
+                    @if(($kpi['pending_gm_prs'] ?? 0) > 0)
+                        <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                            <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-0" style="font-size:0.7rem;">Action Required</span>
+                            <a href="#gm-procurement-hub" class="text-danger fw-semibold small text-decoration-none">Review Requests <i class="fa-solid fa-arrow-down ms-1"></i></a>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+
+        {{-- Card 2: Pending Expenses & Financial Authorizations --}}
+        <div class="col-xl-4 col-md-6">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #f6c23e !important; border-radius: 12px;">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="text-xs fw-bold text-warning text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">
+                                <i class="fa-solid fa-file-invoice-dollar me-1"></i>Expense Authorizations
+                            </div>
+                            <div class="h3 mb-0 fw-bold text-dark">{{ $kpi['pending_gm_expenses'] ?? 0 }}</div>
+                            <small class="text-muted">
+                                Total: <strong class="text-dark">{{ number_format($kpi['pending_gm_expenses_amount'] ?? 0, 2) }} ETB</strong>
+                            </small>
+                        </div>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(246,194,62,0.15); width:54px; height:54px;">
+                            <i class="fa-solid fa-receipt fa-xl text-warning"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Loans: <strong>{{ $kpi['pending_loans'] ?? 0 }}</strong> · Payroll: <strong>{{ $kpi['pending_payroll'] ?? 0 }}</strong></small>
+                        <a href="{{ route('expenses.index', ['tab' => 'pending_gm']) }}" class="text-warning fw-semibold small text-decoration-none">View Expenses <i class="fa-solid fa-arrow-right ms-1"></i></a>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #1cc88a !important;">
-                <div class="card-body">
+
+        {{-- Card 3: Active Projects & Total Portfolio Value --}}
+        <div class="col-xl-4 col-md-6">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #4e73df !important; border-radius: 12px;">
+                <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
-                            <div class="text-xs fw-bold text-success text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">Total Contract Value</div>
-                            <div class="h4 mb-0 fw-bold text-dark">{{ number_format($kpi['total_contract_value'], 0) }} ETB</div>
+                            <div class="text-xs fw-bold text-primary text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">
+                                <i class="fa-solid fa-building me-1"></i>Projects Portfolio
+                            </div>
+                            <div class="h3 mb-0 fw-bold text-dark">{{ $kpi['active_projects'] ?? 0 }} <span class="fs-6 fw-normal text-muted">Active</span></div>
+                            <small class="text-muted">
+                                Contract Value: <strong class="text-primary">{{ number_format($kpi['total_contract_value'] ?? 0, 0) }} ETB</strong>
+                            </small>
                         </div>
-                        <div class="bg-success bg-opacity-10 rounded-circle p-3">
-                            <i class="fas fa-file-contract fa-lg text-success"></i>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(78,115,223,0.12); width:54px; height:54px;">
+                            <i class="fa-solid fa-city fa-xl text-primary"></i>
                         </div>
+                    </div>
+                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Open Issues: <strong class="{{ ($kpi['open_issues'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">{{ $kpi['open_issues'] ?? 0 }}</strong></small>
+                        <a href="{{ route('projects.index') }}" class="text-primary fw-semibold small text-decoration-none">Projects Directory <i class="fa-solid fa-arrow-right ms-1"></i></a>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #36b9cc !important;">
-                <div class="card-body">
+
+        {{-- Card 4: Budget Utilization --}}
+        <div class="col-xl-4 col-md-6">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #36b9cc !important; border-radius: 12px;">
+                <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="text-xs fw-bold text-info text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">Budget Utilization</div>
-                            <div class="h4 mb-0 fw-bold text-dark">{{ $kpi['budget_utilization'] }}%</div>
-                            <div class="progress mt-2" style="height:4px">
-                                <div class="progress-bar bg-info" style="width:{{ min($kpi['budget_utilization'], 100) }}%"></div>
+                        <div class="flex-grow-1 me-2">
+                            <div class="text-xs fw-bold text-info text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">
+                                <i class="fa-solid fa-chart-pie me-1"></i>Budget Utilization
+                            </div>
+                            <div class="h3 mb-0 fw-bold text-dark">{{ $kpi['budget_utilization'] ?? 0 }}%</div>
+                            <div class="progress mt-2" style="height:6px; border-radius:3px;">
+                                <div class="progress-bar bg-info" style="width:{{ min($kpi['budget_utilization'] ?? 0, 100) }}%"></div>
                             </div>
                         </div>
-                        <div class="bg-info bg-opacity-10 rounded-circle p-3">
-                            <i class="fas fa-percent fa-lg text-info"></i>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(54,185,204,0.12); width:54px; height:54px;">
+                            <i class="fa-solid fa-percent fa-xl text-info"></i>
                         </div>
+                    </div>
+                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Health: <strong>{{ ($kpi['budget_utilization'] ?? 0) > 85 ? 'High Usage' : 'Healthy' }}</strong></small>
+                        <a href="{{ route('budgets.index') }}" class="text-info fw-semibold small text-decoration-none">Budget Tracker <i class="fa-solid fa-arrow-right ms-1"></i></a>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #f6c23e !important;">
-                <div class="card-body">
+
+        {{-- Card 5: Workforce & Pending Approvals --}}
+        <div class="col-xl-4 col-md-6">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #6f42c1 !important; border-radius: 12px;">
+                <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
-                            <div class="text-xs fw-bold text-warning text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">Pending Employee Approvals</div>
-                            <div class="h4 mb-0 fw-bold text-dark">{{ $kpi['pending_approvals'] }}</div>
+                            <div class="text-xs fw-bold text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px; color:#6f42c1;">
+                                <i class="fa-solid fa-users me-1"></i>Workforce & Approvals
+                            </div>
+                            <div class="h3 mb-0 fw-bold text-dark">{{ $kpi['total_employees'] ?? 0 }} <span class="fs-6 fw-normal text-muted">Active Staff</span></div>
+                            <small class="text-muted">
+                                Pending Approvals: <strong class="{{ ($kpi['pending_approvals'] ?? 0) > 0 ? 'text-warning' : 'text-success' }}">{{ $kpi['pending_approvals'] ?? 0 }} hires</strong>
+                            </small>
                         </div>
-                        <div class="bg-warning bg-opacity-10 rounded-circle p-3">
-                            <i class="fas fa-user-clock fa-lg text-warning"></i>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(111,66,193,0.12); width:54px; height:54px;">
+                            <i class="fa-solid fa-user-clock fa-xl" style="color:#6f42c1;"></i>
                         </div>
+                    </div>
+                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Pending Leaves: <strong>{{ $kpi['pending_leaves'] ?? 0 }}</strong></small>
+                        <a href="{{ route('employees.pending-approval') }}" class="fw-semibold small text-decoration-none" style="color:#6f42c1;">Approve Hires <i class="fa-solid fa-arrow-right ms-1"></i></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Card 6: Cumulative Spend (Cash + Material) --}}
+        <div class="col-xl-4 col-md-6">
+            <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #20c997 !important; border-radius: 12px;">
+                <div class="card-body p-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <div class="text-xs fw-bold text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px; color:#20c997;">
+                                <i class="fa-solid fa-coins me-1"></i>Cash vs Material Cost
+                            </div>
+                            <div class="h5 mb-0 fw-bold text-dark">
+                                {{ number_format(($kpi['total_cash_expense'] ?? 0) + ($kpi['total_material_cost'] ?? 0), 0) }} <small class="text-muted fs-6">ETB</small>
+                            </div>
+                            <small class="text-muted">
+                                Cash: <strong class="text-warning">{{ number_format($kpi['total_cash_expense'] ?? 0, 0) }}</strong> · Mat: <strong class="text-success">{{ number_format($kpi['total_material_cost'] ?? 0, 0) }}</strong>
+                            </small>
+                        </div>
+                        <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(32,201,151,0.12); width:54px; height:54px;">
+                            <i class="fa-solid fa-layer-group fa-xl" style="color:#20c997;"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Top Materials: <strong>20 tracked</strong></small>
+                        <a href="#project-expenses" class="fw-semibold small text-decoration-none" style="color:#20c997;">Cost Breakdown <i class="fa-solid fa-arrow-down ms-1"></i></a>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- KPI Row 2 -->
-    <div class="row g-3 mb-3">
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #6f42c1 !important;">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between">
+    {{-- ═══ NEW FEATURE: UNASSIGNED ROLE ESCALATIONS ALERT (OVERSIGHT) ════════════ --}}
+    @if(isset($unassignedStagePrs) && $unassignedStagePrs->isNotEmpty())
+    <div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, #fffbeb, #fef3c7); border-left: 4px solid #f59e0b !important; border-radius: 12px;">
+        <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-warning text-dark p-2 rounded-circle"><i class="fa-solid fa-triangle-exclamation"></i></span>
+                    <div>
+                        <h6 class="mb-0 fw-bold text-dark">Unassigned Stage Escalations Alert ({{ $unassignedStagePrs->count() }})</h6>
+                        <small class="text-muted">These purchase requests are routed to Global Admin / GM because no team member is assigned to the stage's role.</small>
+                    </div>
+                </div>
+                <a href="{{ route('purchase-requests.index') }}" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3">Manage Sourcing</a>
+            </div>
+            <div class="table-responsive bg-white rounded-3 border">
+                <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">PR Number</th>
+                            <th>Project</th>
+                            <th>Current Stage</th>
+                            <th>Requested By</th>
+                            <th>Date</th>
+                            <th class="text-end pe-3">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($unassignedStagePrs as $upr)
+                        <tr>
+                            <td class="ps-3 fw-bold text-primary">{{ $upr->pr_number }}</td>
+                            <td>{{ $upr->project->name ?? 'N/A' }}</td>
+                            <td>
+                                <span class="badge bg-warning text-dark rounded-pill px-2 py-1">
+                                    {{ ucfirst(str_replace('_', ' ', $upr->status)) }}
+                                </span>
+                            </td>
+                            <td>{{ $upr->requestedBy->name ?? 'System' }}</td>
+                            <td>{{ $upr->created_at->format('M d, Y') }}</td>
+                            <td class="text-end pe-3">
+                                <a href="{{ route('purchase-requests.show', $upr->id) }}" class="btn btn-sm btn-primary rounded-pill px-3">
+                                    <i class="fa-solid fa-arrow-right me-1"></i>Open PR
+                                </a>
+                            </td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    @endif
+
+    {{-- ═══ NEW FEATURE: PROCUREMENT GM DECISION HUB (CRITICAL OPERATION) ═════════ --}}
+    <div id="gm-procurement-hub" class="card shadow-sm border-0 mb-4" style="border-radius: 12px;">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <span class="rounded-circle p-2 bg-danger bg-opacity-10 text-danger">
+                    <i class="fa-solid fa-gavel"></i>
+                </span>
+                <div>
+                    <h6 class="mb-0 fw-bold text-dark">Procurement Purchase Requests Awaiting GM Decision</h6>
+                    <small class="text-muted">Review proforma evaluations, marketing variance, direct buy requests, and authorize payments.</small>
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ route('purchase-requests.index', ['status' => 'pending_gm']) }}" class="btn btn-sm btn-danger rounded-pill px-3">
+                    <i class="fa-solid fa-list-check me-1"></i>View All ({{ $pendingGmPrs->count() }})
+                </a>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            @if($pendingGmPrs->isEmpty())
+                <div class="text-center py-5">
+                    <div class="rounded-circle bg-success bg-opacity-10 text-success d-inline-flex p-3 mb-2">
+                        <i class="fa-solid fa-circle-check fa-2x"></i>
+                    </div>
+                    <h6 class="fw-bold text-dark mb-1">No Purchase Requests Awaiting GM Decision</h6>
+                    <p class="text-muted small mb-0">All submitted proformas and direct-buy requests have been triaged or approved.</p>
+                </div>
+            @else
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">PR Code</th>
+                                <th>Project</th>
+                                <th>Sourcing Channel</th>
+                                <th>Proposed Supplier / Quote</th>
+                                <th class="text-end">Estimated / Quoted Total</th>
+                                <th class="text-center">Priority</th>
+                                <th class="text-end pe-3">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($pendingGmPrs as $pr)
+                            @php
+                                $selectedProforma = $pr->proformaInvoices->firstWhere('gm_selected', true)
+                                    ?? $pr->proformaInvoices->firstWhere('is_selected', true)
+                                    ?? $pr->proformaInvoices->first();
+                                $amount = $pr->direct_buy_amount ?: ($selectedProforma ? $selectedProforma->total_amount : $pr->items->sum('estimated_total'));
+                            @endphp
+                            <tr>
+                                <td class="ps-3">
+                                    <div class="fw-bold text-dark">{{ $pr->pr_number }}</div>
+                                    <small class="text-muted">{{ $pr->created_at->format('M d, Y') }}</small>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">{{ $pr->project->name ?? 'General Store' }}</div>
+                                    <small class="badge bg-light text-dark border">{{ $pr->project->code ?? 'N/A' }}</small>
+                                </td>
+                                <td>
+                                    @if($pr->is_direct_buy)
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info rounded-pill px-2 py-1">
+                                            <i class="fa-solid fa-bolt me-1"></i>Direct Buy
+                                        </span>
+                                        @if($pr->marketingVariance)
+                                            <span class="badge bg-warning bg-opacity-25 text-dark rounded-pill px-2 py-1 ms-1">
+                                                <i class="fa-solid fa-chart-simple me-1"></i>Variance Checked
+                                            </span>
+                                        @endif
+                                    @else
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary rounded-pill px-2 py-1">
+                                            <i class="fa-solid fa-table-list me-1"></i>Proforma Quotes ({{ $pr->proformaInvoices->count() }})
+                                        </span>
+                                    @endif
+                                </td>
+                                <td>
+                                    @if($pr->is_direct_buy)
+                                        <span class="fw-semibold text-dark">{{ $pr->supplier->name ?? 'Direct Vendor' }}</span>
+                                    @elseif($selectedProforma)
+                                        <span class="fw-semibold text-dark">{{ $selectedProforma->supplier_name }}</span>
+                                        <small class="text-muted d-block">{{ $selectedProforma->supplier_phone ?? '' }}</small>
+                                    @else
+                                        <span class="text-muted fst-italic">Pending vendor selection</span>
+                                    @endif
+                                </td>
+                                <td class="text-end fw-bold text-dark">
+                                    {{ number_format((float)$amount, 2) }} <small class="text-muted fw-normal">ETB</small>
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge rounded-pill
+                                        @if($pr->priority == 'urgent') bg-danger
+                                        @elseif($pr->priority == 'high') bg-warning text-dark
+                                        @else bg-secondary @endif">
+                                        {{ ucfirst($pr->priority ?? 'Normal') }}
+                                    </span>
+                                </td>
+                                <td class="text-end pe-3">
+                                    <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-danger rounded-pill px-3 shadow-sm">
+                                        <i class="fa-solid fa-gavel me-1"></i>Make Decision
+                                    </a>
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </div>
+    </div>
+
+    {{-- ═══ EXPENSE & FINANCIAL AUTHORIZATIONS QUEUE ════════════════════════════ --}}
+    <div class="row g-3 mb-4">
+        {{-- Pending Expenses Queue --}}
+        <div class="col-xl-7">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="rounded-circle p-2 bg-warning bg-opacity-15 text-warning">
+                            <i class="fa-solid fa-file-invoice-dollar"></i>
+                        </span>
                         <div>
-                            <div class="text-xs fw-bold text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;color:#6f42c1">Active Employees</div>
-                            <div class="h4 mb-0 fw-bold text-dark">{{ $kpi['total_employees'] }}</div>
-                        </div>
-                        <div class="rounded-circle p-3" style="background:rgba(111,66,193,0.1)">
-                            <i class="fas fa-users fa-lg" style="color:#6f42c1"></i>
+                            <h6 class="mb-0 fw-bold text-dark">Expense Authorizations Awaiting GM</h6>
+                            <small class="text-muted">Cash disbursements, emergency project spend, and advances</small>
                         </div>
                     </div>
+                    <a href="{{ route('expenses.index', ['tab' => 'pending_gm']) }}" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3">
+                        View All ({{ $pendingGmExpenses->count() }})
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    @if($pendingGmExpenses->isEmpty())
+                        <div class="text-center py-5">
+                            <i class="fa-solid fa-check-circle fa-2x text-success mb-2"></i>
+                            <h6 class="fw-bold text-dark mb-1">No Pending Expenses for GM</h6>
+                            <p class="text-muted small mb-0">All expense requests have been reviewed.</p>
+                        </div>
+                    @else
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">Req #</th>
+                                        <th>Project</th>
+                                        <th>Category</th>
+                                        <th>Requester</th>
+                                        <th class="text-end">Amount (ETB)</th>
+                                        <th class="text-end pe-3">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($pendingGmExpenses as $exp)
+                                    <tr>
+                                        <td class="ps-3 fw-bold text-dark">#{{ $exp->id }}</td>
+                                        <td>{{ $exp->project->name ?? 'General' }}</td>
+                                        <td><span class="badge bg-light text-dark border">{{ ucfirst($exp->category ?? 'Expense') }}</span></td>
+                                        <td>{{ $exp->requester->name ?? 'Staff' }}</td>
+                                        <td class="text-end fw-bold text-warning">{{ number_format($exp->amount, 2) }}</td>
+                                        <td class="text-end pe-3">
+                                            <a href="{{ route('expense-requests.show', $exp->id) }}" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2">
+                                                Review
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #e74a3b !important;">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between">
+
+        {{-- Pending Employee Approvals --}}
+        <div class="col-xl-5">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="rounded-circle p-2 bg-primary bg-opacity-10 text-primary">
+                            <i class="fa-solid fa-user-clock"></i>
+                        </span>
                         <div>
-                            <div class="text-xs fw-bold text-danger text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">Pending Expenses</div>
-                            <div class="h4 mb-0 fw-bold text-dark">{{ $kpi['pending_expenses'] }}</div>
-                        </div>
-                        <div class="bg-danger bg-opacity-10 rounded-circle p-3">
-                            <i class="fas fa-receipt fa-lg text-danger"></i>
+                            <h6 class="mb-0 fw-bold text-dark">New Hires Awaiting GM Approval</h6>
+                            <small class="text-muted">Strict GM approval requirement</small>
                         </div>
                     </div>
+                    <a href="{{ route('employees.pending-approval') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                        View All ({{ $pendingEmployees->count() }})
+                    </a>
                 </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <!-- Total Cash Expense -->
-            <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #fd7e14 !important;">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="text-xs fw-bold text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;color:#fd7e14">Total Cash Expenses</div>
-                            <div class="h5 mb-0 fw-bold text-dark">{{ number_format($kpi['total_cash_expense'] ?? 0, 0) }} <small class="text-muted fs-6">ETB</small></div>
+                <div class="card-body p-0">
+                    @if($pendingEmployees->isEmpty())
+                        <div class="text-center py-5">
+                            <i class="fa-solid fa-user-check fa-2x text-success mb-2"></i>
+                            <h6 class="fw-bold text-dark mb-1">All Employees Approved</h6>
+                            <p class="text-muted small mb-0">No onboarding approvals pending.</p>
                         </div>
-                        <div class="rounded-circle p-3" style="background:rgba(253,126,20,0.1)">
-                            <i class="fas fa-money-bill-wave fa-lg" style="color:#fd7e14"></i>
+                    @else
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3">Employee</th>
+                                        <th>Department</th>
+                                        <th class="text-end pe-3">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($pendingEmployees as $emp)
+                                    <tr>
+                                        <td class="ps-3">
+                                            <div class="fw-semibold text-dark">{{ $emp->full_name }}</div>
+                                            <small class="text-muted">{{ $emp->employee_code }}</small>
+                                        </td>
+                                        <td><span class="badge bg-light text-dark border">{{ $emp->department ?? 'General' }}</span></td>
+                                        <td class="text-end pe-3">
+                                            <form action="{{ route('employees.approve', $emp) }}" method="POST" class="d-inline">
+                                                @csrf @method('PUT')
+                                                <button type="submit" class="btn btn-sm btn-success rounded-pill px-2 shadow-sm" onclick="return confirm('Approve employee {{ $emp->full_name }}?')">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                            </form>
+                                            <a href="{{ route('employees.show', $emp) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-2 ms-1">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <!-- Total Material Consumption Cost -->
-            <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #20c997 !important;">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="text-xs fw-bold text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;color:#20c997">Material Consumption Cost</div>
-                            <div class="h5 mb-0 fw-bold text-dark">{{ number_format($kpi['total_material_cost'] ?? 0, 0) }} <small class="text-muted fs-6">ETB</small></div>
-                        </div>
-                        <div class="rounded-circle p-3" style="background:rgba(32,201,151,0.1)">
-                            <i class="fas fa-cubes fa-lg" style="color:#20c997"></i>
-                        </div>
-                    </div>
+                    @endif
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Charts Row -->
+    {{-- ═══ CHARTS & ANALYTICS ROW ═══════════════════════════════════════════════ --}}
     <div class="row g-3 mb-4">
         <!-- Project Status Chart -->
         <div class="col-xl-3">
-            <div class="card shadow-sm border-0 h-100">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-chart-pie me-2 text-primary"></i>Project Status</h6>
                 </div>
@@ -183,9 +528,9 @@
 
         <!-- Monthly Expense Trend Chart -->
         <div class="col-xl-5">
-            <div class="card shadow-sm border-0 h-100">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 fw-bold"><i class="fas fa-chart-bar me-2 text-warning"></i>Monthly Expense Trend <small class="text-muted fw-normal">(Last 6 Months)</small></h6>
+                    <h6 class="mb-0 fw-bold"><i class="fas fa-chart-bar me-2 text-warning"></i>Monthly Expense &amp; Material Trend <small class="text-muted fw-normal">(Last 6 Mo.)</small></h6>
                 </div>
                 <div class="card-body">
                     <div id="gm-trend-data"
@@ -202,7 +547,7 @@
 
         <!-- Expense Category Breakdown -->
         <div class="col-xl-4">
-            <div class="card shadow-sm border-0 h-100">
+            <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
                 <div class="card-header bg-white border-bottom py-3">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-tags me-2 text-info"></i>Expense by Category</h6>
                 </div>
@@ -238,10 +583,10 @@
         </div>
     </div>
 
-    <!-- ═══ PROJECT EXPENSES TABLE ═══════════════════════════════════════════════ -->
+    {{-- ═══ PROJECT EXPENSES TRACKER (CASH + MATERIAL) ═══════════════════════════ --}}
     <div id="project-expenses" class="row g-3 mb-4">
         <div class="col-12">
-            <div class="card shadow-sm border-0">
+            <div class="card shadow-sm border-0" style="border-radius: 12px;">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-chart-pie me-2 text-danger"></i>Project Expenses Tracker
                         <span class="badge bg-danger bg-opacity-10 text-danger ms-2 fw-normal" style="font-size:0.75rem;">Cash + Material Consumption</span>
@@ -359,10 +704,10 @@
         </div>
     </div>
 
-    <!-- ═══ MATERIAL CONSUMPTION REPORT ══════════════════════════════════════════ -->
+    {{-- ═══ MATERIAL CONSUMPTION REPORT ══════════════════════════════════════════ --}}
     <div class="row g-3 mb-4">
         <div class="col-12">
-            <div class="card shadow-sm border-0">
+            <div class="card shadow-sm border-0" style="border-radius: 12px;">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-boxes me-2 text-success"></i>Material Consumption Report
                         <span class="badge bg-success bg-opacity-10 text-success ms-2 fw-normal" style="font-size:0.75rem;">Priced by Unit Cost</span>
@@ -446,113 +791,6 @@
                                     <td></td>
                                 </tr>
                             </tfoot>
-                        </table>
-                    </div>
-                    @endif
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- ═══ BOTTOM ROW ═══════════════════════════════════════════════════════════ -->
-    <div class="row g-3">
-        <!-- Employees Awaiting Approval -->
-        <div class="col-xl-7">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 fw-bold"><i class="fas fa-user-clock me-2 text-warning"></i>Employees Awaiting GM Approval</h6>
-                    <a href="{{ route('employees.pending-approval') }}" class="btn btn-sm btn-outline-primary fw-semibold px-3 rounded-pill">View All</a>
-                </div>
-                <div class="card-body p-0">
-                    @if($pendingEmployees->isEmpty())
-                        <div class="text-center text-muted py-5">
-                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
-                            <p>All employees have been approved!</p>
-                        </div>
-                    @else
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Employee</th>
-                                    <th>Department</th>
-                                    <th>Joined</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($pendingEmployees as $emp)
-                                <tr>
-                                    <td>
-                                        <div class="fw-semibold">{{ $emp->full_name }}</div>
-                                        <small class="text-muted">{{ $emp->employee_code }}</small>
-                                    </td>
-                                    <td><span class="badge bg-light text-dark">{{ $emp->department ?? 'N/A' }}</span></td>
-                                    <td>{{ optional($emp->created_at)->format('d M Y') }}</td>
-                                    <td>
-                                        <form action="{{ route('employees.approve', $emp) }}" method="POST" class="d-inline">
-                                            @csrf @method('PUT')
-                                            <button type="submit" class="btn btn-sm btn-success">
-                                                <i class="fas fa-check me-1"></i>Approve
-                                            </button>
-                                        </form>
-                                        <a href="{{ route('employees.show', $emp) }}" class="btn btn-sm btn-outline-secondary ms-1">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                    @endif
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent Projects -->
-        <div class="col-xl-5">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 fw-bold"><i class="fas fa-building me-2 text-success"></i>Recent Projects</h6>
-                    <a href="{{ route('projects.index') }}" class="btn btn-sm btn-outline-success">View All</a>
-                </div>
-                <div class="card-body p-0">
-                    @if($recentProjects->isEmpty())
-                        <div class="text-center text-muted py-4"><p>No projects found.</p></div>
-                    @else
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Project</th>
-                                    <th>Status</th>
-                                    <th>Contract Value</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach($recentProjects as $proj)
-                                <tr>
-                                    <td class="fw-semibold">{{ $proj->name }}</td>
-                                    <td>
-                                        <span class="badge rounded-pill
-                                            @if($proj->status == 'active') bg-success
-                                            @elseif($proj->status == 'completed') bg-primary
-                                            @elseif($proj->status == 'cancelled') bg-danger
-                                            @else bg-secondary @endif">
-                                            {{ ucfirst($proj->status) }}
-                                        </span>
-                                    </td>
-                                    <td>{{ number_format($proj->contract_value ?? 0, 0) }} ETB</td>
-                                    <td>
-                                        <a href="{{ route('projects.show', $proj) }}" class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-eye me-1"></i>View
-                                        </a>
-                                    </td>
-                                </tr>
-                                @endforeach
-                            </tbody>
                         </table>
                     </div>
                     @endif
