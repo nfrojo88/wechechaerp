@@ -17,15 +17,41 @@
         </a>
     </div>
 
-    <form action="{{ route('employee-letters.store') }}" method="POST" enctype="multipart/form-data">
+    {{-- Validation and Session Alerts --}}
+    @if($errors->any())
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-4">
+            <div class="d-flex align-items-center mb-2">
+                <i class="fa-solid fa-triangle-exclamation me-2 fa-lg"></i>
+                <strong class="fs-6">Please correct the following errors before saving:</strong>
+            </div>
+            <ul class="mb-0 ps-3">
+                @foreach($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-4">
+            <i class="fa-solid fa-circle-exclamation me-2"></i>{{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+
+    <form id="letterForm" action="{{ route('employee-letters.store') }}" method="POST" enctype="multipart/form-data">
         @csrf
 
         <div class="row g-4">
             {{-- Left column: Letter Details --}}
             <div class="col-lg-8">
                 <div class="card border-0 shadow-sm rounded-3 mb-4">
-                    <div class="card-header bg-white border-bottom py-3">
+                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
                         <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-file-lines text-primary me-2"></i>Letter Details</h6>
+                        <span id="selected_emp_badge" class="badge bg-light text-muted border px-2 py-1">
+                            <i class="fa-solid fa-user me-1"></i><span id="selected_emp_name_label">No employee selected</span>
+                        </span>
                     </div>
                     <div class="card-body p-4">
 
@@ -90,7 +116,6 @@
                             </div>
                         </div>
 
-
                         {{-- Subject / Title --}}
                         <div class="mb-3">
                             <label class="form-label fw-bold">Letter Subject / Title <span class="text-danger">*</span></label>
@@ -121,7 +146,7 @@
 
             {{-- Right column: Employee & Administrative metadata --}}
             <div class="col-lg-4">
-                <div class="card border-0 shadow-sm rounded-3 mb-4">
+                <div id="recipientCard" class="card border-0 shadow-sm rounded-3 mb-4">
                     <div class="card-header bg-white border-bottom py-3">
                         <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-user-check text-primary me-2"></i>Recipient &amp; Reference</h6>
                     </div>
@@ -130,14 +155,17 @@
                         {{-- Select Employee --}}
                         <div class="mb-3">
                             <label class="form-label fw-bold">Select Employee <span class="text-danger">*</span></label>
-                            <select name="employee_id" id="employee_id" class="form-select select2" required>
-                                <option value="">-- Choose Employee --</option>
+                            <select name="employee_id" id="employee_id" class="form-select @error('employee_id') is-invalid @enderror" required>
+                                <option value="">-- Choose Employee (Required) --</option>
                                 @foreach($employees as $emp)
                                 <option value="{{ $emp->id }}" data-name="{{ $emp->full_name }}" data-code="{{ $emp->employee_code }}" data-role="{{ $emp->role_title ?? $emp->department }}" {{ old('employee_id', $selectedEmployeeId) == $emp->id ? 'selected' : '' }}>
                                     {{ $emp->full_name }} ({{ $emp->employee_code }}) - {{ $emp->role_title ?? $emp->department }}
                                 </option>
                                 @endforeach
                             </select>
+                            <div id="emp_error_feedback" class="text-danger small mt-1 fw-bold {{ $errors->has('employee_id') ? '' : 'd-none' }}">
+                                <i class="fa-solid fa-circle-exclamation me-1"></i>Please select an employee before saving the letter.
+                            </div>
                         </div>
 
                         {{-- Reference Number --}}
@@ -178,7 +206,12 @@
 
                         <hr>
 
-                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">
+                        <div id="emp_missing_warning" class="alert alert-warning py-2 px-3 small mb-3 {{ old('employee_id', $selectedEmployeeId) ? 'd-none' : '' }}">
+                            <i class="fa-solid fa-triangle-exclamation me-1 text-danger"></i>
+                            <strong>Employee required:</strong> Choose an employee from the dropdown above to save this letter.
+                        </div>
+
+                        <button type="submit" id="submitBtn" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">
                             <i class="fa-solid fa-paper-plane me-1"></i> Issue &amp; Record Letter
                         </button>
                     </div>
@@ -226,7 +259,6 @@ const templates = {
         action: "Employee guarantee registered in employee history. HR monitor guarantor commitment."
     },
     power_of_attorney: {
-
         title: "Power of Attorney & Official Representation Letter (የውክልና ማስረጃ / መስጫ ደብዳቤ)",
         content: `ለሚመለከተው ሁሉ / To Whom It May Concern:\n\nጉዳዩ፡- የውክልና ስልጣን መስጠትን ይመለከታል (Official Power of Attorney & Corporate Representation)\n\nድርጅታችን ወጨጫ ኮንስትራክሽን (Wechecha Construction PLC) ሰራተኛችን የሆኑትን አቶ/ወ/ሮ/ወ/ሪት [EMPLOYEE_NAME] (መለያ ቁጥር: [EMPLOYEE_CODE]፤ የሥራ መደብ: [EMPLOYEE_ROLE]) ድርጅታችንን በመወከል ከዚህ በታች የተዘረዘሩትን ተግባራት በህጋዊ መንገድ እንዲያከናውኑ ሙሉ ውክልና የሰጠናቸው መሆኑን እናረጋግጣለን።\n\nየውክልናው ስልጣን ወሰንና ተግባራት / Scope of Authority & Representation:\n1. ድርጅታችንን በመወከል በማናቸውም የመንግስት እና የግል መስሪያ ቤቶች፣ ፍርድ ቤቶች፣ ባንኮች፣ ጉምሩክ፣ ማዘጋጃ ቤት፣ የኤሌክትሪክ እና የውሃ አገልግሎት መስሪያ ቤቶች፣ እንዲሁም ሌሎች አጋር ድርጅቶች ቀርበው ጉዳዮችን ለመከታተልና ለማስፈጸም።\n2. ከድርጅቱ የስራ እንቅስቃሴ ጋር የተያያዙ ሰነዶችን፣ ደብዳቤዎችን፣ ፈቃዶችን እና የፍተሻ ማረጋገጫዎችን ለማስገባት፣ ለመፈረም እንዲሁም ለመረከብ።\n3. ለግንባታ ፕሮጀክቶች የሚያስፈልጉ ግብዓቶችን፣ እቃዎችን እና ማሽነሪዎችን ከማናቸውም አቅራቢዎች እና መጋዘኖች ተረክቦ የርክክብ ሰነድ ለመፈረም።\n4. በድርጅቱ የበላይ አመራር የሚሰጡ ማናቸውንም ህጋዊ እና አስተዳደራዊ የስራ ውክልናዎችን በታማኝነት ለማከናወን።\n\nይህ የውክልና ስልጣን ደብዳቤ በይፋ በጽሁፍ እስካልተሻረ ወይም የተሰጣቸው ስራ እስኪጠናቀቅ ድረስ በህግ ፊት የጸና እና ሙሉ ተፈጻሚነት ያለው ነው።\n\nከአክብሮት ሰላምታ ጋር / Authorized Signatory:\n\n___________________________________\nዋና ስራ አስኪያጅ / General Manager\nወጨጫ ኮንስትራክሽን (Wechecha Construction PLC)`,
         action: "Official Power of Attorney registered in corporate registry and permanent employee archive."
@@ -240,7 +272,7 @@ const templates = {
 
 function formatTemplateText(templateText) {
     const empSelect = document.getElementById('employee_id');
-    const selectedOption = empSelect ? empSelect.options[empSelect.selectedIndex] : null;
+    const selectedOption = empSelect && empSelect.selectedIndex > 0 ? empSelect.options[empSelect.selectedIndex] : null;
     const empName = selectedOption ? (selectedOption.getAttribute('data-name') || '[EMPLOYEE_NAME]') : '[EMPLOYEE_NAME]';
     const empCode = selectedOption ? (selectedOption.getAttribute('data-code') || 'EMP-ID') : 'EMP-ID';
     const empRole = selectedOption ? (selectedOption.getAttribute('data-role') || 'Authorized Staff') : 'Authorized Staff';
@@ -249,6 +281,36 @@ function formatTemplateText(templateText) {
         .replace(/\[EMPLOYEE_NAME\]/g, empName)
         .replace(/\[EMPLOYEE_CODE\]/g, empCode)
         .replace(/\[EMPLOYEE_ROLE\]/g, empRole);
+}
+
+function updateEmployeeStatusUI() {
+    const empSelect = document.getElementById('employee_id');
+    const badgeLabel = document.getElementById('selected_emp_name_label');
+    const badge = document.getElementById('selected_emp_badge');
+    const warning = document.getElementById('emp_missing_warning');
+    const errorFeedback = document.getElementById('emp_error_feedback');
+
+    if (empSelect && empSelect.value) {
+        const opt = empSelect.options[empSelect.selectedIndex];
+        const name = opt ? (opt.getAttribute('data-name') || opt.text) : 'Selected';
+        if (badgeLabel) badgeLabel.textContent = name;
+        if (badge) {
+            badge.className = 'badge bg-success text-white px-2 py-1 shadow-xs';
+            badge.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> ' + name;
+        }
+        if (warning) warning.classList.add('d-none');
+        if (errorFeedback) errorFeedback.classList.add('d-none');
+        empSelect.classList.remove('is-invalid');
+        empSelect.style.border = '';
+        empSelect.style.backgroundColor = '';
+    } else {
+        if (badgeLabel) badgeLabel.textContent = 'No employee selected';
+        if (badge) {
+            badge.className = 'badge bg-light text-muted border px-2 py-1';
+            badge.innerHTML = '<i class="fa-solid fa-user me-1"></i> No employee selected';
+        }
+        if (warning) warning.classList.remove('d-none');
+    }
 }
 
 function loadTemplate(type) {
@@ -268,6 +330,12 @@ function resetCurrentTemplate() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    const empSelect = document.getElementById('employee_id');
+    const letterForm = document.getElementById('letterForm');
+    const submitBtn = document.getElementById('submitBtn');
+
+    updateEmployeeStatusUI();
+
     if (!document.getElementById('letter_content').value) {
         const checkedType = document.querySelector('input[name="letter_type"]:checked');
         if (checkedType) {
@@ -275,12 +343,56 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    const empSelect = document.getElementById('employee_id');
     if (empSelect) {
         empSelect.addEventListener('change', function() {
+            updateEmployeeStatusUI();
             const checkedType = document.querySelector('input[name="letter_type"]:checked');
             if (checkedType && templates[checkedType.value]) {
                 document.getElementById('letter_content').value = formatTemplateText(templates[checkedType.value].content);
+            }
+        });
+    }
+
+    // Form submission validation & feedback
+    if (letterForm) {
+        letterForm.addEventListener('submit', function(e) {
+            if (!empSelect || !empSelect.value) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                // Highlight employee select field
+                empSelect.classList.add('is-invalid');
+                empSelect.style.border = '2px solid #ef4444';
+                empSelect.style.backgroundColor = '#fef2f2';
+
+                const errorFeedback = document.getElementById('emp_error_feedback');
+                if (errorFeedback) errorFeedback.classList.remove('d-none');
+
+                const warning = document.getElementById('emp_missing_warning');
+                if (warning) {
+                    warning.classList.remove('d-none');
+                    warning.classList.remove('alert-warning');
+                    warning.classList.add('alert-danger');
+                }
+
+                // Shake recipient card
+                const recipientCard = document.getElementById('recipientCard');
+                if (recipientCard) {
+                    recipientCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    recipientCard.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.4)';
+                    setTimeout(() => {
+                        recipientCard.style.boxShadow = '';
+                    }, 2500);
+                }
+
+                empSelect.focus();
+                return false;
+            }
+
+            // Valid submission - show spinner
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Recording Letter...';
             }
         });
     }

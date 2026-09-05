@@ -111,59 +111,81 @@ class EmployeeLetterController extends Controller
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'employee_id'            => 'required|exists:employees,id',
-            'letter_type'            => 'required|string|max:50',
-            'title'                  => 'required|string|max:255',
-            'content'                => 'required|string',
-            'issued_date'            => 'required|date',
-            'effective_date'         => 'nullable|date',
-            'reference_number'       => 'nullable|string|max:100|unique:employee_letters,reference_number',
-            'action_required'        => 'nullable|string',
-            'acknowledgement_status' => 'nullable|string|in:pending,acknowledged,refused_to_sign',
-            'attachment'             => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
-        ]);
+        try {
+            $validated = $request->validate([
+                'employee_id'            => 'required|exists:employees,id',
+                'letter_type'            => 'required|string|max:50',
+                'title'                  => 'required|string|max:255',
+                'content'                => 'required|string',
+                'issued_date'            => 'required|date',
+                'effective_date'         => 'nullable|date',
+                'reference_number'       => 'nullable|string|max:100|unique:employee_letters,reference_number',
+                'action_required'        => 'nullable|string',
+                'acknowledgement_status' => 'nullable|string|in:pending,acknowledged,refused_to_sign',
+                'attachment'             => 'nullable|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
+            ], [
+                'employee_id.required'   => 'Please select an employee to receive this official letter.',
+                'employee_id.exists'     => 'The selected employee record does not exist.',
+                'letter_type.required'   => 'Please choose a letter type.',
+                'title.required'         => 'The letter subject/title is required.',
+                'content.required'       => 'Letter content cannot be empty.',
+                'issued_date.required'   => 'Date of issuance is required.',
+            ]);
 
-        if (empty($validated['reference_number'])) {
-            $prefix = match ($validated['letter_type']) {
-                'thanks_letter', 'appreciation' => 'LTR-APPR',
-                'guarantee_letter'              => 'LTR-GUR',
-                'power_of_attorney'             => 'LTR-POA',
-                'application_letter'            => 'LTR-APPL',
-                'first_warning'                 => 'LTR-WARN1',
-                'second_warning'                => 'LTR-WARN2',
-                'final_warning'                 => 'LTR-FWN',
-                'show_cause'                    => 'LTR-SCQ',
-                'suspension'                    => 'LTR-SUSP',
-                'termination'                   => 'LTR-TERM',
-                default                         => 'LTR-GEN',
+            if (empty($validated['reference_number'])) {
+                $prefix = match ($validated['letter_type']) {
+                    'thanks_letter', 'appreciation' => 'LTR-APPR',
+                    'guarantee_letter'              => 'LTR-GUR',
+                    'power_of_attorney'             => 'LTR-POA',
+                    'application_letter'            => 'LTR-APPL',
+                    'first_warning'                 => 'LTR-WARN1',
+                    'second_warning'                => 'LTR-WARN2',
+                    'final_warning'                 => 'LTR-FWN',
+                    'show_cause'                    => 'LTR-SCQ',
+                    'suspension'                    => 'LTR-SUSP',
+                    'termination'                   => 'LTR-TERM',
+                    default                         => 'LTR-GEN',
+                };
+
+                $seq = EmployeeLetter::whereDate('created_at', today())->count() + 1;
+                do {
+                    $candidate = $prefix . '-' . date('Ymd') . '-' . str_pad($seq, 4, '0', STR_PAD_LEFT);
+                    $seq++;
+                } while (EmployeeLetter::where('reference_number', $candidate)->exists());
+
+                $validated['reference_number'] = $candidate;
+            }
+
+            // Determine severity automatically
+            $validated['severity'] = match ($validated['letter_type']) {
+                'thanks_letter', 'appreciation', 'promotion', 'power_of_attorney' => 'positive',
+                'first_warning', 'show_cause'                                    => 'warning',
+                'second_warning', 'final_warning', 'suspension', 'termination'   => 'critical',
+                default                                                          => 'info',
             };
-            $validated['reference_number'] = $prefix . '-' . date('Ymd') . '-' . str_pad(EmployeeLetter::count() + 1, 4, '0', STR_PAD_LEFT);
+
+            if ($request->hasFile('attachment')) {
+                $path = $request->file('attachment')->store('employee_letters', 'public');
+                $validated['attachment_path'] = $path;
+            }
+
+            $validated['issued_by'] = Auth::id();
+            $validated['acknowledgement_status'] = $validated['acknowledgement_status'] ?? 'acknowledged';
+            if ($validated['acknowledgement_status'] === 'acknowledged') {
+                $validated['acknowledged_at'] = now();
+            }
+
+            $letter = EmployeeLetter::create($validated);
+
+            return redirect()->route('employee-letters.show', $letter)->with('success', 'Official employee letter has been issued and recorded successfully.');
+        } catch (\Illuminate\Validation\ValidationException $ve) {
+            throw $ve;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Employee letter save failed: ' . $e->getMessage(), [
+                'exception' => $e,
+            ]);
+            return back()->withInput()->with('error', 'Failed to save letter: ' . $e->getMessage());
         }
-
-
-        // Determine severity automatically
-        $validated['severity'] = match ($validated['letter_type']) {
-            'thanks_letter', 'appreciation', 'promotion', 'power_of_attorney' => 'positive',
-            'first_warning', 'show_cause'                                    => 'warning',
-            'second_warning', 'final_warning', 'suspension', 'termination'   => 'critical',
-            default                                                          => 'info',
-        };
-
-        if ($request->hasFile('attachment')) {
-            $path = $request->file('attachment')->store('employee_letters', 'public');
-            $validated['attachment_path'] = $path;
-        }
-
-        $validated['issued_by'] = Auth::id();
-        $validated['acknowledgement_status'] = $validated['acknowledgement_status'] ?? 'acknowledged';
-        if ($validated['acknowledgement_status'] === 'acknowledged') {
-            $validated['acknowledged_at'] = now();
-        }
-
-        $letter = EmployeeLetter::create($validated);
-
-        return redirect()->route('employee-letters.show', $letter)->with('success', 'Official employee letter has been issued and recorded successfully.');
     }
 
     /**

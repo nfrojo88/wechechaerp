@@ -658,6 +658,23 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                     </div>
                 @endif
 
+                @if(isset($errors) && $errors->any())
+                    <div class="flash-container">
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <div>
+                                <strong class="d-block mb-1">Please correct the following before saving:</strong>
+                                <ul class="mb-0 ps-3">
+                                    @foreach($errors->all() as $error)
+                                        <li>{{ $error }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    </div>
+                @endif
+
                 @if(session('info'))
                     <div class="flash-container">
                         <div class="alert alert-info alert-dismissible fade show" role="alert">
