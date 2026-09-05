@@ -327,8 +327,10 @@
     </a>
     <div class="collapse {{ $letterActive ? 'show' : '' }}" id="adminGroupLetters">
         <ul class="sidebar-sub-nav">
-            <li><a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.index') || request()->routeIs('letters.show') ? 'active' : '' }}"><i class="fa-solid fa-envelope-open-text text-primary"></i><span>All Letters</span></a></li>
-            <li><a href="{{ route('letters.create') }}" class="sidebar-nav-link {{ request()->routeIs('letters.create') ? 'active' : '' }}"><i class="fa-solid fa-pen-to-square text-success"></i><span>New Letter</span></a></li>
+            <li><a href="{{ route('letters.index', ['tab' => 'all']) }}" class="sidebar-nav-link {{ request()->routeIs('letters.index') && !request('type') ? 'active' : '' }}"><i class="fa-solid fa-clock-rotate-left text-primary"></i><span>All Letter History</span></a></li>
+            <li><a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'incoming']) }}" class="sidebar-nav-link {{ request()->routeIs('letters.index') && request('type') === 'incoming' ? 'active' : '' }}"><i class="fa-solid fa-arrow-down-left text-info"></i><span>Incoming Letters (ገቢ)</span></a></li>
+            <li><a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'outgoing']) }}" class="sidebar-nav-link {{ request()->routeIs('letters.index') && request('type') === 'outgoing' ? 'active' : '' }}"><i class="fa-solid fa-arrow-up-right text-warning"></i><span>Outgoing Letters (ወጪ)</span></a></li>
+            <li><a href="{{ route('letters.create') }}" class="sidebar-nav-link {{ request()->routeIs('letters.create') ? 'active' : '' }}"><i class="fa-solid fa-pen-to-square text-success"></i><span>Register New Letter</span></a></li>
         </ul>
     </div>
 </li>
@@ -858,25 +860,61 @@
         @endif
 
         @if($isSecretary)
+        <hr class="sidebar-section-divider">
+        <li style="padding: 0.35rem 0.9rem 0.1rem;">
+            <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+                Letter Registry &amp; History
+            </small>
+        </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.index') || request()->routeIs('letters.show') ? 'active' : '' }}">
-                <i class="fa-solid fa-envelope-open-text text-primary"></i>
-                <span>Letters &amp; Correspondence</span>
+            <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="sidebar-nav-link {{ request()->routeIs('letters.index') && !request('type') ? 'active' : '' }}">
+                <i class="fa-solid fa-clock-rotate-left text-primary"></i>
+                <span>All Letter History</span>
                 @php
-                    $secLetterCount = 0;
-                    try {
-                        $secLetterCount = \App\Models\Letter::whereIn('status', ['pending', 'forwarded', 'in_progress'])->count();
-                    } catch (\Exception $e) {}
+                    $secTotalLettersCount = 0;
+                    try { $secTotalLettersCount = \App\Models\Letter::count(); } catch (\Throwable $e) {}
                 @endphp
-                @if($secLetterCount > 0)
-                    <span class="badge bg-danger rounded-pill ms-auto">{{ $secLetterCount }}</span>
+                @if($secTotalLettersCount > 0)
+                    <span class="badge bg-primary rounded-pill ms-auto">{{ $secTotalLettersCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'incoming']) }}" class="sidebar-nav-link {{ request()->routeIs('letters.index') && request('type') === 'incoming' ? 'active' : '' }}">
+                <i class="fa-solid fa-arrow-down-left text-info"></i>
+                <span>Incoming Letters (ገቢ)</span>
+                @php
+                    $secIncomingLettersCount = 0;
+                    try { $secIncomingLettersCount = \App\Models\Letter::where('type', 'incoming')->count(); } catch (\Throwable $e) {}
+                @endphp
+                @if($secIncomingLettersCount > 0)
+                    <span class="badge bg-info text-dark rounded-pill ms-auto">{{ $secIncomingLettersCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.index', ['tab' => 'all', 'type' => 'outgoing']) }}" class="sidebar-nav-link {{ request()->routeIs('letters.index') && request('type') === 'outgoing' ? 'active' : '' }}">
+                <i class="fa-solid fa-arrow-up-right text-warning"></i>
+                <span>Outgoing Letters (ወጪ)</span>
+                @php
+                    $secOutgoingLettersCount = 0;
+                    try { $secOutgoingLettersCount = \App\Models\Letter::where('type', 'outgoing')->count(); } catch (\Throwable $e) {}
+                @endphp
+                @if($secOutgoingLettersCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $secOutgoingLettersCount }}</span>
                 @endif
             </a>
         </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('letters.create') }}" class="sidebar-nav-link {{ request()->routeIs('letters.create') ? 'active' : '' }}">
                 <i class="fa-solid fa-pen-to-square text-success"></i>
-                <span>New Letter</span>
+                <span>Register New Letter</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('employee-letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('employee-letters.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-file-signature text-secondary"></i>
+                <span>Employee Letters History</span>
             </a>
         </li>
         <li class="sidebar-nav-item">

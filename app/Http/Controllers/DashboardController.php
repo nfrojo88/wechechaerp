@@ -492,19 +492,29 @@ class DashboardController extends Controller
         $user = auth()->user();
 
         // Letters / Correspondence
-        $totalLetters        = $this->safe(fn() => \App\Models\Letter::count(), 0);
-        $pendingLetters      = $this->safe(fn() => \App\Models\Letter::whereIn('status', ['pending', 'forwarded', 'in_progress'])->count(), 0);
-        $closedLetters       = $this->safe(fn() => \App\Models\Letter::where('status', 'closed')->count(), 0);
-        $myLettersCount      = $this->safe(fn() => \App\Models\Letter::where('created_by', $user->id)->count(), 0);
-        $myLetters           = $this->safe(fn() => \App\Models\Letter::where('created_by', $user->id)->latest()->take(8)->get(), collect());
-        $recentLetters       = $this->safe(fn() => \App\Models\Letter::with(['creator', 'recipients'])->latest()->take(10)->get(), collect());
+        $totalLetters          = $this->safe(fn() => \App\Models\Letter::count(), 0);
+        $incomingLettersCount  = $this->safe(fn() => \App\Models\Letter::where('type', \App\Models\Letter::TYPE_INCOMING)->count(), 0);
+        $outgoingLettersCount  = $this->safe(fn() => \App\Models\Letter::where('type', \App\Models\Letter::TYPE_OUTGOING)->count(), 0);
+        $pendingLetters        = $this->safe(fn() => \App\Models\Letter::whereIn('status', ['pending', 'forwarded', 'in_progress', 'redirected'])->count(), 0);
+        $closedLetters         = $this->safe(fn() => \App\Models\Letter::where('status', 'closed')->count(), 0);
+        $myLettersCount        = $this->safe(fn() => \App\Models\Letter::where('created_by', $user->id)->count(), 0);
+        $myLetters             = $this->safe(fn() => \App\Models\Letter::where('created_by', $user->id)->latest('date')->take(8)->get(), collect());
+
+        // Full Letter History collections
+        $recentLetters         = $this->safe(fn() => \App\Models\Letter::with(['creator', 'latestRecipient.toUser', 'attachments'])->latest('date')->latest('id')->take(20)->get(), collect());
+        $incomingLetters       = $this->safe(fn() => \App\Models\Letter::with(['creator', 'latestRecipient.toUser', 'attachments'])->where('type', \App\Models\Letter::TYPE_INCOMING)->latest('date')->latest('id')->take(15)->get(), collect());
+        $outgoingLetters       = $this->safe(fn() => \App\Models\Letter::with(['creator', 'latestRecipient.toUser', 'attachments'])->where('type', \App\Models\Letter::TYPE_OUTGOING)->latest('date')->latest('id')->take(15)->get(), collect());
+
+        // Employee Official Letters
+        $employeeLettersCount  = $this->safe(fn() => \App\Models\EmployeeLetter::count(), 0);
+        $recentEmployeeLetters = $this->safe(fn() => \App\Models\EmployeeLetter::with('employee')->latest('issued_date')->take(10)->get(), collect());
 
         // My expense requests
-        $myExpenseRequests   = $this->safe(fn() => \App\Models\ExpenseRequest::where('requested_by', $user->id)->latest()->take(6)->get(), collect());
-        $myExpenseCount      = $this->safe(fn() => \App\Models\ExpenseRequest::where('requested_by', $user->id)->count(), 0);
+        $myExpenseRequests     = $this->safe(fn() => \App\Models\ExpenseRequest::where('requested_by', $user->id)->latest()->take(6)->get(), collect());
+        $myExpenseCount        = $this->safe(fn() => \App\Models\ExpenseRequest::where('requested_by', $user->id)->count(), 0);
 
         // Office Material Requisitions (PR)
-        $myOfficeRequests    = $this->safe(fn() => \App\Models\PurchaseRequest::with(['items.product', 'hrCoordinatorApprovedBy'])
+        $myOfficeRequests      = $this->safe(fn() => \App\Models\PurchaseRequest::with(['items.product', 'hrCoordinatorApprovedBy'])
             ->where(function($q) use ($user) {
                 $q->where('is_office_request', true)
                   ->orWhere('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
@@ -528,9 +538,9 @@ class DashboardController extends Controller
             ->count(), 0);
 
         return view('dashboard.secretary', compact(
-            'totalLetters', 'pendingLetters', 'closedLetters', 'myLettersCount',
-            'myLetters', 'recentLetters', 'myExpenseRequests', 'myExpenseCount',
-            'myOfficeRequests', 'myOfficeRequestsCount', 'pendingOfficeRequestsCount'
+            'totalLetters', 'incomingLettersCount', 'outgoingLettersCount', 'pendingLetters', 'closedLetters', 'myLettersCount',
+            'myLetters', 'recentLetters', 'incomingLetters', 'outgoingLetters', 'employeeLettersCount', 'recentEmployeeLetters',
+            'myExpenseRequests', 'myExpenseCount', 'myOfficeRequests', 'myOfficeRequestsCount', 'pendingOfficeRequestsCount'
         ));
     }
 
