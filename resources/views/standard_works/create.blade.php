@@ -571,11 +571,14 @@
 @endsection
 
 @push('scripts')
+<script type="application/json" id="standard-products-data">{!! json_encode($productsJson ?? []) !!}</script>
+<script type="application/json" id="standard-equipment-data">{!! json_encode($equipmentJson ?? []) !!}</script>
+<script type="application/json" id="standard-roles-data">{!! json_encode($manpowerRoles ?? []) !!}</script>
 <script>
     /* ─── Product, Equipment & Manpower Roles data from PHP ─── */
-    const PRODUCTS      = {!! json_encode($productsJson ?? []) !!};
-    const EQUIPMENT     = {!! json_encode($equipmentJson ?? []) !!};
-    let MANPOWER_ROLES  = {!! json_encode($manpowerRoles ?? []) !!};
+    const PRODUCTS      = JSON.parse(document.getElementById('standard-products-data').textContent || '[]');
+    const EQUIPMENT     = JSON.parse(document.getElementById('standard-equipment-data').textContent || '[]');
+    let MANPOWER_ROLES  = JSON.parse(document.getElementById('standard-roles-data').textContent || '[]');
 
     /* ─── Row counters ─── */
     const counts = { materials: 1, manpower: 1, scientific_manpower: 1, equipment: 1 };

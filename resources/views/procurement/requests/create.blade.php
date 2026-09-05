@@ -217,8 +217,9 @@
 </div>
 
 <!-- Products JSON for Dynamic Selector -->
+<script type="application/json" id="products-data">@json($products ?? [])</script>
 <script>
-    const availableProducts = @json($products ?? []);
+    const availableProducts = JSON.parse(document.getElementById('products-data').textContent || '[]');
     let materialRowIndex = 0;
 
     function addMaterialRow(selectedProductId = '', qty = '', unitText = '', notesText = '') {
@@ -342,19 +343,19 @@
         }
 
         // Check if pre-filled single material was passed
-        @if(!empty($materialName))
-            const prefilledMatName = "{{ $materialName }}".toLowerCase();
+        const prefilledMatName = "{{ $materialName ?? '' }}".toLowerCase();
+        if (prefilledMatName) {
             const matchedProd = availableProducts.find(p => p.name.toLowerCase().includes(prefilledMatName));
             if (matchedProd) {
                 addMaterialRow(matchedProd.id, "{{ $quantity ?? 1 }}", matchedProd.unit, "Forecast Demand Request");
             } else {
-                addMaterialRow('', "{{ $quantity ?? 1 }}", "{{ $unit ?? 'pcs' }}", "{{ $materialName }}");
+                addMaterialRow('', "{{ $quantity ?? 1 }}", "{{ $unit ?? 'pcs' }}", "{{ $materialName ?? '' }}");
             }
-        @else
+        } else {
             // Add initial empty material rows
             addMaterialRow();
             addMaterialRow();
-        @endif
+        }
     });
 </script>
 @endsection

@@ -307,7 +307,7 @@ if (!function_exists('evalTakeoffExpr')) {
                                                             @csrf @method('PATCH')
                                                             <button class="action-btn header" title="Toggle Header">H</button>
                                                         </form>
-                                                        <button type="button" onclick="showInlineForm({{ $section->id }})" class="action-btn add" title="Add Item">
+                                                        <button type="button" onclick="showInlineForm('{{ $section->id }}')" class="action-btn add" title="Add Item">
                                                             <i class="fa-solid fa-plus"></i>
                                                         </button>
                                                         <form method="POST" action="{{ route('takeoff.items.destroy', [$takeoff, $item]) }}" class="d-inline" onsubmit="return confirm('Delete this item?')">
@@ -351,14 +351,14 @@ if (!function_exists('evalTakeoffExpr')) {
                                              @if($canEdit)
                                                  <td>
                                                      <div class="actions-cell">
-                                                         <button type="button" onclick="showEditRow({{ $item->id }})" class="action-btn edit" title="Edit Item">
+                                                         <button type="button" onclick="showEditRow('{{ $item->id }}')" class="action-btn edit" title="Edit Item">
                                                              <i class="fa-solid fa-pen-to-square"></i>
                                                          </button>
                                                          <form method="POST" action="{{ route('takeoff.items.toggle-header', [$takeoff, $item]) }}" class="d-inline">
                                                              @csrf @method('PATCH')
                                                              <button class="action-btn header" title="Make Header">H</button>
                                                          </form>
-                                                         <button type="button" onclick="showInlineForm({{ $section->id }})" class="action-btn add" title="Add Item">
+                                                         <button type="button" onclick="showInlineForm('{{ $section->id }}')" class="action-btn add" title="Add Item">
                                                              <i class="fa-solid fa-plus"></i>
                                                          </button>
                                                          <form method="POST" action="{{ route('takeoff.items.destroy', [$takeoff, $item]) }}" class="d-inline" onsubmit="return confirm('Delete this item?')">
@@ -399,7 +399,7 @@ if (!function_exists('evalTakeoffExpr')) {
                                                  <td></td>
                                                  <td style="white-space:nowrap;">
                                                      <button type="submit" class="btn btn-sm btn-primary py-0 px-2 fw-bold me-1" style="font-size:11px;">Update</button>
-                                                     <button type="button" onclick="hideEditRow({{ $item->id }})" class="btn btn-sm btn-outline-secondary border-0 py-0 px-1">✕</button>
+                                                     <button type="button" onclick="hideEditRow('{{ $item->id }}')" class="btn btn-sm btn-outline-secondary border-0 py-0 px-1">✕</button>
                                                  </td>
                                                  </form>
                                              </tr>
@@ -424,7 +424,7 @@ if (!function_exists('evalTakeoffExpr')) {
                                 @if($canEdit)
                                     <tr class="add-row-trigger" id="trigger-{{ $section->id }}">
                                         <td colspan="11">
-                                            <button type="button" class="btn-add-inline" onclick="showInlineForm({{ $section->id }})">
+                                            <button type="button" class="btn-add-inline" onclick="showInlineForm('{{ $section->id }}')">
                                                 <i class="fa-solid fa-plus me-1"></i> Add Item to "{{ $section->name }}"
                                             </button>
                                         </td>

@@ -245,7 +245,7 @@
     $taskStart = $section->task_start_date ?? null;
     $taskEnd   = $section->task_end_date ?? null;
 @endphp
-<div class="section-card">
+<div class="section-card" data-section-idx="{{ $sIdx }}" data-section-id="{{ $section->id }}" data-section-name="{{ $taskName }}">
     <div class="section-card-head">
         <div class="d-flex align-items-center gap-2 flex-wrap">
             <i class="fa-solid fa-layer-group text-primary"></i>
@@ -274,7 +274,7 @@
                 <input type="number" step="0.001" min="0" class="form-control form-control-sm sec-qty fw-bold text-primary"
                        id="sec-qty-{{ $sIdx }}" style="width:110px;"
                        value="{{ $section->total_quantity }}"
-                       oninput="updateSectionCalculations({{ $sIdx }})">
+                       oninput="updateSectionCalculations('{{ $sIdx }}')">
                 <span class="badge bg-secondary bg-opacity-10 text-secondary" id="sec-unit-tag-{{ $sIdx }}">{{ $section->primary_unit ?: 'unit' }}</span>
             </div>
 
@@ -284,7 +284,7 @@
                 <input type="number" step="1" min="1" class="form-control form-control-sm sec-dur fw-bold text-dark"
                        id="sec-dur-{{ $sIdx }}" style="width:85px;"
                        value="{{ $section->schedule_duration_days ?: 1 }}"
-                       oninput="updateSectionCalculations({{ $sIdx }})">
+                       oninput="updateSectionCalculations('{{ $sIdx }}')">
                 <span class="text-muted small fw-semibold">Days</span>
             </div>
 
@@ -344,7 +344,7 @@
                 Select Standard Work for <strong>{{ $section->primary_unit ?: 'any unit' }}</strong>:
             </span>
             <select class="form-select form-select-sm" id="tmpl-sel-{{ $sIdx }}"
-                    onchange="expandTemplate({{ $sIdx }}, this.value)">
+                    onchange="expandTemplate('{{ $sIdx }}', this.value)">
                 <option value="">— Pick a template —</option>
             </select>
             <button type="button" class="btn btn-sm btn-outline-secondary"
@@ -356,7 +356,7 @@
             <i class="fa-solid fa-flask text-primary"></i>
             <span class="small fw-semibold text-muted">Select registered material:</span>
             <select class="form-select form-select-sm" id="mat-sel-{{ $sIdx }}"
-                    onchange="onPickChange({{ $sIdx }},'material')">
+                    onchange="onPickChange('{{ $sIdx }}','material')">
                 <option value="">— Pick material —</option>
                 @foreach($registeredProducts as $prod)
                 <option value="{{ $prod['id'] }}"
@@ -369,7 +369,7 @@
             </select>
             <span class="unit-tag" id="mat-utag-{{ $sIdx }}">unit: —</span>
             <button type="button" class="btn btn-sm btn-primary" id="mat-addbtn-{{ $sIdx }}"
-                    style="display:none" onclick="addPickedRow({{ $sIdx }},'material')">
+                    style="display:none" onclick="addPickedRow('{{ $sIdx }}','material')">
                 <i class="fa-solid fa-plus me-1"></i>Add Row
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary"
@@ -381,7 +381,7 @@
             <i class="fa-solid fa-users text-success"></i>
             <span class="small fw-semibold text-muted">Select registered role:</span>
             <select class="form-select form-select-sm" id="mp-sel-{{ $sIdx }}"
-                    onchange="onPickChange({{ $sIdx }},'manpower')">
+                    onchange="onPickChange('{{ $sIdx }}','manpower')">
                 <option value="">— Pick role —</option>
                 @foreach($registeredRoles as $role)
                 <option value="{{ $role['id'] }}"
@@ -394,7 +394,7 @@
             </select>
             <span class="unit-tag" id="mp-utag-{{ $sIdx }}">unit: man-day</span>
             <button type="button" class="btn btn-sm btn-success" id="mp-addbtn-{{ $sIdx }}"
-                    style="display:none" onclick="addPickedRow({{ $sIdx }},'manpower')">
+                    style="display:none" onclick="addPickedRow('{{ $sIdx }}','manpower')">
                 <i class="fa-solid fa-plus me-1"></i>Add Row
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary"
@@ -406,7 +406,7 @@
             <i class="fa-solid fa-gears text-warning"></i>
             <span class="small fw-semibold text-muted">Select registered equipment:</span>
             <select class="form-select form-select-sm" id="eq-sel-{{ $sIdx }}"
-                    onchange="onPickChange({{ $sIdx }},'equipment')">
+                    onchange="onPickChange('{{ $sIdx }}','equipment')">
                 <option value="">— Pick equipment —</option>
                 @foreach($registeredEquipment as $eq)
                 <option value="{{ $eq['id'] }}"
@@ -419,7 +419,7 @@
             </select>
             <span class="unit-tag" id="eq-utag-{{ $sIdx }}">unit: hour</span>
             <button type="button" class="btn btn-sm btn-warning" id="eq-addbtn-{{ $sIdx }}"
-                    style="display:none" onclick="addPickedRow({{ $sIdx }},'equipment')">
+                    style="display:none" onclick="addPickedRow('{{ $sIdx }}','equipment')">
                 <i class="fa-solid fa-plus me-1"></i>Add Row
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary"
@@ -429,24 +429,24 @@
         {{-- Button Row --}}
         <div class="d-flex gap-2 flex-wrap align-items-center">
             <button type="button" class="load-tmpl-btn"
-                    onclick="openTmplPanel({{ $sIdx }}, '{{ $section->primary_unit }}')">
+                    onclick="openTmplPanel('{{ $sIdx }}', '{{ $section->primary_unit }}')">
                 <i class="fa-solid fa-magic-wand-sparkles"></i> Load from Standard Work Template
             </button>
             <span class="text-muted" style="font-size:11px;">or add manually:</span>
             <button type="button" class="btn btn-sm btn-outline-primary add-btn"
-                    onclick="openPickPanel({{ $sIdx }},'material')">
+                    onclick="openPickPanel('{{ $sIdx }}','material')">
                 <i class="fa-solid fa-flask me-1"></i>+ Material
             </button>
             <button type="button" class="btn btn-sm btn-outline-success add-btn"
-                    onclick="openPickPanel({{ $sIdx }},'manpower')">
+                    onclick="openPickPanel('{{ $sIdx }}','manpower')">
                 <i class="fa-solid fa-users me-1"></i>+ Manpower
             </button>
             <button type="button" class="btn btn-sm btn-outline-warning add-btn"
-                    onclick="openPickPanel({{ $sIdx }},'equipment')">
+                    onclick="openPickPanel('{{ $sIdx }}','equipment')">
                 <i class="fa-solid fa-gears me-1"></i>+ Equipment
             </button>
             <button type="button" class="btn btn-sm btn-outline-secondary add-btn ms-auto"
-                    onclick="addManualFreeRow({{ $sIdx }})">
+                    onclick="addManualFreeRow('{{ $sIdx }}')">
                 <i class="fa-solid fa-plus me-1"></i>+ Custom Manual Row
             </button>
         </div>
@@ -480,12 +480,16 @@
 @endsection
 
 @push('scripts')
+<script type="application/json" id="data-standard-works">@json($standardWorksJson)</script>
+<script type="application/json" id="data-registered-products">@json($registeredProducts)</script>
+<script type="application/json" id="data-registered-equipment">@json($registeredEquipment)</script>
+<script type="application/json" id="data-registered-roles">@json($registeredRoles)</script>
 <script>
 // ── Server data ──
-const SW      = @json($standardWorksJson);
-const MATLIST = @json($registeredProducts);
-const EQLIST  = @json($registeredEquipment);
-const MPLIST  = @json($registeredRoles);
+const SW      = JSON.parse(document.getElementById('data-standard-works').textContent || '[]');
+const MATLIST = JSON.parse(document.getElementById('data-registered-products').textContent || '[]');
+const EQLIST  = JSON.parse(document.getElementById('data-registered-equipment').textContent || '[]');
+const MPLIST  = JSON.parse(document.getElementById('data-registered-roles').textContent || '[]');
 
 // ── Type config ──
 const TYPE_CFG = {
@@ -922,9 +926,10 @@ document.addEventListener('change', e => {
 
 // Init calculations on DOM load
 document.addEventListener('DOMContentLoaded', () => {
-    @foreach($takeoff->sections as $sIdx => $section)
-        updateSectionCalculations({{ $sIdx }});
-    @endforeach
+    document.querySelectorAll('.sec-qty').forEach(el => {
+        const sIdx = el.id.replace('sec-qty-', '');
+        updateSectionCalculations(sIdx);
+    });
 });
 
 // ── SUBMIT ──
@@ -960,17 +965,19 @@ function submitConversion() {
     body.innerHTML = '';
     let hasAny = false;
 
-    @foreach($takeoff->sections as $sIdx => $section)
-    (function() {
-        const si = {{ $sIdx }};
+    document.querySelectorAll('.section-card').forEach(card => {
+        const si = card.dataset.sectionIdx;
+        const secId = card.dataset.sectionId || '';
+        const secName = card.dataset.sectionName || '';
         const tbody = document.getElementById(`tbody-${si}`);
+        if (!tbody) return;
         const workedQty    = document.getElementById(`sec-qty-${si}`)?.value || '0';
         const scheduleDays = document.getElementById(`sec-dur-${si}`)?.value || '1';
         const taskStart    = document.getElementById(`sec-task-start-${si}`)?.value || '';
         const taskEnd      = document.getElementById(`sec-task-end-${si}`)?.value || '';
 
-        addH(body, `sections[${si}][section_id]`,       '{{ $section->id }}');
-        addH(body, `sections[${si}][section_name]`,     '{{ addslashes($taskName ?? $section->name) }}');
+        addH(body, `sections[${si}][section_id]`,       secId);
+        addH(body, `sections[${si}][section_name]`,     secName);
         addH(body, `sections[${si}][worked_quantity]`,  workedQty);
         addH(body, `sections[${si}][schedule_days]`,    scheduleDays);
         addH(body, `sections[${si}][task_start_date]`,  taskStart);
@@ -996,8 +1003,7 @@ function submitConversion() {
             addH(body, `sections[${si}][resources][${ri}][total_cost]`,        row.querySelector('.r-cost')?.value  || '0');
             ri++;
         });
-    })();
-    @endforeach
+    });
 
     if (!hasAny) {
         alert('Please add at least one resource row with a name before creating the plan.');

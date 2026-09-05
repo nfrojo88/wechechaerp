@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Log;
 
 class RegisterController extends Controller
 {
-    protected $smsService;
+    protected SmsEthiopiaService $smsService;
 
     public function __construct(SmsEthiopiaService $smsService)
     {
@@ -25,7 +25,7 @@ class RegisterController extends Controller
     /**
      * Normalize phone number to local (09...) and international (+2519...) formats
      */
-    private function normalizePhone($phone)
+    private function normalizePhone(string $phone)
     {
         $phone = preg_replace('/[^\d+]/', '', $phone);
         
@@ -118,7 +118,7 @@ class RegisterController extends Controller
                 ->with('success', 'OTP sent to your phone number. Please check your messages.');
         } else {
             // SMS FAILED
-            \Log::warning("SMS Failed - Showing OTP for testing", [
+            Log::warning("SMS Failed - Showing OTP for testing", [
                 'phone' => $intlPhone,
                 'otp' => $otp,
                 'error' => $result['message']
@@ -316,7 +316,7 @@ class RegisterController extends Controller
         if ($result['success']) {
             return back()->with('success', 'A new OTP has been sent to your phone number.');
         } else {
-            \Log::warning("SMS Failed - Showing OTP for testing", [
+            Log::warning("SMS Failed - Showing OTP for testing", [
                 'phone' => $phone,
                 'otp' => $otp,
                 'error' => $result['message']

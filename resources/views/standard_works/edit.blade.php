@@ -578,15 +578,18 @@
 @endsection
 
 @push('scripts')
+<script type="application/json" id="standard-products-data">{!! json_encode($productsJson ?? []) !!}</script>
+<script type="application/json" id="standard-equipment-data">{!! json_encode($equipmentJson ?? []) !!}</script>
+<script type="application/json" id="standard-roles-data">{!! json_encode($manpowerRoles ?? []) !!}</script>
 <script>
-    const PRODUCTS      = {!! json_encode($productsJson ?? []) !!};
-    const EQUIPMENT     = {!! json_encode($equipmentJson ?? []) !!};
-    let MANPOWER_ROLES  = {!! json_encode($manpowerRoles ?? []) !!};
+    const PRODUCTS      = JSON.parse(document.getElementById('standard-products-data').textContent || '[]');
+    const EQUIPMENT     = JSON.parse(document.getElementById('standard-equipment-data').textContent || '[]');
+    let MANPOWER_ROLES  = JSON.parse(document.getElementById('standard-roles-data').textContent || '[]');
 
     const counts = {
-        materials: {{ count($mats) ?: 1 }},
-        manpower:  {{ count($mps) ?: 1 }},
-        equipment: {{ count($eqs) ?: 1 }}
+        materials: parseInt('{{ count($mats) ?: 1 }}', 10),
+        manpower:  parseInt('{{ count($mps) ?: 1 }}', 10),
+        equipment: parseInt('{{ count($eqs) ?: 1 }}', 10)
     };
 
     function fillUnit(selectEl, section) {

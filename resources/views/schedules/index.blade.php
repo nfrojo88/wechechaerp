@@ -68,7 +68,7 @@
                             <div class="progress" style="height: 6px;">
                                 <div class="progress-bar {{ $schedule->progress == 100 ? 'bg-success' : 'bg-primary' }}" 
                                      role="progressbar" 
-                                     style="width: {{ $schedule->progress }}%;" 
+                                     @style(["width: {$schedule->progress}%"]) 
                                      aria-valuenow="{{ $schedule->progress }}" 
                                      aria-valuemin="0" 
                                      aria-valuemax="100"></div>

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -73,7 +74,7 @@ class Product extends Model
     /**
      * Scope a query to only include consumable products.
      */
-    public function scopeConsumable($query)
+    public function scopeConsumable(Builder $query): Builder
     {
         return $query->where('category', 'Consumable');
     }
@@ -81,7 +82,7 @@ class Product extends Model
     /**
      * Scope a query to only include fixed assets.
      */
-    public function scopeFixedAsset($query)
+    public function scopeFixedAsset(Builder $query): Builder
     {
         return $query->where('category', 'Fixed Asset');
     }
@@ -89,7 +90,7 @@ class Product extends Model
     /**
      * Scope a query to only include available products.
      */
-    public function scopeAvailable($query)
+    public function scopeAvailable(Builder $query): Builder
     {
         return $query->where('asset_status', 'Available');
     }
@@ -97,7 +98,7 @@ class Product extends Model
     /**
      * Scope a query to only include products below reorder level.
      */
-    public function scopeBelowReorderLevel($query)
+    public function scopeBelowReorderLevel(Builder $query): Builder
     {
         return $query->whereRaw('max_stock <= reorder_level');
     }
@@ -179,7 +180,7 @@ class Product extends Model
     /**
      * Search products by name, SKU, or category.
      */
-    public function scopeSearch($query, $term)
+    public function scopeSearch(Builder $query, ?string $term = null): Builder
     {
         return $query->where(function ($q) use ($term) {
             $q->where('name', 'like', "%{$term}%")
@@ -192,7 +193,7 @@ class Product extends Model
     /**
      * Get products by location.
      */
-    public function scopeAtLocation($query, $location)
+    public function scopeAtLocation(Builder $query, ?string $location = null): Builder
     {
         return $query->where('current_location', $location);
     }

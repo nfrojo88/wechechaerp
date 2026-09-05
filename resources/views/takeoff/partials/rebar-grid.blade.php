@@ -106,7 +106,7 @@
                                     @csrf @method('PATCH')
                                     <button class="action-btn header" title="Toggle Header">H</button>
                                 </form>
-                                <button type="button" onclick="showInlineForm({{ $section->id }})" class="action-btn add" title="Add"><i class="fa-solid fa-plus"></i></button>
+                                <button type="button" onclick="showInlineForm('{{ $section->id }}')" class="action-btn add" title="Add"><i class="fa-solid fa-plus"></i></button>
                                 <form method="POST" action="{{ route('takeoff.items.destroy', [$takeoff, $item]) }}" class="d-inline" onsubmit="return confirm('Delete this item?')">
                                     @csrf @method('DELETE')
                                     <button class="action-btn del" title="Delete"><i class="fa-solid fa-xmark"></i></button>
@@ -145,14 +145,14 @@
                         @if($canEdit)
                         <td>
                             <div class="actions-cell">
-                                <button type="button" onclick="showEditRow({{ $item->id }})" class="action-btn edit" title="Edit">
+                                <button type="button" onclick="showEditRow('{{ $item->id }}')" class="action-btn edit" title="Edit">
                                     <i class="fa-solid fa-pen-to-square"></i>
                                 </button>
                                 <form method="POST" action="{{ route('takeoff.items.toggle-header', [$takeoff, $item]) }}" class="d-inline">
                                     @csrf @method('PATCH')
                                     <button class="action-btn header" title="Make Header">H</button>
                                 </form>
-                                <button type="button" onclick="showInlineForm({{ $section->id }})" class="action-btn add" title="Add"><i class="fa-solid fa-plus"></i></button>
+                                <button type="button" onclick="showInlineForm('{{ $section->id }}')" class="action-btn add" title="Add"><i class="fa-solid fa-plus"></i></button>
                                 <form method="POST" action="{{ route('takeoff.items.destroy', [$takeoff, $item]) }}" class="d-inline" onsubmit="return confirm('Delete this item?')">
                                     @csrf @method('DELETE')
                                     <button class="action-btn del" title="Delete"><i class="fa-solid fa-xmark"></i></button>
@@ -211,7 +211,7 @@
                                     <i class="fa-solid fa-check me-1"></i>Update
                                 </button>
                                 <button type="button"
-                                        onclick="hideEditRow({{ $item->id }})"
+                                        onclick="hideEditRow('{{ $item->id }}')"
                                         class="btn btn-sm btn-outline-secondary border-0 py-0 px-1">✕</button>
                             </td>
                         </form>
@@ -257,7 +257,7 @@
             @if($canEdit)
             <tr class="add-row-trigger" id="trigger-{{ $section->id }}">
                 <td colspan="{{ 7 + count($diameters) }}">
-                    <button type="button" class="btn-add-inline" onclick="showInlineForm({{ $section->id }})"
+                    <button type="button" class="btn-add-inline" onclick="showInlineForm('{{ $section->id }}')"
                             style="border-color:#fdba74; color:#ea580c;">
                         <i class="fa-solid fa-plus me-1"></i> Add Rebar Item
                     </button>
@@ -297,7 +297,7 @@
                 <td colspan="{{ count($diameters) }}"></td>
                 <td style="text-align:center; padding:5px; white-space:nowrap;">
                     <button type="submit" class="btn btn-sm btn-danger py-0 px-2 fw-bold me-1" style="font-size:11px;">Save</button>
-                    <button type="button" onclick="hideInlineForm({{ $section->id }})"
+                    <button type="button" onclick="hideInlineForm('{{ $section->id }}')"
                             class="btn btn-sm btn-outline-secondary border-0 py-0 px-1">✕</button>
                 </td>
                 </form>

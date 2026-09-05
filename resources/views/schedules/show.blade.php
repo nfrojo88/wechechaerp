@@ -518,6 +518,7 @@
 @endphp
 
 @push('scripts')
+<script type="application/json" id="gantt-tasks-data">{!! $ganttTasksJson !!}</script>
 <script>
 /* ── View toggle ─────────────────────────────────────────────── */
 function switchView(v) {
@@ -530,7 +531,7 @@ function switchView(v) {
 /* ── Gantt chart builder ─────────────────────────────────────── */
 (function() {
     // Task data from Blade (pre-encoded in PHP block to avoid Blade parse issues)
-    const tasks     = {!! $ganttTasksJson !!};
+    const tasks     = JSON.parse(document.getElementById('gantt-tasks-data').textContent || '[]');
     if (!tasks.length) return;
 
     // Determine date range from schedule

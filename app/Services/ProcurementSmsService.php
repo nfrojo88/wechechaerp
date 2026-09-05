@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ProcurementSmsLog;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Procurement SMS Service
@@ -61,7 +62,7 @@ class ProcurementSmsService
 
         // Always log to DB for traceability
         try {
-            \DB::table('procurement_sms_logs')->insert([
+            DB::table('procurement_sms_logs')->insert([
                 'purchase_request_id' => $purchaseRequestId,
                 'recipient_phone'     => $phone,
                 'recipient_role'      => $recipientRole,

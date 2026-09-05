@@ -946,6 +946,7 @@ class DashboardController extends Controller
     // ─── Finance / Finance Head ─────────────────────────────────────────────────
     public function finance()
     {
+        /** @var \App\Models\User|null $user */
         $user = auth()->user();
         $isFinanceHead = $user && $user->hasAnyRole(['Finance head', 'finance_head', 'admin', 'global_admin']);
 

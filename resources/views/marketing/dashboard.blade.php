@@ -246,11 +246,13 @@
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="application/json" id="chart-months-data">{!! json_encode($months ?? []) !!}</script>
+<script type="application/json" id="chart-datasets-data">{!! json_encode($chartDatasets ?? []) !!}</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const ctx = document.getElementById('priceTrendChart').getContext('2d');
-    const months = {!! json_encode($months ?? []) !!};
-    const datasetsRaw = {!! json_encode($chartDatasets ?? []) !!};
+    const months = JSON.parse(document.getElementById('chart-months-data').textContent || '[]');
+    const datasetsRaw = JSON.parse(document.getElementById('chart-datasets-data').textContent || '[]');
 
     const colors = ['#2563eb', '#dc2626', '#16a34a', '#d97706'];
     const datasets = datasetsRaw.map((ds, idx) => ({

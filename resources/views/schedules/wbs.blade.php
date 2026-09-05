@@ -675,7 +675,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function updateBaselineCount(selectEl) {
-    const totalCount = {{ $allTasks->count() }};
+    const totalCount = parseInt('{{ $allTasks->count() }}', 10) || 0;
     const countEl = document.getElementById('baseline-task-count');
     if (!countEl) return;
 
