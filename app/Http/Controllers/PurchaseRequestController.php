@@ -30,30 +30,7 @@ class PurchaseRequestController extends Controller
     // ─── Index / List ────────────────────────────────────────────────────────
     public function index(Request $request)
     {
-        $query = PurchaseRequest::with(['project', 'requestedBy'])
-            ->latest();
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-        if ($request->filled('project_id')) {
-            $query->where('project_id', $request->project_id);
-        }
-        if ($request->filled('source')) {
-            $query->whereHas('materialRequest', fn($q) => $q->where('source', $request->source));
-        }
-        if ($request->filled('search')) {
-            $query->where('pr_no', 'like', '%' . $request->search . '%');
-        }
-
-        $prs      = $query->paginate(20)->withQueryString();
-        $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
-        if ($projects->isEmpty()) {
-            $projects = Project::orderBy('name')->get();
-        }
-        $statuses = PurchaseRequest::statusLabels();
-
-        return view('procurement.purchase-requests.index', compact('prs', 'projects', 'statuses'));
+        return redirect()->route('procurement.my-queue', $request->query());
     }
 
     // ─── Create / Store ──────────────────────────────────────────────────────
@@ -132,7 +109,7 @@ class PurchaseRequestController extends Controller
             }
         });
 
-        return redirect()->route('purchase-requests.index')->with('success', 'Purchase Request created.');
+        return redirect()->route('procurement.my-queue')->with('success', 'Purchase Request created.');
     }
 
     // ─── Show ────────────────────────────────────────────────────────────────

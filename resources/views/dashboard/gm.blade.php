@@ -14,7 +14,7 @@
             </h1>
         </div>
         <div class="d-flex gap-2 flex-wrap align-items-center">
-            <a href="{{ route('purchase-requests.index', ['status' => 'pending_gm']) }}" class="btn btn-outline-danger btn-sm rounded-pill px-3 shadow-sm position-relative">
+            <a href="{{ route('procurement.my-queue', ['status' => 'pending_gm']) }}" class="btn btn-outline-danger btn-sm rounded-pill px-3 shadow-sm position-relative">
                 <i class="fa-solid fa-cart-arrow-down me-1"></i>PR Decisions
                 @if(($kpi['pending_gm_prs'] ?? 0) > 0)
                     <span class="badge bg-danger rounded-pill ms-1">{{ $kpi['pending_gm_prs'] }}</span>
@@ -220,7 +220,7 @@
                         <small class="text-muted">These purchase requests are routed to Global Admin / GM because no team member is assigned to the stage's role.</small>
                     </div>
                 </div>
-                <a href="{{ route('purchase-requests.index') }}" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3">Manage Sourcing</a>
+                <a href="{{ route('procurement.my-queue') }}" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-3">Manage Sourcing</a>
             </div>
             <div class="table-responsive bg-white rounded-3 border">
                 <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
@@ -273,7 +273,7 @@
                 </div>
             </div>
             <div class="d-flex gap-2">
-                <a href="{{ route('purchase-requests.index', ['status' => 'pending_gm']) }}" class="btn btn-sm btn-danger rounded-pill px-3">
+                <a href="{{ route('procurement.my-queue', ['status' => 'pending_gm']) }}" class="btn btn-sm btn-danger rounded-pill px-3">
                     <i class="fa-solid fa-list-check me-1"></i>View All ({{ $pendingGmPrs->count() }})
                 </a>
             </div>

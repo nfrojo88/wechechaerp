@@ -157,8 +157,7 @@
     <div class="collapse {{ $procActive ? 'show' : '' }}" id="adminGroupProcurement">
         <ul class="sidebar-sub-nav">
             <li><a href="{{ route('dashboard.purchase') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.purchase') ? 'active' : '' }}"><i class="fa-solid fa-chart-line text-info"></i><span>Purchase Dashboard</span></a></li>
-            <li><a href="{{ route('purchase-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-file-invoice text-warning"></i><span>Purchase Requests</span></a></li>
-            <li><a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.my-queue') ? 'active' : '' }}"><i class="fa-solid fa-tasks text-primary"></i><span>My Procurement Queue</span></a></li>
+            <li><a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-tasks text-primary"></i><span>Procurement — My Queue</span></a></li>
             <li><a href="{{ route('material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-cart-flatbed text-danger"></i><span>Material Requests</span></a></li>
             <li><a href="{{ route('delivery-receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('delivery-receipts.*') ? 'active' : '' }}"><i class="fa-solid fa-receipt text-success"></i><span>Delivery Receipts</span></a></li>
         </ul>
@@ -482,7 +481,7 @@
 </li>
 
 <li class="sidebar-nav-item">
-    <a href="{{ route('purchase-requests.index', ['status' => 'pending_gm']) }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.*') && request('status') === 'pending_gm' ? 'active' : '' }}">
+    <a href="{{ route('procurement.my-queue', ['status' => 'pending_gm']) }}" class="sidebar-nav-link {{ (request()->routeIs('purchase-requests.*') || request()->routeIs('procurement.*')) && request('status') === 'pending_gm' ? 'active' : '' }}">
         <i class="fa-solid fa-cart-arrow-down text-danger"></i>
         <span>PR GM Decisions</span>
         @if($gmPendingPrCount > 0)
@@ -600,15 +599,9 @@
     </small>
 </li>
 <li class="sidebar-nav-item">
-    <a href="{{ route('purchase-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.*') && request('status') !== 'pending_gm' ? 'active' : '' }}">
-        <i class="fa-solid fa-list-check text-primary"></i>
-        <span>All Purchase Requests</span>
-    </a>
-</li>
-<li class="sidebar-nav-item">
-    <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') ? 'active' : '' }}">
+    <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ (request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*')) && request('status') !== 'pending_gm' ? 'active' : '' }}">
         <i class="fa-solid fa-arrows-split-up-and-left text-warning"></i>
-        <span>Procurement Queue</span>
+        <span>Procurement — My Queue</span>
     </a>
 </li>
 <li class="sidebar-nav-item">
@@ -839,15 +832,9 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') ? 'active' : '' }}">
+            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-boxes-packing text-primary"></i>
                 <span>Procurement Status (Read-Only)</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('purchase-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-file-invoice text-info"></i>
-                <span>Purchase Requests (Read-Only)</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -1315,9 +1302,9 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.my-queue') ? 'active' : '' }}">
+            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-tasks text-warning"></i>
-                <span>Procurement My Queue</span>
+                <span>Procurement — My Queue</span>
                 @php
                     $smQueueCount = 0;
                     try {
@@ -1541,19 +1528,11 @@
         </li>
         @endcanany
         <li class="sidebar-nav-item">
-            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.my-queue') ? 'active' : '' }}">
+            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-tasks text-warning"></i>
-                <span>Procurement My Queue</span>
+                <span>Procurement — My Queue</span>
             </a>
         </li>
-        @canany(['purchases.requests.create', 'purchases.*'])
-        <li class="sidebar-nav-item">
-            <a href="{{ route('purchase-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-file-invoice"></i>
-                <span>Purchase Requests</span>
-            </a>
-        </li>
-        @endcanany
         @canany(['purchases.view', 'purchases.*'])
         <li class="sidebar-nav-item">
             <a href="{{ route('purchase-orders.index') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-orders.*') ? 'active' : '' }}">
