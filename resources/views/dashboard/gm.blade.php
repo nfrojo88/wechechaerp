@@ -38,6 +38,9 @@
             <a href="{{ route('gm.hr-reports') }}" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm">
                 <i class="fa-solid fa-file-waveform me-1"></i>HR Reports
             </a>
+            <a href="#vat-withholding-report" class="btn btn-outline-danger btn-sm rounded-pill px-3 shadow-sm">
+                <i class="fa-solid fa-receipt me-1"></i>VAT &amp; WHT Report
+            </a>
         </div>
     </div>
 
@@ -494,6 +497,9 @@
             </div>
         </div>
     </div>
+
+    {{-- ═══ VAT & WITHHOLDING TAX COMPLIANCE REPORT ═══════════════════════════════ --}}
+    @include('dashboard.partials.tax_compliance_report')
 
     {{-- ═══ CHARTS & ANALYTICS ROW ═══════════════════════════════════════════════ --}}
     <div class="row g-3 mb-4">

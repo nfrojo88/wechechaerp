@@ -92,6 +92,128 @@ class DashboardController extends Controller
         return $prices;
     }
 
+    /**
+     * Get VAT & Withholding Tax compliance summary and monthly report.
+     */
+    public function getTaxComplianceReportData(): array
+    {
+        return $this->safe(function () {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                return [
+                    'total_records'            => 0,
+                    'total_gross_base'         => 0.0,
+                    'total_vat_amount'         => 0.0,
+                    'total_withholding_amount' => 0.0,
+                    'total_net_disbursed'      => 0.0,
+                    'slips_attached_count'     => 0,
+                    'monthly_report'           => [],
+                ];
+            }
+
+            $query = \App\Models\ExpenseRequest::with(['user', 'employee', 'bankAccount', 'project'])
+                ->where(function ($q) {
+                    $q->where('has_withholding', true)
+                      ->orWhere('withholding_amount', '>', 0)
+                      ->orWhere('vat_amount', '>', 0)
+                      ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b'])
+                      ->orWhere(function ($sq) {
+                          $sq->whereNotNull('withholding_receipt')->where('withholding_receipt', '!=', '');
+                      });
+                });
+
+            $items = $query->latest()->get();
+
+            $totalRecords = $items->count();
+            $totalGrossBase = 0.0;
+            $totalVatAmount = 0.0;
+            $totalWithholdingAmount = 0.0;
+            $totalNetDisbursed = 0.0;
+            $slipsAttachedCount = 0;
+
+            $monthlyMap = [];
+
+            foreach ($items as $item) {
+                $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
+                $vatType = $item->vat_type ?? 'none';
+                $vatRate = (float)($item->vat_rate > 0 ? $item->vat_rate : 15.00);
+
+                $vat = 0.0;
+                if ((float)$item->vat_amount > 0) {
+                    $vat = (float)$item->vat_amount;
+                } elseif (in_array($vatType, ['inclusive', 'vat_b'])) {
+                    $base = round($gross / (1 + ($vatRate / 100)), 2);
+                    $vat = round($gross - $base, 2);
+                } elseif ($vatType === 'exclusive') {
+                    $vat = round($gross * ($vatRate / 100), 2);
+                }
+
+                $wht = (float)$item->calculated_withholding_amount;
+                $net = (float)$item->effective_payable_amount;
+                $hasReceipt = !empty($item->withholding_receipt);
+
+                $totalGrossBase += $gross;
+                $totalVatAmount += $vat;
+                $totalWithholdingAmount += $wht;
+                $totalNetDisbursed += $net;
+                if ($hasReceipt) {
+                    $slipsAttachedCount++;
+                }
+
+                $date = $item->paid_at ? \Illuminate\Support\Carbon::parse($item->paid_at) : ($item->created_at ? \Illuminate\Support\Carbon::parse($item->created_at) : now());
+                $monthKey = $date->format('Y-m');
+                $monthLabel = $date->format('F Y');
+                $monthStart = $date->copy()->startOfMonth()->format('Y-m-d');
+                $monthEnd   = $date->copy()->endOfMonth()->format('Y-m-d');
+
+                if (!isset($monthlyMap[$monthKey])) {
+                    $monthlyMap[$monthKey] = [
+                        'month_key'     => $monthKey,
+                        'month_label'   => $monthLabel,
+                        'from_date'     => $monthStart,
+                        'to_date'       => $monthEnd,
+                        'count'         => 0,
+                        'gross_base'    => 0.0,
+                        'vat_amount'    => 0.0,
+                        'wht_amount'    => 0.0,
+                        'net_disbursed' => 0.0,
+                        'slips_count'   => 0,
+                    ];
+                }
+
+                $monthlyMap[$monthKey]['count']++;
+                $monthlyMap[$monthKey]['gross_base'] += $gross;
+                $monthlyMap[$monthKey]['vat_amount'] += $vat;
+                $monthlyMap[$monthKey]['wht_amount'] += $wht;
+                $monthlyMap[$monthKey]['net_disbursed'] += $net;
+                if ($hasReceipt) {
+                    $monthlyMap[$monthKey]['slips_count']++;
+                }
+            }
+
+            // Sort months descending (newest month first)
+            krsort($monthlyMap);
+            $monthlyReport = array_values($monthlyMap);
+
+            return [
+                'total_records'            => $totalRecords,
+                'total_gross_base'         => $totalGrossBase,
+                'total_vat_amount'         => $totalVatAmount,
+                'total_withholding_amount' => $totalWithholdingAmount,
+                'total_net_disbursed'      => $totalNetDisbursed,
+                'slips_attached_count'     => $slipsAttachedCount,
+                'monthly_report'           => $monthlyReport,
+            ];
+        }, [
+            'total_records'            => 0,
+            'total_gross_base'         => 0.0,
+            'total_vat_amount'         => 0.0,
+            'total_withholding_amount' => 0.0,
+            'total_net_disbursed'      => 0.0,
+            'slips_attached_count'     => 0,
+            'monthly_report'           => [],
+        ]);
+    }
+
     // ─── Admin ──────────────────────────────────────────────────────────────────
     public function admin()
     {
@@ -166,7 +288,9 @@ class DashboardController extends Controller
 
         $recentTickets = $this->safe(fn() => \App\Models\SupportTicket::with('user')->latest()->take(5)->get(), collect());
 
-        return view('dashboard.admin', compact('kpi', 'usersByRole', 'projectBudgets', 'activityLogs', 'unassignedUsers', 'ticketStats', 'recentTickets'));
+        $taxData = $this->getTaxComplianceReportData();
+
+        return view('dashboard.admin', compact('kpi', 'usersByRole', 'projectBudgets', 'activityLogs', 'unassignedUsers', 'ticketStats', 'recentTickets', 'taxData'));
     }
 
     // ─── GM ─────────────────────────────────────────────────────────────────────
@@ -423,10 +547,12 @@ class DashboardController extends Controller
             return $contractValue > 0 ? round(($totalSpend / $contractValue) * 100, 1) : 0;
         }, 0);
 
+        $taxData = $this->getTaxComplianceReportData();
+
         return view('dashboard.gm', compact(
             'kpi', 'projectStatus', 'recentProjects', 'pendingEmployees', 'recentExpenses',
             'projectExpenses', 'materialConsumptionReport', 'monthlyExpenseTrend', 'expenseCategoryBreakdown',
-            'pendingGmPrs', 'unassignedStagePrs', 'pendingGmExpenses'
+            'pendingGmPrs', 'unassignedStagePrs', 'pendingGmExpenses', 'taxData'
         ));
     }
 

@@ -52,6 +52,13 @@
         @endif
     </a>
 </li>
+{{-- Quick Action: Tax Compliance Ledger (VAT & WHT) --}}
+<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
+    <a href="{{ route('finance.tax-deductions.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}" style="font-weight:600;">
+        <i class="fa-solid fa-receipt text-danger"></i>
+        <span>VAT &amp; WHT Tax Ledger</span>
+    </a>
+</li>
 <hr class="sidebar-section-divider">
 
 {{-- ② Projects & Planning --}}
@@ -1103,6 +1110,15 @@
                 @if($totalProjExpCount > 0)
                     <span class="badge rounded-pill ms-auto" style="background:rgba(220,53,69,0.15);color:#dc3545;font-size:0.6rem;">{{ $totalProjExpCount }}</span>
                 @endif
+            </a>
+        </li>
+
+        <li class="sidebar-nav-item">
+            <a href="{{ route('finance.tax-deductions.index') }}"
+               class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}"
+               title="VAT & 3% Withholding Tax Deductions Ledger & Monthly Report">
+                <i class="fa-solid fa-receipt text-danger"></i>
+                <span>VAT &amp; WHT Tax Ledger</span>
             </a>
         </li>
 

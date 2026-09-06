@@ -2,8 +2,16 @@
 @section('title', 'Global Admin Dashboard')
 @section('content')
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-gauge-high me-2"></i>Global Admin Dashboard</h1>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <a href="#vat-withholding-report" class="btn btn-outline-danger btn-sm rounded-pill px-3 shadow-xs">
+                <i class="fa-solid fa-receipt me-1"></i>VAT &amp; WHT Report
+            </a>
+            <a href="{{ route('finance.tax-deductions.index') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
+                <i class="fa-solid fa-file-invoice-dollar me-1"></i>Tax Compliance Ledger
+            </a>
+        </div>
     </div>
 
     <!-- KPI Row -->
@@ -98,6 +106,9 @@
             </div>
         </div>
     </div>
+
+    {{-- ═══ VAT & WITHHOLDING TAX COMPLIANCE REPORT ═══════════════════════════════ --}}
+    @include('dashboard.partials.tax_compliance_report')
 
     <!-- New Feature Panels Row -->
     <div class="row mt-4">
