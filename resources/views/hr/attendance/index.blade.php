@@ -12,8 +12,8 @@
             <a href="{{ route('attendance.create') }}" class="btn btn-primary">
                 <i class="fas fa-plus me-1"></i>Record Attendance
             </a>
-            <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#bulkAttendanceModal">
-                <i class="fas fa-users me-1"></i>Bulk Upload
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#importDeviceModal">
+                <i class="fas fa-file-excel me-1"></i>Bulk Upload (XLS / Biometric)
             </button>
             <a href="{{ route('attendance.deviceLogs') }}" class="btn btn-outline-info">
                 <i class="fa-solid fa-fingerprint me-1"></i>Device Logs
@@ -231,44 +231,111 @@
     </div>
 </div>
 
-<!-- Bulk Attendance Modal -->
-<div class="modal fade" id="bulkAttendanceModal" tabindex="-1">
+<!-- Device Import Modal -->
+<div class="modal fade" id="importDeviceModal" tabindex="-1" aria-labelledby="importDeviceModalLabel">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Bulk Upload Attendance</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-gradient text-white" style="background: linear-gradient(135deg, #1a73e8, #0f4fa8);">
+                <h5 class="modal-title" id="importDeviceModalLabel">
+                    <i class="fas fa-file-import me-2"></i>Import Attendance from Biometric Device
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form action="{{ route('attendance.bulkStore') }}" method="POST" enctype="multipart/form-data">
+            <form action="{{ route('attendance.importXls') }}" method="POST" enctype="multipart/form-data" id="importDeviceForm">
                 @csrf
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Attendance Date <span class="text-danger">*</span></label>
-                        <input type="date" name="attendance_date" class="form-control" required value="{{ date('Y-m-d') }}">
+                <div class="modal-body p-4">
+
+                    @if(session('error'))
+                    <div class="alert alert-danger alert-dismissible fade show">
+                        <i class="fas fa-times-circle me-2"></i>{{ session('error') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    @endif
+                    @if(session('warning'))
+                    <div class="alert alert-warning alert-dismissible fade show">
+                        <i class="fas fa-exclamation-triangle me-2"></i>{{ session('warning') }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    @endif
+
+                    {{-- File Upload Area --}}
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            <i class="fas fa-upload text-primary me-1"></i>
+                            Select Attendance Export File <span class="text-danger">*</span>
+                        </label>
+                        <div class="upload-area border-2 border-dashed rounded-3 p-4 text-center position-relative"
+                             id="uploadDropZone"
+                             style="border-color: #1a73e8; background: #f0f6ff; cursor: pointer; transition: all 0.3s;">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3 d-block"></i>
+                            <p class="mb-1 fw-semibold text-dark">Drag & drop your file here, or <span class="text-primary">click to browse</span></p>
+                            <p class="text-muted small mb-0">Supports: <strong>.xls</strong> (biometric export), <strong>.xlsx</strong>, <strong>.csv</strong> — Max 10MB</p>
+                            <input type="file" name="file" id="attendanceFile" accept=".xls,.xlsx,.csv"
+                                   class="position-absolute top-0 start-0 w-100 h-100 opacity-0" style="cursor: pointer;" required>
+                        </div>
+                        <div id="fileNameDisplay" class="mt-2 text-success d-none">
+                            <i class="fas fa-check-circle me-1"></i><span id="fileNameText"></span>
+                        </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Upload Excel/CSV File <span class="text-danger">*</span></label>
-                        <input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xls" required>
-                        <small class="text-muted">
-                            Format: Employee ID | Status (present/absent/leave/half_day)<br>
-                            <a href="#" onclick="downloadTemplate()">Download template</a>
-                        </small>
+                    {{-- Format Info --}}
+                    <div class="accordion" id="formatAccordion">
+                        <div class="accordion-item border-0 shadow-sm rounded-3 mb-2">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed rounded-3 fw-semibold" type="button"
+                                        data-bs-toggle="collapse" data-bs-target="#collapseFormat">
+                                    <i class="fas fa-table text-info me-2"></i>Expected File Format & Column Mapping
+                                </button>
+                            </h2>
+                            <div id="collapseFormat" class="accordion-collapse collapse" data-bs-parent="#formatAccordion">
+                                <div class="accordion-body pt-0">
+                                    <p class="text-muted small">The system accepts the standard export from biometric attendance machines (Dahua, Hikvision, ZKTeco, etc.):</p>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-bordered small mb-0">
+                                            <thead class="table-primary">
+                                                <tr>
+                                                    <th>Column (XLS)</th>
+                                                    <th>System Field</th>
+                                                    <th>Example</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td><code>Emp No.</code></td><td>Employee Code</td><td>EMP001, 78</td></tr>
+                                                <tr><td><code>Name</code></td><td>Employee Name (fallback)</td><td>John Doe</td></tr>
+                                                <tr><td><code>Date</code></td><td>Attendance Date</td><td>9/2/2026</td></tr>
+                                                <tr><td><code>Timetable</code></td><td>Session</td><td>Morning / Afternoon</td></tr>
+                                                <tr><td><code>Clock In</code></td><td>Check-in time</td><td>08:25</td></tr>
+                                                <tr><td><code>Clock Out</code></td><td>Check-out time</td><td>17:35</td></tr>
+                                                <tr><td><code>Late</code></td><td>Late minutes (note)</td><td>15</td></tr>
+                                                <tr><td><code>OT Time</code></td><td>Overtime hours</td><td>1.5</td></tr>
+                                                <tr><td><code>Absent</code></td><td>Absent flag</td><td>True / False</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="alert alert-info mt-3 mb-0 py-2 small">
+                                        <i class="fas fa-lightbulb me-1"></i>
+                                        <strong>Note:</strong> Morning + Afternoon sessions for the same employee and date are automatically merged into a single attendance record.
+                                        Employee matching works automatically via <strong>Emp No.</strong>, <strong>Device User ID</strong>, or <strong>Employee Full Name</strong>.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="alert alert-info">
-                        <strong>Instructions:</strong>
-                        <ul class="mb-0">
-                            <li>First column: Employee ID or Code</li>
-                            <li>Second column: Status (present, absent, leave, half_day)</li>
-                            <li>Skip header row if present</li>
-                        </ul>
+                    <div class="d-flex align-items-center mt-3 gap-2">
+                        <a href="{{ route('attendance.downloadTemplate') }}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-download me-1"></i>Download CSV Template
+                        </a>
+                        <span class="text-muted small">Don't have a file? Download a sample template to see the expected format.</span>
                     </div>
+
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-upload me-1"></i>Upload
+                <div class="modal-footer border-top-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-success px-4" id="importSubmitBtn">
+                        <i class="fas fa-file-import me-1"></i>Import Attendance
                     </button>
                 </div>
             </form>
@@ -278,15 +345,55 @@
 
 @push('scripts')
 <script>
-function downloadTemplate() {
-    const csv = "Employee ID,Status\nEMP001,present\nEMP002,absent\nEMP003,leave";
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'attendance-template.csv';
-    a.click();
-}
+// File drop zone interaction
+const dropZone = document.getElementById('uploadDropZone');
+const fileInput = document.getElementById('attendanceFile');
+const fileDisplay = document.getElementById('fileNameDisplay');
+const fileNameText = document.getElementById('fileNameText');
+const importForm = document.getElementById('importDeviceForm');
+const submitBtn = document.getElementById('importSubmitBtn');
+
+fileInput.addEventListener('change', function() {
+    if (this.files.length > 0) {
+        const file = this.files[0];
+        fileNameText.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+        fileDisplay.classList.remove('d-none');
+        dropZone.style.borderColor = '#28a745';
+        dropZone.style.background = '#f0fff4';
+    }
+});
+
+['dragover', 'dragenter'].forEach(e => {
+    dropZone.addEventListener(e, function(ev) {
+        ev.preventDefault();
+        dropZone.style.borderColor = '#0f4fa8';
+        dropZone.style.background = '#e8f0fe';
+    });
+});
+
+['dragleave', 'drop'].forEach(e => {
+    dropZone.addEventListener(e, function(ev) {
+        ev.preventDefault();
+        if (e === 'drop' && ev.dataTransfer.files.length > 0) {
+            fileInput.files = ev.dataTransfer.files;
+            fileInput.dispatchEvent(new Event('change'));
+        } else {
+            dropZone.style.borderColor = '#1a73e8';
+            dropZone.style.background = '#f0f6ff';
+        }
+    });
+});
+
+importForm.addEventListener('submit', function() {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Importing...';
+});
+
+// Auto-open modal if there was a warning/error from import
+@if(session('warning') || session('error'))
+    var importModal = new bootstrap.Modal(document.getElementById('importDeviceModal'));
+    importModal.show();
+@endif
 </script>
 @endpush
 

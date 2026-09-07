@@ -1749,6 +1749,8 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('attendance', App\Http\Controllers\AttendanceController::class)->only(['index', 'create', 'store']);
     Route::post('attendance/quick-clock', [App\Http\Controllers\AttendanceController::class, 'quickClock'])->name('attendance.quickClock');
     Route::post('attendance/bulk', [App\Http\Controllers\AttendanceController::class, 'bulkStore'])->name('attendance.bulkStore');
+    Route::post('attendance/import-xls', [App\Http\Controllers\AttendanceController::class, 'importXls'])->name('attendance.importXls');
+    Route::get('attendance/download-template', [App\Http\Controllers\AttendanceController::class, 'downloadTemplate'])->name('attendance.downloadTemplate');
     Route::get('attendance/device-logs', [App\Http\Controllers\AttendanceController::class, 'deviceLogs'])->name('attendance.deviceLogs');
     Route::post('attendance/zkteco-sync', [App\Http\Controllers\AttendanceController::class, 'syncZkteco'])->name('attendance.zkteco-sync');
     Route::get('attendance/zkteco-status', [App\Http\Controllers\AttendanceController::class, 'zktecoStatus'])->name('attendance.zkteco-status');

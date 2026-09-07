@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class AttendanceController extends Controller
 {
@@ -255,8 +256,8 @@ class AttendanceController extends Controller
             Attendance::updateOrCreate(
                 ['employee_id' => $rec['employee_id'], 'attendance_date' => $request->attendance_date],
                 [
-                    'status' => $rec['status'],
-                    'source' => 'bulk_upload',
+                    'status'      => $rec['status'],
+                    'source'      => 'bulk_upload',
                     'is_approved' => true,
                     'approved_by' => Auth::id(),
                 ]
@@ -265,6 +266,422 @@ class AttendanceController extends Controller
         }
 
         return back()->with('success', "$count attendance records saved successfully.");
+    }
+
+    /**
+     * Import attendance from a biometric machine XLS export (BIFF2 format)
+     * or a CSV file in the same column layout.
+     *
+     * Expected XLS columns:
+     *   Emp No. | AC-No. | Name | Date | Timetable | On duty | Off duty |
+     *   Clock In | Clock Out | Normal | Late | Early | Absent | OT Time | Work Time | Department
+     */
+    public function importXls(Request $request)
+    {
+        $request->validate([
+            'file' => [
+                'required',
+                'file',
+                'max:10240',
+                function ($attribute, $value, $fail) {
+                    $ext = strtolower($value->getClientOriginalExtension());
+                    if (!in_array($ext, ['xls', 'xlsx', 'csv', 'txt'])) {
+                        $fail('The uploaded file must be an XLS, XLSX, or CSV file.');
+                    }
+                },
+            ],
+        ]);
+
+        $file     = $request->file('file');
+        $ext      = strtolower($file->getClientOriginalExtension());
+        $tmpPath  = $file->getRealPath();
+
+        // ── Parse the file ────────────────────────────────────────────────
+        $records = [];
+
+        if ($ext === 'csv') {
+            $records = $this->parseCsvAttendance($tmpPath);
+        } elseif ($ext === 'xls') {
+            $parser  = new \App\Services\AttendanceXlsParser();
+            $records = $parser->parse($tmpPath);
+        } elseif ($ext === 'xlsx') {
+            // openspout is installed for xlsx support
+            $records = $this->parseXlsxAttendance($tmpPath);
+        }
+
+        if (empty($records)) {
+            return back()->with('error', 'No records found in the uploaded file. Please check the file format.');
+        }
+
+        // ── Load all employees for matching ───────────────────────────────
+        $employees = Employee::select('id', 'employee_code', 'device_user_id', 'full_name', 'basic_salary')->get();
+
+        $normalizeName = function($name) {
+            $name = preg_replace('/[._\s]+/', ' ', strtolower(trim((string)$name)));
+            return preg_replace('/[^a-z0-9 ]/', '', $name);
+        };
+
+        // Multi-index mapping
+        $empByCode     = [];
+        $empByDevice   = [];
+        $empById       = [];
+        $empByName     = [];
+        $empByCodeNum  = [];
+
+        foreach ($employees as $e) {
+            $empById[$e->id] = $e;
+
+            if (!empty($e->employee_code)) {
+                $cUpper = strtoupper(trim($e->employee_code));
+                $empByCode[$cUpper] = $e;
+                if (preg_match('/(\d+)/', $cUpper, $m)) {
+                    $empByCodeNum[(int)$m[1]] = $e;
+                }
+            }
+
+            if (!empty($e->device_user_id)) {
+                $dUpper = strtoupper(trim((string)$e->device_user_id));
+                $empByDevice[$dUpper] = $e;
+                if (is_numeric($dUpper)) {
+                    $empByDevice[(int)$dUpper] = $e;
+                }
+            }
+
+            if (!empty($e->full_name)) {
+                $norm = $normalizeName($e->full_name);
+                if ($norm) {
+                    $empByName[$norm] = $e;
+                }
+            }
+        }
+
+        // ── Group records by (employee, date) and merge Morning+Afternoon ─
+        $grouped = []; // [empCode][date] => merged record
+
+        foreach ($records as $rec) {
+            $empNo    = trim($rec['Emp No.']  ?? $rec['emp_no']  ?? '');
+            $acNo     = trim($rec['AC-No.']   ?? $rec['ac_no']   ?? '');
+            $empName  = trim($rec['Name']     ?? $rec['name']    ?? '');
+            $dateRaw  = trim($rec['Date']     ?? $rec['date']    ?? '');
+            $session  = trim($rec['Timetable'] ?? $rec['timetable'] ?? '');
+            $clockIn  = trim($rec['Clock In']  ?? $rec['clock_in']  ?? '');
+            $clockOut = trim($rec['Clock Out'] ?? $rec['clock_out'] ?? '');
+            $absent   = trim($rec['Absent']    ?? $rec['absent']   ?? '');
+            $late     = trim($rec['Late']      ?? $rec['late']     ?? '');
+            $otTime   = trim($rec['OT Time']   ?? $rec['ot_time']  ?? '');
+            $workTime = trim($rec['Work Time'] ?? $rec['work_time'] ?? '');
+
+            if (empty($dateRaw) || (empty($empNo) && empty($empName))) {
+                continue;
+            }
+
+            // Parse date
+            try {
+                $date = Carbon::parse($dateRaw)->format('Y-m-d');
+            } catch (\Exception $e) {
+                continue;
+            }
+
+            // Build a key for matching
+            $key = strtoupper($empNo) ?: strtolower($empName);
+
+            if (!isset($grouped[$key][$date])) {
+                $grouped[$key][$date] = [
+                    'emp_no'        => $empNo,
+                    'ac_no'         => $acNo,
+                    'emp_name'      => $empName,
+                    'morning_in'    => null,
+                    'morning_out'   => null,
+                    'afternoon_in'  => null,
+                    'afternoon_out' => null,
+                    'absent'        => false,
+                    'late_mins'     => 0,
+                    'ot_hours'      => 0,
+                    'work_hours'    => 0,
+                ];
+            }
+
+            $isMorning   = stripos($session, 'morning') !== false;
+            $isAfternoon = stripos($session, 'afternoon') !== false || stripos($session, 'evening') !== false;
+
+            // Map clock times
+            if ($isMorning) {
+                if (!empty($clockIn))  $grouped[$key][$date]['morning_in']  = $clockIn;
+                if (!empty($clockOut)) $grouped[$key][$date]['morning_out'] = $clockOut;
+            } elseif ($isAfternoon) {
+                if (!empty($clockIn))  $grouped[$key][$date]['afternoon_in']  = $clockIn;
+                if (!empty($clockOut)) $grouped[$key][$date]['afternoon_out'] = $clockOut;
+            } else {
+                // Single session or unknown — treat as clock_in/out
+                if (!empty($clockIn))  $grouped[$key][$date]['morning_in']  = $clockIn;
+                if (!empty($clockOut)) $grouped[$key][$date]['afternoon_out'] = $clockOut;
+            }
+
+            // Accumulate absent/late/OT
+            if (strtolower($absent) === 'true' || $absent === '1') {
+                // Only mark absent if both sessions are absent
+                if ($isMorning && empty($clockIn)) {
+                    $grouped[$key][$date]['absent_morning'] = true;
+                }
+                if ($isAfternoon && empty($clockIn)) {
+                    $grouped[$key][$date]['absent_afternoon'] = true;
+                }
+            }
+
+            if (!empty($late) && is_numeric($late)) {
+                $grouped[$key][$date]['late_mins'] += (float) $late;
+            }
+
+            if (!empty($otTime) && is_numeric($otTime)) {
+                $grouped[$key][$date]['ot_hours'] = max($grouped[$key][$date]['ot_hours'], (float) $otTime);
+            }
+
+            if (!empty($workTime) && is_numeric($workTime)) {
+                $grouped[$key][$date]['work_hours'] += (float) $workTime;
+            }
+        }
+
+        // ── Upsert attendance records ─────────────────────────────────────
+        $saved   = 0;
+        $skipped = 0;
+        $errors  = [];
+
+        foreach ($grouped as $empKey => $dates) {
+            // Resolve employee: code, device ID, numeric code, ID, or normalized name
+            $employee = null;
+            $empKeyUpper = strtoupper($empKey);
+
+            if (isset($empByCode[$empKeyUpper])) {
+                $employee = $empByCode[$empKeyUpper];
+            } elseif (isset($empByDevice[$empKeyUpper])) {
+                $employee = $empByDevice[$empKeyUpper];
+            } elseif (is_numeric($empKey) && isset($empByCodeNum[(int)$empKey])) {
+                $employee = $empByCodeNum[(int)$empKey];
+            } elseif (is_numeric($empKey) && isset($empById[(int)$empKey])) {
+                $employee = $empById[(int)$empKey];
+            }
+
+            if (!$employee) {
+                // Try AC-No. or Name from date records
+                $firstEntry = array_values($dates)[0];
+                $acNo       = trim($firstEntry['ac_no'] ?? '');
+
+                if ($acNo !== '' && isset($empByDevice[strtoupper($acNo)])) {
+                    $employee = $empByDevice[strtoupper($acNo)];
+                } elseif ($acNo !== '' && is_numeric($acNo) && isset($empByCodeNum[(int)$acNo])) {
+                    $employee = $empByCodeNum[(int)$acNo];
+                }
+
+                if (!$employee) {
+                    $rawName  = trim($firstEntry['emp_name'] ?? '');
+                    $normName = $normalizeName($rawName);
+                    if ($normName !== '' && isset($empByName[$normName])) {
+                        $employee = $empByName[$normName];
+                    }
+                }
+            }
+
+            if (!$employee) {
+                $skipped++;
+                $firstEntry = array_values($dates)[0] ?? [];
+                $empNameDisplay = trim($firstEntry['emp_name'] ?? '');
+                $errors[] = "Employee not found: Emp No. '{$empKey}'" . ($empNameDisplay ? " ({$empNameDisplay})" : '');
+                continue;
+            }
+
+            foreach ($dates as $date => $info) {
+                // Determine status
+                $hasMorningIn  = !empty($info['morning_in']);
+                $hasAfternoonIn = !empty($info['afternoon_in']);
+
+                if ($hasMorningIn && $hasAfternoonIn) {
+                    $status = 'present';
+                } elseif ($hasMorningIn || $hasAfternoonIn) {
+                    $status = 'half_day';
+                } elseif (!empty($info['absent_morning']) && !empty($info['absent_afternoon'])) {
+                    $status = 'absent';
+                } elseif (!empty($info['absent_morning']) || !empty($info['absent_afternoon'])) {
+                    $status = 'half_day';
+                } else {
+                    $status = 'absent';
+                }
+
+                // Calculate hours worked
+                $hours = (float) $info['work_hours'];
+                if ($hours == 0) {
+                    if ($info['morning_in'] && $info['morning_out']) {
+                        try {
+                            $mIn  = Carbon::createFromFormat('H:i', $info['morning_in']);
+                            $mOut = Carbon::createFromFormat('H:i', $info['morning_out']);
+                            $hours += max(0, round($mOut->diffInMinutes($mIn) / 60, 2));
+                        } catch (\Exception $e) {}
+                    }
+                    if ($info['afternoon_in'] && $info['afternoon_out']) {
+                        try {
+                            $aIn  = Carbon::createFromFormat('H:i', $info['afternoon_in']);
+                            $aOut = Carbon::createFromFormat('H:i', $info['afternoon_out']);
+                            $hours += max(0, round($aOut->diffInMinutes($aIn) / 60, 2));
+                        } catch (\Exception $e) {}
+                    }
+                }
+
+                $checkIn  = $info['morning_in']    ?: ($info['afternoon_in']  ?: null);
+                $checkOut = $info['afternoon_out']  ?: ($info['morning_out']  ?: null);
+
+                // OT calculation
+                $otHours = (float) ($info['ot_hours'] ?? 0);
+                $otType  = 'none';
+                if ($otHours > 0) {
+                    $dayOfWeek = Carbon::parse($date)->dayOfWeek;
+                    if ($dayOfWeek === 0 || $dayOfWeek === 6) {
+                        $otType = 'rest_day';
+                    }
+                }
+
+                $basic = (float) ($employee->basic_salary ?? 0);
+                $otPay = \App\Models\Payroll::calculateOvertimePay($basic, $otHours, $otType);
+
+                $toTime = fn($val) => (!empty($val) && trim((string)$val) !== '') ? trim((string)$val) : null;
+
+                Attendance::updateOrCreate(
+                    [
+                        'employee_id'     => $employee->id,
+                        'attendance_date' => $date,
+                    ],
+                    [
+                        'morning_in'     => $toTime($info['morning_in']),
+                        'morning_out'    => $toTime($info['morning_out']),
+                        'afternoon_in'   => $toTime($info['afternoon_in']),
+                        'afternoon_out'  => $toTime($info['afternoon_out']),
+                        'check_in'       => $toTime($checkIn),
+                        'check_out'      => $toTime($checkOut),
+                        'hours_worked'   => $hours,
+                        'status'         => $status,
+                        'source'         => 'bulk_upload',
+                        'is_approved'    => true,
+                        'approved_by'    => Auth::id(),
+                        'overtime_hours' => $otHours,
+                        'overtime_type'  => $otType,
+                        'overtime_pay'   => $otPay,
+                        'notes'          => $info['late_mins'] > 0 ? "Late: {$info['late_mins']} min" : null,
+                    ]
+                );
+                $saved++;
+            }
+        }
+
+        $message = "✅ Import complete: {$saved} attendance records saved.";
+        if ($skipped > 0) {
+            $message .= " ⚠️ {$skipped} employees not matched (check employee codes).";
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'saved'   => $saved,
+                'skipped' => $skipped,
+                'errors'  => $errors,
+                'message' => $message,
+            ]);
+        }
+
+        $status = $skipped > 0 ? 'warning' : 'success';
+        return redirect()->route('attendance.index')->with($status, $message);
+    }
+
+    /**
+     * Parse a CSV file in the biometric machine export format.
+     */
+    private function parseCsvAttendance(string $filePath): array
+    {
+        $rows    = [];
+        $headers = null;
+
+        if (($handle = fopen($filePath, 'r')) !== false) {
+            while (($row = fgetcsv($handle, 1000, ',')) !== false) {
+                if ($headers === null) {
+                    $headers = array_map('trim', $row);
+                    continue;
+                }
+                if (count($row) < 2) {
+                    continue;
+                }
+                $rows[] = array_combine($headers, array_pad($row, count($headers), null));
+            }
+            fclose($handle);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Parse an XLSX file using openspout.
+     */
+    private function parseXlsxAttendance(string $filePath): array
+    {
+        $rows    = [];
+        $headers = null;
+
+        try {
+            $reader = \OpenSpout\Reader\XLSX\Reader::create();
+            $reader->open($filePath);
+
+            foreach ($reader->getSheetIterator() as $sheet) {
+                foreach ($sheet->getRowIterator() as $row) {
+                    $cells = $row->getCells();
+                    $values = [];
+                    foreach ($cells as $cell) {
+                        $values[] = $cell->getValue();
+                    }
+
+                    if ($headers === null) {
+                        $headers = array_map(fn($v) => trim((string) $v), $values);
+                        continue;
+                    }
+
+                    if (empty(array_filter($values))) {
+                        continue;
+                    }
+
+                    $rows[] = array_combine($headers, array_pad($values, count($headers), null));
+                }
+                break; // First sheet only
+            }
+
+            $reader->close();
+        } catch (\Exception $e) {
+            // Return empty if XLSX reading fails
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Download a sample CSV template matching the biometric machine export format.
+     */
+    public function downloadTemplate()
+    {
+        $headers = [
+            'Emp No.', 'AC-No.', 'No.', 'Name', 'Auto-Assign', 'Date',
+            'Timetable', 'On duty', 'Off duty', 'Clock In', 'Clock Out',
+            'Normal', 'Real time', 'Late', 'Early', 'Absent', 'OT Time',
+            'Work Time', 'Exception', 'Must C/In', 'Must C/Out', 'Department',
+        ];
+
+        $sample = [
+            ['EMP001', '1', '', 'John Doe', '', date('n/j/Y'), 'Morning', '08:30', '12:30', '08:25', '12:35', '0.5', '0.5', '', '', '', '', '4', '', 'True', 'True', 'Office'],
+            ['EMP001', '1', '', 'John Doe', '', date('n/j/Y'), 'Afternoon', '13:30', '17:30', '13:28', '17:35', '0.5', '0.5', '', '', '', '0.1', '4.1', '', 'True', 'True', 'Office'],
+        ];
+
+        $csv = implode(',', $headers) . "\r\n";
+        foreach ($sample as $row) {
+            $csv .= implode(',', array_map(fn($v) => '"' . str_replace('"', '""', $v) . '"', $row)) . "\r\n";
+        }
+
+        return response($csv, 200, [
+            'Content-Type'        => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="attendance-import-template.csv"',
+        ]);
     }
 
     public function deviceLogs()
