@@ -356,7 +356,7 @@ class AttendanceController extends Controller
         }
 
         // ── Group records by (employee, date) and merge Morning+Afternoon ─
-        $grouped = []; // [empCode][date] => merged record
+        $grouped = []; // [userKey][date] => merged record
 
         foreach ($records as $rec) {
             $empNo    = trim($rec['Emp No.']  ?? $rec['emp_no']  ?? '');
@@ -371,22 +371,31 @@ class AttendanceController extends Controller
             $otTime   = trim($rec['OT Time']   ?? $rec['ot_time']  ?? '');
             $workTime = trim($rec['Work Time'] ?? $rec['work_time'] ?? '');
 
-            if (empty($dateRaw) || (empty($empNo) && empty($empName))) {
+            if (empty($dateRaw) || ($acNo === '' && $empNo === '' && $empName === '')) {
                 continue;
             }
 
-            // Parse date
+            // Extract Attendance Date from 'Date' column
+            $date = null;
             try {
                 $date = Carbon::parse($dateRaw)->format('Y-m-d');
             } catch (\Exception $e) {
+                if (preg_match('/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/', $dateRaw, $m)) {
+                    try {
+                        $date = Carbon::createFromDate($m[3], $m[1], $m[2])->format('Y-m-d');
+                    } catch (\Exception $e2) {}
+                }
+            }
+
+            if (!$date) {
                 continue;
             }
 
-            // Build a key for matching
-            $key = strtoupper($empNo) ?: strtolower($empName);
+            // Primary unique identifier in device export is AC-No. (ZKTeco Device User ID)
+            $userKey = $acNo !== '' ? "AC:{$acNo}" : ($empNo !== '' ? "EMP:{$empNo}" : "NAME:{$empName}");
 
-            if (!isset($grouped[$key][$date])) {
-                $grouped[$key][$date] = [
+            if (!isset($grouped[$userKey][$date])) {
+                $grouped[$userKey][$date] = [
                     'emp_no'        => $empNo,
                     'ac_no'         => $acNo,
                     'emp_name'      => $empName,
@@ -406,38 +415,37 @@ class AttendanceController extends Controller
 
             // Map clock times
             if ($isMorning) {
-                if (!empty($clockIn))  $grouped[$key][$date]['morning_in']  = $clockIn;
-                if (!empty($clockOut)) $grouped[$key][$date]['morning_out'] = $clockOut;
+                if (!empty($clockIn))  $grouped[$userKey][$date]['morning_in']  = $clockIn;
+                if (!empty($clockOut)) $grouped[$userKey][$date]['morning_out'] = $clockOut;
             } elseif ($isAfternoon) {
-                if (!empty($clockIn))  $grouped[$key][$date]['afternoon_in']  = $clockIn;
-                if (!empty($clockOut)) $grouped[$key][$date]['afternoon_out'] = $clockOut;
+                if (!empty($clockIn))  $grouped[$userKey][$date]['afternoon_in']  = $clockIn;
+                if (!empty($clockOut)) $grouped[$userKey][$date]['afternoon_out'] = $clockOut;
             } else {
                 // Single session or unknown — treat as clock_in/out
-                if (!empty($clockIn))  $grouped[$key][$date]['morning_in']  = $clockIn;
-                if (!empty($clockOut)) $grouped[$key][$date]['afternoon_out'] = $clockOut;
+                if (!empty($clockIn))  $grouped[$userKey][$date]['morning_in']  = $clockIn;
+                if (!empty($clockOut)) $grouped[$userKey][$date]['afternoon_out'] = $clockOut;
             }
 
             // Accumulate absent/late/OT
             if (strtolower($absent) === 'true' || $absent === '1') {
-                // Only mark absent if both sessions are absent
                 if ($isMorning && empty($clockIn)) {
-                    $grouped[$key][$date]['absent_morning'] = true;
+                    $grouped[$userKey][$date]['absent_morning'] = true;
                 }
                 if ($isAfternoon && empty($clockIn)) {
-                    $grouped[$key][$date]['absent_afternoon'] = true;
+                    $grouped[$userKey][$date]['absent_afternoon'] = true;
                 }
             }
 
             if (!empty($late) && is_numeric($late)) {
-                $grouped[$key][$date]['late_mins'] += (float) $late;
+                $grouped[$userKey][$date]['late_mins'] += (float) $late;
             }
 
             if (!empty($otTime) && is_numeric($otTime)) {
-                $grouped[$key][$date]['ot_hours'] = max($grouped[$key][$date]['ot_hours'], (float) $otTime);
+                $grouped[$userKey][$date]['ot_hours'] = max($grouped[$userKey][$date]['ot_hours'], (float) $otTime);
             }
 
             if (!empty($workTime) && is_numeric($workTime)) {
-                $grouped[$key][$date]['work_hours'] += (float) $workTime;
+                $grouped[$userKey][$date]['work_hours'] += (float) $workTime;
             }
         }
 
@@ -446,46 +454,65 @@ class AttendanceController extends Controller
         $skipped = 0;
         $errors  = [];
 
-        foreach ($grouped as $empKey => $dates) {
-            // Resolve employee: code, device ID, numeric code, ID, or normalized name
-            $employee = null;
-            $empKeyUpper = strtoupper($empKey);
+        foreach ($grouped as $userKey => $dates) {
+            $firstEntry = array_values($dates)[0] ?? [];
+            $acNo       = trim($firstEntry['ac_no'] ?? '');
+            $empNo      = trim($firstEntry['emp_no'] ?? '');
+            $rawName    = trim($firstEntry['emp_name'] ?? '');
 
-            if (isset($empByCode[$empKeyUpper])) {
-                $employee = $empByCode[$empKeyUpper];
-            } elseif (isset($empByDevice[$empKeyUpper])) {
-                $employee = $empByDevice[$empKeyUpper];
-            } elseif (is_numeric($empKey) && isset($empByCodeNum[(int)$empKey])) {
-                $employee = $empByCodeNum[(int)$empKey];
-            } elseif (is_numeric($empKey) && isset($empById[(int)$empKey])) {
-                $employee = $empById[(int)$empKey];
+            $employee = null;
+
+            // 1. PRIMARY: Match AC-No. directly with Employee's ZKTeco Device User ID (device_user_id)
+            if ($acNo !== '') {
+                $acUpper = strtoupper($acNo);
+                if (isset($empByDevice[$acUpper])) {
+                    $employee = $empByDevice[$acUpper];
+                } elseif (is_numeric($acNo) && isset($empByDevice[(int)$acNo])) {
+                    $employee = $empByDevice[(int)$acNo];
+                } elseif (is_numeric($acNo) && isset($empByDevice[(string)(int)$acNo])) {
+                    $employee = $empByDevice[(string)(int)$acNo];
+                }
             }
 
-            if (!$employee) {
-                // Try AC-No. or Name from date records
-                $firstEntry = array_values($dates)[0];
-                $acNo       = trim($firstEntry['ac_no'] ?? '');
-
-                if ($acNo !== '' && isset($empByDevice[strtoupper($acNo)])) {
-                    $employee = $empByDevice[strtoupper($acNo)];
-                } elseif ($acNo !== '' && is_numeric($acNo) && isset($empByCodeNum[(int)$acNo])) {
-                    $employee = $empByCodeNum[(int)$acNo];
+            // 2. SECONDARY: Match AC-No. against employee_code numeric part or internal ID
+            if (!$employee && $acNo !== '' && is_numeric($acNo)) {
+                $acInt = (int)$acNo;
+                if (isset($empByCodeNum[$acInt])) {
+                    $employee = $empByCodeNum[$acInt];
+                } elseif (isset($empById[$acInt])) {
+                    $employee = $empById[$acInt];
                 }
+            }
 
-                if (!$employee) {
-                    $rawName  = trim($firstEntry['emp_name'] ?? '');
-                    $normName = $normalizeName($rawName);
-                    if ($normName !== '' && isset($empByName[$normName])) {
-                        $employee = $empByName[$normName];
-                    }
+            // 3. TERTIARY: Match Emp No. against device_user_id or employee_code
+            if (!$employee && $empNo !== '') {
+                $empUpper = strtoupper($empNo);
+                if (isset($empByDevice[$empUpper])) {
+                    $employee = $empByDevice[$empUpper];
+                } elseif (isset($empByCode[$empUpper])) {
+                    $employee = $empByCode[$empUpper];
+                } elseif (is_numeric($empNo) && isset($empByCodeNum[(int)$empNo])) {
+                    $employee = $empByCodeNum[(int)$empNo];
+                } elseif (is_numeric($empNo) && isset($empById[(int)$empNo])) {
+                    $employee = $empById[(int)$empNo];
+                }
+            }
+
+            // 4. FALLBACK: Match normalized Name against employee full_name
+            if (!$employee && $rawName !== '') {
+                $normName = $normalizeName($rawName);
+                if ($normName !== '' && isset($empByName[$normName])) {
+                    $employee = $empByName[$normName];
                 }
             }
 
             if (!$employee) {
                 $skipped++;
-                $firstEntry = array_values($dates)[0] ?? [];
-                $empNameDisplay = trim($firstEntry['emp_name'] ?? '');
-                $errors[] = "Employee not found: Emp No. '{$empKey}'" . ($empNameDisplay ? " ({$empNameDisplay})" : '');
+                $label = $acNo !== '' ? "AC-No. (Device ID: {$acNo})" : "Emp No. '{$empNo}'";
+                if ($rawName !== '') {
+                    $label .= " [Name: {$rawName}]";
+                }
+                $errors[] = "Employee not matched: {$label}. Set 'ZKTeco Device User ID' to '{$acNo}' on the employee form.";
                 continue;
             }
 
@@ -561,9 +588,10 @@ class AttendanceController extends Controller
                         'is_approved'    => true,
                         'approved_by'    => Auth::id(),
                         'overtime_hours' => $otHours,
-                        'overtime_type'  => $otType,
-                        'overtime_pay'   => $otPay,
-                        'notes'          => $info['late_mins'] > 0 ? "Late: {$info['late_mins']} min" : null,
+                        'overtime_type'       => $otType,
+                        'overtime_pay'        => $otPay,
+                        'biometric_device_id' => $acNo ?: ($employee->device_user_id ?: null),
+                        'notes'               => $info['late_mins'] > 0 ? "Late: {$info['late_mins']} min" : null,
                     ]
                 );
                 $saved++;

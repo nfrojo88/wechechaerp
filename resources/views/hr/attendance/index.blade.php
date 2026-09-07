@@ -291,31 +291,56 @@
                                 <div class="accordion-body pt-0">
                                     <p class="text-muted small">The system accepts the standard export from biometric attendance machines (Dahua, Hikvision, ZKTeco, etc.):</p>
                                     <div class="table-responsive">
-                                        <table class="table table-sm table-bordered small mb-0">
+                                        <table class="table table-sm table-bordered small mb-0 align-middle">
                                             <thead class="table-primary">
                                                 <tr>
-                                                    <th>Column (XLS)</th>
-                                                    <th>System Field</th>
-                                                    <th>Example</th>
+                                                    <th style="width: 25%;">Excel Column</th>
+                                                    <th style="width: 35%;">System Field & Link Mode</th>
+                                                    <th style="width: 40%;">Description / Example</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                <tr><td><code>Emp No.</code></td><td>Employee Code</td><td>EMP001, 78</td></tr>
-                                                <tr><td><code>Name</code></td><td>Employee Name (fallback)</td><td>John Doe</td></tr>
-                                                <tr><td><code>Date</code></td><td>Attendance Date</td><td>9/2/2026</td></tr>
-                                                <tr><td><code>Timetable</code></td><td>Session</td><td>Morning / Afternoon</td></tr>
-                                                <tr><td><code>Clock In</code></td><td>Check-in time</td><td>08:25</td></tr>
-                                                <tr><td><code>Clock Out</code></td><td>Check-out time</td><td>17:35</td></tr>
-                                                <tr><td><code>Late</code></td><td>Late minutes (note)</td><td>15</td></tr>
-                                                <tr><td><code>OT Time</code></td><td>Overtime hours</td><td>1.5</td></tr>
-                                                <tr><td><code>Absent</code></td><td>Absent flag</td><td>True / False</td></tr>
+                                                <tr class="table-light">
+                                                    <td><strong class="text-primary"><i class="fa-solid fa-fingerprint me-1"></i>AC-No.</strong></td>
+                                                    <td><strong class="text-dark">ZKTeco Device User ID</strong> <span class="badge bg-success ms-1">Primary Link</span></td>
+                                                    <td>Matches numeric ID assigned in biometric device (e.g. <code>1</code>, <code>2</code>, <code>17</code>, <code>21</code>, <code>50</code>) set on the Employee Profile.</td>
+                                                </tr>
+                                                <tr class="table-light">
+                                                    <td><strong class="text-primary"><i class="far fa-calendar-alt me-1"></i>Date</strong></td>
+                                                    <td><strong class="text-dark">Attendance Date</strong> <span class="badge bg-primary ms-1">Required</span></td>
+                                                    <td>Punches are recorded for each specific day from this column (e.g. <code>9/2/2026</code>, <code>2026-09-02</code>).</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>Emp No.</code></td>
+                                                    <td>Employee Code (Fallback)</td>
+                                                    <td>Alternative match against Employee Code (e.g. <code>EMP-20</code>, <code>78</code>).</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>Name</code></td>
+                                                    <td>Employee Name (Fallback)</td>
+                                                    <td>Fallback match against Employee Full Name (e.g. <code>Mekdes...Alemu</code>).</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>Timetable</code></td>
+                                                    <td>Session Type</td>
+                                                    <td><code>Morning</code> / <code>Afternoon</code> (automatically combined into one daily record).</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>Clock In</code> / <code>Clock Out</code></td>
+                                                    <td>Check-In / Check-Out Times</td>
+                                                    <td>Actual punch times recorded by biometric scanner (e.g. <code>08:25</code>, <code>17:35</code>).</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>Late</code> / <code>OT Time</code></td>
+                                                    <td>Late Minutes & Overtime</td>
+                                                    <td>Calculates late arrival penalties and overtime pay based on basic salary.</td>
+                                                </tr>
                                             </tbody>
                                         </table>
                                     </div>
                                     <div class="alert alert-info mt-3 mb-0 py-2 small">
                                         <i class="fas fa-lightbulb me-1"></i>
-                                        <strong>Note:</strong> Morning + Afternoon sessions for the same employee and date are automatically merged into a single attendance record.
-                                        Employee matching works automatically via <strong>Emp No.</strong>, <strong>Device User ID</strong>, or <strong>Employee Full Name</strong>.
+                                        <strong>How linking works:</strong> Set each employee's <strong>ZKTeco Device User ID</strong> on their profile to match their <strong>AC-No.</strong> in the machine (e.g. 1, 2, 21). When you upload the file, all punches are automatically matched and saved under each row's <strong>Date</strong>!
                                     </div>
                                 </div>
                             </div>
