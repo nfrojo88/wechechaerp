@@ -16,12 +16,17 @@ class AttendanceController extends Controller
     {
         $query = Attendance::with('employee')->whereHas('employee')->latest('attendance_date');
 
-        // Filter by date range
-        if (request('date_from')) {
-            $query->whereDate('attendance_date', '>=', request('date_from'));
-        }
-        if (request('date_to')) {
-            $query->whereDate('attendance_date', '<=', request('date_to'));
+        // Filter by specific single date or date range
+        $selectedDate = request('date');
+        if ($selectedDate) {
+            $query->whereDate('attendance_date', $selectedDate);
+        } else {
+            if (request('date_from')) {
+                $query->whereDate('attendance_date', '>=', request('date_from'));
+            }
+            if (request('date_to')) {
+                $query->whereDate('attendance_date', '<=', request('date_to'));
+            }
         }
 
         // Filter by employee (name, code, or ZKTeco device ID)
@@ -49,9 +54,30 @@ class AttendanceController extends Controller
             });
         }
 
-        $attendances = $query->paginate(30);
+        $attendances = $query->paginate(30)->withQueryString();
 
-        return view('hr.attendance.index', compact('attendances'));
+        // Fetch distinct available dates from attendance records for quick date navigation
+        $availableDates = Attendance::select('attendance_date')
+            ->distinct()
+            ->orderBy('attendance_date', 'asc')
+            ->limit(30)
+            ->get()
+            ->map(fn($a) => $a->attendance_date ? $a->attendance_date->format('Y-m-d') : null)
+            ->filter()
+            ->values();
+
+        // Determine date for statistics cards
+        $statsDate = $selectedDate ?: (request('date_from') ?: ($availableDates->first() ?? today()->toDateString()));
+
+        $stats = [
+            'date'      => $statsDate,
+            'present'   => Attendance::whereDate('attendance_date', $statsDate)->where('status', 'present')->count(),
+            'half_day'  => Attendance::whereDate('attendance_date', $statsDate)->where('status', 'half_day')->count(),
+            'absent'    => Attendance::whereDate('attendance_date', $statsDate)->where('status', 'absent')->count(),
+            'leave'     => Attendance::whereDate('attendance_date', $statsDate)->where('status', 'leave')->count(),
+        ];
+
+        return view('hr.attendance.index', compact('attendances', 'availableDates', 'stats', 'selectedDate'));
     }
 
     public function create(Request $request)
@@ -451,16 +477,30 @@ class AttendanceController extends Controller
                 }
             }
 
-            if (!empty($late) && is_numeric($late)) {
-                $grouped[$userKey][$date]['late_mins'] += (float) $late;
+            if (!empty($late)) {
+                if (preg_match('/^(\d+):(\d+)$/', $late, $lm)) {
+                    $grouped[$userKey][$date]['late_mins'] += ((int)$lm[1] * 60) + (int)$lm[2];
+                } elseif (is_numeric($late)) {
+                    $grouped[$userKey][$date]['late_mins'] += (float) $late;
+                }
             }
 
-            if (!empty($otTime) && is_numeric($otTime)) {
-                $grouped[$userKey][$date]['ot_hours'] = max($grouped[$userKey][$date]['ot_hours'], (float) $otTime);
+            if (!empty($otTime)) {
+                if (preg_match('/^(\d+):(\d+)$/', $otTime, $om)) {
+                    $otH = (int)$om[1] + ((int)$om[2] / 60);
+                    $grouped[$userKey][$date]['ot_hours'] = max($grouped[$userKey][$date]['ot_hours'], round($otH, 2));
+                } elseif (is_numeric($otTime)) {
+                    $grouped[$userKey][$date]['ot_hours'] = max($grouped[$userKey][$date]['ot_hours'], (float) $otTime);
+                }
             }
 
-            if (!empty($workTime) && is_numeric($workTime)) {
-                $grouped[$userKey][$date]['work_hours'] += (float) $workTime;
+            if (!empty($workTime)) {
+                if (preg_match('/^(\d+):(\d+)$/', $workTime, $wm)) {
+                    $wH = (int)$wm[1] + ((int)$wm[2] / 60);
+                    $grouped[$userKey][$date]['work_hours'] += round($wH, 2);
+                } elseif (is_numeric($workTime)) {
+                    $grouped[$userKey][$date]['work_hours'] += (float) $workTime;
+                }
             }
         }
 

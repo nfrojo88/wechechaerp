@@ -36,79 +36,119 @@
     @endif
 
     <!-- Filter Section -->
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="card border-0 shadow-sm mb-3">
         <div class="card-body">
-            <form method="GET" action="{{ route('attendance.index') }}" class="row g-3">
+            <form method="GET" action="{{ route('attendance.index') }}" class="row g-3 align-items-end">
                 <div class="col-md-3">
+                    <label class="form-label fw-semibold">Specific Date</label>
+                    <input type="date" name="date" class="form-control" value="{{ request('date', $selectedDate ?? '') }}">
+                </div>
+                <div class="col-md-2">
                     <label class="form-label">Date From</label>
                     <input type="date" name="date_from" class="form-control" value="{{ request('date_from') }}">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label">Date To</label>
                     <input type="date" name="date_to" class="form-control" value="{{ request('date_to') }}">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Employee</label>
-                    <input type="text" name="employee" class="form-control" placeholder="Search employee..." value="{{ request('employee') }}">
+                    <label class="form-label">Employee / Device ID</label>
+                    <input type="text" name="employee" class="form-control" placeholder="Name, code, or device ID..." value="{{ request('employee') }}">
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label">Status</label>
-                    <select name="status" class="form-select">
-                        <option value="">All</option>
-                        <option value="present" @selected(request('status')=='present')>Present</option>
-                        <option value="absent" @selected(request('status')=='absent')>Absent</option>
-                        <option value="half_day" @selected(request('status')=='half_day')>Half Day</option>
-                        <option value="leave" @selected(request('status')=='leave')>Leave</option>
-                        <option value="holiday" @selected(request('status')=='holiday')>Holiday</option>
-                    </select>
-                </div>
-                <div class="col-md-1 d-flex gap-2 align-items-end">
+                <div class="col-md-2 d-flex gap-2">
                     <button type="submit" class="btn btn-primary w-100">
-                        <i class="fas fa-search"></i>
+                        <i class="fas fa-filter me-1"></i>Filter
                     </button>
+                    <a href="{{ route('attendance.index') }}" class="btn btn-outline-secondary" title="Reset Filters">
+                        <i class="fas fa-redo"></i>
+                    </a>
                 </div>
             </form>
         </div>
     </div>
 
+    {{-- Quick Date Navigator (Shows all uploaded dates) --}}
+    @if(isset($availableDates) && $availableDates->count() > 0)
+    <div class="card border-0 shadow-sm mb-4 bg-white">
+        <div class="card-body py-2 px-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary rounded-circle p-2"><i class="far fa-calendar-alt text-white"></i></span>
+                    <div>
+                        <span class="fw-bold small text-dark d-block">Jump to Uploaded Date:</span>
+                        <small class="text-muted">Click any date to see that day's attendance</small>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-1 flex-wrap">
+                    <a href="{{ route('attendance.index') }}" 
+                       class="btn btn-sm {{ !request('date') && !request('date_from') ? 'btn-dark' : 'btn-outline-secondary' }} rounded-pill px-3">
+                        <i class="fas fa-list me-1"></i>All Dates
+                    </a>
+                    @foreach($availableDates as $dt)
+                        @php
+                            $isActive = request('date') === $dt || (request('date_from') === $dt && request('date_to') === $dt);
+                            $cDate = \Carbon\Carbon::parse($dt);
+                        @endphp
+                        <a href="{{ route('attendance.index', ['date' => $dt]) }}" 
+                           class="btn btn-sm {{ $isActive ? 'btn-primary shadow fw-bold' : 'btn-outline-primary' }} rounded-pill px-3">
+                            <i class="far fa-calendar-check me-1"></i>{{ $cDate->format('M d, Y') }} ({{ $cDate->format('D') }})
+                        </a>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
+
     <!-- Statistics Cards -->
     <div class="row mb-4">
+        @php
+            $targetDateFormatted = isset($stats['date']) ? \Carbon\Carbon::parse($stats['date'])->format('M d, Y') : 'Today';
+        @endphp
         <div class="col-md-3">
             <div class="card border-left-success shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Present Today</div>
+                <div class="card-body py-2">
+                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                        Present on {{ $targetDateFormatted }}
+                    </div>
                     <div class="h5 mb-0 font-weight-bold text-gray-800">
-                        {{ \App\Models\Attendance::whereDate('attendance_date', now())->where('status', 'present')->count() }}
+                        {{ $stats['present'] ?? 0 }}
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="card border-left-danger shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Absent Today</div>
+                <div class="card-body py-2">
+                    <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                        Absent on {{ $targetDateFormatted }}
+                    </div>
                     <div class="h5 mb-0 font-weight-bold text-gray-800">
-                        {{ \App\Models\Attendance::whereDate('attendance_date', now())->where('status', 'absent')->count() }}
+                        {{ $stats['absent'] ?? 0 }}
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="card border-left-warning shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">On Leave Today</div>
+                <div class="card-body py-2">
+                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                        Half Day on {{ $targetDateFormatted }}
+                    </div>
                     <div class="h5 mb-0 font-weight-bold text-gray-800">
-                        {{ \App\Models\Attendance::whereDate('attendance_date', now())->where('status', 'leave')->count() }}
+                        {{ $stats['half_day'] ?? 0 }}
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
             <div class="card border-left-info shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Half Day Today</div>
+                <div class="card-body py-2">
+                    <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                        Leave on {{ $targetDateFormatted }}
+                    </div>
                     <div class="h5 mb-0 font-weight-bold text-gray-800">
-                        {{ \App\Models\Attendance::whereDate('attendance_date', now())->where('status', 'half_day')->count() }}
+                        {{ $stats['leave'] ?? 0 }}
                     </div>
                 </div>
             </div>
@@ -166,7 +206,10 @@
                                 </div>
                             </td>
                             <td class="text-nowrap">
-                                <span class="fw-semibold text-dark">{{ $a->attendance_date->format('M d, Y') }}</span>
+                                <a href="{{ route('attendance.index', ['date' => $a->attendance_date->format('Y-m-d')]) }}" 
+                                   class="fw-bold text-primary text-decoration-none" title="Click to view all records for {{ $a->attendance_date->format('M d, Y') }}">
+                                    <i class="far fa-calendar-alt me-1"></i>{{ $a->attendance_date->format('M d, Y') }}
+                                </a>
                                 <br><small class="text-muted">{{ $a->attendance_date->format('l') }}</small>
                             </td>
                             <td class="text-center">
