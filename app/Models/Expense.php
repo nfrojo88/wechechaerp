@@ -13,6 +13,13 @@ class Expense extends Model
         'project_id', 'category', 'description', 'amount',
         'expense_date', 'status', 'created_by', 'approved_by',
         'approved_at', 'notes',
+        'receipt_path',
+        'audit_receipt_status',
+        'audit_receipt_notes',
+        'audit_receipt_requested_at',
+        'audit_receipt_requested_by',
+        'audit_receipt_verified_at',
+        'audit_receipt_verified_by',
     ];
 
     protected $casts = [

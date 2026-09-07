@@ -548,6 +548,12 @@ function openAuditModal(modalId) {
         console.warn('Modal element not found:', modalId);
         return;
     }
+
+    // Always move modal directly to <body> so it is never trapped behind backdrops
+    if (modalEl.parentNode !== document.body) {
+        document.body.appendChild(modalEl);
+    }
+
     try {
         if (window.bootstrap && window.bootstrap.Modal) {
             var instance = window.bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -575,15 +581,22 @@ function openAuditModal(modalId) {
         }
     } catch(e) {}
 
-    // Fallback: manual CSS display if no JS library caught it
+    // Fallback: manual CSS display with correct z-index hierarchy
     modalEl.classList.add('show');
     modalEl.style.display = 'block';
+    modalEl.style.zIndex = '1055';
     modalEl.removeAttribute('aria-hidden');
     modalEl.setAttribute('aria-modal', 'true');
-    var backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop fade show';
-    backdrop.id = 'manual_backdrop_' + modalId;
-    document.body.appendChild(backdrop);
+
+    var existingBackdrop = document.getElementById('manual_backdrop_' + modalId);
+    if (!existingBackdrop) {
+        var backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop fade show';
+        backdrop.id = 'manual_backdrop_' + modalId;
+        backdrop.style.zIndex = '1050';
+        document.body.appendChild(backdrop);
+    }
+
     var closeButtons = modalEl.querySelectorAll('[data-bs-dismiss="modal"]');
     closeButtons.forEach(function(btn) {
         btn.onclick = function() {
@@ -596,6 +609,15 @@ function openAuditModal(modalId) {
         };
     });
 }
+
+// Ensure all audit action modals are attached directly to body on page load
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.modal[id^="askReceiptModal_"], .modal[id^="attachReceiptModal_"], .modal[id^="verifyNoReceiptModal_"]').forEach(function(m) {
+        if (m.parentNode !== document.body) {
+            document.body.appendChild(m);
+        }
+    });
+});
 </script>
 @endpush
 @endsection

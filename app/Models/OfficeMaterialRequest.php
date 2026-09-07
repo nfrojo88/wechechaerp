@@ -50,6 +50,13 @@ class OfficeMaterialRequest extends Model
         'rejected_by',
         'rejected_at',
         'rejection_reason',
+        // Audit Receipt Tracking
+        'audit_receipt_status',
+        'audit_receipt_notes',
+        'audit_receipt_requested_at',
+        'audit_receipt_requested_by',
+        'audit_receipt_verified_at',
+        'audit_receipt_verified_by',
     ];
 
     protected $casts = [
