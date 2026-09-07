@@ -2038,6 +2038,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('material-usages/{materialUsage}/confirm', [App\Http\Controllers\MaterialUsageController::class, 'confirm'])->name('material-usages.confirm');
 
     Route::resource('delivery-receipts', App\Http\Controllers\DeliveryReceiptController::class)->only(['index', 'create', 'store', 'show']);
+    Route::post('delivery-receipts/upload-inquired-receipt', [App\Http\Controllers\DeliveryReceiptController::class, 'uploadInquiredReceipt'])->name('delivery-receipts.upload-inquired-receipt');
     Route::post('delivery-receipts/{deliveryReceipt}/receive', [App\Http\Controllers\DeliveryReceiptController::class, 'receive'])->name('delivery-receipts.receive');
 
     Route::resource('transfers', App\Http\Controllers\TransferController::class)->only(['index', 'create', 'store', 'show']);

@@ -816,7 +816,7 @@
     <div class="modal fade" id="uploadInquiredModal_{{ $inq->unique_key }}" tabindex="-1" aria-labelledby="uploadInquiredModalLabel_{{ $inq->unique_key }}" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                <form method="POST" action="{{ route('delivery-receipts.upload-inquired-receipt') }}" enctype="multipart/form-data">
+                <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('delivery-receipts.upload-inquired-receipt') ? route('delivery-receipts.upload-inquired-receipt') : url('/delivery-receipts/upload-inquired-receipt') }}" enctype="multipart/form-data">
                     @csrf
                     <input type="hidden" name="source_type" value="{{ $inq->source_type }}">
                     <input type="hidden" name="source_id" value="{{ $inq->source_id }}">
