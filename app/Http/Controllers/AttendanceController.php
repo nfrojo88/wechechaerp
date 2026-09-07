@@ -14,7 +14,7 @@ class AttendanceController extends Controller
 {
     public function index()
     {
-        $query = Attendance::with('employee')->latest('attendance_date');
+        $query = Attendance::with('employee')->whereHas('employee')->latest('attendance_date');
 
         // Filter by date range
         if (request('date_from')) {
@@ -24,20 +24,29 @@ class AttendanceController extends Controller
             $query->whereDate('attendance_date', '<=', request('date_to'));
         }
 
-        // Filter by employee
+        // Filter by employee (name, code, or ZKTeco device ID)
         if (request('employee')) {
             $search = request('employee');
             $query->whereHas('employee', function ($q) use ($search) {
                 $q->where('full_name', 'like', "%$search%")
                   ->orWhere('employee_code', 'like', "%$search%")
-                  ->orWhere('first_name', 'like', "%$search%")
-                  ->orWhere('last_name', 'like', "%$search%");
+                  ->orWhere('device_user_id', 'like', "%$search%");
             });
         }
 
-        // Filter by status
+        // Filter by status or only records with punches added
         if (request('status')) {
             $query->where('status', request('status'));
+        } elseif (!request()->has('show_all')) {
+            // "if not added don't show in attendance section": only show records with actual clock times
+            $query->where(function ($q) {
+                $q->whereNotNull('morning_in')
+                  ->orWhereNotNull('morning_out')
+                  ->orWhereNotNull('afternoon_in')
+                  ->orWhereNotNull('afternoon_out')
+                  ->orWhereNotNull('check_in')
+                  ->orWhereNotNull('check_out');
+            });
         }
 
         $attendances = $query->paginate(30);
@@ -523,8 +532,15 @@ class AttendanceController extends Controller
             }
 
             foreach ($dates as $date => $info) {
+                // "if not added don't show in attendance section" - skip days where no punch was recorded
+                $hasAnyPunch = !empty($info['morning_in']) || !empty($info['morning_out'])
+                            || !empty($info['afternoon_in']) || !empty($info['afternoon_out']);
+                if (!$hasAnyPunch) {
+                    continue;
+                }
+
                 // Determine status
-                $hasMorningIn  = !empty($info['morning_in']);
+                $hasMorningIn   = !empty($info['morning_in']);
                 $hasAfternoonIn = !empty($info['afternoon_in']);
 
                 if ($hasMorningIn && $hasAfternoonIn) {

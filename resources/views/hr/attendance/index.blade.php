@@ -127,14 +127,19 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>Employee</th>
+                            <th style="min-width: 190px;">Employee & Device ID</th>
                             <th>Date</th>
-                            <th>Check In</th>
-                            <th>Check Out</th>
+                            <th class="text-center" style="min-width: 160px;">
+                                <div class="text-primary fw-bold"><i class="fas fa-sun me-1"></i>Morning Session</div>
+                                <div class="small text-muted fw-normal">Clock In &bull; Clock Out</div>
+                            </th>
+                            <th class="text-center" style="min-width: 160px;">
+                                <div class="text-warning fw-bold"><i class="fas fa-cloud-sun me-1"></i>Afternoon Session</div>
+                                <div class="small text-muted fw-normal">Clock In &bull; Clock Out</div>
+                            </th>
                             <th class="text-center">Hours</th>
-                            <th>Status</th>
-                            <th class="text-center">OT Hrs</th>
-                            <th class="text-end">OT Pay</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center">OT (Hrs / Pay)</th>
                             <th>Source</th>
                             <th class="text-center">Approved</th>
                         </tr>
@@ -143,32 +148,73 @@
                         @forelse($attendances as $a)
                         <tr>
                             <td>
-                                <strong>{{ $a->employee->full_name ?? $a->employee->first_name . ' ' . $a->employee->last_name }}</strong>
-                                <br><small class="text-muted">{{ $a->employee->employee_code ?? 'N/A' }}</small>
+                                <strong class="text-dark">{{ $a->employee->full_name ?? 'N/A' }}</strong>
+                                <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                                    <small class="text-muted font-monospace">{{ $a->employee->employee_code ?? 'EMP' }}</small>
+                                    @php
+                                        $devId = $a->employee->device_user_id ?: $a->biometric_device_id;
+                                    @endphp
+                                    @if($devId)
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="ZKTeco Biometric Device User ID">
+                                            <i class="fa-solid fa-fingerprint me-1"></i>Device ID: {{ $devId }}
+                                        </span>
+                                    @else
+                                        <span class="badge bg-light text-muted border" title="No ZKTeco Device ID assigned">
+                                            <i class="fa-solid fa-fingerprint me-1"></i>No Device ID
+                                        </span>
+                                    @endif
+                                </div>
                             </td>
-                            <td>{{ $a->attendance_date->format('M d, Y') }}</td>
-                            <td>
-                                @if($a->check_in)
-                                    <span class="badge bg-info">{{ $a->check_in }}</span>
-                                @else
-                                    <span class="text-muted">—</span>
-                                @endif
+                            <td class="text-nowrap">
+                                <span class="fw-semibold text-dark">{{ $a->attendance_date->format('M d, Y') }}</span>
+                                <br><small class="text-muted">{{ $a->attendance_date->format('l') }}</small>
                             </td>
-                            <td>
-                                @if($a->check_out)
-                                    <span class="badge bg-info">{{ $a->check_out }}</span>
+                            <td class="text-center">
+                                <div class="d-flex justify-content-center align-items-center gap-1">
+                                    @if($a->morning_in)
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" title="Morning Clock In">
+                                            <i class="fas fa-arrow-right me-1"></i>{{ substr($a->morning_in, 0, 5) }}
+                                        </span>
+                                    @else
+                                        <span class="badge bg-light text-muted border px-2 py-1" title="No Morning Clock In">—</span>
+                                    @endif
+                                    <span class="text-muted small">&bull;</span>
+                                    @if($a->morning_out)
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1" title="Morning Clock Out">
+                                            <i class="fas fa-arrow-left me-1"></i>{{ substr($a->morning_out, 0, 5) }}
+                                        </span>
+                                    @else
+                                        <span class="badge bg-light text-muted border px-2 py-1" title="No Morning Clock Out">—</span>
+                                    @endif
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <div class="d-flex justify-content-center align-items-center gap-1">
+                                    @if($a->afternoon_in)
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" title="Afternoon Clock In">
+                                            <i class="fas fa-arrow-right me-1"></i>{{ substr($a->afternoon_in, 0, 5) }}
+                                        </span>
+                                    @else
+                                        <span class="badge bg-light text-muted border px-2 py-1" title="No Afternoon Clock In">—</span>
+                                    @endif
+                                    <span class="text-muted small">&bull;</span>
+                                    @if($a->afternoon_out)
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1" title="Afternoon Clock Out">
+                                            <i class="fas fa-arrow-left me-1"></i>{{ substr($a->afternoon_out, 0, 5) }}
+                                        </span>
+                                    @else
+                                        <span class="badge bg-light text-muted border px-2 py-1" title="No Afternoon Clock Out">—</span>
+                                    @endif
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                @if($a->hours_worked > 0)
+                                    <strong class="text-dark">{{ number_format($a->hours_worked, 1) }}h</strong>
                                 @else
                                     <span class="text-muted">—</span>
                                 @endif
                             </td>
                             <td class="text-center">
-                                @if($a->hours_worked)
-                                    <strong>{{ $a->hours_worked }}h</strong>
-                                @else
-                                    <span class="text-muted">—</span>
-                                @endif
-                            </td>
-                            <td>
                                 @php 
                                     $statusColors = [
                                         'present' => 'success',
@@ -184,35 +230,25 @@
                                 </span>
                             </td>
                             <td class="text-center">
-                                @if(($a->overtime_hours ?? 0) > 0)
-                                    <span class="badge bg-warning text-dark">{{ $a->overtime_hours }}h</span>
-                                @else
-                                    <span class="text-muted">—</span>
-                                @endif
-                            </td>
-                            <td class="text-end">
-                                @if(($a->overtime_pay ?? 0) > 0)
-                                    @php
-                                        $otLabels = ['holiday'=>'Holiday×2.5','rest_day'=>'Rest×2.0','night_12_4'=>'Night×1.5','night_4_12'=>'Night×1.75'];
-                                    @endphp
-                                    <span class="fw-bold text-warning" title="{{ $otLabels[$a->overtime_type] ?? '' }}">
-                                        {{ number_format($a->overtime_pay, 2) }}
-                                    </span>
-                                    <br><small class="text-muted">{{ $otLabels[$a->overtime_type] ?? '' }}</small>
+                                @if(($a->overtime_hours ?? 0) > 0 || ($a->overtime_pay ?? 0) > 0)
+                                    <span class="badge bg-warning text-dark">{{ $a->overtime_hours ?? 0 }}h</span>
+                                    @if(($a->overtime_pay ?? 0) > 0)
+                                        <div class="small fw-bold text-success mt-1">{{ number_format($a->overtime_pay, 2) }} ETB</div>
+                                    @endif
                                 @else
                                     <span class="text-muted">—</span>
                                 @endif
                             </td>
                             <td>
-                                <small class="text-muted">{{ ucfirst($a->source) }}</small>
+                                <span class="badge bg-light text-secondary border">{{ ucfirst(str_replace('_', ' ', $a->source)) }}</span>
                             </td>
                             <td class="text-center">
                                 @if($a->is_approved)
-                                    <span class="badge bg-success">
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">
                                         <i class="fas fa-check me-1"></i>Approved
                                     </span>
                                 @else
-                                    <span class="badge bg-warning">
+                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle">
                                         <i class="fas fa-hourglass-half me-1"></i>Pending
                                     </span>
                                 @endif
@@ -220,7 +256,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="10" class="text-center py-5 text-muted">
+                            <td colspan="9" class="text-center py-5 text-muted">
                                 <i class="fas fa-inbox fa-3x mb-3 opacity-50"></i>
                                 <p class="mb-0">No attendance records found.</p>
                             </td>
