@@ -62,9 +62,9 @@ class LetterController extends Controller
         // Build query based on active tab
         if ($tab === 'sent') {
             $query = Letter::with(['creator', 'latestRecipient.toUser', 'attachments'])
-                ->where(function($q) use ($user) {
+                ->where(function ($q) use ($user) {
                     $q->where('created_by', $user->id)
-                      ->orWhereHas('recipients', fn($rq) => $rq->where('from_user_id', $user->id));
+                        ->orWhereHas('recipients', fn($rq) => $rq->where('from_user_id', $user->id));
                 });
         } elseif ($tab === 'all' && $isAdminOrSecretary) {
             $query = Letter::with(['creator', 'latestRecipient.toUser', 'attachments']);
@@ -99,11 +99,11 @@ class LetterController extends Controller
             $search = trim($request->search);
             $query->where(function ($q) use ($search) {
                 $q->where('letters.letter_number', 'like', "%{$search}%")
-                  ->orWhere('letters.subject', 'like', "%{$search}%")
-                  ->orWhere('letters.sender', 'like', "%{$search}%")
-                  ->orWhere('letters.sender_department', 'like', "%{$search}%")
-                  ->orWhere('letters.recipient_organization', 'like', "%{$search}%")
-                  ->orWhere('letters.specification', 'like', "%{$search}%");
+                    ->orWhere('letters.subject', 'like', "%{$search}%")
+                    ->orWhere('letters.sender', 'like', "%{$search}%")
+                    ->orWhere('letters.sender_department', 'like', "%{$search}%")
+                    ->orWhere('letters.recipient_organization', 'like', "%{$search}%")
+                    ->orWhere('letters.specification', 'like', "%{$search}%");
             });
         }
 
@@ -267,7 +267,7 @@ class LetterController extends Controller
         $unviewed = $letter->recipients()
             ->where(function ($q) use ($user, $userRoles) {
                 $q->where('to_user_id', $user->id)
-                  ->orWhereIn('to_role_name', $userRoles);
+                    ->orWhereIn('to_role_name', $userRoles);
             })
             ->whereNull('viewed_at')
             ->first();
@@ -299,11 +299,11 @@ class LetterController extends Controller
 
         // Cash and Bank accounts from Chart of Accounts for payment disbursement
         $cashAndBankAccounts = \App\Models\ChartOfAccount::where('is_active', true)
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->where('subtype', 'Cash and Bank')
-                  ->orWhere('subtype', 'like', '%Cash%')
-                  ->orWhere('subtype', 'like', '%Bank%')
-                  ->orWhere('type', 'Asset');
+                    ->orWhere('subtype', 'like', '%Cash%')
+                    ->orWhere('subtype', 'like', '%Bank%')
+                    ->orWhere('type', 'Asset');
             })
             ->orderBy('name')
             ->get();
@@ -313,7 +313,7 @@ class LetterController extends Controller
         $expenseCategories = [
             'Service'            => 'Service (አገልግሎት)',
             'Transport'          => 'Transport (ትራንስፖርት)',
-            'Loading & Unloading'=> 'Loading & Unloading (መጫን እና ማውረድ)',
+            'Loading & Unloading' => 'Loading & Unloading (መጫን እና ማውረድ)',
             'Contract Work'      => 'Contract Work (የኮንትራት ስራ)',
             'Office Material'    => 'Office Material (የቢሮ እቃ)',
             'Maintenance'        => 'Maintenance & Repairs (ጥገና)',
@@ -323,22 +323,35 @@ class LetterController extends Controller
         $projects = \App\Models\Project::where('status', '!=', 'cancelled')->orderBy('name')->get();
 
         $isFinanceOrAdmin = $user->hasAnyRole([
-            'admin', 'global_admin', 'gm', 'finance_head', 'finance_manager', 
-            'finance', 'finance_staff', 'accountant', 'cashier'
+            'admin',
+            'global_admin',
+            'gm',
+            'finance_head',
+            'finance_manager',
+            'finance',
+            'finance_staff',
+            'accountant',
+            'cashier'
         ]);
 
         $isRedirectedToFinance = $letter->recipients()
-            ->where(function($q) {
+            ->where(function ($q) {
                 $q->where('to_role_name', 'like', '%finance%')
-                  ->orWhere('to_role_name', 'like', '%cashier%')
-                  ->orWhere('to_role_name', 'like', '%accountant%');
+                    ->orWhere('to_role_name', 'like', '%cashier%')
+                    ->orWhere('to_role_name', 'like', '%accountant%');
             })
             ->exists();
 
         return view('letters.show', compact(
-            'letter', 'users', 'roles', 'cashAndBankAccounts',
-            'bankAccounts', 'expenseCategories', 'projects',
-            'isFinanceOrAdmin', 'isRedirectedToFinance'
+            'letter',
+            'users',
+            'roles',
+            'cashAndBankAccounts',
+            'bankAccounts',
+            'expenseCategories',
+            'projects',
+            'isFinanceOrAdmin',
+            'isRedirectedToFinance'
         ));
     }
 
@@ -357,7 +370,7 @@ class LetterController extends Controller
             'send_target_type' => 'required|in:user,role',
             'to_user_id'       => 'required_if:send_target_type,user|nullable|exists:users,id',
             'to_role_name'     => 'required_if:send_target_type,role|nullable|string',
-            'redirection_notes'=> 'required|string|max:1000',
+            'redirection_notes' => 'required|string|max:1000',
         ]);
 
         $toUserId = ($validated['send_target_type'] === 'user') ? $validated['to_user_id'] : null;
@@ -551,7 +564,7 @@ class LetterController extends Controller
                     'withholding_rate'          => $withholdingRate,
                     'withholding_amount'        => $withholdingAmount,
                     'withholding_receipt'       => $withholdingReceiptPath,
-                    'withholding_receipt_number'=> $validated['withholding_receipt_number'] ?? null,
+                    'withholding_receipt_number' => $validated['withholding_receipt_number'] ?? null,
                     'net_amount'                => $disbursedAmount,
                     'description'               => "Direct Payment Settlement for Letter #{$letter->letter_number}: {$letter->subject}",
                     'status'                    => \App\Models\ExpenseRequest::STATUS_PAID,
@@ -577,7 +590,7 @@ class LetterController extends Controller
                 try {
                     $expense = \App\Models\Expense::create([
                         'project_id'   => $validated['project_id'] ?? null,
-                        'category'     => strtolower($categoryName) === 'maintenance' ? 'equipment' : (in_array(strtolower($categoryName), ['labour','material','equipment','overhead','subcontractor']) ? strtolower($categoryName) : 'other'),
+                        'category'     => strtolower($categoryName) === 'maintenance' ? 'equipment' : (in_array(strtolower($categoryName), ['labour', 'material', 'equipment', 'overhead', 'subcontractor']) ? strtolower($categoryName) : 'other'),
                         'description'  => "Settlement for Letter #{$letter->letter_number}: {$letter->subject}",
                         'amount'       => $disbursedAmount,
                         'expense_date' => now()->toDateString(),
@@ -608,7 +621,7 @@ class LetterController extends Controller
                 'withholding_rate'          => $hasPayment ? $withholdingRate : 3.00,
                 'withholding_amount'        => $hasPayment ? $withholdingAmount : 0,
                 'withholding_receipt'       => $withholdingReceiptPath,
-                'withholding_receipt_number'=> $validated['withholding_receipt_number'] ?? null,
+                'withholding_receipt_number' => $validated['withholding_receipt_number'] ?? null,
                 'net_amount'                => $hasPayment ? $disbursedAmount : null,
                 'payment_reference'         => $validated['payment_reference'] ?? null,
                 'paid_from_account'         => $paidFromAccountName,
@@ -626,7 +639,7 @@ class LetterController extends Controller
                 ? (" [VAT: ETB " . number_format($vatAmount, 2) . ", WHT: ETB " . number_format($withholdingAmount, 2) . "]")
                 : "";
 
-            $routingNotes = $hasPayment 
+            $routingNotes = $hasPayment
                 ? ("Payment Disbursed: ETB " . number_format($disbursedAmount, 2) . $taxDetails . ($paidFromAccountName ? " from {$paidFromAccountName}" : "") . ($validated['payment_reference'] ? " (Ref: {$validated['payment_reference']})" : "") . ". Final Decision: " . $validated['closing_notes'])
                 : ('Closed with decision/resolution: ' . $validated['closing_notes']);
 
@@ -642,7 +655,7 @@ class LetterController extends Controller
 
             // Notify Creator
             if ($letter->created_by && $letter->created_by !== $user->id) {
-                $notifMsg = $hasPayment 
+                $notifMsg = $hasPayment
                     ? "Letter {$letter->letter_number} was finalized by {$user->name} with an authorized payment disbursement of ETB " . number_format($paymentAmount, 2) . "."
                     : "Letter {$letter->letter_number} decision was recorded and marked as Closed by {$user->name}.";
 
@@ -655,7 +668,7 @@ class LetterController extends Controller
 
             DB::commit();
 
-            $successMsg = $hasPayment 
+            $successMsg = $hasPayment
                 ? "Payment of ETB " . number_format($paymentAmount, 2) . " disbursed and letter closed successfully! Expense recorded in Company Expenses."
                 : 'Letter decision recorded and marked as Reviewed & Closed.';
 
@@ -776,7 +789,7 @@ class LetterController extends Controller
         return Letter::with(['creator', 'latestRecipient.toUser', 'attachments'])
             ->whereHas('recipients', function ($q) use ($user, $userRoles) {
                 $q->where('to_user_id', $user->id)
-                  ->orWhereIn('to_role_name', $userRoles);
+                    ->orWhereIn('to_role_name', $userRoles);
             });
     }
 

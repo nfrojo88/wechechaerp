@@ -14,27 +14,27 @@
                     <i class="fa-solid fa-file-lines text-primary me-2"></i>{{ $letter->letter_number }}
                 </h3>
                 @if($letter->type === 'incoming')
-                    <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-2 py-1">
-                        <i class="fa-solid fa-arrow-down-left me-1"></i> Incoming
-                    </span>
+                <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-2 py-1">
+                    <i class="fa-solid fa-arrow-down-left me-1"></i> Incoming
+                </span>
                 @else
-                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 px-2 py-1">
-                        <i class="fa-solid fa-arrow-up-right me-1"></i> Outgoing
-                    </span>
+                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 px-2 py-1">
+                    <i class="fa-solid fa-arrow-up-right me-1"></i> Outgoing
+                </span>
                 @endif
 
                 @if($letter->priority === 'urgent')
-                    <span class="badge bg-danger px-2 py-1"><i class="fa-solid fa-fire me-1"></i>URGENT</span>
+                <span class="badge bg-danger px-2 py-1"><i class="fa-solid fa-fire me-1"></i>URGENT</span>
                 @endif
 
                 @php
-                    $badgeClass = match($letter->status) {
-                        'pending'    => 'bg-warning text-dark',
-                        'viewed'     => 'bg-info text-dark',
-                        'redirected' => 'bg-primary text-white',
-                        'closed'     => 'bg-success text-white',
-                        default      => 'bg-secondary text-white'
-                    };
+                $badgeClass = match($letter->status) {
+                'pending' => 'bg-warning text-dark',
+                'viewed' => 'bg-info text-dark',
+                'redirected' => 'bg-primary text-white',
+                'closed' => 'bg-success text-white',
+                default => 'bg-secondary text-white'
+                };
                 @endphp
                 <span class="badge {{ $badgeClass }} px-2 py-1">{{ ucfirst($letter->status) }}</span>
             </div>
@@ -46,29 +46,29 @@
                 <i class="fa-solid fa-arrow-left me-1"></i> Back to Inbox
             </a>
             @if($letter->status !== 'closed')
-                <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#redirectModal">
-                    <i class="fa-solid fa-share me-1"></i> Redirect / Forward
-                </button>
-                <button type="button" class="btn btn-success shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
-                    <i class="fa-solid fa-check-double me-1"></i> Mark Reviewed / Closed
-                </button>
+            <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#redirectModal">
+                <i class="fa-solid fa-share me-1"></i> Redirect / Forward
+            </button>
+            <button type="button" class="btn btn-success shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
+                <i class="fa-solid fa-check-double me-1"></i> Mark Reviewed / Closed
+            </button>
             @endif
         </div>
     </div>
 
     {{-- Alerts --}}
     @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show border-start border-4 border-success" role="alert">
-            <i class="fa-solid fa-circle-check me-2"></i>{{ session('success') }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
+    <div class="alert alert-success alert-dismissible fade show border-start border-4 border-success" role="alert">
+        <i class="fa-solid fa-circle-check me-2"></i>{{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
     @endif
 
     @if(session('error'))
-        <div class="alert alert-danger alert-dismissible fade show border-start border-4 border-danger" role="alert">
-            <i class="fa-solid fa-circle-exclamation me-2"></i>{{ session('error') }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
+    <div class="alert alert-danger alert-dismissible fade show border-start border-4 border-danger" role="alert">
+        <i class="fa-solid fa-circle-exclamation me-2"></i>{{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
     @endif
 
     <div class="row g-4">
@@ -128,55 +128,55 @@
                 </div>
                 <div class="card-body">
                     @forelse($letter->attachments as $att)
-                        <div class="border rounded-3 p-3 mb-3 bg-white shadow-sm">
-                            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                                <div class="d-flex align-items-center gap-2">
-                                    @if($att->is_pdf)
-                                        <i class="fa-solid fa-file-pdf fa-2x text-danger"></i>
-                                    @else
-                                        <i class="fa-solid fa-file-image fa-2x text-primary"></i>
-                                    @endif
-                                    <div>
-                                        <div class="fw-bold text-dark">{{ $att->file_name }}</div>
-                                        <small class="text-muted">{{ $att->formatted_size }} • Uploaded by {{ $att->uploader->name ?? 'Staff' }} on {{ $att->created_at->format('M d, Y') }}</small>
-                                    </div>
-                                </div>
-                                <div class="d-flex gap-2">
-                                    <a href="{{ route('letters.attachments.preview', $att->id) }}" class="btn btn-sm btn-outline-secondary" target="_blank">
-                                        <i class="fa-solid fa-external-link me-1"></i> Open Full View
-                                    </a>
-                                    <a href="{{ route('letters.attachments.download', $att->id) }}" class="btn btn-sm btn-outline-primary" target="_blank">
-                                        <i class="fa-solid fa-download me-1"></i> Download
-                                    </a>
+                    <div class="border rounded-3 p-3 mb-3 bg-white shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                                @if($att->is_pdf)
+                                <i class="fa-solid fa-file-pdf fa-2x text-danger"></i>
+                                @else
+                                <i class="fa-solid fa-file-image fa-2x text-primary"></i>
+                                @endif
+                                <div>
+                                    <div class="fw-bold text-dark">{{ $att->file_name }}</div>
+                                    <small class="text-muted">{{ $att->formatted_size }} • Uploaded by {{ $att->uploader->name ?? 'Staff' }} on {{ $att->created_at->format('M d, Y') }}</small>
                                 </div>
                             </div>
+                            <div class="d-flex gap-2">
+                                <a href="{{ route('letters.attachments.preview', $att->id) }}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                                    <i class="fa-solid fa-external-link me-1"></i> Open Full View
+                                </a>
+                                <a href="{{ route('letters.attachments.download', $att->id) }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                    <i class="fa-solid fa-download me-1"></i> Download
+                                </a>
+                            </div>
+                        </div>
 
-                            {{-- Inline Preview --}}
-                            @php
-                                $previewUrl = route('letters.attachments.preview', $att->id);
-                            @endphp
-                            @if($att->is_pdf)
-                                <div class="mt-2 border rounded bg-light overflow-hidden" style="height: 520px;">
-                                    <iframe src="{{ $previewUrl }}" width="100%" height="100%" style="border: none;">
-                                        <p class="p-3 text-center text-muted">Your browser does not support inline PDF viewing. <a href="{{ route('letters.attachments.download', $att->id) }}">Click here to download.</a></p>
-                                    </iframe>
-                                </div>
-                            @elseif($att->is_image)
-                                <div class="mt-2 text-center p-2 bg-light rounded border">
-                                    <a href="{{ $previewUrl }}" target="_blank">
-                                        <img src="{{ $previewUrl }}"
-                                             alt="{{ $att->file_name }}"
-                                             class="img-fluid rounded shadow-sm"
-                                             style="max-height: 450px; object-fit: contain; cursor: zoom-in;">
-                                    </a>
-                                </div>
-                            @endif
+                        {{-- Inline Preview --}}
+                        @php
+                        $previewUrl = route('letters.attachments.preview', $att->id);
+                        @endphp
+                        @if($att->is_pdf)
+                        <div class="mt-2 border rounded bg-light overflow-hidden" style="height: 520px;">
+                            <iframe src="{{ $previewUrl }}" width="100%" height="100%" style="border: none;">
+                                <p class="p-3 text-center text-muted">Your browser does not support inline PDF viewing. <a href="{{ route('letters.attachments.download', $att->id) }}">Click here to download.</a></p>
+                            </iframe>
                         </div>
+                        @elseif($att->is_image)
+                        <div class="mt-2 text-center p-2 bg-light rounded border">
+                            <a href="{{ $previewUrl }}" target="_blank">
+                                <img src="{{ $previewUrl }}"
+                                    alt="{{ $att->file_name }}"
+                                    class="img-fluid rounded shadow-sm"
+                                    style="max-height: 450px; object-fit: contain; cursor: zoom-in;">
+                            </a>
+                        </div>
+                        @endif
+                    </div>
                     @empty
-                        <div class="text-center py-4 text-muted">
-                            <i class="fa-solid fa-paperclip fa-2x mb-2 d-block opacity-50"></i>
-                            No document attachments uploaded for this letter.
-                        </div>
+                    <div class="text-center py-4 text-muted">
+                        <i class="fa-solid fa-paperclip fa-2x mb-2 d-block opacity-50"></i>
+                        No document attachments uploaded for this letter.
+                    </div>
                     @endforelse
                 </div>
             </div>
@@ -185,8 +185,8 @@
         {{-- Right Column: Actions & Routing History Timeline --}}
         <div class="col-lg-4">
             @php
-                $currentUser = auth()->user();
-                $isSecretaryOnly = $currentUser && $currentUser->hasRole('secretary') && !$currentUser->hasAnyRole(['admin', 'global_admin', 'gm', 'manager', 'director', 'hr_manager', 'finance_head']);
+            $currentUser = auth()->user();
+            $isSecretaryOnly = $currentUser && $currentUser->hasRole('secretary') && !$currentUser->hasAnyRole(['admin', 'global_admin', 'gm', 'manager', 'director', 'hr_manager', 'finance_head']);
             @endphp
 
             {{-- Quick Action Card --}}
@@ -198,17 +198,17 @@
                 <div class="card-body">
                     <p class="small text-muted mb-3">
                         @if($isSecretaryOnly)
-                            As Secretary, you can forward this letter to the assigned manager or department for decision-making.
+                        As Secretary, you can forward this letter to the assigned manager or department for decision-making.
                         @else
-                            You can forward this letter to another colleague/department or record a decision and close it.
+                        You can forward this letter to another colleague/department or record a decision and close it.
                         @endif
                     </p>
 
                     @if($isRedirectedToFinance || $isFinanceOrAdmin)
-                        <div class="alert alert-warning border-0 shadow-sm rounded-3 py-2 px-3 small mb-3">
-                            <i class="fa-solid fa-hand-holding-dollar text-warning fa-lg me-1"></i>
-                            <strong>Finance Action:</strong> You can give a final decision and optionally process payment disbursement &amp; expense booking directly.
-                        </div>
+                    <div class="alert alert-warning border-0 shadow-sm rounded-3 py-2 px-3 small mb-3">
+                        <i class="fa-solid fa-hand-holding-dollar text-warning fa-lg me-1"></i>
+                        <strong>Finance Action:</strong> You can give a final decision and optionally process payment disbursement &amp; expense booking directly.
+                    </div>
                     @endif
 
                     <div class="d-grid gap-2">
@@ -217,14 +217,14 @@
                         </button>
 
                         @if(!$isSecretaryOnly)
-                            <button type="button" class="btn btn-success py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
-                                <i class="fa-solid fa-check-double me-1"></i> Give Decision &amp; Close Letter
-                            </button>
+                        <button type="button" class="btn btn-success py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
+                            <i class="fa-solid fa-check-double me-1"></i> Give Decision &amp; Close Letter
+                        </button>
                         @else
-                            <div class="alert alert-info py-2 px-3 mb-0 small border-0 bg-info bg-opacity-10 text-dark rounded-3">
-                                <i class="fa-solid fa-shield-halved text-info me-1"></i>
-                                <strong>Secretary Access:</strong> You can create and forward letters. Official decisions &amp; closure are reserved for assigned managers.
-                            </div>
+                        <div class="alert alert-info py-2 px-3 mb-0 small border-0 bg-info bg-opacity-10 text-dark rounded-3">
+                            <i class="fa-solid fa-shield-halved text-info me-1"></i>
+                            <strong>Secretary Access:</strong> You can create and forward letters. Official decisions &amp; closure are reserved for assigned managers.
+                        </div>
                         @endif
                     </div>
                 </div>
@@ -238,64 +238,64 @@
                             <i class="fa-solid fa-circle-check fa-lg"></i> Letter Closed / Final Decision Recorded
                         </div>
                         @if($letter->payment_amount > 0)
-                            <span class="badge bg-success shadow-sm px-2 py-1">
-                                <i class="fa-solid fa-money-bill-wave me-1"></i>ETB {{ number_format($letter->payment_amount, 2) }} Paid
-                            </span>
+                        <span class="badge bg-success shadow-sm px-2 py-1">
+                            <i class="fa-solid fa-money-bill-wave me-1"></i>ETB {{ number_format($letter->payment_amount, 2) }} Paid
+                        </span>
                         @endif
                     </div>
                     <p class="small text-muted mb-1">Decided &amp; closed by <strong>{{ $letter->closer->name ?? 'Staff' }}</strong> on {{ $letter->closed_at ? $letter->closed_at->format('M d, Y H:i') : '' }}.</p>
                     @if($letter->closing_notes)
-                        <div class="small p-2 bg-white rounded border text-dark mt-2">
-                            <strong>Decision / Closing Notes:</strong> {{ $letter->closing_notes }}
-                        </div>
+                    <div class="small p-2 bg-white rounded border text-dark mt-2">
+                        <strong>Decision / Closing Notes:</strong> {{ $letter->closing_notes }}
+                    </div>
                     @endif
 
                     {{-- Financial Settlement Details --}}
                     @if($letter->payment_amount > 0)
-                        <div class="card border-0 rounded-3 mt-3 shadow-sm" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac !important;">
-                            <div class="card-body p-3">
-                                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom border-success border-opacity-25">
-                                    <div class="fw-bold text-success">
-                                        <i class="fa-solid fa-receipt me-1"></i> Financial Payment &amp; Expense Settlement
-                                    </div>
-                                    <span class="badge bg-success text-white">Disbursed</span>
+                    <div class="card border-0 rounded-3 mt-3 shadow-sm" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1px solid #86efac !important;">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom border-success border-opacity-25">
+                                <div class="fw-bold text-success">
+                                    <i class="fa-solid fa-receipt me-1"></i> Financial Payment &amp; Expense Settlement
                                 </div>
-                                <div class="row g-2 small text-dark">
-                                    <div class="col-sm-6">
-                                        <div class="text-muted" style="font-size: 0.78rem;">Amount Disbursed:</div>
-                                        <div class="fw-bold text-success fs-6">ETB {{ number_format($letter->payment_amount, 2) }}</div>
-                                    </div>
-                                    <div class="col-sm-6">
-                                        <div class="text-muted" style="font-size: 0.78rem;">Paid From Account:</div>
-                                        <div class="fw-bold">{{ $letter->paid_from_account ?? ($letter->chartOfAccount->name ?? 'Company Account') }}</div>
-                                    </div>
-                                    <div class="col-sm-6">
-                                        <div class="text-muted" style="font-size: 0.78rem;">Reference / Cheque:</div>
-                                        <div class="fw-semibold font-monospace">{{ $letter->payment_reference ?? 'N/A' }}</div>
-                                    </div>
-                                    <div class="col-sm-6">
-                                        <div class="text-muted" style="font-size: 0.78rem;">Paid By / Date:</div>
-                                        <div>{{ $letter->payer->name ?? 'Finance Officer' }} on {{ optional($letter->paid_at)->format('M d, Y') }}</div>
-                                    </div>
+                                <span class="badge bg-success text-white">Disbursed</span>
+                            </div>
+                            <div class="row g-2 small text-dark">
+                                <div class="col-sm-6">
+                                    <div class="text-muted" style="font-size: 0.78rem;">Amount Disbursed:</div>
+                                    <div class="fw-bold text-success fs-6">ETB {{ number_format($letter->payment_amount, 2) }}</div>
                                 </div>
-
-                                <div class="d-flex gap-2 mt-3 pt-2 border-top border-success border-opacity-25 flex-wrap">
-                                    @if($letter->expense_request_id)
-                                        <a href="{{ route('expense-requests.show', $letter->expense_request_id) }}" class="btn btn-sm btn-outline-success bg-white shadow-sm">
-                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i> View Expense Request
-                                        </a>
-                                    @endif
-                                    @if($letter->payment_voucher_path)
-                                        <a href="{{ asset('storage/' . $letter->payment_voucher_path) }}" target="_blank" class="btn btn-sm btn-outline-primary bg-white shadow-sm">
-                                            <i class="fa-solid fa-paperclip me-1"></i> View Payment Voucher
-                                        </a>
-                                    @endif
-                                    <a href="{{ route('expense-requests.history') }}" class="btn btn-sm btn-link text-success text-decoration-none ms-auto">
-                                        Company Expense History &rarr;
-                                    </a>
+                                <div class="col-sm-6">
+                                    <div class="text-muted" style="font-size: 0.78rem;">Paid From Account:</div>
+                                    <div class="fw-bold">{{ $letter->paid_from_account ?? ($letter->chartOfAccount->name ?? 'Company Account') }}</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-muted" style="font-size: 0.78rem;">Reference / Cheque:</div>
+                                    <div class="fw-semibold font-monospace">{{ $letter->payment_reference ?? 'N/A' }}</div>
+                                </div>
+                                <div class="col-sm-6">
+                                    <div class="text-muted" style="font-size: 0.78rem;">Paid By / Date:</div>
+                                    <div>{{ $letter->payer->name ?? 'Finance Officer' }} on {{ optional($letter->paid_at)->format('M d, Y') }}</div>
                                 </div>
                             </div>
+
+                            <div class="d-flex gap-2 mt-3 pt-2 border-top border-success border-opacity-25 flex-wrap">
+                                @if($letter->expense_request_id)
+                                <a href="{{ route('expense-requests.show', $letter->expense_request_id) }}" class="btn btn-sm btn-outline-success bg-white shadow-sm">
+                                    <i class="fa-solid fa-file-invoice-dollar me-1"></i> View Expense Request
+                                </a>
+                                @endif
+                                @if($letter->payment_voucher_path)
+                                <a href="{{ asset('storage/' . $letter->payment_voucher_path) }}" target="_blank" class="btn btn-sm btn-outline-primary bg-white shadow-sm">
+                                    <i class="fa-solid fa-paperclip me-1"></i> View Payment Voucher
+                                </a>
+                                @endif
+                                <a href="{{ route('expense-requests.history') }}" class="btn btn-sm btn-link text-success text-decoration-none ms-auto">
+                                    Company Expense History &rarr;
+                                </a>
+                            </div>
                         </div>
+                    </div>
                     @endif
                 </div>
             </div>
@@ -311,42 +311,42 @@
                 <div class="card-body p-3">
                     <div class="timeline position-relative ps-3" style="border-left: 2px solid #dee2e6;">
                         @forelse($letter->recipients as $recipient)
-                            <div class="timeline-item mb-4 position-relative ps-3">
-                                {{-- Circle dot --}}
-                                <div class="position-absolute rounded-circle bg-primary" 
-                                     style="width: 12px; height: 12px; left: -20px; top: 4px; border: 2px solid white;"></div>
-                                
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <span class="badge bg-secondary small">
-                                        {{ ucfirst(str_replace('_', ' ', $recipient->action)) }}
-                                    </span>
-                                    <small class="text-muted">{{ $recipient->created_at->format('M d, H:i') }}</small>
-                                </div>
+                        <div class="timeline-item mb-4 position-relative ps-3">
+                            {{-- Circle dot --}}
+                            <div class="position-absolute rounded-circle bg-primary"
+                                style="width: 12px; height: 12px; left: -20px; top: 4px; border: 2px solid white;"></div>
 
-                                <div class="small fw-semibold text-dark">
-                                    From: <span class="text-primary">{{ $recipient->fromUser->name ?? 'Secretary' }}</span>
-                                </div>
-                                <div class="small text-muted">
-                                    To: <strong class="text-dark">{{ $recipient->recipient_label }}</strong>
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 0.68rem;">
-                                        <i class="fa-solid fa-mobile-screen me-1"></i>SMS Dispatched
-                                    </span>
-                                </div>
-
-                                @if($recipient->notes)
-                                    <div class="small bg-light p-2 rounded mt-2 text-secondary border">
-                                        <i class="fa-solid fa-comment-dots me-1 text-muted"></i> "{{ $recipient->notes }}"
-                                    </div>
-                                @endif
-
-                                @if($recipient->viewed_at)
-                                    <div class="small text-success mt-1" style="font-size: 0.75rem;">
-                                        <i class="fa-solid fa-eye me-1"></i> Viewed on {{ $recipient->viewed_at->format('M d, Y H:i') }}
-                                    </div>
-                                @endif
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="badge bg-secondary small">
+                                    {{ ucfirst(str_replace('_', ' ', $recipient->action)) }}
+                                </span>
+                                <small class="text-muted">{{ $recipient->created_at->format('M d, H:i') }}</small>
                             </div>
+
+                            <div class="small fw-semibold text-dark">
+                                From: <span class="text-primary">{{ $recipient->fromUser->name ?? 'Secretary' }}</span>
+                            </div>
+                            <div class="small text-muted">
+                                To: <strong class="text-dark">{{ $recipient->recipient_label }}</strong>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 0.68rem;">
+                                    <i class="fa-solid fa-mobile-screen me-1"></i>SMS Dispatched
+                                </span>
+                            </div>
+
+                            @if($recipient->notes)
+                            <div class="small bg-light p-2 rounded mt-2 text-secondary border">
+                                <i class="fa-solid fa-comment-dots me-1 text-muted"></i> "{{ $recipient->notes }}"
+                            </div>
+                            @endif
+
+                            @if($recipient->viewed_at)
+                            <div class="small text-success mt-1" style="font-size: 0.75rem;">
+                                <i class="fa-solid fa-eye me-1"></i> Viewed on {{ $recipient->viewed_at->format('M d, Y H:i') }}
+                            </div>
+                            @endif
+                        </div>
                         @empty
-                            <div class="text-muted small text-center py-3">No routing logs recorded yet.</div>
+                        <div class="text-muted small text-center py-3">No routing logs recorded yet.</div>
                         @endforelse
                     </div>
                 </div>
@@ -387,7 +387,7 @@
                         <select name="to_user_id" id="modalToUser" class="form-select" required>
                             <option value="">-- Choose User --</option>
                             @foreach($users as $u)
-                                <option value="{{ $u->id }}">{{ $u->name }} ({{ $u->email }})</option>
+                            <option value="{{ $u->id }}">{{ $u->name }} ({{ $u->email }})</option>
                             @endforeach
                         </select>
                     </div>
@@ -397,15 +397,15 @@
                         <select name="to_role_name" id="modalToRole" class="form-select">
                             <option value="">-- Choose Role --</option>
                             @foreach($roles as $r)
-                                <option value="{{ $r }}">{{ ucfirst(str_replace(['_', '-'], ' ', $r)) }}</option>
+                            <option value="{{ $r }}">{{ ucfirst(str_replace(['_', '-'], ' ', $r)) }}</option>
                             @endforeach
                         </select>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label fw-bold">Forwarding Notes / Remarks <span class="text-danger">*</span></label>
-                        <textarea name="redirection_notes" class="form-control" rows="3" 
-                                  placeholder="e.g., Forwarding to Finance team for payment approval and processing..." required></textarea>
+                        <textarea name="redirection_notes" class="form-control" rows="3"
+                            placeholder="e.g., Forwarding to Finance team for payment approval and processing..." required></textarea>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
@@ -433,11 +433,11 @@
                 @csrf
                 <div class="modal-body p-4">
                     <p class="small text-muted mb-3">Provide a summary of the action taken, resolution, or financial settlement for this letter to mark it officially closed.</p>
-                    
+
                     <div class="mb-3">
                         <label class="form-label fw-bold">Resolution Notes / Decision Summary <span class="text-danger">*</span></label>
-                        <textarea name="closing_notes" class="form-control" rows="3" 
-                                  placeholder="e.g., Payment approved and disbursed to vendor according to attached invoice and contract terms." required></textarea>
+                        <textarea name="closing_notes" class="form-control" rows="3"
+                            placeholder="e.g., Payment approved and disbursed to vendor according to attached invoice and contract terms." required></textarea>
                     </div>
 
                     {{-- Financial Payment Option Card --}}
@@ -466,9 +466,9 @@
                                     <select name="chart_of_account_id" id="modalCoaId" class="form-select">
                                         <option value="">-- Select Cash / Bank Account --</option>
                                         @foreach($cashAndBankAccounts ?? [] as $coa)
-                                            <option value="{{ $coa->id }}">
-                                                {{ $coa->code }} - {{ $coa->name }} (Bal: ETB {{ number_format($coa->current_balance ?? 0, 2) }})
-                                            </option>
+                                        <option value="{{ $coa->id }}">
+                                            {{ $coa->code }} - {{ $coa->name }} (Bal: ETB {{ number_format($coa->current_balance ?? 0, 2) }})
+                                        </option>
                                         @endforeach
                                     </select>
                                 </div>
@@ -500,8 +500,8 @@
                                             <div class="col-md-6">
                                                 <label class="form-label small fw-semibold mb-1">Withholding Tax (የቅድመ ግብር 3%)</label>
                                                 <div class="form-check form-switch mt-1">
-                                                    <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" 
-                                                           id="modalWithholdingToggle" onchange="recalculateLetterTax()">
+                                                    <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1"
+                                                        id="modalWithholdingToggle" onchange="recalculateLetterTax()">
                                                     <label class="form-check-label small" for="modalWithholdingToggle">
                                                         Apply 3% Service Withholding Deduction
                                                     </label>
@@ -543,15 +543,15 @@
                                             </div>
                                             <div class="row g-2 align-items-center">
                                                 <div class="col-md-7">
-                                                    <input type="file" name="withholding_receipt" id="modalWithholdingReceipt" 
-                                                           class="form-control form-control-sm" 
-                                                           accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
+                                                    <input type="file" name="withholding_receipt" id="modalWithholdingReceipt"
+                                                        class="form-control form-control-sm"
+                                                        accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
                                                     <small class="text-muted" style="font-size:0.75rem;">Upload official Withholding receipt image or PDF.</small>
                                                 </div>
                                                 <div class="col-md-5">
-                                                    <input type="text" name="withholding_receipt_number" id="modalWithholdingReceiptNo" 
-                                                           class="form-control form-control-sm" 
-                                                           placeholder="WHT Receipt / Voucher #">
+                                                    <input type="text" name="withholding_receipt_number" id="modalWithholdingReceiptNo"
+                                                        class="form-control form-control-sm"
+                                                        placeholder="WHT Receipt / Voucher #">
                                                     <small class="text-muted" style="font-size:0.75rem;">Voucher / Receipt Serial # (Optional)</small>
                                                 </div>
                                             </div>
@@ -566,7 +566,7 @@
                                     <label class="form-label fw-semibold text-dark">Expense Category</label>
                                     <select name="expense_category" class="form-select">
                                         @foreach($expenseCategories ?? [] as $key => $label)
-                                            <option value="{{ $key }}" {{ $key === 'Service' ? 'selected' : '' }}>{{ $label }}</option>
+                                        <option value="{{ $key }}" {{ $key === 'Service' ? 'selected' : '' }}>{{ $label }}</option>
                                         @endforeach
                                     </select>
                                 </div>
@@ -576,7 +576,7 @@
                                     <select name="project_id" class="form-select">
                                         <option value="">-- General / Head Office Expense --</option>
                                         @foreach($projects ?? [] as $proj)
-                                            <option value="{{ $proj->id }}">{{ $proj->name ?? $proj->project_name }}</option>
+                                        <option value="{{ $proj->id }}">{{ $proj->name ?? $proj->project_name }}</option>
                                         @endforeach
                                     </select>
                                 </div>
@@ -606,129 +606,132 @@
 </div>
 
 <script>
-function toggleModalTarget() {
-    const isRole = document.getElementById('modalTargetRole').checked;
-    const userBox = document.getElementById('modalUserBox');
-    const roleBox = document.getElementById('modalRoleBox');
-    const userSelect = document.getElementById('modalToUser');
-    const roleSelect = document.getElementById('modalToRole');
+    function toggleModalTarget() {
+        const isRole = document.getElementById('modalTargetRole').checked;
+        const userBox = document.getElementById('modalUserBox');
+        const roleBox = document.getElementById('modalRoleBox');
+        const userSelect = document.getElementById('modalToUser');
+        const roleSelect = document.getElementById('modalToRole');
 
-    if (isRole) {
-        userBox.classList.add('d-none');
-        roleBox.classList.remove('d-none');
-        userSelect.removeAttribute('required');
-        roleSelect.setAttribute('required', 'required');
-    } else {
-        userBox.classList.remove('d-none');
-        roleBox.classList.add('d-none');
-        userSelect.setAttribute('required', 'required');
-        roleSelect.removeAttribute('required');
-    }
-}
-
-function togglePaymentFields() {
-    const isChecked = document.getElementById('recordPaymentSwitch').checked;
-    const container = document.getElementById('paymentFieldsContainer');
-    const grossInput = document.getElementById('modalGrossAmount');
-    const coaSelect = document.getElementById('modalCoaId');
-
-    if (isChecked) {
-        container.classList.remove('d-none');
-        if (grossInput) grossInput.setAttribute('required', 'required');
-        if (coaSelect) coaSelect.setAttribute('required', 'required');
-        recalculateLetterTax();
-    } else {
-        container.classList.add('d-none');
-        if (grossInput) grossInput.removeAttribute('required');
-        if (coaSelect) coaSelect.removeAttribute('required');
-    }
-}
-
-function recalculateLetterTax() {
-    const grossInput = document.getElementById('modalGrossAmount');
-    const vatTypeSelect = document.getElementById('modalVatType');
-    const whtToggle = document.getElementById('modalWithholdingToggle');
-
-    if (!grossInput) return;
-    const gross = parseFloat(grossInput.value) || 0;
-    const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
-    const vatRate = 15.00;
-    const hasWht = whtToggle ? whtToggle.checked : false;
-    const whtRate = 3.00;
-
-    let vatAmount = 0.0;
-    let baseAmount = gross;
-    let whtAmount = 0.0;
-    let netAmount = gross;
-
-    if (vatType === 'exclusive') {
-        vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
-        baseAmount = gross;
-        const totalGrossWithVat = gross + vatAmount;
-        if (hasWht) {
-            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
-        }
-        netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
-    } else if (vatType === 'inclusive' || vatType === 'vat_b') {
-        baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
-        vatAmount = Math.round((gross - baseAmount) * 100) / 100;
-        if (hasWht) {
-            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
-        }
-        netAmount = Math.round((gross - whtAmount) * 100) / 100;
-    } else {
-        baseAmount = gross;
-        vatAmount = 0.0;
-        if (hasWht) {
-            whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
-        }
-        netAmount = Math.round((gross - whtAmount) * 100) / 100;
-    }
-
-    // Set hidden inputs
-    const hiddenVat = document.getElementById('modalVatAmount');
-    const hiddenWht = document.getElementById('modalWithholdingAmount');
-    const hiddenNet = document.getElementById('modalNetAmount');
-    const hiddenPayment = document.getElementById('modalPaymentAmount');
-
-    if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
-    if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
-    if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
-    if (hiddenPayment) hiddenPayment.value = (netAmount > 0 ? netAmount : gross).toFixed(2);
-
-    // Update display labels
-    const dispBase = document.getElementById('displayLetterBase');
-    const dispVat = document.getElementById('displayLetterVat');
-    const dispWht = document.getElementById('displayLetterWht');
-    const dispNet = document.getElementById('displayLetterNet');
-    const btnSpan = document.getElementById('btnLetterAmount');
-
-    const fmt = num => 'ETB ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-    if (dispBase) dispBase.innerText = fmt(baseAmount);
-    if (dispVat) dispVat.innerText = (vatAmount > 0 ? '+ ' : '') + fmt(vatAmount);
-    if (dispWht) dispWht.innerText = (whtAmount > 0 ? '- ' : '') + fmt(whtAmount);
-    if (dispNet) dispNet.innerText = fmt(netAmount);
-    if (btnSpan) btnSpan.innerText = fmt(netAmount);
-
-    // Toggle Withholding Receipt Section requirement
-    const whtSection = document.getElementById('withholdingReceiptSection');
-    const whtInput = document.getElementById('modalWithholdingReceipt');
-    if (whtSection) {
-        if (hasWht) {
-            whtSection.style.display = 'block';
-            if (whtInput) whtInput.required = true;
+        if (isRole) {
+            userBox.classList.add('d-none');
+            roleBox.classList.remove('d-none');
+            userSelect.removeAttribute('required');
+            roleSelect.setAttribute('required', 'required');
         } else {
-            whtSection.style.display = 'none';
-            if (whtInput) whtInput.required = false;
+            userBox.classList.remove('d-none');
+            roleBox.classList.add('d-none');
+            userSelect.setAttribute('required', 'required');
+            roleSelect.removeAttribute('required');
         }
     }
-}
 
-document.addEventListener('DOMContentLoaded', function() {
-    if (document.getElementById('recordPaymentSwitch')) {
-        togglePaymentFields();
+    function togglePaymentFields() {
+        const isChecked = document.getElementById('recordPaymentSwitch').checked;
+        const container = document.getElementById('paymentFieldsContainer');
+        const grossInput = document.getElementById('modalGrossAmount');
+        const coaSelect = document.getElementById('modalCoaId');
+
+        if (isChecked) {
+            container.classList.remove('d-none');
+            if (grossInput) grossInput.setAttribute('required', 'required');
+            if (coaSelect) coaSelect.setAttribute('required', 'required');
+            recalculateLetterTax();
+        } else {
+            container.classList.add('d-none');
+            if (grossInput) grossInput.removeAttribute('required');
+            if (coaSelect) coaSelect.removeAttribute('required');
+        }
     }
-});
+
+    function recalculateLetterTax() {
+        const grossInput = document.getElementById('modalGrossAmount');
+        const vatTypeSelect = document.getElementById('modalVatType');
+        const whtToggle = document.getElementById('modalWithholdingToggle');
+
+        if (!grossInput) return;
+        const gross = parseFloat(grossInput.value) || 0;
+        const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
+        const vatRate = 15.00;
+        const hasWht = whtToggle ? whtToggle.checked : false;
+        const whtRate = 3.00;
+
+        let vatAmount = 0.0;
+        let baseAmount = gross;
+        let whtAmount = 0.0;
+        let netAmount = gross;
+
+        if (vatType === 'exclusive') {
+            vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
+            baseAmount = gross;
+            const totalGrossWithVat = gross + vatAmount;
+            if (hasWht) {
+                whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+            }
+            netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
+        } else if (vatType === 'inclusive' || vatType === 'vat_b') {
+            baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
+            vatAmount = Math.round((gross - baseAmount) * 100) / 100;
+            if (hasWht) {
+                whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+            }
+            netAmount = Math.round((gross - whtAmount) * 100) / 100;
+        } else {
+            baseAmount = gross;
+            vatAmount = 0.0;
+            if (hasWht) {
+                whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+            }
+            netAmount = Math.round((gross - whtAmount) * 100) / 100;
+        }
+
+        // Set hidden inputs
+        const hiddenVat = document.getElementById('modalVatAmount');
+        const hiddenWht = document.getElementById('modalWithholdingAmount');
+        const hiddenNet = document.getElementById('modalNetAmount');
+        const hiddenPayment = document.getElementById('modalPaymentAmount');
+
+        if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
+        if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
+        if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
+        if (hiddenPayment) hiddenPayment.value = (netAmount > 0 ? netAmount : gross).toFixed(2);
+
+        // Update display labels
+        const dispBase = document.getElementById('displayLetterBase');
+        const dispVat = document.getElementById('displayLetterVat');
+        const dispWht = document.getElementById('displayLetterWht');
+        const dispNet = document.getElementById('displayLetterNet');
+        const btnSpan = document.getElementById('btnLetterAmount');
+
+        const fmt = num => 'ETB ' + num.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+
+        if (dispBase) dispBase.innerText = fmt(baseAmount);
+        if (dispVat) dispVat.innerText = (vatAmount > 0 ? '+ ' : '') + fmt(vatAmount);
+        if (dispWht) dispWht.innerText = (whtAmount > 0 ? '- ' : '') + fmt(whtAmount);
+        if (dispNet) dispNet.innerText = fmt(netAmount);
+        if (btnSpan) btnSpan.innerText = fmt(netAmount);
+
+        // Toggle Withholding Receipt Section requirement
+        const whtSection = document.getElementById('withholdingReceiptSection');
+        const whtInput = document.getElementById('modalWithholdingReceipt');
+        if (whtSection) {
+            if (hasWht) {
+                whtSection.style.display = 'block';
+                if (whtInput) whtInput.required = true;
+            } else {
+                whtSection.style.display = 'none';
+                if (whtInput) whtInput.required = false;
+            }
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (document.getElementById('recordPaymentSwitch')) {
+            togglePaymentFields();
+        }
+    });
 </script>
 @endsection

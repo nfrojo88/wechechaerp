@@ -16,6 +16,8 @@ class LetterRecipient extends Model
         'to_role_name',
         'action',
         'notes',
+        'attachment_path',
+        'attachment_name',
         'status',
         'viewed_at',
     ];

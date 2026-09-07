@@ -25,6 +25,7 @@ class Letter extends Model
         'closed_by',
         'closed_at',
         'closing_notes',
+        'resolution_attachment_path',
         'payment_amount',
         'gross_amount',
         'vat_type',
