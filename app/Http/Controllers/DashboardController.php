@@ -111,6 +111,7 @@ class DashboardController extends Controller
             }
 
             $query = \App\Models\ExpenseRequest::with(['user', 'employee', 'bankAccount', 'project'])
+                ->where('status', \App\Models\ExpenseRequest::STATUS_PAID)
                 ->where(function ($q) {
                     $q->where('has_withholding', true)
                       ->orWhere('withholding_amount', '>', 0)

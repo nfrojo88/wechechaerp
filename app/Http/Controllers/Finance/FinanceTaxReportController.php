@@ -26,8 +26,9 @@ class FinanceTaxReportController extends Controller
         $toDate = $request->input('to_date');
         $accountId = $request->input('account_id');
 
-        // Base Query: All records that have VAT, Withholding Tax, or an uploaded Withholding slip
+        // Base Query: Strictly PAID records that have VAT, Withholding Tax, or an uploaded Withholding slip
         $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount', 'letter', 'purchaseRequest'])
+            ->where('status', ExpenseRequest::STATUS_PAID)
             ->where(function ($q) {
                 $q->where('has_withholding', true)
                   ->orWhere('withholding_amount', '>', 0)
@@ -49,8 +50,8 @@ class FinanceTaxReportController extends Controller
                 $q->where('vat_amount', '>', 0)
                   ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
             });
-        } elseif ($tab === 'paid') {
-            $query->where('status', ExpenseRequest::STATUS_PAID);
+        } elseif ($tab === 'slips') {
+            $query->whereNotNull('withholding_receipt')->where('withholding_receipt', '!=', '');
         }
 
 
@@ -166,8 +167,9 @@ class FinanceTaxReportController extends Controller
         $fromDate = $request->input('from_date');
         $toDate = $request->input('to_date');
 
-        // Base Query: All records that have VAT, Withholding Tax, or an uploaded Withholding slip
+        // Base Query: Strictly PAID records that have VAT, Withholding Tax, or an uploaded Withholding slip
         $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount', 'letter', 'purchaseRequest'])
+            ->where('status', ExpenseRequest::STATUS_PAID)
             ->where(function ($q) {
                 $q->where('has_withholding', true)
                   ->orWhere('withholding_amount', '>', 0)
@@ -188,8 +190,8 @@ class FinanceTaxReportController extends Controller
                 $q->where('vat_amount', '>', 0)
                   ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
             });
-        } elseif ($tab === 'paid') {
-            $query->where('status', ExpenseRequest::STATUS_PAID);
+        } elseif ($tab === 'slips') {
+            $query->whereNotNull('withholding_receipt')->where('withholding_receipt', '!=', '');
         }
 
 

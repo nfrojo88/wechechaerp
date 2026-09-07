@@ -102,15 +102,15 @@
         <div class="card-header bg-white border-bottom py-3 px-4">
             <ul class="nav nav-pills card-header-pills gap-2 flex-wrap">
                 <li class="nav-item">
-                    <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'all' ? 'active bg-primary text-white shadow-sm' : 'text-secondary' }}" 
+                    <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'all' || $tab === 'paid' ? 'active bg-primary text-white shadow-sm' : 'text-secondary' }}" 
                        href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'all'])) }}">
-                        <i class="fa-solid fa-receipt me-1"></i> All Verified Slips ({{ $totalRecords }})
+                        <i class="fa-solid fa-receipt me-1"></i> All Paid Tax Slips ({{ $totalRecords }})
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'withholding' ? 'active bg-danger text-white shadow-sm' : 'text-secondary' }}" 
                        href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'withholding'])) }}">
-                        <i class="fa-solid fa-scissors me-1"></i> 3% Withholding Tax
+                        <i class="fa-solid fa-scissors me-1"></i> 3% Withholding Tax ({{ $totalWhtTransactions }})
                     </a>
                 </li>
                 <li class="nav-item">
@@ -120,9 +120,9 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'paid' ? 'active bg-success text-white shadow-sm' : 'text-secondary' }}" 
-                       href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'paid'])) }}">
-                        <i class="fa-solid fa-check-circle me-1"></i> Paid &amp; Completed
+                    <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'slips' ? 'active bg-success text-white shadow-sm' : 'text-secondary' }}" 
+                       href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'slips'])) }}">
+                        <i class="fa-solid fa-file-circle-check me-1"></i> WHT Slips Attached ({{ $slipsAttachedCount }})
                     </a>
                 </li>
             </ul>
