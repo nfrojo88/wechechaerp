@@ -386,48 +386,43 @@
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                <tr class="table-light">
-                                                    <td><strong class="text-primary"><i class="fa-solid fa-fingerprint me-1"></i>AC-No.</strong></td>
-                                                    <td><strong class="text-dark">ZKTeco Device User ID</strong> <span class="badge bg-success ms-1">Primary Link</span></td>
-                                                    <td>Matches numeric ID assigned in biometric device (e.g. <code>1</code>, <code>2</code>, <code>17</code>, <code>21</code>, <code>50</code>) set on the Employee Profile.</td>
-                                                </tr>
-                                                <tr class="table-light">
-                                                    <td><strong class="text-primary"><i class="far fa-calendar-alt me-1"></i>Date</strong></td>
-                                                    <td><strong class="text-dark">Attendance Date</strong> <span class="badge bg-primary ms-1">Required</span></td>
-                                                    <td>Punches are recorded for each specific day from this column (e.g. <code>9/2/2026</code>, <code>2026-09-02</code>).</td>
-                                                </tr>
-                                                <tr>
-                                                    <td><code>Emp No.</code></td>
-                                                    <td>Employee Code (Fallback)</td>
-                                                    <td>Alternative match against Employee Code (e.g. <code>EMP-20</code>, <code>78</code>).</td>
-                                                </tr>
-                                                <tr>
-                                                    <td><code>Name</code></td>
-                                                    <td>Employee Name (Fallback)</td>
-                                                    <td>Fallback match against Employee Full Name (e.g. <code>Mekdes...Alemu</code>).</td>
-                                                </tr>
-                                                <tr>
-                                                    <td><code>Timetable</code></td>
-                                                    <td>Session Type</td>
-                                                    <td><code>Morning</code> / <code>Afternoon</code> (automatically combined into one daily record).</td>
-                                                </tr>
-                                                <tr>
-                                                    <td><code>Clock In</code> / <code>Clock Out</code></td>
-                                                    <td>Check-In / Check-Out Times</td>
-                                                    <td>Actual punch times recorded by biometric scanner (e.g. <code>08:25</code>, <code>17:35</code>).</td>
-                                                </tr>
-                                                <tr>
-                                                    <td><code>Late</code> / <code>OT Time</code></td>
-                                                    <td>Late Minutes & Overtime</td>
-                                                    <td>Calculates late arrival penalties and overtime pay based on basic salary.</td>
-                                                </tr>
-                                            </tbody>
+                                                 <tr class="table-light">
+                                                     <td><strong class="text-primary"><i class="fa-solid fa-fingerprint me-1"></i>AC-No.</strong></td>
+                                                     <td><strong class="text-dark">ZKTeco Device User ID</strong> <span class="badge bg-danger ms-1">Strict Match</span></td>
+                                                     <td>Strict rule: must match <strong>ZKTeco Device User ID</strong> on the Employee Profile (e.g. <code>1</code>, <code>2</code>, <code>17</code>, <code>21</code>). If not assigned on the employee, records are strictly skipped.</td>
+                                                 </tr>
+                                                 <tr class="table-light">
+                                                     <td><strong class="text-primary"><i class="far fa-calendar-alt me-1"></i>Date</strong></td>
+                                                     <td><strong class="text-dark">Attendance Date</strong> <span class="badge bg-primary ms-1">Required</span></td>
+                                                     <td>Punches are recorded for each specific day from this column (e.g. <code>9/2/2026</code>, <code>2026-09-02</code>).</td>
+                                                 </tr>
+                                                 <tr>
+                                                     <td><code>Emp No.</code> / <code>Name</code></td>
+                                                     <td>Device Reference / Name</td>
+                                                     <td>Device log metadata. Strictly linked via the ZKTeco Device User ID.</td>
+                                                 </tr>
+                                                 <tr>
+                                                     <td><code>Timetable</code></td>
+                                                     <td>Session Type</td>
+                                                     <td><code>Morning</code> / <code>Afternoon</code> (automatically combined into one daily record).</td>
+                                                 </tr>
+                                                 <tr>
+                                                     <td><code>Clock In</code> / <code>Clock Out</code></td>
+                                                     <td>Check-In / Check-Out Times</td>
+                                                     <td>Actual punch times recorded by biometric scanner (e.g. <code>08:25</code>, <code>17:35</code>).</td>
+                                                 </tr>
+                                                 <tr>
+                                                     <td><code>Late</code> / <code>OT Time</code></td>
+                                                     <td>Late Minutes & Overtime</td>
+                                                     <td>Calculates late arrival penalties and overtime pay based on basic salary.</td>
+                                                 </tr>
+                                             </tbody>
                                         </table>
                                     </div>
-                                    <div class="alert alert-info mt-3 mb-0 py-2 small">
-                                        <i class="fas fa-lightbulb me-1"></i>
-                                        <strong>How linking works:</strong> Set each employee's <strong>ZKTeco Device User ID</strong> on their profile to match their <strong>AC-No.</strong> in the machine (e.g. 1, 2, 21). When you upload the file, all punches are automatically matched and saved under each row's <strong>Date</strong>!
-                                    </div>
+                                    <div class="alert alert-warning mt-3 mb-0 py-2 small">
+                                         <i class="fas fa-shield-halved me-1"></i>
+                                         <strong>Strict Device Matching:</strong> An employee <strong>must</strong> have their <strong>ZKTeco Device User ID</strong> set in their profile (e.g. 3, 21). If an employee does not have a Device User ID assigned, the system will <strong>not guess</strong> and will <strong>not show/import</strong> them in attendance!
+                                     </div>
                                 </div>
                             </div>
                         </div>

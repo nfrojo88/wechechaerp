@@ -354,44 +354,23 @@ class AttendanceController extends Controller
             return back()->with('error', 'No records found in the uploaded file. Please check the file format.');
         }
 
-        // ── Load all employees for matching ───────────────────────────────
-        $employees = Employee::select('id', 'employee_code', 'device_user_id', 'full_name', 'basic_salary')->get();
+        // ── Load employees with assigned ZKTeco Device User ID ─────────────
+        // STRICT RULE: Only employees who have an explicit device_user_id are eligible.
+        // Absolutely NO guessing by employee code, ID numbers, or names.
+        $employees = Employee::whereNotNull('device_user_id')
+            ->where('device_user_id', '!=', '')
+            ->select('id', 'employee_code', 'device_user_id', 'full_name', 'basic_salary')
+            ->get();
 
-        $normalizeName = function($name) {
-            $name = preg_replace('/[._\s]+/', ' ', strtolower(trim((string)$name)));
-            return preg_replace('/[^a-z0-9 ]/', '', $name);
-        };
-
-        // Multi-index mapping
-        $empByCode     = [];
-        $empByDevice   = [];
-        $empById       = [];
-        $empByName     = [];
-        $empByCodeNum  = [];
-
+        $empByDevice = [];
         foreach ($employees as $e) {
-            $empById[$e->id] = $e;
-
-            if (!empty($e->employee_code)) {
-                $cUpper = strtoupper(trim($e->employee_code));
-                $empByCode[$cUpper] = $e;
-                if (preg_match('/(\d+)/', $cUpper, $m)) {
-                    $empByCodeNum[(int)$m[1]] = $e;
-                }
-            }
-
-            if (!empty($e->device_user_id)) {
-                $dUpper = strtoupper(trim((string)$e->device_user_id));
+            $rawDev = trim((string)$e->device_user_id);
+            if ($rawDev !== '') {
+                $dUpper = strtoupper($rawDev);
                 $empByDevice[$dUpper] = $e;
-                if (is_numeric($dUpper)) {
-                    $empByDevice[(int)$dUpper] = $e;
-                }
-            }
-
-            if (!empty($e->full_name)) {
-                $norm = $normalizeName($e->full_name);
-                if ($norm) {
-                    $empByName[$norm] = $e;
+                if (is_numeric($rawDev)) {
+                    $empByDevice[(int)$rawDev] = $e;
+                    $empByDevice[(string)(int)$rawDev] = $e;
                 }
             }
         }
@@ -517,57 +496,32 @@ class AttendanceController extends Controller
 
             $employee = null;
 
-            // 1. PRIMARY: Match AC-No. directly with Employee's ZKTeco Device User ID (device_user_id)
-            if ($acNo !== '') {
-                $acUpper = strtoupper($acNo);
-                if (isset($empByDevice[$acUpper])) {
-                    $employee = $empByDevice[$acUpper];
-                } elseif (is_numeric($acNo) && isset($empByDevice[(int)$acNo])) {
-                    $employee = $empByDevice[(int)$acNo];
-                } elseif (is_numeric($acNo) && isset($empByDevice[(string)(int)$acNo])) {
-                    $employee = $empByDevice[(string)(int)$acNo];
-                }
-            }
+            // STRICT RULE: Only match by ZKTeco Device User ID (device_user_id).
+            // Absolutely NO guessing by employee code, ID numbers, or employee names.
+            // If the employee has not been assigned a ZKTeco Device User ID, do NOT import or show them.
+            $searchId = $acNo !== '' ? $acNo : $empNo;
 
-            // 2. SECONDARY: Match AC-No. against employee_code numeric part or internal ID
-            if (!$employee && $acNo !== '' && is_numeric($acNo)) {
-                $acInt = (int)$acNo;
-                if (isset($empByCodeNum[$acInt])) {
-                    $employee = $empByCodeNum[$acInt];
-                } elseif (isset($empById[$acInt])) {
-                    $employee = $empById[$acInt];
-                }
-            }
-
-            // 3. TERTIARY: Match Emp No. against device_user_id or employee_code
-            if (!$employee && $empNo !== '') {
-                $empUpper = strtoupper($empNo);
-                if (isset($empByDevice[$empUpper])) {
-                    $employee = $empByDevice[$empUpper];
-                } elseif (isset($empByCode[$empUpper])) {
-                    $employee = $empByCode[$empUpper];
-                } elseif (is_numeric($empNo) && isset($empByCodeNum[(int)$empNo])) {
-                    $employee = $empByCodeNum[(int)$empNo];
-                } elseif (is_numeric($empNo) && isset($empById[(int)$empNo])) {
-                    $employee = $empById[(int)$empNo];
-                }
-            }
-
-            // 4. FALLBACK: Match normalized Name against employee full_name
-            if (!$employee && $rawName !== '') {
-                $normName = $normalizeName($rawName);
-                if ($normName !== '' && isset($empByName[$normName])) {
-                    $employee = $empByName[$normName];
+            if ($searchId !== '') {
+                $sUpper = strtoupper(trim((string)$searchId));
+                if (isset($empByDevice[$sUpper])) {
+                    $employee = $empByDevice[$sUpper];
+                } elseif (is_numeric($searchId)) {
+                    $sInt = (int)$searchId;
+                    if (isset($empByDevice[$sInt])) {
+                        $employee = $empByDevice[$sInt];
+                    } elseif (isset($empByDevice[(string)$sInt])) {
+                        $employee = $empByDevice[(string)$sInt];
+                    }
                 }
             }
 
             if (!$employee) {
                 $skipped++;
-                $label = $acNo !== '' ? "AC-No. (Device ID: {$acNo})" : "Emp No. '{$empNo}'";
+                $label = $acNo !== '' ? "Device ID #{$acNo}" : ($empNo !== '' ? "Emp No. '{$empNo}'" : "Unknown");
                 if ($rawName !== '') {
-                    $label .= " [Name: {$rawName}]";
+                    $label .= " ({$rawName})";
                 }
-                $errors[] = "Employee not matched: {$label}. Set 'ZKTeco Device User ID' to '{$acNo}' on the employee form.";
+                $errors[] = "Skipped: {$label} - No employee is registered with this ZKTeco Device User ID.";
                 continue;
             }
 
@@ -652,7 +606,7 @@ class AttendanceController extends Controller
                         'overtime_hours' => $otHours,
                         'overtime_type'       => $otType,
                         'overtime_pay'        => $otPay,
-                        'biometric_device_id' => $acNo ?: ($employee->device_user_id ?: null),
+                        'biometric_device_id' => $employee->device_user_id,
                         'notes'               => $info['late_mins'] > 0 ? "Late: {$info['late_mins']} min" : null,
                     ]
                 );
@@ -662,7 +616,7 @@ class AttendanceController extends Controller
 
         $message = "✅ Import complete: {$saved} attendance records saved.";
         if ($skipped > 0) {
-            $message .= " ⚠️ {$skipped} employees not matched (check employee codes).";
+            $message .= " ⚠️ {$skipped} device user ID(s) skipped (employees must have 'ZKTeco Device User ID' assigned in their profile).";
         }
 
         if ($request->wantsJson()) {
