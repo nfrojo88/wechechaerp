@@ -282,6 +282,12 @@ class AssignedAccountController extends Controller
             ->latest()
             ->paginate(10, ['*'], 'replenishments_page');
 
+        // Check if any payments from this account have pending auditor inquiries
+        $inquiredReceiptsCount = ExpenseRequest::where(function($q) use ($account) {
+            $q->where('coa_id', $account->id)
+              ->orWhere('chart_of_account_id', $account->id);
+        })->where('audit_receipt_status', 'requested')->count();
+
         return view('finance.assigned_accounts.show', compact(
             'account',
             'entries',
@@ -296,6 +302,7 @@ class AssignedAccountController extends Controller
             'unreplenishedCount',
             'pendingReplenishment',
             'replenishments',
+            'inquiredReceiptsCount',
             'isFinanceHead'
         ));
     }

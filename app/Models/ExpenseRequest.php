@@ -500,6 +500,11 @@ class ExpenseRequest extends Model
 
         return (float)($this->gross_amount > 0 ? $this->gross_amount : $this->amount);
     }
+
+    public function auditReceiptRequestedBy()
+    {
+        return $this->belongsTo(User::class, 'audit_receipt_requested_by');
+    }
 }
 
 

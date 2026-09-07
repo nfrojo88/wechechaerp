@@ -90,6 +90,27 @@
         </div>
     @endif
 
+    @if(isset($inquiredReceiptsCount) && $inquiredReceiptsCount > 0)
+        <div class="alert alert-warning border-0 shadow-sm rounded-4 d-flex flex-wrap justify-content-between align-items-center p-3 mb-4 border-start border-4 border-warning">
+            <div class="d-flex align-items-center gap-3 mb-2 mb-md-0">
+                <div class="rounded-circle bg-warning text-dark p-3 d-flex align-items-center justify-content-center shadow-sm" style="width: 48px; height: 48px;">
+                    <i class="fa-solid fa-bell-concierge fa-xl"></i>
+                </div>
+                <div>
+                    <div class="fw-bold text-dark fs-6">
+                        Auditor Receipt Inquiries Pending: {{ $inquiredReceiptsCount }} Action Required (የተጠየቁ ደረሰኞች)
+                    </div>
+                    <div class="text-muted small">
+                        The Auditor has requested official receipts for <strong>{{ $inquiredReceiptsCount }}</strong> expense payment(s) funded by this account.
+                    </div>
+                </div>
+            </div>
+            <a href="{{ route('delivery-receipts.index', ['tab' => 'inquired_receipts']) }}" class="btn btn-warning text-dark fw-bold rounded-pill px-4 shadow-sm">
+                <i class="fas fa-upload me-1"></i> Add / Upload Receipts ({{ $inquiredReceiptsCount }})
+            </a>
+        </div>
+    @endif
+
     <!-- Metric Summary Cards -->
     <div class="row g-3 mb-4">
         <!-- 1. Current Balance Card -->
