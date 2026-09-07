@@ -296,6 +296,12 @@ class AttendanceController extends Controller
         $ext      = strtolower($file->getClientOriginalExtension());
         $tmpPath  = $file->getRealPath();
 
+        // ── Clear previous attendance history if requested ────────────────
+        if ($request->boolean('clear_before_import')) {
+            Attendance::truncate();
+            \App\Models\DeviceAttendanceLog::truncate();
+        }
+
         // ── Parse the file ────────────────────────────────────────────────
         $records = [];
 
@@ -710,6 +716,17 @@ class AttendanceController extends Controller
             'Content-Type'        => 'text/csv',
             'Content-Disposition' => 'attachment; filename="attendance-import-template.csv"',
         ]);
+    }
+
+    /**
+     * Clear all attendance records & raw device logs to start from scratch.
+     */
+    public function clearHistory(Request $request)
+    {
+        Attendance::truncate();
+        \App\Models\DeviceAttendanceLog::truncate();
+
+        return redirect()->route('attendance.index')->with('success', 'All previous attendance history has been cleared successfully. You can now start uploading from scratch.');
     }
 
     public function deviceLogs()

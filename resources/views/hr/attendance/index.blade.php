@@ -18,6 +18,13 @@
             <a href="{{ route('attendance.deviceLogs') }}" class="btn btn-outline-info">
                 <i class="fa-solid fa-fingerprint me-1"></i>Device Logs
             </a>
+            <form action="{{ route('attendance.clearHistory') }}" method="POST" class="d-inline"
+                  onsubmit="return confirm('⚠️ Are you sure you want to completely clear and wipe all previous attendance history? This will remove all records so you can start from scratch.');">
+                @csrf
+                <button type="submit" class="btn btn-outline-danger">
+                    <i class="fas fa-trash-alt me-1"></i>Clear History
+                </button>
+            </form>
         </div>
     </div>
 
@@ -352,6 +359,15 @@
                             <i class="fas fa-download me-1"></i>Download CSV Template
                         </a>
                         <span class="text-muted small">Don't have a file? Download a sample template to see the expected format.</span>
+                    </div>
+
+                    {{-- Start from Scratch Option --}}
+                    <div class="form-check form-switch mt-3 p-3 bg-light rounded-3 border border-warning">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" name="clear_before_import" value="1" id="clearBeforeImport">
+                        <label class="form-check-label fw-semibold text-danger" for="clearBeforeImport">
+                            <i class="fas fa-trash-alt me-1"></i>Wipe / Clear previous attendance history before uploading
+                        </label>
+                        <div class="text-muted small ps-4">Enable this to delete all prior attendance records and start completely fresh from scratch with this file.</div>
                     </div>
 
                 </div>
