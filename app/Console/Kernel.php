@@ -17,6 +17,9 @@ class Kernel extends ConsoleKernel
     {
         // Sync ZKTeco device punch logs → attendance table every 5 minutes
         $schedule->command('zkteco:sync')->everyFiveMinutes()->withoutOverlapping();
+
+        // Check & escalate overdue audit receipt inquiries (>3 days to Auditor/Finance Head, >5 days to GM/Admin)
+        $schedule->command('audit:escalate-overdue-inquiries')->hourly()->withoutOverlapping();
     }
 
     /**

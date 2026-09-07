@@ -63,6 +63,8 @@ class ExpenseRequest extends Model
         'audit_receipt_requested_by',
         'audit_receipt_verified_at',
         'audit_receipt_verified_by',
+        'audit_escalated_3day_at',
+        'audit_escalated_5day_at',
     ];
 
 

@@ -16,13 +16,17 @@ use App\Models\BankAccount;
 use App\Models\ActivityLog;
 use App\Services\InventoryService;
 use App\Services\FileUploadService;
+use App\Services\AuditInquiryEscalationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 
 class DeliveryReceiptController extends Controller
 {
-    public function __construct(private InventoryService $inventoryService) {}
+    public function __construct(
+        private InventoryService $inventoryService,
+        private AuditInquiryEscalationService $escalationService
+    ) {}
 
     public function index(Request $request)
     {
@@ -108,6 +112,9 @@ class DeliveryReceiptController extends Controller
             $assignedStaff = $er->chartOfAccount?->manager?->name ?? ($er->chartOfAccount?->assignedStaff?->name ?? null);
             $payingAcctLabel = $payingAcct . ($assignedStaff ? " (Assigned: {$assignedStaff})" : '');
 
+            $requestedAt = $er->audit_receipt_requested_at ? \Carbon\Carbon::parse($er->audit_receipt_requested_at) : null;
+            $ageDays = $requestedAt ? $requestedAt->diffInDays(now()) : 0;
+
             $inquiredReceipts->push((object)[
                 'unique_key'       => 'er_' . $er->id,
                 'source_type'      => 'expense_request',
@@ -124,6 +131,9 @@ class DeliveryReceiptController extends Controller
                 'audit_note'       => $er->audit_receipt_notes,
                 'requested_at'     => $er->audit_receipt_requested_at,
                 'requested_by'     => $er->auditReceiptRequestedBy?->name ?? 'Auditor',
+                'age_days'         => $ageDays,
+                'escalated_3day_at'=> $er->audit_escalated_3day_at,
+                'escalated_5day_at'=> $er->audit_escalated_5day_at,
                 'has_receipt'      => !empty($er->attachment),
                 'receipt_url'      => !empty($er->attachment) ? FileUploadService::url($er->attachment) : null,
                 'raw_model'        => $er,
@@ -136,6 +146,9 @@ class DeliveryReceiptController extends Controller
             $payingAcct = $payment?->coaAccount?->name ?? 'Procurement Fund';
             $assignedStaff = $payment?->coaAccount?->manager?->name ?? ($payment?->assignedStaff?->name ?? null);
             $payingAcctLabel = $payingAcct . ($assignedStaff ? " (Assigned: {$assignedStaff})" : '');
+
+            $requestedAt = $receipt?->updated_at ? \Carbon\Carbon::parse($receipt->updated_at) : null;
+            $ageDays = $requestedAt ? $requestedAt->diffInDays(now()) : 0;
 
             $inquiredReceipts->push((object)[
                 'unique_key'       => 'pr_' . $pr->id,
@@ -153,6 +166,9 @@ class DeliveryReceiptController extends Controller
                 'audit_note'       => $receipt?->verification_notes ?? 'Auditor requested official vendor receipt.',
                 'requested_at'     => $receipt?->updated_at,
                 'requested_by'     => 'Auditor',
+                'age_days'         => $ageDays,
+                'escalated_3day_at'=> $receipt?->audit_escalated_3day_at,
+                'escalated_5day_at'=> $receipt?->audit_escalated_5day_at,
                 'has_receipt'      => !empty($receipt?->file_path),
                 'receipt_url'      => !empty($receipt?->file_path) ? FileUploadService::url($receipt->file_path) : null,
                 'raw_model'        => $pr,
@@ -354,6 +370,21 @@ class DeliveryReceiptController extends Controller
         );
 
         return back()->with('success', "Receipt for {$refNo} successfully uploaded and submitted for audit verification!");
+    }
+
+    /**
+     * Manually or automatically trigger audit receipt inquiry escalation SMS
+     */
+    public function triggerAuditEscalations(Request $request)
+    {
+        $res = $this->escalationService->checkAndEscalate();
+
+        $msg = "Escalation check completed: Checked {$res['checked']} pending inquiry(ies). Dispatched {$res['sms_sent']} SMS notifications ({$res['escalated_3day']} 3-day alerts to Auditor & Finance Head, {$res['escalated_5day']} 5-day urgent alerts to GM & General Admin).";
+        if ($res['sms_failed'] > 0) {
+            $msg .= " ({$res['sms_failed']} failed due to missing phone numbers).";
+        }
+
+        return back()->with('success', $msg);
     }
 
     public function verifyProcurementReceipt(Request $request, ProcurementReceipt $procurementReceipt)

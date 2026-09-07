@@ -1695,6 +1695,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('delivery-receipts/upload-inquired-receipt', [App\Http\Controllers\DeliveryReceiptController::class, 'uploadInquiredReceipt'])->name('delivery-receipts.upload-inquired-receipt');
     Route::post('procurement-receipts/{procurementReceipt}/verify', [App\Http\Controllers\DeliveryReceiptController::class, 'verifyProcurementReceipt'])->name('procurement-receipts.verify');
     Route::post('delivery-receipts/{deliveryReceipt}/verify', [App\Http\Controllers\DeliveryReceiptController::class, 'verifyDeliveryReceipt'])->name('delivery-receipts.verify');
+    Route::post('delivery-receipts/trigger-audit-escalations', [App\Http\Controllers\DeliveryReceiptController::class, 'triggerAuditEscalations'])->name('delivery-receipts.trigger-audit-escalations');
     
     Route::resource('subcon-agreements', App\Http\Controllers\SubconAgreementController::class)->only(['index', 'create', 'store', 'show']);
     Route::post('subcon-agreements/{subconAgreement}/upload-file', [App\Http\Controllers\SubconAgreementController::class, 'uploadFile'])->name('subcon-agreements.upload-file');
@@ -2039,6 +2040,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::resource('delivery-receipts', App\Http\Controllers\DeliveryReceiptController::class)->only(['index', 'create', 'store', 'show']);
     Route::post('delivery-receipts/upload-inquired-receipt', [App\Http\Controllers\DeliveryReceiptController::class, 'uploadInquiredReceipt'])->name('delivery-receipts.upload-inquired-receipt');
+    Route::post('delivery-receipts/trigger-audit-escalations', [App\Http\Controllers\DeliveryReceiptController::class, 'triggerAuditEscalations'])->name('delivery-receipts.trigger-audit-escalations');
     Route::post('delivery-receipts/{deliveryReceipt}/receive', [App\Http\Controllers\DeliveryReceiptController::class, 'receive'])->name('delivery-receipts.receive');
 
     Route::resource('transfers', App\Http\Controllers\TransferController::class)->only(['index', 'create', 'store', 'show']);

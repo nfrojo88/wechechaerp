@@ -564,11 +564,19 @@
                 <h5 class="fw-bold text-dark mb-0">
                     <i class="fas fa-file-circle-question text-warning me-2"></i>Auditor Inquiries & Requested Receipts (የተጠየቁ ደረሰኞች)
                 </h5>
-                <p class="text-muted small mb-0">Payments where the Auditor has requested official receipts. Visible strictly to the assigned requester or custodian of the paying account.</p>
+                <p class="text-muted small mb-0">Payments where the Auditor has requested official receipts. Overdue >3 days alerts Auditor & Finance Head. Overdue >5 days escalates directly to GM & General Admin via SMS.</p>
             </div>
-            <span class="badge bg-warning bg-opacity-10 text-dark border border-warning rounded-pill px-3 py-2 fw-bold">
-                {{ $inquiredReceiptsCount }} Pending Inquir{{ $inquiredReceiptsCount === 1 ? 'y' : 'ies' }}
-            </span>
+            <div class="d-flex align-items-center gap-2">
+                <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('delivery-receipts.trigger-audit-escalations') ? route('delivery-receipts.trigger-audit-escalations') : url('/delivery-receipts/trigger-audit-escalations') }}">
+                    @csrf
+                    <button type="submit" class="btn btn-sm btn-outline-warning text-dark fw-bold rounded-pill px-3 shadow-sm" title="Check inquiries and trigger escalation SMS if overdue">
+                        <i class="fas fa-tower-broadcast me-1 text-warning"></i> Check & Send Escalation SMS
+                    </button>
+                </form>
+                <span class="badge bg-warning bg-opacity-10 text-dark border border-warning rounded-pill px-3 py-2 fw-bold">
+                    {{ $inquiredReceiptsCount }} Pending Inquir{{ $inquiredReceiptsCount === 1 ? 'y' : 'ies' }}
+                </span>
+            </div>
         </div>
 
         <div class="card-body p-0 mt-2">
@@ -580,7 +588,7 @@
                             <th class="py-3">Requester & Dept</th>
                             <th class="py-3">Amount & Paying Account</th>
                             <th class="py-3" style="max-width: 280px;">Auditor Inquiry Note</th>
-                            <th class="py-3 text-center">Receipt Status</th>
+                            <th class="py-3 text-center">Receipt & Escalation Status</th>
                             <th class="px-4 py-3 text-end">Action</th>
                         </tr>
                     </thead>
@@ -651,11 +659,39 @@
                                     @endif
                                 </td>
 
-                                <!-- Receipt Status -->
+                                <!-- Receipt & Escalation Status -->
                                 <td class="text-center">
                                     <span class="badge bg-warning text-dark border border-warning px-3 py-2 rounded-pill shadow-sm">
                                         <i class="fas fa-paper-plane me-1"></i> Receipt Inquired
                                     </span>
+
+                                    <!-- Escalation status according to age -->
+                                    <div class="mt-2">
+                                        @if(($inq->age_days ?? 0) >= 5 || !empty($inq->escalated_5day_at))
+                                            <span class="badge bg-danger rounded-pill px-2 py-1 shadow-sm" title="Overdue > 5 days. Escalated directly to GM & General Admin">
+                                                <i class="fas fa-triangle-exclamation me-1"></i> Overdue ({{ $inq->age_days }}d): GM & Admin Alerted
+                                            </span>
+                                            @if($inq->escalated_5day_at)
+                                                <div class="text-danger small mt-1 fw-bold" style="font-size: 0.7rem;">
+                                                    <i class="fas fa-sms me-1"></i> SMS Dispatched to GM & Admin
+                                                </div>
+                                            @endif
+                                        @elseif(($inq->age_days ?? 0) >= 3 || !empty($inq->escalated_3day_at))
+                                            <span class="badge bg-warning text-dark border border-warning rounded-pill px-2 py-1 shadow-sm" title="Overdue > 3 days. Escalated to Auditor & Finance Head">
+                                                <i class="fas fa-envelope-open-text me-1"></i> Overdue ({{ $inq->age_days }}d): Auditor & Finance Head Alerted
+                                            </span>
+                                            @if($inq->escalated_3day_at)
+                                                <div class="text-warning-emphasis small mt-1 fw-bold" style="font-size: 0.7rem;">
+                                                    <i class="fas fa-sms me-1"></i> SMS Dispatched to Auditor & Finance Head
+                                                </div>
+                                            @endif
+                                        @else
+                                            <span class="badge bg-light text-secondary border rounded-pill px-2 py-1" style="font-size: 0.72rem;">
+                                                <i class="fas fa-hourglass-start me-1 text-primary"></i> Pending {{ $inq->age_days ?? 0 }} day{{ ($inq->age_days ?? 0) === 1 ? '' : 's' }}
+                                            </span>
+                                        @endif
+                                    </div>
+
                                     @if($inq->has_receipt && $inq->receipt_url)
                                         <div class="mt-2">
                                             <a href="{{ $inq->receipt_url }}" target="_blank" class="btn btn-xs btn-outline-secondary rounded-pill px-2 py-1 small" style="font-size: 0.75rem;">
