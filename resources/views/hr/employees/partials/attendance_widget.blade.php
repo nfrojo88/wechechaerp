@@ -1,6 +1,92 @@
 @php
-    $attStats   = $employee->getMonthlyAttendanceStats();
-    $todayPunch = $employee->today_punch;
+    // Resilient stats calculation: use model method if available, else direct query fallback
+    if (method_exists($employee, 'getMonthlyAttendanceStats')) {
+        $attStats = $employee->getMonthlyAttendanceStats();
+    } else {
+        $currYear  = (int) date('Y');
+        $currMonth = (int) date('n');
+        $records = \Illuminate\Support\Facades\DB::table('attendance')
+            ->where('employee_id', $employee->id)
+            ->whereYear('attendance_date', $currYear)
+            ->whereMonth('attendance_date', $currMonth)
+            ->get();
+
+        $presentCount  = $records->where('status', 'present')->count();
+        $absentCount   = $records->where('status', 'absent')->count();
+        $halfDayCount  = $records->where('status', 'half_day')->count();
+        $leaveCount    = $records->where('status', 'leave')->count();
+        $totalHours    = (float) $records->sum('hours_worked');
+        $workingRecords = $presentCount + $absentCount + $halfDayCount;
+        $rate = $workingRecords > 0
+            ? round((($presentCount + ($halfDayCount * 0.5)) / $workingRecords) * 100, 1)
+            : ($records->count() > 0 ? 100.0 : 0.0);
+
+        $attStats = [
+            'year'          => $currYear,
+            'month'         => $currMonth,
+            'month_label'   => \Carbon\Carbon::createFromDate($currYear, $currMonth, 1)->format('F Y'),
+            'present'       => $presentCount,
+            'absent'        => $absentCount,
+            'half_day'      => $halfDayCount,
+            'leave'         => $leaveCount,
+            'hours_worked'  => round($totalHours, 1),
+            'rate'          => $rate,
+            'total_records' => $records->count(),
+        ];
+    }
+
+    // Resilient today punch detection
+    $todayPunch = null;
+    try {
+        if (isset($employee->today_punch)) {
+            $todayPunch = $employee->today_punch;
+        }
+    } catch (\Throwable $e) {
+        $todayPunch = null;
+    }
+
+    if (!$todayPunch) {
+        $todayAtt = \Illuminate\Support\Facades\DB::table('attendance')
+            ->where('employee_id', $employee->id)
+            ->whereDate('attendance_date', today()->toDateString())
+            ->first();
+
+        if ($todayAtt && ($todayAtt->check_in || $todayAtt->status)) {
+            $todayPunch = [
+                'check_in'     => $todayAtt->check_in ? \Carbon\Carbon::parse($todayAtt->check_in)->format('h:i A') : null,
+                'check_out'    => $todayAtt->check_out ? \Carbon\Carbon::parse($todayAtt->check_out)->format('h:i A') : null,
+                'status'       => $todayAtt->status ?? 'present',
+                'hours_worked' => $todayAtt->hours_worked,
+                'source'       => $todayAtt->source ?? 'manual',
+            ];
+        } elseif (!empty($employee->device_user_id)) {
+            $deviceId = trim((string) $employee->device_user_id);
+            $today = today()->toDateString();
+            $punches = \Illuminate\Support\Facades\DB::table('device_attendance_logs')
+                ->where(function ($q) use ($deviceId, $employee) {
+                    $q->where('device_user_id', $deviceId)
+                      ->orWhere('device_user_id', ltrim($deviceId, '0'))
+                      ->orWhere('device_user_id', $employee->employee_code);
+                })
+                ->whereDate('punch_time', $today)
+                ->orderBy('punch_time', 'asc')
+                ->get();
+
+            if ($punches->isNotEmpty()) {
+                $first = $punches->first()->punch_time;
+                $last  = $punches->last()->punch_time;
+                $inTime = \Carbon\Carbon::parse($first)->format('h:i A');
+                $outTime = ($last !== $first) ? \Carbon\Carbon::parse($last)->format('h:i A') : null;
+                $todayPunch = [
+                    'check_in'     => $inTime,
+                    'check_out'    => $outTime,
+                    'status'       => 'present',
+                    'hours_worked' => $outTime ? round(\Carbon\Carbon::parse($last)->diffInMinutes(\Carbon\Carbon::parse($first)) / 60, 1) : null,
+                    'source'       => 'device',
+                ];
+            }
+        }
+    }
 
     // Rate color schemes
     if ($attStats['rate'] >= 85) {
