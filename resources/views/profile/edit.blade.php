@@ -697,6 +697,8 @@
                             </li>
                         </ul>
                     </div>
+                </div>
+
                 @if(isset($assignedPettyCash) && $assignedPettyCash->isNotEmpty())
                 {{-- Petty Cash Sidebar Widget (Only for Petty Cash) --}}
                 <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden border-start border-4 border-success">
@@ -717,6 +719,9 @@
                     </div>
                 </div>
                 @endif
+
+                {{-- Attendance Overview Widget --}}
+                @include('hr.employees.partials.attendance_widget', ['employee' => $employee])
 
                 {{-- 4 Stat Cards in 2x2 Grid --}}
                 <div class="row g-3 mb-4">

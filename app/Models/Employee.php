@@ -562,4 +562,101 @@ class Employee extends Model
         }
         return null;
     }
+
+    /**
+     * Get attendance record for today.
+     */
+    public function getTodayAttendanceAttribute()
+    {
+        return $this->attendances()->whereDate('attendance_date', today())->first();
+    }
+
+    /**
+     * Get live or recorded punch for today (combines attendance table + today's biometric device logs).
+     */
+    public function getTodayPunchAttribute(): ?array
+    {
+        $att = $this->today_attendance;
+        if ($att && ($att->check_in || $att->status)) {
+            return [
+                'check_in'     => $att->check_in ? \Carbon\Carbon::parse($att->check_in)->format('h:i A') : null,
+                'check_out'    => $att->check_out ? \Carbon\Carbon::parse($att->check_out)->format('h:i A') : null,
+                'status'       => $att->status ?? 'present',
+                'hours_worked' => $att->hours_worked,
+                'source'       => $att->source ?? 'manual',
+            ];
+        }
+
+        if ($this->device_user_id) {
+            $deviceId = trim((string) $this->device_user_id);
+            $today = today()->toDateString();
+            $punches = \Illuminate\Support\Facades\DB::table('device_attendance_logs')
+                ->where(function ($q) use ($deviceId) {
+                    $q->where('device_user_id', $deviceId)
+                      ->orWhere('device_user_id', ltrim($deviceId, '0'))
+                      ->orWhere('device_user_id', $this->employee_code);
+                })
+                ->whereDate('punch_time', $today)
+                ->orderBy('punch_time', 'asc')
+                ->get();
+
+            if ($punches->isNotEmpty()) {
+                $first = $punches->first()->punch_time;
+                $last  = $punches->last()->punch_time;
+                $inTime = \Carbon\Carbon::parse($first)->format('h:i A');
+                $outTime = ($last !== $first) ? \Carbon\Carbon::parse($last)->format('h:i A') : null;
+                return [
+                    'check_in'     => $inTime,
+                    'check_out'    => $outTime,
+                    'status'       => 'present',
+                    'hours_worked' => $outTime ? round(\Carbon\Carbon::parse($last)->diffInMinutes(\Carbon\Carbon::parse($first)) / 60, 1) : null,
+                    'source'       => 'device',
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Get aggregated attendance statistics for a given month and year.
+     */
+    public function getMonthlyAttendanceStats($year = null, $month = null): array
+    {
+        $year = $year ?? (int) date('Y');
+        $month = $month ?? (int) date('n');
+
+        $records = $this->attendances()
+            ->whereYear('attendance_date', $year)
+            ->whereMonth('attendance_date', $month)
+            ->get();
+
+        $presentCount  = $records->where('status', 'present')->count();
+        $absentCount   = $records->where('status', 'absent')->count();
+        $halfDayCount  = $records->where('status', 'half_day')->count();
+        $leaveCount    = $records->where('status', 'leave')->count();
+        $holidayCount  = $records->where('status', 'holiday')->count();
+        $weekendCount  = $records->where('status', 'weekend')->count();
+        $totalHours    = (float) $records->sum('hours_worked');
+
+        $workingRecords = $presentCount + $absentCount + $halfDayCount;
+        $rate = $workingRecords > 0
+            ? round((($presentCount + ($halfDayCount * 0.5)) / $workingRecords) * 100, 1)
+            : ($records->count() > 0 ? 100.0 : 0.0);
+
+        return [
+            'year'          => $year,
+            'month'         => $month,
+            'month_label'   => \Carbon\Carbon::createFromDate($year, $month, 1)->format('F Y'),
+            'present'       => $presentCount,
+            'absent'        => $absentCount,
+            'half_day'      => $halfDayCount,
+            'leave'         => $leaveCount,
+            'holiday'       => $holidayCount,
+            'weekend'       => $weekendCount,
+            'hours_worked'  => round($totalHours, 1),
+            'rate'          => $rate,
+            'total_records' => $records->count(),
+        ];
+    }
 }

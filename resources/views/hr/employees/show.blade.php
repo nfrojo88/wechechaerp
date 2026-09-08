@@ -1581,6 +1581,9 @@
             </div>
         </div>
 
+        {{-- Attendance Overview Widget --}}
+        @include('hr.employees.partials.attendance_widget', ['employee' => $employee])
+
         {{-- Quick Stats Tiles --}}
         <div class="row g-2 mb-3">
             <div class="col-6">
@@ -1820,7 +1823,7 @@
 </div>
 
 {{-- ===================== ATTENDANCE HISTORY ===================== --}}
-<div class="row g-3 mt-1">
+<div class="row g-3 mt-1" id="attendance-history">
     <div class="col-12">
         <div class="card border-0 shadow-sm">
             <div class="card-header bg-white py-3 px-4 border-bottom d-flex flex-wrap align-items-center justify-content-between gap-2">
