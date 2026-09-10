@@ -140,7 +140,7 @@
                     </div>
                 </div>
 
-                <form method="POST" action="{{ route('admin.announcements.store') }}" id="announcementForm">
+                <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('admin.announcements.store') ? route('admin.announcements.store') : url('/admin/announcements') }}" id="announcementForm">
                     @csrf
                     <div class="row g-3">
                         {{-- Title / Subject --}}
@@ -407,16 +407,16 @@
                                     <span class="text-dark fw-semibold">{{ $ann->author->name ?? 'Global Admin' }}</span>
                                 </td>
                                 <td class="text-end pe-4 text-nowrap">
-                                    <a href="{{ route('admin.announcements.show', $ann->id) }}" class="btn btn-sm btn-outline-primary py-0 px-2 rounded shadow-xs" title="View Report and SMS Logs">
+                                    <a href="{{ \Illuminate\Support\Facades\Route::has('admin.announcements.show') ? route('admin.announcements.show', $ann->id) : url('/admin/announcements/' . $ann->id) }}" class="btn btn-sm btn-outline-primary py-0 px-2 rounded shadow-xs" title="View Report and SMS Logs">
                                         <i class="fa-solid fa-chart-pie me-1"></i>Report
                                     </a>
-                                    <form method="POST" action="{{ route('admin.announcements.toggle-publish', $ann->id) }}" class="d-inline">
+                                    <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('admin.announcements.toggle-publish') ? route('admin.announcements.toggle-publish', $ann->id) : url('/admin/announcements/' . $ann->id . '/toggle-publish') }}" class="d-inline">
                                         @csrf
                                         <button type="submit" class="btn btn-sm {{ $ann->is_published ? 'btn-outline-warning' : 'btn-outline-success' }} py-0 px-2 rounded shadow-xs" title="Toggle In-App Banner">
                                             <i class="fa-solid {{ $ann->is_published ? 'fa-eye-slash' : 'fa-eye' }}"></i>
                                         </button>
                                     </form>
-                                    <form method="POST" action="{{ route('admin.announcements.destroy', $ann->id) }}" class="d-inline" onsubmit="return confirm('Delete this announcement record?')">
+                                    <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('admin.announcements.destroy') ? route('admin.announcements.destroy', $ann->id) : url('/admin/announcements/' . $ann->id) }}" class="d-inline" onsubmit="return confirm('Delete this announcement record?')">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2 rounded shadow-xs" title="Delete">
@@ -541,7 +541,7 @@ function dispatchTestSms() {
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Sending...';
     alertBox.style.display = 'none';
 
-    fetch('{{ route("admin.announcements.test-sms") }}', {
+    fetch('{{ \Illuminate\Support\Facades\Route::has("admin.announcements.test-sms") ? route("admin.announcements.test-sms") : url("/admin/announcements/test-sms") }}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

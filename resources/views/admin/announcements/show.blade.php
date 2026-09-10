@@ -9,7 +9,7 @@
         <div>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb mb-1 small">
-                    <li class="breadcrumb-item"><a href="{{ route('admin.announcements.index') }}" class="text-decoration-none">Announcements</a></li>
+                    <li class="breadcrumb-item"><a href="{{ \Illuminate\Support\Facades\Route::has('admin.announcements.index') ? route('admin.announcements.index') : url('/admin/announcements') }}" class="text-decoration-none">Announcements</a></li>
                     <li class="breadcrumb-item active" aria-current="page">Broadcast Report #{{ $announcement->id }}</li>
                 </ol>
             </nav>
@@ -18,10 +18,10 @@
             </h3>
         </div>
         <div class="d-flex gap-2 mt-2 mt-md-0">
-            <a href="{{ route('admin.announcements.index') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-xs">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('admin.announcements.index') ? route('admin.announcements.index') : url('/admin/announcements') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-arrow-left me-1"></i> Back to Announcements
             </a>
-            <form method="POST" action="{{ route('admin.announcements.toggle-publish', $announcement->id) }}" class="d-inline">
+            <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('admin.announcements.toggle-publish') ? route('admin.announcements.toggle-publish', $announcement->id) : url('/admin/announcements/' . $announcement->id . '/toggle-publish') }}" class="d-inline">
                 @csrf
                 <button type="submit" class="btn {{ $announcement->is_published ? 'btn-outline-warning' : 'btn-outline-success' }} rounded-pill px-3 shadow-xs">
                     <i class="fa-solid {{ $announcement->is_published ? 'fa-eye-slash' : 'fa-eye' }} me-1"></i>

@@ -60,9 +60,17 @@
     </a>
 </li>
 @if(auth()->check() && auth()->user()->hasRole('global_admin'))
+@php
+    if (!\Illuminate\Support\Facades\Route::has('admin.announcements.index')) {
+        try { \Illuminate\Support\Facades\Artisan::call('route:clear'); } catch (\Throwable $e) {}
+    }
+    $announcementUrl = \Illuminate\Support\Facades\Route::has('admin.announcements.index') 
+        ? route('admin.announcements.index') 
+        : url('/admin/announcements');
+@endphp
 {{-- Quick Action: Announcements & Bulk SMS (Global Admin Only) --}}
 <li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
-    <a href="{{ route('admin.announcements.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.announcements.*') ? 'active' : '' }}" style="font-weight:600;">
+    <a href="{{ $announcementUrl }}" class="sidebar-nav-link {{ request()->routeIs('admin.announcements.*') || request()->is('admin/announcements*') ? 'active' : '' }}" style="font-weight:600;">
         <i class="fa-solid fa-bullhorn text-warning"></i>
         <span>Announcements &amp; Bulk SMS</span>
         <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.6rem;">Global Admin</span>
@@ -400,7 +408,7 @@
             <li><a href="{{ route('messages.index') }}" class="sidebar-nav-link {{ request()->routeIs('messages.*') ? 'active' : '' }}"><i class="fa-solid fa-envelope"></i><span>Messages</span></a></li>
             <li><a href="{{ route('tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('tickets.*') && !request()->routeIs('admin.tickets.*') ? 'active' : '' }}"><i class="fa-solid fa-headset text-warning"></i><span>My Support Tickets</span></a></li>
             @if(auth()->check() && auth()->user()->hasRole('global_admin'))
-                <li><a href="{{ route('admin.announcements.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.announcements.*') ? 'active' : '' }}"><i class="fa-solid fa-bullhorn text-warning"></i><span>Announcements &amp; SMS</span></a></li>
+                <li><a href="{{ \Illuminate\Support\Facades\Route::has('admin.announcements.index') ? route('admin.announcements.index') : url('/admin/announcements') }}" class="sidebar-nav-link {{ request()->routeIs('admin.announcements.*') || request()->is('admin/announcements*') ? 'active' : '' }}"><i class="fa-solid fa-bullhorn text-warning"></i><span>Announcements &amp; SMS</span></a></li>
             @endif
         </ul>
     </div>
