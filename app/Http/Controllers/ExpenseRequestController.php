@@ -769,6 +769,7 @@ class ExpenseRequestController extends Controller
             'net_amount'         => 'nullable|numeric|min:0',
             'category'           => 'nullable|string',
             'service_type'       => 'nullable|string|max:100',
+            'attachment'         => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
             'withholding_receipt' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
             'withholding_receipt_number' => 'nullable|string|max:100',
         ]);
@@ -777,6 +778,18 @@ class ExpenseRequestController extends Controller
         try {
             $user = auth()->user();
             $paymentRef = $validated['payment_reference'] ?? ('PAY-' . strtoupper(Str::random(6)));
+
+            // Handle Payment / Expense Receipt upload if attached
+            $attachmentUrl = $expenseRequest->attachment;
+            if ($request->hasFile('attachment')) {
+                try {
+                    $cloudinary = app(CloudinaryService::class);
+                    $attachmentUrl = $cloudinary->upload($request->file('attachment'), 'expense_receipts');
+                } catch (\Throwable $e) {
+                    Log::error('Expense payment receipt upload error: ' . $e->getMessage());
+                    $attachmentUrl = $request->file('attachment')->store('uploads/expense_receipts', 'public');
+                }
+            }
 
             // Handle Withholding Tax Receipt upload if attached
             $withholdingReceiptUrl = $expenseRequest->withholding_receipt;
@@ -855,6 +868,7 @@ class ExpenseRequestController extends Controller
                 'has_withholding'    => $hasWithholding,
                 'withholding_rate'   => $withholdingRate,
                 'withholding_amount' => $withholdingAmount,
+                'attachment'         => $attachmentUrl,
                 'withholding_receipt' => $withholdingReceiptUrl,
                 'withholding_receipt_number' => $request->input('withholding_receipt_number', $expenseRequest->withholding_receipt_number),
                 'net_amount'         => $disbursedAmount,

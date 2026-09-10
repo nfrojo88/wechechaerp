@@ -873,6 +873,36 @@
                             </div>
                         </div>
 
+                        {{-- Main Expense Receipt / Payment Voucher Upload Section --}}
+                        <div class="p-3 bg-white rounded-3 border border-success-subtle shadow-sm mb-3">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <label class="form-label small fw-bold text-success text-uppercase mb-0">
+                                    <i class="fa-solid fa-receipt me-1"></i>Expense Receipt / Payment Voucher Upload (የወጪ / የክፍያ ደረሰኝ)
+                                </label>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0">Payment Proof</span>
+                            </div>
+                            <div class="row g-2 align-items-center">
+                                <div class="col-12">
+                                    <input type="file" name="attachment" id="modalExpenseReceiptIdx{{ $req->id }}" 
+                                           class="form-control form-control-sm" 
+                                           accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
+                                    <small class="text-muted" style="font-size:0.75rem;">Upload paid receipt, cash voucher, scanned invoice, or disbursement document (PDF, JPG, PNG - max 10MB).</small>
+                                </div>
+                            </div>
+                            @if(!empty($req->attachment))
+                                <div class="mt-2 p-2 bg-light rounded border d-flex justify-content-between align-items-center small">
+                                    <div>
+                                        <i class="fa-solid fa-circle-check text-success me-1"></i>
+                                        <strong class="text-dark">Attached Receipt:</strong>
+                                        <span class="text-muted ms-1">Existing receipt on file</span>
+                                    </div>
+                                    <a href="{{ route('expense-requests.attachment', $req->id) }}" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2 shadow-xs">
+                                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> View Receipt
+                                    </a>
+                                </div>
+                            @endif
+                        </div>
+
                         <input type="hidden" name="net_amount" id="modalNetAmount{{ $req->id }}" value="{{ $req->net_amount ?? $req->amount }}">
                         <input type="hidden" name="paid_amount" id="modalPaidAmount{{ $req->id }}" value="{{ $req->net_amount ?? $req->amount }}">
 
