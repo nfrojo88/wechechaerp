@@ -2255,6 +2255,16 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/attachments/{attachment}/preview',  [App\Http\Controllers\LetterController::class, 'previewAttachment'])->name('attachments.preview');
         Route::get('/attachments/{attachment}/download', [App\Http\Controllers\LetterController::class, 'downloadAttachment'])->name('attachments.download');
     });
+
+    // ─── Global Admin: Announcements & Bulk SMS (Restricted strictly to Global Admin) ─────────
+    Route::prefix('admin/announcements')->name('admin.announcements.')->group(function () {
+        Route::get('/',                                    [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'index'])->name('index');
+        Route::post('/',                                   [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'store'])->name('store');
+        Route::post('/test-sms',                           [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'sendTestSms'])->name('test-sms');
+        Route::get('/{announcement}',                      [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'show'])->name('show');
+        Route::post('/{announcement}/toggle-publish',      [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'togglePublish'])->name('toggle-publish');
+        Route::delete('/{announcement}',                   [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'destroy'])->name('destroy');
+    });
 });
 
 

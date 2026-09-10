@@ -638,6 +638,34 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                         </div>
                     </div>
                 @endif
+
+                {{-- Global Admin In-App Announcement Banner --}}
+                @php
+                    $activeAnnouncement = null;
+                    try {
+                        if (\Illuminate\Support\Facades\Schema::hasTable('announcements')) {
+                            $activeAnnouncement = \App\Models\Announcement::activeBanner()->latest()->first();
+                        }
+                    } catch (\Throwable $e) {}
+                @endphp
+
+                @if($activeAnnouncement)
+                    <div class="alert alert-warning border-0 shadow-sm rounded-3 mb-3 mx-4 d-flex align-items-center justify-content-between gap-3 bg-gradient" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 5px solid #f59e0b !important;" role="alert">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="bg-warning text-dark p-2.5 rounded-circle shadow-xs flex-shrink-0">
+                                <i class="fa-solid fa-bullhorn fs-5"></i>
+                            </div>
+                            <div>
+                                <strong class="d-block text-dark fw-bold" style="font-size: 0.95rem;">
+                                    {{ $activeAnnouncement->title }}
+                                </strong>
+                                <div class="text-dark small" style="line-height: 1.45; white-space: pre-wrap;">{{ $activeAnnouncement->message }}</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close" title="Dismiss announcement"></button>
+                    </div>
+                @endif
+
                 @if(session('success'))
                     <div class="flash-container">
                         <div class="alert alert-success alert-dismissible fade show" role="alert">
