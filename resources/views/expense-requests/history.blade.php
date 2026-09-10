@@ -81,8 +81,11 @@
                                 @if($req->category === 'Transport')
                                     <div class="mt-1 small" style="font-size: 0.72rem; line-height: 1.35;">
                                         <div class="text-truncate text-muted"><i class="fa-solid fa-user-pen text-primary me-1"></i>Asked by: <strong class="text-dark">{{ $req->user->name ?? 'N/A' }}</strong></div>
-                                        @php $appr = $req->approver_info; @endphp
-                                        <div class="text-truncate text-muted"><i class="fa-solid fa-check-circle text-success me-1"></i>Approved: <strong class="text-success">{{ $appr['name'] ?? 'Authorized' }}</strong></div>
+                                        @php
+                                            $hAppr = (is_array($req->approver_info ?? null) ? $req->approver_info : (method_exists($req, 'getApproverInfoAttribute') ? $req->getApproverInfoAttribute() : []));
+                                            $hName = $hAppr['name'] ?? ($req->gmApprover->name ?? $req->gmReviewer->name ?? $req->hrReviewer->name ?? $req->paidBy->name ?? 'Authorized');
+                                        @endphp
+                                        <div class="text-truncate text-muted"><i class="fa-solid fa-check-circle text-success me-1"></i>Approved: <strong class="text-success">{{ $hName }}</strong></div>
                                     </div>
                                 @endif
                             </td>

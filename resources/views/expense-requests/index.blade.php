@@ -189,20 +189,29 @@
                                             <span class="text-muted">Asked by:</span>
                                             <strong class="text-dark">{{ $req->user->name ?? 'Requester' }}</strong>
                                         </div>
-                                        @php $appr = $req->approver_info; @endphp
-                                        <div class="text-truncate" title="Approved by: {{ $appr['text'] }}">
-                                            <i class="fa-solid {{ $appr['is_approved'] ? 'fa-circle-check text-success' : ($appr['is_rejected'] ? 'fa-circle-xmark text-danger' : 'fa-hourglass-half text-warning') }} me-1"></i>
+                                        @php
+                                            $appr = (is_array($req->approver_info ?? null) ? $req->approver_info : (method_exists($req, 'getApproverInfoAttribute') ? $req->getApproverInfoAttribute() : []));
+                                            $isApproved = !empty($appr['is_approved']);
+                                            $isRejected = !empty($appr['is_rejected']) || ($req->status === 'Rejected');
+                                            $apprName = $appr['name'] ?? ($req->gmApprover->name ?? $req->gmReviewer->name ?? $req->hrReviewer->name ?? null);
+                                            $apprRole = $appr['role'] ?? ($req->gm_approved_at ? 'GM' : ($req->hr_reviewed_at ? 'HR' : null));
+                                            $apprText = $appr['text'] ?? ($apprName ? ($apprName . ($apprRole ? " ({$apprRole})" : '')) : ($isRejected ? 'Rejected' : ($req->status ?? 'Pending Review')));
+                                        @endphp
+                                        <div class="text-truncate" title="Approved by: {{ $apprText }}">
+                                            <i class="fa-solid {{ $isApproved ? 'fa-circle-check text-success' : ($isRejected ? 'fa-circle-xmark text-danger' : 'fa-hourglass-half text-warning') }} me-1"></i>
                                             <span class="text-muted">Approved by:</span>
-                                            @if(!empty($appr['name']))
-                                                <strong class="text-success">{{ $appr['name'] }}</strong>
-                                                <span class="text-muted" style="font-size: 0.68rem;">({{ $appr['role'] }})</span>
-                                            @elseif(!empty($appr['is_rejected']))
+                                            @if(!empty($apprName))
+                                                <strong class="text-success">{{ $apprName }}</strong>
+                                                @if(!empty($apprRole))
+                                                    <span class="text-muted" style="font-size: 0.68rem;">({{ $apprRole }})</span>
+                                                @endif
+                                            @elseif($isRejected)
                                                 <span class="badge bg-danger-subtle text-danger border border-danger-subtle py-0 px-1" style="font-size: 0.68rem;">
-                                                    {{ $appr['text'] }}
+                                                    {{ $apprText }}
                                                 </span>
                                             @else
                                                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle py-0 px-1" style="font-size: 0.68rem;">
-                                                    {{ $appr['text'] }}
+                                                    {{ $apprText }}
                                                 </span>
                                             @endif
                                         </div>
@@ -953,26 +962,34 @@
                                 <div class="text-muted small mb-1">Request Amount:</div>
                                 <div class="fw-bold fs-4 text-success mb-1">ETB {{ number_format($req->amount, 2) }}</div>
                                 <div class="small mb-2">{!! $req->status_badge !!}</div>
-                                @php $detailAppr = $req->approver_info; @endphp
+                                @php
+                                    $detailAppr = (is_array($req->approver_info ?? null) ? $req->approver_info : (method_exists($req, 'getApproverInfoAttribute') ? $req->getApproverInfoAttribute() : []));
+                                    $dApproved = !empty($detailAppr['is_approved']);
+                                    $dRejected = !empty($detailAppr['is_rejected']) || ($req->status === 'Rejected');
+                                    $dName = $detailAppr['name'] ?? ($req->gmApprover->name ?? $req->gmReviewer->name ?? $req->hrReviewer->name ?? null);
+                                    $dRole = $detailAppr['role'] ?? ($req->gm_approved_at ? 'General Manager (GM)' : ($req->hr_reviewed_at ? 'HR / Coordinator' : null));
+                                    $dDate = $detailAppr['date'] ?? ($req->gm_approved_at ?? $req->hr_reviewed_at ?? null);
+                                    $dText = $detailAppr['text'] ?? ($dName ? ($dName . ($dRole ? " ({$dRole})" : '')) : ($dRejected ? 'Rejected' : ($req->status ?? 'Pending Review')));
+                                @endphp
                                 <div class="mt-2 pt-2 border-top">
                                     <div class="text-muted small"><i class="fa-solid fa-user-check text-success me-1"></i>Approval Information:</div>
                                     <div class="small mt-1">
-                                        @if(!empty($detailAppr['name']))
+                                        @if(!empty($dName))
                                             <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
-                                                <i class="fa-solid fa-check me-1"></i>Approved by: <strong>{{ $detailAppr['name'] }}</strong> ({{ $detailAppr['role'] }})
+                                                <i class="fa-solid fa-check me-1"></i>Approved by: <strong>{{ $dName }}</strong> @if($dRole) ({{ $dRole }}) @endif
                                             </span>
-                                            @if(!empty($detailAppr['date']))
+                                            @if(!empty($dDate))
                                                 <div class="text-muted mt-1" style="font-size:0.72rem;">
-                                                    <i class="fa-regular fa-clock me-1"></i>{{ \Carbon\Carbon::parse($detailAppr['date'])->format('d M Y, h:i A') }}
+                                                    <i class="fa-regular fa-clock me-1"></i>{{ \Carbon\Carbon::parse($dDate)->format('d M Y, h:i A') }}
                                                 </div>
                                             @endif
-                                        @elseif(!empty($detailAppr['is_rejected']))
+                                        @elseif($dRejected)
                                             <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
-                                                <i class="fa-solid fa-xmark me-1"></i>{{ $detailAppr['text'] }}
+                                                <i class="fa-solid fa-xmark me-1"></i>{{ $dText }}
                                             </span>
                                         @else
                                             <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
-                                                <i class="fa-solid fa-hourglass-half me-1"></i>{{ $detailAppr['text'] }}
+                                                <i class="fa-solid fa-hourglass-half me-1"></i>{{ $dText }}
                                             </span>
                                         @endif
                                     </div>

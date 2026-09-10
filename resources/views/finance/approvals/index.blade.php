@@ -223,11 +223,14 @@
                                     @if($item->category === 'Transport' && $item->type === 'expense_request' && isset($item->raw_model))
                                         @php 
                                             $tReq = $item->raw_model;
-                                            $tAppr = $tReq->approver_info;
+                                            $tAppr = (is_array($tReq->approver_info ?? null) ? $tReq->approver_info : (method_exists($tReq, 'getApproverInfoAttribute') ? $tReq->getApproverInfoAttribute() : []));
+                                            $tName = $tAppr['name'] ?? ($tReq->gmApprover->name ?? $tReq->gmReviewer->name ?? $tReq->hrReviewer->name ?? null);
+                                            $tApproved = !empty($tAppr['is_approved']) || !empty($tName);
+                                            $tText = $tAppr['text'] ?? ($tName ? $tName : ($tReq->status ?? 'Pending'));
                                         @endphp
                                         <div class="mt-1 small" style="font-size: 0.70rem; line-height: 1.35;">
                                             <div class="text-truncate text-muted"><i class="fa-solid fa-user-pen text-primary me-1"></i>Asked: <strong class="text-dark">{{ $tReq->user->name ?? 'N/A' }}</strong></div>
-                                            <div class="text-truncate text-muted"><i class="fa-solid {{ $tAppr['is_approved'] ? 'fa-circle-check text-success' : 'fa-hourglass-half text-warning' }} me-1"></i>Approved: <strong class="{{ $tAppr['is_approved'] ? 'text-success' : 'text-warning-emphasis' }}">{{ $tAppr['name'] ?? $tAppr['text'] }}</strong></div>
+                                            <div class="text-truncate text-muted"><i class="fa-solid {{ $tApproved ? 'fa-circle-check text-success' : 'fa-hourglass-half text-warning' }} me-1"></i>Approved: <strong class="{{ $tApproved ? 'text-success' : 'text-warning-emphasis' }}">{{ $tName ?? $tText }}</strong></div>
                                         </div>
                                     @endif
                                 </td>
