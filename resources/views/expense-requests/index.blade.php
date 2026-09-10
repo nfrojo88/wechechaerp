@@ -1395,23 +1395,40 @@
                             <div class="p-3 bg-light border border-info border-2 rounded-3 shadow-sm position-relative overflow-hidden">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <label class="form-label fw-bold text-dark mb-0 fs-6">
-                                        <i class="fa-solid fa-user-tag text-info me-1"></i>Assign Employee / Driver (ተጠቃሚ ሰራተኛ / አሽከርካሪ ይምረጡ) <span class="text-danger" id="employeeRequiredAsterisk">*</span>
+                                        <i class="fa-solid fa-user-tag text-info me-1"></i>Assign Beneficiary Employee / Driver (ተጠቃሚ ሰራተኛ / አሽከርካሪ ይምረጡ) <span class="text-danger" id="employeeRequiredAsterisk">*</span>
                                     </label>
                                     <span class="badge bg-info text-white px-2 py-1"><i class="fa-solid fa-truck-ramp-box me-1"></i>Transport Money Allocation</span>
                                 </div>
+                                @php
+                                    $currentEmpId = auth()->user()->employee?->id;
+                                    $currentUserId = auth()->id();
+                                @endphp
                                 <select name="employee_id" id="employeeSelect" class="form-select form-select-lg fw-semibold mt-1 border-info">
-                                    <option value="">-- Choose Employee / Driver --</option>
+                                    <option value="" selected disabled>-- Select Another Employee / Driver (ሌላ ሰራተኛ/አሽከርካሪ ይምረጡ) --</option>
                                     @foreach($employees ?? [] as $emp)
-                                        <option value="{{ $emp->id }}" {{ (auth()->user()->employee && auth()->user()->employee->id == $emp->id) ? 'selected' : '' }}>
+                                        @if(($currentEmpId && $emp->id == $currentEmpId) || ($emp->user_id && $emp->user_id == $currentUserId))
+                                            @continue
+                                        @endif
+                                        <option value="{{ $emp->id }}">
                                             👤 {{ $emp->full_name }} ({{ $emp->employee_code ?? 'EMP' }}) — {{ $emp->role_title ?? $emp->department ?? 'Staff' }}
                                         </option>
                                     @endforeach
                                 </select>
+
+                                {{-- Strict Warning Notice: Self-Assignment Prohibited --}}
+                                <div class="mt-2 p-2 bg-danger-subtle text-danger rounded border border-danger-subtle small d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-ban text-danger fs-5"></i>
+                                    <div>
+                                        <strong class="text-danger d-block">Strict Policy: Self-Assignment Prohibited (ራስዎን መምረጥ በጥብቅ የተከለከለ ነው)</strong>
+                                        <span class="text-dark" style="font-size: 0.8rem;">You cannot assign transport money to yourself. You must select the actual beneficiary driver or employee who will receive the funds.</span>
+                                    </div>
+                                </div>
+
                                 <div class="mt-2 p-2 bg-white rounded border border-info-subtle small d-flex align-items-center gap-2">
                                     <i class="fa-solid fa-shield-halved text-success fs-5"></i>
                                     <div>
-                                        <strong class="text-dark d-block">First Approval Destination: HR or Coordinator</strong>
-                                        <span class="text-muted" style="font-size: 0.8rem;">This transport request will first go to <strong>HR or Coordinator</strong> for initial review and sign-off before routing to GM/Finance.</span>
+                                        <strong class="text-dark d-block">First Approval Step: Assigned Employee Confirmation</strong>
+                                        <span class="text-muted" style="font-size: 0.8rem;">This transport request will first be sent to the assigned employee/driver for confirmation, then route to <strong>HR or Coordinator</strong> and GM/Finance.</span>
                                     </div>
                                 </div>
                             </div>
@@ -1558,14 +1575,14 @@ function toggleCategoryOptions() {
     if (category === 'Transport') {
         if (employeeGroup) employeeGroup.style.display = 'block';
         if (employeeSelect) {
-            // Require an employee selection for Transport requests
-            if (!employeeSelect.value && employeeSelect.options.length > 1) {
-                employeeSelect.required = true;
-            }
+            employeeSelect.required = true;
         }
     } else {
         if (employeeGroup) employeeGroup.style.display = 'none';
-        if (employeeSelect) employeeSelect.required = false;
+        if (employeeSelect) {
+            employeeSelect.required = false;
+            employeeSelect.value = '';
+        }
     }
 
     if (taxSection) {
@@ -1794,13 +1811,20 @@ function recalculatePaymentTax(reqId) {
 document.addEventListener('DOMContentLoaded', function() {
     toggleCategoryOptions();
 
-    const createModalEl = document.getElementById('createRequestModal');
-    if (createModalEl) {
-        createModalEl.addEventListener('show.bs.modal', function () {
-            toggleCategoryOptions();
-        });
-        createModalEl.addEventListener('shown.bs.modal', function () {
-            toggleCategoryOptions();
+    // Strict form validation on request submission
+    const createForm = document.getElementById('createExpenseRequestForm');
+    if (createForm) {
+        createForm.addEventListener('submit', function (e) {
+            const category = document.getElementById('categorySelect').value;
+            const employeeSelect = document.getElementById('employeeSelect');
+            if (category === 'Transport') {
+                if (!employeeSelect || !employeeSelect.value) {
+                    e.preventDefault();
+                    alert('Strict Requirement: You must select and assign another employee or driver for transport requests. Self-assignment is prohibited. (ራስዎን መምረጥ አይፈቀድም፤ እባክዎ ሌላ ሰራተኛ ወይም አሽከርካሪ ይምረጡ)።');
+                    employeeSelect?.focus();
+                    return false;
+                }
+            }
         });
     }
 

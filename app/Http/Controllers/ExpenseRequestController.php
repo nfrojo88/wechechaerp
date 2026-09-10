@@ -266,9 +266,25 @@ class ExpenseRequestController extends Controller
         }
 
         // Fetch active employees for Transport & expense request employee assignment
-        $employees = \App\Models\Employee::where('status', 'active')->orderBy('full_name')->get();
+        // Strictly exclude the currently authenticated user so requesters cannot assign themselves
+        $currentUserId = $user->id;
+        $currentUserEmpId = $userEmpId;
+
+        $employees = \App\Models\Employee::where('status', 'active')
+            ->when($currentUserEmpId, fn($q) => $q->where('id', '!=', $currentUserEmpId))
+            ->when($currentUserId, fn($q) => $q->where(function ($q2) use ($currentUserId) {
+                $q2->whereNull('user_id')->orWhere('user_id', '!=', $currentUserId);
+            }))
+            ->orderBy('full_name')
+            ->get();
+
         if ($employees->isEmpty()) {
-            $employees = \App\Models\Employee::orderBy('full_name')->get();
+            $employees = \App\Models\Employee::when($currentUserEmpId, fn($q) => $q->where('id', '!=', $currentUserEmpId))
+                ->when($currentUserId, fn($q) => $q->where(function ($q2) use ($currentUserId) {
+                    $q2->whereNull('user_id')->orWhere('user_id', '!=', $currentUserId);
+                }))
+                ->orderBy('full_name')
+                ->get();
         }
 
         return view('expense-requests.index', compact(
@@ -386,7 +402,46 @@ class ExpenseRequestController extends Controller
 
         $user = auth()->user();
         $employee = $user->employee ?? null;
-        $targetEmployeeId = $request->filled('employee_id') ? $request->input('employee_id') : ($employee ? $employee->id : null);
+        $userEmployeeId = $employee ? $employee->id : null;
+
+        // Standardize category name
+        $category = $validated['category'];
+        if (in_array($category, ['Loading / Unloading', 'Loading Unloading'])) {
+            $category = 'Loading & Unloading';
+        }
+
+        $targetEmployeeId = $request->filled('employee_id') ? (int)$request->input('employee_id') : null;
+
+        // STRICT ENFORCEMENT: Transport requests must assign another employee or driver
+        if ($category === 'Transport') {
+            if (!$targetEmployeeId) {
+                return back()->with('error', 'Strict Policy: You must assign another employee or driver for transport requests. (ለትራንስፖርት ወጪ ሌላ ተጠቃሚ ሰራተኛ ወይም አሽከርካሪ መምረጥ ግዴታ ነው።)')->withInput();
+            }
+        }
+
+        // STRICT ENFORCEMENT: Requesters CANNOT assign money to themselves
+        if ($targetEmployeeId) {
+            $targetEmp = \App\Models\Employee::find($targetEmployeeId);
+            $isSelf = false;
+            if ($userEmployeeId && $targetEmployeeId === (int)$userEmployeeId) {
+                $isSelf = true;
+            }
+            if ($targetEmp && $targetEmp->user_id && (int)$targetEmp->user_id === (int)$user->id) {
+                $isSelf = true;
+            }
+            if ($targetEmp && !empty($targetEmp->email) && strtolower($targetEmp->email) === strtolower($user->email)) {
+                $isSelf = true;
+            }
+
+            if ($isSelf) {
+                return back()->with('error', 'Strict Policy: You cannot assign money to yourself. You must assign another employee or driver. (ራስዎን መምረጥ በጥብቅ የተከለከለ ነው፤ እባክዎ ሌላ ሰራተኛ ወይም አሽከርካሪ ይምረጡ።)')->withInput();
+            }
+        }
+
+        // For non-transport categories without an explicit assigned employee, default to requester's employee profile
+        if (!$targetEmployeeId && $category !== 'Transport') {
+            $targetEmployeeId = $userEmployeeId;
+        }
 
         // Auto-generate request number REQ-YYYYMMDD-XXXX
         $requestNumber = 'REQ-' . date('Ymd') . '-' . strtoupper(Str::random(4));
@@ -412,13 +467,6 @@ class ExpenseRequestController extends Controller
                 Log::error('Withholding receipt upload error: ' . $e->getMessage());
                 $withholdingReceiptUrl = $request->file('withholding_receipt')->store('uploads/withholding_receipts', 'public');
             }
-        }
-
-
-        // Standardize category name
-        $category = $validated['category'];
-        if (in_array($category, ['Loading / Unloading', 'Loading Unloading'])) {
-            $category = 'Loading & Unloading';
         }
 
         // Tax & Amount Calculations
