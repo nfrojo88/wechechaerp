@@ -175,11 +175,37 @@
                                     <i class="fa-solid {{ $catIcon }} me-1 text-primary"></i>
                                     {{ $req->category }}
                                 </span>
-                                @if($req->category === 'Transport' && $req->employee)
-                                    <div class="mt-1">
-                                        <span class="badge bg-info-subtle text-info border border-info-subtle" style="font-size: 0.70rem;" title="Assigned Transport Beneficiary">
-                                            <i class="fa-solid fa-id-badge me-1"></i>{{ $req->employee->full_name }}
-                                        </span>
+                                @if($req->category === 'Transport')
+                                    <div class="mt-1 p-2 rounded-2 bg-light border border-info-subtle small shadow-xs" style="font-size: 0.74rem; line-height: 1.45; min-width: 200px;">
+                                        @if($req->employee)
+                                            <div class="text-truncate mb-1" title="Transport Beneficiary / Driver: {{ $req->employee->full_name }}">
+                                                <i class="fa-solid fa-id-badge text-info me-1"></i>
+                                                <span class="text-muted">For:</span>
+                                                <strong class="text-dark">{{ $req->employee->full_name }}</strong>
+                                            </div>
+                                        @endif
+                                        <div class="text-truncate mb-1" title="Asked By: {{ $req->user->name ?? 'Requester' }}">
+                                            <i class="fa-solid fa-user-pen text-primary me-1"></i>
+                                            <span class="text-muted">Asked by:</span>
+                                            <strong class="text-dark">{{ $req->user->name ?? 'Requester' }}</strong>
+                                        </div>
+                                        @php $appr = $req->approver_info; @endphp
+                                        <div class="text-truncate" title="Approved by: {{ $appr['text'] }}">
+                                            <i class="fa-solid {{ $appr['is_approved'] ? 'fa-circle-check text-success' : ($appr['is_rejected'] ? 'fa-circle-xmark text-danger' : 'fa-hourglass-half text-warning') }} me-1"></i>
+                                            <span class="text-muted">Approved by:</span>
+                                            @if(!empty($appr['name']))
+                                                <strong class="text-success">{{ $appr['name'] }}</strong>
+                                                <span class="text-muted" style="font-size: 0.68rem;">({{ $appr['role'] }})</span>
+                                            @elseif(!empty($appr['is_rejected']))
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle py-0 px-1" style="font-size: 0.68rem;">
+                                                    {{ $appr['text'] }}
+                                                </span>
+                                            @else
+                                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle py-0 px-1" style="font-size: 0.68rem;">
+                                                    {{ $appr['text'] }}
+                                                </span>
+                                            @endif
+                                        </div>
                                     </div>
                                 @endif
                                 @if($req->category === 'Other' && $req->other_reason)
@@ -909,17 +935,48 @@
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <div class="p-3 bg-light rounded-3 border">
-                                <div class="text-muted small">Employee Info</div>
-                                <div class="fw-bold fs-6">{{ $req->user->name ?? 'N/A' }}</div>
+                            <div class="p-3 bg-light rounded-3 border h-100">
+                                <div class="text-muted small mb-1"><i class="fa-solid fa-user-pen text-primary me-1"></i>Asker (Requested By):</div>
+                                <div class="fw-bold fs-6 text-dark">{{ $req->user->name ?? 'N/A' }}</div>
                                 <div class="small text-muted">{{ $req->user->email ?? '' }}</div>
+                                @if($req->employee)
+                                    <div class="mt-2 pt-2 border-top">
+                                        <div class="text-muted small"><i class="fa-solid fa-id-badge text-info me-1"></i>Assigned Beneficiary / Driver:</div>
+                                        <div class="fw-semibold text-dark">{{ $req->employee->full_name }}</div>
+                                        <small class="text-muted">{{ $req->employee->department ?? '' }} ({{ $req->employee->role_title ?? 'Staff' }})</small>
+                                    </div>
+                                @endif
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <div class="p-3 bg-light rounded-3 border">
-                                <div class="text-muted small">Request Amount</div>
-                                <div class="fw-bold fs-4 text-success">ETB {{ number_format($req->amount, 2) }}</div>
-                                <div class="small">{!! $req->status_badge !!}</div>
+                            <div class="p-3 bg-light rounded-3 border h-100">
+                                <div class="text-muted small mb-1">Request Amount:</div>
+                                <div class="fw-bold fs-4 text-success mb-1">ETB {{ number_format($req->amount, 2) }}</div>
+                                <div class="small mb-2">{!! $req->status_badge !!}</div>
+                                @php $detailAppr = $req->approver_info; @endphp
+                                <div class="mt-2 pt-2 border-top">
+                                    <div class="text-muted small"><i class="fa-solid fa-user-check text-success me-1"></i>Approval Information:</div>
+                                    <div class="small mt-1">
+                                        @if(!empty($detailAppr['name']))
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                                <i class="fa-solid fa-check me-1"></i>Approved by: <strong>{{ $detailAppr['name'] }}</strong> ({{ $detailAppr['role'] }})
+                                            </span>
+                                            @if(!empty($detailAppr['date']))
+                                                <div class="text-muted mt-1" style="font-size:0.72rem;">
+                                                    <i class="fa-regular fa-clock me-1"></i>{{ \Carbon\Carbon::parse($detailAppr['date'])->format('d M Y, h:i A') }}
+                                                </div>
+                                            @endif
+                                        @elseif(!empty($detailAppr['is_rejected']))
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                                <i class="fa-solid fa-xmark me-1"></i>{{ $detailAppr['text'] }}
+                                            </span>
+                                        @else
+                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
+                                                <i class="fa-solid fa-hourglass-half me-1"></i>{{ $detailAppr['text'] }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1160,9 +1217,22 @@
                         <label class="fw-bold mb-2"><i class="fa-solid fa-timeline me-1"></i>Approval & Payment Timeline:</label>
                         <ul class="list-group list-group-flush border rounded">
                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <span><i class="fa-solid fa-paper-plane text-primary me-2"></i>Submitted by Employee</span>
+                                <span>
+                                    <i class="fa-solid fa-paper-plane text-primary me-2"></i>
+                                    Asked by <strong>{{ $req->user->name ?? 'Requester' }}</strong>
+                                    @if($req->employee && $req->user && $req->employee->full_name !== $req->user->name)
+                                        <span class="text-muted">(for {{ $req->employee->full_name }})</span>
+                                    @endif
+                                </span>
                                 <small class="text-muted">{{ $req->created_at->format('M d, Y H:i') }}</small>
                             </li>
+
+                            @if($req->employee_approved_at)
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><i class="fa-solid fa-id-badge text-info me-2"></i>Confirmed by Beneficiary ({{ $req->employee->full_name ?? 'Employee' }})</span>
+                                <small class="text-muted">{{ $req->employee_approved_at->format('M d, Y H:i') }}</small>
+                            </li>
+                            @endif
 
                             @if($req->hr_reviewed_at)
                             <li class="list-group-item d-flex justify-content-between align-items-center">

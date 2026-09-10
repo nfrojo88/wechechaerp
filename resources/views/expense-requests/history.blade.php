@@ -78,6 +78,13 @@
                                     <i class="fa-solid {{ $catIcon }} me-1 text-primary"></i>
                                     {{ $req->category }}
                                 </span>
+                                @if($req->category === 'Transport')
+                                    <div class="mt-1 small" style="font-size: 0.72rem; line-height: 1.35;">
+                                        <div class="text-truncate text-muted"><i class="fa-solid fa-user-pen text-primary me-1"></i>Asked by: <strong class="text-dark">{{ $req->user->name ?? 'N/A' }}</strong></div>
+                                        @php $appr = $req->approver_info; @endphp
+                                        <div class="text-truncate text-muted"><i class="fa-solid fa-check-circle text-success me-1"></i>Approved: <strong class="text-success">{{ $appr['name'] ?? 'Authorized' }}</strong></div>
+                                    </div>
+                                @endif
                             </td>
                             <td class="fw-bold fs-6 text-success">
                                 ETB {{ number_format($req->amount, 2) }}

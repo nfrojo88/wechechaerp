@@ -220,6 +220,16 @@
                                     <span class="badge bg-{{ $catColor }}-subtle text-{{ $catColor }} border border-{{ $catColor }}-subtle px-2 py-1 rounded-pill" style="font-size: .75rem;">
                                         {{ $item->category }} {{ $catAmharic ? "({$catAmharic})" : '' }}
                                     </span>
+                                    @if($item->category === 'Transport' && $item->type === 'expense_request' && isset($item->raw_model))
+                                        @php 
+                                            $tReq = $item->raw_model;
+                                            $tAppr = $tReq->approver_info;
+                                        @endphp
+                                        <div class="mt-1 small" style="font-size: 0.70rem; line-height: 1.35;">
+                                            <div class="text-truncate text-muted"><i class="fa-solid fa-user-pen text-primary me-1"></i>Asked: <strong class="text-dark">{{ $tReq->user->name ?? 'N/A' }}</strong></div>
+                                            <div class="text-truncate text-muted"><i class="fa-solid {{ $tAppr['is_approved'] ? 'fa-circle-check text-success' : 'fa-hourglass-half text-warning' }} me-1"></i>Approved: <strong class="{{ $tAppr['is_approved'] ? 'text-success' : 'text-warning-emphasis' }}">{{ $tAppr['name'] ?? $tAppr['text'] }}</strong></div>
+                                        </div>
+                                    @endif
                                 </td>
 
                                 <td>

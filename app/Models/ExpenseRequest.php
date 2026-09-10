@@ -507,6 +507,129 @@ class ExpenseRequest extends Model
     {
         return $this->belongsTo(User::class, 'audit_receipt_requested_by');
     }
+
+    /**
+     * Get the name of the person who submitted/asked the request.
+     */
+    public function getAskerNameAttribute(): string
+    {
+        return $this->user?->name ?? 'Requester';
+    }
+
+    /**
+     * Get details of who approved the request or current review stage.
+     */
+    public function getApproverInfoAttribute(): array
+    {
+        // 1. Rejected request
+        if ($this->status === self::STATUS_REJECTED) {
+            $name = $this->rejected_by_user->name ?? $this->rejected_by_role;
+            return [
+                'is_approved' => false,
+                'is_rejected' => true,
+                'name'        => $name,
+                'role'        => $this->rejected_by_role,
+                'date'        => $this->rejected_at,
+                'badge_class' => 'bg-danger-subtle text-danger border border-danger-subtle',
+                'text'        => 'Rejected by ' . $name,
+            ];
+        }
+
+        // 2. GM Approved (typically for > 5000 ETB or GM sign-off)
+        if ($this->gm_approved_at || $this->gm_approver_id || $this->gm_reviewer_id) {
+            $gmUser = $this->gmApprover ?? $this->gmReviewer;
+            if ($gmUser) {
+                return [
+                    'is_approved' => true,
+                    'is_rejected' => false,
+                    'name'        => $gmUser->name,
+                    'role'        => 'General Manager (GM)',
+                    'date'        => $this->gm_approved_at ?? $this->gm_reviewed_at,
+                    'badge_class' => 'bg-success-subtle text-success border border-success-subtle',
+                    'text'        => $gmUser->name . ' (GM)',
+                ];
+            }
+        }
+
+        // 3. HR / Coordinator Approved
+        if ($this->hr_reviewed_at || $this->hr_reviewer_id) {
+            $hrUser = $this->hrReviewer;
+            if ($hrUser) {
+                return [
+                    'is_approved' => true,
+                    'is_rejected' => false,
+                    'name'        => $hrUser->name,
+                    'role'        => 'HR / Coordinator',
+                    'date'        => $this->hr_reviewed_at,
+                    'badge_class' => 'bg-success-subtle text-success border border-success-subtle',
+                    'text'        => $hrUser->name . ' (HR / Coordinator)',
+                ];
+            }
+        }
+
+        // 4. Pending GM Review (HR has already reviewed and approved it, waiting for GM)
+        if ($this->status === self::STATUS_PENDING_GM) {
+            $hrName = $this->hrReviewer?->name;
+            return [
+                'is_approved' => false,
+                'is_rejected' => false,
+                'name'        => null,
+                'role'        => 'Pending GM Review',
+                'date'        => null,
+                'badge_class' => 'bg-info-subtle text-info border border-info-subtle',
+                'text'        => $hrName ? "Approved by HR ({$hrName}), Awaiting GM" : 'Pending GM Review',
+            ];
+        }
+
+        // 5. Pending HR / Coordinator Review
+        if ($this->status === self::STATUS_PENDING_HR) {
+            return [
+                'is_approved' => false,
+                'is_rejected' => false,
+                'name'        => null,
+                'role'        => 'HR / Coordinator',
+                'date'        => null,
+                'badge_class' => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
+                'text'        => 'Pending (HR / Coordinator Review)',
+            ];
+        }
+
+        // 6. Pending Employee Confirmation
+        if ($this->status === self::STATUS_PENDING_EMPLOYEE) {
+            return [
+                'is_approved' => false,
+                'is_rejected' => false,
+                'name'        => null,
+                'role'        => 'Employee Confirmation',
+                'date'        => null,
+                'badge_class' => 'bg-warning-subtle text-warning-emphasis border border-warning-subtle',
+                'text'        => 'Pending Employee Confirmation',
+            ];
+        }
+
+        // 7. Paid (fallback if reviewer user wasn't tracked)
+        if ($this->status === self::STATUS_PAID && $this->paidBy) {
+            return [
+                'is_approved' => true,
+                'is_rejected' => false,
+                'name'        => $this->paidBy->name,
+                'role'        => 'Finance (Disbursed)',
+                'date'        => $this->paid_at,
+                'badge_class' => 'bg-success-subtle text-success border border-success-subtle',
+                'text'        => 'Paid by ' . $this->paidBy->name,
+            ];
+        }
+
+        return [
+            'is_approved' => false,
+            'is_rejected' => false,
+            'name'        => null,
+            'role'        => $this->status,
+            'date'        => null,
+            'badge_class' => 'bg-secondary-subtle text-secondary border border-secondary-subtle',
+            'text'        => $this->status,
+        ];
+    }
 }
 
 
