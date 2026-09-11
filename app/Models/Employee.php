@@ -17,6 +17,7 @@ class Employee extends Model
         'probation_ends_at', 'probation_completed', 'lock_reason',
         'basic_salary', 'transport_allowance', 'house_allowance', 'position_allowance',
         'status', 'notes', 'bank_name', 'account_number',
+        'is_dead_file', 'dead_file_at', 'dead_file_reason', 'dead_file_notes', 'dead_file_by',
         'guarantee_letter', 'guarantee_letter_2', 'guarantee_letter_submitted_at', 'guarantee_letter_required',
         'guarantor_name', 'guarantor_id_number', 'guarantor_id_card', 'guarantor_phone',
         'guarantor_2_name', 'guarantor_2_id_number', 'guarantor_2_id_card', 'guarantor_2_phone',
@@ -32,6 +33,8 @@ class Employee extends Model
         'probation_ends_at' => 'date',
         'probation_completed' => 'boolean',
         'basic_salary'    => 'decimal:2',
+        'is_dead_file'    => 'boolean',
+        'dead_file_at'    => 'datetime',
         'guarantee_letter_submitted_at' => 'date',
         'guarantee_letter_required' => 'boolean',
         'registration_letters' => 'array',
@@ -90,6 +93,25 @@ class Employee extends Model
     public function gmRejectedBy()
     {
         return $this->belongsTo(User::class, 'gm_rejected_by');
+    }
+
+    public function deadFileArchivedBy()
+    {
+        return $this->belongsTo(User::class, 'dead_file_by');
+    }
+
+    public function scopeActiveRoster($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('is_dead_file', false)
+              ->orWhereNull('is_dead_file');
+        })->where('status', '!=', 'dead_file');
+    }
+
+    public function scopeInDeadFile($query)
+    {
+        return $query->where('is_dead_file', true)
+                     ->orWhere('status', 'dead_file');
     }
 
     public function user()

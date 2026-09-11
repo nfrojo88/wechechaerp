@@ -12,9 +12,10 @@ class EmployeeController extends Controller
     public function index(Request $request)
     {
         Gate::authorize('viewAny', Employee::class);
+        $this->ensureGuarantorAndRegistrationColumnsExist();
 
         $statusFilter = $request->get('approval_status', 'all');
-        $query = Employee::with(['project', 'gmApprovedBy', 'gmRejectedBy'])->latest();
+        $query = Employee::activeRoster()->with(['project', 'gmApprovedBy', 'gmRejectedBy'])->latest();
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -56,13 +57,13 @@ class EmployeeController extends Controller
 
         // Counts for tabs/badges
         $counts = [
-            'all'             => Employee::count(),
-            'approved'        => Employee::where('is_approved_by_gm', true)->count(),
-            'pending'         => Employee::where('is_approved_by_gm', false)->where(function($q) {
+            'all'             => Employee::activeRoster()->count(),
+            'approved'        => Employee::activeRoster()->where('is_approved_by_gm', true)->count(),
+            'pending'         => Employee::activeRoster()->where('is_approved_by_gm', false)->where(function($q) {
                                   $q->whereNull('gm_approval_status')->orWhere('gm_approval_status', '!=', 'rejected');
                                 })->count(),
-            'rejected'        => Employee::where('gm_approval_status', 'rejected')->count(),
-            'probation_alert' => Employee::where('status', 'active')
+            'rejected'        => Employee::activeRoster()->where('gm_approval_status', 'rejected')->count(),
+            'probation_alert' => Employee::activeRoster()->where('status', 'active')
                                   ->where('probation_completed', false)
                                   ->whereNotNull('date_of_joining')
                                   ->where(function($q) {
@@ -74,6 +75,7 @@ class EmployeeController extends Controller
                                   ->where('date_of_joining', '<=', now()->subDays(20))
                                   ->count(),
             'history'         => Employee::whereIn('status', ['terminated', 'suspended'])->orWhereNotNull('lock_reason')->count(),
+            'dead_file'       => Employee::inDeadFile()->count(),
         ];
 
         $departments = \App\Models\Department::where('is_active', true)->pluck('name');
@@ -1327,27 +1329,201 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Remove the specified employee from storage.
+     * Send employee to Dead File (archives employee instead of hard deletion).
+     */
+    public function sendToDeadFile(Request $request, Employee $employee)
+    {
+        Gate::authorize('delete', $employee);
+        $this->ensureGuarantorAndRegistrationColumnsExist();
+
+        $validated = $request->validate([
+            'dead_file_reason' => 'required|string|max:150',
+            'dead_file_at'     => 'nullable|date',
+            'dead_file_notes'  => 'nullable|string|max:2000',
+        ]);
+
+        $name = $employee->full_name;
+        $code = $employee->employee_code;
+        $departureDate = $validated['dead_file_at'] ? \Carbon\Carbon::parse($validated['dead_file_at']) : now();
+
+        // Release any assigned company fixed assets back to store
+        try {
+            if ($employee->assignedFixedAssets && $employee->assignedFixedAssets->count() > 0) {
+                foreach ($employee->assignedFixedAssets as $unit) {
+                    $unit->returnToStore(
+                        auth()->id() ?? 1,
+                        "Auto-returned upon employee transfer to Dead File ({$validated['dead_file_reason']})",
+                        'good'
+                    );
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Asset unassign on dead file for employee {$code}: " . $e->getMessage());
+        }
+
+        // Deactivate linked system user account if exists
+        if ($employee->user_id) {
+            $user = \App\Models\User::find($employee->user_id);
+            if ($user && \Illuminate\Support\Facades\Schema::hasColumn('users', 'is_active')) {
+                $user->update(['is_active' => false]);
+            }
+        }
+
+        // Transfer employee record to Dead File
+        $employee->update([
+            'is_dead_file'      => true,
+            'status'            => 'dead_file',
+            'dead_file_at'      => $departureDate,
+            'dead_file_reason'  => $validated['dead_file_reason'],
+            'dead_file_notes'   => $validated['dead_file_notes'] ?? null,
+            'dead_file_by'      => auth()->id(),
+            'lock_reason'       => "Dead File: {$validated['dead_file_reason']}",
+        ]);
+
+        return redirect()->route('employees.dead-file')
+            ->with('success', "Employee {$name} ({$code}) has been transferred to the Dead File section. All history, contracts, payroll, and documents remain securely archived.");
+    }
+
+    /**
+     * Intercept hard delete requests and redirect to Dead File preservation.
      */
     public function destroy(Employee $employee)
     {
         Gate::authorize('delete', $employee);
-        
+        $this->ensureGuarantorAndRegistrationColumnsExist();
+
         $name = $employee->full_name;
         $code = $employee->employee_code;
 
-        // If employee has a linked user account without global system roles, remove or decouple
+        // Release any assigned fixed assets
+        try {
+            if ($employee->assignedFixedAssets && $employee->assignedFixedAssets->count() > 0) {
+                foreach ($employee->assignedFixedAssets as $unit) {
+                    $unit->returnToStore(auth()->id() ?? 1, 'Auto-returned upon employee transfer to Dead File', 'good');
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Asset unassign on delete: " . $e->getMessage());
+        }
+
+        // Deactivate user account
         if ($employee->user_id) {
             $user = \App\Models\User::find($employee->user_id);
-            if ($user && $user->roles()->count() === 0) {
-                $user->delete();
+            if ($user && \Illuminate\Support\Facades\Schema::hasColumn('users', 'is_active')) {
+                $user->update(['is_active' => false]);
             }
         }
 
-        $employee->delete();
-        
-        return redirect()->route('employees.index')
-            ->with('success', "Employee {$name} ({$code}) has been deleted successfully. If this employee is registered or added again later, fresh GM approval will be strictly required.");
+        // Automatically archive to Dead File to enforce zero data-loss policy
+        $employee->update([
+            'is_dead_file'      => true,
+            'status'            => 'dead_file',
+            'dead_file_at'      => now(),
+            'dead_file_reason'  => 'Removed from Active Roster (Transferred to Dead File)',
+            'dead_file_notes'   => 'Archived via Employee Management action. Hard deletion is disabled by company policy to protect legal and audit records.',
+            'dead_file_by'      => auth()->id(),
+            'lock_reason'       => 'Dead File: Decommissioned from Active Roster',
+        ]);
+
+        return redirect()->route('employees.dead-file')
+            ->with('success', "Employee {$name} ({$code}) has been moved to the Dead File section. Data deletion is prohibited to preserve audit trails and documents.");
+    }
+
+    /**
+     * Display the Dead Employee / Dead File archive page.
+     */
+    public function deadFile(Request $request)
+    {
+        Gate::authorize('viewAny', Employee::class);
+        $this->ensureGuarantorAndRegistrationColumnsExist();
+
+        $query = Employee::with(['project', 'user', 'deadFileArchivedBy'])->inDeadFile();
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('full_name', 'like', "%{$search}%")
+                  ->orWhere('employee_code', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%")
+                  ->orWhere('department', 'like', "%{$search}%")
+                  ->orWhere('tin_number', 'like', "%{$search}%")
+                  ->orWhere('dead_file_reason', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('department')) {
+            $query->where('department', $request->input('department'));
+        }
+
+        if ($request->filled('reason')) {
+            $query->where('dead_file_reason', 'like', "%{$request->input('reason')}%");
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('dead_file_at', '>=', $request->input('date_from'));
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('dead_file_at', '<=', $request->input('date_to'));
+        }
+
+        $employees = $query->latest('dead_file_at')->latest('updated_at')->paginate(20)->withQueryString();
+        $departments = Employee::distinct()->whereNotNull('department')->pluck('department');
+
+        // Dynamic KPI metrics
+        $counts = [
+            'total'          => Employee::inDeadFile()->count(),
+            'resigned'       => Employee::inDeadFile()->where(function($q) {
+                                    $q->where('dead_file_reason', 'like', '%resig%')
+                                      ->orWhere('dead_file_reason', 'like', '%መልቀቅ%');
+                                })->count(),
+            'contract_ended' => Employee::inDeadFile()->where(function($q) {
+                                    $q->where('dead_file_reason', 'like', '%contract%')
+                                      ->orWhere('dead_file_reason', 'like', '%ውል%');
+                                })->count(),
+            'terminated'     => Employee::inDeadFile()->where(function($q) {
+                                    $q->where('dead_file_reason', 'like', '%terminat%')
+                                      ->orWhere('dead_file_reason', 'like', '%dismiss%')
+                                      ->orWhere('dead_file_reason', 'like', '%ስንብት%');
+                                })->count(),
+            'project_done'   => Employee::inDeadFile()->where(function($q) {
+                                    $q->where('dead_file_reason', 'like', '%project%')
+                                      ->orWhere('dead_file_reason', 'like', '%ፕሮጀክት%');
+                                })->count(),
+        ];
+
+        return view('hr.employees.dead_file', compact('employees', 'departments', 'counts'));
+    }
+
+    /**
+     * Restore or rehire an employee from Dead File back to active service.
+     */
+    public function restoreFromDeadFile(Request $request, Employee $employee)
+    {
+        Gate::authorize('update', $employee);
+        $this->ensureGuarantorAndRegistrationColumnsExist();
+
+        $validated = $request->validate([
+            'employment_type'   => 'required|in:permanent,contract,daily',
+            'contract_end_date' => 'nullable|date',
+            'restore_notes'     => 'nullable|string|max:1000',
+        ]);
+
+        $employee->update([
+            'is_dead_file'        => false,
+            'status'              => 'active',
+            'dead_file_at'        => null,
+            'dead_file_reason'    => null,
+            'dead_file_notes'     => null,
+            'dead_file_by'        => null,
+            'employment_type'     => $validated['employment_type'],
+            'contract_end_date'   => $validated['contract_end_date'] ?? null,
+            'lock_reason'         => null,
+            'probation_completed' => true,
+        ]);
+
+        return redirect()->route('employees.show', $employee)
+            ->with('success', "Employee {$employee->full_name} ({$employee->employee_code}) has been restored from Dead File back to active roster!");
     }
     /**
      * Display terminated / locked employee history.
@@ -1492,6 +1668,21 @@ class EmployeeController extends Controller
                     }
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'lock_reason')) {
                         $table->string('lock_reason')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'is_dead_file')) {
+                        $table->boolean('is_dead_file')->default(false)->index();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'dead_file_at')) {
+                        $table->timestamp('dead_file_at')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'dead_file_reason')) {
+                        $table->string('dead_file_reason', 150)->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'dead_file_notes')) {
+                        $table->text('dead_file_notes')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'dead_file_by')) {
+                        $table->unsignedBigInteger('dead_file_by')->nullable();
                     }
                 });
             }

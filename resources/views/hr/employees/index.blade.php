@@ -93,6 +93,16 @@
                 @endif
             </a>
         </li>
+        <li class="nav-item">
+            <a class="nav-link text-danger py-2 px-3 fw-semibold border border-danger-subtle bg-danger-subtle bg-opacity-25" href="{{ route('employees.dead-file') }}">
+                <i class="fa-solid fa-box-archive me-1"></i> Dead File (የሞቱ ፋይሎች)
+                @if(!empty($counts['dead_file']) && $counts['dead_file'] > 0)
+                    <span class="badge bg-danger text-white ms-1">{{ $counts['dead_file'] }}</span>
+                @else
+                    <span class="badge bg-secondary ms-1">0</span>
+                @endif
+            </a>
+        </li>
         <li class="nav-item ms-auto">
             <a class="nav-link text-danger py-2 px-3 fw-semibold" href="{{ route('employees.history') }}">
                 <i class="fa-solid fa-user-clock me-1"></i> Employee History (Locked/Terminated)
@@ -225,13 +235,9 @@
                                     @endif
                                 @endcan
                                 @can('delete', $emp)
-                                <form action="{{ route('employees.destroy', $emp) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete employee {{ addslashes($emp->full_name) }} ({{ $emp->employee_code }})?');">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Employee">
-                                        <i class="fa-solid fa-trash me-1"></i>Delete
-                                    </button>
-                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deadFileModal{{ $emp->id }}" title="Send to Dead File Archive">
+                                    <i class="fa-solid fa-box-archive me-1"></i>Dead File
+                                </button>
                                 @endcan
                             </div>
                         </td>
@@ -290,4 +296,69 @@ function showReason(name, reason, date) {
     new bootstrap.Modal(document.getElementById('rejectionReasonModal')).show();
 }
 </script>
+
+{{-- Dead File Confirmation Modals --}}
+@foreach($employees as $emp)
+<div class="modal fade" id="deadFileModal{{ $emp->id }}" tabindex="-1" aria-labelledby="deadFileModalLabel{{ $emp->id }}" aria-hidden="true" data-bs-backdrop="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
+            <form action="{{ route('employees.send-to-dead-file', $emp) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-danger text-white py-3 px-4">
+                    <h5 class="modal-title fs-6 fw-bold mb-0" id="deadFileModalLabel{{ $emp->id }}">
+                        <i class="fa-solid fa-box-archive me-2"></i>Send to Dead File: {{ $emp->full_name }}
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white text-start">
+                    <div class="alert alert-warning py-2 px-3 small border-0 mb-3 d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-shield-halved fa-lg text-warning"></i>
+                        <div>
+                            <strong>Permanent Archival Policy:</strong> Employee records are never deleted. This safely archives {{ $emp->full_name }} ({{ $emp->employee_code }}) in the <strong>Dead File</strong> section, preserving all payroll, contract, guarantee, and tax records.
+                        </div>
+                    </div>
+
+                    @if($emp->assignedFixedAssets && $emp->assignedFixedAssets->count() > 0)
+                    <div class="alert alert-danger py-2 px-3 small border-0 mb-3">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                        <strong>Asset Alert:</strong> {{ $emp->assignedFixedAssets->count() }} company fixed asset(s) are currently assigned to this employee and will be automatically released back to available inventory.
+                    </div>
+                    @endif
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark small">Reason for Dead File / Separation <span class="text-danger">*</span></label>
+                        <select name="dead_file_reason" class="form-select form-select-sm" required>
+                            <option value="">-- Select Separation Reason --</option>
+                            <option value="Resignation (የመልቀቂያ ፈቃድ)">Resignation (የመልቀቂያ ፈቃድ)</option>
+                            <option value="Contract Expired (የውል ጊዜ ማብቂያ)">Contract Expired (የውል ጊዜ ማብቂያ)</option>
+                            <option value="Termination / Dismissal (ከሥራ መሰናበት)">Termination / Dismissal (ከሥራ መሰናበት)</option>
+                            <option value="Project Completed (የፕሮጀክት ማጠናቀቂያ)">Project Completed (የፕሮጀክት ማጠናቀቂያ)</option>
+                            <option value="Retirement (የጡረታ መውጫ)">Retirement (የጡረታ መውጫ)</option>
+                            <option value="Deceased (ህልፈተ ህይወት)">Deceased (ህልፈተ ህይወት)</option>
+                            <option value="45-Day Test Period Overdue">45-Day Test Period Overdue</option>
+                            <option value="Other Separation Reason">Other Separation Reason</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark small">Effective Separation Date <span class="text-danger">*</span></label>
+                        <input type="date" name="dead_file_at" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold text-dark small">Archive Reference &amp; Clearance Notes <span class="text-muted fw-normal">(Optional)</span></label>
+                        <textarea name="dead_file_notes" class="form-control form-control-sm" rows="2" placeholder="e.g., Box #05, Shelf A, Clearance form signed, ID badge returned..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4 border-top">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-danger fw-bold px-3">
+                        <i class="fa-solid fa-box-archive me-1"></i> Confirm &amp; Send to Dead File
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endforeach
 @endsection

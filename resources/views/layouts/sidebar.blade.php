@@ -259,8 +259,9 @@
     <div class="collapse {{ $hrActive ? 'show' : '' }}" id="adminGroupHR">
         <ul class="sidebar-sub-nav">
             <li><a href="{{ route('dashboard.hr') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.hr') ? 'active' : '' }}"><i class="fa-solid fa-gauge-high text-primary"></i><span>HR Dashboard</span></a></li>
-            <li><a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') && !request()->routeIs('employees.history') ? 'active' : '' }}"><i class="fa-solid fa-users text-primary"></i><span>Employees</span></a></li>
-            <li><a href="{{ route('employees.history') }}" class="sidebar-nav-link {{ request()->routeIs('employees.history') ? 'active' : '' }}"><i class="fa-solid fa-user-clock text-danger"></i><span>Employee History</span></a></li>
+            <li><a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') && !request()->routeIs('employees.history') && !request()->routeIs('employees.dead-file') ? 'active' : '' }}"><i class="fa-solid fa-users text-primary"></i><span>Employees</span></a></li>
+            <li><a href="{{ route('employees.dead-file') }}" class="sidebar-nav-link {{ request()->routeIs('employees.dead-file') ? 'active' : '' }}"><i class="fa-solid fa-box-archive text-danger"></i><span>Dead Employees</span></a></li>
+            <li><a href="{{ route('employees.history') }}" class="sidebar-nav-link {{ request()->routeIs('employees.history') ? 'active' : '' }}"><i class="fa-solid fa-user-clock text-warning"></i><span>Employee History</span></a></li>
             <li><a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.index') ? route('employee-letters.index') : url('/employee-letters') }}" class="sidebar-nav-link {{ request()->routeIs('employee-letters.*') ? 'active' : '' }}"><i class="fa-solid fa-envelope-open-text text-warning"></i><span>Employee Letters</span></a></li>
             <li><a href="{{ route('departments.index') }}" class="sidebar-nav-link {{ request()->routeIs('departments.*') ? 'active' : '' }}"><i class="fa-solid fa-building text-secondary"></i><span>Departments</span></a></li>
             <li><a href="{{ route('attendance.index') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}"><i class="fa-solid fa-calendar-check text-success"></i><span>Attendance</span></a></li>
@@ -2167,14 +2168,20 @@
         @if(!$isContractAdmin && !$isSecretary && !$isStoreKeeper && (auth()->check() && (auth()->user()->hasAnyRole(['hr_officer', 'hr_manager', 'hr', 'admin', 'global_admin', 'gm', 'general_manager']) || auth()->user()->hasAnyPermission(['hr.departments.view', 'hr.employees.view', 'hr.employees.create', 'hr.employees.edit', 'hr.attendance.view', 'hr.attendance.manage', 'finance.payroll.process', 'hr.payroll.view', 'hr.*']))))
 
         <li class="sidebar-nav-item">
-            <a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') && !request()->routeIs('employees.history') ? 'active' : '' }}">
+            <a href="{{ route('employees.index') }}" class="sidebar-nav-link {{ request()->routeIs('employees.*') && !request()->routeIs('employees.history') && !request()->routeIs('employees.dead-file') ? 'active' : '' }}">
                 <i class="fa-solid fa-users text-primary"></i>
                 <span>Employees</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('employees.dead-file') }}" class="sidebar-nav-link {{ request()->routeIs('employees.dead-file') ? 'active' : '' }}">
+                <i class="fa-solid fa-box-archive text-danger"></i>
+                <span>Dead Employees</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('employees.history') }}" class="sidebar-nav-link {{ request()->routeIs('employees.history') ? 'active' : '' }}">
-                <i class="fa-solid fa-user-clock text-danger"></i>
+                <i class="fa-solid fa-user-clock text-warning"></i>
                 <span>Employee History</span>
             </a>
         </li>

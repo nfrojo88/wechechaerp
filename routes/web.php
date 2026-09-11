@@ -1762,6 +1762,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('attendance/clear-test-logs', [App\Http\Controllers\AttendanceController::class, 'clearTestLogs'])->name('attendance.clear-test-logs');
 
     Route::get('employees/pending-approval', [App\Http\Controllers\EmployeeController::class, 'pendingApproval'])->name('employees.pending-approval');
+    Route::get('employees/dead-file', [App\Http\Controllers\EmployeeController::class, 'deadFile'])->name('employees.dead-file');
+    Route::post('employees/{employee}/send-to-dead-file', [App\Http\Controllers\EmployeeController::class, 'sendToDeadFile'])->name('employees.send-to-dead-file');
+    Route::post('employees/{employee}/restore-from-dead-file', [App\Http\Controllers\EmployeeController::class, 'restoreFromDeadFile'])->name('employees.restore-from-dead-file');
     Route::get('employees/history', [App\Http\Controllers\EmployeeController::class, 'history'])->name('employees.history');
     Route::post('employees/{employee}/renew', [App\Http\Controllers\EmployeeController::class, 'renew'])->name('employees.renew');
     Route::post('employees/bulk-approve', [App\Http\Controllers\EmployeeController::class, 'bulkApprove'])->name('employees.bulk-approve');
