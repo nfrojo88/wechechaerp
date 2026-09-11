@@ -94,7 +94,7 @@
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link text-danger py-2 px-3 fw-semibold border border-danger-subtle bg-danger-subtle bg-opacity-25" href="{{ route('employees.dead-file') }}">
+            <a class="nav-link text-danger py-2 px-3 fw-semibold border border-danger-subtle bg-danger-subtle bg-opacity-25" href="{{ \Illuminate\Support\Facades\Route::has('employees.dead-file') ? route('employees.dead-file') : url('/employees/dead-file') }}">
                 <i class="fa-solid fa-box-archive me-1"></i> Dead File (የሞቱ ፋይሎች)
                 @if(!empty($counts['dead_file']) && $counts['dead_file'] > 0)
                     <span class="badge bg-danger text-white ms-1">{{ $counts['dead_file'] }}</span>
@@ -302,7 +302,7 @@ function showReason(name, reason, date) {
 <div class="modal fade" id="deadFileModal{{ $emp->id }}" tabindex="-1" aria-labelledby="deadFileModalLabel{{ $emp->id }}" aria-hidden="true" data-bs-backdrop="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
-            <form action="{{ route('employees.send-to-dead-file', $emp) }}" method="POST">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('employees.send-to-dead-file') ? route('employees.send-to-dead-file', $emp) : url('/employees/' . $emp->id . '/send-to-dead-file') }}" method="POST">
                 @csrf
                 <div class="modal-header bg-danger text-white py-3 px-4">
                     <h5 class="modal-title fs-6 fw-bold mb-0" id="deadFileModalLabel{{ $emp->id }}">

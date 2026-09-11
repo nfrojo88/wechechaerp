@@ -1763,8 +1763,19 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('employees/pending-approval', [App\Http\Controllers\EmployeeController::class, 'pendingApproval'])->name('employees.pending-approval');
     Route::get('employees/dead-file', [App\Http\Controllers\EmployeeController::class, 'deadFile'])->name('employees.dead-file');
+    Route::get('employees/dead_file', [App\Http\Controllers\EmployeeController::class, 'deadFile'])->name('employees.dead_file');
     Route::post('employees/{employee}/send-to-dead-file', [App\Http\Controllers\EmployeeController::class, 'sendToDeadFile'])->name('employees.send-to-dead-file');
     Route::post('employees/{employee}/restore-from-dead-file', [App\Http\Controllers\EmployeeController::class, 'restoreFromDeadFile'])->name('employees.restore-from-dead-file');
+    Route::get('system/clear-cache', function () {
+        if (!auth()->check()) {
+            abort(403);
+        }
+        \Illuminate\Support\Facades\Artisan::call('route:clear');
+        \Illuminate\Support\Facades\Artisan::call('view:clear');
+        \Illuminate\Support\Facades\Artisan::call('config:clear');
+        \Illuminate\Support\Facades\Artisan::call('cache:clear');
+        return back()->with('success', 'System route, view, and application caches have been cleared successfully!');
+    })->name('system.clear-cache');
     Route::get('employees/history', [App\Http\Controllers\EmployeeController::class, 'history'])->name('employees.history');
     Route::post('employees/{employee}/renew', [App\Http\Controllers\EmployeeController::class, 'renew'])->name('employees.renew');
     Route::post('employees/bulk-approve', [App\Http\Controllers\EmployeeController::class, 'bulkApprove'])->name('employees.bulk-approve');

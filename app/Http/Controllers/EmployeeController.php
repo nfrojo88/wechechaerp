@@ -1380,7 +1380,7 @@ class EmployeeController extends Controller
             'lock_reason'       => "Dead File: {$validated['dead_file_reason']}",
         ]);
 
-        return redirect()->route('employees.dead-file')
+        return redirect()->to(\Illuminate\Support\Facades\Route::has('employees.dead-file') ? route('employees.dead-file') : url('/employees/dead-file'))
             ->with('success', "Employee {$name} ({$code}) has been transferred to the Dead File section. All history, contracts, payroll, and documents remain securely archived.");
     }
 
@@ -1425,7 +1425,7 @@ class EmployeeController extends Controller
             'lock_reason'       => 'Dead File: Decommissioned from Active Roster',
         ]);
 
-        return redirect()->route('employees.dead-file')
+        return redirect()->to(\Illuminate\Support\Facades\Route::has('employees.dead-file') ? route('employees.dead-file') : url('/employees/dead-file'))
             ->with('success', "Employee {$name} ({$code}) has been moved to the Dead File section. Data deletion is prohibited to preserve audit trails and documents.");
     }
 

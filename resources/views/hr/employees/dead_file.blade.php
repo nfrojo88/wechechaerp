@@ -92,7 +92,7 @@
 {{-- Search & Filter Card --}}
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body p-3">
-        <form method="GET" action="{{ route('employees.dead-file') }}" class="row g-2 align-items-center">
+        <form method="GET" action="{{ \Illuminate\Support\Facades\Route::has('employees.dead-file') ? route('employees.dead-file') : url('/employees/dead-file') }}" class="row g-2 align-items-center">
             <div class="col-md-4">
                 <div class="input-group input-group-sm">
                     <span class="input-group-text bg-white"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
@@ -124,7 +124,7 @@
                     <i class="fa-solid fa-filter me-1"></i> Filter
                 </button>
                 @if(request()->hasAny(['search', 'department', 'reason', 'date_from', 'date_to']))
-                    <a href="{{ route('employees.dead-file') }}" class="btn btn-sm btn-outline-secondary" title="Reset Filters">
+                    <a href="{{ \Illuminate\Support\Facades\Route::has('employees.dead-file') ? route('employees.dead-file') : url('/employees/dead-file') }}" class="btn btn-sm btn-outline-secondary" title="Reset Filters">
                         <i class="fa-solid fa-rotate-left"></i>
                     </a>
                 @endif
@@ -270,7 +270,7 @@
 <div class="modal fade" id="restoreModal{{ $emp->id }}" tabindex="-1" aria-labelledby="restoreModalLabel{{ $emp->id }}" aria-hidden="true" data-bs-backdrop="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 12px; overflow: hidden;">
-            <form action="{{ route('employees.restore-from-dead-file', $emp) }}" method="POST">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('employees.restore-from-dead-file') ? route('employees.restore-from-dead-file', $emp) : url('/employees/' . $emp->id . '/restore-from-dead-file') }}" method="POST">
                 @csrf
                 <div class="modal-header bg-success text-white py-3 px-4">
                     <h5 class="modal-title fs-6 fw-bold mb-0" id="restoreModalLabel{{ $emp->id }}">
