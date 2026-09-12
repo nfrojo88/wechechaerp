@@ -357,7 +357,12 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th class="ps-3">Transfer #</th>
+                            @if(!$isAuditorUser)
+                            <th class="ps-3" style="width: 40px;">
+                                <input type="checkbox" id="selectAllTransfers" class="form-check-input" title="Select all editable transfers">
+                            </th>
+                            @endif
+                            <th class="{{ $isAuditorUser ? 'ps-3' : '' }}">Transfer #</th>
                             <th>Origin (From)</th>
                             <th>Destination (To)</th>
                             <th>Assigned Driver &amp; Vehicle</th>
@@ -373,9 +378,28 @@
                             $userStoreId = $assignedStore?->id ?? auth()->user()->store_id;
                             $isIncoming = $userStoreId && ($transfer->to_store_id == $userStoreId);
                             $isOutgoing = $userStoreId && ($transfer->from_store_id == $userStoreId);
+                            $canEditTransfer = !$isAuditorUser && in_array($transfer->status, ['draft', 'pending_approval', 'approved']);
                         @endphp
-                        <tr>
-                            <td class="ps-3">
+                        <tr id="row_transfer_{{ $transfer->id }}">
+                            @if(!$isAuditorUser)
+                            <td class="ps-3 text-center" style="width: 40px;">
+                                @if($canEditTransfer)
+                                    <input type="checkbox" class="form-check-input transfer-select-checkbox" 
+                                           value="{{ $transfer->id }}"
+                                           data-transfer-no="{{ $transfer->transfer_no }}"
+                                           data-from-id="{{ $transfer->from_store_id }}"
+                                           data-to-id="{{ $transfer->to_store_id }}"
+                                           data-from-name="{{ $transfer->fromStore->name ?? 'Origin' }}"
+                                           data-to-name="{{ $transfer->toStore->name ?? 'Destination' }}"
+                                           data-items-count="{{ $transfer->items->count() }}"
+                                           data-status="{{ $transfer->status }}"
+                                           data-driver="{{ $transfer->driver ? $transfer->driver->full_name : '' }}">
+                                @else
+                                    <span class="text-muted small opacity-50" title="Dispatched or completed transfers cannot be merged"><i class="fas fa-lock"></i></span>
+                                @endif
+                            </td>
+                            @endif
+                            <td class="{{ $isAuditorUser ? 'ps-3' : '' }}">
                                 <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="fw-bold font-monospace text-primary text-decoration-none">
                                     {{ $transfer->transfer_no }}
                                 </a>
@@ -423,7 +447,7 @@
                                 @if($transfer->outgoing_slip_file || $transfer->outgoing_slip_no || $transfer->physical_slip_no)
                                     <div>
                                         <span class="badge bg-light text-dark font-monospace border">
-                                            <i class="fas fa-receipt text-primary me-1"></i>{{ $transfer->outgoing_slip_no ?: $transfer->physical_slip_no ?: 'Uploaded' }}
+                                             <i class="fas fa-receipt text-primary me-1"></i>{{ $transfer->outgoing_slip_no ?: $transfer->physical_slip_no ?: 'Uploaded' }}
                                         </span>
                                     </div>
                                     @if($transfer->outgoing_slip_url)
@@ -483,7 +507,7 @@
 
                             {{-- Actions --}}
                             <td class="text-end pe-3">
-                                <div class="d-flex justify-content-end gap-1">
+                                <div class="d-flex justify-content-end gap-1 flex-wrap">
                                     @if($isAuditorUser)
                                         <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-outline-primary">
                                             <i class="fas fa-eye me-1"></i> Audit Review
@@ -493,6 +517,16 @@
                                             <i class="fas fa-box-open me-1"></i>Receive
                                         </a>
                                     @elseif(in_array($transfer->status, ['draft', 'approved']) && ($isOutgoing || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager'])))
+                                        @if(!$transfer->driver_employee_id)
+                                            <button type="button" class="btn btn-sm btn-warning text-dark fw-bold btn-quick-driver shadow-sm"
+                                                    data-transfer-id="{{ $transfer->id }}"
+                                                    data-transfer-no="{{ $transfer->transfer_no }}"
+                                                    data-from="{{ $transfer->fromStore->name ?? 'Origin' }}"
+                                                    data-to="{{ $transfer->toStore->name ?? 'Destination' }}"
+                                                    title="Assign Driver & Vehicle">
+                                                <i class="fas fa-id-badge me-1"></i>Assign Driver
+                                            </button>
+                                        @endif
                                         <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-primary shadow-sm" title="Dispatch & Upload Outgoing Slip">
                                             <i class="fas fa-truck-fast me-1"></i>Dispatch
                                         </a>
@@ -506,7 +540,7 @@
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="8" class="text-center py-5 text-muted">
+                            <td colspan="{{ $isAuditorUser ? 8 : 9 }}" class="text-center py-5 text-muted">
                                 <i class="fa-solid fa-truck-moving fa-3x mb-2 d-block opacity-25"></i>
                                 <h6 class="fw-bold mb-1">No Material Transfers Found</h6>
                                 <p class="small mb-3">No transfer records match your current filter selection.</p>
@@ -527,5 +561,317 @@
         @endif
     </div>
 
+    {{-- Floating / Sticky Batch Merge Bar --}}
+    @if(!$isAuditorUser)
+    <div id="transferBatchBar" class="alert alert-dark shadow-lg border-0 d-none align-items-center justify-content-between p-3 rounded-3 mt-3 flex-wrap gap-2 sticky-bottom" style="background: #1e293b; color: #f8fafc; z-index: 1020;">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <span class="badge bg-primary px-3 py-2 fs-6 rounded-pill">
+                <span id="selectedTransfersCount">0</span> Transfers Selected
+            </span>
+            <div id="routeStatusBadge" class="small fw-semibold text-white"></div>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <button type="button" id="btnOpenMergeModal" class="btn btn-warning btn-sm fw-bold text-dark shadow-sm" disabled data-bs-toggle="modal" data-bs-target="#bulkMergeModal">
+                <i class="fas fa-code-merge me-1"></i>Merge Selected Transfers &amp; Assign Driver
+            </button>
+            <button type="button" id="btnClearSelection" class="btn btn-outline-light btn-sm">Clear</button>
+        </div>
+    </div>
+    @endif
+
 </div>
+
+@if(!$isAuditorUser)
+{{-- MODAL: Bulk Merge Transfers & Assign Driver --}}
+<div class="modal fade" id="bulkMergeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ Route::has('store-manager.transfers.bulk-merge') ? route('store-manager.transfers.bulk-merge') : url('store-manager/transfers/bulk-merge') }}" method="POST" id="bulkMergeForm">
+                @csrf
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-code-merge me-2"></i>Merge Transfers &amp; Assign Driver</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3">
+                        <i class="fas fa-circle-info me-1"></i>
+                        <strong>How Merge Works:</strong> All materials from the source transfers will be moved into the chosen <strong>Target Transfer</strong>. Source transfers will be marked cancelled/merged. If materials share the same product code, quantities can be combined into one line item.
+                    </div>
+
+                    {{-- Route Info Banner --}}
+                    <div class="card border-0 bg-light p-3 mb-3 rounded-3">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div>
+                                <small class="text-muted d-block">Verified Common Route:</small>
+                                <span class="fw-bold text-dark fs-6" id="modalRouteText">—</span>
+                            </div>
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
+                                <i class="fas fa-check-circle me-1"></i>Origin &amp; Destination Match
+                            </span>
+                        </div>
+                    </div>
+
+                    {{-- Choose Target Transfer --}}
+                    <div class="mb-4">
+                        <label class="form-label fw-bold small text-dark">Select Target Transfer (Receives All Merged Items) <span class="text-danger">*</span></label>
+                        <div id="targetTransferList" class="d-flex flex-column gap-2">
+                            {{-- Dynamically populated via JS --}}
+                        </div>
+                        <div id="hiddenSourceInputsContainer"></div>
+                    </div>
+
+                    {{-- Merge Options --}}
+                    <div class="form-check form-switch mb-4 p-3 bg-light rounded-3 ms-0">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" name="consolidate_duplicates" value="1" id="chkConsolidate" checked>
+                        <label class="form-check-label fw-semibold text-dark" for="chkConsolidate">
+                            Consolidate duplicate items (Sum requested quantities of identical materials)
+                        </label>
+                        <div class="text-muted small ps-4 ms-2">If unchecked, identical products from different transfers will appear as separate rows in the target transfer.</div>
+                    </div>
+
+                    {{-- Optional Driver & Vehicle Assignment right inside Merge Modal --}}
+                    <div class="card border-0 shadow-sm p-3 bg-white border border-secondary border-opacity-25 rounded-3 mb-2">
+                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-id-badge text-primary me-2"></i>Assign Driver &amp; Vehicle (Optional)</h6>
+                        <p class="text-muted small mb-3">You can directly assign a driver now, or leave it blank to assign later.</p>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small">Driver</label>
+                                <select name="driver_employee_id" class="form-select form-select-sm">
+                                    <option value="">-- Assign Driver Later --</option>
+                                    @foreach($drivers as $drv)
+                                        <option value="{{ $drv->id }}">
+                                            {{ $drv->full_name }} {{ $drv->phone ? '('.$drv->phone.')' : '' }} - {{ $drv->department ?? 'General Service' }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small">Vehicle Plate Number</label>
+                                <input type="text" name="vehicle_plate_no" class="form-control form-control-sm" placeholder="e.g. 3-45678 AA / 2-98765 ET">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold small">Logistics / Dispatch Instructions</label>
+                                <textarea name="dispatch_notes" rows="2" class="form-control form-control-sm" placeholder="Consolidated delivery instructions, driver timing, or notes..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning btn-sm fw-bold text-dark shadow-sm">
+                        <i class="fas fa-code-merge me-1"></i>Confirm Merge &amp; Assign Driver
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- MODAL: Quick Assign Driver for individual transfer --}}
+<div class="modal fade" id="quickAssignModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <form id="quickAssignForm" method="POST" action="">
+                @csrf
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-id-badge me-2"></i>Assign Driver &amp; Vehicle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3 p-3 bg-light rounded-3">
+                        <div class="fw-bold text-dark" id="quickAssignTransferTitle">Transfer #—</div>
+                        <div class="text-muted small" id="quickAssignRouteText">Origin &rarr; Destination</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Driver <span class="text-danger">*</span></label>
+                        <select name="driver_employee_id" class="form-select" required>
+                            <option value="">-- Select Driver --</option>
+                            @foreach($drivers as $drv)
+                                <option value="{{ $drv->id }}">
+                                    {{ $drv->full_name }} {{ $drv->phone ? '('.$drv->phone.')' : '' }} - {{ $drv->department ?? 'General Service' }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Vehicle Plate Number</label>
+                        <input type="text" name="vehicle_plate_no" class="form-control" placeholder="e.g. 3-45678 AA">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Dispatch Notes / Route</label>
+                        <textarea name="dispatch_notes" rows="2" class="form-control" placeholder="Special handling notes, delivery route..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm">
+                        <i class="fas fa-paper-plane me-1"></i>Confirm &amp; Notify Driver
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const selectAllCheckbox = document.getElementById('selectAllTransfers');
+    const transferCheckboxes = document.querySelectorAll('.transfer-select-checkbox');
+    const batchBar = document.getElementById('transferBatchBar');
+    const selectedCountSpan = document.getElementById('selectedTransfersCount');
+    const routeStatusBadge = document.getElementById('routeStatusBadge');
+    const btnOpenMerge = document.getElementById('btnOpenMergeModal');
+    const btnClearSelection = document.getElementById('btnClearSelection');
+
+    const targetTransferList = document.getElementById('targetTransferList');
+    const hiddenSourceInputsContainer = document.getElementById('hiddenSourceInputsContainer');
+    const modalRouteText = document.getElementById('modalRouteText');
+
+    function updateSelectionState() {
+        const selected = Array.from(transferCheckboxes).filter(cb => cb.checked);
+        const count = selected.length;
+
+        if (count === 0) {
+            batchBar.classList.add('d-none');
+            batchBar.classList.remove('d-flex');
+            if (selectAllCheckbox) selectAllCheckbox.checked = false;
+            return;
+        }
+
+        batchBar.classList.remove('d-none');
+        batchBar.classList.add('d-flex');
+        selectedCountSpan.textContent = count;
+
+        if (count < 2) {
+            routeStatusBadge.innerHTML = '<span class="badge bg-secondary"><i class="fas fa-info-circle me-1"></i>Select at least 2 transfers to merge</span>';
+            btnOpenMerge.disabled = true;
+            return;
+        }
+
+        // Check route compatibility
+        const firstFrom = selected[0].dataset.fromId;
+        const firstTo = selected[0].dataset.toId;
+        const fromName = selected[0].dataset.fromName;
+        const toName = selected[0].dataset.toName;
+
+        const allMatch = selected.every(cb => cb.dataset.fromId === firstFrom && cb.dataset.toId === firstTo);
+
+        if (allMatch) {
+            routeStatusBadge.innerHTML = `<span class="badge bg-success"><i class="fas fa-route me-1"></i>Route: ${fromName} &rarr; ${toName}</span>`;
+            btnOpenMerge.disabled = false;
+        } else {
+            routeStatusBadge.innerHTML = '<span class="badge bg-danger"><i class="fas fa-triangle-exclamation me-1"></i>Selected transfers have different Origin or Destination</span>';
+            btnOpenMerge.disabled = true;
+        }
+    }
+
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function () {
+            transferCheckboxes.forEach(cb => {
+                cb.checked = selectAllCheckbox.checked;
+            });
+            updateSelectionState();
+        });
+    }
+
+    transferCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateSelectionState);
+    });
+
+    if (btnClearSelection) {
+        btnClearSelection.addEventListener('click', function () {
+            transferCheckboxes.forEach(cb => cb.checked = false);
+            if (selectAllCheckbox) selectAllCheckbox.checked = false;
+            updateSelectionState();
+        });
+    }
+
+    // Populate Merge Modal when button clicked
+    if (btnOpenMerge) {
+        btnOpenMerge.addEventListener('click', function () {
+            const selected = Array.from(transferCheckboxes).filter(cb => cb.checked);
+            if (selected.length < 2) return;
+
+            const fromName = selected[0].dataset.fromName;
+            const toName = selected[0].dataset.toName;
+            modalRouteText.innerHTML = `<i class="fas fa-arrow-up text-primary me-1"></i><strong>${fromName}</strong> &rarr; <i class="fas fa-arrow-down text-success me-1"></i><strong>${toName}</strong>`;
+
+            targetTransferList.innerHTML = '';
+
+            selected.forEach((cb, idx) => {
+                const isFirst = (idx === 0);
+                const div = document.createElement('div');
+                div.className = 'form-check p-3 rounded border ' + (isFirst ? 'border-primary bg-primary bg-opacity-10' : 'bg-light');
+                div.innerHTML = `
+                    <input class="form-check-input ms-0 me-2 target-radio" type="radio" name="target_transfer_id" id="target_radio_${cb.value}" value="${cb.value}" ${isFirst ? 'checked' : ''}>
+                    <label class="form-check-label w-100 ps-1" for="target_radio_${cb.value}">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap">
+                            <span class="fw-bold font-monospace text-primary">${cb.dataset.transferNo}</span>
+                            <span class="badge bg-light text-dark border">${cb.dataset.itemsCount} item(s)</span>
+                        </div>
+                        <small class="text-muted d-block">Status: ${cb.dataset.status} ${cb.dataset.driver ? ' &bull; Driver: ' + cb.dataset.driver : ' &bull; No driver'}</small>
+                    </label>
+                `;
+                targetTransferList.appendChild(div);
+            });
+
+            function syncSourceInputs() {
+                const selectedTarget = document.querySelector('input[name="target_transfer_id"]:checked')?.value;
+                hiddenSourceInputsContainer.innerHTML = '';
+
+                // Update visual styling of radio wrappers
+                document.querySelectorAll('.target-radio').forEach(r => {
+                    const parent = r.closest('.form-check');
+                    if (r.checked) {
+                        parent.className = 'form-check p-3 rounded border border-primary bg-primary bg-opacity-10';
+                    } else {
+                        parent.className = 'form-check p-3 rounded border bg-light';
+                    }
+                });
+
+                selected.forEach(cb => {
+                    if (cb.value !== selectedTarget) {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'source_transfer_ids[]';
+                        input.value = cb.value;
+                        hiddenSourceInputsContainer.appendChild(input);
+                    }
+                });
+            }
+
+            document.querySelectorAll('input[name="target_transfer_id"]').forEach(r => {
+                r.addEventListener('change', syncSourceInputs);
+            });
+
+            syncSourceInputs();
+        });
+    }
+
+    // Quick Driver Assign Modal Button Handlers
+    document.querySelectorAll('.btn-quick-driver').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const transferId = this.dataset.transferId;
+            const transferNo = this.dataset.transferNo;
+            const from = this.dataset.from;
+            const to = this.dataset.to;
+
+            const form = document.getElementById('quickAssignForm');
+            form.action = "{{ url('store-manager/transfers') }}/" + transferId + "/assign-driver";
+
+            document.getElementById('quickAssignTransferTitle').textContent = `Transfer #${transferNo}`;
+            document.getElementById('quickAssignRouteText').innerHTML = `<i class="fas fa-arrow-up text-primary me-1"></i>${from} &rarr; <i class="fas fa-arrow-down text-success me-1"></i>${to}`;
+
+            const modal = new bootstrap.Modal(document.getElementById('quickAssignModal'));
+            modal.show();
+        });
+    });
+});
+</script>
+@endif
 @endsection

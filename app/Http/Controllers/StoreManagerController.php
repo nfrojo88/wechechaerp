@@ -18,6 +18,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class StoreManagerController extends Controller
 {
@@ -483,8 +484,19 @@ class StoreManagerController extends Controller
         $transfers = $query->latest()->paginate(20)->withQueryString();
         $stores = Store::where('is_active', true)->orderBy('name')->get();
 
+        // Fetch Drivers for quick assignment and merging
+        $drivers = \App\Models\Employee::where('status', 'active')
+            ->where(function ($q) {
+                $q->where('department', 'like', '%driver%')
+                  ->orWhere('role_title', 'like', '%driver%');
+            })->orderBy('full_name')->get();
+
+        if ($drivers->isEmpty()) {
+            $drivers = \App\Models\Employee::where('status', 'active')->orderBy('full_name')->get();
+        }
+
         return view('store-manager.transfers.index', compact(
-            'transfers', 'stores', 'isStoreKeeper', 'assignedStore', 'tab',
+            'transfers', 'stores', 'drivers', 'isStoreKeeper', 'assignedStore', 'tab',
             'totalCount', 'pendingDriverCount', 'assignedDriverCount', 'readyToDispatchCount', 'inTransitCount', 'completedCount',
             'incomingCount', 'outgoingCount', 'pendingIncomingCount', 'completedIncomingCount', 'pendingOutgoingCount', 'completedOutgoingCount'
         ));
@@ -524,7 +536,19 @@ class StoreManagerController extends Controller
             $drivers = \App\Models\Employee::where('status', 'active')->orderBy('full_name')->get();
         }
 
-        return view('store-manager.transfers.show', compact('transfer', 'isStoreKeeper', 'assignedStore', 'drivers'));
+        // Fetch other pending transfers sharing the exact same origin & destination store for merging/moving
+        $compatibleTransfers = Transfer::with(['items.product', 'requestedBy'])
+            ->where('id', '!=', $transfer->id)
+            ->where('from_store_id', $transfer->from_store_id)
+            ->where('to_store_id', $transfer->to_store_id)
+            ->whereIn('status', ['draft', 'pending_approval', 'approved'])
+            ->latest()
+            ->get();
+
+        // Product Catalog for material adjustment
+        $products = Product::where('is_active', true)->orderBy('name')->get();
+
+        return view('store-manager.transfers.show', compact('transfer', 'isStoreKeeper', 'assignedStore', 'drivers', 'compatibleTransfers', 'products'));
     }
 
     /**
@@ -736,6 +760,437 @@ class StoreManagerController extends Controller
         ]);
 
         return back()->with('success', 'Physical Slip #' . $request->physical_slip_no . ' saved successfully.');
+    }
+
+    /**
+     * Bulk Merge Multiple Transfers into a single Transfer & optionally assign Driver
+     */
+    public function bulkMergeTransfers(Request $request)
+    {
+        $request->validate([
+            'target_transfer_id'     => 'required|exists:transfers,id',
+            'source_transfer_ids'    => 'required|array|min:1',
+            'source_transfer_ids.*'  => 'required|exists:transfers,id',
+            'consolidate_duplicates' => 'nullable',
+            'driver_employee_id'     => 'nullable|exists:employees,id',
+            'vehicle_plate_no'       => 'nullable|string|max:100',
+            'dispatch_notes'         => 'nullable|string|max:500',
+        ]);
+
+        $targetTransfer = Transfer::with(['items', 'fromStore', 'toStore'])->findOrFail($request->target_transfer_id);
+
+        if (in_array($targetTransfer->status, ['in_transit', 'completed', 'rejected'])) {
+            return back()->with('error', "Target transfer #{$targetTransfer->transfer_no} cannot be modified because its status is {$targetTransfer->status}.");
+        }
+
+        // Filter out target from source IDs
+        $sourceIds = array_values(array_filter($request->source_transfer_ids, fn($id) => (int)$id !== (int)$targetTransfer->id));
+
+        if (empty($sourceIds)) {
+            return back()->with('error', 'Please select at least one different transfer to merge into the target transfer.');
+        }
+
+        $sourceTransfers = Transfer::with(['items', 'fromStore', 'toStore'])->whereIn('id', $sourceIds)->get();
+
+        // Verify compatibility: exact same origin & destination store
+        foreach ($sourceTransfers as $src) {
+            if ($src->from_store_id != $targetTransfer->from_store_id || $src->to_store_id != $targetTransfer->to_store_id) {
+                return back()->with('error', "Transfer #{$src->transfer_no} does not have the same origin and destination as #{$targetTransfer->transfer_no} and cannot be merged.");
+            }
+            if (in_array($src->status, ['in_transit', 'completed'])) {
+                return back()->with('error', "Transfer #{$src->transfer_no} is already {$src->status} and cannot be merged.");
+            }
+        }
+
+        $consolidate = $request->boolean('consolidate_duplicates', true);
+        $mergedTransfersCount = 0;
+        $itemsMovedCount = 0;
+
+        DB::transaction(function () use ($request, $targetTransfer, $sourceTransfers, $consolidate, &$mergedTransfersCount, &$itemsMovedCount) {
+            $hasMergedIntoCol = Schema::hasColumn('transfers', 'merged_into_transfer_id');
+            $hasMergeNotesCol = Schema::hasColumn('transfers', 'merge_notes');
+
+            foreach ($sourceTransfers as $src) {
+                foreach ($src->items as $srcItem) {
+                    $existingItem = null;
+                    if ($consolidate) {
+                        $existingItem = $targetTransfer->items()
+                            ->where('product_id', $srcItem->product_id)
+                            ->where('unit', $srcItem->unit)
+                            ->first();
+                    }
+
+                    if ($existingItem) {
+                        $existingItem->increment('requested_quantity', $srcItem->requested_quantity);
+                        $srcItem->delete();
+                    } else {
+                        $srcItem->update(['transfer_id' => $targetTransfer->id]);
+                    }
+                    $itemsMovedCount++;
+                }
+
+                $auditNote = "Merged into {$targetTransfer->transfer_no} by " . (Auth::user()->name ?? 'Store Manager') . " on " . now()->format('Y-m-d H:i');
+
+                $updateData = [
+                    'status'           => 'cancelled',
+                    'rejection_reason' => $auditNote,
+                ];
+                if ($hasMergedIntoCol) {
+                    $updateData['merged_into_transfer_id'] = $targetTransfer->id;
+                }
+                if ($hasMergeNotesCol) {
+                    $updateData['merge_notes'] = $auditNote;
+                }
+
+                $src->update($updateData);
+                $src->delete(); // Soft delete so it leaves the active list cleanly
+                $mergedTransfersCount++;
+            }
+
+            // Assign driver & vehicle if specified
+            if ($request->filled('driver_employee_id')) {
+                $targetTransfer->update([
+                    'driver_employee_id' => $request->driver_employee_id,
+                    'vehicle_plate_no'   => $request->vehicle_plate_no,
+                    'dispatch_notes'     => $request->dispatch_notes,
+                    'approved_by'        => Auth::id(),
+                    'approved_at'        => now(),
+                    'status'             => 'approved',
+                ]);
+
+                // Send Driver SMS
+                $driver = \App\Models\Employee::find($request->driver_employee_id);
+                if ($driver && !empty($driver->phone)) {
+                    try {
+                        $fromStoreName = $targetTransfer->fromStore->name ?? 'Main Store';
+                        $toStoreName   = $targetTransfer->toStore->name ?? 'Destination Store';
+                        $itemsList     = $targetTransfer->items()->with('product')->get()->map(function($i) {
+                            return ($i->product->name ?? 'Item') . ' (' . number_format($i->requested_quantity, 2) . ' ' . $i->unit . ')';
+                        })->implode(', ');
+
+                        $smsMessage = "ConstructPro: Consolidated Transfer #{$targetTransfer->transfer_no} has been assigned to you.\nPickup: {$fromStoreName}\nDelivery To: {$toStoreName}\nItems: {$itemsList}";
+                        $smsService = app(\App\Services\SmsEthiopiaService::class);
+                        $smsService->sendMessage($driver->phone, $smsMessage);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error('Transfer Driver SMS error: ' . $e->getMessage());
+                    }
+                }
+            }
+        });
+
+        $msg = "Successfully consolidated {$mergedTransfersCount} transfer(s) into #{$targetTransfer->transfer_no} with {$itemsMovedCount} material item line(s)!";
+        if ($request->filled('driver_employee_id')) {
+            $msg .= ' Driver & vehicle assigned successfully.';
+        }
+
+        return redirect()->route('store-manager.transfers.show', $targetTransfer)->with('success', $msg);
+    }
+
+    /**
+     * Merge Other Compatible Transfers into this specific Transfer (From Transfer Show page)
+     */
+    public function mergeTransfersIntoThis(Request $request, Transfer $transfer)
+    {
+        $request->merge(['target_transfer_id' => $transfer->id]);
+        return $this->bulkMergeTransfers($request);
+    }
+
+    /**
+     * Move or Split an individual Transfer Item to Another Transfer or New Transfer
+     */
+    public function moveTransferItem(Request $request, Transfer $transfer)
+    {
+        if (in_array($transfer->status, ['in_transit', 'completed'])) {
+            return back()->with('error', 'Cannot move items from a transfer that has already been dispatched or completed.');
+        }
+
+        $request->validate([
+            'transfer_item_id'   => 'required|exists:transfer_items,id',
+            'move_quantity'      => 'required|numeric|min:0.001',
+            'target_mode'        => 'required|in:existing,new',
+            'target_transfer_id' => 'required_if:target_mode,existing|nullable|exists:transfers,id',
+        ]);
+
+        $item = $transfer->items()->where('id', $request->transfer_item_id)->firstOrFail();
+
+        if ((float)$request->move_quantity > (float)$item->requested_quantity) {
+            return back()->with('error', "Requested move quantity ({$request->move_quantity}) cannot exceed available quantity ({$item->requested_quantity} {$item->unit}).");
+        }
+
+        $moveQty = (float)$request->move_quantity;
+        $isFullMove = ($moveQty >= (float)$item->requested_quantity);
+        $targetTransferNo = '';
+
+        DB::transaction(function () use ($request, $transfer, $item, $moveQty, $isFullMove, &$targetTransferNo) {
+            if ($request->target_mode === 'existing') {
+                $destinationTransfer = Transfer::findOrFail($request->target_transfer_id);
+
+                if ($destinationTransfer->from_store_id != $transfer->from_store_id || $destinationTransfer->to_store_id != $transfer->to_store_id) {
+                    throw new \Exception('Destination transfer does not share the same origin and destination stores.');
+                }
+                if (in_array($destinationTransfer->status, ['in_transit', 'completed'])) {
+                    throw new \Exception('Destination transfer is already dispatched or completed.');
+                }
+
+                $targetTransferNo = $destinationTransfer->transfer_no;
+
+                // Check if destination already has this product and unit
+                $existing = $destinationTransfer->items()
+                    ->where('product_id', $item->product_id)
+                    ->where('unit', $item->unit)
+                    ->first();
+
+                if ($existing) {
+                    $existing->increment('requested_quantity', $moveQty);
+                    if ($isFullMove) {
+                        $item->delete();
+                    } else {
+                        $item->decrement('requested_quantity', $moveQty);
+                    }
+                } else {
+                    if ($isFullMove) {
+                        $item->update(['transfer_id' => $destinationTransfer->id]);
+                    } else {
+                        $item->decrement('requested_quantity', $moveQty);
+                        $destinationTransfer->items()->create([
+                            'product_id'         => $item->product_id,
+                            'requested_quantity' => $moveQty,
+                            'unit'               => $item->unit,
+                        ]);
+                    }
+                }
+            } else {
+                // Split to a new transfer request
+                $no = 'TR-' . date('Ymd') . '-' . str_pad(Transfer::count() + 1, 4, '0', STR_PAD_LEFT);
+                $targetTransferNo = $no;
+
+                $destinationTransfer = Transfer::create([
+                    'transfer_no'   => $no,
+                    'from_store_id' => $transfer->from_store_id,
+                    'to_store_id'   => $transfer->to_store_id,
+                    'requested_by'  => Auth::id(),
+                    'required_date' => $transfer->required_date,
+                    'reason'        => 'Separated / Split from ' . $transfer->transfer_no . ': ' . ($transfer->reason ?? ''),
+                    'status'        => 'draft',
+                ]);
+
+                if ($isFullMove) {
+                    $item->update(['transfer_id' => $destinationTransfer->id]);
+                } else {
+                    $item->decrement('requested_quantity', $moveQty);
+                    $destinationTransfer->items()->create([
+                        'product_id'         => $item->product_id,
+                        'requested_quantity' => $moveQty,
+                        'unit'               => $item->unit,
+                    ]);
+                }
+            }
+
+            // If source transfer has 0 remaining items, mark cancelled
+            if ($transfer->items()->count() === 0) {
+                $hasMergedIntoCol = Schema::hasColumn('transfers', 'merged_into_transfer_id');
+                $hasMergeNotesCol = Schema::hasColumn('transfers', 'merge_notes');
+                $auditNote = "All items moved to {$targetTransferNo} by " . Auth::user()->name;
+
+                $updateData = [
+                    'status'           => 'cancelled',
+                    'rejection_reason' => $auditNote,
+                ];
+                if ($hasMergedIntoCol && isset($destinationTransfer)) {
+                    $updateData['merged_into_transfer_id'] = $destinationTransfer->id;
+                }
+                if ($hasMergeNotesCol) {
+                    $updateData['merge_notes'] = $auditNote;
+                }
+                $transfer->update($updateData);
+            }
+        });
+
+        return back()->with('success', "Moved {$moveQty} {$item->unit} of " . ($item->product->name ?? 'Material') . " to transfer #{$targetTransferNo} successfully!");
+    }
+
+    /**
+     * Material Work Adjustment: Adjust Quantities, Add New Items, Remove Items & Assign Driver
+     */
+    public function adjustTransferItems(Request $request, Transfer $transfer)
+    {
+        if (in_array($transfer->status, ['in_transit', 'completed'])) {
+            return back()->with('error', 'Cannot adjust materials on a transfer that has already been dispatched or completed.');
+        }
+
+        $request->validate([
+            'items'                      => 'required|array|min:1',
+            'items.*.id'                 => 'nullable|exists:transfer_items,id',
+            'items.*.product_id'         => 'required|exists:products,id',
+            'items.*.requested_quantity' => 'required|numeric|min:0.001',
+            'items.*.unit'               => 'required|string|max:20',
+            'items.*.delete'             => 'nullable',
+            'driver_employee_id'         => 'nullable|exists:employees,id',
+            'vehicle_plate_no'           => 'nullable|string|max:100',
+            'dispatch_notes'             => 'nullable|string|max:500',
+        ]);
+
+        DB::transaction(function () use ($request, $transfer) {
+            foreach ($request->items as $row) {
+                $shouldDelete = !empty($row['delete']) && ($row['delete'] == '1' || $row['delete'] === true);
+
+                if (!empty($row['id'])) {
+                    $existingItem = $transfer->items()->where('id', $row['id'])->first();
+                    if ($existingItem) {
+                        if ($shouldDelete) {
+                            $existingItem->delete();
+                        } else {
+                            $existingItem->update([
+                                'product_id'         => $row['product_id'],
+                                'requested_quantity' => $row['requested_quantity'],
+                                'unit'               => $row['unit'],
+                            ]);
+                        }
+                    }
+                } elseif (!$shouldDelete) {
+                    $transfer->items()->create([
+                        'product_id'         => $row['product_id'],
+                        'requested_quantity' => $row['requested_quantity'],
+                        'unit'               => $row['unit'],
+                    ]);
+                }
+            }
+
+            // Assign driver & vehicle if provided
+            if ($request->filled('driver_employee_id')) {
+                $transfer->update([
+                    'driver_employee_id' => $request->driver_employee_id,
+                    'vehicle_plate_no'   => $request->vehicle_plate_no,
+                    'dispatch_notes'     => $request->dispatch_notes,
+                    'approved_by'        => Auth::id(),
+                    'approved_at'        => now(),
+                    'status'             => 'approved',
+                ]);
+
+                // Send SMS to Driver
+                $driver = \App\Models\Employee::find($request->driver_employee_id);
+                if ($driver && !empty($driver->phone)) {
+                    try {
+                        $fromStoreName = $transfer->fromStore->name ?? 'Main Store';
+                        $toStoreName   = $transfer->toStore->name ?? 'Destination Store';
+                        $itemsList     = $transfer->items()->with('product')->get()->map(function($i) {
+                            return ($i->product->name ?? 'Item') . ' (' . number_format($i->requested_quantity, 2) . ' ' . $i->unit . ')';
+                        })->implode(', ');
+
+                        $smsMessage = "ConstructPro: Transfer #{$transfer->transfer_no} has been assigned to you.\nPickup: {$fromStoreName}\nDelivery To: {$toStoreName}\nItems: {$itemsList}";
+                        $smsService = app(\App\Services\SmsEthiopiaService::class);
+                        $smsService->sendMessage($driver->phone, $smsMessage);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error('Transfer Driver SMS error: ' . $e->getMessage());
+                    }
+                }
+            }
+        });
+
+        $msg = 'Transfer materials adjusted successfully.';
+        if ($request->filled('driver_employee_id')) {
+            $msg .= ' Driver assigned and notified.';
+        }
+
+        return back()->with('success', $msg);
+    }
+
+    /**
+     * Split multiple selected items into a new transfer
+     */
+    public function splitTransferToNew(Request $request, Transfer $transfer)
+    {
+        if (in_array($transfer->status, ['in_transit', 'completed'])) {
+            return back()->with('error', 'Cannot split items from a transfer that has already been dispatched.');
+        }
+
+        $request->validate([
+            'split_items'            => 'required|array|min:1',
+            'split_items.*.item_id'  => 'required|exists:transfer_items,id',
+            'split_items.*.quantity' => 'required|numeric|min:0.001',
+            'driver_employee_id'     => 'nullable|exists:employees,id',
+            'vehicle_plate_no'       => 'nullable|string|max:100',
+            'dispatch_notes'         => 'nullable|string|max:500',
+        ]);
+
+        $newTransfer = null;
+
+        DB::transaction(function () use ($request, $transfer, &$newTransfer) {
+            $no = 'TR-' . date('Ymd') . '-' . str_pad(Transfer::count() + 1, 4, '0', STR_PAD_LEFT);
+
+            $newTransfer = Transfer::create([
+                'transfer_no'        => $no,
+                'from_store_id'      => $transfer->from_store_id,
+                'to_store_id'        => $transfer->to_store_id,
+                'requested_by'       => Auth::id(),
+                'required_date'      => $transfer->required_date,
+                'reason'             => 'Separated/Split from ' . $transfer->transfer_no . ': ' . ($transfer->reason ?? ''),
+                'status'             => $request->filled('driver_employee_id') ? 'approved' : 'draft',
+                'driver_employee_id' => $request->driver_employee_id,
+                'vehicle_plate_no'   => $request->vehicle_plate_no,
+                'dispatch_notes'     => $request->dispatch_notes,
+                'approved_by'        => $request->filled('driver_employee_id') ? Auth::id() : null,
+                'approved_at'        => $request->filled('driver_employee_id') ? now() : null,
+            ]);
+
+            foreach ($request->split_items as $splitRow) {
+                $item = $transfer->items()->where('id', $splitRow['item_id'])->first();
+                if (!$item) continue;
+
+                $qty = (float)$splitRow['quantity'];
+                if ($qty >= (float)$item->requested_quantity) {
+                    $item->update(['transfer_id' => $newTransfer->id]);
+                } else {
+                    $item->decrement('requested_quantity', $qty);
+                    $newTransfer->items()->create([
+                        'product_id'         => $item->product_id,
+                        'requested_quantity' => $qty,
+                        'unit'               => $item->unit,
+                    ]);
+                }
+            }
+
+            if ($transfer->items()->count() === 0) {
+                $hasMergedIntoCol = Schema::hasColumn('transfers', 'merged_into_transfer_id');
+                $hasMergeNotesCol = Schema::hasColumn('transfers', 'merge_notes');
+                $auditNote = "All items split into new transfer {$newTransfer->transfer_no} by " . Auth::user()->name;
+
+                $updateData = [
+                    'status'           => 'cancelled',
+                    'rejection_reason' => $auditNote,
+                ];
+                if ($hasMergedIntoCol) {
+                    $updateData['merged_into_transfer_id'] = $newTransfer->id;
+                }
+                if ($hasMergeNotesCol) {
+                    $updateData['merge_notes'] = $auditNote;
+                }
+                $transfer->update($updateData);
+            }
+
+            // Driver SMS if assigned
+            if ($request->filled('driver_employee_id')) {
+                $driver = \App\Models\Employee::find($request->driver_employee_id);
+                if ($driver && !empty($driver->phone)) {
+                    try {
+                        $fromStoreName = $newTransfer->fromStore->name ?? 'Main Store';
+                        $toStoreName   = $newTransfer->toStore->name ?? 'Destination Store';
+                        $itemsList     = $newTransfer->items()->with('product')->get()->map(function($i) {
+                            return ($i->product->name ?? 'Item') . ' (' . number_format($i->requested_quantity, 2) . ' ' . $i->unit . ')';
+                        })->implode(', ');
+
+                        $smsMessage = "ConstructPro: Split Transfer #{$newTransfer->transfer_no} has been assigned to you.\nPickup: {$fromStoreName}\nDelivery To: {$toStoreName}\nItems: {$itemsList}";
+                        $smsService = app(\App\Services\SmsEthiopiaService::class);
+                        $smsService->sendMessage($driver->phone, $smsMessage);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error('Transfer Driver SMS error: ' . $e->getMessage());
+                    }
+                }
+            }
+        });
+
+        return redirect()->route('store-manager.transfers.show', $newTransfer)
+            ->with('success', "New separated transfer #{$newTransfer->transfer_no} successfully created from #{$transfer->transfer_no}!");
     }
 
 

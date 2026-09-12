@@ -2131,6 +2131,11 @@ Route::middleware(['auth'])->group(function () {
         Route::post('transfers/{transfer}/dispatch', [App\Http\Controllers\StoreManagerController::class, 'dispatchTransfer'])->name('transfers.dispatch');
         Route::post('transfers/{transfer}/receive', [App\Http\Controllers\StoreManagerController::class, 'receiveTransfer'])->name('transfers.receive');
         Route::post('transfers/{transfer}/reject', [App\Http\Controllers\StoreManagerController::class, 'rejectTransfer'])->name('transfers.reject');
+        Route::post('transfers/bulk-merge', [App\Http\Controllers\StoreManagerController::class, 'bulkMergeTransfers'])->name('transfers.bulk-merge');
+        Route::post('transfers/{transfer}/merge-into', [App\Http\Controllers\StoreManagerController::class, 'mergeTransfersIntoThis'])->name('transfers.merge-into');
+        Route::post('transfers/{transfer}/move-item', [App\Http\Controllers\StoreManagerController::class, 'moveTransferItem'])->name('transfers.move-item');
+        Route::post('transfers/{transfer}/adjust-items', [App\Http\Controllers\StoreManagerController::class, 'adjustTransferItems'])->name('transfers.adjust-items');
+        Route::post('transfers/{transfer}/split-new', [App\Http\Controllers\StoreManagerController::class, 'splitTransferToNew'])->name('transfers.split-new');
 
         
         // Material Requests from Site Engineers / Coordinator

@@ -25,6 +25,7 @@ class Transfer extends Model
         'dispatched_by', 'dispatched_at', 'outgoing_slip_file', 'outgoing_slip_no',
         'receiving_slip_file', 'receiving_slip_no', 'receiving_notes',
         'material_request_id',
+        'merged_into_transfer_id', 'merge_notes',
     ];
 
     protected $casts = [
@@ -72,6 +73,16 @@ class Transfer extends Model
     public function items()
     {
         return $this->hasMany(TransferItem::class);
+    }
+
+    public function mergedInto()
+    {
+        return $this->belongsTo(Transfer::class, 'merged_into_transfer_id');
+    }
+
+    public function mergedTransfers()
+    {
+        return $this->hasMany(Transfer::class, 'merged_into_transfer_id');
     }
 
     public function getOutgoingSlipUrlAttribute(): ?string

@@ -77,6 +77,18 @@
         </div>
 
         <div class="d-flex gap-2 flex-wrap">
+            {{-- Material Work Adjustment & Merge (Editable Statuses) --}}
+            @if(in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin)
+                <button type="button" class="btn btn-outline-primary btn-sm shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#adjustMaterialsModal">
+                    <i class="fas fa-sliders me-1"></i>Work Adjustment
+                </button>
+                @if(isset($compatibleTransfers) && $compatibleTransfers->isNotEmpty())
+                    <button type="button" class="btn btn-warning btn-sm text-dark shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#mergeIntoModal">
+                        <i class="fas fa-code-merge me-1"></i>Merge Transfers ({{ $compatibleTransfers->count() }})
+                    </button>
+                @endif
+            @endif
+
             {{-- Quick action buttons in header --}}
             @if(in_array($transfer->status, ['draft', 'pending_approval']) && $isAdmin)
                 <button type="button" class="btn btn-warning btn-sm shadow-sm text-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#assignDriverModal">
@@ -382,7 +394,18 @@
                 <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-boxes-stacked me-2 text-primary"></i>Transferred Materials Inventory Details</h6>
                 <small class="text-muted">Compare requested, sent by origin storekeeper, and received by destination storekeeper</small>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 flex-wrap">
+                @if(in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin)
+                    <button type="button" class="btn btn-outline-primary btn-sm shadow-sm" data-bs-toggle="modal" data-bs-target="#adjustMaterialsModal">
+                        <i class="fas fa-sliders me-1"></i>Adjust Materials &amp; Qty
+                    </button>
+                    @if(isset($compatibleTransfers) && $compatibleTransfers->isNotEmpty())
+                        <button type="button" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#mergeIntoModal">
+                            <i class="fas fa-code-merge me-1"></i>Merge Transfers ({{ $compatibleTransfers->count() }})
+                        </button>
+                    @endif
+                @endif
+
                 @if(in_array($transfer->status, ['draft', 'approved']) && ($isSenderStore || $isAdmin))
                     <button type="button" class="btn btn-primary btn-sm shadow-sm" data-bs-toggle="modal" data-bs-target="#dispatchModal">
                         <i class="fas fa-truck-fast me-1"></i>Dispatch Sent Items
@@ -397,6 +420,20 @@
             </div>
         </div>
 
+        @if(isset($compatibleTransfers) && $compatibleTransfers->isNotEmpty() && $isAdmin && in_array($transfer->status, ['draft', 'pending_approval', 'approved']))
+        <div class="alert alert-info border-0 shadow-sm mx-3 mt-3 mb-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <i class="fas fa-code-merge text-primary me-2 fa-lg"></i>
+                <strong>{{ $compatibleTransfers->count() }} other pending transfer(s)</strong> share this exact route: 
+                <span class="badge bg-white text-dark">{{ $transfer->fromStore->name ?? 'Origin' }} &rarr; {{ $transfer->toStore->name ?? 'Destination' }}</span>
+                <span class="text-muted small d-block">e.g. {{ $compatibleTransfers->pluck('transfer_no')->implode(', ') }}</span>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#mergeIntoModal">
+                <i class="fas fa-code-merge me-1"></i>Merge Them Into #{{ $transfer->transfer_no }}
+            </button>
+        </div>
+        @endif
+
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
@@ -410,12 +447,16 @@
                             <th class="text-end">Received Qty (Dest.)</th>
                             <th class="text-center">Unit</th>
                             <th class="text-center">Variance / Status</th>
+                            @if(in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin)
+                                <th class="text-end pe-3">Actions</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($transfer->items as $item)
                         @php
                             $variance = ($item->received_quantity > 0) ? ($item->received_quantity - $item->sent_quantity) : 0;
+                            $canAdjustItems = in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin;
                         @endphp
                         <tr>
                             <td class="ps-3">{{ $loop->iteration }}</td>
@@ -473,10 +514,23 @@
                                     </span>
                                 @endif
                             </td>
+                            @if($canAdjustItems)
+                            <td class="text-end pe-3">
+                                <button type="button" class="btn btn-xs btn-outline-primary btn-sm py-0 px-2 btn-move-item"
+                                        data-item-id="{{ $item->id }}"
+                                        data-product-name="{{ $item->product->name ?? 'Material' }}"
+                                        data-product-code="{{ $item->product->code ?? '' }}"
+                                        data-quantity="{{ $item->requested_quantity }}"
+                                        data-unit="{{ $item->unit }}"
+                                        title="Move or Split this item">
+                                    <i class="fas fa-arrows-split-up-and-left me-1"></i>Split / Move
+                                </button>
+                            </td>
+                            @endif
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="8" class="text-center py-4 text-muted">No items found in this transfer record</td>
+                            <td colspan="{{ in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin ? 9 : 8 }}" class="text-center py-4 text-muted">No items found in this transfer record</td>
                         </tr>
                         @endforelse
                     </tbody>
@@ -745,5 +799,316 @@
         </div>
     </div>
 </div>
+
+@if(in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin)
+{{-- MODAL 6: Material Work Adjustment (Edit/Add/Remove Items & Assign Driver) --}}
+<div class="modal fade" id="adjustMaterialsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ Route::has('store-manager.transfers.adjust-items') ? route('store-manager.transfers.adjust-items', $transfer) : url('store-manager/transfers/'.$transfer->id.'/adjust-items') }}" method="POST">
+                @csrf
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-sliders me-2"></i>Material Work Adjustment &amp; Logistics</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Adjust requested material quantities, add new line items to this transfer, or mark unneeded items for removal before dispatching to site.
+                    </div>
+
+                    <div class="table-responsive mb-3">
+                        <table class="table table-bordered table-sm align-middle" id="adjustmentItemsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="min-width: 280px;">Product / Material <span class="text-danger">*</span></th>
+                                    <th class="text-center" style="width: 160px;">Requested Qty <span class="text-danger">*</span></th>
+                                    <th class="text-center" style="width: 120px;">Unit <span class="text-danger">*</span></th>
+                                    <th class="text-center" style="width: 100px;">Remove?</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adjustmentTableBody">
+                                @foreach($transfer->items as $idx => $adjItem)
+                                <tr>
+                                    <td>
+                                        <input type="hidden" name="items[{{ $idx }}][id]" value="{{ $adjItem->id }}">
+                                        <select name="items[{{ $idx }}][product_id]" class="form-select form-select-sm" required>
+                                            @foreach($products as $p)
+                                                <option value="{{ $p->id }}" {{ $adjItem->product_id == $p->id ? 'selected' : '' }}>
+                                                    {{ $p->name }} {{ $p->code ? '('.$p->code.')' : '' }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="number" step="0.001" min="0.001" name="items[{{ $idx }}][requested_quantity]" class="form-control form-control-sm text-end fw-bold" value="{{ $adjItem->requested_quantity }}" required>
+                                    </td>
+                                    <td>
+                                        <input type="text" name="items[{{ $idx }}][unit]" class="form-control form-control-sm text-center" value="{{ $adjItem->unit }}" required>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="form-check d-flex justify-content-center">
+                                            <input class="form-check-input" type="checkbox" name="items[{{ $idx }}][delete]" value="1" title="Check to delete this item">
+                                        </div>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <button type="button" class="btn btn-outline-success btn-sm mb-4" id="btnAddAdjustmentItem">
+                        <i class="fas fa-plus me-1"></i>Add Another Material Line
+                    </button>
+
+                    {{-- Driver & Vehicle Section within Adjustment Modal --}}
+                    <div class="card border-0 shadow-sm p-3 bg-light rounded-3">
+                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-id-badge text-primary me-2"></i>Assign Driver &amp; Logistics (Optional)</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small">Driver</label>
+                                <select name="driver_employee_id" class="form-select form-select-sm">
+                                    <option value="">-- Keep Current / Assign Later --</option>
+                                    @foreach($drivers as $drv)
+                                        <option value="{{ $drv->id }}" {{ $transfer->driver_employee_id == $drv->id ? 'selected' : '' }}>
+                                            {{ $drv->full_name }} {{ $drv->phone ? '('.$drv->phone.')' : '' }} - {{ $drv->department ?? 'General Service' }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small">Vehicle Plate Number</label>
+                                <input type="text" name="vehicle_plate_no" class="form-control form-control-sm" placeholder="e.g. 3-45678 AA" value="{{ $transfer->vehicle_plate_no }}">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold small">Dispatch / Handling Notes</label>
+                                <textarea name="dispatch_notes" rows="2" class="form-control form-control-sm" placeholder="Consolidated handling notes, route, or timing...">{{ $transfer->dispatch_notes }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold shadow-sm">
+                        <i class="fas fa-save me-1"></i>Save Work Adjustments
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- MODAL 7: Move or Split Single Item --}}
+<div class="modal fade" id="moveItemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ Route::has('store-manager.transfers.move-item') ? route('store-manager.transfers.move-item', $transfer) : url('store-manager/transfers/'.$transfer->id.'/move-item') }}" method="POST">
+                @csrf
+                <input type="hidden" name="transfer_item_id" id="moveItemId">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-arrows-split-up-and-left me-2"></i>Move or Split Material</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="p-3 bg-light rounded-3 mb-3">
+                        <small class="text-muted d-block">Selected Material:</small>
+                        <div class="fw-bold text-dark fs-6" id="moveItemTitle">—</div>
+                        <div class="text-muted small">Available Quantity in this transfer: <strong id="moveItemAvailQty" class="text-primary">—</strong></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Quantity to Move / Split <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="number" step="0.001" min="0.001" name="move_quantity" id="moveItemQtyInput" class="form-control fw-bold" required>
+                            <span class="input-group-text font-monospace" id="moveItemUnitBadge">pcs</span>
+                        </div>
+                        <small class="text-muted">Enter partial quantity to split the item, or full quantity to move the entire line item.</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Destination Target <span class="text-danger">*</span></label>
+                        
+                        @if(isset($compatibleTransfers) && $compatibleTransfers->isNotEmpty())
+                        <div class="form-check p-3 rounded border border-primary bg-primary bg-opacity-10 mb-2">
+                            <input class="form-check-input ms-0 me-2" type="radio" name="target_mode" id="targetModeExisting" value="existing" checked>
+                            <label class="form-check-label w-100 ps-1" for="targetModeExisting">
+                                <strong>Move to an existing pending transfer:</strong>
+                                <select name="target_transfer_id" class="form-select form-select-sm mt-2" id="existingTargetSelect">
+                                    @foreach($compatibleTransfers as $ct)
+                                        <option value="{{ $ct->id }}">
+                                            {{ $ct->transfer_no }} ({{ $ct->items->count() }} item(s), Req: {{ $ct->requestedBy->name ?? 'User' }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </label>
+                        </div>
+                        @endif
+
+                        <div class="form-check p-3 rounded border bg-light">
+                            <input class="form-check-input ms-0 me-2" type="radio" name="target_mode" id="targetModeNew" value="new" {{ (!isset($compatibleTransfers) || $compatibleTransfers->isEmpty()) ? 'checked' : '' }}>
+                            <label class="form-check-label w-100 ps-1" for="targetModeNew">
+                                <strong>Separate into a brand new transfer request</strong>
+                                <div class="text-muted small">Creates a new pending transfer for the same route with this material.</div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold shadow-sm">
+                        <i class="fas fa-check me-1"></i>Confirm Move / Separation
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- MODAL 8: Merge Other Compatible Transfers Into This Transfer --}}
+@if(isset($compatibleTransfers) && $compatibleTransfers->isNotEmpty())
+<div class="modal fade" id="mergeIntoModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ Route::has('store-manager.transfers.merge-into') ? route('store-manager.transfers.merge-into', $transfer) : url('store-manager/transfers/'.$transfer->id.'/merge-into') }}" method="POST">
+                @csrf
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-code-merge me-2"></i>Merge Other Transfers Into #{{ $transfer->transfer_no }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Select which pending transfers going from <strong>{{ $transfer->fromStore->name ?? 'Origin' }}</strong> to <strong>{{ $transfer->toStore->name ?? 'Destination' }}</strong> you would like to merge into <strong>#{{ $transfer->transfer_no }}</strong>.
+                    </div>
+
+                    <h6 class="fw-bold text-dark mb-2">Select Transfers to Merge:</h6>
+                    <div class="d-flex flex-column gap-2 mb-4">
+                        @foreach($compatibleTransfers as $ct)
+                        <div class="p-3 rounded border bg-light">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="source_transfer_ids[]" value="{{ $ct->id }}" id="chk_merge_{{ $ct->id }}" checked>
+                                <label class="form-check-label w-100" for="chk_merge_{{ $ct->id }}">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap">
+                                        <strong class="font-monospace text-primary fs-6">{{ $ct->transfer_no }}</strong>
+                                        <span class="badge bg-secondary">{{ $ct->items->count() }} item(s)</span>
+                                    </div>
+                                    <small class="text-muted d-block mt-1">
+                                        Requested by {{ $ct->requestedBy->name ?? 'User' }} &bull; Items: 
+                                        {{ $ct->items->map(fn($i) => ($i->product->name ?? 'Item') . ' (' . number_format($i->requested_quantity, 1) . ' ' . $i->unit . ')')->implode(', ') }}
+                                    </small>
+                                </label>
+                            </div>
+                        </div>
+                        @endforeach
+                    </div>
+
+                    <div class="form-check form-switch mb-4 p-3 bg-light rounded-3 ms-0">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" name="consolidate_duplicates" value="1" id="chkConsolidateInto" checked>
+                        <label class="form-check-label fw-semibold text-dark" for="chkConsolidateInto">
+                            Consolidate duplicate items (Sum quantities for matching products)
+                        </label>
+                    </div>
+
+                    {{-- Driver assignment within merge modal --}}
+                    <div class="card border-0 shadow-sm p-3 bg-white border border-secondary border-opacity-25 rounded-3 mb-2">
+                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-id-badge text-primary me-2"></i>Assign Driver &amp; Vehicle (Optional)</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small">Driver</label>
+                                <select name="driver_employee_id" class="form-select form-select-sm">
+                                    <option value="">-- Keep Current / Assign Later --</option>
+                                    @foreach($drivers as $drv)
+                                        <option value="{{ $drv->id }}" {{ $transfer->driver_employee_id == $drv->id ? 'selected' : '' }}>
+                                            {{ $drv->full_name }} {{ $drv->phone ? '('.$drv->phone.')' : '' }} - {{ $drv->department ?? 'General Service' }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small">Vehicle Plate Number</label>
+                                <input type="text" name="vehicle_plate_no" class="form-control form-control-sm" placeholder="e.g. 3-45678 AA" value="{{ $transfer->vehicle_plate_no }}">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-bold small">Consolidated Dispatch Notes</label>
+                                <textarea name="dispatch_notes" rows="2" class="form-control form-control-sm" placeholder="Instructions for driver...">{{ $transfer->dispatch_notes }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm">
+                        <i class="fas fa-code-merge me-1"></i>Merge All Selected Into #{{ $transfer->transfer_no }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Dynamic Row Add in Material Work Adjustment Modal
+    let nextItemIdx = {{ $transfer->items->count() + 10 }};
+    const btnAddAdjustmentItem = document.getElementById('btnAddAdjustmentItem');
+    const adjustmentTableBody = document.getElementById('adjustmentTableBody');
+
+    if (btnAddAdjustmentItem && adjustmentTableBody) {
+        btnAddAdjustmentItem.addEventListener('click', function () {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>
+                    <select name="items[${nextItemIdx}][product_id]" class="form-select form-select-sm" required>
+                        <option value="">-- Select Material --</option>
+                        @foreach($products as $p)
+                            <option value="{{ $p->id }}">{{ $p->name }} {{ $p->code ? '('.$p->code.')' : '' }}</option>
+                        @endforeach
+                    </select>
+                </td>
+                <td>
+                    <input type="number" step="0.001" min="0.001" name="items[${nextItemIdx}][requested_quantity]" class="form-control form-control-sm text-end fw-bold" placeholder="0.00" required>
+                </td>
+                <td>
+                    <input type="text" name="items[${nextItemIdx}][unit]" class="form-control form-control-sm text-center" value="pcs" required>
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-xs btn-outline-danger btn-sm py-0 px-2 btn-remove-row">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </td>
+            `;
+            adjustmentTableBody.appendChild(tr);
+            nextItemIdx++;
+
+            tr.querySelector('.btn-remove-row').addEventListener('click', function () {
+                tr.remove();
+            });
+        });
+    }
+
+    // Split / Move Item Modal trigger
+    document.querySelectorAll('.btn-move-item').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const itemId = this.dataset.itemId;
+            const productName = this.dataset.productName;
+            const productCode = this.dataset.productCode;
+            const quantity = this.dataset.quantity;
+            const unit = this.dataset.unit;
+
+            document.getElementById('moveItemId').value = itemId;
+            document.getElementById('moveItemTitle').textContent = productName + (productCode ? ' (' + productCode + ')' : '');
+            document.getElementById('moveItemAvailQty').textContent = parseFloat(quantity).toLocaleString() + ' ' + unit;
+            document.getElementById('moveItemQtyInput').value = quantity;
+            document.getElementById('moveItemQtyInput').max = quantity;
+            document.getElementById('moveItemUnitBadge').textContent = unit;
+
+            const modal = new bootstrap.Modal(document.getElementById('moveItemModal'));
+            modal.show();
+        });
+    });
+});
+</script>
+@endif
 
 @endsection
