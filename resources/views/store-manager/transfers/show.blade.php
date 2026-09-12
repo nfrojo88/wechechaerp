@@ -21,6 +21,17 @@
         $step2Completed = !empty($transfer->driver_employee_id) || in_array($transfer->status, ['approved', 'in_transit', 'completed']);
         $step3Completed = in_array($transfer->status, ['in_transit', 'completed']);
         $step4Completed = $transfer->status === 'completed';
+
+        // Defensive fallbacks (in case controller response is cached on production)
+        $products = $products ?? \App\Models\Product::where('is_active', true)->orderBy('name')->get();
+        $drivers = $drivers ?? \App\Models\Employee::where('status', 'active')->orderBy('full_name')->get();
+        $compatibleTransfers = $compatibleTransfers ?? \App\Models\Transfer::with(['items.product', 'requestedBy'])
+            ->where('id', '!=', $transfer->id)
+            ->where('from_store_id', $transfer->from_store_id)
+            ->where('to_store_id', $transfer->to_store_id)
+            ->whereIn('status', ['draft', 'pending_approval', 'approved'])
+            ->latest()
+            ->get();
     @endphp
 
     @if($isAuditorUser)
