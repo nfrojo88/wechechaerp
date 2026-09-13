@@ -7,8 +7,12 @@ use Illuminate\Http\Request;
 
 class WeeklyReportController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        if ($request->ajax() || $request->input('ajax') === 'daily-reports') {
+            return $this->getDailyReportsAjax($request);
+        }
+
         $query = WeeklyReport::with(['project', 'createdBy'])->latest();
 
         /** @var \App\Models\User|null $user */
@@ -32,8 +36,18 @@ class WeeklyReportController extends Controller
         return view('operational.weekly-reports.index', compact('reports'));
     }
 
-    public function create()
+    public function create(Request $request)
     {
+        if ($request->ajax() || $request->input('ajax') === 'daily-reports') {
+            return $this->getDailyReportsAjax($request);
+        }
+
+        if (!\Illuminate\Support\Facades\Route::has('weekly-reports.daily-reports-ajax')) {
+            try {
+                \Illuminate\Support\Facades\Artisan::call('route:clear');
+            } catch (\Throwable $e) {}
+        }
+
         /** @var \App\Models\User|null $user */
         $user = auth()->user();
         $assignedProjectIds = collect();

@@ -190,16 +190,27 @@ document.addEventListener('DOMContentLoaded', function() {
         drManpowerBadge.style.display = 'none';
         drSummarizeBtn.style.display = 'none';
 
-        const url = `{{ route('weekly-reports.daily-reports-ajax') }}?project_id=${encodeURIComponent(projectId)}&week_start=${encodeURIComponent(weekStart)}&week_end=${encodeURIComponent(weekEnd)}`;
+        const primaryUrl = `{{ url('weekly-reports/ajax/daily-reports') }}?project_id=${encodeURIComponent(projectId)}&week_start=${encodeURIComponent(weekStart)}&week_end=${encodeURIComponent(weekEnd)}`;
+        const fallbackUrl = `{{ url('weekly-reports') }}?ajax=daily-reports&project_id=${encodeURIComponent(projectId)}&week_start=${encodeURIComponent(weekStart)}&week_end=${encodeURIComponent(weekEnd)}`;
 
-        fetch(url, {
+        fetch(primaryUrl, {
             headers: {
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest'
             }
         })
         .then(response => {
-            if (!response.ok) throw new Error('Network error');
+            if (!response.ok) {
+                return fetch(fallbackUrl, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                }).then(r => {
+                    if (!r.ok) throw new Error('Network error');
+                    return r.json();
+                });
+            }
             return response.json();
         })
         .then(data => {
