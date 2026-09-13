@@ -12,6 +12,7 @@
     $isStoreManager = in_array('store_manager', $rawUserRoles);
     $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
     $isGmUser = in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['gm', 'general_manager', 'General Manager', 'GM']));
+    $isSiteEngineer = in_array('site_engineer', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['site_engineer', 'Site Engineer', 'site-engineer']));
 @endphp
 
 <div class="sidebar-scroll">
@@ -979,7 +980,7 @@
         </li>
         @endif
 
-        @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser && !$isAuditorUser)
+        @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser && !$isAuditorUser && !$isSiteEngineer)
         <li class="sidebar-nav-item">
             <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-success"></i>
@@ -997,7 +998,7 @@
         </li>
         @endif
 
-        @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser && !$isAuditorUser)
+        @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser && !$isAuditorUser && !$isSiteEngineer)
         <li class="sidebar-nav-item">
             <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-envelope-open-text text-primary"></i>
@@ -1023,7 +1024,7 @@
         @endif
 
         {{-- Ask / Request Leave (Visible to All Roles) --}}
-        @if(!$isSecretary && !$isGeneralServiceUser && !$isAuditorUser)
+        @if(!$isSecretary && !$isGeneralServiceUser && !$isAuditorUser && !$isSiteEngineer)
         <li class="sidebar-nav-item">
             <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.create') || request()->routeIs('leave-requests.my-requests') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-plus text-info"></i>
@@ -1760,10 +1761,25 @@
         {{-- Site Engineer Tools --}}
         @if(auth()->check() && (auth()->user()->hasAnyRole(['site_engineer', 'admin', 'global_admin'])))
 
+        {{-- 1. Main Hub / Overview --}}
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.site-engineer') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.site-engineer') ? 'active' : '' }}">
                 <i class="fa-solid fa-hard-hat text-warning"></i>
                 <span>Site Engineer Dashboard</span>
+            </a>
+        </li>
+
+        {{-- 2. Planning & Daily Site Operations --}}
+        <li class="sidebar-nav-item">
+            <a href="{{ route('dispatches.index') }}" class="sidebar-nav-link {{ request()->routeIs('dispatches.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-calendar-week text-info"></i>
+                <span>Weekly Plans</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('attendance.index') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-user-check text-warning"></i>
+                <span>Site Attendance</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -1779,19 +1795,6 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('material-requests.create', ['source' => 'Emergency']) }}" class="sidebar-nav-link {{ request()->fullUrlIs('*source=Emergency*') ? 'active' : '' }}">
-                <i class="fa-solid fa-bolt text-danger"></i>
-                <span>Ask Emergency MR</span>
-            </a>
-        </li>
-
-        <li class="sidebar-nav-item">
-            <a href="{{ route('dispatches.index') }}" class="sidebar-nav-link {{ request()->routeIs('dispatches.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-calendar-week text-info"></i>
-                <span>Weekly Plans</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
             <a href="{{ route('daily-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('daily-reports.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-file-signature text-success"></i>
                 <span>Daily Reports</span>
@@ -1804,15 +1807,17 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('attendance.index') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-user-check text-warning"></i>
-                <span>Site Attendance</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
             <a href="{{ route('issues.index') }}" class="sidebar-nav-link {{ request()->routeIs('issues.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-triangle-exclamation text-danger"></i>
                 <span>Site Issues</span>
+            </a>
+        </li>
+
+        {{-- 3. Site Logistics, BOQ & Commercial --}}
+        <li class="sidebar-nav-item">
+            <a href="{{ route('material-requests.create', ['source' => 'Emergency']) }}" class="sidebar-nav-link {{ request()->fullUrlIs('*source=Emergency*') ? 'active' : '' }}">
+                <i class="fa-solid fa-bolt text-danger"></i>
+                <span>Ask Emergency MR</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -1824,7 +1829,58 @@
         <li class="sidebar-nav-item">
             <a href="{{ route('ipcs.index') }}" class="sidebar-nav-link {{ request()->routeIs('ipcs.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-money-check-dollar text-success"></i>
-                <span>Takeoffs & Payments</span>
+                <span>Takeoffs &amp; Payments</span>
+            </a>
+        </li>
+
+        {{-- 4. Employee Self-Service (At the bottom) --}}
+        <hr class="sidebar-section-divider" style="margin: 0.5rem 0.75rem; border-color: rgba(255,255,255,0.08);">
+        <li style="padding: 0.35rem 0.9rem 0.1rem;">
+            <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+                Employee Services
+            </small>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-hand-holding-dollar text-success"></i>
+                <span>Ask Money</span>
+                @php
+                    $pendingExpenseCount = 0;
+                    try {
+                        $pendingExpenseCount = \App\Models\ExpenseRequest::where('status', 'like', 'Pending%')->count();
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($pendingExpenseCount > 0 && auth()->check() && (auth()->user()->hasAnyRole(['admin', 'global_admin', 'hr_manager', 'hr_officer', 'gm', 'finance_head', 'coordinator', 'Coordinator']) || in_array('coordinator', $rawUserRoles)))
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingExpenseCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-envelope-open-text text-primary"></i>
+                <span>Correspondence (Letters)</span>
+                @php
+                    $unreadLettersCount = 0;
+                    try {
+                        if (auth()->check()) {
+                            $user = auth()->user();
+                            $userRoles = $user->getRoleNames()->toArray();
+                            $unreadLettersCount = \App\Models\Letter::whereHas('recipients', function($q) use ($user, $userRoles) {
+                                $q->where('to_user_id', $user->id)
+                                  ->orWhereIn('to_role_name', $userRoles);
+                            })->where('status', '!=', \App\Models\Letter::STATUS_CLOSED)->count();
+                        }
+                    } catch (\Exception $e) {}
+                @endphp
+                @if($unreadLettersCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $unreadLettersCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.create') || request()->routeIs('leave-requests.my-requests') ? 'active' : '' }}">
+                <i class="fa-solid fa-calendar-plus text-info"></i>
+                <span>Ask / Request Leave</span>
             </a>
         </li>
         @endif
