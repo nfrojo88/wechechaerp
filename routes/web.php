@@ -2089,6 +2089,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('daily-reports', App\Http\Controllers\DailyReportController::class)->only(['index', 'create', 'store', 'show']);
     Route::post('daily-reports/{dailyReport}/approve', [App\Http\Controllers\DailyReportController::class, 'approve'])->name('daily-reports.approve');
     Route::post('daily-reports/{dailyReport}/reject', [App\Http\Controllers\DailyReportController::class, 'reject'])->name('daily-reports.reject');
+    Route::get('weekly-reports/ajax/daily-reports', [App\Http\Controllers\WeeklyReportController::class, 'getDailyReportsAjax'])->name('weekly-reports.daily-reports-ajax');
     Route::resource('weekly-reports', App\Http\Controllers\WeeklyReportController::class)->only(['index', 'create', 'store', 'show']);
 
     // ─── Phase 9 Communication ──────────────────────────────────────────────
