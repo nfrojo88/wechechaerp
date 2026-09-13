@@ -585,28 +585,36 @@
 @if(!$isAuditorUser)
 {{-- MODAL: Bulk Merge Transfers & Assign Driver --}}
 <div class="modal fade" id="bulkMergeModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <form action="{{ Route::has('store-manager.transfers.bulk-merge') ? route('store-manager.transfers.bulk-merge') : url('store-manager/transfers/bulk-merge') }}" method="POST" id="bulkMergeForm">
                 @csrf
-                <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-code-merge me-2"></i>Merge Transfers &amp; Assign Driver</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(245, 158, 11, 0.18); border: 1px solid rgba(251, 191, 36, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-code-merge" style="color: #fbbf24; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Merge Transfers &amp; Assign Driver</h5>
+                            <span class="small" style="color: #94a3b8; font-size: 0.8rem;">Consolidate transfers and dispatch combined shipment</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3">
-                        <i class="fas fa-circle-info me-1"></i>
+                <div class="modal-body p-4 bg-white">
+                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3 rounded-3" style="background-color: #f0f7ff; color: #1e3a8a; border-left: 4px solid #3b82f6 !important;">
+                        <i class="fas fa-circle-info me-1.5"></i>
                         <strong>How Merge Works:</strong> All materials from the source transfers will be moved into the chosen <strong>Target Transfer</strong>. Source transfers will be marked cancelled/merged. If materials share the same product code, quantities can be combined into one line item.
                     </div>
 
                     {{-- Route Info Banner --}}
-                    <div class="card border-0 bg-light p-3 mb-3 rounded-3">
+                    <div class="p-3 mb-3 rounded-3 border" style="background: #f8fafc; border-color: #e2e8f0 !important;">
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <div>
-                                <small class="text-muted d-block">Verified Common Route:</small>
-                                <span class="fw-bold text-dark fs-6" id="modalRouteText">—</span>
+                                <small class="text-uppercase fw-bold d-block" style="color: #64748b; font-size: 0.72rem; letter-spacing: 0.05em;">Verified Common Route</small>
+                                <span class="fw-bold fs-6" id="modalRouteText" style="color: #0f172a;">—</span>
                             </div>
-                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1">
+                            <span class="badge rounded-pill px-2.5 py-1.5" style="background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0; font-weight: 600;">
                                 <i class="fas fa-check-circle me-1"></i>Origin &amp; Destination Match
                             </span>
                         </div>
@@ -614,7 +622,9 @@
 
                     {{-- Choose Target Transfer --}}
                     <div class="mb-4">
-                        <label class="form-label fw-bold small text-dark">Select Target Transfer (Receives All Merged Items) <span class="text-danger">*</span></label>
+                        <label class="form-label fw-bold small text-uppercase mb-2" style="color: #334155; letter-spacing: 0.04em;">
+                            Select Target Transfer (Receives All Merged Items) <span class="text-danger">*</span>
+                        </label>
                         <div id="targetTransferList" class="d-flex flex-column gap-2">
                             {{-- Dynamically populated via JS --}}
                         </div>
@@ -622,22 +632,25 @@
                     </div>
 
                     {{-- Merge Options --}}
-                    <div class="form-check form-switch mb-4 p-3 bg-light rounded-3 ms-0">
+                    <div class="form-check form-switch mb-4 p-3 rounded-3 ms-0 border" style="background: #f8fafc; border-color: #e2e8f0 !important;">
                         <input class="form-check-input ms-0 me-2" type="checkbox" name="consolidate_duplicates" value="1" id="chkConsolidate" checked>
-                        <label class="form-check-label fw-semibold text-dark" for="chkConsolidate">
+                        <label class="form-check-label fw-semibold" style="color: #0f172a;" for="chkConsolidate">
                             Consolidate duplicate items (Sum requested quantities of identical materials)
                         </label>
                         <div class="text-muted small ps-4 ms-2">If unchecked, identical products from different transfers will appear as separate rows in the target transfer.</div>
                     </div>
 
                     {{-- Optional Driver & Vehicle Assignment right inside Merge Modal --}}
-                    <div class="card border-0 shadow-sm p-3 bg-white border border-secondary border-opacity-25 rounded-3 mb-2">
-                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-id-badge text-primary me-2"></i>Assign Driver &amp; Vehicle (Optional)</h6>
+                    <div class="card border-0 shadow-sm p-3 rounded-3 mb-2" style="background: #f8fafc; border: 1.5px solid #e2e8f0 !important;">
+                        <h6 class="fw-bold mb-2 d-flex align-items-center gap-2" style="color: #0f172a;">
+                            <span class="p-1 rounded-2 text-white d-inline-flex align-items-center justify-content-center" style="width: 26px; height: 26px; background: #2563eb; font-size: 0.8rem;"><i class="fas fa-id-badge"></i></span>
+                            Assign Driver &amp; Vehicle (Optional)
+                        </h6>
                         <p class="text-muted small mb-3">You can directly assign a driver now, or leave it blank to assign later.</p>
 
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label class="form-label fw-bold small">Driver</label>
+                                <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Driver</label>
                                 <select name="driver_employee_id" class="form-select form-select-sm">
                                     <option value="">-- Assign Driver Later --</option>
                                     @foreach($drivers as $drv)
@@ -648,21 +661,21 @@
                                 </select>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-bold small">Vehicle Plate Number</label>
+                                <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Vehicle Plate Number</label>
                                 <input type="text" name="vehicle_plate_no" class="form-control form-control-sm" placeholder="e.g. 3-45678 AA / 2-98765 ET">
                             </div>
                             <div class="col-12">
-                                <label class="form-label fw-bold small">Logistics / Dispatch Instructions</label>
+                                <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Logistics / Dispatch Instructions</label>
                                 <textarea name="dispatch_notes" rows="2" class="form-control form-control-sm" placeholder="Consolidated delivery instructions, driver timing, or notes..."></textarea>
                             </div>
                         </div>
                     </div>
 
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-warning btn-sm fw-bold text-dark shadow-sm">
-                        <i class="fas fa-code-merge me-1"></i>Confirm Merge &amp; Assign Driver
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%);">
+                        <i class="fas fa-code-merge me-1.5"></i>Confirm Merge &amp; Assign Driver
                     </button>
                 </div>
             </form>
@@ -672,23 +685,31 @@
 
 {{-- MODAL: Quick Assign Driver for individual transfer --}}
 <div class="modal fade" id="quickAssignModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <form id="quickAssignForm" method="POST" action="">
                 @csrf
-                <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-id-badge me-2"></i>Assign Driver &amp; Vehicle</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(245, 158, 11, 0.18); border: 1px solid rgba(251, 191, 36, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-id-badge" style="color: #fbbf24; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Assign Driver &amp; Vehicle</h5>
+                            <span class="small" style="color: #94a3b8; font-size: 0.8rem;">Select transport logistics for this transfer</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="mb-3 p-3 bg-light rounded-3">
-                        <div class="fw-bold text-dark" id="quickAssignTransferTitle">Transfer #—</div>
-                        <div class="text-muted small" id="quickAssignRouteText">Origin &rarr; Destination</div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="mb-3 p-3 rounded-3 border" style="background: #f8fafc; border-color: #e2e8f0 !important;">
+                        <div class="fw-bold fs-6" id="quickAssignTransferTitle" style="color: #0f172a;">Transfer #—</div>
+                        <div class="small mt-1" id="quickAssignRouteText" style="color: #475569;">Origin &rarr; Destination</div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold small">Driver <span class="text-danger">*</span></label>
-                        <select name="driver_employee_id" class="form-select" required>
+                        <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Driver <span class="text-danger">*</span></label>
+                        <select name="driver_employee_id" class="form-select form-select-lg rounded-3" style="font-size: 0.95rem; border: 1.5px solid #cbd5e1;" required>
                             <option value="">-- Select Driver --</option>
                             @foreach($drivers as $drv)
                                 <option value="{{ $drv->id }}">
@@ -699,19 +720,19 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold small">Vehicle Plate Number</label>
-                        <input type="text" name="vehicle_plate_no" class="form-control" placeholder="e.g. 3-45678 AA">
+                        <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Vehicle Plate Number</label>
+                        <input type="text" name="vehicle_plate_no" class="form-control rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. 3-45678 AA">
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold small">Dispatch Notes / Route</label>
-                        <textarea name="dispatch_notes" rows="2" class="form-control" placeholder="Special handling notes, delivery route..."></textarea>
+                        <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Dispatch Notes / Route</label>
+                        <textarea name="dispatch_notes" rows="2" class="form-control rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="Special handling notes, delivery route..."></textarea>
                     </div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm">
-                        <i class="fas fa-paper-plane me-1"></i>Confirm &amp; Notify Driver
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%);">
+                        <i class="fas fa-paper-plane me-1.5"></i>Confirm &amp; Notify Driver
                     </button>
                 </div>
             </form>
@@ -807,17 +828,27 @@ document.addEventListener('DOMContentLoaded', function () {
             selected.forEach((cb, idx) => {
                 const isFirst = (idx === 0);
                 const div = document.createElement('div');
-                div.className = 'form-check p-3 rounded border ' + (isFirst ? 'border-primary bg-primary bg-opacity-10' : 'bg-light');
+                div.className = 'form-check p-3 rounded-3 border';
+                div.style.cssText = isFirst 
+                    ? 'background: #f0f7ff; border: 2px solid #3b82f6 !important; cursor: pointer; transition: all 0.2s ease;' 
+                    : 'background: #ffffff; border: 1.5px solid #e2e8f0 !important; cursor: pointer; transition: all 0.2s ease;';
                 div.innerHTML = `
-                    <input class="form-check-input ms-0 me-2 target-radio" type="radio" name="target_transfer_id" id="target_radio_${cb.value}" value="${cb.value}" ${isFirst ? 'checked' : ''}>
-                    <label class="form-check-label w-100 ps-1" for="target_radio_${cb.value}">
+                    <input class="form-check-input ms-0 me-2 target-radio" type="radio" name="target_transfer_id" id="target_radio_${cb.value}" value="${cb.value}" ${isFirst ? 'checked' : ''} style="cursor: pointer;">
+                    <label class="form-check-label w-100 ps-1" for="target_radio_${cb.value}" style="cursor: pointer;">
                         <div class="d-flex justify-content-between align-items-center flex-wrap">
-                            <span class="fw-bold font-monospace text-primary">${cb.dataset.transferNo}</span>
-                            <span class="badge bg-light text-dark border">${cb.dataset.itemsCount} item(s)</span>
+                            <span class="fw-bold font-monospace fs-6" style="color: #1e3a8a;">${cb.dataset.transferNo}</span>
+                            <span class="badge" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 600;">${cb.dataset.itemsCount} item(s)</span>
                         </div>
-                        <small class="text-muted d-block">Status: ${cb.dataset.status} ${cb.dataset.driver ? ' &bull; Driver: ' + cb.dataset.driver : ' &bull; No driver'}</small>
+                        <small class="d-block mt-1" style="color: #64748b;">Status: <strong style="color: #334155;">${cb.dataset.status}</strong> ${cb.dataset.driver ? ' &bull; Driver: ' + cb.dataset.driver : ' &bull; No driver assigned'}</small>
                     </label>
                 `;
+                div.addEventListener('click', function(e) {
+                    const radio = div.querySelector('.target-radio');
+                    if (radio && e.target !== radio) {
+                        radio.checked = true;
+                        syncSourceInputs();
+                    }
+                });
                 targetTransferList.appendChild(div);
             });
 
@@ -829,9 +860,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.querySelectorAll('.target-radio').forEach(r => {
                     const parent = r.closest('.form-check');
                     if (r.checked) {
-                        parent.className = 'form-check p-3 rounded border border-primary bg-primary bg-opacity-10';
+                        parent.style.background = '#f0f7ff';
+                        parent.style.border = '2px solid #3b82f6';
                     } else {
-                        parent.className = 'form-check p-3 rounded border bg-light';
+                        parent.style.background = '#ffffff';
+                        parent.style.border = '1.5px solid #e2e8f0';
                     }
                 });
 

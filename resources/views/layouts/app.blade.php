@@ -334,8 +334,23 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .modal-content { border: none !important; border-radius: var(--radius-xl) !important; box-shadow: 0 25px 60px rgba(0,0,0,.2) !important; overflow: hidden; }
 .modal-header { background: var(--gray-50); border-bottom: 1px solid var(--gray-200) !important; padding: 18px 24px !important; }
 .modal-title { font-weight: 700; font-size: 16px; color: var(--gray-800); }
+.modal-header.bg-dark .modal-title,
+.modal-header.bg-primary .modal-title,
+.modal-header.bg-secondary .modal-title,
+.modal-header.text-white .modal-title,
+.modal-header.bg-danger .modal-title,
+.modal-header.bg-success .modal-title,
+.modal-header[style*="linear-gradient"] .modal-title { color: #ffffff !important; }
 .modal-body { padding: 24px !important; }
 .modal-footer { background: var(--gray-50); border-top: 1px solid var(--gray-200) !important; padding: 16px 24px !important; gap: 8px; }
+
+/* Opacity fallbacks for older Bootstrap or custom utility override */
+.bg-primary.bg-opacity-10 { background-color: rgba(36, 53, 84, 0.08) !important; }
+.bg-success.bg-opacity-10 { background-color: rgba(16, 185, 129, 0.08) !important; }
+.bg-warning.bg-opacity-10 { background-color: rgba(245, 158, 11, 0.08) !important; }
+.bg-info.bg-opacity-10 { background-color: rgba(14, 165, 233, 0.08) !important; }
+.bg-danger.bg-opacity-10 { background-color: rgba(239, 68, 68, 0.08) !important; }
+.bg-primary.bg-opacity-25 { background-color: rgba(36, 53, 84, 0.18) !important; }
 /* Progress */
 .progress { border-radius: 20px; background: var(--gray-200); height: 8px; overflow: hidden; }
 .progress-bar { border-radius: 20px; transition: width .6s ease; }

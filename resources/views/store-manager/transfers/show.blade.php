@@ -554,22 +554,30 @@
 
 {{-- MODAL 1: Assign Driver (General Service / Store Manager / Admin) --}}
 <div class="modal fade" id="assignDriverModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <form action="{{ route('store-manager.transfers.assign-driver', $transfer) }}" method="POST">
                 @csrf
-                <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-id-badge me-2"></i>Assign Driver &amp; Vehicle</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(245, 158, 11, 0.18); border: 1px solid rgba(251, 191, 36, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-id-badge" style="color: #fbbf24; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Assign Driver &amp; Vehicle</h5>
+                            <span class="small" style="color: #94a3b8; font-size: 0.8rem;">General service transport dispatch &amp; SMS notification</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body p-4 bg-white">
                     <p class="text-muted small mb-3">
                         Select an active driver to transport materials from <strong>{{ $transfer->fromStore->name ?? 'Origin Store' }}</strong> to <strong>{{ $transfer->toStore->name ?? 'Destination Store' }}</strong>. An automated SMS notification with transfer details will be sent to the driver.
                     </p>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold small">Driver <span class="text-danger">*</span></label>
-                        <select name="driver_employee_id" class="form-select" required>
+                        <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Driver <span class="text-danger">*</span></label>
+                        <select name="driver_employee_id" class="form-select form-select-lg rounded-3" style="font-size: 0.95rem; border: 1.5px solid #cbd5e1;" required>
                             <option value="">-- Select Driver --</option>
                             @foreach($drivers as $drv)
                                 <option value="{{ $drv->id }}" {{ old('driver_employee_id', $transfer->driver_employee_id) == $drv->id ? 'selected' : '' }}>
@@ -580,19 +588,19 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold small">Vehicle Plate Number</label>
-                        <input type="text" name="vehicle_plate_no" class="form-control" placeholder="e.g. 3-45678 AA / 2-98765 ET" value="{{ old('vehicle_plate_no', $transfer->vehicle_plate_no) }}">
+                        <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Vehicle Plate Number</label>
+                        <input type="text" name="vehicle_plate_no" class="form-control rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. 3-45678 AA / 2-98765 ET" value="{{ old('vehicle_plate_no', $transfer->vehicle_plate_no) }}">
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold small">Logistics &amp; Dispatch Instructions</label>
-                        <textarea name="dispatch_notes" rows="2" class="form-control" placeholder="Special handling notes, delivery route, or required arrival timing...">{{ old('dispatch_notes', $transfer->dispatch_notes) }}</textarea>
+                        <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Logistics &amp; Dispatch Instructions</label>
+                        <textarea name="dispatch_notes" rows="2" class="form-control rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="Special handling notes, delivery route, or required arrival timing...">{{ old('dispatch_notes', $transfer->dispatch_notes) }}</textarea>
                     </div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm">
-                        <i class="fas fa-paper-plane me-1"></i>Confirm &amp; Notify Driver
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%);">
+                        <i class="fas fa-paper-plane me-1.5"></i>Confirm &amp; Notify Driver
                     </button>
                 </div>
             </form>
@@ -602,39 +610,47 @@
 
 {{-- MODAL 2: Outgoing Store Keeper Dispatch & Slip Upload --}}
 <div class="modal fade" id="dispatchModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <form action="{{ route('store-manager.transfers.dispatch', $transfer) }}" method="POST" enctype="multipart/form-data">
                 @csrf
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-truck-fast me-2"></i>Dispatch Material &amp; Upload Outgoing Slip</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(59, 130, 246, 0.18); border: 1px solid rgba(96, 165, 250, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-truck-fast" style="color: #60a5fa; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Dispatch Material &amp; Upload Outgoing Slip</h5>
+                            <span class="small" style="color: #94a3b8; font-size: 0.8rem;">Deduct origin inventory and begin transit to site</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3">
-                        <i class="fas fa-info-circle me-1"></i>
+                <div class="modal-body p-4 bg-white">
+                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3 rounded-3" style="background-color: #f0f7ff; color: #1e3a8a; border-left: 4px solid #3b82f6 !important;">
+                        <i class="fas fa-info-circle me-1.5"></i>
                         <strong>Important:</strong> Upon submitting this dispatch, the confirmed sent quantities will be <strong>automatically deducted from your store ({{ $transfer->fromStore->name ?? 'Origin Store' }}) inventory</strong>, and the status will update to <em>In Transit</em>.
                     </div>
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-bold small">Outgoing Physical Slip / Waybill # <span class="text-danger">*</span></label>
-                            <input type="text" name="outgoing_slip_no" class="form-control font-monospace" placeholder="e.g. SLIP-09823 or WB-2026-44" value="{{ old('outgoing_slip_no', $transfer->outgoing_slip_no ?: $transfer->physical_slip_no) }}" required>
+                            <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Outgoing Physical Slip / Waybill # <span class="text-danger">*</span></label>
+                            <input type="text" name="outgoing_slip_no" class="form-control font-monospace rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. SLIP-09823 or WB-2026-44" value="{{ old('outgoing_slip_no', $transfer->outgoing_slip_no ?: $transfer->physical_slip_no) }}" required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-bold small">Vehicle Plate # (Verification)</label>
-                            <input type="text" name="vehicle_plate_no" class="form-control" placeholder="e.g. 3-45678 AA" value="{{ old('vehicle_plate_no', $transfer->vehicle_plate_no) }}">
+                            <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Vehicle Plate # (Verification)</label>
+                            <input type="text" name="vehicle_plate_no" class="form-control rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. 3-45678 AA" value="{{ old('vehicle_plate_no', $transfer->vehicle_plate_no) }}">
                         </div>
                         <div class="col-12">
-                            <label class="form-label fw-bold small">Attach Outgoing Physical Slip / Waybill Document (PDF / Image)</label>
-                            <input type="file" name="outgoing_slip_file" class="form-control" accept=".jpeg,.jpg,.png,.pdf,.webp">
+                            <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Attach Outgoing Physical Slip / Waybill Document (PDF / Image)</label>
+                            <input type="file" name="outgoing_slip_file" class="form-control rounded-3" style="border: 1.5px solid #cbd5e1;" accept=".jpeg,.jpg,.png,.pdf,.webp">
                             <small class="text-muted">Upload a clear photo or scanned copy of the signed physical outgoing paper slip.</small>
                         </div>
                     </div>
 
-                    <h6 class="fw-bold text-dark border-bottom pb-2 mb-3 mt-4">Confirm Sent Quantities</h6>
+                    <h6 class="fw-bold border-bottom pb-2 mb-3 mt-4 small text-uppercase" style="color: #0f172a; letter-spacing: 0.04em;">Confirm Sent Quantities</h6>
                     <div class="table-responsive">
-                        <table class="table table-sm table-bordered align-middle mb-0">
+                        <table class="table table-sm table-bordered align-middle mb-0" style="border-color: #e2e8f0;">
                             <thead class="table-light">
                                 <tr>
                                     <th>Item</th>
@@ -647,7 +663,7 @@
                                 @foreach($transfer->items as $item)
                                 <tr>
                                     <td>
-                                        <strong>{{ $item->product->name ?? 'Item' }}</strong>
+                                        <strong style="color: #0f172a;">{{ $item->product->name ?? 'Item' }}</strong>
                                         <div class="text-muted small font-monospace">{{ $item->product->code ?? '' }}</div>
                                     </td>
                                     <td class="text-center fw-semibold">{{ number_format($item->requested_quantity, 2) }}</td>
@@ -661,10 +677,10 @@
                         </table>
                     </div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm shadow-sm fw-bold">
-                        <i class="fas fa-truck-fast me-1"></i>Submit Dispatch &amp; Deduct Stock
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);">
+                        <i class="fas fa-truck-fast me-1.5"></i>Submit Dispatch &amp; Deduct Stock
                     </button>
                 </div>
             </form>
@@ -674,30 +690,38 @@
 
 {{-- MODAL 3: Incoming Store Keeper Inspect & Receive Materials --}}
 <div class="modal fade" id="receiveModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <form action="{{ route('store-manager.transfers.receive', $transfer) }}" method="POST" enctype="multipart/form-data">
                 @csrf
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-box-open me-2"></i>Inspect &amp; Receive Materials into Store</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #065f46 0%, #064e3b 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(52, 211, 153, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-box-open" style="color: #34d399; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Inspect &amp; Receive Materials into Store</h5>
+                            <span class="small" style="color: #a7f3d0; font-size: 0.8rem;">Confirm arrival and add stock to destination inventory</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="alert alert-success border-0 shadow-sm p-3 small mb-3">
-                        <i class="fas fa-check-circle me-1"></i>
+                <div class="modal-body p-4 bg-white">
+                    <div class="alert alert-success border-0 shadow-sm p-3 small mb-3 rounded-3" style="background-color: #ecfdf5; color: #065f46; border-left: 4px solid #10b981 !important;">
+                        <i class="fas fa-check-circle me-1.5"></i>
                         <strong>Stock Inflow:</strong> Upon confirming receipt, the verified quantities will be <strong>automatically added to your store ({{ $transfer->toStore->name ?? 'Destination Store' }}) inventory</strong>, completing this transfer.
                     </div>
 
                     {{-- Outgoing Slip Inspection Preview --}}
                     @if($transfer->outgoing_slip_url || $transfer->outgoing_slip_no || $transfer->physical_slip_no)
-                    <div class="card border-0 bg-light p-3 mb-3 rounded-3">
-                        <div class="d-flex justify-content-between align-items-center">
+                    <div class="card border-0 p-3 mb-3 rounded-3" style="background: #f8fafc; border: 1.5px solid #e2e8f0 !important;">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <div>
-                                <span class="text-muted small d-block">Origin Store Waybill / Slip #:</span>
-                                <strong class="font-monospace text-dark">{{ $transfer->outgoing_slip_no ?: $transfer->physical_slip_no }}</strong>
+                                <span class="text-uppercase fw-bold d-block" style="color: #64748b; font-size: 0.72rem; letter-spacing: 0.05em;">Origin Store Waybill / Slip #:</span>
+                                <strong class="font-monospace fs-6" style="color: #0f172a;">{{ $transfer->outgoing_slip_no ?: $transfer->physical_slip_no }}</strong>
                             </div>
                             @if($transfer->outgoing_slip_url)
-                                <a href="{{ $transfer->outgoing_slip_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <a href="{{ $transfer->outgoing_slip_url }}" target="_blank" class="btn btn-sm btn-outline-primary fw-semibold">
                                     <i class="fas fa-external-link-alt me-1"></i>Open Attached Outgoing Slip
                                 </a>
                             @endif
@@ -707,22 +731,22 @@
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-bold small">Signed Receiving Slip / GRN # (Optional)</label>
-                            <input type="text" name="receiving_slip_no" class="form-control font-monospace" placeholder="e.g. GRN-2026-99" value="{{ old('receiving_slip_no', $transfer->receiving_slip_no) }}">
+                            <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Signed Receiving Slip / GRN # (Optional)</label>
+                            <input type="text" name="receiving_slip_no" class="form-control font-monospace rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. GRN-2026-99" value="{{ old('receiving_slip_no', $transfer->receiving_slip_no) }}">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-bold small">Attach Signed Receiving Document (Optional)</label>
-                            <input type="file" name="receiving_slip_file" class="form-control" accept=".jpeg,.jpg,.png,.pdf,.webp">
+                            <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Attach Signed Receiving Document (Optional)</label>
+                            <input type="file" name="receiving_slip_file" class="form-control rounded-3" style="border: 1.5px solid #cbd5e1;" accept=".jpeg,.jpg,.png,.pdf,.webp">
                         </div>
                         <div class="col-12">
-                            <label class="form-label fw-bold small">Inspection / Receiving Notes</label>
-                            <textarea name="receiving_notes" rows="2" class="form-control" placeholder="Condition of materials, remarks, or notes...">{{ old('receiving_notes', $transfer->receiving_notes) }}</textarea>
+                            <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Inspection / Receiving Notes</label>
+                            <textarea name="receiving_notes" rows="2" class="form-control rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="Condition of materials, remarks, or notes...">{{ old('receiving_notes', $transfer->receiving_notes) }}</textarea>
                         </div>
                     </div>
 
-                    <h6 class="fw-bold text-dark border-bottom pb-2 mb-3 mt-4">Verify Received Quantities</h6>
+                    <h6 class="fw-bold border-bottom pb-2 mb-3 mt-4 small text-uppercase" style="color: #0f172a; letter-spacing: 0.04em;">Verify Received Quantities</h6>
                     <div class="table-responsive">
-                        <table class="table table-sm table-bordered align-middle mb-0">
+                        <table class="table table-sm table-bordered align-middle mb-0" style="border-color: #e2e8f0;">
                             <thead class="table-light">
                                 <tr>
                                     <th>Item</th>
@@ -735,7 +759,7 @@
                                 @foreach($transfer->items as $item)
                                 <tr>
                                     <td>
-                                        <strong>{{ $item->product->name ?? 'Item' }}</strong>
+                                        <strong style="color: #0f172a;">{{ $item->product->name ?? 'Item' }}</strong>
                                         <div class="text-muted small font-monospace">{{ $item->product->code ?? '' }}</div>
                                     </td>
                                     <td class="text-center fw-semibold text-primary">{{ number_format($item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity, 2) }}</td>
@@ -749,10 +773,10 @@
                         </table>
                     </div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success btn-sm shadow-sm fw-bold">
-                        <i class="fas fa-check-circle me-1"></i>Confirm Receipt &amp; Add Stock to Inventory
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #059669 0%, #047857 100%);">
+                        <i class="fas fa-check-circle me-1.5"></i>Confirm Receipt &amp; Add Stock to Inventory
                     </button>
                 </div>
             </form>
@@ -762,24 +786,34 @@
 
 {{-- MODAL 4: Quick Edit Physical Slip # --}}
 <div class="modal fade" id="physicalSlipModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <form action="{{ route('store-manager.transfers.physical-slip', $transfer) }}" method="POST">
                 @csrf
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-file-invoice me-2"></i>Physical Slip / Waybill Number</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(59, 130, 246, 0.18); border: 1px solid rgba(96, 165, 250, 0.3); width: 40px; height: 40px;">
+                            <i class="fa-solid fa-file-invoice" style="color: #60a5fa; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Physical Slip / Waybill Number</h5>
+                            <span class="small" style="color: #94a3b8; font-size: 0.8rem;">Delivery paper note reference</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body p-4 bg-white">
                     <div class="mb-3">
-                        <label class="form-label fw-bold small">Physical Slip Number <span class="text-danger">*</span></label>
-                        <input type="text" name="physical_slip_no" class="form-control font-monospace" placeholder="e.g. SLIP-09823 or WB-2026-44" value="{{ old('physical_slip_no', $transfer->physical_slip_no ?: $transfer->outgoing_slip_no) }}" required>
-                        <small class="text-muted">Enter the physical paper slip or delivery receipt number that accompanies this transfer.</small>
+                        <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Physical Slip Number <span class="text-danger">*</span></label>
+                        <input type="text" name="physical_slip_no" class="form-control font-monospace rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="e.g. SLIP-09823 or WB-2026-44" value="{{ old('physical_slip_no', $transfer->physical_slip_no ?: $transfer->outgoing_slip_no) }}" required>
+                        <small class="text-muted mt-1 d-block">Enter the physical paper slip or delivery receipt number that accompanies this transfer.</small>
                     </div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm fw-bold"><i class="fa-solid fa-save me-1"></i>Save Slip #</button>
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);">
+                        <i class="fa-solid fa-save me-1.5"></i>Save Slip #
+                    </button>
                 </div>
             </form>
         </div>
@@ -788,23 +822,31 @@
 
 {{-- MODAL 5: Reject Transfer --}}
 <div class="modal fade" id="rejectModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <form action="{{ route('store-manager.transfers.reject', $transfer) }}" method="POST">
                 @csrf
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-ban me-2"></i>Reject Transfer</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(248, 113, 113, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-ban" style="color: #f87171; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Reject Transfer</h5>
+                            <span class="small" style="color: #fca5a5; font-size: 0.8rem;">Cancel transfer request and record rationale</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body p-4 bg-white">
                     <div class="mb-3">
-                        <label class="form-label fw-bold small">Rejection Reason <span class="text-danger">*</span></label>
-                        <textarea name="rejection_reason" rows="3" class="form-control" placeholder="Specify reason for cancelling or rejecting this transfer..." required></textarea>
+                        <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Rejection Reason <span class="text-danger">*</span></label>
+                        <textarea name="rejection_reason" rows="3" class="form-control rounded-3" style="border: 1.5px solid #cbd5e1;" placeholder="Specify reason for cancelling or rejecting this transfer..." required></textarea>
                     </div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger btn-sm fw-bold">Confirm Rejection</button>
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);">Confirm Rejection</button>
                 </div>
             </form>
         </div>
@@ -814,22 +856,30 @@
 @if(in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin)
 {{-- MODAL 6: Material Work Adjustment (Edit/Add/Remove Items & Assign Driver) --}}
 <div class="modal fade" id="adjustMaterialsModal" tabindex="-1">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <form action="{{ Route::has('store-manager.transfers.adjust-items') ? route('store-manager.transfers.adjust-items', $transfer) : url('store-manager/transfers/'.$transfer->id.'/adjust-items') }}" method="POST">
                 @csrf
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-sliders me-2"></i>Material Work Adjustment &amp; Logistics</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(16, 185, 129, 0.18); border: 1px solid rgba(52, 211, 153, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-sliders" style="color: #34d399; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Material Work Adjustment &amp; Logistics</h5>
+                            <span class="small" style="color: #94a3b8; font-size: 0.8rem;">Adjust line item quantities, add/remove materials, and assign transport</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3">
-                        <i class="fas fa-info-circle me-1"></i>
+                <div class="modal-body p-4 bg-white">
+                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3 rounded-3" style="background-color: #f0f7ff; color: #1e3a8a; border-left: 4px solid #3b82f6 !important;">
+                        <i class="fas fa-info-circle me-1.5"></i>
                         Adjust requested material quantities, add new line items to this transfer, or mark unneeded items for removal before dispatching to site.
                     </div>
 
                     <div class="table-responsive mb-3">
-                        <table class="table table-bordered table-sm align-middle" id="adjustmentItemsTable">
+                        <table class="table table-bordered table-sm align-middle" id="adjustmentItemsTable" style="border-color: #e2e8f0;">
                             <thead class="table-light">
                                 <tr>
                                     <th style="min-width: 280px;">Product / Material <span class="text-danger">*</span></th>
@@ -868,16 +918,19 @@
                         </table>
                     </div>
 
-                    <button type="button" class="btn btn-outline-success btn-sm mb-4" id="btnAddAdjustmentItem">
+                    <button type="button" class="btn btn-outline-success btn-sm mb-4 fw-semibold" id="btnAddAdjustmentItem">
                         <i class="fas fa-plus me-1"></i>Add Another Material Line
                     </button>
 
                     {{-- Driver & Vehicle Section within Adjustment Modal --}}
-                    <div class="card border-0 shadow-sm p-3 bg-light rounded-3">
-                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-id-badge text-primary me-2"></i>Assign Driver &amp; Logistics (Optional)</h6>
+                    <div class="card border-0 shadow-sm p-3 rounded-3" style="background: #f8fafc; border: 1.5px solid #e2e8f0 !important;">
+                        <h6 class="fw-bold mb-3 d-flex align-items-center gap-2" style="color: #0f172a;">
+                            <span class="p-1 rounded-2 text-white d-inline-flex align-items-center justify-content-center" style="width: 26px; height: 26px; background: #2563eb; font-size: 0.8rem;"><i class="fas fa-id-badge"></i></span>
+                            Assign Driver &amp; Logistics (Optional)
+                        </h6>
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label class="form-label fw-bold small">Driver</label>
+                                <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Driver</label>
                                 <select name="driver_employee_id" class="form-select form-select-sm">
                                     <option value="">-- Keep Current / Assign Later --</option>
                                     @foreach($drivers as $drv)
@@ -888,20 +941,20 @@
                                 </select>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-bold small">Vehicle Plate Number</label>
+                                <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Vehicle Plate Number</label>
                                 <input type="text" name="vehicle_plate_no" class="form-control form-control-sm" placeholder="e.g. 3-45678 AA" value="{{ $transfer->vehicle_plate_no }}">
                             </div>
                             <div class="col-12">
-                                <label class="form-label fw-bold small">Dispatch / Handling Notes</label>
+                                <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Dispatch / Handling Notes</label>
                                 <textarea name="dispatch_notes" rows="2" class="form-control form-control-sm" placeholder="Consolidated handling notes, route, or timing...">{{ $transfer->dispatch_notes }}</textarea>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm fw-bold shadow-sm">
-                        <i class="fas fa-save me-1"></i>Save Work Adjustments
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);">
+                        <i class="fas fa-save me-1.5"></i>Save Work Adjustments
                     </button>
                 </div>
             </form>
@@ -911,63 +964,92 @@
 
 {{-- MODAL 7: Move or Split Single Item --}}
 <div class="modal fade" id="moveItemModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <form action="{{ Route::has('store-manager.transfers.move-item') ? route('store-manager.transfers.move-item', $transfer) : url('store-manager/transfers/'.$transfer->id.'/move-item') }}" method="POST">
                 @csrf
                 <input type="hidden" name="transfer_item_id" id="moveItemId">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-arrows-split-up-and-left me-2"></i>Move or Split Material</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="p-3 bg-light rounded-3 mb-3">
-                        <small class="text-muted d-block">Selected Material:</small>
-                        <div class="fw-bold text-dark fs-6" id="moveItemTitle">—</div>
-                        <div class="text-muted small">Available Quantity in this transfer: <strong id="moveItemAvailQty" class="text-primary">—</strong></div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label fw-bold small">Quantity to Move / Split <span class="text-danger">*</span></label>
-                        <div class="input-group">
-                            <input type="number" step="0.001" min="0.001" name="move_quantity" id="moveItemQtyInput" class="form-control fw-bold" required>
-                            <span class="input-group-text font-monospace" id="moveItemUnitBadge">pcs</span>
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(59, 130, 246, 0.18); border: 1px solid rgba(96, 165, 250, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-arrows-split-up-and-left" style="color: #60a5fa; font-size: 1.1rem;"></i>
                         </div>
-                        <small class="text-muted">Enter partial quantity to split the item, or full quantity to move the entire line item.</small>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Move or Split Material</h5>
+                            <span class="small" style="color: #94a3b8; font-size: 0.8rem;">Re-route or separate items to another transfer</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="p-3 rounded-3 mb-3 border" style="background: #f8fafc; border-color: #e2e8f0 !important;">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <span class="text-uppercase fw-bold" style="color: #64748b; font-size: 0.72rem; letter-spacing: 0.05em;">Selected Material</span>
+                            <span class="badge rounded-pill px-2.5 py-1" style="background: #e0f2fe; color: #0284c7; font-weight: 700; font-size: 0.75rem;">Source Line Item</span>
+                        </div>
+                        <div class="fw-bold fs-6" id="moveItemTitle" style="color: #0f172a;">—</div>
+                        <div class="small mt-1" style="color: #475569;">
+                            Available Quantity in this transfer: <strong id="moveItemAvailQty" style="color: #0284c7; font-weight: 700;">—</strong>
+                        </div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold small">Destination Target <span class="text-danger">*</span></label>
+                        <label class="form-label fw-bold small text-uppercase" style="color: #334155; letter-spacing: 0.04em;">
+                            Quantity to Move / Split <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <input type="number" step="0.001" min="0.001" name="move_quantity" id="moveItemQtyInput" class="form-control form-control-lg fw-bold" style="border: 1.5px solid #cbd5e1; font-size: 1.15rem; color: #0f172a;" required>
+                            <span class="input-group-text font-monospace fw-bold px-3" id="moveItemUnitBadge" style="background: #f1f5f9; border: 1.5px solid #cbd5e1; border-left: 0; color: #334155;">pcs</span>
+                        </div>
+                        <small class="text-muted mt-1 d-block" style="font-size: 0.8rem;">Enter partial quantity to split the item, or full quantity to move the entire line item.</small>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold small text-uppercase mb-2" style="color: #334155; letter-spacing: 0.04em;">
+                            Destination Target <span class="text-danger">*</span>
+                        </label>
                         
                         @if(isset($compatibleTransfers) && $compatibleTransfers->isNotEmpty())
-                        <div class="form-check p-3 rounded border border-primary bg-primary bg-opacity-10 mb-2">
-                            <input class="form-check-input ms-0 me-2" type="radio" name="target_mode" id="targetModeExisting" value="existing" checked>
-                            <label class="form-check-label w-100 ps-1" for="targetModeExisting">
-                                <strong>Move to an existing pending transfer:</strong>
-                                <select name="target_transfer_id" class="form-select form-select-sm mt-2" id="existingTargetSelect">
-                                    @foreach($compatibleTransfers as $ct)
-                                        <option value="{{ $ct->id }}">
-                                            {{ $ct->transfer_no }} ({{ $ct->items->count() }} item(s), Req: {{ $ct->requestedBy->name ?? 'User' }})
-                                        </option>
-                                    @endforeach
-                                </select>
-                            </label>
+                        <div class="target-card-wrapper mb-2" id="wrapperExistingTarget">
+                            <div class="p-3 rounded-3" id="cardExistingTarget" style="background: #f0f7ff; border: 2px solid #3b82f6 !important; cursor: pointer; transition: all 0.2s ease;">
+                                <div class="d-flex align-items-start gap-2">
+                                    <input class="form-check-input mt-1 flex-shrink-0" type="radio" name="target_mode" id="targetModeExisting" value="existing" checked style="cursor: pointer;">
+                                    <div class="w-100">
+                                        <label for="targetModeExisting" class="d-block mb-0" style="cursor: pointer;">
+                                            <strong class="d-block" style="color: #1e3a8a; font-size: 0.92rem; font-weight: 700;">Move to an existing pending transfer:</strong>
+                                        </label>
+                                        <select name="target_transfer_id" class="form-select form-select-sm mt-2 fw-medium" id="existingTargetSelect" style="background: #ffffff; border: 1.5px solid #93c5fd; color: #0f172a; font-weight: 600;">
+                                            @foreach($compatibleTransfers as $ct)
+                                                <option value="{{ $ct->id }}">
+                                                    {{ $ct->transfer_no }} ({{ $ct->items->count() }} item(s), Req: {{ $ct->requestedBy->name ?? 'User' }})
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         @endif
 
-                        <div class="form-check p-3 rounded border bg-light">
-                            <input class="form-check-input ms-0 me-2" type="radio" name="target_mode" id="targetModeNew" value="new" {{ (!isset($compatibleTransfers) || $compatibleTransfers->isEmpty()) ? 'checked' : '' }}>
-                            <label class="form-check-label w-100 ps-1" for="targetModeNew">
-                                <strong>Separate into a brand new transfer request</strong>
-                                <div class="text-muted small">Creates a new pending transfer for the same route with this material.</div>
-                            </label>
+                        <div class="target-card-wrapper m-0" id="wrapperNewTarget">
+                            <div class="p-3 rounded-3" id="cardNewTarget" style="background: #ffffff; border: 1.5px solid #e2e8f0 !important; cursor: pointer; transition: all 0.2s ease;">
+                                <div class="d-flex align-items-start gap-2">
+                                    <input class="form-check-input mt-1 flex-shrink-0" type="radio" name="target_mode" id="targetModeNew" value="new" {{ (!isset($compatibleTransfers) || $compatibleTransfers->isEmpty()) ? 'checked' : '' }} style="cursor: pointer;">
+                                    <div class="w-100">
+                                        <label for="targetModeNew" class="d-block mb-0" style="cursor: pointer;">
+                                            <strong class="d-block" id="labelTitleNewTarget" style="color: #0f172a; font-size: 0.92rem; font-weight: 700;">Separate into a brand new transfer request</strong>
+                                            <span class="small d-block mt-1" style="color: #64748b; font-size: 0.82rem;">Creates a new pending transfer for the same route with this material.</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm fw-bold shadow-sm">
-                        <i class="fas fa-check me-1"></i>Confirm Move / Separation
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%);">
+                        <i class="fas fa-check me-1.5"></i>Confirm Move / Separation
                     </button>
                 </div>
             </form>
@@ -978,33 +1060,41 @@
 {{-- MODAL 8: Merge Other Compatible Transfers Into This Transfer --}}
 @if(isset($compatibleTransfers) && $compatibleTransfers->isNotEmpty())
 <div class="modal fade" id="mergeIntoModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content border-0 shadow">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <form action="{{ Route::has('store-manager.transfers.merge-into') ? route('store-manager.transfers.merge-into', $transfer) : url('store-manager/transfers/'.$transfer->id.'/merge-into') }}" method="POST">
                 @csrf
-                <div class="modal-header bg-warning text-dark">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-code-merge me-2"></i>Merge Other Transfers Into #{{ $transfer->transfer_no }}</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(245, 158, 11, 0.18); border: 1px solid rgba(251, 191, 36, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-code-merge" style="color: #fbbf24; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Merge Other Transfers Into #{{ $transfer->transfer_no }}</h5>
+                            <span class="small" style="color: #94a3b8; font-size: 0.8rem;">Consolidate pending transfers sharing route into this record</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3">
-                        <i class="fas fa-info-circle me-1"></i>
+                <div class="modal-body p-4 bg-white">
+                    <div class="alert alert-info border-0 shadow-sm p-3 small mb-3 rounded-3" style="background-color: #f0f7ff; color: #1e3a8a; border-left: 4px solid #3b82f6 !important;">
+                        <i class="fas fa-info-circle me-1.5"></i>
                         Select which pending transfers going from <strong>{{ $transfer->fromStore->name ?? 'Origin' }}</strong> to <strong>{{ $transfer->toStore->name ?? 'Destination' }}</strong> you would like to merge into <strong>#{{ $transfer->transfer_no }}</strong>.
                     </div>
 
-                    <h6 class="fw-bold text-dark mb-2">Select Transfers to Merge:</h6>
+                    <h6 class="fw-bold text-dark mb-2 small text-uppercase" style="letter-spacing: 0.04em;">Select Transfers to Merge:</h6>
                     <div class="d-flex flex-column gap-2 mb-4">
                         @foreach($compatibleTransfers as $ct)
-                        <div class="p-3 rounded border bg-light">
-                            <div class="form-check">
+                        <div class="p-3 rounded-3 border" style="background: #ffffff; border: 1.5px solid #e2e8f0 !important;">
+                            <div class="form-check m-0">
                                 <input class="form-check-input" type="checkbox" name="source_transfer_ids[]" value="{{ $ct->id }}" id="chk_merge_{{ $ct->id }}" checked>
-                                <label class="form-check-label w-100" for="chk_merge_{{ $ct->id }}">
+                                <label class="form-check-label w-100 ps-1" for="chk_merge_{{ $ct->id }}">
                                     <div class="d-flex justify-content-between align-items-center flex-wrap">
-                                        <strong class="font-monospace text-primary fs-6">{{ $ct->transfer_no }}</strong>
-                                        <span class="badge bg-secondary">{{ $ct->items->count() }} item(s)</span>
+                                        <strong class="font-monospace fs-6" style="color: #1e3a8a;">{{ $ct->transfer_no }}</strong>
+                                        <span class="badge" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 600;">{{ $ct->items->count() }} item(s)</span>
                                     </div>
-                                    <small class="text-muted d-block mt-1">
-                                        Requested by {{ $ct->requestedBy->name ?? 'User' }} &bull; Items: 
+                                    <small class="d-block mt-1" style="color: #64748b;">
+                                        Requested by <strong style="color: #1e293b;">{{ $ct->requestedBy->name ?? 'User' }}</strong> &bull; Items: 
                                         {{ $ct->items->map(fn($i) => ($i->product->name ?? 'Item') . ' (' . number_format($i->requested_quantity, 1) . ' ' . $i->unit . ')')->implode(', ') }}
                                     </small>
                                 </label>
@@ -1013,19 +1103,22 @@
                         @endforeach
                     </div>
 
-                    <div class="form-check form-switch mb-4 p-3 bg-light rounded-3 ms-0">
+                    <div class="form-check form-switch mb-4 p-3 rounded-3 ms-0 border" style="background: #f8fafc; border-color: #e2e8f0 !important;">
                         <input class="form-check-input ms-0 me-2" type="checkbox" name="consolidate_duplicates" value="1" id="chkConsolidateInto" checked>
-                        <label class="form-check-label fw-semibold text-dark" for="chkConsolidateInto">
+                        <label class="form-check-label fw-semibold" style="color: #0f172a;" for="chkConsolidateInto">
                             Consolidate duplicate items (Sum quantities for matching products)
                         </label>
                     </div>
 
                     {{-- Driver assignment within merge modal --}}
-                    <div class="card border-0 shadow-sm p-3 bg-white border border-secondary border-opacity-25 rounded-3 mb-2">
-                        <h6 class="fw-bold text-dark mb-2"><i class="fas fa-id-badge text-primary me-2"></i>Assign Driver &amp; Vehicle (Optional)</h6>
+                    <div class="card border-0 shadow-sm p-3 rounded-3 mb-2" style="background: #f8fafc; border: 1.5px solid #e2e8f0 !important;">
+                        <h6 class="fw-bold mb-3 d-flex align-items-center gap-2" style="color: #0f172a;">
+                            <span class="p-1 rounded-2 text-white d-inline-flex align-items-center justify-content-center" style="width: 26px; height: 26px; background: #2563eb; font-size: 0.8rem;"><i class="fas fa-id-badge"></i></span>
+                            Assign Driver &amp; Vehicle (Optional)
+                        </h6>
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label class="form-label fw-bold small">Driver</label>
+                                <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Driver</label>
                                 <select name="driver_employee_id" class="form-select form-select-sm">
                                     <option value="">-- Keep Current / Assign Later --</option>
                                     @foreach($drivers as $drv)
@@ -1036,20 +1129,20 @@
                                 </select>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-bold small">Vehicle Plate Number</label>
+                                <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Vehicle Plate Number</label>
                                 <input type="text" name="vehicle_plate_no" class="form-control form-control-sm" placeholder="e.g. 3-45678 AA" value="{{ $transfer->vehicle_plate_no }}">
                             </div>
                             <div class="col-12">
-                                <label class="form-label fw-bold small">Consolidated Dispatch Notes</label>
+                                <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Consolidated Dispatch Notes</label>
                                 <textarea name="dispatch_notes" rows="2" class="form-control form-control-sm" placeholder="Instructions for driver...">{{ $transfer->dispatch_notes }}</textarea>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm">
-                        <i class="fas fa-code-merge me-1"></i>Merge All Selected Into #{{ $transfer->transfer_no }}
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #d97706 0%, #b45309 100%);">
+                        <i class="fas fa-code-merge me-1.5"></i>Merge All Selected Into #{{ $transfer->transfer_no }}
                     </button>
                 </div>
             </form>
@@ -1118,6 +1211,54 @@ document.addEventListener('DOMContentLoaded', function () {
             modal.show();
         });
     });
+
+    // Target Selection Card Highlight Sync in Move Item Modal
+    const radioExisting = document.getElementById('targetModeExisting');
+    const radioNew = document.getElementById('targetModeNew');
+    const cardExisting = document.getElementById('cardExistingTarget');
+    const cardNew = document.getElementById('cardNewTarget');
+    const wrapperExisting = document.getElementById('wrapperExistingTarget');
+    const wrapperNew = document.getElementById('wrapperNewTarget');
+
+    function syncMoveCardStyles() {
+        if (cardExisting && radioExisting) {
+            if (radioExisting.checked) {
+                cardExisting.style.background = '#f0f7ff';
+                cardExisting.style.border = '2px solid #3b82f6';
+            } else {
+                cardExisting.style.background = '#ffffff';
+                cardExisting.style.border = '1.5px solid #e2e8f0';
+            }
+        }
+        if (cardNew && radioNew) {
+            if (radioNew.checked) {
+                cardNew.style.background = '#f0f7ff';
+                cardNew.style.border = '2px solid #3b82f6';
+            } else {
+                cardNew.style.background = '#ffffff';
+                cardNew.style.border = '1.5px solid #e2e8f0';
+            }
+        }
+    }
+
+    if (wrapperExisting && radioExisting) {
+        wrapperExisting.addEventListener('click', function (e) {
+            if (e.target.id !== 'existingTargetSelect' && !e.target.closest('#existingTargetSelect')) {
+                radioExisting.checked = true;
+                syncMoveCardStyles();
+            }
+        });
+    }
+
+    if (wrapperNew && radioNew) {
+        wrapperNew.addEventListener('click', function () {
+            radioNew.checked = true;
+            syncMoveCardStyles();
+        });
+    }
+
+    if (radioExisting) radioExisting.addEventListener('change', syncMoveCardStyles);
+    if (radioNew) radioNew.addEventListener('change', syncMoveCardStyles);
 });
 </script>
 @endif
