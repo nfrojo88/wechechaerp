@@ -2136,7 +2136,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('transfers/{transfer}/move-item', [App\Http\Controllers\StoreManagerController::class, 'moveTransferItem'])->name('transfers.move-item');
         Route::post('transfers/{transfer}/adjust-items', [App\Http\Controllers\StoreManagerController::class, 'adjustTransferItems'])->name('transfers.adjust-items');
         Route::post('transfers/{transfer}/split-new', [App\Http\Controllers\StoreManagerController::class, 'splitTransferToNew'])->name('transfers.split-new');
-
+        Route::delete('transfers/{transfer}', [App\Http\Controllers\StoreManagerController::class, 'destroyTransfer'])->name('transfers.destroy');
+        Route::post('transfers/{transfer}/delete', [App\Http\Controllers\StoreManagerController::class, 'destroyTransfer'])->name('transfers.delete');
+        Route::post('transfers/{transfer}/items/{item}/delete', [App\Http\Controllers\StoreManagerController::class, 'deleteTransferItem'])->name('transfers.items.delete');
         
         // Material Requests from Site Engineers / Coordinator
         Route::get('material-requests', [App\Http\Controllers\StoreManagerController::class, 'materialRequests'])->name('material-requests.index');

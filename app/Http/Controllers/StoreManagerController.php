@@ -1193,6 +1193,87 @@ class StoreManagerController extends Controller
             ->with('success', "New separated transfer #{$newTransfer->transfer_no} successfully created from #{$transfer->transfer_no}!");
     }
 
+    /**
+     * Delete an unassigned transfer request (Only permitted before a driver has been assigned)
+     */
+    public function destroyTransfer(Request $request, Transfer $transfer)
+    {
+        // Strict guard: once a driver is assigned, deletion is strictly locked
+        if (!empty($transfer->driver_employee_id)) {
+            return redirect()->back()->with('error', 'Cannot delete transfer: A driver has already been assigned. Deletion is only permitted prior to driver assignment.');
+        }
+
+        // Strict guard: cannot delete if already dispatched or completed
+        if (in_array($transfer->status, ['in_transit', 'completed'])) {
+            return redirect()->back()->with('error', 'Cannot delete transfer: Materials are already in transit or completed.');
+        }
+
+        $user = Auth::user();
+        $userStoreId = $user->store_id ?? Store::where('manager_id', $user->id)->value('id');
+        $isAdmin = $user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'general_service', 'coordinator']);
+        $isSenderStore = $userStoreId && ($transfer->from_store_id == $userStoreId);
+
+        if (!$isAdmin && !$isSenderStore) {
+            return redirect()->back()->with('error', 'Unauthorized: Only authorized Store Managers or Admins can delete this transfer.');
+        }
+
+        $transferNo = $transfer->transfer_no;
+
+        DB::transaction(function() use ($transfer) {
+            // Delete child items
+            $transfer->items()->delete();
+            // Delete transfer
+            $transfer->delete();
+
+            try {
+                \App\Models\ActivityLog::log(
+                    'transfer_deleted',
+                    "Transfer #{$transfer->transfer_no} was deleted prior to driver assignment by " . Auth::user()->name,
+                    'Material Transfers',
+                    $transfer
+                );
+            } catch (\Throwable $e) {}
+        });
+
+        return redirect()->route('store-manager.transfers.index')
+            ->with('success', "Transfer #{$transferNo} has been deleted successfully.");
+    }
+
+    /**
+     * Delete a single material line item from an unassigned transfer
+     */
+    public function deleteTransferItem(Request $request, Transfer $transfer, TransferItem $item)
+    {
+        if (!empty($transfer->driver_employee_id)) {
+            return redirect()->back()->with('error', 'Cannot delete material: A driver has already been assigned to this transfer.');
+        }
+
+        if (in_array($transfer->status, ['in_transit', 'completed'])) {
+            return redirect()->back()->with('error', 'Cannot delete material: This transfer is already in transit or completed.');
+        }
+
+        if ($item->transfer_id != $transfer->id) {
+            return redirect()->back()->with('error', 'Invalid item for this transfer.');
+        }
+
+        $productName = $item->product->name ?? 'Material Item';
+
+        // If this is the only remaining line item, deleting it deletes the whole transfer
+        if ($transfer->items()->count() <= 1) {
+            $transferNo = $transfer->transfer_no;
+            DB::transaction(function() use ($transfer, $item) {
+                $item->delete();
+                $transfer->delete();
+            });
+
+            return redirect()->route('store-manager.transfers.index')
+                ->with('success', "Item \"{$productName}\" removed. Since it was the only material, Transfer #{$transferNo} has been deleted.");
+        }
+
+        $item->delete();
+
+        return redirect()->back()->with('success', "Material line \"{$productName}\" removed from Transfer #{$transfer->transfer_no}.");
+    }
 
     /**
      * Material Requests from Site Engineers / Coordinator

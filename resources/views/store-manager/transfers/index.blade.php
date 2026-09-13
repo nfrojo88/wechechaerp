@@ -527,11 +527,27 @@
                                                     title="Assign Driver & Vehicle">
                                                 <i class="fas fa-id-badge me-1"></i>Assign Driver
                                             </button>
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-quick-delete shadow-sm"
+                                                    data-transfer-id="{{ $transfer->id }}"
+                                                    data-transfer-no="{{ $transfer->transfer_no }}"
+                                                    data-delete-url="{{ Route::has('store-manager.transfers.delete') ? route('store-manager.transfers.delete', $transfer) : url('store-manager/transfers/'.$transfer->id.'/delete') }}"
+                                                    title="Delete this transfer (Permitted prior to driver assignment)">
+                                                <i class="fas fa-trash-can"></i>
+                                            </button>
                                         @endif
                                         <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-primary shadow-sm" title="Dispatch & Upload Outgoing Slip">
                                             <i class="fas fa-truck-fast me-1"></i>Dispatch
                                         </a>
                                     @else
+                                        @if(!$transfer->driver_employee_id && in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && !$isAuditorUser && ($isOutgoing || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager'])))
+                                            <button type="button" class="btn btn-sm btn-outline-danger btn-quick-delete shadow-sm"
+                                                    data-transfer-id="{{ $transfer->id }}"
+                                                    data-transfer-no="{{ $transfer->transfer_no }}"
+                                                    data-delete-url="{{ Route::has('store-manager.transfers.delete') ? route('store-manager.transfers.delete', $transfer) : url('store-manager/transfers/'.$transfer->id.'/delete') }}"
+                                                    title="Delete this transfer (Permitted prior to driver assignment)">
+                                                <i class="fas fa-trash-can"></i>
+                                            </button>
+                                        @endif
                                         <a href="{{ route('store-manager.transfers.show', $transfer) }}" class="btn btn-sm btn-outline-primary">
                                             <i class="fas fa-eye me-1"></i>View
                                         </a>
@@ -740,6 +756,44 @@
     </div>
 </div>
 
+{{-- MODAL: Quick Delete Transfer (Only allowed before driver assignment) --}}
+<div class="modal fade" id="quickDeleteTransferModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form id="quickDeleteTransferForm" method="POST" action="">
+                @csrf
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(248, 113, 113, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-trash-can" style="color: #f87171; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Delete Transfer Request</h5>
+                            <span class="small" style="color: #fca5a5; font-size: 0.8rem;">Permanently remove transfer record</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="alert alert-warning border-0 shadow-sm p-3 small mb-3 rounded-3" style="background: #fffbeb; color: #92400e; border-left: 4px solid #f59e0b !important;">
+                        <i class="fas fa-triangle-exclamation me-1.5"></i>
+                        <strong>Confirm Deletion:</strong> No driver has been assigned to this transfer, so it is safe to remove.
+                    </div>
+                    <p class="text-dark mb-0">
+                        Are you sure you want to delete Transfer <strong id="quickDeleteTransferNo">—</strong>? This action will permanently remove the transfer and cannot be undone.
+                    </p>
+                </div>
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);">
+                        <i class="fas fa-trash-can me-1.5"></i>Confirm Delete
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const selectAllCheckbox = document.getElementById('selectAllTransfers');
@@ -903,6 +957,30 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const modal = new bootstrap.Modal(document.getElementById('quickAssignModal'));
             modal.show();
+        });
+    });
+
+    // Quick Delete Modal Button Handlers (Only allowed before driver assignment)
+    document.querySelectorAll('.btn-quick-delete').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const transferNo = this.dataset.transferNo || '';
+            const deleteUrl = this.dataset.deleteUrl;
+
+            const form = document.getElementById('quickDeleteTransferForm');
+            if (form && deleteUrl) {
+                form.action = deleteUrl;
+            }
+
+            const noSpan = document.getElementById('quickDeleteTransferNo');
+            if (noSpan) {
+                noSpan.textContent = '#' + transferNo;
+            }
+
+            const modalEl = document.getElementById('quickDeleteTransferModal');
+            if (modalEl) {
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            }
         });
     });
 });

@@ -405,7 +405,7 @@
                 <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-boxes-stacked me-2 text-primary"></i>Transferred Materials Inventory Details</h6>
                 <small class="text-muted">Compare requested, sent by origin storekeeper, and received by destination storekeeper</small>
             </div>
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="d-flex gap-2 flex-wrap align-items-center">
                 @if(in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && $isAdmin)
                     <button type="button" class="btn btn-outline-primary btn-sm shadow-sm" data-bs-toggle="modal" data-bs-target="#adjustMaterialsModal">
                         <i class="fas fa-sliders me-1"></i>Adjust Materials &amp; Qty
@@ -415,6 +415,12 @@
                             <i class="fas fa-code-merge me-1"></i>Merge Transfers ({{ $compatibleTransfers->count() }})
                         </button>
                     @endif
+                @endif
+
+                @if(empty($transfer->driver_employee_id) && in_array($transfer->status, ['draft', 'pending_approval', 'approved']) && ($isAdmin || $isSenderStore))
+                    <button type="button" class="btn btn-outline-danger btn-sm shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#deleteTransferModal" title="Delete this transfer (Permitted prior to driver assignment)">
+                        <i class="fas fa-trash-can me-1"></i>Delete Transfer
+                    </button>
                 @endif
 
                 @if(in_array($transfer->status, ['draft', 'approved']) && ($isSenderStore || $isAdmin))
@@ -526,16 +532,29 @@
                                 @endif
                             </td>
                             @if($canAdjustItems)
-                            <td class="text-end pe-3">
-                                <button type="button" class="btn btn-xs btn-outline-primary btn-sm py-0 px-2 btn-move-item"
-                                        data-item-id="{{ $item->id }}"
-                                        data-product-name="{{ $item->product->name ?? 'Material' }}"
-                                        data-product-code="{{ $item->product->code ?? '' }}"
-                                        data-quantity="{{ $item->requested_quantity }}"
-                                        data-unit="{{ $item->unit }}"
-                                        title="Move or Split this item">
-                                    <i class="fas fa-arrows-split-up-and-left me-1"></i>Split / Move
-                                </button>
+                            <td class="text-end pe-3 text-nowrap">
+                                <div class="d-inline-flex gap-1 align-items-center">
+                                    <button type="button" class="btn btn-xs btn-outline-primary btn-sm py-0 px-2 btn-move-item"
+                                            data-item-id="{{ $item->id }}"
+                                            data-product-name="{{ $item->product->name ?? 'Material' }}"
+                                            data-product-code="{{ $item->product->code ?? '' }}"
+                                            data-quantity="{{ $item->requested_quantity }}"
+                                            data-unit="{{ $item->unit }}"
+                                            title="Move or Split this item">
+                                        <i class="fas fa-arrows-split-up-and-left me-1"></i>Split / Move
+                                    </button>
+
+                                    @if(empty($transfer->driver_employee_id))
+                                    <button type="button" class="btn btn-xs btn-outline-danger btn-sm py-0 px-2 btn-delete-single-item"
+                                            data-item-id="{{ $item->id }}"
+                                            data-product-name="{{ $item->product->name ?? 'Material' }}"
+                                            data-quantity="{{ number_format($item->requested_quantity, 2) }} {{ $item->unit }}"
+                                            data-delete-url="{{ Route::has('store-manager.transfers.items.delete') ? route('store-manager.transfers.items.delete', [$transfer, $item]) : url('store-manager/transfers/'.$transfer->id.'/items/'.$item->id.'/delete') }}"
+                                            title="Delete this material line (Permitted before driver assignment)">
+                                        <i class="fas fa-trash-can me-1"></i>Delete
+                                    </button>
+                                    @endif
+                                </div>
                             </td>
                             @endif
                         </tr>
@@ -1151,6 +1170,93 @@
 </div>
 @endif
 
+{{-- MODAL 9: Delete Transfer (Only allowed before driver assignment) --}}
+@if(empty($transfer->driver_employee_id) && in_array($transfer->status, ['draft', 'pending_approval', 'approved']))
+<div class="modal fade" id="deleteTransferModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form action="{{ Route::has('store-manager.transfers.delete') ? route('store-manager.transfers.delete', $transfer) : (Route::has('store-manager.transfers.destroy') ? route('store-manager.transfers.destroy', $transfer) : url('store-manager/transfers/'.$transfer->id.'/delete')) }}" method="POST">
+                @csrf
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(248, 113, 113, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-trash-can" style="color: #f87171; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Delete Transfer #{{ $transfer->transfer_no }}</h5>
+                            <span class="small" style="color: #fca5a5; font-size: 0.8rem;">Permanently remove transfer and its line items</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <div class="alert alert-warning border-0 shadow-sm p-3 small mb-3 rounded-3" style="background: #fffbeb; color: #92400e; border-left: 4px solid #f59e0b !important;">
+                        <i class="fas fa-triangle-exclamation me-1.5"></i>
+                        <strong>Safe Deletion:</strong> No driver has been assigned to this transfer yet, so it can safely be removed.
+                    </div>
+                    <p class="text-dark mb-2">
+                        Are you sure you want to permanently delete Transfer <strong>#{{ $transfer->transfer_no }}</strong>?
+                    </p>
+                    <div class="p-3 rounded-3 border" style="background: #f8fafc; border-color: #e2e8f0 !important;">
+                        <div class="small text-muted d-block mb-1 text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.04em;">Route &amp; Line Items:</div>
+                        <div class="fw-bold text-dark">{{ $transfer->fromStore->name ?? 'Origin Store' }} &rarr; {{ $transfer->toStore->name ?? 'Destination Store' }}</div>
+                        <div class="small text-muted mt-1">{{ $transfer->items->count() }} material line item(s) will be deleted.</div>
+                    </div>
+                </div>
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);">
+                        <i class="fas fa-trash-can me-1.5"></i>Yes, Delete Transfer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- MODAL 10: Delete Single Material Line Item --}}
+<div class="modal fade" id="deleteItemModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form id="deleteItemForm" method="POST" action="">
+                @csrf
+                <div class="modal-header py-3 px-4" style="background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-3 p-2 d-flex align-items-center justify-content-center shadow-sm" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(248, 113, 113, 0.3); width: 40px; height: 40px;">
+                            <i class="fas fa-trash-can" style="color: #f87171; font-size: 1.1rem;"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" style="color: #ffffff !important; font-size: 1.15rem;">Delete Material Line</h5>
+                            <span class="small" style="color: #fca5a5; font-size: 0.8rem;">Remove material row from this transfer</span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-white">
+                    <p class="text-dark mb-3">
+                        Are you sure you want to remove this material line from Transfer <strong>#{{ $transfer->transfer_no }}</strong>?
+                    </p>
+                    <div class="p-3 rounded-3 border mb-3" style="background: #f8fafc; border-color: #e2e8f0 !important;">
+                        <div class="text-uppercase fw-bold text-muted small" style="font-size: 0.72rem; letter-spacing: 0.04em;">Material To Remove:</div>
+                        <div class="fw-bold fs-6 text-dark mt-1" id="delItemProductName">—</div>
+                        <div class="small text-muted mt-1">Quantity: <strong class="text-dark" id="delItemQuantity">—</strong></div>
+                    </div>
+                    <div class="small text-muted">
+                        <i class="fas fa-info-circle me-1"></i>Note: If this is the only material item in this transfer, deleting it will also delete the transfer record.
+                    </div>
+                </div>
+                <div class="modal-footer py-3 px-4" style="background: #f8fafc; border-top: 1px solid #e2e8f0;">
+                    <button type="button" class="btn btn-light border px-4 fw-semibold" style="color: #475569;" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn text-white px-4 fw-bold shadow-sm" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);">
+                        <i class="fas fa-trash-can me-1.5"></i>Confirm Delete
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // Dynamic Row Add in Material Work Adjustment Modal
@@ -1259,6 +1365,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (radioExisting) radioExisting.addEventListener('change', syncMoveCardStyles);
     if (radioNew) radioNew.addEventListener('change', syncMoveCardStyles);
+
+    // Single item delete modal trigger
+    document.querySelectorAll('.btn-delete-single-item').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const productName = this.dataset.productName;
+            const quantity = this.dataset.quantity;
+            const deleteUrl = this.dataset.deleteUrl;
+
+            const nameEl = document.getElementById('delItemProductName');
+            const qtyEl = document.getElementById('delItemQuantity');
+            const formEl = document.getElementById('deleteItemForm');
+
+            if (nameEl) nameEl.textContent = productName;
+            if (qtyEl) qtyEl.textContent = quantity;
+            if (formEl) formEl.action = deleteUrl;
+
+            const modal = new bootstrap.Modal(document.getElementById('deleteItemModal'));
+            modal.show();
+        });
+    });
 });
 </script>
 @endif
