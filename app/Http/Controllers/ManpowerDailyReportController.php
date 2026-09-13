@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ManpowerDailyReport;
+use App\Models\ManpowerRole;
 use App\Models\Project;
 use App\Models\Store;
 use Illuminate\Http\Request;
