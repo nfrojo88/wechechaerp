@@ -126,6 +126,24 @@
                                 <i class="fa-solid fa-sigma me-1"></i>{{ $report->total_present }} Total Present
                             </span>
                         </div>
+                        @if(!empty($report->roles_breakdown) && is_array($report->roles_breakdown))
+                        <div class="col-12 mt-2 text-center">
+                            <a class="btn btn-xs btn-outline-primary py-0 px-2 small shadow-sm" data-bs-toggle="collapse" href="#breakdown_{{ $report->id }}" role="button" aria-expanded="false" style="font-size:0.75rem;">
+                                <i class="fa-solid fa-list-check me-1"></i>Trade Breakdown ({{ count($report->roles_breakdown) }})
+                            </a>
+                            <div class="collapse mt-2 text-start" id="breakdown_{{ $report->id }}">
+                                <div class="p-2 rounded bg-white border small shadow-sm">
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @foreach($report->roles_breakdown as $trade)
+                                            <span class="badge" style="background:#f8fafc; color:#1e293b; border:1px solid #cbd5e1; font-weight:500;">
+                                                <strong style="color:#0f172a;">{{ $trade['role_name'] ?? 'Role' }}</strong>: <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">{{ $trade['count'] ?? 0 }}</span>
+                                            </span>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
                     </div>
                 </div>
 

@@ -41,12 +41,12 @@ class ManpowerDailyReportController extends Controller
         } catch (\Throwable $e) {}
         $assignedProjectIds = $assignedProjectIds->filter()->unique();
 
-        $projects = Project::where('status', '!=', 'cancelled')
-            ->when($assignedProjectIds->isNotEmpty() && !$user->hasAnyRole(['admin', 'global_admin']), fn($q) => $q->whereIn('id', $assignedProjectIds))
-            ->get();
+        $isPrivileged = $user->hasAnyRole(['admin', 'global_admin', 'planning_manager', 'planning', 'technical_manager', 'gm']);
 
-        if ($projects->isEmpty()) {
-            $projects = Project::where('status', '!=', 'cancelled')->get();
+        if ($isPrivileged || $assignedProjectIds->isEmpty()) {
+            $projects = Project::where('status', '!=', 'cancelled')->orderBy('name')->get();
+        } else {
+            $projects = Project::whereIn('id', $assignedProjectIds)->where('status', '!=', 'cancelled')->orderBy('name')->get();
         }
 
         // Auto-select project
@@ -58,6 +58,9 @@ class ManpowerDailyReportController extends Controller
             ->where('project_id', $selectedProjectId)
             ->first();
 
+        // Available Manpower Roles / Designations for dynamic selection
+        $manpowerRoles = ManpowerRole::orderBy('name')->get();
+
         // Recent reports for this engineer
         $recentReports = ManpowerDailyReport::where('submitted_by', $user->id)
             ->with('project')
@@ -66,7 +69,7 @@ class ManpowerDailyReportController extends Controller
             ->get();
 
         return view('site_engineer.manpower_report.create', compact(
-            'projects', 'selectedProjectId', 'todayReport', 'recentReports'
+            'projects', 'selectedProjectId', 'todayReport', 'recentReports', 'manpowerRoles'
         ));
     }
 
@@ -78,13 +81,18 @@ class ManpowerDailyReportController extends Controller
         $validated = $request->validate([
             'project_id'             => 'required|exists:projects,id',
             'report_date'            => 'required|date|before_or_equal:today',
-            'skilled_workers'        => 'required|integer|min:0',
-            'unskilled_workers'      => 'required|integer|min:0',
-            'supervisors'            => 'required|integer|min:0',
-            'engineers'              => 'required|integer|min:0',
-            'operators'              => 'required|integer|min:0',
-            'daily_laborers'         => 'required|integer|min:0',
-            'subcontractor_workers'  => 'required|integer|min:0',
+            'roles'                  => 'nullable|array',
+            'roles.*.role_id'        => 'nullable|integer',
+            'roles.*.role_name'      => 'nullable|string|max:150',
+            'roles.*.category'       => 'nullable|string|max:100',
+            'roles.*.count'          => 'nullable|integer|min:0',
+            'skilled_workers'        => 'nullable|integer|min:0',
+            'unskilled_workers'      => 'nullable|integer|min:0',
+            'supervisors'            => 'nullable|integer|min:0',
+            'engineers'              => 'nullable|integer|min:0',
+            'operators'              => 'nullable|integer|min:0',
+            'daily_laborers'         => 'nullable|integer|min:0',
+            'subcontractor_workers'  => 'nullable|integer|min:0',
             'total_absent'           => 'nullable|integer|min:0',
             'work_area'              => 'nullable|string|max:255',
             'planned_activities'     => 'nullable|string',
@@ -92,6 +100,64 @@ class ManpowerDailyReportController extends Controller
             'challenges'             => 'nullable|string',
             'notes'                  => 'nullable|string',
         ]);
+
+        // Process dynamic roles breakdown if submitted
+        $rolesInput = $request->input('roles', []);
+        $filteredRoles = [];
+        $totalFromRoles = 0;
+        $skilled = (int)($request->input('skilled_workers', 0));
+        $unskilled = (int)($request->input('unskilled_workers', 0));
+        $supervisors = (int)($request->input('supervisors', 0));
+        $operators = (int)($request->input('operators', 0));
+        $dailyLaborers = (int)($request->input('daily_laborers', 0));
+        $subcontractors = (int)($request->input('subcontractor_workers', 0));
+        $engineers = (int)($request->input('engineers', 0));
+
+        if (!empty($rolesInput) && is_array($rolesInput)) {
+            $skilled = 0;
+            $unskilled = 0;
+            $supervisors = 0;
+            $operators = 0;
+            $dailyLaborers = 0;
+            $subcontractors = 0;
+            $engineers = 0;
+
+            foreach ($rolesInput as $item) {
+                $roleName = trim($item['role_name'] ?? '');
+                $count = (int)($item['count'] ?? 0);
+                $category = trim($item['category'] ?? 'Skilled Labor');
+
+                if ($count > 0 && !empty($roleName)) {
+                    $filteredRoles[] = [
+                        'role_id'   => !empty($item['role_id']) ? (int)$item['role_id'] : null,
+                        'role_name' => $roleName,
+                        'category'  => $category,
+                        'count'     => $count,
+                    ];
+                    $totalFromRoles += $count;
+
+                    // Automatically categorize into legacy summary categories for charts/dashboards
+                    $catLower = strtolower($category);
+                    $nameLower = strtolower($roleName);
+
+                    if (str_contains($catLower, 'supervis') || str_contains($nameLower, 'supervis') || str_contains($nameLower, 'foreman')) {
+                        $supervisors += $count;
+                    } elseif (str_contains($catLower, 'operator') || str_contains($nameLower, 'operator') || str_contains($nameLower, 'driver')) {
+                        $operators += $count;
+                    } elseif (str_contains($catLower, 'unskill') || str_contains($nameLower, 'unskill') || str_contains($nameLower, 'helper')) {
+                        $unskilled += $count;
+                    } elseif (str_contains($catLower, 'labor') || str_contains($nameLower, 'daily') || str_contains($nameLower, 'laborer')) {
+                        $dailyLaborers += $count;
+                    } elseif (str_contains($catLower, 'subcon') || str_contains($nameLower, 'subcon')) {
+                        $subcontractors += $count;
+                    } elseif (str_contains($nameLower, 'engineer') || str_contains($nameLower, 'surveyor')) {
+                        $engineers += $count;
+                    } else {
+                        $skilled += $count;
+                    }
+                }
+            }
+        }
 
         // Check duplicate
         $existing = ManpowerDailyReport::where('submitted_by', $user->id)
@@ -103,9 +169,18 @@ class ManpowerDailyReportController extends Controller
             return back()->with('error', "You already submitted a manpower report for {$validated['report_date']}. You can only submit once per day per project.");
         }
 
-        $validated['submitted_by'] = $user->id;
-        $validated['status']        = 'pending';
-        $validated['total_absent']  = $validated['total_absent'] ?? 0;
+        $validated['submitted_by']          = $user->id;
+        $validated['status']                = 'pending';
+        $validated['total_absent']          = $validated['total_absent'] ?? 0;
+        $validated['roles_breakdown']       = !empty($filteredRoles) ? $filteredRoles : null;
+        $validated['skilled_workers']       = $skilled;
+        $validated['unskilled_workers']     = $unskilled;
+        $validated['supervisors']           = $supervisors;
+        $validated['operators']             = $operators;
+        $validated['daily_laborers']        = $dailyLaborers;
+        $validated['subcontractor_workers'] = $subcontractors;
+        $validated['engineers']             = $engineers;
+        $validated['total_present']         = !empty($filteredRoles) ? $totalFromRoles : ($skilled + $unskilled + $supervisors + $operators + $dailyLaborers + $subcontractors + $engineers);
 
         ManpowerDailyReport::create($validated);
 

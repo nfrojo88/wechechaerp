@@ -10,7 +10,7 @@ class ManpowerRoleController extends Controller
     public function __construct()
     {
         $this->middleware('auth');
-        $this->middleware('role:planning_manager|planning|technical_manager|admin|global_admin');
+        $this->middleware('role:planning_manager|planning|technical_manager|site_engineer|Site Engineer|admin|global_admin');
     }
 
     /** Return all roles as JSON (for modals / selects) */

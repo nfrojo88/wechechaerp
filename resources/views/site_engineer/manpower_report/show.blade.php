@@ -31,6 +31,46 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
+                        @if(!empty($manpowerDailyReport->roles_breakdown) && is_array($manpowerDailyReport->roles_breakdown) && count($manpowerDailyReport->roles_breakdown) > 0)
+                        <table class="table table-hover table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3" style="width: 50px;">#</th>
+                                    <th>Trade / Manpower Role</th>
+                                    <th>Category</th>
+                                    <th class="text-center" style="width: 150px;">Workers Present</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($manpowerDailyReport->roles_breakdown as $item)
+                                <tr>
+                                    <td class="ps-3 text-muted small">{{ $loop->iteration }}</td>
+                                    <td class="fw-bold text-dark">
+                                        <i class="fa-solid fa-user-gear text-primary me-2"></i>{{ $item['role_name'] ?? 'Trade' }}
+                                    </td>
+                                    <td>
+                                        <span class="badge" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 600;">
+                                            {{ $item['category'] ?? 'General' }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-1 fw-bold fs-6">
+                                            {{ $item['count'] ?? 0 }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                @endforeach
+                                <tr class="table-light fw-bold">
+                                    <td colspan="3" class="ps-3 text-end"><i class="fa-solid fa-sigma me-1.5 text-primary"></i>Total Present:</td>
+                                    <td class="text-center"><span class="badge bg-primary px-3 py-1.5 fs-6">{{ $manpowerDailyReport->total_present }}</span></td>
+                                </tr>
+                                <tr class="table-danger">
+                                    <td colspan="3" class="ps-3 text-end fw-semibold"><i class="fa-solid fa-user-xmark text-danger me-1.5"></i>Total Absent:</td>
+                                    <td class="text-center"><span class="badge bg-danger px-3 py-1.5 fs-6">{{ $manpowerDailyReport->total_absent }}</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        @else
                         <table class="table table-bordered mb-0">
                             <tbody>
                                 @php
@@ -64,6 +104,7 @@
                                 </tr>
                             </tbody>
                         </table>
+                        @endif
                     </div>
                 </div>
             </div>

@@ -21,6 +21,7 @@ class ManpowerDailyReport extends Model
         'operators',
         'daily_laborers',
         'subcontractor_workers',
+        'roles_breakdown',
         'total_present',
         'total_absent',
         'work_area',
@@ -35,8 +36,9 @@ class ManpowerDailyReport extends Model
     ];
 
     protected $casts = [
-        'report_date'  => 'date',
-        'reviewed_at'  => 'datetime',
+        'report_date'      => 'date',
+        'reviewed_at'      => 'datetime',
+        'roles_breakdown'  => 'array',
     ];
 
     public function project()
@@ -59,13 +61,21 @@ class ManpowerDailyReport extends Model
     {
         parent::boot();
         static::saving(function ($model) {
-            $model->total_present = (int)$model->skilled_workers
-                + (int)$model->unskilled_workers
-                + (int)$model->supervisors
-                + (int)$model->engineers
-                + (int)$model->operators
-                + (int)$model->daily_laborers
-                + (int)$model->subcontractor_workers;
+            if (!empty($model->roles_breakdown) && is_array($model->roles_breakdown)) {
+                $totalFromRoles = 0;
+                foreach ($model->roles_breakdown as $item) {
+                    $totalFromRoles += (int)($item['count'] ?? 0);
+                }
+                $model->total_present = $totalFromRoles;
+            } else {
+                $model->total_present = (int)$model->skilled_workers
+                    + (int)$model->unskilled_workers
+                    + (int)$model->supervisors
+                    + (int)$model->engineers
+                    + (int)$model->operators
+                    + (int)$model->daily_laborers
+                    + (int)$model->subcontractor_workers;
+            }
         });
     }
 
