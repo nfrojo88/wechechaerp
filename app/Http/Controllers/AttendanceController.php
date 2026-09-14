@@ -207,6 +207,10 @@ class AttendanceController extends Controller
 
     public function store(Request $request)
     {
+        if ($request->input('action') === 'update_schedule') {
+            return $this->updateSchedule($request);
+        }
+
         $request->validate([
             'employee_id'     => 'required|exists:employees,id',
             'attendance_date' => 'required|date',

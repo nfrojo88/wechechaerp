@@ -740,8 +740,9 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form action="{{ route('attendance.updateSchedule') }}" method="POST">
+            <form action="{{ url('/attendance') }}" method="POST">
                 @csrf
+                <input type="hidden" name="action" value="update_schedule">
                 <div class="modal-body p-4">
                     <p class="text-muted small mb-3">
                         Define which times employees are actively in work and which times are non-working lunch/rest breaks. Fully synchronized with Ethiopian Time & Calendar.
