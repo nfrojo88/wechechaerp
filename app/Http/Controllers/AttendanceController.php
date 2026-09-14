@@ -79,8 +79,70 @@ class AttendanceController extends Controller
 
         $allEmployees = Employee::where('status', 'active')->orderBy('full_name')->get();
         $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+        $projects     = \App\Models\Project::orderBy('name')->get();
 
-        return view('hr.attendance.index', compact('attendances', 'availableDates', 'stats', 'selectedDate', 'allEmployees', 'workSchedule'));
+        return view('hr.attendance.index', compact('attendances', 'availableDates', 'stats', 'selectedDate', 'allEmployees', 'workSchedule', 'projects'));
+    }
+
+    /**
+     * Record Site Attendance when employee goes to a construction site.
+     * (Employee is on-site so not captured by office biometric device).
+     */
+    public function recordSiteAttendance(Request $request)
+    {
+        $validated = $request->validate([
+            'employee_id'    => 'required|exists:employees,id',
+            'project_id'     => 'nullable|exists:projects,id',
+            'site_name'      => 'nullable|string|max:255',
+            'attendance_date'=> 'required|date',
+            'task_notes'     => 'nullable|string|max:255',
+            'hours_worked'   => 'nullable|numeric|min:1|max:24',
+        ]);
+
+        $employee = Employee::findOrFail($validated['employee_id']);
+        $date     = $validated['attendance_date'];
+        $hours    = (float) ($validated['hours_worked'] ?? 8.0);
+
+        $projectName = 'Job Site';
+        if (!empty($validated['project_id'])) {
+            $proj = \App\Models\Project::find($validated['project_id']);
+            if ($proj) {
+                $projectName = $proj->name;
+            }
+        } elseif (!empty($validated['site_name'])) {
+            $projectName = trim($validated['site_name']);
+        }
+
+        $note = "On-Site: {$projectName}" . (!empty($validated['task_notes']) ? " ({$validated['task_notes']})" : "");
+
+        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+        $mIn  = $workSchedule['morning_in'] ?? '08:30';
+        $mOut = $workSchedule['morning_out'] ?? '12:30';
+        $aIn  = $workSchedule['afternoon_in'] ?? '13:30';
+        $aOut = $workSchedule['afternoon_out'] ?? '17:30';
+
+        Attendance::updateOrCreate(
+            [
+                'employee_id'     => $employee->id,
+                'attendance_date' => $date,
+            ],
+            [
+                'status'         => 'present',
+                'source'         => 'manual',
+                'morning_in'     => $mIn,
+                'morning_out'    => $mOut,
+                'afternoon_in'   => $aIn,
+                'afternoon_out'  => $aOut,
+                'check_in'       => $mIn,
+                'check_out'      => $aOut,
+                'hours_worked'   => $hours,
+                'notes'          => $note,
+                'is_approved'    => true,
+                'approved_by'    => Auth::id(),
+            ]
+        );
+
+        return redirect()->back()->with('success', "On-site attendance recorded for {$employee->full_name} on {$projectName}.");
     }
 
     /**
@@ -209,6 +271,10 @@ class AttendanceController extends Controller
     {
         if ($request->input('action') === 'update_schedule') {
             return $this->updateSchedule($request);
+        }
+
+        if ($request->input('action') === 'record_site_attendance') {
+            return $this->recordSiteAttendance($request);
         }
 
         $request->validate([
