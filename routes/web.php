@@ -1750,6 +1750,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('departments', App\Http\Controllers\DepartmentController::class)->except(['show', 'destroy']);
     Route::resource('attendance', App\Http\Controllers\AttendanceController::class)->only(['index', 'create', 'store']);
     Route::post('attendance/quick-clock', [App\Http\Controllers\AttendanceController::class, 'quickClock'])->name('attendance.quickClock');
+    Route::post('attendance/update-schedule', [App\Http\Controllers\AttendanceController::class, 'updateSchedule'])->name('attendance.updateSchedule');
     Route::post('attendance/bulk', [App\Http\Controllers\AttendanceController::class, 'bulkStore'])->name('attendance.bulkStore');
     Route::post('attendance/import-xls', [App\Http\Controllers\AttendanceController::class, 'importXls'])->name('attendance.importXls');
     Route::get('attendance/download-template', [App\Http\Controllers\AttendanceController::class, 'downloadTemplate'])->name('attendance.downloadTemplate');

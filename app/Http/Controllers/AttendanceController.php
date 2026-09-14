@@ -77,7 +77,31 @@ class AttendanceController extends Controller
             'leave'     => Attendance::whereDate('attendance_date', $statsDate)->where('status', 'leave')->count(),
         ];
 
-        return view('hr.attendance.index', compact('attendances', 'availableDates', 'stats', 'selectedDate'));
+        $allEmployees = Employee::where('status', 'active')->orderBy('full_name')->get();
+        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+
+        return view('hr.attendance.index', compact('attendances', 'availableDates', 'stats', 'selectedDate', 'allEmployees', 'workSchedule'));
+    }
+
+    /**
+     * Update Company Work Schedule settings (working hours and break/non-work periods).
+     */
+    public function updateSchedule(Request $request)
+    {
+        $validated = $request->validate([
+            'morning_in'    => 'required|date_format:H:i',
+            'morning_out'   => 'required|date_format:H:i',
+            'break_start'   => 'required|date_format:H:i',
+            'break_end'     => 'required|date_format:H:i',
+            'afternoon_in'  => 'required|date_format:H:i',
+            'afternoon_out' => 'required|date_format:H:i',
+            'work_days'     => 'nullable|string',
+            'title'         => 'nullable|string',
+        ]);
+
+        \App\Helpers\EthiopianCalendar::saveWorkSchedule($validated);
+
+        return redirect()->back()->with('success', 'Work schedule & working hours policy updated successfully.');
     }
 
     public function create(Request $request)
