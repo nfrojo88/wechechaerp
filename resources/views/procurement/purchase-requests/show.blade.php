@@ -3070,7 +3070,7 @@ function submitQuickSupplier() {
 <div class="modal fade" id="addPrItemModal" tabindex="-1" aria-labelledby="addPrItemModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <form action="{{ route('purchase-requests.add-item', $purchaseRequest) }}" method="POST">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.add-item') ? route('purchase-requests.add-item', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/items') }}" method="POST">
                 @csrf
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title fs-6 fw-bold" id="addPrItemModalLabel">
@@ -3241,7 +3241,7 @@ function confirmDeletePrItem(itemId, productName) {
 <div class="modal fade" id="financeSendBackGmModal" tabindex="-1" aria-labelledby="financeSendBackGmModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-3">
-            <form action="{{ route('purchase-requests.finance-send-back-to-gm', $purchaseRequest) }}" method="POST">
+            <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.finance-send-back-to-gm') ? route('purchase-requests.finance-send-back-to-gm', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/finance-send-back-to-gm') }}" method="POST">
                 @csrf
                 <div class="modal-header bg-warning text-dark py-3 px-4">
                     <h5 class="modal-title fs-6 fw-bold mb-0" id="financeSendBackGmModalLabel">
