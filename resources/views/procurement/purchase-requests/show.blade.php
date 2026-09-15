@@ -752,6 +752,12 @@
                             </button>
                         </form>
 
+                        <div class="mt-3 pt-3 border-top">
+                            <button type="button" class="btn btn-outline-warning text-dark btn-sm w-100 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#financeSendBackGmModal">
+                                <i class="fas fa-undo me-1"></i> Send Back to GM
+                            </button>
+                        </div>
+
                     <!-- STAGE 7b: Finance Staff Execute Payment -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PAYMENT && $purchaseRequest->payment?->assigned_finance_staff_id)
                         <div class="mb-3">
@@ -3229,5 +3235,38 @@ function confirmDeletePrItem(itemId, productName) {
     }
 }
 </script>
+
+
+<!-- Modal: Finance Head Send Back to GM -->
+<div class="modal fade" id="financeSendBackGmModal" tabindex="-1" aria-labelledby="financeSendBackGmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <form action="{{ route('purchase-requests.finance-send-back-to-gm', $purchaseRequest) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-warning text-dark py-3 px-4">
+                    <h5 class="modal-title fs-6 fw-bold mb-0" id="financeSendBackGmModalLabel">
+                        <i class="fas fa-undo me-2"></i>Send Back to General Manager
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-warning py-2 px-3 small mb-3 border-start border-4 border-warning">
+                        <i class="fas fa-exclamation-triangle me-1"></i> Returning this Purchase Request will revert the status back to <strong>Pending GM Decision</strong> and notify the General Manager for review.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Reason for Returning to GM <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control" rows="3" placeholder="Please provide details (e.g. funding account insufficient, credit terms renegotiation, payment amount clarification...)" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-4">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning text-dark btn-sm px-3 fw-bold shadow-sm">
+                        <i class="fas fa-undo me-1"></i> Confirm &amp; Send Back to GM
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 @endsection

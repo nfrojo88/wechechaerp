@@ -1549,4 +1549,16 @@ class PurchaseRequestController extends Controller
 
         return back()->with('success', "Item '{$productName}' removed from purchase request.");
     }
+
+    public function financeSendBackToGm(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['finance_head', 'finance_manager', 'finance', 'cfo', 'admin', 'global_admin']);
+        $request->validate([
+            'reason' => 'required|string|max:1000',
+        ]);
+
+        $this->lifecycle->financeHeadSendBackToGm($purchaseRequest, $request->reason);
+
+        return back()->with('success', 'Purchase Request returned to General Manager successfully.');
+    }
 }

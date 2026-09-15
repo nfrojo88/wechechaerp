@@ -1002,4 +1002,41 @@ class ProcurementLifecycleService
             \Illuminate\Support\Facades\Log::error("ProcurementJournalEntry error: " . $e->getMessage());
         }
     }
+
+    /**
+     * Finance Head sends PR back to General Manager for review / reassessment.
+     */
+    public function financeHeadSendBackToGm(PurchaseRequest $pr, string $reason): void
+    {
+        $from = $pr->status;
+        $targetRole = $this->resolveOwnerRole('gm', $pr);
+
+        $pr->update([
+            'status'             => PurchaseRequest::STATUS_PENDING_GM,
+            'current_owner_role' => $targetRole,
+        ]);
+
+        try {
+            if ($pr->payment) {
+                $pr->payment->update([
+                    'status' => 'returned_to_gm',
+                    'notes'  => ($pr->payment->notes ? $pr->payment->notes . ' | ' : '') . "Returned to GM by Finance Head: {$reason}",
+                ]);
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            $expReq = \App\Models\ExpenseRequest::where('purchase_request_id', $pr->id)->first();
+            if ($expReq) {
+                $expReq->update([
+                    'status'      => 'rejected',
+                    'description' => $expReq->description . " [Returned to GM by Finance Head: {$reason}]",
+                ]);
+            }
+        } catch (\Throwable $e) {}
+
+        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_GM, 'finance_send_back_to_gm', 'finance_head', $reason);
+        $this->sms->notifyRole($pr->id, $targetRole,
+            "ConstructPro: PR #{$pr->pr_no} was returned to GM by Finance Head. Reason: {$reason}. Open: " . url("/purchase-requests/{$pr->id}"));
+    }
 }
