@@ -951,7 +951,7 @@ class PurchaseRequestController extends Controller
             $filePath = \App\Services\FileUploadService::upload($request->file('proforma_file'), 'proformas');
         }
 
-        $pNo = $request->proforma_no ?: ('PROF-' . date('Ymd') . '-' . str_pad(ProformaInvoice::count() + 1, 4, '0', STR_PAD_LEFT));
+        $pNo = ProformaInvoice::generateNextNo($request->proforma_no);
 
         // Process item prices breakdown
         $itemPricesInput = $request->input('item_prices', []);
@@ -989,21 +989,34 @@ class PurchaseRequestController extends Controller
         $taxAmount = (float)($request->tax_amount ?? 0);
         $grandTotal = (float)$request->grand_total;
 
-        $proforma = ProformaInvoice::create([
-            'proforma_no'         => $pNo,
-            'purchase_request_id' => $purchaseRequest->id,
-            'supplier_id'         => $request->supplier_id,
-            'proforma_date'       => $request->proforma_date,
-            'valid_until'         => $request->valid_until,
-            'subtotal'            => $subtotal,
-            'tax_amount'          => $taxAmount,
-            'grand_total'         => $grandTotal,
-            'item_prices'         => !empty($structuredItemPrices) ? $structuredItemPrices : null,
-            'notes'               => $request->notes,
-            'file_path'           => $filePath,
-            'status'              => 'pending',
-            'gm_selected'         => false,
-        ]);
+        $proforma = null;
+        $attempts = 0;
+        while (!$proforma && $attempts < 5) {
+            $attempts++;
+            try {
+                $proforma = ProformaInvoice::create([
+                    'proforma_no'         => $pNo,
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'supplier_id'         => $request->supplier_id,
+                    'proforma_date'       => $request->proforma_date,
+                    'valid_until'         => $request->valid_until,
+                    'subtotal'            => $subtotal,
+                    'tax_amount'          => $taxAmount,
+                    'grand_total'         => $grandTotal,
+                    'item_prices'         => !empty($structuredItemPrices) ? $structuredItemPrices : null,
+                    'notes'               => $request->notes,
+                    'file_path'           => $filePath,
+                    'status'              => 'pending',
+                    'gm_selected'         => false,
+                ]);
+            } catch (\Illuminate\Database\QueryException $e) {
+                if ($e->getCode() == 23000 || str_contains($e->getMessage(), 'Duplicate entry')) {
+                    $pNo = 'PROF-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+                } else {
+                    throw $e;
+                }
+            }
+        }
 
         return back()->with('success', "Proforma #{$proforma->proforma_no} attached successfully with itemized pricing.");
     }
