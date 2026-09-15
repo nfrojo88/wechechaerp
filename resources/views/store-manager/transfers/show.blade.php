@@ -1389,4 +1389,24 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 @endif
 
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    @if(request('dispatch') == 1 || session('open_dispatch'))
+        var dispatchModalEl = document.getElementById('dispatchModal');
+        if (dispatchModalEl) {
+            var dModal = new bootstrap.Modal(dispatchModalEl);
+            dModal.show();
+        }
+    @endif
+
+    @if(request('receive') == 1 || session('open_receive'))
+        var receiveModalEl = document.getElementById('receiveModal');
+        if (receiveModalEl) {
+            var rModal = new bootstrap.Modal(receiveModalEl);
+            rModal.show();
+        }
+    @endif
+});
+</script>
 @endsection

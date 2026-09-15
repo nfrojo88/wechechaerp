@@ -2133,7 +2133,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('transfers/{transfer}', [App\Http\Controllers\StoreManagerController::class, 'showTransfer'])->name('transfers.show');
         Route::post('transfers/{transfer}/assign-driver', [App\Http\Controllers\StoreManagerController::class, 'assignDriver'])->name('transfers.assign-driver');
         Route::post('transfers/{transfer}/physical-slip', [App\Http\Controllers\StoreManagerController::class, 'updatePhysicalSlip'])->name('transfers.physical-slip');
-        Route::post('transfers/{transfer}/dispatch', [App\Http\Controllers\StoreManagerController::class, 'dispatchTransfer'])->name('transfers.dispatch');
+        Route::match(['get', 'post'], 'transfers/{transfer}/dispatch', [App\Http\Controllers\StoreManagerController::class, 'dispatchTransfer'])->name('transfers.dispatch');
         Route::post('transfers/{transfer}/receive', [App\Http\Controllers\StoreManagerController::class, 'receiveTransfer'])->name('transfers.receive');
         Route::post('transfers/{transfer}/reject', [App\Http\Controllers\StoreManagerController::class, 'rejectTransfer'])->name('transfers.reject');
         Route::post('transfers/bulk-merge', [App\Http\Controllers\StoreManagerController::class, 'bulkMergeTransfers'])->name('transfers.bulk-merge');

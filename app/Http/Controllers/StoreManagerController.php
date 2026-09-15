@@ -601,6 +601,9 @@ class StoreManagerController extends Controller
      */
     public function dispatchTransfer(Request $request, Transfer $transfer)
     {
+        if ($request->isMethod('get')) {
+            return redirect()->route('store-manager.transfers.show', ['transfer' => $transfer, 'dispatch' => 1]);
+        }
         $request->validate([
             'outgoing_slip_no'   => 'required|string|max:100',
             'outgoing_slip_file' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
@@ -670,6 +673,9 @@ class StoreManagerController extends Controller
      */
     public function receiveTransfer(Request $request, Transfer $transfer)
     {
+        if ($request->isMethod('get')) {
+            return redirect()->route('store-manager.transfers.show', ['transfer' => $transfer, 'receive' => 1]);
+        }
         $request->validate([
             'receiving_slip_no'   => 'nullable|string|max:100',
             'receiving_slip_file' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
