@@ -389,10 +389,12 @@ class PurchaseRequestController extends Controller
             $nextReceiveSlipNo = $receiveSlipSequence ? $receiveSlipSequence->formatSlipNumber($receiveSlipSequence->current_slip_no) : null;
         }
 
+        $availableProducts = \App\Models\Product::where('is_active', true)->orderBy('name')->get();
+
         return view('procurement.purchase-requests.show', compact(
             'purchaseRequest', 'stockAvailability', 'transferAvailability', 'prTransfers', 'coaAccounts',
             'financeStaff', 'drivers', 'suppliers', 'stores', 'pricingBenchmarks',
-            'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo'
+            'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo', 'availableProducts'
         ));
 
     }
@@ -1412,5 +1414,126 @@ class PurchaseRequestController extends Controller
             'rejection_reason' => $request->rejection_reason,
         ]);
         return back()->with('success', 'Purchase Request rejected.');
+    }
+
+    // ─── Items Management: Add / Update / Remove ───────────────────────────
+    public function addItem(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $request->validate([
+            'product_id'          => 'required|exists:products,id',
+            'quantity'            => 'required|numeric|min:0.001',
+            'purchased_quantity'  => 'nullable|numeric|min:0',
+            'unit'                => 'nullable|string|max:50',
+            'estimated_unit_cost' => 'nullable|numeric|min:0',
+            'specifications'      => 'nullable|string|max:1000',
+        ]);
+
+        $product = \App\Models\Product::find($request->product_id);
+        $unit = $request->filled('unit') ? trim($request->unit) : ($product?->unit ?? 'pcs');
+        $estCost = $request->filled('estimated_unit_cost') ? (float)$request->estimated_unit_cost : (float)($product?->unit_price ?? 0);
+        $purchasedQty = $request->filled('purchased_quantity') ? (float)$request->purchased_quantity : 0;
+
+        $itemData = [
+            'purchase_request_id' => $purchaseRequest->id,
+            'product_id'          => (int)$request->product_id,
+            'quantity'            => (float)$request->quantity,
+            'unit'                => $unit,
+            'specifications'      => $request->specifications,
+            'estimated_unit_cost' => $estCost,
+        ];
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'purchased_quantity')) {
+                $itemData['purchased_quantity'] = $purchasedQty;
+            }
+        } catch (\Throwable $e) {
+            $itemData['purchased_quantity'] = $purchasedQty;
+        }
+
+        PurchaseRequestItem::create($itemData);
+
+        try {
+            \App\Models\PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_status'         => $purchaseRequest->status,
+                'to_status'           => $purchaseRequest->status,
+                'action'              => 'add_item',
+                'actor_role'          => auth()->user()?->roles?->first()?->name ?? 'user',
+                'actor_id'            => auth()->id(),
+                'notes'               => "Added item: " . ($product?->name ?? "Product #{$request->product_id}") . " (Requested: {$request->quantity} {$unit}, Purchased: {$purchasedQty})",
+            ]);
+        } catch (\Throwable $e) {}
+
+        return back()->with('success', "Item added to purchase request successfully.");
+    }
+
+    public function updateItem(Request $request, PurchaseRequest $purchaseRequest, PurchaseRequestItem $item)
+    {
+        if ($item->purchase_request_id !== $purchaseRequest->id) {
+            abort(404);
+        }
+
+        $request->validate([
+            'quantity'            => 'required|numeric|min:0.001',
+            'purchased_quantity'  => 'nullable|numeric|min:0',
+            'estimated_unit_cost' => 'nullable|numeric|min:0',
+            'unit'                => 'nullable|string|max:50',
+            'specifications'      => 'nullable|string|max:1000',
+        ]);
+
+        $updateData = [
+            'quantity'       => (float)$request->quantity,
+            'specifications' => $request->specifications,
+        ];
+
+        if ($request->filled('unit')) {
+            $updateData['unit'] = trim($request->unit);
+        }
+
+        if ($request->has('estimated_unit_cost')) {
+            $updateData['estimated_unit_cost'] = (float)$request->estimated_unit_cost;
+        }
+
+        if ($request->has('purchased_quantity')) {
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'purchased_quantity')) {
+                    $updateData['purchased_quantity'] = (float)$request->purchased_quantity;
+                }
+            } catch (\Throwable $e) {
+                $updateData['purchased_quantity'] = (float)$request->purchased_quantity;
+            }
+        }
+
+        $item->update($updateData);
+
+        return back()->with('success', "Item updated successfully.");
+    }
+
+    public function removeItem(PurchaseRequest $purchaseRequest, PurchaseRequestItem $item)
+    {
+        if ($item->purchase_request_id !== $purchaseRequest->id) {
+            abort(404);
+        }
+
+        if ($purchaseRequest->items()->count() <= 1) {
+            return back()->withErrors(['item' => 'Cannot remove the only item from this purchase request.']);
+        }
+
+        $productName = $item->product?->name ?? "Item #{$item->id}";
+        $item->delete();
+
+        try {
+            \App\Models\PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_status'         => $purchaseRequest->status,
+                'to_status'           => $purchaseRequest->status,
+                'action'              => 'remove_item',
+                'actor_role'          => auth()->user()?->roles?->first()?->name ?? 'user',
+                'actor_id'            => auth()->id(),
+                'notes'               => "Removed item: {$productName}",
+            ]);
+        } catch (\Throwable $e) {}
+
+        return back()->with('success', "Item '{$productName}' removed from purchase request.");
     }
 }

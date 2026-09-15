@@ -1086,35 +1086,43 @@
                         <span class="badge bg-secondary rounded-pill">{{ $purchaseRequest->items->count() }} items</span>
                     </div>
 
-                    @if($isSelectableStage)
-                        @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
-                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <span class="small text-muted me-1"><span class="selected-items-count fw-bold text-primary">0</span> selected</span>
-                            <button type="button" class="btn btn-sm btn-outline-info shadow-sm" onclick="openSelectiveTransferModal()">
-                                <i class="fas fa-truck-ramp-box me-1"></i> Transfer Selected
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-success shadow-sm" onclick="openSelectiveSendPmModal()">
-                                <i class="fas fa-cart-shopping me-1"></i> Send to Purchase
-                            </button>
-                            <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#splitAndProcessModal">
-                                <i class="fas fa-random me-1"></i> Smart Split All
-                            </button>
-                        </div>
-                        @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER)
-                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <span class="small text-muted me-1"><span class="selected-items-count fw-bold text-primary">0</span> selected</span>
-                            <button type="button" class="btn btn-sm btn-warning text-dark shadow-sm fw-bold" onclick="openPmSendBackStoreModal()">
-                                <i class="fas fa-undo me-1"></i> Send to Store Manager (<span class="selected-items-count fw-bold">0</span>)
-                            </button>
-                            <button type="button" class="btn btn-sm btn-success shadow-sm fw-bold" onclick="openPmDirectBuyModal()">
-                                <i class="fas fa-bolt me-1"></i> Direct Buy Selected
-                            </button>
-                            <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" onclick="openPmProformaModal()">
-                                <i class="fas fa-file-invoice-dollar me-1"></i> Proforma Selected
-                            </button>
-                        </div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        @if(!in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_CANCELLED, \App\Models\PurchaseRequest::STATUS_REJECTED]))
+                        <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addPrItemModal">
+                            <i class="fas fa-plus-circle me-1"></i> Add More Items
+                        </button>
                         @endif
-                    @endif
+
+                        @if($isSelectableStage)
+                            @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="small text-muted me-1"><span class="selected-items-count fw-bold text-primary">0</span> selected</span>
+                                <button type="button" class="btn btn-sm btn-outline-info shadow-sm" onclick="openSelectiveTransferModal()">
+                                    <i class="fas fa-truck-ramp-box me-1"></i> Transfer Selected
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-success shadow-sm" onclick="openSelectiveSendPmModal()">
+                                    <i class="fas fa-cart-shopping me-1"></i> Send to Purchase
+                                </button>
+                                <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#splitAndProcessModal">
+                                    <i class="fas fa-random me-1"></i> Smart Split All
+                                </button>
+                            </div>
+                            @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER)
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="small text-muted me-1"><span class="selected-items-count fw-bold text-primary">0</span> selected</span>
+                                <button type="button" class="btn btn-sm btn-warning text-dark shadow-sm fw-bold" onclick="openPmSendBackStoreModal()">
+                                    <i class="fas fa-undo me-1"></i> Send to Store Manager (<span class="selected-items-count fw-bold">0</span>)
+                                </button>
+                                <button type="button" class="btn btn-sm btn-success shadow-sm fw-bold" onclick="openPmDirectBuyModal()">
+                                    <i class="fas fa-bolt me-1"></i> Direct Buy Selected
+                                </button>
+                                <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" onclick="openPmProformaModal()">
+                                    <i class="fas fa-file-invoice-dollar me-1"></i> Proforma Selected
+                                </button>
+                            </div>
+                            @endif
+                        @endif
+                    </div>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -1128,13 +1136,17 @@
                                     @endif
                                     <th>Product / Material</th>
                                     <th>Store Inventory Status</th>
-                                    <th>Qty Requested</th>
+                                    <th class="text-center bg-light border-start border-end">
+                                        Qty Requested<br><span class="badge bg-secondary bg-opacity-25 text-dark fw-normal py-0 px-1" style="font-size:10px;">Asked</span>
+                                    </th>
+                                    <th class="text-center bg-light border-end">
+                                        Qty Purchased<br><span class="badge bg-primary bg-opacity-25 text-primary fw-normal py-0 px-1" style="font-size:10px;">Procured</span>
+                                    </th>
+                                    <th class="text-center">Status</th>
                                     <th>Unit</th>
                                     <th>Est. Unit Cost</th>
                                     <th>Est. Total</th>
-                                    @if($isSelectableStage)
                                     <th class="pe-3 text-end">Quick Action</th>
-                                    @endif
                                 </tr>
                             </thead>
                             <tbody>
@@ -1145,6 +1157,12 @@
                                     $totalInTransfer = $itemStocks->sum('in_transfer_qty');
                                     $totalNetStock = $itemStocks->sum('net_available');
                                     $hasStock = $totalNetStock > 0 || $totalRawStock > 0;
+
+                                    $reqQty = (float)$item->quantity;
+                                    $purchQty = method_exists($item, 'getEffectivePurchasedQty') ? $item->getEffectivePurchasedQty() : (float)($item->purchased_quantity ?? 0);
+                                    $remQty = max(0, $reqQty - $purchQty);
+                                    $isCompleted = ($purchQty >= $reqQty && $reqQty > 0);
+                                    $isPartial = ($purchQty > 0 && !$isCompleted);
                                 @endphp
                                 <tr id="itemRow{{ $item->id }}">
                                     @if($isSelectableStage)
@@ -1165,6 +1183,9 @@
                                         <strong class="text-dark">{{ $item->product?->name ?? 'Item #' . $item->product_id }}</strong>
                                         @if($item->product?->code)
                                              <br><code class="small text-muted">{{ $item->product->code }}</code>
+                                        @endif
+                                        @if($item->specifications)
+                                            <br><small class="text-muted fst-italic"><i class="fas fa-info-circle me-1"></i>{{ $item->specifications }}</small>
                                         @endif
                                     </td>
                                     <td>
@@ -1195,45 +1216,82 @@
                                             </span>
                                         @endif
                                     </td>
-                                    <td class="fw-bold text-dark fs-6">{{ number_format($item->quantity, 3) }}</td>
+                                    <td class="text-center fw-bold text-dark fs-6 bg-light border-start border-end">
+                                        {{ number_format($reqQty, 3) }}
+                                    </td>
+                                    <td class="text-center fw-bold fs-6 bg-light border-end">
+                                        @if($isCompleted)
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success py-1 px-2">
+                                                <i class="fas fa-check-circle me-1"></i>{{ number_format($purchQty, 3) }}
+                                            </span>
+                                        @elseif($isPartial)
+                                            <span class="badge bg-warning bg-opacity-15 text-warning-emphasis border border-warning py-1 px-2">
+                                                <i class="fas fa-chart-pie me-1"></i>{{ number_format($purchQty, 3) }}
+                                            </span>
+                                        @else
+                                            <span class="badge bg-light text-muted border py-1 px-2">
+                                                <i class="fas fa-clock me-1 text-secondary"></i>0.000
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        @if($isCompleted)
+                                            <span class="badge rounded-pill bg-success"><i class="fas fa-check me-1"></i>Purchased</span>
+                                        @elseif($isPartial)
+                                            <span class="badge rounded-pill bg-warning text-dark">Partial ({{ $reqQty > 0 ? round(($purchQty / $reqQty) * 100) : 0 }}%)</span>
+                                            <div class="small text-muted mt-1" style="font-size: 10px;">Rem: {{ number_format($remQty, 2) }} {{ $item->unit }}</div>
+                                        @else
+                                            <span class="badge rounded-pill bg-secondary bg-opacity-25 text-dark">Pending</span>
+                                        @endif
+                                    </td>
                                     <td><span class="badge bg-light text-dark border">{{ $item->unit }}</span></td>
                                     <td>{{ number_format($item->estimated_unit_cost ?? 0, 2) }} ETB</td>
-                                    <td class="fw-bold text-primary">{{ number_format($item->estimated_total ?? 0, 2) }} ETB</td>
-                                    @if($isSelectableStage)
+                                    <td class="fw-bold text-primary">{{ number_format($item->estimated_total ?? ($reqQty * (float)($item->estimated_unit_cost ?? 0)), 2) }} ETB</td>
                                     <td class="pe-3 text-end">
-                                        @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                                         <div class="btn-group btn-group-sm">
-                                            @if($totalNetStock > 0 || $totalRawStock > 0)
-                                            <button type="button" class="btn btn-outline-info" title="Quick Transfer this Item" onclick="quickTransferSingleItem({{ $item->id }})">
-                                                <i class="fas fa-truck-ramp-box"></i> Transfer
+                                            <!-- Edit / Update Item / Purchased Qty -->
+                                            <button type="button" class="btn btn-outline-secondary" title="Edit Item / Purchased Quantity"
+                                                    onclick="openEditPrItemModal({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}', {{ $reqQty }}, {{ $purchQty }}, '{{ addslashes($item->unit) }}', {{ (float)($item->estimated_unit_cost ?? 0) }}, '{{ addslashes($item->specifications ?? '') }}')">
+                                                <i class="fas fa-pen-to-square"></i>
+                                            </button>
+                                            @if($purchaseRequest->items->count() > 1 && !in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_CANCELLED]))
+                                            <button type="button" class="btn btn-outline-danger" title="Remove Item"
+                                                    onclick="confirmDeletePrItem({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}')">
+                                                <i class="fas fa-trash-can"></i>
                                             </button>
                                             @endif
 
-                                            <button type="button" class="btn btn-outline-success" title="Quick Purchase this Item" onclick="quickPurchaseSingleItem({{ $item->id }})">
-                                                <i class="fas fa-cart-shopping"></i> Purchase
-                                            </button>
-                                        </div>
-                                        @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER)
-                                        <div class="btn-group btn-group-sm">
-                                            @if($hasStock)
-                                            <button type="button" class="btn btn-warning text-dark fw-semibold" title="Send to Store Manager (Stock Available in other stores)" onclick="quickPmSendBackSingleItem({{ $item->id }})">
-                                                <i class="fas fa-undo me-1"></i>To Store
-                                            </button>
-                                            @else
-                                            <button type="button" class="btn btn-outline-secondary" title="Send back to Store Manager" onclick="quickPmSendBackSingleItem({{ $item->id }})">
-                                                <i class="fas fa-undo me-1"></i>To Store
-                                            </button>
+                                            @if($isSelectableStage)
+                                                @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                                    @if($totalNetStock > 0 || $totalRawStock > 0)
+                                                    <button type="button" class="btn btn-outline-info" title="Quick Transfer this Item" onclick="quickTransferSingleItem({{ $item->id }})">
+                                                        <i class="fas fa-truck-ramp-box"></i> Transfer
+                                                    </button>
+                                                    @endif
+
+                                                    <button type="button" class="btn btn-outline-success" title="Quick Purchase this Item" onclick="quickPurchaseSingleItem({{ $item->id }})">
+                                                        <i class="fas fa-cart-shopping"></i> Purchase
+                                                    </button>
+                                                @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER)
+                                                    @if($hasStock)
+                                                    <button type="button" class="btn btn-warning text-dark fw-semibold" title="Send to Store Manager (Stock Available in other stores)" onclick="quickPmSendBackSingleItem({{ $item->id }})">
+                                                        <i class="fas fa-undo me-1"></i>To Store
+                                                    </button>
+                                                    @else
+                                                    <button type="button" class="btn btn-outline-secondary" title="Send back to Store Manager" onclick="quickPmSendBackSingleItem({{ $item->id }})">
+                                                        <i class="fas fa-undo me-1"></i>To Store
+                                                    </button>
+                                                    @endif
+                                                    <button type="button" class="btn btn-outline-success" title="Direct Buy this item" onclick="quickPmDirectBuySingleItem({{ $item->id }})">
+                                                        <i class="fas fa-bolt"></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-outline-primary" title="Proforma quote for this item" onclick="quickPmProformaSingleItem({{ $item->id }})">
+                                                        <i class="fas fa-file-invoice-dollar"></i>
+                                                    </button>
+                                                @endif
                                             @endif
-                                            <button type="button" class="btn btn-outline-success" title="Direct Buy this item" onclick="quickPmDirectBuySingleItem({{ $item->id }})">
-                                                <i class="fas fa-bolt"></i>
-                                            </button>
-                                            <button type="button" class="btn btn-outline-primary" title="Proforma quote for this item" onclick="quickPmProformaSingleItem({{ $item->id }})">
-                                                <i class="fas fa-file-invoice-dollar"></i>
-                                            </button>
                                         </div>
-                                        @endif
                                     </td>
-                                    @endif
                                 </tr>
                                 @endforeach
                             </tbody>
@@ -1242,7 +1300,7 @@
                 </div>
             </div>
 
-            <!-- Proforma Invoices / Supplier Quotations Section -->
+                        <!-- Proforma Invoices / Supplier Quotations Section -->
             @if($purchaseRequest->sourcing_method === 'proforma' || $purchaseRequest->proformaInvoices->count() > 0 || in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM, \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION, \App\Models\PurchaseRequest::STATUS_PENDING_GM]))
             <div class="card border-0 shadow-sm mb-4 border-start border-4 border-primary">
                 <div class="card-header bg-white font-weight-bold py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -3001,4 +3059,175 @@ function submitQuickSupplier() {
     });
 }
 </script>
+
+<!-- Modal: Add Item to Purchase Request -->
+<div class="modal fade" id="addPrItemModal" tabindex="-1" aria-labelledby="addPrItemModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.add-item', $purchaseRequest) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fs-6 fw-bold" id="addPrItemModalLabel">
+                        <i class="fas fa-plus-circle me-2"></i>Add More Items to PR #{{ $purchaseRequest->pr_no }}
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Select Material / Product <span class="text-danger">*</span></label>
+                        <select class="form-select" name="product_id" id="modalAddProductId" required onchange="onModalProductChange(this)">
+                            <option value="">-- Choose Product / Material --</option>
+                            @php
+                                $allProducts = $availableProducts ?? \App\Models\Product::where('is_active', true)->orderBy('name')->get();
+                            @endphp
+                            @foreach($allProducts as $p)
+                                <option value="{{ $p->id }}" 
+                                        data-unit="{{ $p->unit ?? 'pcs' }}" 
+                                        data-cost="{{ (float)($p->unit_price ?? 0) }}"
+                                        data-name="{{ $p->name }}">
+                                    {{ $p->name }} {{ $p->code ? '('.$p->code.')' : '' }} [Unit: {{ $p->unit ?? 'pcs' }}]
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">Qty Requested (Asked) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.001" min="0.001" class="form-control fw-bold" name="quantity" id="modalAddQuantity" placeholder="0.000" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">Qty Purchased</label>
+                            <input type="number" step="0.001" min="0" class="form-control" name="purchased_quantity" id="modalAddPurchasedQuantity" placeholder="0.000" value="0">
+                            <small class="text-muted" style="font-size: 11px;">Already procured amount (optional)</small>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">Unit</label>
+                            <input type="text" class="form-control" name="unit" id="modalAddUnit" placeholder="e.g. Quintal, Pcs, Bag">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">Est. Unit Cost (ETB)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" name="estimated_unit_cost" id="modalAddUnitCost" placeholder="0.00">
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Specifications / Remarks</label>
+                        <textarea class="form-control" name="specifications" rows="2" placeholder="Optional notes, grade, brand preference..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary fw-bold shadow-sm">
+                        <i class="fas fa-plus me-1"></i> Add Item
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Edit Item / Purchased Quantity -->
+<div class="modal fade" id="editPrItemModal" tabindex="-1" aria-labelledby="editPrItemModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form id="editPrItemForm" method="POST">
+                @csrf
+                @method('PUT')
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title fs-6 fw-bold" id="editPrItemModalLabel">
+                        <i class="fas fa-pen-to-square me-2"></i>Update Item / Purchased Quantity
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Material / Product</label>
+                        <input type="text" class="form-control bg-light" id="modalEditProductName" readonly>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">Qty Requested (Asked) <span class="text-danger">*</span></label>
+                            <input type="number" step="0.001" min="0.001" class="form-control fw-bold" name="quantity" id="modalEditQuantity" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase text-success">Qty Purchased</label>
+                            <input type="number" step="0.001" min="0" class="form-control fw-bold border-success" name="purchased_quantity" id="modalEditPurchasedQuantity" required>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">Unit</label>
+                            <input type="text" class="form-control" name="unit" id="modalEditUnit">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">Est. Unit Cost (ETB)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" name="estimated_unit_cost" id="modalEditUnitCost">
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Specifications</label>
+                        <textarea class="form-control" name="specifications" id="modalEditSpecifications" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success fw-bold shadow-sm">
+                        <i class="fas fa-check me-1"></i> Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<form id="deletePrItemForm" method="POST" style="display:none;">
+    @csrf
+    @method('DELETE')
+</form>
+
+<script>
+function onModalProductChange(select) {
+    const selected = select.options[select.selectedIndex];
+    if (selected && selected.value) {
+        const unit = selected.getAttribute('data-unit') || 'pcs';
+        const cost = selected.getAttribute('data-cost') || '0';
+        const unitInput = document.getElementById('modalAddUnit');
+        const costInput = document.getElementById('modalAddUnitCost');
+        if (unitInput) unitInput.value = unit;
+        if (costInput && parseFloat(cost) > 0) {
+            costInput.value = parseFloat(cost).toFixed(2);
+        }
+    }
+}
+
+function openEditPrItemModal(itemId, productName, quantity, purchasedQty, unit, unitCost, specs) {
+    const form = document.getElementById('editPrItemForm');
+    form.action = "{{ url('purchase-requests/' . $purchaseRequest->id . '/items') }}/" + itemId;
+    document.getElementById('modalEditProductName').value = productName;
+    document.getElementById('modalEditQuantity').value = quantity;
+    document.getElementById('modalEditPurchasedQuantity').value = purchasedQty;
+    document.getElementById('modalEditUnit').value = unit;
+    document.getElementById('modalEditUnitCost').value = unitCost > 0 ? unitCost.toFixed(2) : '';
+    document.getElementById('modalEditSpecifications').value = specs || '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('editPrItemModal'));
+    modal.show();
+}
+
+function confirmDeletePrItem(itemId, productName) {
+    if (confirm('Are you sure you want to remove "' + productName + '" from this Purchase Request?')) {
+        const form = document.getElementById('deletePrItemForm');
+        form.action = "{{ url('purchase-requests/' . $purchaseRequest->id . '/items') }}/" + itemId;
+        form.submit();
+    }
+}
+</script>
+
 @endsection

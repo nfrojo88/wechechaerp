@@ -1659,6 +1659,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/store-intake', [App\Http\Controllers\PurchaseRequestController::class, 'storeIntake'])->name('purchase-requests.store-intake');
     Route::post('purchase-requests/{purchaseRequest}/reactivate', [App\Http\Controllers\PurchaseRequestController::class, 'reactivate'])->name('purchase-requests.reactivate');
     Route::post('purchase-requests/{purchaseRequest}/send-to-finance-direct', [App\Http\Controllers\PurchaseRequestController::class, 'sendToFinanceDirect'])->name('purchase-requests.send-to-finance-direct');
+    Route::post('purchase-requests/{purchaseRequest}/items', [App\Http\Controllers\PurchaseRequestController::class, 'addItem'])->name('purchase-requests.add-item');
+    Route::put('purchase-requests/{purchaseRequest}/items/{item}', [App\Http\Controllers\PurchaseRequestController::class, 'updateItem'])->name('purchase-requests.update-item');
+    Route::delete('purchase-requests/{purchaseRequest}/items/{item}', [App\Http\Controllers\PurchaseRequestController::class, 'removeItem'])->name('purchase-requests.remove-item');
 
     // ── Office Material Requests (Secretary -> HR Money Approval -> Finance Assign -> Finance Pay) ──
     Route::get('office-requests', [App\Http\Controllers\OfficeSupplyRequestController::class, 'index'])->name('office-requests.index');
