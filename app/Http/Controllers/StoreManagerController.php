@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Inventory;
+use App\Models\InventoryMovement;
 use App\Models\Transfer;
 use App\Models\TransferItem;
 use App\Models\MaterialRequest;
@@ -637,14 +638,15 @@ class StoreManagerController extends Controller
                 if ($inv) {
                     $inv->decrement('quantity_on_hand', $sentQty);
 
-                    DB::table('inventory_movements')->insert([
-                        'inventory_id' => $inv->id,
-                        'type'         => 'transfer_out',
-                        'quantity'     => -$sentQty,
-                        'reference_id' => $transfer->id,
-                        'notes'        => 'Transfer #' . $transfer->transfer_no . ' dispatched to driver (Slip: ' . $request->outgoing_slip_no . ')',
-                        'created_at'   => now(),
-                        'updated_at'   => now(),
+                    $remarks1 = 'Transfer #' . $transfer->transfer_no . ' dispatched to driver (Slip: ' . $request->outgoing_slip_no . ')';
+                    InventoryMovement::create([
+                        'inventory_id'   => $inv->id,
+                        'type'           => 'transfer_out',
+                        'quantity'       => -$sentQty,
+                        'reference_type' => Transfer::class,
+                        'reference_id'   => $transfer->id,
+                        'performed_by'   => Auth::id() ?? 1,
+                        'remarks'        => $remarks1,
                     ]);
                 }
             }
@@ -709,14 +711,15 @@ class StoreManagerController extends Controller
                     );
                     $inv->increment('quantity_on_hand', $receivedQty);
 
-                    DB::table('inventory_movements')->insert([
-                        'inventory_id' => $inv->id,
-                        'type'         => 'transfer_in',
-                        'quantity'     => $receivedQty,
-                        'reference_id' => $transfer->id,
-                        'notes'        => 'Transfer #' . $transfer->transfer_no . ' received from ' . ($transfer->fromStore->name ?? 'Source Store') . ' (Slip: ' . ($request->receiving_slip_no ?? $transfer->outgoing_slip_no ?? 'N/A') . ')',
-                        'created_at'   => now(),
-                        'updated_at'   => now(),
+                    $remarks2 = 'Transfer #' . $transfer->transfer_no . ' received from ' . ($transfer->fromStore->name ?? 'Source Store') . ' (Slip: ' . ($request->receiving_slip_no ?? $transfer->outgoing_slip_no ?? 'N/A') . ')';
+                    InventoryMovement::create([
+                        'inventory_id'   => $inv->id,
+                        'type'           => 'transfer_in',
+                        'quantity'       => $receivedQty,
+                        'reference_type' => Transfer::class,
+                        'reference_id'   => $transfer->id,
+                        'performed_by'   => Auth::id() ?? 1,
+                        'remarks'        => $remarks2,
                     ]);
                 }
             }
@@ -1358,14 +1361,15 @@ class StoreManagerController extends Controller
                 if ($inv) {
                     $inv->decrement('quantity_on_hand', $item->quantity);
 
-                    DB::table('inventory_movements')->insert([
-                        'inventory_id' => $inv->id,
-                        'type'         => 'issue',
-                        'quantity'     => -$item->quantity,
-                        'reference_id' => $materialRequest->id,
-                        'notes'        => 'Issued to Site Engineer for Material Request #' . ($materialRequest->reference_number ?? $materialRequest->id),
-                        'created_at'   => now(),
-                        'updated_at'   => now(),
+                    $remarks3 = 'Issued to Site Engineer for Material Request #' . ($materialRequest->reference_number ?? $materialRequest->id);
+                    InventoryMovement::create([
+                        'inventory_id'   => $inv->id,
+                        'type'           => 'issue',
+                        'quantity'       => -$item->quantity,
+                        'reference_type' => MaterialRequest::class,
+                        'reference_id'   => $materialRequest->id,
+                        'performed_by'   => Auth::id() ?? 1,
+                        'remarks'        => $remarks3,
                     ]);
                 }
             }
