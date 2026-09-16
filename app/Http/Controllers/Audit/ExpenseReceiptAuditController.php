@@ -136,7 +136,7 @@ class ExpenseReceiptAuditController extends Controller
 
         // 1. Fetch Expense Requests (STRICTLY PAID ONLY - no rejected, no pending)
         try {
-            $expenseRequests = ExpenseRequest::with(['user', 'employee', 'paidBy', 'chartOfAccount', 'coa'])
+            $expenseRequests = ExpenseRequest::with(['user', 'employee', 'paidBy', 'chartOfAccount', 'coa', 'project'])
                 ->whereNull('purchase_request_id')
                 ->where('request_number', 'not like', 'EXP-PR-%')
                 ->where('status', ExpenseRequest::STATUS_PAID)
@@ -165,6 +165,9 @@ class ExpenseReceiptAuditController extends Controller
                         'date'             => $req->paid_at ?? $req->created_at,
                         'requester'        => $applicantName,
                         'department'       => $dept,
+                        'project_id'       => $req->project_id,
+                        'project_name'     => $req->project?->name,
+                        'project_code'     => $req->project?->code,
                         'category'         => $req->category . ($req->other_reason ? ' (' . $req->other_reason . ')' : ''),
                         'description'      => $req->description,
                         'amount'           => (float) ($req->net_amount > 0 ? $req->net_amount : $req->amount),
@@ -231,6 +234,9 @@ class ExpenseReceiptAuditController extends Controller
                         'date'             => $payment?->paid_at ?? $pr->created_at,
                         'requester'        => $pr->requestedBy?->name ?? 'Procurement',
                         'department'       => $pr->project ? $pr->project->name : 'Site / Project',
+                        'project_id'       => $pr->project_id,
+                        'project_name'     => $pr->project?->name,
+                        'project_code'     => $pr->project?->code,
                         'category'         => 'Material Purchase',
                         'description'      => 'PR #' . $pr->pr_no . ($pr->justification ? ' - ' . $pr->justification : ''),
                         'amount'           => $amount,
@@ -276,6 +282,9 @@ class ExpenseReceiptAuditController extends Controller
                             'date'             => $req->paid_at ?? $req->created_at,
                             'requester'        => $req->requestedBy?->name ?? 'Office Staff',
                             'department'       => 'Head Office',
+                            'project_id'       => null,
+                            'project_name'     => 'Head Office',
+                            'project_code'     => 'HQ',
                             'category'         => 'Office Material',
                             'description'      => $req->office_purpose ?? 'Office Supplies & Materials',
                             'amount'           => (float) ($req->amount ?? 0),
@@ -322,6 +331,9 @@ class ExpenseReceiptAuditController extends Controller
                         'date'             => $exp->expense_date ?? $exp->created_at,
                         'requester'        => $exp->creator?->name ?? 'Direct Entry',
                         'department'       => $exp->project ? $exp->project->name : 'General',
+                        'project_id'       => $exp->project_id,
+                        'project_name'     => $exp->project?->name,
+                        'project_code'     => $exp->project?->code,
                         'category'         => ucfirst($exp->category ?? 'Operational'),
                         'description'      => $exp->description,
                         'amount'           => (float) $exp->amount,
@@ -387,13 +399,24 @@ class ExpenseReceiptAuditController extends Controller
                     || str_contains(strtolower($i->requester), $search)
                     || str_contains(strtolower($i->description), $search)
                     || str_contains(strtolower($i->category), $search)
-                    || str_contains(strtolower($i->department), $search);
+                    || str_contains(strtolower($i->department), $search)
+                    || (!empty($i->project_name) && str_contains(strtolower($i->project_name), $search))
+                    || (!empty($i->project_code) && str_contains(strtolower($i->project_code), $search));
             });
         }
 
         // Source Type Filter
         if ($request->filled('type') && $request->type !== 'all') {
             $items = $items->where('source_type', $request->type);
+        }
+
+        // Project Filter
+        if ($request->filled('project_id')) {
+            if ($request->project_id === 'unlinked') {
+                $items = $items->filter(fn($i) => empty($i->project_id));
+            } else {
+                $items = $items->filter(fn($i) => (string)$i->project_id === (string)$request->project_id);
+            }
         }
 
         // Date Filters
@@ -409,6 +432,9 @@ class ExpenseReceiptAuditController extends Controller
         // Sort latest first
         $items = $items->sortByDesc(fn($i) => Carbon::parse($i->date)->timestamp)->values();
 
+        // Projects list for linking and filtering
+        $projects = \App\Models\Project::orderBy('name')->get(['id', 'name', 'code']);
+
         // Paginate results manually for Collection
         $perPage = 25;
         $currentPage = (int) $request->input('page', 1);
@@ -422,6 +448,7 @@ class ExpenseReceiptAuditController extends Controller
 
         return view('audit.expense_receipts.index', [
             'items'                 => $paginatedItems,
+            'projects'              => $projects,
             'tab'                   => $tab,
             'totalExpensesCount'    => $totalExpensesCount,
             'totalExpensesAmount'   => $totalExpensesAmount,
@@ -715,6 +742,58 @@ class ExpenseReceiptAuditController extends Controller
         );
 
         return redirect()->back()->with('success', "Expense {$refNo} verified without receipt (audit waiver applied).");
+    }
+
+    /**
+     * Link or reassign an expense to a specific Project
+     */
+    public function linkProject(Request $request)
+    {
+        $this->authorizeAuditor();
+
+        $request->validate([
+            'source_type' => 'required|in:expense_request,purchase_request,expense,office_material_request',
+            'source_id'   => 'required|integer',
+            'project_id'  => 'nullable|exists:projects,id',
+            'notes'       => 'nullable|string|max:500',
+        ]);
+
+        $user = Auth::user();
+        $sourceType = $request->source_type;
+        $sourceId = $request->source_id;
+        $projectId = $request->project_id ?: null;
+        $project = $projectId ? \App\Models\Project::find($projectId) : null;
+        $projectName = $project ? "{$project->name} ({$project->code})" : 'Unlinked (General HQ)';
+        $refNo = '';
+
+        if ($sourceType === 'expense_request') {
+            $item = ExpenseRequest::findOrFail($sourceId);
+            $item->project_id = $projectId;
+            if ($request->filled('notes')) {
+                $existingNotes = $item->audit_receipt_notes ? $item->audit_receipt_notes . "\n" : '';
+                $item->audit_receipt_notes = $existingNotes . "[Project Link: {$projectName}] " . $request->notes;
+            }
+            $item->save();
+            $refNo = $item->request_number;
+        } elseif ($sourceType === 'purchase_request') {
+            $item = PurchaseRequest::findOrFail($sourceId);
+            $item->project_id = $projectId;
+            $item->save();
+            $refNo = $item->pr_no;
+        } elseif ($sourceType === 'expense') {
+            $item = Expense::findOrFail($sourceId);
+            $item->project_id = $projectId;
+            $item->save();
+            $refNo = 'EXP-' . $item->id;
+        }
+
+        ActivityLog::log(
+            'expense_project_linked',
+            "Auditor {$user->name} linked expense [{$refNo}] to Project: {$projectName}",
+            'Expense Audit & Compliance'
+        );
+
+        return redirect()->back()->with('success', "Expense {$refNo} successfully linked to {$projectName}.");
     }
 }
 

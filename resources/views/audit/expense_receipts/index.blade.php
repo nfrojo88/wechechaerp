@@ -179,7 +179,7 @@
                 <div class="col-md-3">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
-                        <input type="text" name="search" class="form-control form-control-sm border-start-0 ps-0" placeholder="Search ref #, requester, details..." value="{{ request('search') }}">
+                        <input type="text" name="search" class="form-control form-control-sm border-start-0 ps-0" placeholder="Search ref #, requester, project, details..." value="{{ request('search') }}">
                     </div>
                 </div>
 
@@ -194,20 +194,34 @@
                 </div>
 
                 <div class="col-md-2">
-                    <input type="date" name="start_date" class="form-control form-control-sm" placeholder="Start Date" value="{{ request('start_date') }}" title="Start Date">
+                    <select name="project_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">All Projects</option>
+                        <option value="unlinked" {{ request('project_id') === 'unlinked' ? 'selected' : '' }}>⚠️ Unlinked (No Project)</option>
+                        @if(isset($projects))
+                            @foreach($projects as $proj)
+                                <option value="{{ $proj->id }}" {{ (string)request('project_id') === (string)$proj->id ? 'selected' : '' }}>
+                                    {{ $proj->code ? '[' . $proj->code . '] ' : '' }}{{ Str::limit($proj->name, 22) }}
+                                </option>
+                            @endforeach
+                        @endif
+                    </select>
                 </div>
 
                 <div class="col-md-2">
+                    <input type="date" name="start_date" class="form-control form-control-sm" placeholder="Start Date" value="{{ request('start_date') }}" title="Start Date">
+                </div>
+
+                <div class="col-md-1">
                     <input type="date" name="end_date" class="form-control form-control-sm" placeholder="End Date" value="{{ request('end_date') }}" title="End Date">
                 </div>
 
-                <div class="col-md-3 d-flex gap-2">
+                <div class="col-md-2 d-flex gap-1 justify-content-end">
                     <button type="submit" class="btn btn-sm btn-primary px-3 rounded-pill">
                         <i class="fa-solid fa-filter me-1"></i> Filter
                     </button>
-                    @if(request('search') || request('type') || request('start_date') || request('end_date'))
-                        <a href="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index', ['tab' => $tab]) : url('/audit/expense-receipts?tab=' . $tab) }}" class="btn btn-sm btn-outline-danger px-3 rounded-pill">
-                            <i class="fa-solid fa-xmark me-1"></i> Clear
+                    @if(request('search') || (request('type') && request('type') !== 'all') || request('project_id') || request('start_date') || request('end_date'))
+                        <a href="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index', ['tab' => $tab]) : url('/audit/expense-receipts?tab=' . $tab) }}" class="btn btn-sm btn-outline-danger px-2 rounded-pill" title="Clear all filters">
+                            <i class="fa-solid fa-xmark"></i>
                         </a>
                     @endif
                 </div>
@@ -222,6 +236,7 @@
                         <th class="ps-4 py-3">Ref # / Date</th>
                         <th class="py-3">Requester / Dept</th>
                         <th class="py-3">Category &amp; Description</th>
+                        <th class="py-3">Project</th>
                         <th class="py-3 text-end">Amount</th>
                         <th class="py-3 text-center">Receipt Status</th>
                         <th class="pe-4 py-3 text-end">Audit Actions</th>
@@ -259,12 +274,43 @@
                             </td>
 
                             <!-- Category & Description -->
-                            <td class="py-3" style="max-width: 320px;">
+                            <td class="py-3" style="max-width: 280px;">
                                 <span class="badge bg-light text-dark border mb-1">{{ $item->category }}</span>
                                 <div class="text-dark small text-truncate" title="{{ $item->description }}">{{ $item->description }}</div>
                                 @if($item->audit_notes)
                                     <div class="text-warning small mt-1 font-monospace" style="font-size:0.72rem;">
                                         <i class="fa-solid fa-comment-dots me-1"></i>Audit Note: {{ Str::limit($item->audit_notes, 50) }}
+                                    </div>
+                                @endif
+                            </td>
+
+                            <!-- Project Link Column -->
+                            <td class="py-3" style="min-width: 150px; max-width: 200px;">
+                                @if(!empty($item->project_name))
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-2 text-truncate py-1 px-2" style="max-width: 140px;" title="{{ $item->project_name }} {{ $item->project_code ? '(' . $item->project_code . ')' : '' }}">
+                                            <i class="fa-solid fa-building me-1"></i>{{ $item->project_code ? $item->project_code . ' · ' : '' }}{{ $item->project_name }}
+                                        </span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-muted" 
+                                                onclick="openAuditModal('linkProjectModal_{{ $item->unique_key }}')" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#linkProjectModal_{{ $item->unique_key }}" 
+                                                title="Reassign / Change Project">
+                                            <i class="fa-solid fa-pen-to-square" style="font-size:0.75rem;"></i>
+                                        </button>
+                                    </div>
+                                @else
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="badge bg-light text-muted border border-dashed rounded-2 py-1 px-2" title="Expense not linked to any project (General HQ)">
+                                            <i class="fa-solid fa-link-slash me-1 text-warning"></i>Unlinked
+                                        </span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-primary fw-semibold" 
+                                                onclick="openAuditModal('linkProjectModal_{{ $item->unique_key }}')" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#linkProjectModal_{{ $item->unique_key }}" 
+                                                title="Link to a Construction Project" style="font-size:0.72rem; text-decoration:none;">
+                                            <i class="fa-solid fa-plus-circle me-1"></i>Link
+                                        </button>
                                     </div>
                                 @endif
                             </td>
@@ -314,7 +360,16 @@
                                         </a>
                                     @endif
 
-                                    <!-- 2. Ask For Receipt Modal Trigger -->
+                                    <!-- 2. Project Link / Reassign Trigger -->
+                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-3 px-2" 
+                                            onclick="openAuditModal('linkProjectModal_{{ $item->unique_key }}')" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#linkProjectModal_{{ $item->unique_key }}" 
+                                            title="{{ !empty($item->project_name) ? 'Reassign Project (' . $item->project_name . ')' : 'Link Expense to Project' }}">
+                                        <i class="fa-solid fa-diagram-project me-1 text-primary"></i> Project
+                                    </button>
+
+                                    <!-- 3. Ask For Receipt Modal Trigger -->
                                     <button type="button" class="btn btn-outline-warning text-dark btn-sm rounded-3 px-2" 
                                             onclick="openAuditModal('askReceiptModal_{{ $item->unique_key }}')" 
                                             data-bs-toggle="modal" 
@@ -323,7 +378,7 @@
                                         <i class="fa-solid fa-envelope-open-text me-1"></i> Ask Receipt
                                     </button>
 
-                                    <!-- 3. Add / Upload Receipt Modal Trigger -->
+                                    <!-- 4. Add / Upload Receipt Modal Trigger -->
                                     <button type="button" class="btn btn-primary btn-sm rounded-3 px-2 fw-semibold" 
                                             onclick="openAuditModal('attachReceiptModal_{{ $item->unique_key }}')" 
                                             data-bs-toggle="modal" 
@@ -332,7 +387,7 @@
                                         <i class="fa-solid fa-upload me-1"></i> Add Receipt
                                     </button>
 
-                                    <!-- 4. Verify Without Receipt Action Button -->
+                                    <!-- 5. Verify Without Receipt Action Button -->
                                     @if($item->audit_status === 'verified_no_receipt')
                                         <button type="button" class="btn btn-info text-white btn-sm rounded-3 px-2 fw-bold shadow-xs" 
                                                 onclick="openAuditModal('verifyNoReceiptModal_{{ $item->unique_key }}')" 
@@ -351,7 +406,7 @@
                                         </button>
                                     @endif
 
-                                    <!-- 5. Verify Receipt Stamp -->
+                                    <!-- 6. Verify Receipt Stamp -->
                                     @if($item->has_receipt && !$item->audit_verified_at)
                                         <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.verify') ? route('audit.expense-receipts.verify') : url('/audit/expense-receipts/verify') }}" class="d-inline" onsubmit="return confirm('Verify this receipt as audit-compliant?')">
                                             @csrf
@@ -367,7 +422,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="text-center py-5 text-muted">
+                            <td colspan="7" class="text-center py-5 text-muted">
                                 <div class="d-flex flex-column align-items-center">
                                     <div class="rounded-circle bg-light p-3 mb-3 text-secondary">
                                         <i class="fa-solid fa-receipt fa-3x opacity-50"></i>
@@ -538,6 +593,74 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal 4: Link / Reassign to Project -->
+    <div class="modal fade" id="linkProjectModal_{{ $item->unique_key }}" tabindex="-1" aria-labelledby="linkProjectModalLabel_{{ $item->unique_key }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <form method="POST" action="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.link-project') ? route('audit.expense-receipts.link-project') : url('/audit/expense-receipts/link-project') }}">
+                    @csrf
+                    <input type="hidden" name="source_type" value="{{ $item->source_type }}">
+                    <input type="hidden" name="source_id" value="{{ $item->source_id }}">
+
+                    <div class="modal-header bg-dark text-white border-0 py-3 px-4">
+                        <h5 class="modal-title fw-bold text-white" id="linkProjectModalLabel_{{ $item->unique_key }}">
+                            <i class="fa-solid fa-diagram-project me-2 text-primary"></i>Link Expense to Project
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 bg-white">
+                        <div class="p-3 bg-light rounded-3 mb-3 border">
+                            <div class="d-flex justify-content-between text-muted small mb-1">
+                                <span>Reference &amp; Type:</span>
+                                <strong class="text-dark font-monospace">{{ $item->reference_no }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted small mb-1">
+                                <span>Requester / Payee:</span>
+                                <strong class="text-dark">{{ $item->requester }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted small mb-1">
+                                <span>Expense Amount:</span>
+                                <strong class="text-success fw-bold">ETB {{ number_format($item->amount, 2) }}</strong>
+                            </div>
+                            <div class="d-flex justify-content-between text-muted small">
+                                <span>Current Project:</span>
+                                <span class="badge {{ !empty($item->project_name) ? 'bg-primary-subtle text-primary border border-primary-subtle' : 'bg-warning-subtle text-warning border border-warning-subtle' }}">
+                                    {{ !empty($item->project_name) ? ($item->project_code ? '[' . $item->project_code . '] ' : '') . $item->project_name : 'None (Unlinked / General HQ)' }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-dark small text-uppercase">Assign Construction Project <span class="text-danger">*</span></label>
+                            <select name="project_id" class="form-select select2-project">
+                                <option value="">-- No Project (General HQ / Unlink) --</option>
+                                @if(isset($projects))
+                                    @foreach($projects as $projectOption)
+                                        <option value="{{ $projectOption->id }}" {{ (string)$item->project_id === (string)$projectOption->id ? 'selected' : '' }}>
+                                            {{ $projectOption->code ? '[' . $projectOption->code . '] ' : '' }}{{ $projectOption->name }}
+                                        </option>
+                                    @endforeach
+                                @endif
+                            </select>
+                            <small class="text-muted">Linking this expense links its cost and audit trail to the selected construction project.</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-dark small text-uppercase">Audit Reason / Project Allocation Note (Optional)</label>
+                            <input type="text" name="notes" class="form-control" placeholder="e.g. Disbursed specifically for site works / material transport">
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 py-3 px-4">
+                        <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="fa-solid fa-link me-1"></i> Save Project Link
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 @endforeach
 
 @push('scripts')
@@ -612,7 +735,7 @@ function openAuditModal(modalId) {
 
 // Ensure all audit action modals are attached directly to body on page load
 document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.modal[id^="askReceiptModal_"], .modal[id^="attachReceiptModal_"], .modal[id^="verifyNoReceiptModal_"]').forEach(function(m) {
+    document.querySelectorAll('.modal[id^="askReceiptModal_"], .modal[id^="attachReceiptModal_"], .modal[id^="verifyNoReceiptModal_"], .modal[id^="linkProjectModal_"]').forEach(function(m) {
         if (m.parentNode !== document.body) {
             document.body.appendChild(m);
         }
