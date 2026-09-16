@@ -508,23 +508,24 @@
             <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
                 <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-chart-pie me-2 text-primary"></i>Project Status</h6>
+                    <span class="badge bg-primary-subtle text-primary rounded-pill px-2" style="font-size:0.72rem;">{{ $projectStatus->sum('total') }} Total</span>
                 </div>
-                <div class="card-body">
-                    <div id="gm-chart-data" data-status="@json($projectStatus->pluck('status'))" data-total="@json($projectStatus->pluck('total'))" class="d-none"></div>
-                    <div style="position:relative;height:180px">
+                <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div style="position:relative; height:170px; width:100%;">
                         <canvas id="statusDonutChart"></canvas>
                     </div>
-                    <div class="mt-3">
+                    <div class="mt-3 pt-2 border-top">
                         @foreach($projectStatus as $ps)
                         <div class="d-flex justify-content-between align-items-center mb-1">
                             <span class="badge rounded-pill
                                 @if($ps->status == 'active') bg-success
                                 @elseif($ps->status == 'completed') bg-primary
                                 @elseif($ps->status == 'cancelled') bg-danger
+                                @elseif($ps->status == 'planning') bg-info text-dark
                                 @else bg-secondary @endif">
                                 {{ ucfirst($ps->status) }}
                             </span>
-                            <strong>{{ $ps->total }}</strong>
+                            <strong class="text-dark">{{ $ps->total }}</strong>
                         </div>
                         @endforeach
                     </div>
@@ -535,55 +536,86 @@
         <!-- Monthly Expense Trend Chart -->
         <div class="col-xl-5">
             <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 fw-bold"><i class="fas fa-chart-bar me-2 text-warning"></i>Monthly Expense &amp; Material Trend <small class="text-muted fw-normal">(Last 6 Mo.)</small></h6>
+                <div class="card-header bg-white border-bottom py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h6 class="mb-0 fw-bold"><i class="fas fa-chart-bar me-2 text-warning"></i>Monthly Expense &amp; Material Trend</h6>
+                        <small class="text-muted" style="font-size:0.73rem;">Cash Disbursed vs Daily Material Consumption (Last 6 Mo.)</small>
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Trend display mode">
+                        <button type="button" class="btn btn-xs btn-outline-secondary active py-0 px-2" id="gmTrendStackedBtn" title="Stacked Bars" style="font-size:0.73rem;">
+                            <i class="fa-solid fa-layer-group me-1"></i>Stacked
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" id="gmTrendGroupedBtn" title="Side-by-side Bars" style="font-size:0.73rem;">
+                            <i class="fa-solid fa-chart-column me-1"></i>Grouped
+                        </button>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <div id="gm-trend-data"
-                        data-labels="@json(collect($monthlyExpenseTrend)->pluck('label'))"
-                        data-cash="@json(collect($monthlyExpenseTrend)->pluck('cash'))"
-                        data-material="@json(collect($monthlyExpenseTrend)->pluck('material'))"
-                        class="d-none"></div>
-                    <div style="position:relative;height:220px">
+                <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    <div style="position:relative; height:220px; width:100%;">
                         <canvas id="expenseTrendChart"></canvas>
+                    </div>
+                    <div class="d-flex justify-content-around align-items-center pt-2 mt-2 border-top text-center" style="font-size:0.75rem;">
+                        <div>
+                            <span class="text-muted d-block" style="font-size:0.68rem;"><i class="fa-solid fa-square text-warning me-1"></i>6-Mo Cash</span>
+                            <strong class="text-warning">ETB {{ number_format(collect($monthlyExpenseTrend)->sum('cash'), 0) }}</strong>
+                        </div>
+                        <div class="border-start ps-3">
+                            <span class="text-muted d-block" style="font-size:0.68rem;"><i class="fa-solid fa-square text-success me-1"></i>6-Mo Material</span>
+                            <strong class="text-success">ETB {{ number_format(collect($monthlyExpenseTrend)->sum('material'), 0) }}</strong>
+                        </div>
+                        <div class="border-start ps-3">
+                            <span class="text-muted d-block" style="font-size:0.68rem;"><i class="fa-solid fa-circle-check text-primary me-1"></i>Combined Total</span>
+                            <strong class="text-primary">ETB {{ number_format(collect($monthlyExpenseTrend)->sum('total'), 0) }}</strong>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Expense Category Breakdown -->
+        <!-- Expense Category Breakdown with Period Filter & Graph -->
         <div class="col-xl-4">
             <div class="card shadow-sm border-0 h-100" style="border-radius: 12px;">
-                <div class="card-header bg-white border-bottom py-3">
+                <div class="card-header bg-white border-bottom py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="mb-0 fw-bold"><i class="fas fa-tags me-2 text-info"></i>Expense by Category</h6>
+                    {{-- Interactive Month Chooser Dropdown --}}
+                    <div style="min-width: 145px;">
+                        <select id="expenseCategoryPeriodSelect" class="form-select form-select-sm py-1 px-2 border-secondary-subtle rounded-pill shadow-xs" style="font-size:0.75rem; font-weight:600;">
+                            <option value="this_month">This Month ({{ now()->format('M Y') }})</option>
+                            <option value="prev_month">Previous Month ({{ now()->subMonths(1)->format('M Y') }})</option>
+                            @for($i = 2; $i < 6; $i++)
+                                @php $mDate = now()->subMonths($i); @endphp
+                                <option value="{{ $mDate->format('Y-m') }}">{{ $mDate->format('F Y') }}</option>
+                            @endfor
+                            <option value="all">All Time / Last 6 Mo.</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="card-body p-0">
-                    @if($expenseCategoryBreakdown->isEmpty())
-                        <div class="text-center text-muted py-4">
-                            <i class="fas fa-inbox fa-2x mb-2 d-block"></i>No expense data
-                        </div>
-                    @else
-                    <ul class="list-group list-group-flush">
-                        @foreach($expenseCategoryBreakdown as $cat)
-                        @php
-                            $catTotal = $expenseCategoryBreakdown->sum('total');
-                            $pct = $catTotal > 0 ? round(($cat->total / $catTotal) * 100, 1) : 0;
-                            $colors = ['#4e73df','#1cc88a','#36b9cc','#f6c23e','#e74a3b','#fd7e14','#6f42c1','#20c997'];
-                            $colorIdx = $loop->index % count($colors);
-                        @endphp
-                        <li class="list-group-item border-0 py-2 px-3">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="fw-semibold text-capitalize" style="font-size:0.85rem;">{{ $cat->category ?? 'Uncategorized' }}</span>
-                                <span class="text-muted small">{{ number_format($cat->total, 0) }} ETB</span>
-                            </div>
-                            <div class="progress" style="height:5px">
-                                <div class="progress-bar" style="width:{{ $pct }}%;background:{{ $colors[$colorIdx] }}"></div>
-                            </div>
-                            <small class="text-muted">{{ $pct }}% · {{ $cat->count }} requests</small>
-                        </li>
-                        @endforeach
-                    </ul>
-                    @endif
+                <div class="card-body p-3 d-flex flex-column justify-content-between">
+                    {{-- Header Summary --}}
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-muted small" style="font-size:0.75rem;" id="categoryPeriodTitle">
+                            Showing: <strong class="text-dark">This Month</strong>
+                        </span>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2 py-1" id="categoryPeriodTotalBadge" style="font-size:0.75rem;">
+                            Total: ETB 0
+                        </span>
+                    </div>
+
+                    {{-- Category Donut Chart --}}
+                    <div id="categoryChartWrapper" style="position:relative; height:130px; width:100%;" class="mb-2">
+                        <canvas id="expenseCategoryChart"></canvas>
+                    </div>
+
+                    {{-- Empty State (if no expenses in selected period) --}}
+                    <div id="categoryEmptyState" class="text-center py-4 d-none">
+                        <i class="fas fa-inbox fa-2x mb-2 text-muted opacity-50 d-block"></i>
+                        <span class="text-muted small">No expenses recorded for this period</span>
+                    </div>
+
+                    {{-- Category List Container (dynamically updated by JS) --}}
+                    <div id="categoryListContainer" style="max-height: 180px; overflow-y: auto; padding-right: 4px;">
+                        {{-- Injected dynamically --}}
+                    </div>
                 </div>
             </div>
         </div>
@@ -813,88 +845,344 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// ── Project Status Donut Chart ────────────────────────────────────────────────
-var chartElement = document.getElementById("gm-chart-data");
-var statusLabels = JSON.parse(chartElement.dataset.status || '[]');
-var statusTotals = JSON.parse(chartElement.dataset.total || '[]');
+(function() {
+    // ── Direct Data from Controller (No HTML attribute parsing issues) ────────
+    var rawStatusLabels = @json($projectStatus->pluck('status')->map(fn($s) => ucfirst($s))->values());
+    var rawStatusTotals = @json($projectStatus->pluck('total')->map(fn($t) => (int)$t)->values());
 
-if (statusLabels.length > 0) {
-    var ctxDonut = document.getElementById("statusDonutChart");
-    new Chart(ctxDonut, {
-        type: 'doughnut',
-        data: {
-            labels: statusLabels,
-            datasets: [{
-                data: statusTotals,
-                backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'],
-                borderWidth: 2,
-            }],
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } },
-            cutout: '70%',
+    var statusLabels = Array.isArray(rawStatusLabels) ? rawStatusLabels : Object.values(rawStatusLabels || {});
+    var statusTotals = Array.isArray(rawStatusTotals) ? rawStatusTotals : Object.values(rawStatusTotals || {});
+
+    var rawTrendLabels   = @json(collect($monthlyExpenseTrend)->pluck('label')->values());
+    var rawTrendCash     = @json(collect($monthlyExpenseTrend)->pluck('cash')->values());
+    var rawTrendMaterial = @json(collect($monthlyExpenseTrend)->pluck('material')->values());
+
+    var trendLabels   = Array.isArray(rawTrendLabels) ? rawTrendLabels : Object.values(rawTrendLabels || {});
+    var trendCash     = Array.isArray(rawTrendCash) ? rawTrendCash : Object.values(rawTrendCash || {});
+    var trendMaterial = Array.isArray(rawTrendMaterial) ? rawTrendMaterial : Object.values(rawTrendMaterial || {});
+
+    var categoryDataByPeriod = @json($categoryDataByPeriod ?? []);
+
+    var donutChartInstance = null;
+    var trendChartInstance = null;
+    var categoryChartInstance = null;
+    var isTrendStacked = true;
+
+    function ensureChart(callback) {
+        if (typeof Chart !== 'undefined') {
+            callback();
+            return;
         }
-    });
-}
+        var checkCount = 0;
+        var timer = setInterval(function() {
+            checkCount++;
+            if (typeof Chart !== 'undefined') {
+                clearInterval(timer);
+                callback();
+            } else if (checkCount > 40) {
+                clearInterval(timer);
+                // Fallback load if needed
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+                s.onload = callback;
+                document.head.appendChild(s);
+            }
+        }, 100);
+    }
 
-// ── Monthly Expense Trend Bar Chart ─────────────────────────────────────────
-var trendEl = document.getElementById("gm-trend-data");
-var trendLabels   = JSON.parse(trendEl.dataset.labels   || '[]');
-var trendCash     = JSON.parse(trendEl.dataset.cash     || '[]');
-var trendMaterial = JSON.parse(trendEl.dataset.material || '[]');
+    // ── 1. Project Status Donut Chart ──────────────────────────────────────────
+    function renderStatusChart() {
+        var canvas = document.getElementById("statusDonutChart");
+        if (!canvas || statusLabels.length === 0) return;
 
-if (trendLabels.length > 0) {
-    var ctxTrend = document.getElementById("expenseTrendChart");
-    new Chart(ctxTrend, {
-        type: 'bar',
-        data: {
-            labels: trendLabels,
-            datasets: [
-                {
-                    label: 'Cash Expenses',
-                    data: trendCash,
-                    backgroundColor: 'rgba(253,126,20,0.75)',
-                    borderRadius: 4,
-                },
-                {
-                    label: 'Material Consumption',
-                    data: trendMaterial,
-                    backgroundColor: 'rgba(32,201,151,0.75)',
-                    borderRadius: 4,
-                }
-            ],
-        },
-        options: {
-            maintainAspectRatio: false,
-            responsive: true,
-            plugins: {
-                legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
-                tooltip: {
-                    callbacks: {
-                        label: function(ctx) {
-                            return ctx.dataset.label + ': ' + new Intl.NumberFormat().format(ctx.parsed.y) + ' ETB';
+        if (donutChartInstance) {
+            donutChartInstance.destroy();
+        }
+
+        var colorMap = {
+            'Active': '#10b981',
+            'Completed': '#3b82f6',
+            'Cancelled': '#ef4444',
+            'Planning': '#0ea5e9',
+            'On_hold': '#f59e0b',
+            'Pending': '#6366f1'
+        };
+
+        var bgColors = statusLabels.map(function(lbl, idx) {
+            return colorMap[lbl] || ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'][idx % 5];
+        });
+
+        donutChartInstance = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: statusLabels,
+                datasets: [{
+                    data: statusTotals,
+                    backgroundColor: bgColors,
+                    borderWidth: 2,
+                    borderColor: '#ffffff',
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { size: 10, weight: '600' }, padding: 8 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                return ' ' + ctx.label + ': ' + ctx.parsed + ' projects';
+                            }
                         }
                     }
-                }
+                },
+                cutout: '68%'
+            }
+        });
+    }
+
+    // ── 2. Monthly Expense & Material Trend Chart ───────────────────────────────
+    function renderTrendChart() {
+        var canvas = document.getElementById("expenseTrendChart");
+        if (!canvas || trendLabels.length === 0) return;
+
+        if (trendChartInstance) {
+            trendChartInstance.destroy();
+        }
+
+        trendChartInstance = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: trendLabels,
+                datasets: [
+                    {
+                        label: 'Cash Expenses',
+                        data: trendCash,
+                        backgroundColor: 'rgba(245, 158, 11, 0.85)',
+                        borderColor: '#f59e0b',
+                        borderWidth: 1,
+                        borderRadius: 5,
+                        maxBarThickness: 38
+                    },
+                    {
+                        label: 'Material Consumption',
+                        data: trendMaterial,
+                        backgroundColor: 'rgba(16, 185, 129, 0.85)',
+                        borderColor: '#10b981',
+                        borderWidth: 1,
+                        borderRadius: 5,
+                        maxBarThickness: 38
+                    }
+                ]
             },
-            scales: {
-                x: { stacked: true, grid: { display: false } },
-                y: {
-                    stacked: true,
-                    ticks: {
-                        callback: function(val) {
-                            if (val >= 1000000) return (val/1000000).toFixed(1) + 'M';
-                            if (val >= 1000) return (val/1000).toFixed(0) + 'K';
-                            return val;
+            options: {
+                maintainAspectRatio: false,
+                responsive: true,
+                animation: { duration: 650, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        align: 'end',
+                        labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { size: 11, weight: '600' }, padding: 10 }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function(ctx) {
+                                var val = Number(ctx.parsed.y || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                                return ' ' + ctx.dataset.label + ': ' + val + ' ETB';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: isTrendStacked,
+                        grid: { display: false },
+                        ticks: { font: { size: 11, weight: '500' }, color: '#64748b' }
+                    },
+                    y: {
+                        stacked: isTrendStacked,
+                        beginAtZero: true,
+                        grid: { color: 'rgba(226, 232, 240, 0.65)' },
+                        ticks: {
+                            font: { size: 10 },
+                            color: '#94a3b8',
+                            callback: function(val) {
+                                if (val >= 1000000) return (val/1000000).toFixed(1) + 'M';
+                                if (val >= 1000) return (val/1000).toFixed(0) + 'K';
+                                return Number(val).toLocaleString();
+                            }
                         }
                     }
                 }
             }
+        });
+    }
+
+    // ── 3. Expense by Category (Interactive Month Chooser) ──────────────────────
+    function updateCategoryView(periodKey) {
+        var periodData = categoryDataByPeriod[periodKey];
+
+        // Fallback to 'all' if selected period data is missing
+        if (!periodData) {
+            periodData = categoryDataByPeriod['all'] || { grand_total: 0, categories: [], labels: [], totals: [], colors: [] };
         }
-    });
-}
+
+        var titleEl = document.getElementById("categoryPeriodTitle");
+        var badgeEl = document.getElementById("categoryPeriodTotalBadge");
+        var chartWrapper = document.getElementById("categoryChartWrapper");
+        var emptyState = document.getElementById("categoryEmptyState");
+        var listContainer = document.getElementById("categoryListContainer");
+
+        var selectEl = document.getElementById("expenseCategoryPeriodSelect");
+        var selectedText = selectEl ? selectEl.options[selectEl.selectedIndex].text : 'Selected Period';
+
+        if (titleEl) {
+            titleEl.innerHTML = 'Showing: <strong class="text-dark">' + selectedText + '</strong>';
+        }
+
+        var formattedTotal = Number(periodData.grand_total || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        if (badgeEl) {
+            badgeEl.innerText = 'Total: ' + formattedTotal + ' ETB';
+        }
+
+        var categories = periodData.categories || [];
+
+        if (categories.length === 0 || periodData.grand_total <= 0) {
+            if (chartWrapper) chartWrapper.classList.add("d-none");
+            if (listContainer) listContainer.classList.add("d-none");
+            if (emptyState) emptyState.classList.remove("d-none");
+            if (categoryChartInstance) {
+                categoryChartInstance.destroy();
+                categoryChartInstance = null;
+            }
+            return;
+        }
+
+        if (chartWrapper) chartWrapper.classList.remove("d-none");
+        if (listContainer) listContainer.classList.remove("d-none");
+        if (emptyState) emptyState.classList.add("d-none");
+
+        // Render / Update Donut Chart
+        var canvas = document.getElementById("expenseCategoryChart");
+        if (canvas) {
+            if (categoryChartInstance) {
+                categoryChartInstance.destroy();
+            }
+
+            categoryChartInstance = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: periodData.labels || [],
+                    datasets: [{
+                        data: periodData.totals || [],
+                        backgroundColor: periodData.colors || [],
+                        borderWidth: 2,
+                        borderColor: '#ffffff',
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    var val = Number(ctx.parsed || 0).toLocaleString('en-US', { minimumFractionDigits: 0 });
+                                    var pct = periodData.grand_total > 0 ? ((ctx.parsed / periodData.grand_total) * 100).toFixed(1) : 0;
+                                    return ' ' + ctx.label + ': ' + val + ' ETB (' + pct + '%)';
+                                }
+                            }
+                        }
+                    },
+                    cutout: '65%'
+                }
+            });
+        }
+
+        // Render Category Progress List
+        if (listContainer) {
+            var html = '<ul class="list-group list-group-flush">';
+            categories.forEach(function(cat) {
+                var amt = Number(cat.total).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+                html += '<li class="list-group-item border-0 py-2 px-1 bg-transparent">';
+                html += '  <div class="d-flex justify-content-between align-items-center mb-1">';
+                html += '    <span class="fw-semibold text-dark text-truncate" style="font-size:0.82rem;">';
+                html += '      <i class="fa-solid fa-circle me-1" style="color:' + cat.color + '; font-size:0.6rem;"></i>' + cat.category;
+                html += '    </span>';
+                html += '    <span class="text-dark small fw-bold" style="font-size:0.8rem;">' + amt + ' ETB</span>';
+                html += '  </div>';
+                html += '  <div class="progress" style="height:6px; border-radius:3px; background-color:#e2e8f0;">';
+                html += '    <div class="progress-bar rounded-pill" style="width:' + cat.pct + '%; background-color:' + cat.color + '"></div>';
+                html += '  </div>';
+                html += '  <div class="d-flex justify-content-between align-items-center text-muted mt-1" style="font-size:0.72rem;">';
+                html += '    <span>' + cat.pct + '% share</span>';
+                html += '    <span>' + cat.count + ' request' + (cat.count > 1 ? 's' : '') + '</span>';
+                html += '  </div>';
+                html += '</li>';
+            });
+            html += '</ul>';
+            listContainer.innerHTML = html;
+        }
+    }
+
+    function initAll() {
+        ensureChart(function() {
+            renderStatusChart();
+            renderTrendChart();
+
+            // Setup Trend Mode Buttons (Stacked vs Grouped)
+            var btnStacked = document.getElementById("gmTrendStackedBtn");
+            var btnGrouped = document.getElementById("gmTrendGroupedBtn");
+            if (btnStacked && btnGrouped) {
+                btnStacked.addEventListener("click", function() {
+                    if (isTrendStacked) return;
+                    isTrendStacked = true;
+                    btnStacked.classList.add("active");
+                    btnGrouped.classList.remove("active");
+                    renderTrendChart();
+                });
+                btnGrouped.addEventListener("click", function() {
+                    if (!isTrendStacked) return;
+                    isTrendStacked = false;
+                    btnGrouped.classList.add("active");
+                    btnStacked.classList.remove("active");
+                    renderTrendChart();
+                });
+            }
+
+            // Setup Category Period Dropdown Selector
+            var selectEl = document.getElementById("expenseCategoryPeriodSelect");
+            if (selectEl) {
+                // If this_month has no data, check if all-time has data and fallback gracefully
+                var thisMonthData = categoryDataByPeriod['this_month'];
+                var initialPeriod = (thisMonthData && thisMonthData.grand_total > 0) ? 'this_month' : 'all';
+                selectEl.value = initialPeriod;
+                updateCategoryView(initialPeriod);
+
+                selectEl.addEventListener("change", function() {
+                    updateCategoryView(this.value);
+                });
+            }
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener("DOMContentLoaded", initAll);
+    } else {
+        initAll();
+    }
+    window.addEventListener("load", initAll);
+})();
 </script>
 @endsection

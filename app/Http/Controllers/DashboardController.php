@@ -495,8 +495,27 @@ class DashboardController extends Controller
                 $m = $date->month;
                 $y = $date->year;
 
-                $cashExp = (float) \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
-                    ->whereMonth('created_at', $m)->whereYear('created_at', $y)->sum('amount');
+                $cashExp = (float) \App\Models\ExpenseRequest::whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'paid', 'approved'])
+                    ->where(function ($q) use ($m, $y) {
+                        $q->where(function ($sq) use ($m, $y) {
+                            $sq->whereNotNull('paid_at')->whereMonth('paid_at', $m)->whereYear('paid_at', $y);
+                        })->orWhere(function ($sq) use ($m, $y) {
+                            $sq->whereNull('paid_at')->whereMonth('created_at', $m)->whereYear('created_at', $y);
+                        });
+                    })
+                    ->sum('amount');
+
+                if (\Illuminate\Support\Facades\Schema::hasTable('expenses')) {
+                    $directExp = (float) \Illuminate\Support\Facades\DB::table('expenses')
+                        ->where(function ($q) use ($m, $y) {
+                            $q->whereMonth('expense_date', $m)->whereYear('expense_date', $y)
+                              ->orWhere(function ($sq) use ($m, $y) {
+                                  $sq->whereNull('expense_date')->whereMonth('created_at', $m)->whereYear('created_at', $y);
+                              });
+                        })
+                        ->sum('amount');
+                    $cashExp += $directExp;
+                }
 
                 $matCost = 0;
                 if (\Illuminate\Support\Facades\Schema::hasTable('material_usages') && \Illuminate\Support\Facades\Schema::hasTable('material_usage_items')) {
@@ -521,17 +540,94 @@ class DashboardController extends Controller
 
                 $months[] = [
                     'label'    => $date->format('M Y'),
-                    'cash'     => $cashExp,
-                    'material' => $matCost,
-                    'total'    => $cashExp + $matCost,
+                    'cash'     => round($cashExp, 2),
+                    'material' => round($matCost, 2),
+                    'total'    => round($cashExp + $matCost, 2),
                 ];
             }
             return $months;
         }, []);
 
-        // ── Expense Category Breakdown ────────────────────────────────────────────
+        // ── Expense Category Breakdown (All-Time and Monthly Periods) ─────────────
+        $categoryDataByPeriod = $this->safe(function () {
+            $expenses = \App\Models\ExpenseRequest::whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'paid', 'approved'])
+                ->select('category', 'amount', 'paid_at', 'created_at')
+                ->get();
+
+            $months = [];
+            for ($i = 0; $i < 6; $i++) {
+                $date = now()->subMonths($i);
+                $key = $date->format('Y-m');
+                $months[$key] = [
+                    'label'      => $date->format('F Y'),
+                    'short'      => $date->format('M Y'),
+                    'is_current' => ($i === 0),
+                    'is_prev'    => ($i === 1),
+                ];
+            }
+
+            $colorPalette = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#fd7e14', '#6f42c1', '#20c997', '#858796'];
+
+            $buildPeriodData = function ($filteredExpenses, $periodLabel) use ($colorPalette) {
+                $grouped = $filteredExpenses->groupBy(fn($item) => trim($item->category ?: 'Other'))
+                    ->map(function ($items, $cat) {
+                        return [
+                            'category' => ucwords($cat),
+                            'total'    => (float) $items->sum('amount'),
+                            'count'    => $items->count(),
+                        ];
+                    })
+                    ->sortByDesc('total')
+                    ->values();
+
+                $grandTotal = (float) $grouped->sum('total');
+
+                $categories = $grouped->map(function ($item, $idx) use ($grandTotal, $colorPalette) {
+                    $pct = $grandTotal > 0 ? round(($item['total'] / $grandTotal) * 100, 1) : 0;
+                    return [
+                        'category' => $item['category'],
+                        'total'    => $item['total'],
+                        'count'    => $item['count'],
+                        'pct'      => $pct,
+                        'color'    => $colorPalette[$idx % count($colorPalette)],
+                    ];
+                })->values()->all();
+
+                return [
+                    'period_label' => $periodLabel,
+                    'grand_total'  => $grandTotal,
+                    'categories'   => $categories,
+                    'labels'       => array_column($categories, 'category'),
+                    'totals'       => array_column($categories, 'total'),
+                    'colors'       => array_column($categories, 'color'),
+                ];
+            };
+
+            $result = [];
+            $result['all'] = $buildPeriodData($expenses, 'All Recent Records');
+
+            foreach ($months as $key => $meta) {
+                $filtered = $expenses->filter(function ($item) use ($key) {
+                    $date = $item->paid_at ? \Illuminate\Support\Carbon::parse($item->paid_at) : ($item->created_at ? \Illuminate\Support\Carbon::parse($item->created_at) : null);
+                    return $date && $date->format('Y-m') === $key;
+                });
+
+                $periodData = $buildPeriodData($filtered, $meta['label']);
+                $result[$key] = $periodData;
+
+                if ($meta['is_current']) {
+                    $result['this_month'] = $periodData;
+                }
+                if ($meta['is_prev']) {
+                    $result['prev_month'] = $periodData;
+                }
+            }
+
+            return $result;
+        }, []);
+
         $expenseCategoryBreakdown = $this->safe(function () {
-            return \App\Models\ExpenseRequest::whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'approved'])
+            return \App\Models\ExpenseRequest::whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'paid', 'approved'])
                 ->select('category', \Illuminate\Support\Facades\DB::raw('SUM(amount) as total'), \Illuminate\Support\Facades\DB::raw('COUNT(*) as count'))
                 ->groupBy('category')
                 ->orderByDesc('total')
@@ -553,7 +649,7 @@ class DashboardController extends Controller
         return view('dashboard.gm', compact(
             'kpi', 'projectStatus', 'recentProjects', 'pendingEmployees', 'recentExpenses',
             'projectExpenses', 'materialConsumptionReport', 'monthlyExpenseTrend', 'expenseCategoryBreakdown',
-            'pendingGmPrs', 'unassignedStagePrs', 'pendingGmExpenses', 'taxData'
+            'pendingGmPrs', 'unassignedStagePrs', 'pendingGmExpenses', 'taxData', 'categoryDataByPeriod'
         ));
     }
 
