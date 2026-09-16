@@ -209,32 +209,60 @@
             </div>
 
             {{-- Monthly Tax Trend Chart --}}
+            @php
+                $trendList = collect($taxData['monthly_report'] ?? [])->reverse()->values();
+                $trendLabels = $trendList->pluck('month_label')->values();
+                $trendVat = $trendList->pluck('vat_amount')->map(fn($v) => (float)$v)->values();
+                $trendWht = $trendList->pluck('wht_amount')->map(fn($v) => (float)$v)->values();
+                $trendGross = $trendList->pluck('gross_base')->map(fn($v) => (float)$v)->values();
+                $trendNet = $trendList->pluck('net_disbursed')->map(fn($v) => (float)$v)->values();
+
+                // Fallback: If monthly breakdown list is empty but grand totals exist, display aggregate totals
+                if ($trendLabels->isEmpty() && (($taxData['total_vat_amount'] ?? 0) > 0 || ($taxData['total_withholding_amount'] ?? 0) > 0)) {
+                    $trendLabels = collect(['Current Total']);
+                    $trendVat    = collect([(float)($taxData['total_vat_amount'] ?? 0)]);
+                    $trendWht    = collect([(float)($taxData['total_withholding_amount'] ?? 0)]);
+                    $trendGross  = collect([(float)($taxData['total_gross_base'] ?? 0)]);
+                    $trendNet    = collect([(float)($taxData['total_net_disbursed'] ?? 0)]);
+                }
+            @endphp
+
             <div class="col-xl-4">
                 <div class="card border shadow-xs rounded-3 h-100">
-                    <div class="card-header bg-light-subtle py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
-                        <span class="fw-bold text-dark small">
-                            <i class="fa-solid fa-chart-column text-info me-1"></i>Monthly VAT &amp; WHT Trend
-                        </span>
-                        <small class="text-muted">VAT vs 3% WHT</small>
+                    <div class="card-header bg-light-subtle py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="fw-bold text-dark small">
+                                <i class="fa-solid fa-chart-column text-info me-1"></i>Monthly VAT &amp; WHT Trend
+                            </span>
+                            <small class="text-muted" style="font-size:0.75rem;">(VAT vs 3% WHT)</small>
+                        </div>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Chart view mode">
+                            <button type="button" class="btn btn-xs btn-outline-secondary active py-0 px-2" id="taxChartModeBar" title="Bar Chart view" style="font-size:0.75rem;">
+                                <i class="fa-solid fa-chart-column"></i>
+                            </button>
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" id="taxChartModeLine" title="Trend Line view" style="font-size:0.75rem;">
+                                <i class="fa-solid fa-chart-line"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body p-3 d-flex flex-column justify-content-between">
-                        <div id="tax-trend-data"
-                            data-labels="@json(collect($taxData['monthly_report'] ?? [])->reverse()->pluck('month_label'))"
-                            data-vat="@json(collect($taxData['monthly_report'] ?? [])->reverse()->pluck('vat_amount'))"
-                            data-wht="@json(collect($taxData['monthly_report'] ?? [])->reverse()->pluck('wht_amount'))"
-                            class="d-none"></div>
-
-                        <div style="position:relative; height:200px; width:100%;">
+                        <div id="taxComplianceChartWrapper" style="position:relative; height:210px; width:100%;">
                             <canvas id="taxComplianceTrendChart"></canvas>
+                        </div>
+
+                        <div id="taxComplianceTrendEmpty" class="text-center py-5 d-none">
+                            <i class="fa-solid fa-chart-simple fa-2x text-muted mb-2 opacity-50"></i>
+                            <h6 class="text-muted fw-semibold small mb-1">No Tax Trend Data</h6>
+                            <p class="text-muted small mb-0" style="font-size:0.75rem;">VAT and 3% WHT entries will be plotted automatically here.</p>
                         </div>
 
                         <div class="mt-3 pt-2 border-top">
                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="small text-muted"><i class="fa-solid fa-square text-info me-1"></i>Total VAT Collected</span>
+                                <span class="small text-muted"><i class="fa-solid fa-circle text-info me-1" style="font-size:0.65rem;"></i>Total VAT (15% / B)</span>
                                 <strong class="small text-info">+ ETB {{ number_format($taxData['total_vat_amount'] ?? 0, 2) }}</strong>
                             </div>
                             <div class="d-flex justify-content-between align-items-center">
-                                <span class="small text-muted"><i class="fa-solid fa-square text-danger me-1"></i>Total 3% WHT Deducted</span>
+                                <span class="small text-muted"><i class="fa-solid fa-circle text-danger me-1" style="font-size:0.65rem;"></i>Total 3% WHT (ቅድመ ግብር)</span>
                                 <strong class="small text-danger">- ETB {{ number_format($taxData['total_withholding_amount'] ?? 0, 2) }}</strong>
                             </div>
                         </div>
@@ -246,66 +274,202 @@
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    var taxTrendEl = document.getElementById("tax-trend-data");
-    if (taxTrendEl && typeof Chart !== 'undefined') {
-        var labels = JSON.parse(taxTrendEl.dataset.labels || '[]');
-        var vatData = JSON.parse(taxTrendEl.dataset.vat || '[]');
-        var whtData = JSON.parse(taxTrendEl.dataset.wht || '[]');
+(function () {
+    var rawLabels = @json($trendLabels);
+    var rawVat = @json($trendVat);
+    var rawWht = @json($trendWht);
 
-        var ctx = document.getElementById("taxComplianceTrendChart");
-        if (ctx && labels.length > 0) {
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Total VAT (15%)',
-                            data: vatData,
-                            backgroundColor: 'rgba(13, 202, 240, 0.8)',
-                            borderColor: '#0dcaf0',
-                            borderWidth: 1,
-                            borderRadius: 4,
-                        },
-                        {
-                            label: '3% Withholding Tax',
-                            data: whtData,
-                            backgroundColor: 'rgba(220, 53, 69, 0.8)',
-                            borderColor: '#dc3545',
-                            borderWidth: 1,
-                            borderRadius: 4,
-                        }
-                    ]
+    var labels = Array.isArray(rawLabels) ? rawLabels : Object.values(rawLabels || {});
+    var vatData = Array.isArray(rawVat) ? rawVat : Object.values(rawVat || {});
+    var whtData = Array.isArray(rawWht) ? rawWht : Object.values(rawWht || {});
+
+    var currentChartType = 'bar';
+    var chartInstance = null;
+
+    function ensureChartJs(callback) {
+        if (typeof Chart !== 'undefined') {
+            callback();
+            return;
+        }
+
+        var existingScript = document.getElementById('chartjs-cdn-script');
+        if (!existingScript) {
+            var script = document.createElement('script');
+            script.id = 'chartjs-cdn-script';
+            script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+            script.onload = function () { callback(); };
+            document.head.appendChild(script);
+        } else {
+            var waitInterval = setInterval(function () {
+                if (typeof Chart !== 'undefined') {
+                    clearInterval(waitInterval);
+                    callback();
+                }
+            }, 100);
+        }
+    }
+
+    function drawChart() {
+        var canvas = document.getElementById("taxComplianceTrendChart");
+        if (!canvas) return;
+
+        var emptyEl = document.getElementById("taxComplianceTrendEmpty");
+        var wrapperEl = document.getElementById("taxComplianceChartWrapper");
+
+        if (!labels || labels.length === 0) {
+            if (emptyEl) emptyEl.classList.remove("d-none");
+            if (wrapperEl) wrapperEl.classList.add("d-none");
+            return;
+        }
+
+        if (emptyEl) emptyEl.classList.add("d-none");
+        if (wrapperEl) wrapperEl.classList.remove("d-none");
+
+        if (chartInstance) {
+            chartInstance.destroy();
+            chartInstance = null;
+        }
+
+        var isBar = (currentChartType === 'bar');
+
+        chartInstance = new Chart(canvas, {
+            type: currentChartType,
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Total VAT (15%)',
+                        data: vatData,
+                        backgroundColor: isBar ? 'rgba(13, 202, 240, 0.85)' : 'rgba(13, 202, 240, 0.15)',
+                        borderColor: '#0dcaf0',
+                        borderWidth: isBar ? 1 : 2.5,
+                        borderRadius: isBar ? 6 : 0,
+                        fill: !isBar,
+                        tension: 0.35,
+                        pointBackgroundColor: '#0dcaf0',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: isBar ? 0 : 4,
+                        pointHoverRadius: 6,
+                        maxBarThickness: 45,
+                    },
+                    {
+                        label: '3% Withholding Tax',
+                        data: whtData,
+                        backgroundColor: isBar ? 'rgba(220, 53, 69, 0.85)' : 'rgba(220, 53, 69, 0.15)',
+                        borderColor: '#dc3545',
+                        borderWidth: isBar ? 1 : 2.5,
+                        borderRadius: isBar ? 6 : 0,
+                        fill: !isBar,
+                        tension: 0.35,
+                        pointBackgroundColor: '#dc3545',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2,
+                        pointRadius: isBar ? 0 : 4,
+                        pointHoverRadius: 6,
+                        maxBarThickness: 45,
+                    }
+                ]
+            },
+            options: {
+                maintainAspectRatio: false,
+                responsive: true,
+                animation: {
+                    duration: 700,
+                    easing: 'easeOutQuart'
                 },
-                options: {
-                    maintainAspectRatio: false,
-                    responsive: true,
-                    plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
-                        tooltip: {
-                            callbacks: {
-                                label: function(ctx) {
-                                    return ctx.dataset.label + ': ' + new Intl.NumberFormat().format(ctx.parsed.y) + ' ETB';
-                                }
-                            }
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        align: 'end',
+                        labels: {
+                            boxWidth: 10,
+                            boxHeight: 10,
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            font: { size: 11, weight: '600', family: "'Inter', system-ui, sans-serif" },
+                            padding: 10
                         }
                     },
-                    scales: {
-                        x: { grid: { display: false } },
-                        y: {
-                            ticks: {
-                                callback: function(val) {
-                                    if (val >= 1000000) return (val/1000000).toFixed(1) + 'M';
-                                    if (val >= 1000) return (val/1000).toFixed(0) + 'K';
-                                    return val;
-                                }
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                        padding: 10,
+                        cornerRadius: 8,
+                        titleFont: { size: 12, weight: '700' },
+                        bodyFont: { size: 11 },
+                        callbacks: {
+                            label: function(ctx) {
+                                var val = Number(ctx.parsed.y || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                return ' ' + ctx.dataset.label + ': ' + val + ' ETB';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            font: { size: 11, weight: '500' },
+                            color: '#64748b'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(226, 232, 240, 0.65)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: { size: 10 },
+                            color: '#94a3b8',
+                            callback: function(val) {
+                                if (val >= 1000000) return (val/1000000).toFixed(1) + 'M';
+                                if (val >= 1000) return (val/1000).toFixed(0) + 'K';
+                                return Number(val).toLocaleString();
                             }
                         }
                     }
                 }
-            });
-        }
+            }
+        });
     }
-});
+
+    function init() {
+        ensureChartJs(function () {
+            drawChart();
+
+            var btnBar = document.getElementById("taxChartModeBar");
+            var btnLine = document.getElementById("taxChartModeLine");
+
+            if (btnBar && btnLine) {
+                btnBar.addEventListener("click", function () {
+                    if (currentChartType === 'bar') return;
+                    currentChartType = 'bar';
+                    btnBar.classList.add('active');
+                    btnLine.classList.remove('active');
+                    drawChart();
+                });
+
+                btnLine.addEventListener("click", function () {
+                    if (currentChartType === 'line') return;
+                    currentChartType = 'line';
+                    btnLine.classList.add('active');
+                    btnBar.classList.remove('active');
+                    drawChart();
+                });
+            }
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener("DOMContentLoaded", init);
+    } else {
+        init();
+    }
+    window.addEventListener("load", function () {
+        if (!chartInstance && labels && labels.length > 0) {
+            init();
+        }
+    });
+})();
 </script>
