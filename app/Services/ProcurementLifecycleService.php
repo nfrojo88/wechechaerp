@@ -883,7 +883,7 @@ class ProcurementLifecycleService
                 'store_id'            => $storeId,
                 'received_date'       => $receivedDate,
                 'received_by'         => Auth::id() ?? 1,
-                'status'              => 'received',
+                'status'              => 'verified',
                 'notes'               => $notes ?: "Intake for PR #{$pr->pr_no} (Slip #{$slipNo})",
             ]);
 
