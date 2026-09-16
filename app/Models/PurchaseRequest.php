@@ -158,5 +158,6 @@ class PurchaseRequest extends Model
     public function receipt()        { return $this->hasOne(ProcurementReceipt::class); }
     public function driverBooking()  { return $this->hasOne(DriverBooking::class); }
     public function workflowLogs()   { return $this->hasMany(PrWorkflowLog::class)->orderBy('created_at'); }
+    public function deliveryReceipts(){ return $this->hasMany(DeliveryReceipt::class); }
 }
 

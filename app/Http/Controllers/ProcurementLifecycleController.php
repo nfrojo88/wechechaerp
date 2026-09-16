@@ -122,22 +122,92 @@ class ProcurementLifecycleController extends Controller
         $pendingStoreOfficeCount = 0;
         $pendingFinanceOfficeCount = 0;
 
-        // 5. Summary Counters
+        // 5. User's Created Requisitions & Purchase Requests History ("they created question history")
+        $createdPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest', 'items.product', 'deliveryReceipts'])
+            ->latest();
+
+        $createdMrQuery = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'items.product', 'purchaseRequests'])
+            ->latest();
+
+        if (!$isAdmin && !$isAuditor) {
+            $createdPrQuery->where('requested_by', $user->id);
+            $createdMrQuery->where(function($q) use ($user) {
+                $q->where('created_by', $user->id)
+                  ->orWhere('requested_by', $user->id);
+            });
+        }
+
+        if ($request->filled('project_id')) {
+            $createdPrQuery->where('project_id', $request->project_id);
+            $createdMrQuery->where('project_id', $request->project_id);
+        }
+        if ($request->filled('status')) {
+            $createdPrQuery->where('status', $request->status);
+            $createdMrQuery->where('status', $request->status);
+        }
+
+        $myCreatedPrs = $createdPrQuery->paginate(15, ['*'], 'created_pr_page')->withQueryString();
+        $myCreatedMrs = $createdMrQuery->take(25)->get();
+
+        $myCreatedCount = ($isAdmin || $isAuditor)
+            ? (PurchaseRequest::count() + MaterialRequest::count())
+            : (PurchaseRequest::where('requested_by', $user->id)->count() + MaterialRequest::where('created_by', $user->id)->count());
+
+        // 6. Completed History
+        $completedPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'items.product', 'deliveryReceipts'])
+            ->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)
+            ->latest();
+
+        if ($request->filled('project_id')) {
+            $completedPrQuery->where('project_id', $request->project_id);
+        }
+        $completedPrs = $completedPrQuery->paginate(15, ['*'], 'completed_page')->withQueryString();
+
+        // 7. All Company PR History (Oversight)
+        $allPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'items.product'])
+            ->latest();
+        if ($request->filled('project_id')) {
+            $allPrQuery->where('project_id', $request->project_id);
+        }
+        if ($request->filled('status')) {
+            $allPrQuery->where('status', $request->status);
+        }
+        $allPrs = $allPrQuery->paginate(15, ['*'], 'all_pr_page')->withQueryString();
+
+        // 8. Summary Counters
+        $pendingCount = $isAuditor ? PurchaseRequest::where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count() : ($myPrs->total() + $materialRequestsQueue->count());
+
         $kpi = [
-            'my_pending'                     => $isAuditor ? PurchaseRequest::where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count() : ($myPrs->total() + $materialRequestsQueue->count()),
+            'my_pending'                     => $pendingCount,
+            'my_created'                     => $myCreatedCount,
             'emergency_mrs'                  => $emergencyMrs->count(),
             'material_requests_queue'        => $materialRequestsQueue->count(),
             'pending_office_requests'        => $pendingOfficeCount,
             'pending_store_office_requests'  => $pendingStoreOfficeCount,
             'pending_finance_office_requests'=> $pendingFinanceOfficeCount,
             'completed'                      => PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(),
+            'all_prs'                        => PurchaseRequest::count(),
         ];
+
+        // Determine active tab: if no pending actions and user has created requests, show their created history tab
+        $activeTab = $request->input('tab');
+        if (!$activeTab) {
+            if ($pendingCount == 0 && $myCreatedCount > 0) {
+                $activeTab = 'my_created';
+            } else {
+                $activeTab = 'pending';
+            }
+        }
 
         $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
         if ($projects->isEmpty()) {
             $projects = Project::orderBy('name')->get();
         }
 
-        return view('procurement.lifecycle.my-queue', compact('myPrs', 'emergencyMrs', 'materialRequestsQueue', 'kpi', 'projects', 'isHr', 'isCoordinator', 'isStoreManager', 'isPurchaseManager', 'isFinanceHead', 'isAuditor'));
+        return view('procurement.lifecycle.my-queue', compact(
+            'myPrs', 'emergencyMrs', 'materialRequestsQueue', 'kpi', 'projects',
+            'myCreatedPrs', 'myCreatedMrs', 'completedPrs', 'allPrs', 'activeTab',
+            'isHr', 'isCoordinator', 'isStoreManager', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm'
+        ));
     }
 }
