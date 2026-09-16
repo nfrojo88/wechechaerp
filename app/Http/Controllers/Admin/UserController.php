@@ -55,6 +55,17 @@ class UserController extends Controller
             'store_id' => ['nullable', 'exists:stores,id'],
         ]);
 
+        // Strict Rule: Do not give login credentials to Dead File employees
+        $inDeadFile = \App\Models\Employee::inDeadFile()
+            ->where('email', $validated['email'])
+            ->exists();
+
+        if ($inDeadFile) {
+            return back()->withErrors([
+                'email' => 'Strict Rule Violation: This person is archived in the Dead File. Granting login credentials to Dead File employees is strictly prohibited.',
+            ])->withInput();
+        }
+
         $user = User::create([
             'name'     => $validated['name'],
             'email'    => $validated['email'],
@@ -83,6 +94,13 @@ class UserController extends Controller
             'store_id' => ['nullable', 'exists:stores,id'],
             'is_active'=> ['boolean'],
         ]);
+
+        // Strict Rule: Do not give login credentials to Dead File employees
+        if ($user->isInDeadFile()) {
+            return back()->withErrors([
+                'email' => 'Strict Rule Violation: This user is linked to an employee in the Dead File. Modifying or enabling login credentials for Dead File employees is strictly prohibited.',
+            ])->withInput();
+        }
 
         $user->update([
             'name'      => $validated['name'],

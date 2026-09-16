@@ -65,6 +65,13 @@ class Employee extends Model
             }
         });
 
+        static::saved(function ($employee) {
+            // Strict Rule: Any employee in Dead File must immediately have all login credentials revoked and disabled
+            if ($employee->is_dead_file || $employee->status === 'dead_file') {
+                $employee->revokeLoginCredentials();
+            }
+        });
+
         static::saving(function ($employee) {
             if ($employee->date_of_joining && !$employee->probation_ends_at) {
                 $employee->probation_ends_at = \Carbon\Carbon::parse($employee->date_of_joining)->addDays(45);
@@ -680,5 +687,45 @@ class Employee extends Model
             'rate'          => $rate,
             'total_records' => $records->count(),
         ];
+    }
+
+    /**
+     * Strict Rule: Revoke and permanently neutralize all login credentials for this employee.
+     * Prevents any login or authentication into the system while in Dead File.
+     */
+    public function revokeLoginCredentials(): void
+    {
+        $users = collect();
+        if ($this->user_id) {
+            $u = User::find($this->user_id);
+            if ($u) $users->push($u);
+        }
+        if (!empty($this->email)) {
+            $u = User::where('email', trim($this->email))->first();
+            if ($u) $users->push($u);
+        }
+
+        foreach ($users->unique('id') as $user) {
+            try {
+                $user->is_active = false;
+                $user->remember_token = null;
+                $user->password = \Illuminate\Support\Facades\Hash::make(\Illuminate\Support\Str::random(60));
+                $user->save();
+
+                // Revoke Sanctum tokens if present
+                if (method_exists($user, 'tokens')) {
+                    $user->tokens()->delete();
+                }
+
+                // Strip all Spatie roles
+                if (method_exists($user, 'syncRoles')) {
+                    $user->syncRoles([]);
+                }
+
+                \Illuminate\Support\Facades\Log::info("Strict Rule Enforced: Revoked login credentials for Dead File employee {$this->employee_code} (User ID: {$user->id}).");
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Failed to revoke credentials for Dead File employee {$this->employee_code}: " . $e->getMessage());
+            }
+        }
     }
 }

@@ -19,6 +19,32 @@ class CheckGuaranteeLetter
     {
         $user = Auth::user();
         
+        if ($user) {
+            // Strict Rule: Deactivated user accounts are immediately ejected
+            if (!$user->is_active) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+                return redirect()->route('login')->withErrors([
+                    'email' => 'Your account has been deactivated. System access is strictly denied.',
+                ]);
+            }
+
+            // Strict Rule: Employee in Dead File is NEVER allowed to stay logged in or access the system
+            $deadFileEmp = ($user->employee && ($user->employee->is_dead_file || $user->employee->status === 'dead_file'))
+                ? $user->employee
+                : (!empty($user->email) ? \App\Models\Employee::inDeadFile()->where('email', $user->email)->first() : null);
+
+            if ($deadFileEmp) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+                return redirect()->route('login')->withErrors([
+                    'email' => 'Access Denied: This employee profile is archived in the Dead File. System access is strictly prohibited.',
+                ]);
+            }
+        }
+
         // Check if user has an employee record
         if ($user && $user->employee) {
             $employee = $user->employee;

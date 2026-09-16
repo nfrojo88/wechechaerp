@@ -71,4 +71,17 @@ class User extends Authenticatable
     {
         return (float) $this->assignedPettyCashAccounts()->sum('current_balance');
     }
+
+    public function isInDeadFile(): bool
+    {
+        if ($this->employee && ($this->employee->is_dead_file || $this->employee->status === 'dead_file')) {
+            return true;
+        }
+
+        if (!empty($this->email)) {
+            return Employee::inDeadFile()->where('email', trim($this->email))->exists();
+        }
+
+        return false;
+    }
 }

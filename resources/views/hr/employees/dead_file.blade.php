@@ -31,6 +31,22 @@
     </div>
 </div>
 
+{{-- Strict Security Rule Notice --}}
+<div class="alert alert-danger border border-danger-subtle rounded-3 d-flex align-items-center justify-content-between p-3 mb-4 shadow-sm" style="background-color: #fef2f2;">
+    <div class="d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-danger text-white p-2 d-flex align-items-center justify-content-center flex-shrink-0 shadow-sm" style="width: 40px; height: 40px;">
+            <i class="fa-solid fa-shield-halved fs-5"></i>
+        </div>
+        <div>
+            <div class="fw-bold text-danger small text-uppercase tracking-wider">Strict Security Policy Enforced</div>
+            <div class="small text-dark">
+                Employees in the <strong>Dead File Section</strong> are strictly barred from having login credentials. System user accounts are automatically revoked and all login attempts are permanently blocked.
+            </div>
+        </div>
+    </div>
+    <span class="badge bg-danger text-white text-uppercase px-2 py-1"><i class="fa-solid fa-lock me-1"></i> Login Prohibited</span>
+</div>
+
 {{-- KPI Summary Cards --}}
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-4 col-xl-2">
@@ -174,7 +190,7 @@
                                     <a href="{{ route('employees.show', $emp) }}" class="fw-bold text-dark text-decoration-none d-block">
                                         {{ $emp->full_name }}
                                     </a>
-                                    <span class="badge bg-secondary font-monospace" style="font-size:0.75rem;">{{ $emp->employee_code }}</span>
+                                    <span class="badge bg-secondary font-monospace" style="font-size:0.75rem;">{{ $emp->employee_code }}</span> <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle font-monospace" style="font-size:0.7rem;"><i class="fa-solid fa-ban me-1"></i>No Login</span>
                                     @if($emp->phone)<small class="text-muted ms-1"><i class="fa-solid fa-phone me-1"></i>{{ $emp->phone }}</small>@endif
                                 </div>
                             </div>

@@ -4,6 +4,31 @@
 
 @section('content')
 
+{{-- Dead File Security Banner --}}
+@if($employee->is_dead_file || $employee->status === 'dead_file')
+<div class="alert alert-danger border-start border-4 border-danger shadow-sm mb-4 rounded-3" role="alert" style="background-color: #fef2f2;">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div class="d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-danger text-white p-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px;">
+                <i class="fa-solid fa-ban fs-5"></i>
+            </div>
+            <div>
+                <strong class="fs-6 text-danger d-block mb-0">
+                    <i class="fa-solid fa-box-archive me-1"></i> ARCHIVED IN DEAD FILE — LOGIN CREDENTIALS STRICTLY REVOKED
+                </strong>
+                <p class="mb-0 text-muted small mt-1">
+                    Reason: <strong>{{ $employee->dead_file_reason ?? 'Separated' }}</strong> • Archived on: <strong>{{ $employee->dead_file_at ? $employee->dead_file_at->format('d M Y') : optional($employee->updated_at)->format('d M Y') }}</strong>.
+                    In accordance with strict security policy, this employee cannot be assigned login credentials and system login access is permanently blocked.
+                </p>
+            </div>
+        </div>
+        <div>
+            <span class="badge bg-danger text-white px-3 py-2 text-uppercase fw-bold"><i class="fa-solid fa-lock me-1"></i> Login Prohibited</span>
+        </div>
+    </div>
+</div>
+@endif
+
 {{-- GM Rejection Alert for HR Officer --}}
 @if($employee->gm_approval_status === 'rejected')
 <div class="alert alert-danger border-start border-4 border-danger shadow mb-4 fade show" role="alert">

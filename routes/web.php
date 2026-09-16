@@ -401,6 +401,10 @@ Route::get('/reset-employees-for-gm-approval', function () {
         $usersRestoredCount = 0;
 
         foreach ($allEmployees as $emp) {
+            // Strict Rule: Never generate or restore login credentials for Dead File employees
+            if ($emp->is_dead_file || $emp->status === 'dead_file') {
+                continue;
+            }
             $code  = strtoupper(trim($emp->employee_code ?? ''));
             $email = strtolower(trim($emp->email ?? ''));
 
@@ -1677,6 +1681,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Credit Store Ledger (Finance Head / Credit Purchases & Payment Tracking)
     Route::get('finance/credit-store', [App\Http\Controllers\Finance\CreditStoreController::class, 'index'])->name('finance.credit-store.index');
+    Route::post('finance/credit-store/batch-payment', [App\Http\Controllers\Finance\CreditStoreController::class, 'batchPayment'])->name('finance.credit-store.batch-payment');
     Route::get('finance/credit-store/{creditStore}', [App\Http\Controllers\Finance\CreditStoreController::class, 'show'])->name('finance.credit-store.show');
     Route::post('finance/credit-store/{creditStore}/record-payment', [App\Http\Controllers\Finance\CreditStoreController::class, 'recordPayment'])->name('finance.credit-store.record-payment');
 
