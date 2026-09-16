@@ -1730,9 +1730,16 @@ class StoreManagerController extends Controller
             }
 
             // Create dummy PO if not exists (required by table structure)
+            $refNumber = 'SYSTEM-' . time();
             $dummyPo = \App\Models\PurchaseOrder::firstOrCreate(
-                ['supplier_id' => 1],
-                ['po_no' => 'SYSTEM-' . time(), 'status' => 'delivered']
+                ['supplier_name' => $request->supplier_name ?: 'Internal Store'],
+                [
+                    'reference_number' => $refNumber,
+                    'status'           => 'delivered',
+                    'total_amount'     => 0,
+                    'issued_date'      => now()->toDateString(),
+                    'created_by'       => Auth::id() ?? 1,
+                ]
             );
 
             $receipt = DeliveryReceipt::create([

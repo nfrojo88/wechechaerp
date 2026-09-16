@@ -811,35 +811,80 @@ class ProcurementLifecycleService
                 } catch (\Throwable $e) {}
             }
 
-            // 2. Create or find dummy PO if required for DeliveryReceipt foreign key
+            // 2. Create or find PO required for DeliveryReceipt foreign key
             $poId = $pr->purchaseOrders()->first()?->id;
             if (!$poId) {
+                // Determine supplier name
+                $supplierName = 'Direct Supplier';
+                if (!empty($pr->supplier_name)) {
+                    $supplierName = $pr->supplier_name;
+                } elseif ($pr->supplier) {
+                    $supplierName = $pr->supplier->name;
+                } elseif ($pr->creditLedger && !empty($pr->creditLedger->supplier_name)) {
+                    $supplierName = $pr->creditLedger->supplier_name;
+                } elseif ($pr->proformaInvoices()->where('gm_selected', true)->exists()) {
+                    $selectedPf = $pr->proformaInvoices()->where('gm_selected', true)->with('supplier')->first();
+                    $supplierName = $selectedPf?->supplier?->name ?: 'Proforma Supplier';
+                }
+
+                $refNo = 'PO-PR-' . ($pr->pr_no ?: $pr->id);
+                
                 try {
-                    $dummyPo = \App\Models\PurchaseOrder::firstOrCreate(
-                        ['po_no' => 'PR-INTAKE-' . $pr->pr_no],
-                        [
+                    $po = \App\Models\PurchaseOrder::where('reference_number', $refNo)
+                        ->orWhere('purchase_request_id', $pr->id)
+                        ->first();
+
+                    if (!$po) {
+                        $po = \App\Models\PurchaseOrder::create([
                             'project_id'          => $pr->project_id,
-                            'supplier_id'         => 1,
                             'purchase_request_id' => $pr->id,
-                            'order_date'          => now()->toDateString(),
+                            'reference_number'    => $refNo,
+                            'supplier_name'       => $supplierName,
+                            'supplier_id'         => $pr->supplier_id ?? ($pr->creditLedger?->supplier_id ?? null),
                             'status'              => 'delivered',
                             'total_amount'        => (float)($pr->direct_buy_amount ?? 0),
-                            'created_by'          => Auth::id(),
-                        ]
-                    );
-                    $poId = $dummyPo->id;
-                } catch (\Throwable $e) {}
+                            'issued_date'         => now()->toDateString(),
+                            'created_by'          => Auth::id() ?? ($pr->requested_by ?: 1),
+                            'notes'               => "Auto-created PO for PR intake #{$pr->pr_no}",
+                        ]);
+                    }
+                    $poId = $po->id;
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error("Failed creating PO for PR {$pr->pr_no}: " . $e->getMessage());
+                    // Fallback: search any existing PO
+                    $poId = \App\Models\PurchaseOrder::value('id');
+                }
+            }
+
+            // Ensure poId is never null
+            if (!$poId) {
+                try {
+                    $fallbackPo = \App\Models\PurchaseOrder::create([
+                        'project_id'       => $pr->project_id,
+                        'reference_number' => 'PO-' . time() . '-' . rand(1000, 9999),
+                        'supplier_name'    => 'Direct Sourcing',
+                        'status'           => 'delivered',
+                        'total_amount'     => 0,
+                        'issued_date'      => now()->toDateString(),
+                        'created_by'       => Auth::id() ?? 1,
+                        'notes'            => 'System fallback PO for store intake',
+                    ]);
+                    $poId = $fallbackPo->id;
+                } catch (\Throwable $e) {
+                    $poId = \App\Models\PurchaseOrder::value('id');
+                }
             }
 
             // 3. Create DeliveryReceipt record
             $receipt = DeliveryReceipt::create([
-                'dr_no'             => $slipNo,
-                'purchase_order_id' => $poId,
-                'store_id'          => $storeId,
-                'received_date'     => $receivedDate,
-                'received_by'       => Auth::id(),
-                'status'            => 'received',
-                'notes'             => $notes ?: "Intake for PR #{$pr->pr_no} (Slip #{$slipNo})",
+                'dr_no'               => $slipNo,
+                'purchase_order_id'   => $poId,
+                'purchase_request_id' => $pr->id,
+                'store_id'            => $storeId,
+                'received_date'       => $receivedDate,
+                'received_by'         => Auth::id() ?? 1,
+                'status'              => 'received',
+                'notes'               => $notes ?: "Intake for PR #{$pr->pr_no} (Slip #{$slipNo})",
             ]);
 
             // 4. Process items and increment Inventory

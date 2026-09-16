@@ -11,6 +11,8 @@ class PurchaseOrder extends Model
 
     protected $fillable = [
         'project_id',
+        'purchase_request_id',
+        'supplier_id',
         'reference_number',
         'supplier_name',
         'status',
@@ -38,5 +40,15 @@ class PurchaseOrder extends Model
     public function items()
     {
         return $this->hasMany(PurchaseOrderItem::class);
+    }
+
+    public function purchaseRequest()
+    {
+        return $this->belongsTo(PurchaseRequest::class);
+    }
+
+    public function supplier()
+    {
+        return $this->belongsTo(Supplier::class);
     }
 }
