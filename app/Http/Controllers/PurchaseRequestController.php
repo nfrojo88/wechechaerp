@@ -374,7 +374,8 @@ class PurchaseRequestController extends Controller
                 'finance_credit_approved',
                 'finance_credit_approved_direct_intake',
                 'driver_booked',
-                'receipt_verified'
+                'receipt_verified',
+                'partial_store_intake'
             ])->exists()
         );
 
@@ -389,12 +390,17 @@ class PurchaseRequestController extends Controller
             $nextReceiveSlipNo = $receiveSlipSequence ? $receiveSlipSequence->formatSlipNumber($receiveSlipSequence->current_slip_no) : null;
         }
 
-        $availableProducts = \App\Models\Product::where('is_active', true)->orderBy('name')->get();
+                $availableProducts = \App\Models\Product::where('is_active', true)->orderBy('name')->get();
+
+        $prDeliveryReceipts = \App\Models\DeliveryReceipt::where('purchase_request_id', $purchaseRequest->id)
+            ->with(['items.product', 'store', 'receivedBy'])
+            ->orderByDesc('id')
+            ->get();
 
         return view('procurement.purchase-requests.show', compact(
             'purchaseRequest', 'stockAvailability', 'transferAvailability', 'prTransfers', 'coaAccounts',
             'financeStaff', 'drivers', 'suppliers', 'stores', 'pricingBenchmarks',
-            'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo', 'availableProducts'
+            'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo', 'availableProducts', 'prDeliveryReceipts'
         ));
 
     }
@@ -1396,7 +1402,7 @@ class PurchaseRequestController extends Controller
             'notes'         => 'nullable|string',
         ]);
 
-        $this->lifecycle->storeIntake(
+        $result = $this->lifecycle->storeIntake(
             $purchaseRequest,
             $request->filled('store_id') ? (int)$request->store_id : null,
             $request->input('slip_no'),
@@ -1405,7 +1411,13 @@ class PurchaseRequestController extends Controller
             $request->input('notes')
         );
 
-        return back()->with('success', 'Material intake complete! Items received into store inventory and slip sequence updated.');
+        if (is_array($result) && !($result['is_full'] ?? true)) {
+            $slip = $result['slip_no'] ?? $request->input('slip_no');
+            $rem = !empty($result['remaining']) ? implode(', ', $result['remaining']) : 'Remaining quantity pending.';
+            return back()->with('warning', "Partial delivery accepted under Slip #{$slip}! PR remains active for remaining balance: {$rem}. Enter the next receiving slip (Model 19 / GRN) when subsequent delivery arrives.");
+        }
+
+        return back()->with('success', 'Full material intake complete! All items received into store inventory and slip sequence updated.');
     }
 
     // ─── Legacy: approve/reject (kept for backward compat) ──────────────────

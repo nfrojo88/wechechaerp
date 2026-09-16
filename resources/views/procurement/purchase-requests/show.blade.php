@@ -954,28 +954,101 @@
                                 <input type="date" name="received_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
                             </div>
 
+                            @if(isset($prDeliveryReceipts) && $prDeliveryReceipts->count() > 0)
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label small fw-bold text-uppercase text-muted mb-0">
+                                            <i class="fas fa-receipt text-success me-1"></i>Previous Intake Slips ({{ $prDeliveryReceipts->count() }})
+                                        </label>
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size: 10px;">Partial Batches</span>
+                                    </div>
+                                    <div class="list-group list-group-flush border rounded bg-white shadow-xs" style="max-height: 140px; overflow-y: auto;">
+                                        @foreach($prDeliveryReceipts as $dr)
+                                            <div class="list-group-item p-2 d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <div class="fw-bold font-monospace text-primary small">
+                                                        <i class="fas fa-hashtag me-1 text-muted"></i>{{ $dr->dr_no }}
+                                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1 py-0 px-1" style="font-size: 9px;">Stocked</span>
+                                                    </div>
+                                                    <div class="text-muted" style="font-size: 10px;">
+                                                        {{ $dr->received_date?->format('M d, Y') ?? date('M d, Y') }}
+                                                        @if($dr->store) &bull; {{ $dr->store->name }} @endif
+                                                        @if($dr->receivedBy) &bull; By: {{ $dr->receivedBy->name }} @endif
+                                                    </div>
+                                                </div>
+                                                <div class="text-end">
+                                                    @php
+                                                        $slipTotalAccepted = $dr->items->sum('accepted_quantity');
+                                                    @endphp
+                                                    <span class="badge bg-secondary font-monospace">+{{ number_format($slipTotalAccepted, 2) }}</span>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    <div class="alert alert-info py-1 px-2 small mt-1 mb-0 d-flex align-items-center" style="font-size: 11px;">
+                                        <i class="fas fa-info-circle me-1 flex-shrink-0"></i>
+                                        <span>Partial delivery logged above. Enter the next slip number and quantity below to continue intake.</span>
+                                    </div>
+                                </div>
+                            @endif
+
                             <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted mb-1">Item Quantities To Receive</label>
-                                <div class="bg-light p-2 rounded border" style="max-height: 220px; overflow-y: auto;">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label small fw-bold text-uppercase text-muted mb-0">Item Quantities To Receive</label>
+                                    <span class="badge bg-light text-dark border" style="font-size: 10px;">Balance Tracking</span>
+                                </div>
+                                <div class="bg-light p-2 rounded border" style="max-height: 280px; overflow-y: auto;">
                                     @foreach($purchaseRequest->items as $itm)
-                                        <div class="mb-2 pb-2 border-bottom">
+                                        @php
+                                            $targetQty = method_exists($itm, 'getTargetIntakeQty') 
+                                                ? $itm->getTargetIntakeQty() 
+                                                : ((float)($itm->purchased_quantity ?? 0) > 0 ? (float)$itm->purchased_quantity : (float)$itm->quantity);
+                                            $receivedQty = method_exists($itm, 'getReceivedQty') 
+                                                ? $itm->getReceivedQty() 
+                                                : (float)($itm->received_quantity ?? 0);
+                                            $remainingQty = method_exists($itm, 'getRemainingIntakeQty') 
+                                                ? $itm->getRemainingIntakeQty() 
+                                                : max(0.0, $targetQty - $receivedQty);
+                                            $isFulfilled = ($remainingQty <= 0.001 && $targetQty > 0);
+                                            $unitLabel = $itm->unit ?? ($itm->product?->unit ?? 'pcs');
+                                        @endphp
+                                        <div class="mb-2 pb-2 border-bottom {{ $isFulfilled ? 'opacity-75' : '' }}">
                                             <div class="d-flex justify-content-between align-items-center mb-1">
                                                 <span class="small fw-bold text-dark">{{ $itm->product?->name ?? 'Material #' . $itm->product_id }}</span>
-                                                <span class="badge bg-primary text-white">{{ (float)$itm->quantity }} {{ $itm->unit ?? ($itm->product?->unit ?? 'pcs') }}</span>
+                                                @if($isFulfilled)
+                                                    <span class="badge bg-success text-white">
+                                                        <i class="fas fa-check-circle me-1"></i>Fulfilled ({{ number_format($targetQty, 2) }} {{ $unitLabel }})
+                                                    </span>
+                                                @else
+                                                    <span class="badge bg-primary text-white">
+                                                        Target: {{ number_format($targetQty, 2) }} {{ $unitLabel }}
+                                                    </span>
+                                                @endif
                                             </div>
+
+                                            <!-- Progress and Remaining Breakdown -->
+                                            <div class="d-flex justify-content-between align-items-center small mb-2 px-2 py-1 rounded bg-white border">
+                                                <span class="text-muted" style="font-size: 10px;">
+                                                    Received so far: <strong class="{{ $receivedQty > 0 ? 'text-success' : 'text-secondary' }}">{{ number_format($receivedQty, 2) }}</strong> / {{ number_format($targetQty, 2) }} {{ $unitLabel }}
+                                                </span>
+                                                <span class="badge {{ $remainingQty > 0 ? 'bg-warning text-dark' : 'bg-success text-white' }}" style="font-size: 10px;">
+                                                    {{ $remainingQty > 0 ? 'Remaining: ' . number_format($remainingQty, 2) . ' ' . $unitLabel : '100% Stocked' }}
+                                                </span>
+                                            </div>
+
                                             <div class="row g-1">
                                                 <div class="col-6">
-                                                    <label class="text-muted" style="font-size: 10px;">Qty Received</label>
+                                                    <label class="text-muted" style="font-size: 10px;">Qty Received (This Slip)</label>
                                                     <input type="number" step="0.01" min="0" 
                                                            name="items[{{ $itm->id }}][quantity]" 
-                                                           value="{{ (float)$itm->quantity }}" 
+                                                           value="{{ $isFulfilled ? '0' : number_format($remainingQty, 2, '.', '') }}" 
                                                            class="form-control form-control-sm" required>
                                                 </div>
                                                 <div class="col-6">
-                                                    <label class="text-muted" style="font-size: 10px;">Accepted Qty</label>
+                                                    <label class="text-muted" style="font-size: 10px;">Accepted Qty (This Slip)</label>
                                                     <input type="number" step="0.01" min="0" 
                                                            name="items[{{ $itm->id }}][accepted_quantity]" 
-                                                           value="{{ (float)$itm->quantity }}" 
+                                                           value="{{ $isFulfilled ? '0' : number_format($remainingQty, 2, '.', '') }}" 
                                                            class="form-control form-control-sm" required>
                                                 </div>
                                             </div>
@@ -986,12 +1059,15 @@
 
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Intake Notes / Remarks</label>
-                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Package condition, delivery verification notes..."></textarea>
+                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Delivery slip notes, batch number, condition..."></textarea>
                             </div>
 
                             <button type="submit" class="btn btn-success btn-sm w-100 fw-bold shadow-sm py-2">
                                 <i class="fas fa-check-double me-1"></i> Confirm Intake & Add to Inventory
                             </button>
+                            <small class="text-muted d-block text-center mt-1" style="font-size: 10px;">
+                                If accepted quantity is less than target, PR will remain open for the next delivery slip.
+                            </small>
                         </form>
 
                     @else
@@ -1148,6 +1224,9 @@
                                     <th class="text-center bg-light border-end">
                                         Qty Purchased<br><span class="badge bg-primary bg-opacity-25 text-primary fw-normal py-0 px-1" style="font-size:10px;">Procured</span>
                                     </th>
+                                    <th class="text-center bg-light border-end">
+                                        Qty Received<br><span class="badge bg-success bg-opacity-25 text-success fw-normal py-0 px-1" style="font-size:10px;">Stocked</span>
+                                    </th>
                                     <th class="text-center">Status</th>
                                     <th>Unit</th>
                                     <th>Est. Unit Cost</th>
@@ -1240,11 +1319,36 @@
                                             </span>
                                         @endif
                                     </td>
+                                    @php
+                                        $itemRecQty = method_exists($item, 'getReceivedQty') ? $item->getReceivedQty() : (float)($item->received_quantity ?? 0);
+                                        $itemTargetQty = method_exists($item, 'getTargetIntakeQty') ? $item->getTargetIntakeQty() : ($purchQty > 0 ? $purchQty : $reqQty);
+                                        $itemRemIntake = max(0.0, $itemTargetQty - $itemRecQty);
+                                        $itemIntakeDone = ($itemTargetQty > 0 && $itemRecQty >= $itemTargetQty);
+                                    @endphp
+                                    <td class="text-center fw-bold fs-6 bg-light border-end">
+                                        @if($itemIntakeDone)
+                                            <span class="badge bg-success py-1 px-2 text-white">
+                                                <i class="fas fa-check-double me-1"></i>{{ number_format($itemRecQty, 2) }}
+                                            </span>
+                                        @elseif($itemRecQty > 0)
+                                            <span class="badge bg-info text-dark py-1 px-2">
+                                                <i class="fas fa-box-open me-1"></i>{{ number_format($itemRecQty, 2) }}
+                                            </span>
+                                            <div class="small text-danger fw-bold mt-1" style="font-size: 10px;">Rem: {{ number_format($itemRemIntake, 2) }}</div>
+                                        @else
+                                            <span class="badge bg-light text-muted border py-1 px-2">0.00</span>
+                                        @endif
+                                    </td>
                                     <td class="text-center">
-                                        @if($isCompleted)
-                                            <span class="badge rounded-pill bg-success"><i class="fas fa-check me-1"></i>Purchased</span>
+                                        @if($itemIntakeDone)
+                                            <span class="badge rounded-pill bg-success"><i class="fas fa-check-double me-1"></i>Stocked</span>
+                                        @elseif($itemRecQty > 0)
+                                            <span class="badge rounded-pill bg-info text-dark">Partial ({{ $itemTargetQty > 0 ? round(($itemRecQty / $itemTargetQty) * 100) : 0 }}%)</span>
+                                            <div class="small text-muted mt-1" style="font-size: 10px;">Awaiting next slip</div>
+                                        @elseif($isCompleted)
+                                            <span class="badge rounded-pill bg-primary"><i class="fas fa-check me-1"></i>Purchased</span>
                                         @elseif($isPartial)
-                                            <span class="badge rounded-pill bg-warning text-dark">Partial ({{ $reqQty > 0 ? round(($purchQty / $reqQty) * 100) : 0 }}%)</span>
+                                            <span class="badge rounded-pill bg-warning text-dark">Partial Procured</span>
                                             <div class="small text-muted mt-1" style="font-size: 10px;">Rem: {{ number_format($remQty, 2) }} {{ $item->unit }}</div>
                                         @else
                                             <span class="badge rounded-pill bg-secondary bg-opacity-25 text-dark">Pending</span>

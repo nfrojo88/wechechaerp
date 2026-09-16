@@ -777,12 +777,14 @@ class ProcurementLifecycleService
         ?string $receivedDate = null,
         array $receivedItems = [],
         ?string $notes = null
-    ): void {
+    ): array {
         $from = $pr->status;
         $storeId = $storeId ?: ($pr->store_id ?: Store::where('is_active', true)->first()?->id ?: 1);
         $receivedDate = $receivedDate ?: now()->toDateString();
 
-        DB::transaction(function () use ($pr, $storeId, $slipNo, $receivedDate, $receivedItems, $notes, $from) {
+        $intakeResult = ['is_full' => true, 'remaining' => [], 'slip_no' => $slipNo];
+
+        DB::transaction(function () use ($pr, $storeId, $slipNo, $receivedDate, $receivedItems, $notes, $from, &$intakeResult) {
             // 1. Determine or auto-generate Slip Number if empty
             if (empty($slipNo)) {
                 $sequence = SlipSequence::where('store_id', $storeId)
@@ -948,26 +950,85 @@ class ProcurementLifecycleService
                         ]);
                     } catch (\Throwable $e) {}
                 }
+
+                // Update cumulative received quantity on PurchaseRequestItem
+                try {
+                    $item->increment('received_quantity', $acceptedQty);
+                } catch (\Throwable $e) {
+                    try {
+                        $item->received_quantity = (float)($item->received_quantity ?? 0) + $acceptedQty;
+                        $item->save();
+                    } catch (\Throwable $e2) {}
+                }
             }
 
-            // 5. Update PR status
-            $pr->update([
-                'status'             => PurchaseRequest::STATUS_INTAKE_COMPLETE,
-                'store_id'           => $storeId,
-                'current_owner_role' => null,
-            ]);
+            // 5. Evaluate intake completion across all items
+            $isFullyReceived = true;
+            $remainingSummaries = [];
+            $freshItems = $pr->items()->with('product')->get();
 
-            $this->log($pr, $from, PurchaseRequest::STATUS_INTAKE_COMPLETE, 'store_intake_complete', 'store_manager', 
-                "Received into store (Slip #{$slipNo}). " . ($notes ?? ''));
+            foreach ($freshItems as $fItm) {
+                $target = method_exists($fItm, 'getTargetIntakeQty') 
+                    ? $fItm->getTargetIntakeQty() 
+                    : ((float)($fItm->purchased_quantity ?? 0) > 0 ? (float)$fItm->purchased_quantity : (float)$fItm->quantity);
+                
+                $received = method_exists($fItm, 'getReceivedQty') 
+                    ? $fItm->getReceivedQty() 
+                    : (float)($fItm->received_quantity ?? 0);
+                
+                $rem = max(0.0, $target - $received);
+                if ($rem > 0.001) {
+                    $isFullyReceived = false;
+                    $pName = $fItm->product?->name ?? "Item #{$fItm->product_id}";
+                    $u = $fItm->unit ?? ($fItm->product?->unit ?? 'pcs');
+                    $remainingSummaries[] = "{$pName}: " . number_format($rem, 2) . " {$u} remaining";
+                }
+            }
+
+            if ($isFullyReceived) {
+                $pr->update([
+                    'status'             => PurchaseRequest::STATUS_INTAKE_COMPLETE,
+                    'store_id'           => $storeId,
+                    'current_owner_role' => null,
+                ]);
+
+                $this->log($pr, $from, PurchaseRequest::STATUS_INTAKE_COMPLETE, 'store_intake_complete', 'store_manager', 
+                    "Full material intake completed into store (Slip #{$slipNo}). " . ($notes ?? ''));
+            } else {
+                // Keep PR in pending_store_review for subsequent delivery slips
+                $pr->update([
+                    'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                    'store_id'           => $storeId,
+                    'current_owner_role' => 'store_manager',
+                ]);
+
+                $remText = implode(', ', $remainingSummaries);
+                $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'partial_store_intake', 'store_manager', 
+                    "Partial intake recorded (Slip #{$slipNo}). {$remText}. Awaiting additional delivery slip(s) to fulfill balance. " . ($notes ?? ''));
+            }
+
+            $intakeResult = [
+                'is_full'   => $isFullyReceived,
+                'remaining' => $remainingSummaries,
+                'slip_no'   => $slipNo,
+            ];
         });
 
         // 6. Notify Requester / Coordinator
         $requester = $pr->requestedBy;
         $phone = $requester?->employee?->phone;
         if ($phone) {
-            $this->sms->send($pr->id, $phone, 'coordinator',
-                "ConstructPro: Your PR #{$pr->pr_no} items have been received and added to store inventory. Project: {$pr->project?->name}.");
+            if ($intakeResult['is_full']) {
+                $this->sms->send($pr->id, $phone, 'coordinator',
+                    "ConstructPro: Your PR #{$pr->pr_no} items have been fully received (Slip #{$intakeResult['slip_no']}) and added to store inventory. Project: {$pr->project?->name}.");
+            } else {
+                $remText = implode(', ', $intakeResult['remaining']);
+                $this->sms->send($pr->id, $phone, 'coordinator',
+                    "ConstructPro: Partial delivery received for PR #{$pr->pr_no} under Slip #{$intakeResult['slip_no']}. Remaining balance: {$remText}.");
+            }
         }
+
+        return $intakeResult;
     }
 
     // ═══════════════════════════════════════════════════════════════════
