@@ -131,10 +131,7 @@ class ProcurementLifecycleController extends Controller
 
         if (!$isAdmin && !$isAuditor) {
             $createdPrQuery->where('requested_by', $user->id);
-            $createdMrQuery->where(function($q) use ($user) {
-                $q->where('created_by', $user->id)
-                  ->orWhere('requested_by', $user->id);
-            });
+            $createdMrQuery->where('created_by', $user->id);
         }
 
         if ($request->filled('project_id')) {
