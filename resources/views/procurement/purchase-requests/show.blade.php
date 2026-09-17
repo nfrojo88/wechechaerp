@@ -1404,6 +1404,73 @@
                                     </td>
                                 </tr>
                                 @endforeach
+
+                                @if($purchaseRequest->items->isEmpty())
+                                    @php
+                                        $linkedTr = $prTransfers ?? $purchaseRequest->linked_transfers ?? collect();
+                                    @endphp
+                                    @if($linkedTr->isNotEmpty())
+                                        <tr>
+                                            <td colspan="10" class="p-0">
+                                                <div class="p-3 bg-light border-0">
+                                                    <div class="alert alert-info border-info-subtle d-flex align-items-center gap-2 mb-3">
+                                                        <i class="fa-solid fa-truck-moving fa-lg text-primary"></i>
+                                                        <div>
+                                                            <strong class="d-block">All Line Items Transferred via Store Transfer</strong>
+                                                            <span class="small">This purchase request was processed and fulfilled through store transfer(s) below rather than external purchase.</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm table-bordered align-middle mb-0 bg-white shadow-xs">
+                                                            <thead class="table-light text-uppercase small text-muted" style="font-size: 11px;">
+                                                                <tr>
+                                                                    <th>Transfer Slip #</th>
+                                                                    <th>Material / Product</th>
+                                                                    <th class="text-center">Transferred Quantity</th>
+                                                                    <th>From Store</th>
+                                                                    <th>To Store</th>
+                                                                    <th>Status</th>
+                                                                    <th class="text-end pe-2">Action</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @foreach($linkedTr as $tr)
+                                                                    @foreach($tr->items as $ti)
+                                                                    <tr>
+                                                                        <td class="fw-bold font-monospace">
+                                                                            <a href="{{ route('store-manager.transfers.show', $tr) }}" class="text-decoration-none text-primary">
+                                                                                #{{ $tr->transfer_no ?? ('TR-' . $tr->id) }}
+                                                                            </a>
+                                                                        </td>
+                                                                        <td class="fw-bold">{{ $ti->product?->name ?? ('Item #' . $ti->product_id) }}</td>
+                                                                        <td class="text-center fw-bold">{{ (float)($ti->requested_quantity ?? $ti->approved_quantity ?? 0) }} {{ $ti->unit ?? ($ti->product?->unit ?? 'pcs') }}</td>
+                                                                        <td>{{ $tr->fromStore?->name ?? 'Source Store' }}</td>
+                                                                        <td>{{ $tr->toStore?->name ?? 'Destination Store' }}</td>
+                                                                        <td><span class="badge bg-success-subtle text-success">{{ ucfirst($tr->status) }}</span></td>
+                                                                        <td class="text-end pe-2">
+                                                                            <a href="{{ route('store-manager.transfers.show', $tr) }}" class="btn btn-xs btn-outline-primary shadow-xs">
+                                                                                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> View Transfer
+                                                                            </a>
+                                                                        </td>
+                                                                    </tr>
+                                                                    @endforeach
+                                                                @endforeach
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    @else
+                                        <tr>
+                                            <td colspan="10" class="text-center py-4 text-muted">
+                                                <i class="fa-solid fa-circle-exclamation fa-2x mb-2 opacity-50"></i>
+                                                <p class="mb-1 fw-semibold">No direct purchase items recorded on this request.</p>
+                                                <small class="text-muted">Check the workflow history below for transfer, merge, or fulfillment records.</small>
+                                            </td>
+                                        </tr>
+                                    @endif
+                                @endif
                             </tbody>
                         </table>
                     </div>

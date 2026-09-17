@@ -63,7 +63,7 @@ class ScratchMaterialRequestController extends Controller
             });
 
         // Base Scratch Purchase Requests Query (Direct purchase requests without prior material request)
-        $prQuery = PurchaseRequest::with(['project', 'store', 'requestedBy', 'items.product', 'supplier'])
+        $prQuery = PurchaseRequest::with(['project', 'store', 'requestedBy', 'items.product', 'supplier', 'workflowLogs.actor'])
             ->whereNull('material_request_id');
 
         // Apply filters to Material Requests
@@ -128,6 +128,25 @@ class ScratchMaterialRequestController extends Controller
         $purchaseRequests = ($activeTab === 'material')
             ? collect()
             : (clone $prQuery)->latest()->paginate(15, ['*'], 'pr_page')->withQueryString();
+
+        // Eagerly resolve linked transfers for paginated PRs to show zero-item transfer breakdown
+        if ($purchaseRequests instanceof \Illuminate\Pagination\LengthAwarePaginator && $purchaseRequests->isNotEmpty()) {
+            $prNos = $purchaseRequests->pluck('pr_no')->filter()->toArray();
+
+            $transfers = \App\Models\Transfer::with(['fromStore', 'toStore', 'items.product', 'driver'])
+                ->where(function ($q) use ($prNos) {
+                    foreach ($prNos as $no) {
+                        $q->orWhere('reason', 'like', "%{$no}%");
+                    }
+                })
+                ->get();
+
+            foreach ($purchaseRequests as $pr) {
+                $pr->matched_transfers = $transfers->filter(function ($t) use ($pr) {
+                    return str_contains($t->reason ?? '', $pr->pr_no);
+                });
+            }
+        }
 
         $projects = Project::orderBy('name')->get();
         $stores   = Store::where('is_active', true)->orderBy('name')->get();

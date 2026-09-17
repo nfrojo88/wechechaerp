@@ -160,5 +160,77 @@ class PurchaseRequest extends Model
     public function driverBooking()  { return $this->hasOne(DriverBooking::class); }
     public function workflowLogs()   { return $this->hasMany(PrWorkflowLog::class)->orderBy('created_at'); }
     public function deliveryReceipts(){ return $this->hasMany(DeliveryReceipt::class); }
+
+    /**
+     * Get transfers associated with this PR (by reason matching PR no or material_request_id).
+     */
+    public function getLinkedTransfersAttribute()
+    {
+        return \App\Models\Transfer::with(['fromStore', 'toStore', 'items.product', 'driver', 'requestedBy'])
+            ->where(function ($q) {
+                $q->where('reason', 'like', "%{$this->pr_no}%");
+                if ($this->material_request_id) {
+                    $q->orWhere('reason', 'like', "%MR-{$this->material_request_id}%");
+                }
+            })
+            ->latest()
+            ->get();
+    }
+
+    /**
+     * Get all effective items for this PR, combining direct PR items and items transferred via store transfers.
+     */
+    public function getEffectiveItemsList(): array
+    {
+        $list = [];
+
+        // Direct PR items
+        if ($this->relationLoaded('items')) {
+            foreach ($this->items as $it) {
+                $list[] = [
+                    'source'        => 'direct',
+                    'product_id'    => $it->product_id,
+                    'product_name'  => $it->product?->name ?? ('Item #' . $it->product_id),
+                    'quantity'      => (float)$it->quantity,
+                    'unit'          => $it->unit ?? ($it->product?->unit ?? 'pcs'),
+                    'status'        => 'In PR Queue',
+                    'transfer'      => null,
+                ];
+            }
+        } elseif ($this->items()->exists()) {
+            foreach ($this->items()->with('product')->get() as $it) {
+                $list[] = [
+                    'source'        => 'direct',
+                    'product_id'    => $it->product_id,
+                    'product_name'  => $it->product?->name ?? ('Item #' . $it->product_id),
+                    'quantity'      => (float)$it->quantity,
+                    'unit'          => $it->unit ?? ($it->product?->unit ?? 'pcs'),
+                    'status'        => 'In PR Queue',
+                    'transfer'      => null,
+                ];
+            }
+        }
+
+        // Transferred items
+        $transfers = $this->linked_transfers;
+        foreach ($transfers as $tr) {
+            foreach ($tr->items as $ti) {
+                $list[] = [
+                    'source'        => 'transferred',
+                    'product_id'    => $ti->product_id,
+                    'product_name'  => $ti->product?->name ?? ('Item #' . $ti->product_id),
+                    'quantity'      => (float)($ti->requested_quantity ?? $ti->approved_quantity ?? 0),
+                    'unit'          => $ti->unit ?? ($ti->product?->unit ?? 'pcs'),
+                    'status'        => 'Transferred via ' . ($tr->transfer_no ?? ('Transfer #' . $tr->id)),
+                    'transfer'      => $tr,
+                    'transfer_no'   => $tr->transfer_no,
+                    'from_store'    => $tr->fromStore?->name,
+                    'to_store'      => $tr->toStore?->name,
+                ];
+            }
+        }
+
+        return $list;
+    }
 }
 
