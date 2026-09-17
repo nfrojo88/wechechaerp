@@ -1,60 +1,47 @@
 @extends('layouts.app')
 
-@section('title', 'Edit Slip Sequence - ' . $slipSequence->label)
+@section('title', 'Edit Slip Sequence')
 
 @section('content')
-<div class="container-fluid py-3">
-    <!-- Breadcrumb & Header -->
-    <div class="row mb-3 align-items-center">
-        <div class="col-md-8">
-            <nav aria-label="breadcrumb">
-                <ol class="breadcrumb mb-1 small">
-                    <li class="breadcrumb-item"><a href="{{ route('store-manager.dashboard') }}">Store Manager</a></li>
-                    <li class="breadcrumb-item"><a href="{{ route('store-manager.slip-sequences.index') }}">Slip Sequences</a></li>
-                    <li class="breadcrumb-item active" aria-current="page">{{ $slipSequence->label }} ({{ $slipSequence->store->name }})</li>
-                </ol>
-            </nav>
-            <h4 class="mb-0 text-dark fw-bold">
-                <i class="fas fa-book-open text-primary me-2"></i>Slip Sequence Book: {{ $slipSequence->label }}
-            </h4>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-0"><i class="fas fa-edit me-2 text-primary"></i>Edit Slip Sequence: {{ $slipSequence->label }}</h4>
+            <small class="text-muted">Manage sequence configuration, monitor book usage, and inspect linked slips</small>
         </div>
-        <div class="col-md-4 text-md-end mt-2 mt-md-0">
-            <a href="{{ route('store-manager.slip-sequences.index') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+        <div>
+            <a href="{{ route('store-manager.slip-sequences.index') }}" class="btn btn-sm btn-secondary shadow-sm">
                 <i class="fas fa-arrow-left me-1"></i>Back to Sequences
             </a>
         </div>
     </div>
 
-    <!-- Top Cards: Config Form + Status Sidebar -->
-    <div class="row g-3">
+    <!-- Top Configuration Row -->
+    <div class="row mb-4">
         <div class="col-lg-8">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-white py-3 border-bottom">
-                    <h6 class="mb-0 fw-bold text-dark">
-                        <i class="fas fa-sliders-h text-primary me-2"></i>Sequence Configuration
-                    </h6>
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white py-3">
+                    <h6 class="m-0 fw-bold text-primary"><i class="fas fa-sliders-h me-1"></i>Sequence Details</h6>
                 </div>
                 <div class="card-body">
-                    <form id="sequenceUpdateForm" action="{{ route('store-manager.slip-sequences.update', $slipSequence) }}" method="POST">
+                    <form id="slipSequenceForm" action="{{ route('store-manager.slip-sequences.update', $slipSequence) }}" method="POST">
                         @csrf
                         @method('PUT')
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label class="form-label text-muted small text-uppercase fw-semibold mb-1">Store</label>
-                                <div class="fs-6 fw-bold text-dark">{{ $slipSequence->store->name }}</div>
+                                <label class="form-label fw-bold small text-muted text-uppercase">Store</label>
+                                <div class="fs-6 fw-semibold text-dark">{{ $slipSequence->store->name }}</div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label text-muted small text-uppercase fw-semibold mb-1">Type</label>
+                                <label class="form-label fw-bold small text-muted text-uppercase">Type</label>
                                 <div>
                                     @if($slipSequence->slip_type === 'receive')
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 rounded-pill fs-7">
-                                        <i class="fas fa-arrow-down me-1"></i>GRN (Goods Receiving)
-                                    </span>
+                                    <span class="badge bg-success"><i class="fas fa-arrow-down me-1"></i>GRN</span>
+                                    <span class="text-muted small ms-1">(Goods Receiving)</span>
                                     @else
-                                    <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2 rounded-pill fs-7">
-                                        <i class="fas fa-arrow-up me-1"></i>SIN (Store Issue Note)
-                                    </span>
+                                    <span class="badge bg-info"><i class="fas fa-arrow-up me-1"></i>SIN</span>
+                                    <span class="text-muted small ms-1">(Store Issue Note)</span>
                                     @endif
                                 </div>
                             </div>
@@ -62,46 +49,42 @@
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Label *</label>
+                                <label class="form-label fw-bold small text-muted text-uppercase">Label *</label>
                                 <input type="text" name="label" class="form-control" 
                                        value="{{ old('label', $slipSequence->label) }}" required>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Prefix</label>
+                                <label class="form-label fw-bold small text-muted text-uppercase">Prefix</label>
                                 <input type="text" name="prefix" class="form-control font-monospace" 
                                        value="{{ old('prefix', $slipSequence->prefix) }}" maxlength="50"
-                                       placeholder="e.g. REC, SIN, or empty for numeric">
+                                       placeholder="(Optional prefix, e.g. REC)">
                             </div>
                         </div>
 
-                        <hr class="my-3">
-                        <h6 class="fw-bold text-secondary mb-3">
-                            <i class="fas fa-info-circle me-1"></i>Book Information (Read-Only)
-                        </h6>
+                        <hr>
+                        <h6 class="fw-bold text-secondary mb-3"><i class="fas fa-book me-1"></i>Book Information (Read-Only)</h6>
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label class="form-label text-muted small text-uppercase fw-semibold mb-1">Book Range</label>
-                                <div class="fs-5 fw-bold text-dark font-monospace">
+                                <label class="form-label fw-bold small text-muted text-uppercase">Book Range</label>
+                                <div class="fs-6 font-monospace fw-bold text-dark">
                                     {{ $slipSequence->book_start_no }} &ndash; {{ $slipSequence->book_end_no }}
                                 </div>
-                                <small class="text-muted">Total capacity: <strong>{{ $slipSequence->book_end_no - $slipSequence->book_start_no + 1 }}</strong> slips</small>
+                                <small class="text-muted">Total: {{ $slipSequence->book_end_no - $slipSequence->book_start_no + 1 }} slips</small>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label text-muted small text-uppercase fw-semibold mb-1">Next Available Slip</label>
+                                <label class="form-label fw-bold small text-muted text-uppercase">Next Available Slip</label>
                                 <div>
-                                    <span class="badge bg-primary fs-6 px-3 py-2 rounded-pill font-monospace">
-                                        #{{ $slipSequence->getNextSlipNumber() }}
-                                    </span>
+                                    <span class="badge bg-primary fs-6 px-3 py-1 font-monospace">#{{ $slipSequence->getNextSlipNumber() }}</span>
                                 </div>
                             </div>
                         </div>
 
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <label class="form-label text-muted small text-uppercase fw-semibold mb-1">Usage Progress</label>
+                                <label class="form-label fw-bold small text-muted text-uppercase">Usage Progress</label>
                                 <div>
-                                    <strong class="fs-6">{{ $slipSequence->used_count }}</strong> / {{ $slipSequence->book_end_no - $slipSequence->book_start_no + 1 }} used
+                                    <strong>{{ $slipSequence->used_count }}</strong> / {{ $slipSequence->book_end_no - $slipSequence->book_start_no + 1 }} used
                                     <div class="progress mt-2" style="height: 8px;">
                                         <div class="progress-bar {{ $slipSequence->getPercentageUsed() > 85 ? 'bg-danger' : 'bg-primary' }}" 
                                              role="progressbar" 
@@ -113,14 +96,14 @@
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label text-muted small text-uppercase fw-semibold mb-1">Status</label>
+                                <label class="form-label fw-bold small text-muted text-uppercase">Status</label>
                                 <div>
                                     @if($slipSequence->status === 'active')
-                                    <span class="badge bg-success px-3 py-2 rounded-pill"><i class="fas fa-check me-1"></i>Active</span>
+                                    <span class="badge bg-success"><i class="fas fa-check me-1"></i>Active</span>
                                     @elseif($slipSequence->status === 'full')
-                                    <span class="badge bg-danger px-3 py-2 rounded-pill"><i class="fas fa-exclamation me-1"></i>Full</span>
+                                    <span class="badge bg-danger"><i class="fas fa-exclamation me-1"></i>Full</span>
                                     @else
-                                    <span class="badge bg-secondary px-3 py-2 rounded-pill">Inactive</span>
+                                    <span class="badge bg-secondary">Inactive</span>
                                     @endif
                                 </div>
                             </div>
@@ -128,34 +111,34 @@
 
                         <div class="row mb-3">
                             <div class="col-12">
-                                <label class="form-label fw-semibold">Notes</label>
-                                <textarea name="notes" class="form-control" rows="2" placeholder="Optional notes regarding this physical book sequence...">{{ old('notes', $slipSequence->notes) }}</textarea>
+                                <label class="form-label fw-bold small text-muted text-uppercase">Notes</label>
+                                <textarea name="notes" class="form-control" rows="2">{{ old('notes', $slipSequence->notes) }}</textarea>
                             </div>
                         </div>
 
-                        <hr class="my-3">
+                        <hr>
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 @if($slipSequence->status === 'active')
-                                <button type="submit" form="deactivateForm" class="btn btn-outline-warning btn-sm">
+                                <button type="submit" form="deactivateForm" class="btn btn-sm btn-warning">
                                     <i class="fas fa-pause me-1"></i>Deactivate
                                 </button>
                                 @elseif($slipSequence->status !== 'full')
-                                <button type="submit" form="reactivateForm" class="btn btn-outline-success btn-sm">
+                                <button type="submit" form="reactivateForm" class="btn btn-sm btn-success">
                                     <i class="fas fa-play me-1"></i>Reactivate
                                 </button>
                                 @endif
                             </div>
-                            <div class="d-flex gap-2">
-                                <a href="{{ route('store-manager.slip-sequences.index') }}" class="btn btn-secondary btn-sm px-3">Cancel</a>
-                                <button type="submit" form="sequenceUpdateForm" class="btn btn-primary btn-sm px-4">
+                            <div>
+                                <a href="{{ route('store-manager.slip-sequences.index') }}" class="btn btn-sm btn-secondary me-1">Cancel</a>
+                                <button type="submit" form="slipSequenceForm" class="btn btn-sm btn-primary">
                                     <i class="fas fa-save me-1"></i>Save Changes
                                 </button>
                             </div>
                         </div>
                     </form>
 
-                    <!-- Separate forms for deactivate & reactivate to prevent HTML nested form conflicts -->
+                    <!-- Deactivate / Reactivate separate forms to prevent HTML form nesting -->
                     @if($slipSequence->status === 'active')
                     <form id="deactivateForm" action="{{ route('store-manager.slip-sequences.deactivate', $slipSequence) }}" method="POST" class="d-none">
                         @csrf
@@ -169,65 +152,44 @@
             </div>
         </div>
 
-        <!-- Sequence Status Card -->
         <div class="col-lg-4">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-white py-3 border-bottom">
-                    <h6 class="mb-0 fw-bold text-dark">
-                        <i class="fas fa-clipboard-check text-primary me-2"></i>Sequence Status
-                    </h6>
+            <div class="card shadow-sm bg-light h-100">
+                <div class="card-header bg-white py-3">
+                    <h6 class="m-0 fw-bold text-dark">Sequence Status</h6>
                 </div>
-                <div class="card-body">
+                <div class="card-body small">
                     <div class="mb-3">
-                        <div class="text-muted small fw-semibold text-uppercase mb-1">Current Status</div>
+                        <div class="fw-bold text-muted text-uppercase mb-1">Current Status:</div>
                         @if($slipSequence->status === 'active')
-                        <div class="badge bg-success-subtle text-success border border-success-subtle p-2 text-wrap text-start w-100 fs-7">
-                            <i class="fas fa-check-circle me-1"></i>Active &ndash; Slips will be assigned from this sequence
-                        </div>
+                        <span class="badge bg-success">Active - Slips will be assigned from this sequence</span>
                         @elseif($slipSequence->status === 'full')
-                        <div class="badge bg-danger-subtle text-danger border border-danger-subtle p-2 text-wrap text-start w-100 fs-7">
-                            <i class="fas fa-times-circle me-1"></i>Full &ndash; All slips in this book have been used
-                        </div>
+                        <span class="badge bg-danger">Full - All slips in this book have been used</span>
                         @else
-                        <div class="badge bg-secondary-subtle text-secondary border border-secondary-subtle p-2 text-wrap text-start w-100 fs-7">
-                            <i class="fas fa-pause-circle me-1"></i>Inactive &ndash; Slips will not be assigned from this sequence
-                        </div>
+                        <span class="badge bg-secondary">Inactive - Slips will not be assigned from this sequence</span>
                         @endif
                     </div>
 
-                    <div class="p-3 bg-light rounded-3 mb-3 border">
-                        <div class="text-muted small fw-semibold text-uppercase">Next Slip to Assign</div>
-                        <div class="fs-4 fw-bold text-primary font-monospace">
-                            #{{ $slipSequence->getNextSlipNumber() }}
-                        </div>
-                        <small class="text-muted">Will be automatically allocated on next store transaction</small>
-                    </div>
+                    <hr>
+                    <div class="fw-bold text-muted text-uppercase">Next Slip to Assign:</div>
+                    <div class="fs-5 fw-bold text-primary font-monospace">#{{ $slipSequence->getNextSlipNumber() }}</div>
 
-                    <div class="p-3 bg-light rounded-3 mb-3 border">
-                        <div class="text-muted small fw-semibold text-uppercase">Remaining Slips</div>
-                        <div class="fs-4 fw-bold text-dark font-monospace">
-                            {{ $slipSequence->getRemainingSlips() }}
-                        </div>
-                        <small class="text-muted">Unissued leaves in range {{ $slipSequence->book_start_no }} &ndash; {{ $slipSequence->book_end_no }}</small>
-                    </div>
+                    <hr>
+                    <div class="fw-bold text-muted text-uppercase">Remaining Slips in Book:</div>
+                    <div class="fs-5 fw-bold text-dark">{{ $slipSequence->getRemainingSlips() }}</div>
 
-                    <div class="p-3 bg-light rounded-3 border">
-                        <div class="text-muted small fw-semibold text-uppercase">Assigned & Linked</div>
-                        <div class="fs-4 fw-bold text-success font-monospace">
-                            {{ $assignedSlips->count() }}
-                        </div>
-                        <small class="text-muted">Recorded transactions linked to this book</small>
-                    </div>
+                    <hr>
+                    <div class="fw-bold text-muted text-uppercase">Assigned & Linked Records:</div>
+                    <div class="fs-5 fw-bold text-success">{{ $assignedSlips->count() }} slips</div>
 
                     @if($slipSequence->getRemainingSlips() < 10 && $slipSequence->getRemainingSlips() > 0)
-                    <div class="alert alert-warning border-0 shadow-xs mt-3 mb-0 py-2">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Low on slips!</strong> Only {{ $slipSequence->getRemainingSlips() }} left in this book.
+                    <div class="alert alert-warning mt-3 mb-0">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        Low on slips! Only {{ $slipSequence->getRemainingSlips() }} left in this book.
                     </div>
                     @elseif($slipSequence->getRemainingSlips() <= 0)
-                    <div class="alert alert-danger border-0 shadow-xs mt-3 mb-0 py-2">
-                        <i class="fas fa-ban me-2"></i>
-                        <strong>Book Exhausted!</strong> Please configure the next sequential book.
+                    <div class="alert alert-danger mt-3 mb-0">
+                        <i class="fas fa-ban me-1"></i>
+                        Book is full! Please create or activate the next sequence book.
                     </div>
                     @endif
                 </div>
@@ -235,365 +197,303 @@
         </div>
     </div>
 
-    <!-- Visual Book Leaf Range Map (Interactive Matrix) -->
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <div>
-                        <h6 class="mb-0 fw-bold text-dark">
-                            <i class="fas fa-th text-primary me-2"></i>Physical Book Range Visualizer ({{ $slipSequence->book_start_no }} &ndash; {{ $slipSequence->book_end_no }})
-                        </h6>
-                        <small class="text-muted">Click any assigned slip to filter or view linked record details below</small>
-                    </div>
-                    <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <span class="badge bg-success-subtle text-success border px-2 py-1 small">
-                            <i class="fas fa-square text-success me-1"></i>Assigned & Linked ({{ $assignedSlips->count() }})
-                        </span>
-                        <span class="badge bg-primary-subtle text-primary border px-2 py-1 small">
-                            <i class="fas fa-square text-primary me-1"></i>Next to Assign (#{{ $slipSequence->getNextSlipNumber() }})
-                        </span>
-                        <span class="badge bg-light text-muted border px-2 py-1 small">
-                            <i class="fas fa-square text-secondary me-1"></i>Available ({{ $slipSequence->getRemainingSlips() }})
-                        </span>
-                        @php
-                            $unrecordedCount = collect($bookMap)->where('status', 'unrecorded')->count();
-                        @endphp
-                        @if($unrecordedCount > 0)
-                        <span class="badge bg-warning-subtle text-warning border px-2 py-1 small">
-                            <i class="fas fa-square text-warning me-1"></i>Unrecorded / Gap ({{ $unrecordedCount }})
-                        </span>
-                        @endif
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="d-flex flex-wrap gap-2" style="max-height: 220px; overflow-y: auto;">
-                        @foreach($bookMap as $leaf)
-                            @if($leaf['status'] === 'assigned')
-                                @php $assigned = $leaf['assigned_data']; @endphp
-                                <button type="button" 
-                                        class="btn btn-sm btn-success px-2 py-1 font-monospace fw-semibold rounded-2 slip-filter-pill"
-                                        style="font-size: 0.8rem;"
-                                        data-slip-no="{{ $leaf['number'] }}"
-                                        data-bs-toggle="tooltip"
-                                        data-bs-html="true"
-                                        title="<strong>Slip #{{ $leaf['formatted'] }}</strong><br>Linked to: {{ $assigned['document_ref'] ?? 'Receipt' }}<br>PR: {{ $assigned['pr_no'] ?? 'N/A' }}<br>Supplier: {{ $assigned['supplier_name'] ?? 'Store' }}<br>Status: {{ ucfirst($assigned['status'] ?? 'verified') }}"
-                                        onclick="highlightSlipInTable('{{ $leaf['number'] }}')">
-                                    <i class="fas fa-check me-1" style="font-size: 0.7rem;"></i>{{ $leaf['formatted'] }}
-                                </button>
-                            @elseif($leaf['status'] === 'next')
-                                <button type="button" 
-                                        class="btn btn-sm btn-primary px-2 py-1 font-monospace fw-bold rounded-2 position-relative slip-filter-pill"
-                                        style="font-size: 0.8rem; box-shadow: 0 0 8px rgba(13, 110, 253, 0.5);"
-                                        data-bs-toggle="tooltip"
-                                        title="Next Slip to be assigned (#{{ $leaf['formatted'] }})">
-                                    <i class="fas fa-arrow-right me-1"></i>{{ $leaf['formatted'] }}
-                                </button>
-                            @elseif($leaf['status'] === 'unrecorded')
-                                <button type="button" 
-                                        class="btn btn-sm btn-outline-warning text-dark px-2 py-1 font-monospace rounded-2 slip-filter-pill"
-                                        style="font-size: 0.8rem; background-color: #fff9e6;"
-                                        data-slip-no="{{ $leaf['number'] }}"
-                                        data-bs-toggle="tooltip"
-                                        title="Slip #{{ $leaf['formatted'] }}: Passed or unrecorded gap"
-                                        onclick="highlightSlipInTable('{{ $leaf['number'] }}')">
-                                    {{ $leaf['formatted'] }}
-                                </button>
-                            @else
-                                <span class="btn btn-sm btn-light border text-muted px-2 py-1 font-monospace rounded-2"
-                                      style="font-size: 0.8rem;"
-                                      data-bs-toggle="tooltip"
-                                      title="Slip #{{ $leaf['formatted'] }}: Available in book">
-                                    {{ $leaf['formatted'] }}
-                                </span>
-                            @endif
-                        @endforeach
-                    </div>
-                </div>
+    <!-- Assigned Slips & Linked Records Section -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h6 class="m-0 fw-bold text-primary">
+                    <i class="fas fa-receipt me-2"></i>Assigned Slips & Linked Records
+                </h6>
+                <small class="text-muted">
+                    Slips issued from book range <strong>{{ $slipSequence->book_start_no }} &ndash; {{ $slipSequence->book_end_no }}</strong> for <strong>{{ $slipSequence->store->name }}</strong>
+                </small>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success">{{ $assignedSlips->count() }} Assigned</span>
+                <span class="badge bg-primary">Next: #{{ $slipSequence->getNextSlipNumber() }}</span>
+                <span class="badge bg-secondary">{{ $slipSequence->getRemainingSlips() }} Remaining</span>
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#bookMapCollapse" aria-expanded="false" aria-controls="bookMapCollapse">
+                    <i class="fas fa-th me-1"></i>Book Range Map
+                </button>
             </div>
         </div>
-    </div>
 
-    <!-- Assigned Slips & Linked Records Detailed Table -->
-    <div class="row mt-4" id="assignedSlipsSection">
-        <div class="col-12">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-3">
-                    <div>
-                        <h5 class="mb-1 text-dark fw-bold">
-                            <i class="fas fa-receipt text-primary me-2"></i>Assigned Slips & Linked Transactions
-                        </h5>
-                        <p class="text-muted mb-0 small">
-                            Detailed audit of all slips issued from Book Range <strong>{{ $slipSequence->book_start_no }} &ndash; {{ $slipSequence->book_end_no }}</strong> and which document, purchase request, and items they link with.
-                        </p>
-                    </div>
-                    <div class="d-flex align-items-center gap-2 flex-wrap">
-                        <div class="input-group input-group-sm" style="width: 260px;">
-                            <span class="input-group-text bg-light border-end-0"><i class="fas fa-search text-muted"></i></span>
-                            <input type="text" id="slipSearchInput" class="form-control border-start-0" placeholder="Filter slip, PR, supplier, item...">
-                        </div>
-                        <button type="button" id="resetFilterBtn" class="btn btn-outline-secondary btn-sm" onclick="resetSlipTableFilter()">
-                            <i class="fas fa-undo me-1"></i>Reset
+        <!-- Collapsible Book Leaves Map -->
+        <div class="collapse border-bottom bg-light p-3" id="bookMapCollapse">
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                <span class="small fw-bold text-muted text-uppercase">
+                    <i class="fas fa-bookmark me-1"></i>Book Range Leaves ({{ $slipSequence->book_start_no }} &ndash; {{ $slipSequence->book_end_no }})
+                </span>
+                <div class="small d-flex gap-3 text-muted">
+                    <span><span class="badge bg-success px-2 py-0">&nbsp;</span> Assigned</span>
+                    <span><span class="badge bg-primary px-2 py-0">&nbsp;</span> Next Available</span>
+                    <span><span class="badge bg-warning text-dark px-2 py-0">&nbsp;</span> Unrecorded / Gap</span>
+                    <span><span class="badge bg-light border text-muted px-2 py-0">&nbsp;</span> Available</span>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-1" style="max-height: 180px; overflow-y: auto;">
+                @foreach($bookMap as $leaf)
+                    @if($leaf['status'] === 'assigned')
+                        <button type="button" 
+                                class="btn btn-sm btn-success px-2 py-0 font-monospace"
+                                style="font-size: 0.75rem;"
+                                title="Slip #{{ $leaf['formatted'] }} - Click to filter row"
+                                onclick="filterSlipRow('{{ $leaf['number'] }}')">
+                            {{ $leaf['formatted'] }}
                         </button>
-                    </div>
+                    @elseif($leaf['status'] === 'next')
+                        <span class="badge bg-primary px-2 py-1 font-monospace" style="font-size: 0.75rem;" title="Next Slip to Assign">
+                            #{{ $leaf['formatted'] }}
+                        </span>
+                    @elseif($leaf['status'] === 'unrecorded')
+                        <button type="button" 
+                                class="btn btn-sm btn-warning text-dark px-2 py-0 font-monospace"
+                                style="font-size: 0.75rem;"
+                                title="Slip #{{ $leaf['formatted'] }} - Unrecorded gap"
+                                onclick="filterSlipRow('{{ $leaf['number'] }}')">
+                            {{ $leaf['formatted'] }}
+                        </button>
+                    @else
+                        <span class="badge bg-light text-muted border px-2 py-1 font-monospace" style="font-size: 0.75rem;">
+                            {{ $leaf['formatted'] }}
+                        </span>
+                    @endif
+                @endforeach
+            </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="p-3 border-bottom bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width: 420px;">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-light"><i class="fas fa-search text-muted"></i></span>
+                    <input type="text" id="slipSearchInput" class="form-control" placeholder="Search slip #, PR #, project, supplier, material...">
                 </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetSlipSearch()">
+                    Reset
+                </button>
+            </div>
+            <div class="small text-muted">
+                Showing <strong>{{ $assignedSlips->count() }}</strong> assigned records
+            </div>
+        </div>
 
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0" id="assignedSlipsTable">
-                            <thead class="table-light text-uppercase small" style="letter-spacing: 0.5px;">
-                                <tr>
-                                    <th class="ps-3">Slip #</th>
-                                    <th>Type</th>
-                                    <th>Linked Document</th>
-                                    <th>Linked Purchase Request (PR)</th>
-                                    <th>Supplier / Source</th>
-                                    <th>Items / Materials</th>
-                                    <th>Handled By & Date</th>
-                                    <th>Status</th>
-                                    <th class="text-end pe-3">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @forelse($assignedSlips as $slip)
-                                <tr class="slip-row {{ $slip['is_void'] ? 'table-danger' : '' }}" 
-                                    id="slip-row-{{ $slip['numeric_no'] }}"
-                                    data-slip-no="{{ $slip['slip_no'] }}"
-                                    data-numeric-no="{{ $slip['numeric_no'] }}">
-                                    <!-- Slip # -->
-                                    <td class="ps-3 font-monospace">
-                                        <div class="d-flex align-items-center gap-2">
-                                            <span class="badge bg-primary px-2 py-1 fs-6 font-monospace">
-                                                #{{ $slip['slip_no'] }}
-                                            </span>
-                                            @if($slip['is_void'])
-                                            <span class="badge bg-danger" title="Marked as Void">VOID</span>
-                                            @endif
-                                        </div>
-                                        <small class="text-muted">Leaf: {{ $slip['numeric_no'] }}</small>
-                                    </td>
-
-                                    <!-- Slip Type -->
-                                    <td>
-                                        @if($slip['slip_type'] === 'receive')
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1">
-                                            <i class="fas fa-arrow-down me-1"></i>GRN
-                                        </span>
-                                        @else
-                                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2 py-1">
-                                            <i class="fas fa-arrow-up me-1"></i>SIN
-                                        </span>
-                                        @endif
-                                    </td>
-
-                                    <!-- Linked Document (DR or Transfer) -->
-                                    <td>
-                                        <div>
-                                            <a href="{{ $slip['document_url'] }}" class="fw-bold text-decoration-none text-primary" target="_blank">
-                                                <i class="fas fa-file-invoice text-primary me-1"></i>{{ $slip['document_ref'] }}
-                                            </a>
-                                        </div>
-                                        <small class="text-muted">
-                                            Store: <strong>{{ $slip['store_name'] }}</strong>
-                                        </small>
-                                    </td>
-
-                                    <!-- Linked Purchase Request -->
-                                    <td>
-                                        @if($slip['purchase_request_id'])
-                                        <div>
-                                            <a href="{{ $slip['pr_url'] }}" class="fw-bold text-decoration-none text-dark" target="_blank">
-                                                <i class="fas fa-shopping-cart text-secondary me-1"></i>PR #{{ $slip['pr_no'] ?: $slip['purchase_request_id'] }}
-                                            </a>
-                                        </div>
-                                        <div class="small text-muted text-truncate" style="max-width: 220px;" title="{{ $slip['pr_title'] }}">
-                                            {{ $slip['pr_title'] ?: 'Material Requisition' }}
-                                        </div>
-                                        <div>
-                                            <span class="badge bg-light text-secondary border px-2 py-0" style="font-size: 0.75rem;">
-                                                <i class="fas fa-project-diagram me-1"></i>{{ $slip['project_name'] }}
-                                            </span>
-                                        </div>
-                                        @else
-                                        <span class="text-muted small">
-                                            <i class="fas fa-minus me-1"></i>Direct / Transfer
-                                        </span>
-                                        @if($slip['project_name'] && $slip['project_name'] !== 'N/A')
-                                        <div>
-                                            <span class="badge bg-light text-secondary border px-2 py-0" style="font-size: 0.75rem;">
-                                                {{ $slip['project_name'] }}
-                                            </span>
-                                        </div>
-                                        @endif
-                                        @endif
-                                    </td>
-
-                                    <!-- Supplier / Source -->
-                                    <td>
-                                        <div class="fw-semibold text-dark text-truncate" style="max-width: 200px;" title="{{ $slip['supplier_name'] }}">
-                                            <i class="fas fa-truck text-muted me-1"></i>{{ $slip['supplier_name'] }}
-                                        </div>
-                                        @if($slip['purchase_order_ref'])
-                                        <small class="text-muted font-monospace">PO: {{ $slip['purchase_order_ref'] }}</small>
-                                        @endif
-                                    </td>
-
-                                    <!-- Items / Materials -->
-                                    <td>
-                                        <div class="d-flex align-items-center gap-1">
-                                            <span class="badge bg-secondary-subtle text-dark border rounded-pill px-2">
-                                                {{ $slip['items_count'] }} {{ \Illuminate\Support\Str::plural('item', $slip['items_count']) }}
-                                            </span>
-                                            @if($slip['items_count'] > 0)
-                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" 
-                                                    data-bs-toggle="modal" 
-                                                    data-bs-target="#itemsModal-{{ $slip['numeric_no'] }}"
-                                                    title="View items received under this slip">
-                                                <i class="fas fa-list-ul text-primary"></i>
-                                            </button>
-                                            @endif
-                                        </div>
-                                        @if(!empty($slip['items']) && count($slip['items']) > 0)
-                                        <div class="small text-muted text-truncate mt-1" style="max-width: 220px;" title="{{ collect($slip['items'])->pluck('name')->implode(', ') }}">
-                                            {{ $slip['items'][0]['name'] }} ({{ $slip['items'][0]['quantity'] }} {{ $slip['items'][0]['unit'] }})
-                                            @if(count($slip['items']) > 1)
-                                            <span class="text-secondary">+{{ count($slip['items']) - 1 }} more</span>
-                                            @endif
-                                        </div>
-                                        @endif
-                                    </td>
-
-                                    <!-- Handled By & Date -->
-                                    <td>
-                                        <div class="small text-dark fw-semibold">
-                                            <i class="fas fa-user-check text-muted me-1"></i>{{ $slip['handled_by'] }}
-                                        </div>
-                                        <small class="text-muted">
-                                            {{ $slip['date'] ? \Carbon\Carbon::parse($slip['date'])->format('M d, Y') : '-' }}
-                                        </small>
-                                    </td>
-
-                                    <!-- Status -->
-                                    <td>
-                                        @if($slip['is_void'])
-                                        <span class="badge bg-danger">Void</span>
-                                        @elseif($slip['status'] === 'verified' || $slip['status'] === 'approved' || $slip['status'] === 'completed')
-                                        <span class="badge bg-success">
-                                            <i class="fas fa-check-circle me-1"></i>{{ ucfirst($slip['status']) }}
-                                        </span>
-                                        @elseif($slip['status'] === 'draft')
-                                        <span class="badge bg-secondary">Draft</span>
-                                        @else
-                                        <span class="badge bg-warning text-dark">{{ ucfirst($slip['status']) }}</span>
-                                        @endif
-                                    </td>
-
-                                    <!-- Actions -->
-                                    <td class="text-end pe-3">
-                                        <div class="btn-group btn-group-sm">
-                                            <a href="{{ $slip['document_url'] }}" class="btn btn-outline-primary" target="_blank" title="View Document Details">
-                                                <i class="fas fa-eye me-1"></i>View
-                                            </a>
-                                            @if($slip['pr_url'])
-                                            <a href="{{ $slip['pr_url'] }}" class="btn btn-outline-secondary" target="_blank" title="View Purchase Request">
-                                                <i class="fas fa-external-link-alt"></i>
-                                            </a>
-                                            @endif
-                                        </div>
-                                    </td>
-                                </tr>
-
-                                <!-- Items Modal for this slip -->
-                                @if($slip['items_count'] > 0)
-                                <div class="modal fade" id="itemsModal-{{ $slip['numeric_no'] }}" tabindex="-1" aria-hidden="true">
-                                    <div class="modal-dialog modal-dialog-centered">
-                                        <div class="modal-content border-0 shadow">
-                                            <div class="modal-header bg-light py-2">
-                                                <h6 class="modal-title fw-bold text-dark">
-                                                    <i class="fas fa-boxes text-primary me-2"></i>Items on Slip #{{ $slip['slip_no'] }}
-                                                </h6>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                            </div>
-                                            <div class="modal-body p-0">
-                                                <div class="p-3 bg-light border-bottom small">
-                                                    <div><strong>Document:</strong> {{ $slip['document_ref'] }}</div>
-                                                    @if($slip['pr_no'])
-                                                    <div><strong>PR:</strong> #{{ $slip['pr_no'] }} &bull; <strong>Project:</strong> {{ $slip['project_name'] }}</div>
-                                                    @endif
-                                                    <div><strong>Supplier / Source:</strong> {{ $slip['supplier_name'] }}</div>
-                                                    <div><strong>Date:</strong> {{ $slip['date'] ? \Carbon\Carbon::parse($slip['date'])->format('M d, Y') : '-' }}</div>
-                                                </div>
-                                                <table class="table table-sm table-striped mb-0">
-                                                    <thead class="table-light small">
-                                                        <tr>
-                                                            <th class="ps-3">Item / Material</th>
-                                                            <th class="text-end">Quantity</th>
-                                                            <th class="text-end pe-3">Unit</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        @foreach($slip['items'] as $it)
-                                                        <tr>
-                                                            <td class="ps-3 fw-semibold">{{ $it['name'] }}</td>
-                                                            <td class="text-end font-monospace">{{ number_format($it['quantity'], 2) }}</td>
-                                                            <td class="text-end pe-3 text-muted">{{ $it['unit'] ?: 'units' }}</td>
-                                                        </tr>
-                                                        @endforeach
-                                                    </tbody>
-                                                </table>
-                                                @if($slip['notes'])
-                                                <div class="p-3 bg-light small border-top text-muted">
-                                                    <strong>Notes:</strong> {{ $slip['notes'] }}
-                                                </div>
-                                                @endif
-                                            </div>
-                                            <div class="modal-footer py-2">
-                                                <a href="{{ $slip['document_url'] }}" class="btn btn-primary btn-sm" target="_blank">
-                                                    <i class="fas fa-external-link-alt me-1"></i>Open Full Document
-                                                </a>
-                                                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+        <!-- Table View -->
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0" id="assignedSlipsTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 110px;">Slip #</th>
+                            <th style="width: 80px;">Type</th>
+                            <th style="min-width: 170px;">Linked Document</th>
+                            <th style="min-width: 220px;">Purchase Request (PR)</th>
+                            <th style="min-width: 160px;">Supplier / Source</th>
+                            <th style="width: 120px;">Items</th>
+                            <th style="width: 130px;">Handled By & Date</th>
+                            <th style="width: 95px;">Status</th>
+                            <th style="width: 110px;" class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse($assignedSlips as $slip)
+                        <tr class="slip-row {{ $slip['is_void'] ? 'table-danger' : '' }}" 
+                            id="slip-row-{{ $slip['numeric_no'] }}"
+                            data-slip-no="{{ $slip['slip_no'] }}"
+                            data-numeric-no="{{ $slip['numeric_no'] }}">
+                            <!-- Slip # -->
+                            <td>
+                                <span class="badge bg-primary font-monospace fs-6">
+                                    #{{ $slip['slip_no'] }}
+                                </span>
+                                @if($slip['is_void'])
+                                <br><span class="badge bg-danger mt-1">VOID</span>
                                 @endif
-                                @empty
-                                <tr>
-                                    <td colspan="9" class="text-center py-5 text-muted">
-                                        <div class="mb-2"><i class="fas fa-inbox fa-3x text-secondary opacity-50"></i></div>
-                                        <div class="fw-bold fs-6">No slips assigned from this book yet</div>
-                                        <small>The next transaction for this store and slip type will automatically allocate slip #<strong>{{ $slipSequence->getNextSlipNumber() }}</strong>.</small>
-                                    </td>
-                                </tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                                <div class="small text-muted mt-1">Leaf: {{ $slip['numeric_no'] }}</div>
+                            </td>
 
-                <div class="card-footer bg-white py-2 border-top d-flex justify-content-between align-items-center small text-muted">
-                    <div>
-                        Showing <strong>{{ $assignedSlips->count() }}</strong> assigned slip records for this book sequence
-                    </div>
-                    <div>
-                        Next slip counter: <strong>#{{ $slipSequence->getNextSlipNumber() }}</strong>
-                    </div>
-                </div>
+                            <!-- Type -->
+                            <td>
+                                @if($slip['slip_type'] === 'receive')
+                                <span class="badge bg-success"><i class="fas fa-arrow-down me-1"></i>GRN</span>
+                                @else
+                                <span class="badge bg-info"><i class="fas fa-arrow-up me-1"></i>SIN</span>
+                                @endif
+                            </td>
+
+                            <!-- Linked Document -->
+                            <td>
+                                <div>
+                                    <a href="{{ $slip['document_url'] }}" class="fw-bold text-primary text-decoration-none" target="_blank">
+                                        <i class="fas fa-file-invoice me-1"></i>{{ $slip['document_ref'] }}
+                                    </a>
+                                </div>
+                                <small class="text-muted d-block">Store: {{ $slip['store_name'] }}</small>
+                            </td>
+
+                            <!-- Linked Purchase Request -->
+                            <td>
+                                @if($slip['purchase_request_id'])
+                                <div>
+                                    <a href="{{ $slip['pr_url'] }}" class="fw-bold text-dark text-decoration-none" target="_blank">
+                                        <i class="fas fa-shopping-cart text-secondary me-1"></i>PR #{{ $slip['pr_no'] ?: $slip['purchase_request_id'] }}
+                                    </a>
+                                </div>
+                                @if($slip['pr_title'])
+                                <small class="text-muted d-block text-truncate" style="max-width: 250px;">{{ $slip['pr_title'] }}</small>
+                                @endif
+                                @if($slip['project_name'] && $slip['project_name'] !== 'N/A')
+                                <span class="badge bg-light text-dark border mt-1" style="font-size: 0.72rem;">
+                                    <i class="fas fa-project-diagram text-secondary me-1"></i>{{ $slip['project_name'] }}
+                                </span>
+                                @endif
+                                @else
+                                <span class="text-muted small">&ndash; Direct / Store Transfer &ndash;</span>
+                                @if($slip['project_name'] && $slip['project_name'] !== 'N/A')
+                                <div><span class="badge bg-light text-dark border mt-1" style="font-size: 0.72rem;">{{ $slip['project_name'] }}</span></div>
+                                @endif
+                                @endif
+                            </td>
+
+                            <!-- Supplier / Source -->
+                            <td>
+                                <div class="fw-semibold text-dark text-truncate" style="max-width: 180px;" title="{{ $slip['supplier_name'] }}">
+                                    {{ $slip['supplier_name'] }}
+                                </div>
+                                @if($slip['purchase_order_ref'])
+                                <small class="text-muted font-monospace d-block">PO: {{ $slip['purchase_order_ref'] }}</small>
+                                @endif
+                            </td>
+
+                            <!-- Items -->
+                            <td>
+                                <span class="badge bg-secondary mb-1">
+                                    {{ $slip['items_count'] }} {{ \Illuminate\Support\Str::plural('item', $slip['items_count']) }}
+                                </span>
+                                @if(!empty($slip['items']) && count($slip['items']) > 0)
+                                <div class="small text-muted text-truncate" style="max-width: 140px;" title="{{ collect($slip['items'])->pluck('name')->implode(', ') }}">
+                                    {{ $slip['items'][0]['name'] }}
+                                    @if($slip['items'][0]['quantity'])
+                                    ({{ $slip['items'][0]['quantity'] }} {{ $slip['items'][0]['unit'] }})
+                                    @endif
+                                </div>
+                                @if(count($slip['items']) > 1)
+                                <button type="button" class="btn btn-link btn-sm p-0 text-primary small text-decoration-none" 
+                                        data-bs-toggle="modal" data-bs-target="#itemsModal-{{ $slip['numeric_no'] }}">
+                                    +{{ count($slip['items']) - 1 }} more
+                                </button>
+                                @endif
+                                @endif
+                            </td>
+
+                            <!-- Handled By & Date -->
+                            <td>
+                                <div class="small fw-semibold text-dark">{{ $slip['handled_by'] }}</div>
+                                <small class="text-muted d-block">
+                                    {{ $slip['date'] ? \Carbon\Carbon::parse($slip['date'])->format('M d, Y') : '-' }}
+                                </small>
+                            </td>
+
+                            <!-- Status -->
+                            <td>
+                                @if($slip['is_void'])
+                                <span class="badge bg-danger">Void</span>
+                                @elseif($slip['status'] === 'verified' || $slip['status'] === 'approved' || $slip['status'] === 'completed')
+                                <span class="badge bg-success">{{ ucfirst($slip['status']) }}</span>
+                                @elseif($slip['status'] === 'draft')
+                                <span class="badge bg-secondary">Draft</span>
+                                @else
+                                <span class="badge bg-warning text-dark">{{ ucfirst($slip['status']) }}</span>
+                                @endif
+                            </td>
+
+                            <!-- Actions -->
+                            <td class="text-end pe-2">
+                                <a href="{{ $slip['document_url'] }}" class="btn btn-sm btn-outline-primary" target="_blank" title="View Document">
+                                    <i class="fas fa-eye me-1"></i>View
+                                </a>
+                                @if($slip['pr_url'])
+                                <a href="{{ $slip['pr_url'] }}" class="btn btn-sm btn-outline-secondary" target="_blank" title="View Purchase Request">
+                                    <i class="fas fa-external-link-alt"></i>
+                                </a>
+                                @endif
+                            </td>
+                        </tr>
+                        @empty
+                        <tr>
+                            <td colspan="9" class="text-center py-4 text-muted">
+                                <i class="fas fa-inbox fa-2x mb-2 text-muted d-block"></i>
+                                No slip records assigned from this sequence book yet.
+                            </td>
+                        </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Modals placed OUTSIDE of the table structure to ensure valid HTML and prevent styling breaks -->
+@foreach($assignedSlips as $slip)
+    @if($slip['items_count'] > 0)
+    <div class="modal fade" id="itemsModal-{{ $slip['numeric_no'] }}" tabindex="-1" aria-labelledby="itemsModalLabel-{{ $slip['numeric_no'] }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title fw-bold" id="itemsModalLabel-{{ $slip['numeric_no'] }}">
+                        <i class="fas fa-boxes me-2 text-primary"></i>Items on Slip #{{ $slip['slip_no'] }}
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="p-3 bg-light border-bottom small">
+                        <div><strong>Document:</strong> {{ $slip['document_ref'] }}</div>
+                        @if($slip['pr_no'])
+                        <div><strong>PR:</strong> #{{ $slip['pr_no'] }} &bull; <strong>Project:</strong> {{ $slip['project_name'] }}</div>
+                        @endif
+                        <div><strong>Supplier / Source:</strong> {{ $slip['supplier_name'] }}</div>
+                        <div><strong>Date:</strong> {{ $slip['date'] ? \Carbon\Carbon::parse($slip['date'])->format('M d, Y') : '-' }}</div>
+                    </div>
+                    <table class="table table-sm table-striped mb-0">
+                        <thead class="table-light small">
+                            <tr>
+                                <th class="ps-3">Item / Material</th>
+                                <th class="text-end">Quantity</th>
+                                <th class="text-end pe-3">Unit</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($slip['items'] as $it)
+                            <tr>
+                                <td class="ps-3">{{ $it['name'] }}</td>
+                                <td class="text-end font-monospace">{{ number_format($it['quantity'], 2) }}</td>
+                                <td class="text-end pe-3 text-muted">{{ $it['unit'] ?: 'units' }}</td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                    @if($slip['notes'])
+                    <div class="p-3 bg-light small border-top text-muted">
+                        <strong>Notes:</strong> {{ $slip['notes'] }}
+                    </div>
+                    @endif
+                </div>
+                <div class="modal-footer py-2">
+                    <a href="{{ $slip['document_url'] }}" class="btn btn-primary btn-sm" target="_blank">
+                        <i class="fas fa-external-link-alt me-1"></i>Open Document
+                    </a>
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    @endif
+@endforeach
+
 @push('scripts')
 <script>
-    // Initialize tooltips
     document.addEventListener('DOMContentLoaded', function() {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl);
-        });
-
-        // Search Filter for Slips Table
         var searchInput = document.getElementById('slipSearchInput');
         if (searchInput) {
             searchInput.addEventListener('input', function() {
@@ -607,8 +507,7 @@
         }
     });
 
-    // Highlight and scroll to specific slip from the book visualizer
-    function highlightSlipInTable(slipNum) {
+    function filterSlipRow(slipNum) {
         var searchInput = document.getElementById('slipSearchInput');
         if (searchInput) {
             searchInput.value = slipNum;
@@ -619,19 +518,14 @@
         var targetRow = document.getElementById('slip-row-' + slipNum);
         if (targetRow) {
             targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            targetRow.classList.add('table-primary');
+            targetRow.classList.add('table-warning');
             setTimeout(function() {
-                targetRow.classList.remove('table-primary');
-            }, 2500);
-        } else {
-            var section = document.getElementById('assignedSlipsSection');
-            if (section) {
-                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
+                targetRow.classList.remove('table-warning');
+            }, 2000);
         }
     }
 
-    function resetSlipTableFilter() {
+    function resetSlipSearch() {
         var searchInput = document.getElementById('slipSearchInput');
         if (searchInput) {
             searchInput.value = '';
