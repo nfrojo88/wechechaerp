@@ -75,12 +75,24 @@ class SlipSequenceController extends Controller
     }
 
     /**
+     * Display / Show Slip Sequence details
+     */
+    public function show(SlipSequence $slipSequence)
+    {
+        return $this->edit($slipSequence);
+    }
+
+    /**
      * Edit Slip Sequence
      */
     public function edit(SlipSequence $slipSequence)
     {
+        $slipSequence->load('store');
         $stores = Store::where('is_active', true)->orderBy('name')->get();
-        return view('slip-sequences.edit', compact('slipSequence', 'stores'));
+        $assignedSlips = $slipSequence->getAssignedSlipsDetail();
+        $bookMap = $slipSequence->getBookRangeMap($assignedSlips);
+
+        return view('slip-sequences.edit', compact('slipSequence', 'stores', 'assignedSlips', 'bookMap'));
     }
 
     /**
