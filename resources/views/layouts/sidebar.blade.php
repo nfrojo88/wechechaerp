@@ -159,7 +159,7 @@
 
 {{-- ④ Procurement --}}
 @php
-    $procRoutes = ['dashboard.purchase','purchase-requests.*','procurement.*','material-requests.*'];
+    $procRoutes = ['dashboard.purchase','purchase-requests.*','procurement.*','material-requests.*','admin.scratch-material-requests.*'];
     $procActive = collect($procRoutes)->contains(fn($p) => request()->routeIs($p));
 @endphp
 <li class="sidebar-nav-item group-item">
@@ -184,7 +184,8 @@
         <ul class="sidebar-sub-nav">
             <li><a href="{{ route('dashboard.purchase') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.purchase') ? 'active' : '' }}"><i class="fa-solid fa-chart-line text-info"></i><span>Purchase Dashboard</span></a></li>
             <li><a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-tasks text-primary"></i><span>Procurement — My Queue</span></a></li>
-            <li><a href="{{ route('material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-cart-flatbed text-danger"></i><span>Material Requests</span></a></li>
+            <li><a href="{{ route('material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-requests.*') && !request()->routeIs('admin.scratch-material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-cart-flatbed text-danger"></i><span>Material Requests</span></a></li>
+            <li><a href="{{ route('admin.scratch-material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.scratch-material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-file-circle-question text-warning"></i><span>Scratch Material Requests</span><span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.55rem;">Scratch</span></a></li>
             <li><a href="{{ route('delivery-receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('delivery-receipts.*') ? 'active' : '' }}"><i class="fa-solid fa-receipt text-success"></i><span>Delivery Receipts</span></a></li>
         </ul>
     </div>

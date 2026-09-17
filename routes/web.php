@@ -1319,6 +1319,12 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/admin/tickets/{ticket}/reply', [AdminTicketController::class, 'reply'])->name('admin.tickets.reply');
         Route::post('/admin/tickets/{ticket}/status', [AdminTicketController::class, 'updateStatus'])->name('admin.tickets.status');
         Route::post('/admin/tickets/{ticket}/assign', [AdminTicketController::class, 'assign'])->name('admin.tickets.assign');
+
+        // Scratch Material Procurement Requisitions (Global Admin Only)
+        Route::get('/admin/procurement/scratch-requests', [App\Http\Controllers\Admin\ScratchMaterialRequestController::class, 'index'])
+            ->name('admin.scratch-material-requests.index');
+        Route::get('/admin/procurement/scratch-requests/export', [App\Http\Controllers\Admin\ScratchMaterialRequestController::class, 'exportCsv'])
+            ->name('admin.scratch-material-requests.export');
     });
 
     // Support Tickets (All Employees)
