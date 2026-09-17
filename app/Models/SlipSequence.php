@@ -140,21 +140,38 @@ class SlipSequence extends Model
     {
         $start = (int) $this->book_start_no;
         $end = (int) $this->book_end_no;
-        $storeId = $this->store_id;
+        $storeId = (int) $this->store_id;
         $slipType = $this->slip_type;
         $prefix = trim((string) $this->prefix);
 
-        // 1. Find matching Delivery Receipts
-        $receipts = DeliveryReceipt::where(function ($q) use ($storeId, $prefix) {
-                $q->where('store_id', $storeId)
-                  ->orWhere('to_store_id', $storeId);
-                if (!empty($prefix)) {
-                    $q->orWhere('dr_no', 'like', $prefix . '%');
+        $assignedSlips = collect();
+
+        // Helper function to extract any integer in [$start, $end] from any text field
+        $extractSlipNumber = function ($str) use ($start, $end) {
+            if (empty($str)) return null;
+            if (preg_match_all('/\d+/', (string) $str, $matches)) {
+                foreach ($matches[0] as $match) {
+                    $val = (int) $match;
+                    if ($val >= $start && $val <= $end) {
+                        return $val;
+                    }
                 }
+            }
+            return null;
+        };
+
+        // 1. Find all matching Delivery Receipts across the database
+        $receipts = DeliveryReceipt::where(function ($q) use ($storeId, $prefix, $start, $end) {
+                $q->where('store_id', $storeId)
+                  ->orWhere('to_store_id', $storeId)
+                  ->orWhereNotNull('dr_no')
+                  ->orWhereNotNull('reference_no')
+                  ->orWhereNotNull('challan_no');
             })
             ->with([
                 'purchaseRequest.project',
                 'purchaseRequest.requestedBy',
+                'purchaseRequest.items.product',
                 'purchaseOrder.supplier',
                 'store',
                 'receivedBy',
@@ -163,31 +180,41 @@ class SlipSequence extends Model
             ->latest('id')
             ->get();
 
-        $assignedSlips = collect();
-
         foreach ($receipts as $receipt) {
-            if (empty($receipt->dr_no)) {
-                continue;
-            }
+            // Check dr_no, reference_no, challan_no, notes
+            $numeric = $extractSlipNumber($receipt->dr_no) 
+                    ?? $extractSlipNumber($receipt->reference_no)
+                    ?? $extractSlipNumber($receipt->challan_no)
+                    ?? $extractSlipNumber($receipt->notes);
 
-            // Extract numeric digits
-            $rawDigits = preg_replace('/[^0-9]/', '', $receipt->dr_no);
-            if ($rawDigits === '') {
-                continue;
-            }
-            $numeric = (int) $rawDigits;
+            if ($numeric !== null) {
+                // If slip already added, don't duplicate
+                if ($assignedSlips->contains('numeric_no', $numeric)) {
+                    continue;
+                }
 
-            if ($numeric >= $start && $numeric <= $end) {
-                $itemsList = $receipt->items->map(function ($it) {
-                    return [
-                        'name'     => $it->product?->name ?? 'Item',
-                        'quantity' => (float) ($it->quantity ?? $it->quantity_received ?? $it->accepted_quantity ?? 0),
-                        'unit'     => $it->unit ?? $it->product?->unit ?? '',
-                    ];
-                });
+                // Extract items from DeliveryReceiptItem or fallback to PR items
+                $itemsList = collect();
+                if ($receipt->items && $receipt->items->isNotEmpty()) {
+                    $itemsList = $receipt->items->map(function ($it) {
+                        return [
+                            'name'     => $it->product?->name ?? 'Item',
+                            'quantity' => (float) ($it->quantity ?? $it->quantity_received ?? $it->accepted_quantity ?? 0),
+                            'unit'     => $it->unit ?? $it->product?->unit ?? '',
+                        ];
+                    });
+                } elseif ($receipt->purchaseRequest && $receipt->purchaseRequest->items) {
+                    $itemsList = $receipt->purchaseRequest->items->map(function ($it) {
+                        return [
+                            'name'     => $it->product?->name ?? $it->item_name ?? 'Item',
+                            'quantity' => (float) ($it->quantity ?? $it->received_quantity ?? 0),
+                            'unit'     => $it->unit ?? $it->product?->unit ?? '',
+                        ];
+                    });
+                }
 
                 $assignedSlips->push([
-                    'slip_no'             => $receipt->dr_no,
+                    'slip_no'             => $receipt->dr_no ?: $this->formatSlipNumber($numeric),
                     'numeric_no'          => $numeric,
                     'source_type'         => 'delivery_receipt',
                     'slip_type'           => $receipt->slip_type ?: $slipType,
@@ -203,7 +230,7 @@ class SlipSequence extends Model
                     'pr_no'               => $receipt->purchaseRequest?->pr_no,
                     'pr_title'            => $receipt->purchaseRequest?->title ?? $receipt->purchaseRequest?->item_name,
                     'pr_url'              => $receipt->purchase_request_id ? route('purchase-requests.show', $receipt->purchase_request_id) : null,
-                    'project_name'        => $receipt->purchaseRequest?->project?->name ?? 'N/A',
+                    'project_name'        => $receipt->purchaseRequest?->project?->name ?? ($receipt->store?->name ?? 'N/A'),
                     'purchase_order_ref'  => $receipt->purchaseOrder?->reference_number,
                     'po_id'               => $receipt->purchase_order_id,
                     'handled_by'          => $receipt->receivedBy?->name ?? 'Store Keeper',
@@ -214,12 +241,16 @@ class SlipSequence extends Model
             }
         }
 
-        // 2. Find matching Transfers
+        // 2. Find matching Transfers across the database
         $transfers = Transfer::where(function ($q) use ($storeId) {
                 $q->where('from_store_id', $storeId)
-                  ->orWhere('to_store_id', $storeId);
+                  ->orWhere('to_store_id', $storeId)
+                  ->orWhereNotNull('outgoing_slip_no')
+                  ->orWhereNotNull('physical_slip_no')
+                  ->orWhereNotNull('receiving_slip_no');
             })
             ->with(['fromStore', 'toStore', 'items.product', 'requestedBy', 'approvedBy'])
+            ->latest('id')
             ->get();
 
         foreach ($transfers as $tr) {
@@ -231,12 +262,10 @@ class SlipSequence extends Model
 
             foreach ($slipsToCheck as $role => $sVal) {
                 if (empty($sVal)) continue;
-                $digits = preg_replace('/[^0-9]/', '', $sVal);
-                if ($digits === '') continue;
-                $num = (int) $digits;
+                $num = $extractSlipNumber($sVal);
 
-                if ($num >= $start && $num <= $end) {
-                    if ($assignedSlips->contains('slip_no', $sVal)) {
+                if ($num !== null) {
+                    if ($assignedSlips->contains('numeric_no', $num)) {
                         continue;
                     }
 
@@ -276,6 +305,114 @@ class SlipSequence extends Model
                 }
             }
         }
+
+        // 3. Find matching Inventory Movements with Slip references
+        try {
+            $movements = InventoryMovement::where('remarks', 'like', '%Slip%')
+                ->with(['performer'])
+                ->latest('id')
+                ->take(300)
+                ->get();
+
+            foreach ($movements as $mov) {
+                $num = $extractSlipNumber($mov->remarks);
+                if ($num !== null && !$assignedSlips->contains('numeric_no', $num)) {
+                    $pr = null;
+                    if ($mov->reference_type === PurchaseRequest::class && $mov->reference_id) {
+                        $pr = PurchaseRequest::with(['project', 'requestedBy', 'items.product'])->find($mov->reference_id);
+                    }
+
+                    $itemsList = collect();
+                    if ($pr && $pr->items) {
+                        $itemsList = $pr->items->map(function ($it) {
+                            return [
+                                'name'     => $it->product?->name ?? $it->item_name ?? 'Item',
+                                'quantity' => (float) ($it->quantity ?? $it->received_quantity ?? 0),
+                                'unit'     => $it->unit ?? $it->product?->unit ?? '',
+                            ];
+                        });
+                    }
+
+                    $assignedSlips->push([
+                        'slip_no'             => $this->formatSlipNumber($num),
+                        'numeric_no'          => $num,
+                        'source_type'         => 'inventory_movement',
+                        'slip_type'           => $slipType,
+                        'document_id'         => $mov->id,
+                        'document_ref'        => $pr ? 'PR #' . $pr->pr_no . ' (Stock In)' : 'Inventory Movement #' . $mov->id,
+                        'document_url'        => $pr ? route('purchase-requests.show', $pr->id) : route('store-manager.inventory.all'),
+                        'status'              => 'verified',
+                        'is_void'             => false,
+                        'date'                => $mov->created_at,
+                        'store_name'          => $this->store?->name ?? 'Store',
+                        'supplier_name'       => $pr?->supplier_name ?? ($this->store?->name ?? 'Store Intake'),
+                        'purchase_request_id' => $pr?->id,
+                        'pr_no'               => $pr?->pr_no,
+                        'pr_title'            => $pr?->title ?? $pr?->item_name,
+                        'pr_url'              => $pr ? route('purchase-requests.show', $pr->id) : null,
+                        'project_name'        => $pr?->project?->name ?? ($this->store?->name ?? 'N/A'),
+                        'purchase_order_ref'  => null,
+                        'po_id'               => null,
+                        'handled_by'          => $mov->performer?->name ?? 'Store Staff',
+                        'items_count'         => $itemsList->count(),
+                        'items'               => $itemsList,
+                        'notes'               => $mov->remarks,
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // 4. Find matching Purchase Request Workflow Logs with Slip references
+        try {
+            $logs = PrWorkflowLog::where('notes', 'like', '%Slip%')
+                ->with(['purchaseRequest.project', 'purchaseRequest.requestedBy', 'purchaseRequest.items.product', 'actor'])
+                ->latest('id')
+                ->take(300)
+                ->get();
+
+            foreach ($logs as $log) {
+                $num = $extractSlipNumber($log->notes);
+                if ($num !== null && !$assignedSlips->contains('numeric_no', $num)) {
+                    $pr = $log->purchaseRequest;
+                    $itemsList = collect();
+                    if ($pr && $pr->items) {
+                        $itemsList = $pr->items->map(function ($it) {
+                            return [
+                                'name'     => $it->product?->name ?? $it->item_name ?? 'Item',
+                                'quantity' => (float) ($it->quantity ?? $it->received_quantity ?? 0),
+                                'unit'     => $it->unit ?? $it->product?->unit ?? '',
+                            ];
+                        });
+                    }
+
+                    $assignedSlips->push([
+                        'slip_no'             => $this->formatSlipNumber($num),
+                        'numeric_no'          => $num,
+                        'source_type'         => 'workflow_log',
+                        'slip_type'           => $slipType,
+                        'document_id'         => $log->id,
+                        'document_ref'        => $pr ? 'PR #' . $pr->pr_no . ' (Intake Log)' : 'Intake Log #' . $log->id,
+                        'document_url'        => $pr ? route('purchase-requests.show', $pr->id) : '#',
+                        'status'              => 'verified',
+                        'is_void'             => false,
+                        'date'                => $log->created_at,
+                        'store_name'          => $this->store?->name ?? 'Store',
+                        'supplier_name'       => $pr?->supplier_name ?? ($this->store?->name ?? 'Store Intake'),
+                        'purchase_request_id' => $pr?->id,
+                        'pr_no'               => $pr?->pr_no,
+                        'pr_title'            => $pr?->title ?? $pr?->item_name,
+                        'pr_url'              => $pr ? route('purchase-requests.show', $pr->id) : null,
+                        'project_name'        => $pr?->project?->name ?? ($this->store?->name ?? 'N/A'),
+                        'purchase_order_ref'  => null,
+                        'po_id'               => null,
+                        'handled_by'          => $log->actor?->name ?? 'Store Manager',
+                        'items_count'         => $itemsList->count(),
+                        'items'               => $itemsList,
+                        'notes'               => $log->notes,
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {}
 
         return $assignedSlips->sortBy('numeric_no')->values();
     }
