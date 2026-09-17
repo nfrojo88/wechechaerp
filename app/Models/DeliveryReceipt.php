@@ -17,6 +17,7 @@ class DeliveryReceipt extends Model
 
     public function purchaseOrder() { return $this->belongsTo(PurchaseOrder::class); }
     public function store()         { return $this->belongsTo(Store::class); }
+    public function toStore()       { return $this->belongsTo(Store::class, 'to_store_id'); }
     public function receivedBy()    { return $this->belongsTo(User::class, 'received_by'); }
 
     public function items()

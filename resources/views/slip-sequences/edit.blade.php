@@ -209,8 +209,20 @@
                     Capacity: <strong>{{ $slipSequence->book_end_no - $slipSequence->book_start_no + 1 }} slips</strong>
                 </small>
             </div>
-            <div class="d-flex align-items-center gap-2">
-                <span class="badge bg-success">{{ $assignedSlips->count() }} Recorded</span>
+            @php
+                $procurementSlipsCount = $assignedSlips->where('source_type', 'delivery_receipt')->count();
+                $transferSlipsCount = $assignedSlips->where('source_type', 'transfer')->count();
+                $unrecordedCount = collect($bookMap)->where('status', 'unrecorded')->count();
+            @endphp
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="badge bg-success" title="{{ $procurementSlipsCount }} Procurement, {{ $transferSlipsCount }} Transfers">
+                    {{ $assignedSlips->count() }} Total Recorded
+                </span>
+                @if($transferSlipsCount > 0)
+                <span class="badge text-white" style="background-color: #4f46e5;">
+                    <i class="fas fa-truck me-1"></i>{{ $transferSlipsCount }} Transfers
+                </span>
+                @endif
                 <span class="badge bg-primary">Next: #{{ $slipSequence->getNextSlipNumber() }}</span>
                 <span class="badge bg-secondary">{{ $slipSequence->getRemainingSlips() }} Remaining</span>
                 <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#bookMapCollapse" aria-expanded="true" aria-controls="bookMapCollapse">
@@ -226,11 +238,9 @@
                     <i class="fas fa-bookmark me-1"></i>Book Pad Leaves ({{ $slipSequence->book_start_no }} &ndash; {{ $slipSequence->book_end_no }})
                 </span>
                 <div class="small d-flex gap-3 text-muted flex-wrap">
-                    <span><span class="badge bg-success px-2 py-0">&nbsp;</span> Recorded ({{ $assignedSlips->count() }})</span>
+                    <span><span class="badge bg-success px-2 py-0">&nbsp;</span> Procurement GRN ({{ $procurementSlipsCount }})</span>
+                    <span><span class="badge px-2 py-0 text-white" style="background-color: #4f46e5;">&nbsp;</span> Store Transfers ({{ $transferSlipsCount }})</span>
                     <span><span class="badge bg-primary px-2 py-0">&nbsp;</span> Next Slip (#{{ $slipSequence->getNextSlipNumber() }})</span>
-                    @php
-                        $unrecordedCount = collect($bookMap)->where('status', 'unrecorded')->count();
-                    @endphp
                     @if($unrecordedCount > 0)
                     <span><span class="badge bg-warning text-dark px-2 py-0">&nbsp;</span> Unrecorded / Gap ({{ $unrecordedCount }})</span>
                     @endif
@@ -240,11 +250,18 @@
             <div class="d-flex flex-wrap gap-1" style="max-height: 180px; overflow-y: auto;">
                 @foreach($bookMap as $leaf)
                     @if($leaf['status'] === 'assigned')
+                        @php
+                            $isTransferLeaf = ($leaf['assigned_data']['source_type'] ?? '') === 'transfer';
+                            $leafTooltip = 'Slip #' . $leaf['formatted'] . ' - ' . ($isTransferLeaf ? ('Store Transfer #' . ($leaf['assigned_data']['transfer_no'] ?? '')) : 'Procurement GRN') . ' - Click to filter';
+                        @endphp
                         <button type="button" 
-                                class="btn btn-sm btn-success px-2 py-0 font-monospace"
-                                style="font-size: 0.75rem;"
-                                title="Slip #{{ $leaf['formatted'] }} - Click to filter"
+                                class="btn btn-sm px-2 py-0 font-monospace shadow-sm {{ $isTransferLeaf ? 'text-white' : 'btn-success' }}"
+                                style="font-size: 0.75rem; {{ $isTransferLeaf ? 'background-color: #4f46e5; border-color: #4338ca;' : '' }}"
+                                title="{{ $leafTooltip }}"
                                 onclick="filterSlipRow('{{ $leaf['number'] }}')">
+                            @if($isTransferLeaf)
+                                <i class="fas fa-exchange-alt me-1" style="font-size: 0.65rem;"></i>
+                            @endif
                             {{ $leaf['formatted'] }}
                         </button>
                     @elseif($leaf['status'] === 'next')
@@ -268,25 +285,40 @@
             </div>
         </div>
 
-        <!-- Navigation Tabs & Search Filter -->
+        <!-- Navigation Tabs, Source Filters & Search -->
         <div class="p-3 border-bottom bg-white d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <ul class="nav nav-pills" id="slipViewTabs" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active py-1 px-3 small fw-semibold" id="recorded-tab" data-bs-toggle="tab" data-bs-target="#recorded-view" type="button" role="tab" aria-controls="recorded-view" aria-selected="true">
-                        <i class="fas fa-check-circle me-1 text-success"></i>Recorded Slips ({{ $assignedSlips->count() }})
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <ul class="nav nav-pills" id="slipViewTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active py-1 px-3 small fw-semibold" id="recorded-tab" data-bs-toggle="tab" data-bs-target="#recorded-view" type="button" role="tab" aria-controls="recorded-view" aria-selected="true">
+                            <i class="fas fa-check-circle me-1 text-success"></i>Recorded Slips ({{ $assignedSlips->count() }})
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link py-1 px-3 small fw-semibold" id="all-leaves-tab" data-bs-toggle="tab" data-bs-target="#all-leaves-view" type="button" role="tab" aria-controls="all-leaves-view" aria-selected="false">
+                            <i class="fas fa-list-ol me-1 text-primary"></i>All Book Leaves ({{ count($bookMap) }})
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Source Quick Filter Group -->
+                <div class="btn-group btn-group-sm ms-md-2" role="group" id="slipSourceFilterGroup">
+                    <button type="button" class="btn btn-secondary active fw-semibold" id="filter-all-btn" onclick="filterSlipCategory('all')">
+                        All ({{ $assignedSlips->count() }})
                     </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link py-1 px-3 small fw-semibold" id="all-leaves-tab" data-bs-toggle="tab" data-bs-target="#all-leaves-view" type="button" role="tab" aria-controls="all-leaves-view" aria-selected="false">
-                        <i class="fas fa-list-ol me-1 text-primary"></i>All Book Leaves ({{ count($bookMap) }})
+                    <button type="button" class="btn btn-outline-primary fw-semibold" id="filter-transfer-btn" onclick="filterSlipCategory('transfer')" style="color: #4338ca; border-color: #6366f1;">
+                        <i class="fas fa-truck me-1"></i>Transfers ({{ $transferSlipsCount }})
                     </button>
-                </li>
-            </ul>
+                    <button type="button" class="btn btn-outline-success fw-semibold" id="filter-procure-btn" onclick="filterSlipCategory('delivery_receipt')">
+                        <i class="fas fa-box me-1"></i>Procurement ({{ $procurementSlipsCount }})
+                    </button>
+                </div>
+            </div>
 
             <div class="d-flex align-items-center gap-2 flex-grow-1 justify-content-md-end" style="max-width: 420px;">
                 <div class="input-group input-group-sm">
                     <span class="input-group-text bg-light"><i class="fas fa-search text-muted"></i></span>
-                    <input type="text" id="slipSearchInput" class="form-control" placeholder="Search slip #, PR #, project, supplier...">
+                    <input type="text" id="slipSearchInput" class="form-control" placeholder="Search slip #, transfer #, PR #, project...">
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetSlipSearch()">
                     Reset
@@ -298,16 +330,16 @@
             <!-- TAB 1: Recorded & Linked Transactions -->
             <div class="tab-pane fade show active" id="recorded-view" role="tabpanel" aria-labelledby="recorded-tab">
                 <div class="table-responsive">
-                    <table class="table table-hover table-striped mb-0" id="assignedSlipsTable">
+                    <table class="table table-hover table-striped mb-0 align-middle" id="assignedSlipsTable">
                         <thead class="table-light">
                             <tr>
-                                <th style="width: 110px;">Slip #</th>
-                                <th style="width: 80px;">Type</th>
-                                <th style="min-width: 170px;">Linked Document</th>
-                                <th style="min-width: 220px;">Purchase Request (PR)</th>
-                                <th style="min-width: 160px;">Supplier / Source</th>
-                                <th style="width: 120px;">Items</th>
-                                <th style="width: 130px;">Handled By & Date</th>
+                                <th style="width: 105px;">Slip #</th>
+                                <th style="width: 95px;">Source / Type</th>
+                                <th style="min-width: 175px;">Linked Document</th>
+                                <th style="min-width: 250px;">Purchase Request / Store Transfer</th>
+                                <th style="min-width: 180px;">Supplier / Transfer Route</th>
+                                <th style="width: 125px;">Items</th>
+                                <th style="width: 135px;">Handled By & Date</th>
                                 <th style="width: 95px;">Status</th>
                                 <th style="width: 110px;" class="text-end">Actions</th>
                             </tr>
@@ -317,7 +349,9 @@
                             <tr class="slip-row {{ $slip['is_void'] ? 'table-danger' : '' }}" 
                                 id="slip-row-{{ $slip['numeric_no'] }}"
                                 data-slip-no="{{ $slip['slip_no'] }}"
-                                data-numeric-no="{{ $slip['numeric_no'] }}">
+                                data-numeric-no="{{ $slip['numeric_no'] }}"
+                                data-source-type="{{ $slip['source_type'] }}"
+                                data-slip-type="{{ $slip['slip_type'] }}">
                                 <!-- Slip # -->
                                 <td>
                                     <span class="badge bg-primary font-monospace fs-6">
@@ -329,12 +363,35 @@
                                     <div class="small text-muted mt-1">Leaf: {{ $slip['numeric_no'] }}</div>
                                 </td>
 
-                                <!-- Type -->
+                                <!-- Source / Type -->
                                 <td>
-                                    @if($slip['slip_type'] === 'receive')
-                                    <span class="badge bg-success"><i class="fas fa-arrow-down me-1"></i>GRN</span>
+                                    @if($slip['source_type'] === 'transfer')
+                                        <div>
+                                            <span class="badge text-white px-2 py-1" style="background-color: #4f46e5; font-size: 0.72rem;">
+                                                <i class="fas fa-exchange-alt me-1"></i>TRANSFER
+                                            </span>
+                                        </div>
+                                        @if($slip['slip_type'] === 'receive')
+                                        <span class="badge bg-success mt-1" title="Inbound Transfer Receipt"><i class="fas fa-arrow-down me-1"></i>TR-IN</span>
+                                        @else
+                                        <span class="badge bg-info mt-1" title="Outbound Transfer Dispatch"><i class="fas fa-arrow-up me-1"></i>TR-OUT</span>
+                                        @endif
+                                        @if(!empty($slip['transfer_role']))
+                                        <div class="small text-muted" style="font-size: 0.68rem;">{{ $slip['transfer_role'] }}</div>
+                                        @endif
+                                    @elseif($slip['source_type'] === 'delivery_receipt')
+                                        <div>
+                                            <span class="badge bg-success px-2 py-1" style="font-size: 0.72rem;">
+                                                <i class="fas fa-box me-1"></i>PROCURE
+                                            </span>
+                                        </div>
+                                        <span class="badge bg-info mt-1"><i class="fas fa-arrow-down me-1"></i>GRN</span>
                                     @else
-                                    <span class="badge bg-info"><i class="fas fa-arrow-up me-1"></i>SIN</span>
+                                        <div>
+                                            <span class="badge bg-secondary px-2 py-1" style="font-size: 0.72rem;">
+                                                <i class="fas fa-warehouse me-1"></i>STOCK
+                                            </span>
+                                        </div>
                                     @endif
                                 </td>
 
@@ -342,43 +399,92 @@
                                 <td>
                                     <div>
                                         <a href="{{ $slip['document_url'] }}" class="fw-bold text-primary text-decoration-none" target="_blank">
-                                            <i class="fas fa-file-invoice me-1"></i>{{ $slip['document_ref'] }}
+                                            @if($slip['source_type'] === 'transfer')
+                                                <i class="fas fa-truck-ramp-box me-1 text-primary"></i>{{ $slip['document_ref'] }}
+                                            @else
+                                                <i class="fas fa-file-invoice me-1"></i>{{ $slip['document_ref'] }}
+                                            @endif
                                         </a>
                                     </div>
                                     <small class="text-muted d-block">Store: {{ $slip['store_name'] }}</small>
+                                    @if(!empty($slip['slip_file_url']))
+                                    <a href="{{ $slip['slip_file_url'] }}" target="_blank" class="badge bg-light text-primary border mt-1 text-decoration-none" style="font-size: 0.72rem;">
+                                        <i class="fas fa-paperclip me-1"></i>Attached Slip File
+                                    </a>
+                                    @endif
                                 </td>
 
-                                <!-- Linked Purchase Request -->
+                                <!-- Linked Purchase Request / Store Transfer -->
                                 <td>
-                                    @if($slip['purchase_request_id'])
-                                    <div>
-                                        <a href="{{ $slip['pr_url'] }}" class="fw-bold text-dark text-decoration-none" target="_blank">
-                                            <i class="fas fa-shopping-cart text-secondary me-1"></i>PR #{{ $slip['pr_no'] ?: $slip['purchase_request_id'] }}
-                                        </a>
-                                    </div>
-                                    @if($slip['pr_title'])
-                                    <small class="text-muted d-block text-truncate" style="max-width: 250px;">{{ $slip['pr_title'] }}</small>
-                                    @endif
-                                    @if($slip['project_name'] && $slip['project_name'] !== 'N/A')
-                                    <span class="badge bg-light text-dark border mt-1" style="font-size: 0.72rem;">
-                                        <i class="fas fa-project-diagram text-secondary me-1"></i>{{ $slip['project_name'] }}
-                                    </span>
-                                    @endif
+                                    @if($slip['source_type'] === 'transfer')
+                                        <div class="p-2 rounded border" style="background: #f8fafc;">
+                                            <div class="d-flex align-items-center justify-content-between gap-1 flex-wrap">
+                                                <a href="{{ $slip['document_url'] }}" target="_blank" class="fw-bold text-dark text-decoration-none" style="font-size: 0.82rem;">
+                                                    <i class="fas fa-truck me-1" style="color: #4f46e5;"></i>{{ $slip['transfer_no'] ?: $slip['document_ref'] }}
+                                                </a>
+                                                @if(!empty($slip['transfer_status']))
+                                                    <span class="badge bg-light text-dark border" style="font-size: 0.68rem;">{{ ucfirst($slip['transfer_status']) }}</span>
+                                                @endif
+                                            </div>
+                                            <div class="small mt-1 text-truncate" style="max-width: 250px;">
+                                                <span class="text-secondary fw-semibold">{{ $slip['from_store_name'] ?? 'Origin Store' }}</span>
+                                                <i class="fas fa-arrow-right text-muted mx-1" style="font-size: 0.7rem;"></i>
+                                                <span class="text-primary fw-semibold">{{ $slip['to_store_name'] ?? 'Destination Store' }}</span>
+                                            </div>
+                                            @if(!empty($slip['driver_name']))
+                                            <div class="text-muted mt-1" style="font-size: 0.72rem;">
+                                                <i class="fas fa-id-badge me-1 text-secondary"></i>Driver: <strong>{{ $slip['driver_name'] }}</strong>
+                                                @if(!empty($slip['vehicle_plate_no'])) &bull; {{ $slip['vehicle_plate_no'] }} @endif
+                                            </div>
+                                            @endif
+                                            @if(!empty($slip['pr_no']))
+                                            <div class="mt-1">
+                                                <a href="{{ $slip['pr_url'] }}" class="badge bg-warning text-dark border text-decoration-none" target="_blank" style="font-size: 0.7rem;">
+                                                    <i class="fas fa-shopping-cart me-1"></i>Linked PR #{{ $slip['pr_no'] }}
+                                                </a>
+                                            </div>
+                                            @endif
+                                        </div>
+                                    @elseif($slip['purchase_request_id'])
+                                        <div>
+                                            <a href="{{ $slip['pr_url'] }}" class="fw-bold text-dark text-decoration-none" target="_blank">
+                                                <i class="fas fa-shopping-cart text-secondary me-1"></i>PR #{{ $slip['pr_no'] ?: $slip['purchase_request_id'] }}
+                                            </a>
+                                        </div>
+                                        @if($slip['pr_title'])
+                                        <small class="text-muted d-block text-truncate" style="max-width: 250px;">{{ $slip['pr_title'] }}</small>
+                                        @endif
+                                        @if($slip['project_name'] && $slip['project_name'] !== 'N/A')
+                                        <span class="badge bg-light text-dark border mt-1" style="font-size: 0.72rem;">
+                                            <i class="fas fa-project-diagram text-secondary me-1"></i>{{ $slip['project_name'] }}
+                                        </span>
+                                        @endif
                                     @else
-                                    <span class="text-muted small">&ndash; Direct / Store Transfer &ndash;</span>
-                                    @if($slip['project_name'] && $slip['project_name'] !== 'N/A')
-                                    <div><span class="badge bg-light text-dark border mt-1" style="font-size: 0.72rem;">{{ $slip['project_name'] }}</span></div>
-                                    @endif
+                                        <span class="text-muted small">&ndash; Direct / Internal &ndash;</span>
+                                        @if($slip['project_name'] && $slip['project_name'] !== 'N/A')
+                                        <div><span class="badge bg-light text-dark border mt-1" style="font-size: 0.72rem;">{{ $slip['project_name'] }}</span></div>
+                                        @endif
                                     @endif
                                 </td>
 
-                                <!-- Supplier / Source -->
+                                <!-- Supplier / Source & Route -->
                                 <td>
-                                    <div class="fw-semibold text-dark text-truncate" style="max-width: 180px;" title="{{ $slip['supplier_name'] }}">
-                                        {{ $slip['supplier_name'] }}
-                                    </div>
-                                    @if($slip['purchase_order_ref'])
-                                    <small class="text-muted font-monospace d-block">PO: {{ $slip['purchase_order_ref'] }}</small>
+                                    @if($slip['source_type'] === 'transfer')
+                                        <div class="fw-semibold text-dark small">
+                                            <i class="fas fa-route me-1" style="color: #4f46e5;"></i>{{ $slip['from_store_name'] ?? 'Origin' }} ➔ {{ $slip['to_store_name'] ?? 'Destination' }}
+                                        </div>
+                                        @if(!empty($slip['notes']))
+                                        <small class="text-muted d-block text-truncate mt-1" style="max-width: 200px;" title="{{ $slip['notes'] }}">
+                                            <i class="fas fa-comment-dots text-secondary me-1"></i>{{ $slip['notes'] }}
+                                        </small>
+                                        @endif
+                                    @else
+                                        <div class="fw-semibold text-dark text-truncate" style="max-width: 180px;" title="{{ $slip['supplier_name'] }}">
+                                            {{ $slip['supplier_name'] }}
+                                        </div>
+                                        @if($slip['purchase_order_ref'])
+                                        <small class="text-muted font-monospace d-block">PO: {{ $slip['purchase_order_ref'] }}</small>
+                                        @endif
                                     @endif
                                 </td>
 
@@ -417,6 +523,8 @@
                                     <span class="badge bg-danger">Void</span>
                                     @elseif($slip['status'] === 'verified' || $slip['status'] === 'approved' || $slip['status'] === 'completed')
                                     <span class="badge bg-success">{{ ucfirst($slip['status']) }}</span>
+                                    @elseif($slip['status'] === 'in_transit')
+                                    <span class="badge bg-warning text-dark"><i class="fas fa-truck me-1"></i>In Transit</span>
                                     @elseif($slip['status'] === 'draft')
                                     <span class="badge bg-secondary">Draft</span>
                                     @else
@@ -452,13 +560,13 @@
             <!-- TAB 2: Complete Book Leaves Audit (All 50 Leaves) -->
             <div class="tab-pane fade" id="all-leaves-view" role="tabpanel" aria-labelledby="all-leaves-tab">
                 <div class="table-responsive">
-                    <table class="table table-hover table-striped mb-0">
+                    <table class="table table-hover table-striped mb-0 align-middle">
                         <thead class="table-light">
                             <tr>
                                 <th style="width: 120px;">Leaf Number</th>
                                 <th style="width: 140px;">Book Status</th>
                                 <th>Linked Transaction / Document</th>
-                                <th>Project / Supplier</th>
+                                <th>Project / Supplier / Route</th>
                                 <th>Handled Date</th>
                                 <th class="text-end" style="width: 110px;">Actions</th>
                             </tr>
@@ -471,7 +579,11 @@
                                 </td>
                                 <td>
                                     @if($leaf['status'] === 'assigned')
-                                    <span class="badge bg-success"><i class="fas fa-check me-1"></i>Recorded</span>
+                                        @if(($leaf['assigned_data']['source_type'] ?? '') === 'transfer')
+                                        <span class="badge text-white" style="background-color: #4f46e5;"><i class="fas fa-truck me-1"></i>Transfer</span>
+                                        @else
+                                        <span class="badge bg-success"><i class="fas fa-check me-1"></i>Procurement</span>
+                                        @endif
                                     @elseif($leaf['status'] === 'next')
                                     <span class="badge bg-primary"><i class="fas fa-arrow-right me-1"></i>Next to Issue</span>
                                     @elseif($leaf['status'] === 'unrecorded')
@@ -490,7 +602,7 @@
                                         <span class="text-muted ms-2">(PR #{{ $ad['pr_no'] }})</span>
                                         @endif
                                     @elseif($leaf['status'] === 'next')
-                                        <span class="text-primary small fw-semibold">Next physical slip to be generated on intake</span>
+                                        <span class="text-primary small fw-semibold">Next physical slip to be generated</span>
                                     @elseif($leaf['status'] === 'unrecorded')
                                         <span class="text-muted small">Counter advanced past this number (gap)</span>
                                     @else
@@ -540,20 +652,31 @@
     <div class="modal fade" id="itemsModal-{{ $slip['numeric_no'] }}" tabindex="-1" aria-labelledby="itemsModalLabel-{{ $slip['numeric_no'] }}" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow">
-                <div class="modal-header py-2">
-                    <h6 class="modal-title fw-bold" id="itemsModalLabel-{{ $slip['numeric_no'] }}">
-                        <i class="fas fa-boxes me-2 text-primary"></i>Items on Slip #{{ $slip['slip_no'] }}
+                <div class="modal-header py-2" style="{{ $slip['source_type'] === 'transfer' ? 'background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); color: #fff;' : '' }}">
+                    <h6 class="modal-title fw-bold mb-0 {{ $slip['source_type'] === 'transfer' ? 'text-white' : '' }}" id="itemsModalLabel-{{ $slip['numeric_no'] }}">
+                        @if($slip['source_type'] === 'transfer')
+                            <i class="fas fa-truck me-2 text-warning"></i>Transfer Items on Slip #{{ $slip['slip_no'] }}
+                        @else
+                            <i class="fas fa-boxes me-2 text-primary"></i>Items on Slip #{{ $slip['slip_no'] }}
+                        @endif
                     </h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn-close {{ $slip['source_type'] === 'transfer' ? 'btn-close-white' : '' }}" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-0">
                     <div class="p-3 bg-light border-bottom small">
                         <div><strong>Document:</strong> {{ $slip['document_ref'] }}</div>
-                        @if($slip['pr_no'])
-                        <div><strong>PR:</strong> #{{ $slip['pr_no'] }} &bull; <strong>Project:</strong> {{ $slip['project_name'] }}</div>
+                        @if($slip['source_type'] === 'transfer')
+                            <div><strong>Route:</strong> {{ $slip['from_store_name'] ?? 'Origin' }} <i class="fas fa-arrow-right text-muted mx-1"></i> {{ $slip['to_store_name'] ?? 'Destination' }}</div>
+                            @if(!empty($slip['driver_name']))
+                            <div><strong>Driver:</strong> {{ $slip['driver_name'] }} @if(!empty($slip['vehicle_plate_no'])) ({{ $slip['vehicle_plate_no'] }}) @endif</div>
+                            @endif
+                        @else
+                            @if($slip['pr_no'])
+                            <div><strong>PR:</strong> #{{ $slip['pr_no'] }} &bull; <strong>Project:</strong> {{ $slip['project_name'] }}</div>
+                            @endif
+                            <div><strong>Supplier / Source:</strong> {{ $slip['supplier_name'] }}</div>
                         @endif
-                        <div><strong>Supplier / Source:</strong> {{ $slip['supplier_name'] }}</div>
-                        <div><strong>Date:</strong> {{ $slip['date'] ? \Carbon\Carbon::parse($slip['date'])->format('M d, Y') : '-' }}</div>
+                        <div><strong>Handled By:</strong> {{ $slip['handled_by'] }} &bull; <strong>Date:</strong> {{ $slip['date'] ? \Carbon\Carbon::parse($slip['date'])->format('M d, Y') : '-' }}</div>
                     </div>
                     <table class="table table-sm table-striped mb-0">
                         <thead class="table-light small">
@@ -583,6 +706,11 @@
                     <a href="{{ $slip['document_url'] }}" class="btn btn-primary btn-sm" target="_blank">
                         <i class="fas fa-external-link-alt me-1"></i>Open Document
                     </a>
+                    @if(!empty($slip['slip_file_url']))
+                    <a href="{{ $slip['slip_file_url'] }}" class="btn btn-outline-secondary btn-sm" target="_blank">
+                        <i class="fas fa-paperclip me-1"></i>Attached File
+                    </a>
+                    @endif
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
@@ -593,19 +721,47 @@
 
 @push('scripts')
 <script>
+    var currentCategoryFilter = 'all';
+
     document.addEventListener('DOMContentLoaded', function() {
         var searchInput = document.getElementById('slipSearchInput');
         if (searchInput) {
             searchInput.addEventListener('input', function() {
-                var query = this.value.toLowerCase().trim();
-                var rows = document.querySelectorAll('#assignedSlipsTable tbody tr.slip-row');
-                rows.forEach(function(row) {
-                    var text = row.innerText.toLowerCase();
-                    row.style.display = text.indexOf(query) > -1 ? '' : 'none';
-                });
+                applySlipFilters();
             });
         }
     });
+
+    function filterSlipCategory(category) {
+        currentCategoryFilter = category;
+
+        // Update button active state
+        var allBtn = document.getElementById('filter-all-btn');
+        var trBtn = document.getElementById('filter-transfer-btn');
+        var prBtn = document.getElementById('filter-procure-btn');
+
+        if (allBtn) allBtn.className = category === 'all' ? 'btn btn-secondary active fw-semibold' : 'btn btn-outline-secondary fw-semibold';
+        if (trBtn) trBtn.className = category === 'transfer' ? 'btn btn-primary active fw-semibold' : 'btn btn-outline-primary fw-semibold';
+        if (prBtn) prBtn.className = category === 'delivery_receipt' ? 'btn btn-success active fw-semibold' : 'btn btn-outline-success fw-semibold';
+
+        applySlipFilters();
+    }
+
+    function applySlipFilters() {
+        var searchInput = document.getElementById('slipSearchInput');
+        var query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        var rows = document.querySelectorAll('#assignedSlipsTable tbody tr.slip-row');
+
+        rows.forEach(function(row) {
+            var rowSource = row.getAttribute('data-source-type');
+            var text = row.innerText.toLowerCase();
+
+            var matchesCategory = (currentCategoryFilter === 'all') || (rowSource === currentCategoryFilter);
+            var matchesSearch = (query === '') || (text.indexOf(query) > -1);
+
+            row.style.display = (matchesCategory && matchesSearch) ? '' : 'none';
+        });
+    }
 
     function filterSlipRow(slipNum) {
         // Switch to recorded tab
@@ -615,11 +771,13 @@
             tab.show();
         }
 
+        // Reset category filter to all
+        filterSlipCategory('all');
+
         var searchInput = document.getElementById('slipSearchInput');
         if (searchInput) {
             searchInput.value = slipNum;
-            var event = new Event('input');
-            searchInput.dispatchEvent(event);
+            applySlipFilters();
         }
 
         var targetRow = document.getElementById('slip-row-' + slipNum);
@@ -628,7 +786,7 @@
             targetRow.classList.add('table-warning');
             setTimeout(function() {
                 targetRow.classList.remove('table-warning');
-            }, 2000);
+            }, 2500);
         }
     }
 
@@ -636,9 +794,8 @@
         var searchInput = document.getElementById('slipSearchInput');
         if (searchInput) {
             searchInput.value = '';
-            var event = new Event('input');
-            searchInput.dispatchEvent(event);
         }
+        filterSlipCategory('all');
     }
 </script>
 @endpush
