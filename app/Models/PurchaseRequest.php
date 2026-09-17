@@ -138,6 +138,7 @@ class PurchaseRequest extends Model
     public function store()          { return $this->belongsTo(Store::class); }
     public function supplier()       { return $this->belongsTo(Supplier::class, 'supplier_id'); }
     public function requestedBy()    { return $this->belongsTo(User::class, 'requested_by'); }
+    public function requester()      { return $this->requestedBy(); }
     public function approvedBy()     { return $this->belongsTo(User::class, 'approved_by'); }
     public function hrCoordinatorApprovedBy() { return $this->belongsTo(User::class, 'hr_coordinator_approved_by'); }
     public function materialRequest(){ return $this->belongsTo(MaterialRequest::class); }

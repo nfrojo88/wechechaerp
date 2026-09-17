@@ -154,11 +154,11 @@ class SlipSequence extends Model
             })
             ->with([
                 'purchaseRequest.project',
-                'purchaseRequest.requester',
+                'purchaseRequest.requestedBy',
                 'purchaseOrder.supplier',
                 'store',
                 'receivedBy',
-                'items.product.unit',
+                'items.product',
             ])
             ->latest('id')
             ->get();
@@ -181,8 +181,8 @@ class SlipSequence extends Model
                 $itemsList = $receipt->items->map(function ($it) {
                     return [
                         'name'     => $it->product?->name ?? 'Item',
-                        'quantity' => (float) ($it->quantity ?? $it->accepted_quantity ?? 0),
-                        'unit'     => $it->product?->unit?->name ?? $it->product?->unit ?? '',
+                        'quantity' => (float) ($it->quantity ?? $it->quantity_received ?? $it->accepted_quantity ?? 0),
+                        'unit'     => $it->unit ?? $it->product?->unit ?? '',
                     ];
                 });
 
