@@ -257,6 +257,11 @@ class SlipSequence extends Model
                     'items'               => $itemsList,
                     'notes'               => $receipt->notes,
                     'slip_file_url'       => null,
+                    'book_id'             => $this->id,
+                    'book_label'          => $this->label,
+                    'book_range'          => "{$this->book_start_no} - {$this->book_end_no}",
+                    'book_status'         => $this->status,
+                    'is_current_book'     => true,
                 ]);
             }
         }
@@ -365,6 +370,11 @@ class SlipSequence extends Model
                         'items'               => $itemsList,
                         'notes'               => $tr->dispatch_notes ?? ($tr->receiving_notes ?? $tr->reason),
                         'slip_file_url'       => $slipFileUrl,
+                        'book_id'             => $this->id,
+                        'book_label'          => $this->label,
+                        'book_range'          => "{$this->book_start_no} - {$this->book_end_no}",
+                        'book_status'         => $this->status,
+                        'is_current_book'     => true,
                     ]);
                 }
             }
@@ -512,6 +522,11 @@ class SlipSequence extends Model
                             'items'               => $itemsList,
                             'notes'               => $mov->remarks,
                             'slip_file_url'       => null,
+                            'book_id'             => $this->id,
+                            'book_label'          => $this->label,
+                            'book_range'          => "{$this->book_start_no} - {$this->book_end_no}",
+                            'book_status'         => $this->status,
+                            'is_current_book'     => true,
                         ]);
                     }
                 }
@@ -577,6 +592,11 @@ class SlipSequence extends Model
                         'items'               => $itemsList,
                         'notes'               => $log->notes,
                         'slip_file_url'       => null,
+                        'book_id'             => $this->id,
+                        'book_label'          => $this->label,
+                        'book_range'          => "{$this->book_start_no} - {$this->book_end_no}",
+                        'book_status'         => $this->status,
+                        'is_current_book'     => true,
                     ]);
                 }
             }
@@ -625,5 +645,415 @@ class SlipSequence extends Model
         }
 
         return $map;
+    }
+
+    /**
+     * Get ALL slips ever recorded for this store and slip type across all sequence books (past & present)
+     * @return \Illuminate\Support\Collection
+     */
+    public function getAllStoreSlipsDetail(): \Illuminate\Support\Collection
+    {
+        return self::getGlobalSlipHistory([
+            'store_id'  => $this->store_id,
+            'slip_type' => $this->slip_type,
+        ], $this->id);
+    }
+
+    /**
+     * Master Slip History Query: Retrieves all slips recorded across books and stores
+     * @param array $filters ['store_id', 'slip_type', 'source_type', 'sequence_id', 'search']
+     * @param int|null $currentSequenceId
+     * @return \Illuminate\Support\Collection
+     */
+    public static function getGlobalSlipHistory(array $filters = [], ?int $currentSequenceId = null): \Illuminate\Support\Collection
+    {
+        $storeId = !empty($filters['store_id']) ? (int) $filters['store_id'] : null;
+        $slipType = !empty($filters['slip_type']) ? (string) $filters['slip_type'] : null;
+        $sourceType = !empty($filters['source_type']) ? (string) $filters['source_type'] : null;
+        $sequenceId = !empty($filters['sequence_id']) ? (int) $filters['sequence_id'] : null;
+        $search = !empty($filters['search']) ? trim(strtolower((string) $filters['search'])) : null;
+
+        // Load all sequence books for book attribution
+        $allBooksQuery = self::query();
+        if ($storeId) {
+            $allBooksQuery->where('store_id', $storeId);
+        }
+        if ($slipType) {
+            $allBooksQuery->where('slip_type', $slipType);
+        }
+        $books = $allBooksQuery->get();
+
+        // Helper to find which book a slip number belongs to
+        $findBookForSlip = function (int $slipNo, ?int $itemStoreId, ?string $itemSlipType) use ($books, $currentSequenceId) {
+            foreach ($books as $b) {
+                $storeMatches = !$itemStoreId || (int)$b->store_id === (int)$itemStoreId;
+                $typeMatches = !$itemSlipType || $b->slip_type === $itemSlipType;
+                if ($storeMatches && $typeMatches && $slipNo >= (int)$b->book_start_no && $slipNo <= (int)$b->book_end_no) {
+                    return $b;
+                }
+            }
+            // Fallback store match only
+            foreach ($books as $b) {
+                if ($slipNo >= (int)$b->book_start_no && $slipNo <= (int)$b->book_end_no) {
+                    return $b;
+                }
+            }
+            return null;
+        };
+
+        $extractSlipNumber = function ($str) {
+            if (empty($str)) return null;
+            if (preg_match_all('/\d+/', (string) $str, $matches)) {
+                foreach ($matches[0] as $match) {
+                    $val = (int) $match;
+                    if ($val > 0) {
+                        return $val;
+                    }
+                }
+            }
+            return null;
+        };
+
+        $assignedSlips = collect();
+
+        // 1. Delivery Receipts
+        if (!$sourceType || $sourceType === 'delivery_receipt' || $sourceType === 'transfer') {
+            $receiptsQuery = DeliveryReceipt::with([
+                'purchaseRequest.project',
+                'purchaseRequest.requestedBy',
+                'purchaseRequest.items.product',
+                'purchaseOrder.supplier',
+                'store',
+                'toStore',
+                'receivedBy',
+                'items.product',
+            ])->latest('id');
+
+            if ($storeId) {
+                $receiptsQuery->where(function ($q) use ($storeId) {
+                    $q->where('store_id', $storeId)
+                      ->orWhere('to_store_id', $storeId);
+                });
+            }
+
+            $receipts = $receiptsQuery->get();
+
+            foreach ($receipts as $receipt) {
+                $numeric = $extractSlipNumber($receipt->dr_no) 
+                        ?? $extractSlipNumber($receipt->reference_no)
+                        ?? $extractSlipNumber($receipt->challan_no)
+                        ?? $extractSlipNumber($receipt->notes);
+
+                if ($numeric === null) {
+                    continue;
+                }
+
+                $isTransferReceipt = ($receipt->slip_type === 'send') 
+                    || !empty($receipt->to_store_id) 
+                    || str_contains(strtolower($receipt->supplier_name ?? ''), 'transfer');
+
+                $recSlipType = $receipt->slip_type ?: ($isTransferReceipt ? 'send' : 'receive');
+                $actualSourceType = $isTransferReceipt ? 'transfer' : 'delivery_receipt';
+
+                if ($slipType && $recSlipType !== $slipType) {
+                    continue;
+                }
+                if ($sourceType && $actualSourceType !== $sourceType) {
+                    continue;
+                }
+
+                $book = $findBookForSlip($numeric, $receipt->store_id, $recSlipType);
+                if ($sequenceId && (!$book || $book->id !== $sequenceId)) {
+                    continue;
+                }
+
+                // Check duplicate
+                $dupKey = 'dr_' . $receipt->id . '_' . $numeric;
+                if ($assignedSlips->has($dupKey)) {
+                    continue;
+                }
+
+                $itemsList = collect();
+                if ($receipt->items && $receipt->items->isNotEmpty()) {
+                    $itemsList = $receipt->items->map(function ($it) {
+                        return [
+                            'name'     => $it->product?->name ?? 'Item',
+                            'quantity' => (float) ($it->quantity ?? $it->quantity_received ?? $it->accepted_quantity ?? 0),
+                            'unit'     => $it->unit ?? $it->product?->unit ?? '',
+                        ];
+                    });
+                } elseif ($receipt->purchaseRequest && $receipt->purchaseRequest->items) {
+                    $itemsList = $receipt->purchaseRequest->items->map(function ($it) {
+                        return [
+                            'name'     => $it->product?->name ?? $it->item_name ?? 'Item',
+                            'quantity' => (float) ($it->quantity ?? $it->received_quantity ?? 0),
+                            'unit'     => $it->unit ?? $it->product?->unit ?? '',
+                        ];
+                    });
+                }
+
+                $fromStoreName = $receipt->store?->name ?? 'Origin Store';
+                $toStoreName = $receipt->toStore?->name ?? ($receipt->to_store_id ? 'Destination Store' : null);
+
+                $assignedSlips->put($dupKey, [
+                    'slip_no'             => $receipt->dr_no ?: ($book ? $book->formatSlipNumber($numeric) : str_pad($numeric, 5, '0', STR_PAD_LEFT)),
+                    'numeric_no'          => $numeric,
+                    'source_type'         => $actualSourceType,
+                    'slip_type'           => $recSlipType,
+                    'document_id'         => $receipt->id,
+                    'document_ref'        => $isTransferReceipt 
+                        ? ('Store Issue Note / Transfer Slip #' . ($receipt->dr_no ?: $receipt->id)) 
+                        : ('GRN / Delivery Receipt #' . ($receipt->dr_no ?: $receipt->id)),
+                    'document_url'        => route('delivery-receipts.show', $receipt->id),
+                    'status'              => $receipt->is_void ? 'void' : ($receipt->status ?: 'verified'),
+                    'is_void'             => (bool) $receipt->is_void,
+                    'date'                => $receipt->received_date ?: $receipt->receipt_date ?: $receipt->created_at,
+                    'store_name'          => $receipt->store?->name ?? 'Store',
+                    'from_store_name'     => $fromStoreName,
+                    'to_store_name'       => $toStoreName,
+                    'supplier_name'       => $isTransferReceipt 
+                        ? ('Store Transfer (' . $fromStoreName . ($toStoreName ? ' ➔ ' . $toStoreName : '') . ')')
+                        : ($receipt->supplier_name ?: ($receipt->purchaseOrder?->supplier?->name ?? ($receipt->purchaseRequest?->supplier_name ?? 'Supplier / Store'))),
+                    'transfer_no'         => $isTransferReceipt ? ($receipt->reference_no ?: ('TR-SLIP-' . ($receipt->dr_no ?: $receipt->id))) : null,
+                    'transfer_id'         => null,
+                    'transfer_role'       => $isTransferReceipt ? 'Store Issue' : null,
+                    'transfer_status'     => $receipt->status,
+                    'driver_name'         => null,
+                    'vehicle_plate_no'    => $receipt->vehicle_no,
+                    'purchase_request_id' => $receipt->purchase_request_id,
+                    'pr_no'               => $receipt->purchaseRequest?->pr_no,
+                    'pr_title'            => $receipt->purchaseRequest?->title ?? $receipt->purchaseRequest?->item_name,
+                    'pr_url'              => $receipt->purchase_request_id ? route('purchase-requests.show', $receipt->purchase_request_id) : null,
+                    'project_name'        => $toStoreName ?: ($receipt->purchaseRequest?->project?->name ?? ($receipt->store?->name ?? 'N/A')),
+                    'purchase_order_ref'  => $receipt->purchaseOrder?->reference_number,
+                    'po_id'               => $receipt->purchase_order_id,
+                    'handled_by'          => $receipt->receivedBy?->name ?? 'Store Keeper',
+                    'items_count'         => $itemsList->count(),
+                    'items'               => $itemsList,
+                    'notes'               => $receipt->notes,
+                    'slip_file_url'       => null,
+                    'book_id'             => $book?->id,
+                    'book_label'          => $book?->label ?? 'Sequence Book',
+                    'book_range'          => $book ? "{$book->book_start_no} - {$book->book_end_no}" : 'Manual / Other',
+                    'book_status'         => $book?->status ?? 'archived',
+                    'is_current_book'     => ($currentSequenceId && $book && $book->id === $currentSequenceId),
+                ]);
+            }
+        }
+
+        // 2. Transfers
+        if (!$sourceType || $sourceType === 'transfer') {
+            $transfersQuery = Transfer::withTrashed()->with([
+                'fromStore', 
+                'toStore', 
+                'items.product', 
+                'requestedBy', 
+                'approvedBy', 
+                'dispatchedBy', 
+                'receivedBy', 
+                'driver'
+            ])->latest('id');
+
+            if ($storeId) {
+                $transfersQuery->where(function ($q) use ($storeId) {
+                    $q->where('from_store_id', $storeId)
+                      ->orWhere('to_store_id', $storeId);
+                });
+            }
+
+            $transfers = $transfersQuery->get();
+
+            foreach ($transfers as $tr) {
+                $slipsToCheck = [
+                    'outgoing'        => $tr->outgoing_slip_no,
+                    'physical'        => $tr->physical_slip_no,
+                    'receiving'       => $tr->receiving_slip_no,
+                    'dispatch_notes'  => $tr->dispatch_notes,
+                    'receiving_notes' => $tr->receiving_notes,
+                    'reason'          => $tr->reason,
+                    'transfer_no'     => $tr->transfer_no,
+                ];
+
+                foreach ($slipsToCheck as $role => $sVal) {
+                    if (empty($sVal)) continue;
+                    $num = $extractSlipNumber($sVal);
+                    if ($num === null) continue;
+
+                    $isReceiving = in_array($role, ['receiving', 'receiving_notes']);
+                    $trSlipType = $isReceiving ? 'receive' : 'send';
+                    $trStoreId = $isReceiving ? $tr->to_store_id : $tr->from_store_id;
+
+                    if ($slipType && $trSlipType !== $slipType) {
+                        continue;
+                    }
+                    if ($storeId && $trStoreId != $storeId) {
+                        // Allow if matching either origin or destination
+                        if ($tr->to_store_id != $storeId && $tr->from_store_id != $storeId) {
+                            continue;
+                        }
+                    }
+
+                    $book = $findBookForSlip($num, $trStoreId, $trSlipType);
+                    if ($sequenceId && (!$book || $book->id !== $sequenceId)) {
+                        continue;
+                    }
+
+                    $dupKey = 'tr_' . $tr->id . '_' . $role . '_' . $num;
+                    if ($assignedSlips->has($dupKey)) {
+                        continue;
+                    }
+
+                    $itemsList = $tr->items->map(function ($it) {
+                        return [
+                            'name'     => $it->product?->name ?? 'Item',
+                            'quantity' => (float) ($it->sent_quantity > 0 ? $it->sent_quantity : ($it->received_quantity > 0 ? $it->received_quantity : ($it->requested_quantity ?? 0))),
+                            'unit'     => $it->product?->unit?->name ?? ($it->unit ?? $it->product?->unit ?? ''),
+                        ];
+                    });
+
+                    $roleLabel = match($role) {
+                        'receiving', 'receiving_notes' => 'Receiving Slip',
+                        'outgoing'                     => 'Outgoing Slip',
+                        'physical'                     => 'Physical Waybill',
+                        default                        => 'Transfer Reference',
+                    };
+
+                    $slipFileUrl = $isReceiving ? $tr->receiving_slip_url : $tr->outgoing_slip_url;
+
+                    $linkedPr = null;
+                    if (!empty($tr->reason) && preg_match('/PR[-#\s]*(\d+)/i', $tr->reason, $prm)) {
+                        try {
+                            $linkedPr = PurchaseRequest::where('pr_no', 'like', '%' . $prm[1] . '%')->first();
+                        } catch (\Throwable $e) {}
+                    }
+
+                    $assignedSlips->put($dupKey, [
+                        'slip_no'             => $book ? $book->formatSlipNumber($num) : str_pad($num, 5, '0', STR_PAD_LEFT),
+                        'numeric_no'          => $num,
+                        'source_type'         => 'transfer',
+                        'slip_type'           => $trSlipType,
+                        'document_id'         => $tr->id,
+                        'document_ref'        => 'Transfer #' . $tr->transfer_no . ' (' . $roleLabel . ')',
+                        'document_url'        => route('store-manager.transfers.show', $tr->id),
+                        'status'              => $tr->deleted_at ? 'cancelled' : ($tr->status ?: 'completed'),
+                        'is_void'             => (bool)$tr->deleted_at || in_array($tr->status, ['rejected', 'cancelled']),
+                        'date'                => $isReceiving ? ($tr->received_at ?: $tr->updated_at) : ($tr->dispatched_at ?: $tr->created_at),
+                        'store_name'          => ($isReceiving ? $tr->toStore?->name : $tr->fromStore?->name) ?? 'Store',
+                        'from_store_name'     => $tr->fromStore?->name ?? 'Source Store',
+                        'to_store_name'       => $tr->toStore?->name ?? 'Destination Store',
+                        'supplier_name'       => 'Store Transfer: ' . ($tr->fromStore?->name ?? 'From') . ' ➔ ' . ($tr->toStore?->name ?? 'To'),
+                        'transfer_no'         => $tr->transfer_no,
+                        'transfer_id'         => $tr->id,
+                        'transfer_role'       => $roleLabel,
+                        'transfer_status'     => $tr->status,
+                        'driver_name'         => $tr->driver?->full_name,
+                        'vehicle_plate_no'    => $tr->vehicle_plate_no,
+                        'purchase_request_id' => $linkedPr?->id,
+                        'pr_no'               => $linkedPr?->pr_no,
+                        'pr_title'            => $linkedPr?->title ?? $linkedPr?->item_name,
+                        'pr_url'              => $linkedPr ? route('purchase-requests.show', $linkedPr->id) : null,
+                        'project_name'        => $tr->toStore?->project?->name ?? ($tr->toStore?->name ?? 'Transfer Destination'),
+                        'purchase_order_ref'  => null,
+                        'po_id'               => null,
+                        'handled_by'          => ($isReceiving ? $tr->receivedBy?->name : $tr->dispatchedBy?->name) ?? ($tr->requestedBy?->name ?? 'Store Staff'),
+                        'items_count'         => $itemsList->count(),
+                        'items'               => $itemsList,
+                        'notes'               => $tr->dispatch_notes ?? ($tr->receiving_notes ?? $tr->reason),
+                        'slip_file_url'       => $slipFileUrl,
+                        'book_id'             => $book?->id,
+                        'book_label'          => $book?->label ?? 'Sequence Book',
+                        'book_range'          => $book ? "{$book->book_start_no} - {$book->book_end_no}" : 'Manual / Other',
+                        'book_status'         => $book?->status ?? 'archived',
+                        'is_current_book'     => ($currentSequenceId && $book && $book->id === $currentSequenceId),
+                    ]);
+                }
+            }
+        }
+
+        // 3. Inventory Movements
+        try {
+            $movementsQuery = InventoryMovement::where(function ($q) {
+                $q->where('remarks', 'like', '%Slip%')
+                  ->orWhere('remarks', 'like', '%slip%')
+                  ->orWhere('remarks', 'like', '%Transfer%')
+                  ->orWhere('remarks', 'like', '%transfer%');
+            })->with(['performer'])->latest('id')->take(1000);
+
+            $movements = $movementsQuery->get();
+
+            foreach ($movements as $mov) {
+                $num = $extractSlipNumber($mov->remarks);
+                if ($num === null) continue;
+
+                $movSlipType = ($mov->type === 'transfer_out') ? 'send' : 'receive';
+                if ($slipType && $movSlipType !== $slipType) continue;
+
+                $book = $findBookForSlip($num, null, $movSlipType);
+                if ($sequenceId && (!$book || $book->id !== $sequenceId)) continue;
+
+                $dupKey = 'mov_' . $mov->id . '_' . $num;
+                if ($assignedSlips->has($dupKey)) continue;
+
+                $assignedSlips->put($dupKey, [
+                    'slip_no'             => $book ? $book->formatSlipNumber($num) : str_pad($num, 5, '0', STR_PAD_LEFT),
+                    'numeric_no'          => $num,
+                    'source_type'         => 'inventory_movement',
+                    'slip_type'           => $movSlipType,
+                    'document_id'         => $mov->id,
+                    'document_ref'        => 'Inventory Movement #' . $mov->id,
+                    'document_url'        => route('store-manager.inventory.all'),
+                    'status'              => 'verified',
+                    'is_void'             => false,
+                    'date'                => $mov->created_at,
+                    'store_name'          => 'Store',
+                    'from_store_name'     => null,
+                    'to_store_name'       => null,
+                    'supplier_name'       => 'Inventory Intake',
+                    'transfer_no'         => null,
+                    'transfer_id'         => null,
+                    'transfer_role'       => null,
+                    'transfer_status'     => null,
+                    'driver_name'         => null,
+                    'vehicle_plate_no'    => null,
+                    'purchase_request_id' => null,
+                    'pr_no'               => null,
+                    'pr_title'            => null,
+                    'pr_url'              => null,
+                    'project_name'        => 'N/A',
+                    'purchase_order_ref'  => null,
+                    'po_id'               => null,
+                    'handled_by'          => $mov->performer?->name ?? 'Store Staff',
+                    'items_count'         => 0,
+                    'items'               => collect(),
+                    'notes'               => $mov->remarks,
+                    'slip_file_url'       => null,
+                    'book_id'             => $book?->id,
+                    'book_label'          => $book?->label ?? 'Sequence Book',
+                    'book_range'          => $book ? "{$book->book_start_no} - {$book->book_end_no}" : 'Manual / Other',
+                    'book_status'         => $book?->status ?? 'archived',
+                    'is_current_book'     => ($currentSequenceId && $book && $book->id === $currentSequenceId),
+                ]);
+            }
+        } catch (\Throwable $e) {}
+
+        // Apply search filter if provided
+        $results = $assignedSlips->values();
+        if ($search) {
+            $results = $results->filter(function ($row) use ($search) {
+                return str_contains(strtolower($row['slip_no'] ?? ''), $search)
+                    || str_contains(strtolower((string)($row['numeric_no'] ?? '')), $search)
+                    || str_contains(strtolower($row['document_ref'] ?? ''), $search)
+                    || str_contains(strtolower($row['pr_no'] ?? ''), $search)
+                    || str_contains(strtolower($row['pr_title'] ?? ''), $search)
+                    || str_contains(strtolower($row['transfer_no'] ?? ''), $search)
+                    || str_contains(strtolower($row['supplier_name'] ?? ''), $search)
+                    || str_contains(strtolower($row['driver_name'] ?? ''), $search)
+                    || str_contains(strtolower($row['store_name'] ?? ''), $search)
+                    || str_contains(strtolower($row['project_name'] ?? ''), $search)
+                    || str_contains(strtolower($row['notes'] ?? ''), $search);
+            });
+        }
+
+        return $results->sortByDesc('numeric_no')->values();
     }
 }

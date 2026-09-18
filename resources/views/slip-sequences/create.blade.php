@@ -77,6 +77,20 @@
 
                         <div class="row mb-3">
                             <div class="col-12">
+                                <div class="form-check form-switch bg-light p-3 rounded border">
+                                    <input class="form-check-input ms-0 me-2" type="checkbox" name="archive_previous" id="archivePreviousSwitch" value="1" checked>
+                                    <label class="form-check-label fw-semibold text-dark" for="archivePreviousSwitch">
+                                        Archive any existing active sequence book for this store & type
+                                    </label>
+                                    <div class="small text-muted ms-4 ps-1">
+                                        Safely preserves all existing slip history. The previous book will be marked as completed/full and never deleted.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-12">
                                 <label class="form-label">Notes</label>
                                 <textarea name="notes" class="form-control" rows="3" 
                                           placeholder="E.g., Book #1, Location: Warehouse A"></textarea>

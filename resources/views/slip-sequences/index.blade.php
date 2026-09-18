@@ -10,7 +10,10 @@
             <p class="text-muted">Manage GRN (Receiving) and SIN (Outgoing) slip sequences</p>
         </div>
         <div class="col-md-6 text-end">
-            <a href="{{ route('store-manager.slip-sequences.create') }}" class="btn btn-primary">
+            <a href="{{ route('store-manager.slip-history.index') }}" class="btn btn-outline-primary me-2 shadow-sm">
+                <i class="fas fa-history me-1"></i>View Complete Slip History
+            </a>
+            <a href="{{ route('store-manager.slip-sequences.create') }}" class="btn btn-primary shadow-sm">
                 <i class="fas fa-plus me-1"></i>Configure New Sequence
             </a>
         </div>

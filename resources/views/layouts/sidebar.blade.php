@@ -153,6 +153,7 @@
             <li><a href="{{ route('store-manager.issued.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.issued.*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding"></i><span>Issued Materials</span></a></li>
             <li><a href="{{ route('store-manager.store-keepers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.store-keepers.*') ? 'active' : '' }}"><i class="fa-solid fa-users-gear text-success"></i><span>Assign Store Keepers</span></a></li>
             <li><a href="{{ route('store-manager.slip-sequences.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.slip-sequences.*') ? 'active' : '' }}"><i class="fa-solid fa-stream text-info"></i><span>Slip Sequences</span></a></li>
+            <li><a href="{{ route('store-manager.slip-history.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.slip-history.*') ? 'active' : '' }}"><i class="fa-solid fa-clock-rotate-left text-success"></i><span>Slip History</span></a></li>
         </ul>
     </div>
 </li>
@@ -1412,6 +1413,12 @@
             <a href="{{ route('store-manager.slip-sequences.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.slip-sequences.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-stream text-info"></i>
                 <span>Slip Sequences</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('store-manager.slip-history.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.slip-history.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-clock-rotate-left text-success"></i>
+                <span>Slip History</span>
             </a>
         </li>
         @endif

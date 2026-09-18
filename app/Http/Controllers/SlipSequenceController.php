@@ -55,44 +55,130 @@ class SlipSequenceController extends Controller
             ->first();
 
         if ($existing) {
-            return back()->withErrors(['slip_type' => "Active sequence already exists for {$existing->label}"]);
+            if ($request->boolean('archive_previous') || $existing->status === 'full' || $existing->current_slip_no > $existing->book_end_no) {
+                $existing->update(['status' => 'full']);
+            } else {
+                return back()->withInput()->withErrors([
+                    'slip_type' => "Active sequence already exists for {$existing->label} (#{$existing->book_start_no}–#{$existing->book_end_no}). Select 'Archive previous sequence' to activate this new book without deleting any history."
+                ]);
+            }
         }
 
-        SlipSequence::create([
-            'store_id'      => $request->store_id,
-            'slip_type'     => $request->slip_type,
-            'label'         => $request->label,
-            'prefix'        => $request->prefix,
-            'book_start_no' => $request->book_start_no,
-            'book_end_no'   => $request->book_end_no,
+        $seq = SlipSequence::create([
+            'store_id'        => $request->store_id,
+            'slip_type'       => $request->slip_type,
+            'label'           => $request->label,
+            'prefix'          => $request->prefix,
+            'book_start_no'   => $request->book_start_no,
+            'book_end_no'     => $request->book_end_no,
             'current_slip_no' => $request->book_start_no,
-            'used_count'    => 0,
-            'status'        => 'active',
-            'notes'         => $request->notes,
+            'used_count'      => 0,
+            'status'          => 'active',
+            'notes'           => $request->notes,
         ]);
 
-        return redirect()->route('store-manager.slip-sequences.index')->with('success', 'Slip sequence configured successfully.');
+        return redirect()->route('store-manager.slip-sequences.edit', $seq)->with('success', "New sequence book (#{$seq->book_start_no}–#{$seq->book_end_no}) configured and activated. All past slips remain preserved in history.");
+    }
+
+    /**
+     * Seamlessly transition to Next Sequence Book for this store + type
+     */
+    public function storeNextBook(Request $request, SlipSequence $slipSequence)
+    {
+        $request->validate([
+            'label'         => 'required|string|max:100',
+            'prefix'        => 'nullable|string|max:50',
+            'book_start_no' => 'required|integer|min:1',
+            'book_end_no'   => 'required|integer|gt:book_start_no',
+            'notes'         => 'nullable|string',
+        ]);
+
+        // Archive / mark previous sequence book as full
+        if ($request->boolean('archive_previous', true)) {
+            $slipSequence->update(['status' => 'full']);
+        }
+
+        // Deactivate any other active sequence for this store + type
+        SlipSequence::where('store_id', $slipSequence->store_id)
+            ->where('slip_type', $slipSequence->slip_type)
+            ->where('status', 'active')
+            ->update(['status' => 'full']);
+
+        // Create the new active sequence
+        $newSequence = SlipSequence::create([
+            'store_id'        => $slipSequence->store_id,
+            'slip_type'       => $slipSequence->slip_type,
+            'label'           => $request->label,
+            'prefix'          => $request->prefix !== null ? $request->prefix : $slipSequence->prefix,
+            'book_start_no'   => (int) $request->book_start_no,
+            'book_end_no'     => (int) $request->book_end_no,
+            'current_slip_no' => (int) $request->book_start_no,
+            'used_count'      => 0,
+            'status'          => 'active',
+            'notes'           => $request->notes ?: "Continuation after Book #{$slipSequence->book_start_no}–#{$slipSequence->book_end_no}",
+        ]);
+
+        return redirect()->route('store-manager.slip-sequences.edit', $newSequence)->with('success', "Next Sequence Book (#{$newSequence->book_start_no}–#{$newSequence->book_end_no}) has been activated! All previous slip records (#{$slipSequence->book_start_no}–#{$slipSequence->book_end_no}) are 100% preserved and viewable below.");
     }
 
     /**
      * Display / Show Slip Sequence details
      */
-    public function show(SlipSequence $slipSequence)
+    public function show(SlipSequence $slipSequence, Request $request)
     {
-        return $this->edit($slipSequence);
+        return $this->edit($slipSequence, $request);
     }
 
     /**
      * Edit Slip Sequence
      */
-    public function edit(SlipSequence $slipSequence)
+    public function edit(SlipSequence $slipSequence, Request $request = null)
     {
         $slipSequence->load('store');
         $stores = Store::where('is_active', true)->orderBy('name')->get();
+
+        // All sequence books for this store and slip type
+        $allStoreSequences = SlipSequence::where('store_id', $slipSequence->store_id)
+            ->where('slip_type', $slipSequence->slip_type)
+            ->orderBy('book_start_no', 'desc')
+            ->get();
+
+        // Slips assigned to this specific book
         $assignedSlips = $slipSequence->getAssignedSlipsDetail();
         $bookMap = $slipSequence->getBookRangeMap($assignedSlips);
 
-        return view('slip-sequences.edit', compact('slipSequence', 'stores', 'assignedSlips', 'bookMap'));
+        // ALL slips ever assigned for this store & slip type across all books
+        $allStoreSlips = $slipSequence->getAllStoreSlipsDetail();
+
+        return view('slip-sequences.edit', compact(
+            'slipSequence', 
+            'stores', 
+            'assignedSlips', 
+            'bookMap',
+            'allStoreSequences',
+            'allStoreSlips'
+        ));
+    }
+
+    /**
+     * Master Slip History Hub across all sequences and stores
+     */
+    public function history(Request $request)
+    {
+        $stores = Store::where('is_active', true)->orderBy('name')->get();
+        $sequences = SlipSequence::with('store')->orderBy('store_id')->orderBy('book_start_no')->get();
+
+        $filters = [
+            'store_id'    => $request->store_id,
+            'slip_type'   => $request->slip_type,
+            'source_type' => $request->source_type,
+            'sequence_id' => $request->sequence_id,
+            'search'      => $request->search,
+        ];
+
+        $allSlips = SlipSequence::getGlobalSlipHistory($filters);
+
+        return view('slip-sequences.history', compact('stores', 'sequences', 'allSlips', 'filters'));
     }
 
     /**

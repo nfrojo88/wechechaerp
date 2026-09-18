@@ -2124,8 +2124,10 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('store-manager')->name('store-manager.')->group(function () {
         Route::get('/', fn() => redirect()->route('dashboard.store-manager'))->name('dashboard');
         
-        // Slip Sequences (GRN/SIN Configuration)
+        // Slip Sequences (GRN/SIN Configuration & History)
+        Route::get('slip-history', [App\Http\Controllers\SlipSequenceController::class, 'history'])->name('slip-history.index');
         Route::resource('slip-sequences', App\Http\Controllers\SlipSequenceController::class);
+        Route::post('slip-sequences/{slipSequence}/next-book', [App\Http\Controllers\SlipSequenceController::class, 'storeNextBook'])->name('slip-sequences.next-book');
         Route::post('slip-sequences/{slipSequence}/deactivate', [App\Http\Controllers\SlipSequenceController::class, 'deactivate'])->name('slip-sequences.deactivate');
         Route::post('slip-sequences/{slipSequence}/reactivate', [App\Http\Controllers\SlipSequenceController::class, 'reactivate'])->name('slip-sequences.reactivate');
         Route::post('slip-sequences/{slipSequence}/reset', [App\Http\Controllers\SlipSequenceController::class, 'reset'])->name('slip-sequences.reset');
