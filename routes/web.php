@@ -56,6 +56,11 @@ Route::get('/deploy-from-github', function () {
     exec('cd ' . base_path() . ' && php artisan config:clear 2>&1 && php artisan route:clear 2>&1 && php artisan view:clear 2>&1 && php artisan migrate --force 2>&1', $cacheOutput);
     $cacheResult = implode("\n", $cacheOutput);
 
+    // Reset web server OPcache
+    if (function_exists('opcache_reset')) {
+        @opcache_reset();
+    }
+
     // Ensure payrolls columns directly
     try {
         if (\Illuminate\Support\Facades\Schema::hasTable('payrolls')) {

@@ -144,11 +144,29 @@ class SlipSequenceController extends Controller
             ->get();
 
         // Slips assigned to this specific book
-        $assignedSlips = $slipSequence->getAssignedSlipsDetail();
-        $bookMap = $slipSequence->getBookRangeMap($assignedSlips);
+        $assignedSlips = method_exists($slipSequence, 'getAssignedSlipsDetail')
+            ? $slipSequence->getAssignedSlipsDetail()
+            : collect();
+        $bookMap = method_exists($slipSequence, 'getBookRangeMap')
+            ? $slipSequence->getBookRangeMap($assignedSlips)
+            : [];
 
         // ALL slips ever assigned for this store & slip type across all books
-        $allStoreSlips = $slipSequence->getAllStoreSlipsDetail();
+        $allStoreSlips = collect();
+        try {
+            if (method_exists($slipSequence, 'getAllStoreSlipsDetail')) {
+                $allStoreSlips = $slipSequence->getAllStoreSlipsDetail();
+            } elseif (method_exists(SlipSequence::class, 'getGlobalSlipHistory')) {
+                $allStoreSlips = SlipSequence::getGlobalSlipHistory([
+                    'store_id'  => $slipSequence->store_id,
+                    'slip_type' => $slipSequence->slip_type,
+                ], $slipSequence->id);
+            } else {
+                $allStoreSlips = $assignedSlips;
+            }
+        } catch (\Throwable $e) {
+            $allStoreSlips = $assignedSlips;
+        }
 
         return view('slip-sequences.edit', compact(
             'slipSequence', 
@@ -176,7 +194,14 @@ class SlipSequenceController extends Controller
             'search'      => $request->search,
         ];
 
-        $allSlips = SlipSequence::getGlobalSlipHistory($filters);
+        $allSlips = collect();
+        try {
+            if (method_exists(SlipSequence::class, 'getGlobalSlipHistory')) {
+                $allSlips = SlipSequence::getGlobalSlipHistory($filters);
+            }
+        } catch (\Throwable $e) {
+            $allSlips = collect();
+        }
 
         return view('slip-sequences.history', compact('stores', 'sequences', 'allSlips', 'filters'));
     }
