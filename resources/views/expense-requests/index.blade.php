@@ -1225,32 +1225,62 @@
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                @foreach($linkedPr->items as $idx => $prItem)
-                                                <tr>
-                                                    <td class="ps-2 text-muted">{{ $idx + 1 }}</td>
-                                                    <td>
-                                                        <div class="fw-semibold text-dark">{{ $prItem->description ?? $prItem->item_name ?? 'Material' }}</div>
-                                                        @if($prItem->specification ?? false)
-                                                            <div class="text-muted small">{{ $prItem->specification }}</div>
-                                                        @endif
-                                                    </td>
-                                                    <td class="text-center fw-bold">{{ $prItem->quantity }}</td>
-                                                    <td class="text-center text-muted">{{ $prItem->unit ?? 'pcs' }}</td>
-                                                    <td class="text-end pe-2 font-monospace">{{ number_format($prItem->estimated_unit_price ?? $prItem->unit_price ?? 0, 2) }}</td>
-                                                    <td class="text-end pe-2 fw-bold font-monospace text-success">
-                                                        {{ number_format((float)$prItem->quantity * (float)($prItem->estimated_unit_price ?? $prItem->unit_price ?? 0), 2) }}
-                                                    </td>
-                                                </tr>
-                                                @endforeach
-                                            </tbody>
-                                            <tfoot class="table-light">
-                                                <tr class="fw-bold">
-                                                    <td colspan="5" class="text-end pe-2">Grand Total:</td>
-                                                    <td class="text-end pe-2 font-monospace text-success">
-                                                        ETB {{ number_format($linkedPr->direct_buy_amount ?? $linkedPr->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0)), 2) }}
-                                                    </td>
-                                                </tr>
-                                            </tfoot>
+                                                 @php
+                                                     $selectedProforma = $linkedPr->proformaInvoices ? $linkedPr->proformaInvoices->firstWhere('gm_selected', true) : null;
+                                                 @endphp
+                                                 @foreach($linkedPr->items as $idx => $prItem)
+                                                 @php
+                                                     $itemName = $prItem->product?->name ?? $prItem->item_name ?? $prItem->description ?? ('Item #' . ($prItem->product_id ?? ($idx + 1)));
+                                                     $qty = (float)$prItem->quantity;
+                                                     $unitPrice = (float)($prItem->estimated_unit_cost ?? $prItem->unit_price ?? $prItem->estimated_unit_price ?? 0);
+                                                     if ($unitPrice <= 0 && $selectedProforma && $selectedProforma->items) {
+                                                         $pItem = $selectedProforma->items->firstWhere('product_id', $prItem->product_id);
+                                                         if ($pItem && (float)$pItem->unit_price > 0) {
+                                                             $unitPrice = (float)$pItem->unit_price;
+                                                         }
+                                                     }
+                                                     if ($unitPrice <= 0 && $linkedPr->items->count() === 1 && (float)($linkedPr->direct_buy_amount ?? $req->amount) > 0) {
+                                                         $unitPrice = (float)($linkedPr->direct_buy_amount ?? $req->amount) / ($qty > 0 ? $qty : 1);
+                                                     }
+                                                     $lineTotal = $qty * $unitPrice;
+                                                     if ($lineTotal <= 0 && $linkedPr->items->count() === 1 && (float)($linkedPr->direct_buy_amount ?? $req->amount) > 0) {
+                                                         $lineTotal = (float)($linkedPr->direct_buy_amount ?? $req->amount);
+                                                     }
+                                                 @endphp
+                                                 <tr>
+                                                     <td class="ps-2 text-muted">{{ $idx + 1 }}</td>
+                                                     <td>
+                                                         <div class="fw-semibold text-dark">{{ $itemName }}</div>
+                                                         @if(!empty($prItem->specifications) || !empty($prItem->specification))
+                                                             <div class="text-muted small">{{ $prItem->specifications ?? $prItem->specification }}</div>
+                                                         @endif
+                                                     </td>
+                                                     <td class="text-center fw-bold">{{ number_format($qty, 3) }}</td>
+                                                     <td class="text-center text-muted">{{ $prItem->unit ?? 'pcs' }}</td>
+                                                     <td class="text-end pe-2 font-monospace">{{ number_format($unitPrice, 2) }}</td>
+                                                     <td class="text-end pe-2 fw-bold font-monospace text-success">
+                                                         {{ number_format($lineTotal, 2) }}
+                                                     </td>
+                                                 </tr>
+                                                 @endforeach
+                                             </tbody>
+                                             <tfoot class="table-light">
+                                                 @php
+                                                     $calcGrandTotal = (float)($linkedPr->direct_buy_amount ?? 0);
+                                                     if ($calcGrandTotal <= 0 && $selectedProforma && (float)$selectedProforma->total_amount > 0) {
+                                                         $calcGrandTotal = (float)$selectedProforma->total_amount;
+                                                     }
+                                                     if ($calcGrandTotal <= 0 && (float)$req->amount > 0) {
+                                                         $calcGrandTotal = (float)$req->amount;
+                                                     }
+                                                 @endphp
+                                                 <tr class="fw-bold">
+                                                     <td colspan="5" class="text-end pe-2">Grand Total:</td>
+                                                     <td class="text-end pe-2 font-monospace text-success">
+                                                         ETB {{ number_format($calcGrandTotal, 2) }}
+                                                     </td>
+                                                 </tr>
+                                             </tfoot>
                                         </table>
                                     </div>
                                 </div>

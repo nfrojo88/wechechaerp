@@ -350,6 +350,10 @@ class ExpenseRequest extends Model
     {
         $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
 
+        $query->whereNull('purchase_request_id')
+              ->where('request_number', 'not like', 'EXP-PR-%')
+              ->where('category', '!=', 'Material');
+
         // Admin & Finance Head see ALL paid requests
         if ($user->hasAnyRole(['admin', 'global_admin', 'finance_head', 'finance_manager']) || 
             str_contains($roleNames, 'finance_head') || 

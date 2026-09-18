@@ -175,14 +175,29 @@ class ExpenseRequestController extends Controller
             });
         };
 
-        // Counters for personal badges
+        // Counters for personal badges (strictly real employee expense requests)
         $counters = [
-            'my_requests'      => ExpenseRequest::where($baseUserScope)->whereNotIn('status', [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED])->count(),
-            'paid_history'     => ExpenseRequest::where($baseUserScope)->where('status', ExpenseRequest::STATUS_PAID)->count(),
-            'rejected_history' => ExpenseRequest::where($baseUserScope)->where('status', ExpenseRequest::STATUS_REJECTED)->count(),
+            'my_requests'      => ExpenseRequest::where($baseUserScope)
+                ->whereNull('purchase_request_id')
+                ->where('request_number', 'not like', 'EXP-PR-%')
+                ->where('category', '!=', 'Material')
+                ->whereNotIn('status', [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED])
+                ->count(),
+            'paid_history'     => ExpenseRequest::where($baseUserScope)
+                ->whereNull('purchase_request_id')
+                ->where('request_number', 'not like', 'EXP-PR-%')
+                ->where('category', '!=', 'Material')
+                ->where('status', ExpenseRequest::STATUS_PAID)
+                ->count(),
+            'rejected_history' => ExpenseRequest::where($baseUserScope)
+                ->whereNull('purchase_request_id')
+                ->where('request_number', 'not like', 'EXP-PR-%')
+                ->where('category', '!=', 'Material')
+                ->where('status', ExpenseRequest::STATUS_REJECTED)
+                ->count(),
         ];
 
-        // Build query for logged-in user's own requests and assigned requests
+        // Build query for logged-in user's own requests and assigned requests (excluding material procurement requests)
         $query = ExpenseRequest::with([
             'user',
             'employee',
@@ -202,7 +217,11 @@ class ExpenseRequestController extends Controller
             'purchaseRequest.supplier',
             'purchaseRequest.proformaInvoices.supplier',
             'purchaseRequest.gmDecisions',
-        ])->where($baseUserScope);
+        ])
+        ->where($baseUserScope)
+        ->whereNull('purchase_request_id')
+        ->where('request_number', 'not like', 'EXP-PR-%')
+        ->where('category', '!=', 'Material');
 
         switch ($tab) {
             case 'paid_history':
@@ -1143,7 +1162,10 @@ class ExpenseRequestController extends Controller
             'paidBy',
             'bankAccount',
             'chartOfAccount'
-        ]);
+        ])
+        ->whereNull('purchase_request_id')
+        ->where('request_number', 'not like', 'EXP-PR-%')
+        ->where('category', '!=', 'Material');
 
         // STRICT DATABASE-LEVEL PAID HISTORY SCOPING
         $query->paidHistoryForUser($user);
