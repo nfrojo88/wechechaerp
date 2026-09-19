@@ -1051,13 +1051,23 @@ class DashboardController extends Controller
                 ->latest()
                 ->take(6)
                 ->get(), collect());
+
+            // Recent Petty Cash Material Purchases for this store
+            $recentPettyCashPurchases = $this->safe(fn() => \App\Models\PettyCashMaterialPurchase::with(['purchaser', 'items.product', 'deliveryReceipt'])
+                ->where('store_id', $storeId)
+                ->latest('purchase_date')
+                ->latest('id')
+                ->take(6)
+                ->get(), collect());
+        } else {
+            $recentPettyCashPurchases = collect();
         }
 
         return view('dashboard.store-keeper', compact(
             'assignedStore', 'storeId', 'kpi',
             'storeInventory', 'lowStockItems',
             'incomingTransfers', 'outgoingTransfers', 'recentTransfers',
-            'materialRequests', 'recentDeliveryReceipts'
+            'materialRequests', 'recentDeliveryReceipts', 'recentPettyCashPurchases'
         ));
     }
 

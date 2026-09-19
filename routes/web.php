@@ -2197,6 +2197,17 @@ Route::middleware(['auth'])->group(function () {
         // Fixed Assets (Centralized Unit Codes & Quantity Lock)
         Route::resource('fixed-assets', App\Http\Controllers\FixedAssetController::class);
         Route::post('fixed-assets/{fixedAsset}/extra-unit', [App\Http\Controllers\FixedAssetController::class, 'storeExtraUnit'])->name('fixed-assets.extra-unit');
+
+        // Petty Cash Material Purchases (Store Manager alias)
+        Route::get('petty-cash-purchases', fn() => redirect()->route('store-keeper.petty-cash-purchases.index'))->name('petty-cash-purchases.index');
+    });
+
+    // ─── Store Keeper Petty Cash Material Purchases (Direct Spot Intake) ───────────
+    Route::prefix('store-keeper/petty-cash-purchases')->name('store-keeper.petty-cash-purchases.')->group(function () {
+        Route::get('/',            [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'index'])->name('index');
+        Route::get('/create',      [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'create'])->name('create');
+        Route::post('/',           [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'store'])->name('store');
+        Route::get('/{purchase}',  [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'show'])->name('show');
     });
 
     // API / AJAX: Available Fixed Asset Units for HR assignment dropdown & return

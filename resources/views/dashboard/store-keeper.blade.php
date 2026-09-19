@@ -31,6 +31,9 @@
                     </div>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-success btn-sm shadow-sm fw-bold">
+                        <i class="fa-solid fa-cart-shopping me-1"></i> Buy Material (Petty Cash)
+                    </a>
                     <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm shadow-sm">
                         <i class="fa-solid fa-exchange-alt me-1"></i> New Transfer
                     </a>
@@ -156,8 +159,11 @@
                         <a href="{{ \Illuminate\Support\Facades\Route::has('store-keeper.weekly-material-demand') ? route('store-keeper.weekly-material-demand') : (\Illuminate\Support\Facades\Route::has('store-manager.weekly-material-demand') ? route('store-manager.weekly-material-demand') : url('/store-keeper/weekly-material-demand')) }}" class="btn btn-outline-primary btn-sm px-3">
                             <i class="fa-solid fa-calendar-check me-1"></i> 4. Weekly Material Demand
                         </a>
-                        <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-success btn-sm px-3">
-                            <i class="fa-solid fa-hand-holding-dollar me-1"></i> 5. Petty Cash (Site Purchase)
+                        <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-outline-success btn-sm px-3">
+                            <i class="fa-solid fa-cart-shopping me-1"></i> 5. Buy Material (Petty Cash)
+                        </a>
+                        <a href="{{ route('expense-requests.index') }}" class="btn btn-outline-secondary btn-sm px-3">
+                            <i class="fa-solid fa-hand-holding-dollar me-1"></i> 6. Expense Requests
                         </a>
                     </div>
                 </div>
@@ -434,6 +440,40 @@
                         @empty
                         <li class="list-group-item text-center py-3 text-muted small">
                             No recent deliveries recorded.
+                        </li>
+                        @endforelse
+                    </ul>
+                </div>
+            </div>
+
+            {{-- Recent Petty Cash Purchases --}}
+            <div class="card border-0 shadow-sm rounded-3 mt-4">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-dark">
+                        <i class="fa-solid fa-cart-shopping text-success me-2"></i>Recent Petty Cash Buys
+                    </h6>
+                    <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="btn btn-sm btn-outline-success">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                        @forelse($recentPettyCashPurchases ?? [] as $pcp)
+                        <li class="list-group-item px-3 py-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <a href="{{ route('store-keeper.petty-cash-purchases.show', $pcp) }}" class="fw-bold font-monospace text-primary text-decoration-none small d-block">
+                                        {{ $pcp->purchase_no }}
+                                    </a>
+                                    <small class="text-muted">{{ $pcp->supplier_name ?: 'Supplier' }} &bull; {{ $pcp->items->count() }} items</small>
+                                </div>
+                                <div class="text-end">
+                                    <strong class="text-success font-monospace small d-block">ETB {{ number_format($pcp->total_amount, 2) }}</strong>
+                                    <small class="text-muted" style="font-size:0.7rem;">{{ optional($pcp->purchase_date)->format('d M') }}</small>
+                                </div>
+                            </div>
+                        </li>
+                        @empty
+                        <li class="list-group-item text-center py-3 text-muted small">
+                            No petty cash purchases recorded yet.
                         </li>
                         @endforelse
                     </ul>

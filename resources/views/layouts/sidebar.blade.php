@@ -1280,6 +1280,12 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-keeper.petty-cash-purchases.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-cart-shopping text-warning"></i>
+                <span>Buy Material (Petty Cash)</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('expense-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('expense-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-hand-holding-dollar text-success"></i>
                 <span>Petty Cash</span>
@@ -1419,6 +1425,12 @@
             <a href="{{ route('store-manager.slip-history.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.slip-history.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-clock-rotate-left text-success"></i>
                 <span>Slip History</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('store-keeper.petty-cash-purchases.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-keeper.petty-cash-purchases.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-cart-flatbed text-warning"></i>
+                <span>Petty Cash Purchases</span>
             </a>
         </li>
         @endif
