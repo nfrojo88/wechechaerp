@@ -81,80 +81,138 @@
     <!-- Official Work Hours & Schedule Card (Working Time vs Non-Working/Break Time) -->
     <div class="card border-0 shadow-sm mb-3 bg-white rounded-3">
         <div class="card-body p-3">
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
                 <div class="d-flex align-items-center gap-2">
                     <span class="badge bg-primary rounded-circle p-2"><i class="fas fa-business-time text-white"></i></span>
                     <div>
                         <h6 class="mb-0 fw-bold text-dark">
-                            Work Hours & Shift Schedule <span class="text-muted fw-normal small">(የሥራና የእረፍት ሰዓት ድልድል)</span>
+                            Work Hours &amp; Shift Schedule <span class="text-muted fw-normal small">(የሥራና የእረፍት ሰዓት ድልድል)</span>
                         </h6>
                         <small class="text-muted">
-                            {{ $workSchedule['work_days'] ?? 'Monday – Saturday' }} &bull; Expected Working Time: <strong class="text-dark">{{ $workSchedule['total_hours'] ?? '8.0' }} hrs/day</strong> &bull; Linked with Ethiopian Time & Calendar
+                            <span class="badge bg-primary-subtle text-primary border border-primary px-2 py-0.5 me-1">Mon – Fri: {{ $workSchedule['total_hours'] ?? '8.0' }} hrs/day</span>
+                            <span class="badge bg-warning-subtle text-dark border border-warning px-2 py-0.5 me-1">Sat: {{ $workSchedule['sat_total_hours'] ?? '4.0' }} hrs (Morning Only)</span>
+                            &bull; Linked with Ethiopian Time &amp; Calendar
                         </small>
                     </div>
                 </div>
                 <div class="d-flex gap-2 align-items-center">
-                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#workScheduleModal">
-                        <i class="fas fa-cog me-1"></i>Edit Work Schedule
+                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#workScheduleModal">
+                        <i class="fas fa-cog me-1"></i>Configure Schedule
                     </button>
                 </div>
             </div>
 
-            <div class="row g-2 pt-1">
-                {{-- Morning Working Hours --}}
-                <div class="col-md-4">
-                    <div class="p-2 rounded-3 border bg-success-subtle bg-opacity-50 border-success-subtle d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="d-flex align-items-center gap-1">
-                                <span class="badge bg-success text-white px-1 py-0 me-1" style="font-size: 0.68rem;">IN WORK</span>
-                                <span class="fw-bold small text-success-emphasis"><i class="fas fa-sun text-warning me-1"></i>Morning Shift (ጠዋት የሥራ ሰዓት)</span>
+            <!-- Schedule Badges / Panels -->
+            <div class="row g-3">
+                <!-- Left: Monday – Friday (Full Working Day) -->
+                <div class="col-12 col-xl-8 border-end-xl">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="badge bg-dark text-white px-2.5 py-1 small fw-bold">
+                            <i class="fa-solid fa-calendar-week me-1 text-info"></i> Monday – Friday (ሰኞ – ዓርብ - Full Day)
+                        </span>
+                        <span class="small text-muted fw-semibold">Expected: <strong>{{ $workSchedule['total_hours'] ?? '8.0' }} hrs</strong></span>
+                    </div>
+                    <div class="row g-2">
+                        {{-- Morning Working Hours --}}
+                        <div class="col-md-4">
+                            <div class="p-2 rounded-3 border bg-success-subtle bg-opacity-50 border-success-subtle d-flex align-items-center justify-content-between">
+                                <div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="badge bg-success text-white px-1 py-0 me-1" style="font-size: 0.65rem;">IN WORK</span>
+                                        <span class="fw-bold small text-success-emphasis"><i class="fas fa-sun text-warning me-1"></i>Morning Shift</span>
+                                    </div>
+                                    <div class="small fw-bold text-dark mt-1 font-monospace">
+                                        {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['morning_in'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['morning_out'])->format('h:i A') }}
+                                    </div>
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">
+                                        🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['morning_in']) }}
+                                    </small>
+                                </div>
                             </div>
-                            <div class="small fw-bold text-dark mt-1 font-monospace">
-                                {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['morning_in'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['morning_out'])->format('h:i A') }}
-                            </div>
-                            <small class="text-muted d-block" style="font-size: 0.75rem;">
-                                🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['morning_in']) }}
-                            </small>
                         </div>
-                        <span class="badge bg-success text-white rounded-pill px-2 py-1 small">Active Work</span>
+
+                        {{-- Lunch & Rest Break --}}
+                        <div class="col-md-4">
+                            <div class="p-2 rounded-3 border bg-warning-subtle bg-opacity-50 border-warning-subtle d-flex align-items-center justify-content-between">
+                                <div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="badge bg-warning text-dark px-1 py-0 me-1" style="font-size: 0.65rem;">BREAK</span>
+                                        <span class="fw-bold small text-warning-emphasis"><i class="fas fa-utensils text-warning me-1"></i>Lunch Break</span>
+                                    </div>
+                                    <div class="small fw-bold text-dark mt-1 font-monospace">
+                                        {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['break_start'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['break_end'])->format('h:i A') }}
+                                    </div>
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">
+                                        🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['break_start']) }}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Afternoon Working Hours --}}
+                        <div class="col-md-4">
+                            <div class="p-2 rounded-3 border bg-primary-subtle bg-opacity-50 border-primary-subtle d-flex align-items-center justify-content-between">
+                                <div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="badge bg-primary text-white px-1 py-0 me-1" style="font-size: 0.65rem;">IN WORK</span>
+                                        <span class="fw-bold small text-primary-emphasis"><i class="fas fa-cloud-sun text-warning me-1"></i>Afternoon Shift</span>
+                                    </div>
+                                    <div class="small fw-bold text-dark mt-1 font-monospace">
+                                        {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['afternoon_in'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['afternoon_out'])->format('h:i A') }}
+                                    </div>
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">
+                                        🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['afternoon_in']) }}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                {{-- Lunch & Rest Break (Non-Working Hours / Which time don't work) --}}
-                <div class="col-md-4">
-                    <div class="p-2 rounded-3 border bg-warning-subtle bg-opacity-50 border-warning-subtle d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="d-flex align-items-center gap-1">
-                                <span class="badge bg-warning text-dark px-1 py-0 me-1" style="font-size: 0.68rem;">DON'T WORK</span>
-                                <span class="fw-bold small text-warning-emphasis"><i class="fas fa-utensils text-warning me-1"></i>Lunch & Rest Break (የምሳ እረፍት)</span>
-                            </div>
-                            <div class="small fw-bold text-dark mt-1 font-monospace">
-                                {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['break_start'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['break_end'])->format('h:i A') }}
-                            </div>
-                            <small class="text-muted d-block" style="font-size: 0.75rem;">
-                                🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['break_start']) }}
-                            </small>
-                        </div>
-                        <span class="badge bg-warning text-dark rounded-pill px-2 py-1 small">Non-Working</span>
+                <!-- Right: Saturday (Morning Session Only) -->
+                <div class="col-12 col-xl-4">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="badge bg-warning text-dark px-2.5 py-1 small fw-bold border border-warning">
+                            <i class="fa-solid fa-mug-saucer me-1"></i> Saturday (ቅዳሜ - Morning Only)
+                        </span>
+                        <span class="small text-muted fw-semibold">Expected: <strong>{{ $workSchedule['sat_total_hours'] ?? '4.0' }} hrs</strong></span>
                     </div>
-                </div>
-
-                {{-- Afternoon Working Hours --}}
-                <div class="col-md-4">
-                    <div class="p-2 rounded-3 border bg-primary-subtle bg-opacity-50 border-primary-subtle d-flex align-items-center justify-content-between">
-                        <div>
-                            <div class="d-flex align-items-center gap-1">
-                                <span class="badge bg-primary text-white px-1 py-0 me-1" style="font-size: 0.68rem;">IN WORK</span>
-                                <span class="fw-bold small text-primary-emphasis"><i class="fas fa-cloud-sun text-warning me-1"></i>Afternoon Shift (ከሰዓት የሥራ ሰዓት)</span>
+                    <div class="row g-2">
+                        {{-- Saturday Morning Shift --}}
+                        <div class="col-12 col-sm-7">
+                            <div class="p-2 rounded-3 border bg-success-subtle bg-opacity-50 border-success-subtle d-flex align-items-center justify-content-between">
+                                <div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="badge bg-success text-white px-1 py-0 me-1" style="font-size: 0.65rem;">IN WORK</span>
+                                        <span class="fw-bold small text-success-emphasis"><i class="fas fa-sun text-warning me-1"></i>Morning (ጠዋት)</span>
+                                    </div>
+                                    <div class="small fw-bold text-dark mt-1 font-monospace">
+                                        {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['sat_morning_in'] ?? '08:30')->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['sat_morning_out'] ?? '12:30')->format('h:i A') }}
+                                    </div>
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">
+                                        🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['sat_morning_in'] ?? '08:30') }}
+                                    </small>
+                                </div>
                             </div>
-                            <div class="small fw-bold text-dark mt-1 font-monospace">
-                                {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['afternoon_in'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['afternoon_out'])->format('h:i A') }}
-                            </div>
-                            <small class="text-muted d-block" style="font-size: 0.75rem;">
-                                🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['afternoon_in']) }}
-                            </small>
                         </div>
-                        <span class="badge bg-primary text-white rounded-pill px-2 py-1 small">Active Work</span>
+
+                        {{-- Saturday Afternoon Off --}}
+                        <div class="col-12 col-sm-5">
+                            <div class="p-2 rounded-3 border bg-light d-flex align-items-center justify-content-between h-100">
+                                <div>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="badge bg-secondary text-white px-1 py-0 me-1" style="font-size: 0.65rem;">OFF</span>
+                                        <span class="fw-bold small text-muted"><i class="fa-solid fa-moon text-secondary me-1"></i>Afternoon</span>
+                                    </div>
+                                    <div class="small fw-bold text-muted mt-1">
+                                        Off / Non-Working
+                                    </div>
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">
+                                        ከሰዓት እረፍት
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -687,95 +745,171 @@
 </div>
 
 <!-- Work Schedule & Shifts Modal -->
+<!-- Work Schedule Modal -->
 <div class="modal fade" id="workScheduleModal" tabindex="-1" aria-labelledby="workScheduleModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content border-0 shadow-lg">
-            <div class="modal-header bg-gradient text-white" style="background: linear-gradient(135deg, #0d6efd, #0b5ed7);">
-                <h5 class="modal-title fw-bold" id="workScheduleModalLabel">
-                    <i class="fas fa-business-time me-2"></i>Configure Work Schedule & Working Hours Policy
-                </h5>
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-gradient text-white py-3 px-4" style="background: linear-gradient(135deg, #1e293b, #0f172a);">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="rounded-circle bg-white bg-opacity-10 p-2 text-warning">
+                        <i class="fas fa-business-time fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="workScheduleModalLabel">
+                            Configure Work Schedule &amp; Working Hours Policy
+                        </h5>
+                        <small class="text-white-50">Separate rules for Monday – Friday and Saturday Morning Session</small>
+                    </div>
+                </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <form action="{{ url('/attendance') }}" method="POST">
                 @csrf
                 <input type="hidden" name="action" value="update_schedule">
-                <div class="modal-body p-4">
+                <input type="hidden" name="sat_work_mode" value="morning_only">
+                <div class="modal-body p-4" style="max-height: calc(85vh - 130px); overflow-y: auto;">
                     <p class="text-muted small mb-3">
-                        Define which times employees are actively in work and which times are non-working lunch/rest breaks. Fully synchronized with Ethiopian Time & Calendar.
+                        Define which times employees are actively in work and which times are non-working lunch/rest breaks. Fully synchronized with Ethiopian Time &amp; Calendar.
                     </p>
 
                     <div class="row g-3 mb-4">
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-muted text-uppercase">Shift Name / Title</label>
-                            <input type="text" name="title" class="form-control" value="{{ $workSchedule['title'] ?? 'Standard Construction & Office Shift' }}" required>
+                            <input type="text" name="title" class="form-control form-control-sm" value="{{ $workSchedule['title'] ?? 'Standard Construction & Office Shift' }}" required>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-bold small text-muted text-uppercase">Work Days</label>
-                            <input type="text" name="work_days" class="form-control" value="{{ $workSchedule['work_days'] ?? 'Monday – Saturday' }}" required>
+                            <label class="form-label fw-bold small text-muted text-uppercase">Work Days Description</label>
+                            <input type="text" name="work_days" class="form-control form-control-sm" value="{{ $workSchedule['work_days'] ?? 'Monday – Friday (Full Day) & Saturday (Morning Only)' }}" required>
                         </div>
                     </div>
 
-                    <!-- Morning Session: In Work -->
-                    <div class="card border-success-subtle bg-success-subtle bg-opacity-10 mb-3">
-                        <div class="card-header bg-success text-white py-2">
-                            <i class="fas fa-sun me-1 text-warning"></i><strong>Morning Session (In Work / የሥራ ሰዓት)</strong>
+                    <!-- ───────────────────────────────────────────────────────────── -->
+                    <!-- 1. MONDAY – FRIDAY WORKING HOURS                              -->
+                    <!-- ───────────────────────────────────────────────────────────── -->
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <h6 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+                            <span class="badge bg-dark text-white px-2 py-1"><i class="fa-solid fa-calendar-days text-info me-1"></i> Monday – Friday (ሰኞ – ዓርብ)</span>
+                            <span class="text-muted small fw-normal">Full Working Day (8.0 Hours)</span>
+                        </h6>
+                    </div>
+
+                    <!-- Monday – Friday: Morning Session -->
+                    <div class="card border-success-subtle bg-success-subtle bg-opacity-10 mb-3 rounded-3 shadow-xs">
+                        <div class="card-header bg-success text-white py-2 px-3 d-flex align-items-center justify-content-between">
+                            <span><i class="fas fa-sun me-1 text-warning"></i><strong>Morning Session (ጠዋት የሥራ ሰዓት - In Work)</strong></span>
+                            <span class="badge bg-white text-success px-2 py-0.5 small fw-bold">Active Work</span>
                         </div>
                         <div class="card-body p-3">
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold text-muted">Morning Clock-In Time (ጠዋት መግቢያ)</label>
-                                    <input type="time" name="morning_in" class="form-control" value="{{ $workSchedule['morning_in'] ?? '08:30' }}" required>
+                                    <input type="time" name="morning_in" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['morning_in'] ?? '08:30' }}" required>
+                                    <div class="form-text small text-muted">Standard entry time for employees.</div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold text-muted">Morning Clock-Out Time (ጠዋት መውጫ)</label>
-                                    <input type="time" name="morning_out" class="form-control" value="{{ $workSchedule['morning_out'] ?? '12:30' }}" required>
+                                    <input type="time" name="morning_out" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['morning_out'] ?? '12:30' }}" required>
+                                    <div class="form-text small text-muted">End of morning work period.</div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Lunch & Rest: Non-Working Hours -->
-                    <div class="card border-warning-subtle bg-warning-subtle bg-opacity-10 mb-3">
-                        <div class="card-header bg-warning text-dark py-2">
-                            <i class="fas fa-utensils me-1"></i><strong>Lunch & Rest Break (Non-Working Hours / "Don't Work" / የእረፍት ሰዓት)</strong>
+                    <!-- Monday – Friday: Lunch & Rest Break -->
+                    <div class="card border-warning-subtle bg-warning-subtle bg-opacity-10 mb-3 rounded-3 shadow-xs">
+                        <div class="card-header bg-warning text-dark py-2 px-3 d-flex align-items-center justify-content-between">
+                            <span><i class="fas fa-utensils me-1"></i><strong>Lunch &amp; Rest Break (የምሳ እረፍት ሰዓት - Non-Working)</strong></span>
+                            <span class="badge bg-dark text-warning px-2 py-0.5 small fw-bold">Don't Work</span>
                         </div>
                         <div class="card-body p-3">
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold text-muted">Break Starts (የምሳ እረፍት መጀመሪያ)</label>
-                                    <input type="time" name="break_start" class="form-control" value="{{ $workSchedule['break_start'] ?? '12:30' }}" required>
+                                    <input type="time" name="break_start" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['break_start'] ?? '12:30' }}" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold text-muted">Break Ends (የምሳ እረፍት መጨረሻ)</label>
-                                    <input type="time" name="break_end" class="form-control" value="{{ $workSchedule['break_end'] ?? '13:30' }}" required>
+                                    <input type="time" name="break_end" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['break_end'] ?? '13:30' }}" required>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Afternoon Session: In Work -->
-                    <div class="card border-primary-subtle bg-primary-subtle bg-opacity-10">
-                        <div class="card-header bg-primary text-white py-2">
-                            <i class="fas fa-cloud-sun me-1 text-warning"></i><strong>Afternoon Session (In Work / የሥራ ሰዓት)</strong>
+                    <!-- Monday – Friday: Afternoon Session -->
+                    <div class="card border-primary-subtle bg-primary-subtle bg-opacity-10 mb-4 rounded-3 shadow-xs">
+                        <div class="card-header bg-primary text-white py-2 px-3 d-flex align-items-center justify-content-between">
+                            <span><i class="fas fa-cloud-sun me-1 text-warning"></i><strong>Afternoon Session (ከሰዓት የሥራ ሰዓት - In Work)</strong></span>
+                            <span class="badge bg-white text-primary px-2 py-0.5 small fw-bold">Active Work</span>
                         </div>
                         <div class="card-body p-3">
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold text-muted">Afternoon Clock-In Time (ከሰዓት መግቢያ)</label>
-                                    <input type="time" name="afternoon_in" class="form-control" value="{{ $workSchedule['afternoon_in'] ?? '13:30' }}" required>
+                                    <input type="time" name="afternoon_in" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['afternoon_in'] ?? '13:30' }}" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-semibold text-muted">Afternoon Clock-Out Time (ከሰዓት መውጫ)</label>
-                                    <input type="time" name="afternoon_out" class="form-control" value="{{ $workSchedule['afternoon_out'] ?? '17:30' }}" required>
+                                    <input type="time" name="afternoon_out" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['afternoon_out'] ?? '17:30' }}" required>
                                 </div>
                             </div>
                         </div>
                     </div>
+
+                    <!-- ───────────────────────────────────────────────────────────── -->
+                    <!-- 2. SATURDAY WORKING HOURS (MORNING ONLY)                      -->
+                    <!-- ───────────────────────────────────────────────────────────── -->
+                    <div class="card border-warning rounded-3 shadow-sm mb-2 overflow-hidden">
+                        <div class="card-header bg-warning bg-opacity-25 py-2.5 px-3 border-bottom border-warning d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-warning text-dark border border-warning px-2.5 py-1 fw-bold">
+                                    <i class="fa-solid fa-mug-saucer me-1"></i> Saturday Schedule (ቅዳሜ የሥራ ሰዓት)
+                                </span>
+                                <span class="fw-bold text-dark small">Morning Session Only (ጠዋት ብቻ)</span>
+                            </div>
+                            <span class="badge bg-dark text-white px-2 py-1 small">4.0 hrs Expected</span>
+                        </div>
+                        <div class="card-body p-3 bg-white">
+                            <div class="alert alert-light border border-warning-subtle shadow-xs rounded-3 p-2 mb-3 d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-circle-info text-warning fs-5"></i>
+                                <div class="small text-dark">
+                                    <strong>Saturday Working Policy:</strong> Officially, work on Saturday is limited strictly to the <strong>morning session</strong>. There is no afternoon shift or lunch break requirement on Saturdays.
+                                </div>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold text-success text-uppercase">
+                                        <i class="fas fa-sun text-warning me-1"></i>Saturday Clock-In Time (የቅዳሜ ጠዋት መግቢያ) <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="time" name="sat_morning_in" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['sat_morning_in'] ?? '08:30' }}" required>
+                                    <div class="form-text small text-muted">Time employees clock in on Saturday morning.</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold text-success text-uppercase">
+                                        <i class="fas fa-door-open text-primary me-1"></i>Saturday Clock-Out Time (የቅዳሜ ጠዋት መውጫ) <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="time" name="sat_morning_out" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['sat_morning_out'] ?? '12:30' }}" required>
+                                    <div class="form-text small text-muted">Time employees finish work for the weekend.</div>
+                                </div>
+                            </div>
+
+                            <div class="mt-3 p-2 rounded-2 bg-light border d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-secondary text-white px-2 py-0.5" style="font-size: 0.7rem;">AFTERNOON</span>
+                                    <span class="small fw-semibold text-muted">Saturday Afternoon (ከሰዓት):</span>
+                                    <span class="small text-dark fw-bold">Off / Non-Working (ከሰዓት እረፍት)</span>
+                                </div>
+                                <span class="badge bg-success-subtle text-success border border-success px-2 py-0.5 small">
+                                    <i class="fa-solid fa-check me-1"></i>Active Policy
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary px-4 fw-bold">
-                        <i class="fas fa-save me-1"></i>Save Work Schedule
+                <div class="modal-footer bg-light py-3 px-4 border-top">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm">
+                        <i class="fas fa-save me-1"></i>Save Work Schedule Policy
                     </button>
                 </div>
             </form>

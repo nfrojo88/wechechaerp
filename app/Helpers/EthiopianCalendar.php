@@ -152,15 +152,23 @@ class EthiopianCalendar
     public static function getWorkSchedule(): array
     {
         $default = [
-            'morning_in'    => '08:30',
-            'morning_out'   => '12:30',
-            'break_start'   => '12:30',
-            'break_end'     => '13:30',
-            'afternoon_in'  => '13:30',
-            'afternoon_out' => '17:30',
-            'work_days'     => 'Monday – Saturday',
-            'total_hours'   => 8.0,
-            'title'         => 'Standard Construction & Office Shift',
+            // Monday – Friday (Full Day)
+            'morning_in'        => '08:30',
+            'morning_out'       => '12:30',
+            'break_start'       => '12:30',
+            'break_end'         => '13:30',
+            'afternoon_in'      => '13:30',
+            'afternoon_out'     => '17:30',
+            'total_hours'       => 8.0,
+
+            // Saturday (Morning Session Only)
+            'sat_morning_in'    => '08:30',
+            'sat_morning_out'   => '12:30',
+            'sat_work_mode'     => 'morning_only',
+            'sat_total_hours'   => 4.0,
+
+            'work_days'         => 'Monday – Friday (Full Day) & Saturday (Morning Only)',
+            'title'             => 'Standard Construction & Office Shift',
         ];
 
         try {
@@ -181,17 +189,27 @@ class EthiopianCalendar
         $current = self::getWorkSchedule();
         $updated = array_merge($current, $data);
 
-        // Recalculate total hours if sessions are provided
+        // Recalculate total hours for Monday-Friday and Saturday
         try {
-            $mIn  = \Carbon\Carbon::createFromFormat('H:i', $updated['morning_in']);
-            $mOut = \Carbon\Carbon::createFromFormat('H:i', $updated['morning_out']);
-            $mHours = max(0, $mOut->diffInMinutes($mIn) / 60);
+            if (!empty($updated['morning_in']) && !empty($updated['morning_out'])) {
+                $mIn  = \Carbon\Carbon::createFromFormat('H:i', $updated['morning_in']);
+                $mOut = \Carbon\Carbon::createFromFormat('H:i', $updated['morning_out']);
+                $mHours = max(0, $mOut->diffInMinutes($mIn) / 60);
 
-            $aIn  = \Carbon\Carbon::createFromFormat('H:i', $updated['afternoon_in']);
-            $aOut = \Carbon\Carbon::createFromFormat('H:i', $updated['afternoon_out']);
-            $aHours = max(0, $aOut->diffInMinutes($aIn) / 60);
+                $aIn  = \Carbon\Carbon::createFromFormat('H:i', $updated['afternoon_in']);
+                $aOut = \Carbon\Carbon::createFromFormat('H:i', $updated['afternoon_out']);
+                $aHours = max(0, $aOut->diffInMinutes($aIn) / 60);
 
-            $updated['total_hours'] = round($mHours + $aHours, 1);
+                $updated['total_hours'] = round($mHours + $aHours, 1);
+            }
+
+            if (!empty($updated['sat_morning_in']) && !empty($updated['sat_morning_out'])) {
+                $satIn  = \Carbon\Carbon::createFromFormat('H:i', $updated['sat_morning_in']);
+                $satOut = \Carbon\Carbon::createFromFormat('H:i', $updated['sat_morning_out']);
+                $updated['sat_total_hours'] = round(max(0, $satOut->diffInMinutes($satIn) / 60), 1);
+            } else {
+                $updated['sat_total_hours'] = 4.0;
+            }
         } catch (\Throwable $e) {}
 
         SystemSetting::set('attendance_work_schedule', $updated, 'json', 'hr_attendance', 'Company work hours and break policy');

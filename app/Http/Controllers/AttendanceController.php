@@ -116,10 +116,26 @@ class AttendanceController extends Controller
         $note = "On-Site: {$projectName}" . (!empty($validated['task_notes']) ? " ({$validated['task_notes']})" : "");
 
         $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
-        $mIn  = $workSchedule['morning_in'] ?? '08:30';
-        $mOut = $workSchedule['morning_out'] ?? '12:30';
-        $aIn  = $workSchedule['afternoon_in'] ?? '13:30';
-        $aOut = $workSchedule['afternoon_out'] ?? '17:30';
+        $dateCarbon = \Carbon\Carbon::parse($date);
+        $isSaturday = $dateCarbon->isSaturday();
+
+        if ($isSaturday) {
+            $mIn   = $workSchedule['sat_morning_in'] ?? '08:30';
+            $mOut  = $workSchedule['sat_morning_out'] ?? '12:30';
+            $aIn   = null;
+            $aOut  = null;
+            $cIn   = $mIn;
+            $cOut  = $mOut;
+            $hours = (float)($workSchedule['sat_total_hours'] ?? 4.0);
+        } else {
+            $mIn   = $workSchedule['morning_in'] ?? '08:30';
+            $mOut  = $workSchedule['morning_out'] ?? '12:30';
+            $aIn   = $workSchedule['afternoon_in'] ?? '13:30';
+            $aOut  = $workSchedule['afternoon_out'] ?? '17:30';
+            $cIn   = $mIn;
+            $cOut  = $aOut;
+            $hours = (float)($workSchedule['total_hours'] ?? 8.0);
+        }
 
         Attendance::updateOrCreate(
             [
@@ -133,8 +149,8 @@ class AttendanceController extends Controller
                 'morning_out'    => $mOut,
                 'afternoon_in'   => $aIn,
                 'afternoon_out'  => $aOut,
-                'check_in'       => $mIn,
-                'check_out'      => $aOut,
+                'check_in'       => $cIn,
+                'check_out'      => $cOut,
                 'hours_worked'   => $hours,
                 'notes'          => $note,
                 'is_approved'    => true,
@@ -151,14 +167,17 @@ class AttendanceController extends Controller
     public function updateSchedule(Request $request)
     {
         $validated = $request->validate([
-            'morning_in'    => 'required|date_format:H:i',
-            'morning_out'   => 'required|date_format:H:i',
-            'break_start'   => 'required|date_format:H:i',
-            'break_end'     => 'required|date_format:H:i',
-            'afternoon_in'  => 'required|date_format:H:i',
-            'afternoon_out' => 'required|date_format:H:i',
-            'work_days'     => 'nullable|string',
-            'title'         => 'nullable|string',
+            'morning_in'      => 'required|date_format:H:i',
+            'morning_out'     => 'required|date_format:H:i',
+            'break_start'     => 'required|date_format:H:i',
+            'break_end'       => 'required|date_format:H:i',
+            'afternoon_in'    => 'required|date_format:H:i',
+            'afternoon_out'   => 'required|date_format:H:i',
+            'sat_morning_in'  => 'required|date_format:H:i',
+            'sat_morning_out' => 'required|date_format:H:i',
+            'sat_work_mode'   => 'nullable|string',
+            'work_days'       => 'nullable|string',
+            'title'           => 'nullable|string',
         ]);
 
         \App\Helpers\EthiopianCalendar::saveWorkSchedule($validated);
