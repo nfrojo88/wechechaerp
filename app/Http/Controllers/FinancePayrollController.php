@@ -20,24 +20,46 @@ class FinancePayrollController extends Controller
      */
     public function index(Request $request)
     {
-        $selectedDate = null;
-        if ($request->filled('date')) {
+        $startDate = null;
+        $endDate   = null;
+
+        if ($request->filled('start_date')) {
             try {
-                $carbon = \Carbon\Carbon::parse($request->date);
-                $month = (int) $carbon->month;
-                $year  = (int) $carbon->year;
-                $selectedDate = $carbon->format('Y-m-d');
+                $carbonStart = \Carbon\Carbon::parse($request->start_date);
+                $startDate   = $carbonStart->format('Y-m-d');
             } catch (\Throwable $e) {}
         }
 
-        if (!$selectedDate) {
+        if ($request->filled('end_date')) {
+            try {
+                $carbonEnd = \Carbon\Carbon::parse($request->end_date);
+                $endDate   = $carbonEnd->format('Y-m-d');
+            } catch (\Throwable $e) {}
+        } elseif ($request->filled('date')) {
+            try {
+                $carbonEnd = \Carbon\Carbon::parse($request->date);
+                $endDate   = $carbonEnd->format('Y-m-d');
+            } catch (\Throwable $e) {}
+        }
+
+        if ($endDate) {
+            $carbon = \Carbon\Carbon::parse($endDate);
+            $month  = (int) $carbon->month;
+            $year   = (int) $carbon->year;
+        } else {
             $month = (int) $request->get('month', date('n'));
             $year  = (int) $request->get('year',  date('Y'));
             $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
             $daysInMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->daysInMonth;
             $day = $isCurrentMonth ? (int)date('j') : $daysInMonth;
-            $selectedDate = sprintf('%04d-%02d-%02d', $year, $month, min($day, $daysInMonth));
+            $endDate = sprintf('%04d-%02d-%02d', $year, $month, min($day, $daysInMonth));
         }
+
+        if (!$startDate) {
+            $startDate = sprintf('%04d-%02d-01', $year, $month);
+        }
+
+        $selectedDate = $endDate;
 
         // Load existing payrolls for this period
         $payrolls = Payroll::with('employee')
@@ -83,7 +105,7 @@ class FinancePayrollController extends Controller
         $approved  = $hasGmStatus ? $payrolls->where('gm_status', 'approved')->count() : 0;
 
         return view('finance.payroll.index', compact(
-            'payrolls', 'totals', 'month', 'year', 'selectedDate', 'gmStatus', 'submitted', 'approved'
+            'payrolls', 'totals', 'month', 'year', 'startDate', 'endDate', 'selectedDate', 'gmStatus', 'submitted', 'approved'
         ));
     }
 
@@ -97,24 +119,46 @@ class FinancePayrollController extends Controller
             'year'  => 'required|integer|min:2020|max:2099',
         ]);
 
-        $selectedDate = null;
-        if ($request->filled('date')) {
+        $startDate = null;
+        $endDate   = null;
+
+        if ($request->filled('start_date')) {
             try {
-                $carbon = \Carbon\Carbon::parse($request->date);
-                $month = (int) $carbon->month;
-                $year  = (int) $carbon->year;
-                $selectedDate = $carbon->format('Y-m-d');
+                $carbonStart = \Carbon\Carbon::parse($request->start_date);
+                $startDate   = $carbonStart->format('Y-m-d');
             } catch (\Throwable $e) {}
         }
 
-        if (!$selectedDate) {
+        if ($request->filled('end_date')) {
+            try {
+                $carbonEnd = \Carbon\Carbon::parse($request->end_date);
+                $endDate   = $carbonEnd->format('Y-m-d');
+            } catch (\Throwable $e) {}
+        } elseif ($request->filled('date')) {
+            try {
+                $carbonEnd = \Carbon\Carbon::parse($request->date);
+                $endDate   = $carbonEnd->format('Y-m-d');
+            } catch (\Throwable $e) {}
+        }
+
+        if ($endDate) {
+            $carbon = \Carbon\Carbon::parse($endDate);
+            $month  = (int) $carbon->month;
+            $year   = (int) $carbon->year;
+        } else {
             $month = (int) $request->month;
             $year  = (int) $request->year;
             $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
             $daysInMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->daysInMonth;
             $day = $isCurrentMonth ? (int)date('j') : $daysInMonth;
-            $selectedDate = sprintf('%04d-%02d-%02d', $year, $month, min($day, $daysInMonth));
+            $endDate = sprintf('%04d-%02d-%02d', $year, $month, min($day, $daysInMonth));
         }
+
+        if (!$startDate) {
+            $startDate = sprintf('%04d-%02d-01', $year, $month);
+        }
+
+        $selectedDate = $endDate;
 
         $employees = Employee::where('status', 'active')->get();
         $created = 0;
@@ -138,9 +182,9 @@ class FinancePayrollController extends Controller
             // 1. Salary advance loan monthly deduction
             $loanDeduction = Payroll::calculateLoanDeduction($emp->id);
 
-            // 2. Unexcused attendance absences without approved leave up to selected cutoff date
+            // 2. Unexcused attendance absences without approved leave between start date and end date
             // Daily rate = basic / 30; each missed day deducts (basic / 30)
-            $absenceInfo      = Payroll::calculateUnexcusedAbsences($emp->id, $month, $year, $selectedDate);
+            $absenceInfo      = Payroll::calculateUnexcusedAbsences($emp->id, $month, $year, $endDate, $startDate);
             $absentDays       = $absenceInfo['days'];
             $dailyRate        = $basic > 0 ? ($basic / 30) : 0;
             $absenceDeduction = round($dailyRate * $absentDays, 2);
@@ -148,13 +192,18 @@ class FinancePayrollController extends Controller
             // Total other deductions = loan repayment + absence deduction
             $totalDeductions  = round($loanDeduction + $absenceDeduction, 2);
 
-            // 3. Sum overtime pay from approved attendance records for this month up to selected date
+            // 3. Sum overtime pay from approved attendance records between start date and end date
             $otQuery = \App\Models\Attendance::where('employee_id', $emp->id)
-                ->whereYear('attendance_date', $year)
-                ->whereMonth('attendance_date', $month)
                 ->where('is_approved', true);
-            if ($selectedDate) {
-                $otQuery->whereDate('attendance_date', '<=', $selectedDate);
+            if ($startDate && $endDate) {
+                $otQuery->whereDate('attendance_date', '>=', $startDate)
+                        ->whereDate('attendance_date', '<=', $endDate);
+            } else {
+                $otQuery->whereYear('attendance_date', $year)
+                        ->whereMonth('attendance_date', $month);
+                if ($endDate) {
+                    $otQuery->whereDate('attendance_date', '<=', $endDate);
+                }
             }
             $overtimePay = round((float) $otQuery->sum('overtime_pay'), 2);
 
@@ -201,12 +250,17 @@ class FinancePayrollController extends Controller
         }
 
         $period = date('F Y', mktime(0,0,0,$month,1,$year));
-        $dateNotice = $selectedDate ? " (as of " . \Carbon\Carbon::parse($selectedDate)->format('M d, Y') . ")" : "";
+        $dateNotice = " (Period: " . \Carbon\Carbon::parse($startDate)->format('M d, Y') . " – " . \Carbon\Carbon::parse($endDate)->format('M d, Y') . ")";
         $msg = "Generated {$created} payroll entries for {$period}{$dateNotice}.";
         if ($skipped) $msg .= " {$skipped} already existed and were skipped.";
 
-        return redirect()->route('finance.payroll.index', ['month' => $month, 'year' => $year, 'date' => $selectedDate])
-                         ->with('success', $msg);
+        return redirect()->route('finance.payroll.index', [
+            'month'      => $month,
+            'year'       => $year,
+            'start_date' => $startDate,
+            'end_date'   => $endDate,
+            'date'       => $endDate,
+        ])->with('success', $msg);
     }
 
     /**
@@ -219,24 +273,46 @@ class FinancePayrollController extends Controller
             'year'  => 'required|integer|min:2020|max:2099',
         ]);
 
-        $selectedDate = null;
-        if ($request->filled('date')) {
+        $startDate = null;
+        $endDate   = null;
+
+        if ($request->filled('start_date')) {
             try {
-                $carbon = \Carbon\Carbon::parse($request->date);
-                $month = (int) $carbon->month;
-                $year  = (int) $carbon->year;
-                $selectedDate = $carbon->format('Y-m-d');
+                $carbonStart = \Carbon\Carbon::parse($request->start_date);
+                $startDate   = $carbonStart->format('Y-m-d');
             } catch (\Throwable $e) {}
         }
 
-        if (!$selectedDate) {
+        if ($request->filled('end_date')) {
+            try {
+                $carbonEnd = \Carbon\Carbon::parse($request->end_date);
+                $endDate   = $carbonEnd->format('Y-m-d');
+            } catch (\Throwable $e) {}
+        } elseif ($request->filled('date')) {
+            try {
+                $carbonEnd = \Carbon\Carbon::parse($request->date);
+                $endDate   = $carbonEnd->format('Y-m-d');
+            } catch (\Throwable $e) {}
+        }
+
+        if ($endDate) {
+            $carbon = \Carbon\Carbon::parse($endDate);
+            $month  = (int) $carbon->month;
+            $year   = (int) $carbon->year;
+        } else {
             $month = (int) $request->month;
             $year  = (int) $request->year;
             $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
             $daysInMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->daysInMonth;
             $day = $isCurrentMonth ? (int)date('j') : $daysInMonth;
-            $selectedDate = sprintf('%04d-%02d-%02d', $year, $month, min($day, $daysInMonth));
+            $endDate = sprintf('%04d-%02d-%02d', $year, $month, min($day, $daysInMonth));
         }
+
+        if (!$startDate) {
+            $startDate = sprintf('%04d-%02d-01', $year, $month);
+        }
+
+        $selectedDate = $endDate;
 
         $employees = Employee::where('status', 'active')->get();
         $updatedCount = 0;
@@ -253,9 +329,9 @@ class FinancePayrollController extends Controller
             // 1. Salary advance loan monthly deduction
             $loanDeduction = Payroll::calculateLoanDeduction($emp->id);
 
-            // 2. Unexcused attendance absences without approved leave up to selected cutoff date
+            // 2. Unexcused attendance absences without approved leave between start date and end date
             // Daily rate = basic / 30; each missed day deducts (basic / 30)
-            $absenceInfo      = Payroll::calculateUnexcusedAbsences($emp->id, $month, $year, $selectedDate);
+            $absenceInfo      = Payroll::calculateUnexcusedAbsences($emp->id, $month, $year, $endDate, $startDate);
             $absentDays       = $absenceInfo['days'];
             $dailyRate        = $basic > 0 ? ($basic / 30) : 0;
             $absenceDeduction = round($dailyRate * $absentDays, 2);
@@ -263,13 +339,18 @@ class FinancePayrollController extends Controller
             // Total other deductions = loan repayment + absence deduction
             $totalDeductions  = round($loanDeduction + $absenceDeduction, 2);
 
-            // 3. Overtime Pay from approved attendance records up to selected date
+            // 3. Overtime Pay from approved attendance records between start date and end date
             $otQuery = \App\Models\Attendance::where('employee_id', $emp->id)
-                ->whereYear('attendance_date', $year)
-                ->whereMonth('attendance_date', $month)
                 ->where('is_approved', true);
-            if ($selectedDate) {
-                $otQuery->whereDate('attendance_date', '<=', $selectedDate);
+            if ($startDate && $endDate) {
+                $otQuery->whereDate('attendance_date', '>=', $startDate)
+                        ->whereDate('attendance_date', '<=', $endDate);
+            } else {
+                $otQuery->whereYear('attendance_date', $year)
+                        ->whereMonth('attendance_date', $month);
+                if ($endDate) {
+                    $otQuery->whereDate('attendance_date', '<=', $endDate);
+                }
             }
             $overtimePay = round((float) $otQuery->sum('overtime_pay'), 2);
 
@@ -326,9 +407,14 @@ class FinancePayrollController extends Controller
         }
 
         $period = date('F Y', mktime(0, 0, 0, $month, 1, $year));
-        $dateNotice = $selectedDate ? " (as of " . \Carbon\Carbon::parse($selectedDate)->format('M d, Y') . ")" : "";
-        return redirect()->route('finance.payroll.index', ['month' => $month, 'year' => $year, 'date' => $selectedDate])
-                         ->with('success', "Recalculated payroll for {$period}{$dateNotice}: {$updatedCount} entries refreshed with latest attendance and loan deductions, {$createdCount} new entries added.");
+        $dateNotice = " (Period: " . \Carbon\Carbon::parse($startDate)->format('M d, Y') . " – " . \Carbon\Carbon::parse($endDate)->format('M d, Y') . ")";
+        return redirect()->route('finance.payroll.index', [
+            'month'      => $month,
+            'year'       => $year,
+            'start_date' => $startDate,
+            'end_date'   => $endDate,
+            'date'       => $endDate,
+        ])->with('success', "Recalculated payroll for {$period}{$dateNotice}: {$updatedCount} entries refreshed with latest attendance and loan deductions, {$createdCount} new entries added.");
     }
 
     /**

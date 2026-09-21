@@ -120,7 +120,7 @@ class Payroll extends Model
      * Calculate unexcused absences (explicit absent days, half days, and unrecorded workdays without approved leave).
      * Daily deduction rate = Basic Salary / 30 per missed day.
      */
-    public static function calculateUnexcusedAbsences(int $employeeId, int $month, int $year, ?string $cutoffDate = null): array
+    public static function calculateUnexcusedAbsences(int $employeeId, int $month, int $year, ?string $cutoffDate = null, ?string $startDate = null): array
     {
         $employee = Employee::find($employeeId);
         if (!$employee) {
@@ -155,12 +155,21 @@ class Payroll extends Model
             $cutoffDay = $isCurrentMonth ? (int)date('j') : $daysInMonth;
         }
 
-        // Start day (if employee joined during this month)
+        // Start day (default 1, or employee joined during this month, or specified by startDate)
         $startDay = 1;
+        if ($startDate) {
+            try {
+                $parsedStart = \Carbon\Carbon::parse($startDate);
+                if ($parsedStart->year == $year && $parsedStart->month == $month) {
+                    $startDay = max($startDay, (int) $parsedStart->day);
+                }
+            } catch (\Throwable $e) {}
+        }
+
         if ($employee->date_of_joining) {
             $joinDate = \Carbon\Carbon::parse($employee->date_of_joining);
             if ($joinDate->year == $year && $joinDate->month == $month) {
-                $startDay = (int) $joinDate->day;
+                $startDay = max($startDay, (int) $joinDate->day);
             } elseif ($joinDate->year > $year || ($joinDate->year == $year && $joinDate->month > $month)) {
                 // Employee hadn't joined yet in this period
                 return ['days' => 0, 'dates' => []];

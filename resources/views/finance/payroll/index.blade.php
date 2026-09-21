@@ -13,21 +13,28 @@
         <p class="text-muted small mb-0">Generate, review, and submit monthly payroll for GM approval.</p>
     </div>
     <div class="d-flex gap-2">
-        {{-- Period & Date Selector --}}
+        {{-- Period & Date Range Selector --}}
         <form method="GET" action="{{ route('finance.payroll.index') }}" class="d-flex flex-wrap gap-2 align-items-center">
-            <div class="input-group input-group-sm" style="width: 175px;">
-                <span class="input-group-text bg-white text-muted px-2" title="Select Specific Date"><i class="fa-regular fa-calendar text-primary"></i></span>
-                <input type="date" name="date" id="payrollDatePicker" class="form-control form-control-sm"
-                       value="{{ $selectedDate ?? sprintf('%04d-%02d-%02d', $year, $month, date('d')) }}"
-                       title="Select Specific Date"
-                       onchange="syncDateToMonthYear(this.value)">
+            <div class="input-group input-group-sm" style="width: 175px;" title="Starting Date">
+                <span class="input-group-text bg-white text-muted px-2"><small class="fw-semibold text-secondary me-1">From</small><i class="fa-regular fa-calendar text-primary"></i></span>
+                <input type="date" name="start_date" id="payrollStartDatePicker" class="form-control form-control-sm"
+                       value="{{ $startDate }}"
+                       title="Payroll Starting Date"
+                       onchange="syncStartDateToMonthYear(this.value)">
             </div>
-            <select name="month" id="payrollMonthSelect" class="form-select form-select-sm" style="width:130px" onchange="syncMonthYearToDate()">
+            <div class="input-group input-group-sm" style="width: 175px;" title="Ending Date">
+                <span class="input-group-text bg-white text-muted px-2"><small class="fw-semibold text-secondary me-1">To</small><i class="fa-regular fa-calendar-check text-success"></i></span>
+                <input type="date" name="end_date" id="payrollEndDatePicker" class="form-control form-control-sm"
+                       value="{{ $endDate }}"
+                       title="Payroll Ending Date"
+                       onchange="syncEndDateToMonthYear(this.value)">
+            </div>
+            <select name="month" id="payrollMonthSelect" class="form-select form-select-sm" style="width:130px" onchange="syncMonthYearToDates()">
                 @for($m=1;$m<=12;$m++)
                     <option value="{{ $m }}" {{ $month==$m?'selected':'' }}>{{ date('F',mktime(0,0,0,$m,1)) }}</option>
                 @endfor
             </select>
-            <input type="number" name="year" id="payrollYearInput" class="form-control form-control-sm" value="{{ $year }}" style="width:85px" min="2020" max="2099" onchange="syncMonthYearToDate()">
+            <input type="number" name="year" id="payrollYearInput" class="form-control form-control-sm" value="{{ $year }}" style="width:85px" min="2020" max="2099" onchange="syncMonthYearToDates()">
             <button type="submit" class="btn btn-sm btn-primary px-3 shadow-sm"><i class="fa-solid fa-filter me-1"></i>Filter</button>
         </form>
     </div>
@@ -63,11 +70,12 @@
     <div class="d-flex align-items-center justify-content-between">
         <div class="d-flex align-items-center flex-wrap gap-2">
             <strong><i class="fa-solid fa-calendar-days me-1"></i>{{ $period }} Payroll</strong>
-            @if(isset($selectedDate))
-                <span class="badge bg-white text-primary border shadow-xs px-2.5 py-1.5" style="font-size: 0.78rem;">
-                    <i class="fa-regular fa-calendar-check me-1"></i>As of {{ \Carbon\Carbon::parse($selectedDate)->format('M d, Y') }}
-                </span>
-            @endif
+            <span class="badge bg-white text-dark border shadow-xs px-2.5 py-1.5" style="font-size: 0.78rem;">
+                <i class="fa-regular fa-calendar-days text-primary me-1"></i>Period: 
+                <strong class="text-primary">{{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }}</strong>
+                <span class="text-muted mx-1">&ndash;</span>
+                <strong class="text-success">{{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }}</strong>
+            </span>
             <span class="text-muted">—</span>
             @if($batchApproved)
                 <span class="badge bg-success rounded-pill"><i class="fa-solid fa-check me-1"></i>GM Approved</span>
@@ -86,11 +94,13 @@
             {{-- Generate Button --}}
             <form method="POST" action="{{ route('finance.payroll.generate') }}">
                 @csrf
-                <input type="hidden" name="month" value="{{ $month }}">
-                <input type="hidden" name="year"  value="{{ $year }}">
-                <input type="hidden" name="date"  value="{{ $selectedDate ?? sprintf('%04d-%02d-%02d', $year, $month, date('d')) }}">
+                <input type="hidden" name="month"      value="{{ $month }}">
+                <input type="hidden" name="year"       value="{{ $year }}">
+                <input type="hidden" name="start_date" value="{{ $startDate }}">
+                <input type="hidden" name="end_date"   value="{{ $endDate }}">
+                <input type="hidden" name="date"       value="{{ $endDate }}">
                 <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm"
-                        onclick="return confirm('Auto-generate payroll for all active employees for {{ $period }} (As of {{ \Carbon\Carbon::parse($selectedDate)->format('M d, Y') }})?')">
+                        onclick="return confirm('Auto-generate payroll for all active employees for {{ $period }} (Period: {{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} – {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }})?')">
                     <i class="fa-solid fa-bolt me-1"></i>Auto-Generate Payroll
                 </button>
             </form>
@@ -98,11 +108,13 @@
             {{-- Recalculate / Sync Button --}}
             <form method="POST" action="{{ url('/finance/payroll/recalculate') }}">
                 @csrf
-                <input type="hidden" name="month" value="{{ $month }}">
-                <input type="hidden" name="year"  value="{{ $year }}">
-                <input type="hidden" name="date"  value="{{ $selectedDate ?? sprintf('%04d-%02d-%02d', $year, $month, date('d')) }}">
+                <input type="hidden" name="month"      value="{{ $month }}">
+                <input type="hidden" name="year"       value="{{ $year }}">
+                <input type="hidden" name="start_date" value="{{ $startDate }}">
+                <input type="hidden" name="end_date"   value="{{ $endDate }}">
+                <input type="hidden" name="date"       value="{{ $endDate }}">
                 <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm"
-                        onclick="return confirm('Recalculate payroll for {{ $period }} (As of {{ \Carbon\Carbon::parse($selectedDate)->format('M d, Y') }})? This will refresh all attendance records and loan deductions.')">
+                        onclick="return confirm('Recalculate payroll for {{ $period }} (Period: {{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} – {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }})? This will refresh all attendance records and loan deductions.')">
                     <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate / Sync
                 </button>
             </form>
@@ -113,11 +125,13 @@
             {{-- Recalculate Button on Rejected --}}
             <form method="POST" action="{{ url('/finance/payroll/recalculate') }}">
                 @csrf
-                <input type="hidden" name="month" value="{{ $month }}">
-                <input type="hidden" name="year"  value="{{ $year }}">
-                <input type="hidden" name="date"  value="{{ $selectedDate ?? sprintf('%04d-%02d-%02d', $year, $month, date('d')) }}">
+                <input type="hidden" name="month"      value="{{ $month }}">
+                <input type="hidden" name="year"       value="{{ $year }}">
+                <input type="hidden" name="start_date" value="{{ $startDate }}">
+                <input type="hidden" name="end_date"   value="{{ $endDate }}">
+                <input type="hidden" name="date"       value="{{ $endDate }}">
                 <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm"
-                        onclick="return confirm('Recalculate payroll for {{ $period }} (As of {{ \Carbon\Carbon::parse($selectedDate)->format('M d, Y') }})?')">
+                        onclick="return confirm('Recalculate payroll for {{ $period }} (Period: {{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} – {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }})?')">
                     <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate / Sync
                 </button>
             </form>
@@ -207,16 +221,23 @@
 {{-- ── Payroll Table ─────────────────────────────────────────────────────── --}}
 <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
     <div class="card-header bg-white py-3 px-4 border-bottom d-flex align-items-center justify-content-between">
-        <h6 class="fw-bold mb-0"><i class="fa-solid fa-table-list text-primary me-2"></i>{{ $period }} Payroll Sheet</h6>
+        <div class="d-flex align-items-center gap-2">
+            <h6 class="fw-bold mb-0"><i class="fa-solid fa-table-list text-primary me-2"></i>{{ $period }} Payroll Sheet</h6>
+            <span class="badge bg-light text-secondary border fw-normal" style="font-size: 0.78rem;">
+                <i class="fa-regular fa-calendar-days text-primary me-1"></i>{{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} &ndash; {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }}
+            </span>
+        </div>
         <div class="d-flex gap-2 align-items-center">
             @if($payrolls->isNotEmpty() && !$batchApproved && !$batchSubmitted)
             <form method="POST" action="{{ url('/finance/payroll/recalculate') }}">
                 @csrf
-                <input type="hidden" name="month" value="{{ $month }}">
-                <input type="hidden" name="year"  value="{{ $year }}">
-                <input type="hidden" name="date"  value="{{ $selectedDate ?? sprintf('%04d-%02d-%02d', $year, $month, date('d')) }}">
+                <input type="hidden" name="month"      value="{{ $month }}">
+                <input type="hidden" name="year"       value="{{ $year }}">
+                <input type="hidden" name="start_date" value="{{ $startDate }}">
+                <input type="hidden" name="end_date"   value="{{ $endDate }}">
+                <input type="hidden" name="date"       value="{{ $endDate }}">
                 <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill shadow-xs"
-                        onclick="return confirm('Recalculate payroll for {{ $period }} (As of {{ \Carbon\Carbon::parse($selectedDate)->format('M d, Y') }})?')">
+                        onclick="return confirm('Recalculate payroll for {{ $period }} (Period: {{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} – {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }})?')">
                     <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate
                 </button>
             </form>
@@ -402,7 +423,7 @@
 </div>
 
 <script>
-    function syncDateToMonthYear(dateVal) {
+    function syncStartDateToMonthYear(dateVal) {
         if (!dateVal) return;
         const parts = dateVal.split('-');
         if (parts.length === 3) {
@@ -415,23 +436,39 @@
         }
     }
 
-    function syncMonthYearToDate() {
+    function syncEndDateToMonthYear(dateVal) {
+        if (!dateVal) return;
+        const parts = dateVal.split('-');
+        if (parts.length === 3) {
+            const y = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10);
+            const mSelect = document.getElementById('payrollMonthSelect');
+            const yInput = document.getElementById('payrollYearInput');
+            if (mSelect) mSelect.value = m;
+            if (yInput) yInput.value = y;
+        }
+    }
+
+    function syncMonthYearToDates() {
         const mSelect = document.getElementById('payrollMonthSelect');
         const yInput = document.getElementById('payrollYearInput');
-        const dPicker = document.getElementById('payrollDatePicker');
-        if (mSelect && yInput && dPicker) {
+        const startPicker = document.getElementById('payrollStartDatePicker');
+        const endPicker = document.getElementById('payrollEndDatePicker');
+        if (mSelect && yInput) {
             const m = String(mSelect.value).padStart(2, '0');
             const y = yInput.value;
-            let currentDay = '01';
-            if (dPicker.value) {
-                const parts = dPicker.value.split('-');
-                if (parts.length === 3) {
-                    currentDay = parts[2];
-                }
+            if (startPicker) {
+                startPicker.value = `${y}-${m}-01`;
             }
-            const maxDays = new Date(parseInt(y, 10), parseInt(m, 10), 0).getDate();
-            const validDay = Math.min(parseInt(currentDay, 10), maxDays);
-            dPicker.value = `${y}-${m}-${String(validDay).padStart(2, '0')}`;
+            if (endPicker) {
+                const maxDays = new Date(parseInt(y, 10), parseInt(m, 10), 0).getDate();
+                const now = new Date();
+                let endDay = maxDays;
+                if (now.getFullYear() === parseInt(y, 10) && (now.getMonth() + 1) === parseInt(m, 10)) {
+                    endDay = Math.min(now.getDate(), maxDays);
+                }
+                endPicker.value = `${y}-${m}-${String(endDay).padStart(2, '0')}`;
+            }
         }
     }
 </script>
