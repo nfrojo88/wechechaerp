@@ -103,12 +103,12 @@ class CreditStoreController extends Controller
             'payments.journalEntry',
         ]);
 
-        $coaAccounts = ChartOfAccount::where('is_active', true)
+        $coaAccounts = ChartOfAccount::with('manager')->where('is_active', true)
             ->where('code', '!=', '5110')
             ->orderBy('code')
             ->get();
 
-        $cashAccounts = ChartOfAccount::where('is_active', true)
+        $cashAccounts = ChartOfAccount::with('manager')->where('is_active', true)
             ->where('code', '!=', '5110')
             ->where(function ($q) {
                 $q->where('type', 'asset')
@@ -123,7 +123,7 @@ class CreditStoreController extends Controller
             ->orderBy('code')
             ->get();
 
-        $bankAccounts = BankAccount::orderBy('bank_name')->get();
+        $bankAccounts = BankAccount::with(['assignedStaff', 'coa.manager'])->orderBy('bank_name')->get();
 
         // Finance Staff users available for payment assignment
         $financeStaff = User::whereHas('roles', function ($q) {
@@ -131,6 +131,19 @@ class CreditStoreController extends Controller
         })->orWhereHas('employee', function($q) {
             $q->where('department', 'like', '%Finance%');
         })->orderBy('name')->get();
+
+        // Ensure any user assigned as custodian to these accounts is included in the staff list
+        $custodianIds = $coaAccounts->pluck('assigned_to')
+            ->concat($cashAccounts->pluck('assigned_to'))
+            ->concat($bankAccounts->pluck('assigned_to'))
+            ->concat($bankAccounts->pluck('coa.assigned_to'))
+            ->filter()
+            ->unique();
+
+        if ($custodianIds->isNotEmpty()) {
+            $custodians = User::whereIn('id', $custodianIds)->get();
+            $financeStaff = $financeStaff->concat($custodians)->unique('id')->sortBy('name')->values();
+        }
 
         if ($financeStaff->isEmpty()) {
             $financeStaff = User::where('is_active', true)->orderBy('name')->get();
@@ -165,7 +178,7 @@ class CreditStoreController extends Controller
         $request->validate([
             'amount'                    => 'required|numeric|min:0.01|max:' . ($remaining > 0 ? $remaining : 999999999),
             'account_source'            => 'required|string',
-            'assigned_finance_staff_id' => 'required|exists:users,id',
+            'assigned_finance_staff_id' => 'nullable|exists:users,id',
             'category'                  => 'nullable|string',
             'notes'                     => 'nullable|string|max:1000',
         ]);
@@ -175,17 +188,38 @@ class CreditStoreController extends Controller
         // Resolve funding accounts
         $bankAccountId = null;
         $fundingCoaId = null;
+        $bank = null;
+        $coa = null;
 
         if ($request->filled('account_source')) {
             $parts = explode(':', $request->account_source);
             if (count($parts) === 2) {
                 if ($parts[0] === 'bank') {
                     $bankAccountId = (int)$parts[1];
-                    $bank = BankAccount::find($bankAccountId);
+                    $bank = BankAccount::with('coa')->find($bankAccountId);
                     $fundingCoaId = $bank?->coa_id;
                 } elseif ($parts[0] === 'coa') {
                     $fundingCoaId = (int)$parts[1];
+                    $coa = ChartOfAccount::find($fundingCoaId);
                 }
+            }
+        }
+
+        // Auto-resolve assigned staff from COA / Bank if not explicitly provided
+        $assignedStaffId = $request->assigned_finance_staff_id;
+        if (!$assignedStaffId) {
+            if ($bank) {
+                $assignedStaffId = $bank->assigned_to ?? $bank->coa?->assigned_to;
+            }
+            if (!$assignedStaffId && $coa) {
+                $assignedStaffId = $coa->assigned_to;
+            }
+            if (!$assignedStaffId && $fundingCoaId && !$coa) {
+                $coa = ChartOfAccount::find($fundingCoaId);
+                $assignedStaffId = $coa?->assigned_to;
+            }
+            if (!$assignedStaffId) {
+                $assignedStaffId = Auth::id() ?: (User::where('is_active', true)->value('id') ?: 1);
             }
         }
 
@@ -200,7 +234,7 @@ class CreditStoreController extends Controller
         }
 
         $category = $request->input('category', 'Material (Credit Settlement)');
-        $assignedStaff = User::find($request->assigned_finance_staff_id);
+        $assignedStaff = User::findOrFail($assignedStaffId);
 
         $createData = [
             'request_number'            => $reqNo,

@@ -398,21 +398,6 @@
 
                                     <div class="mb-3">
                                         <label class="form-label small fw-bold text-uppercase text-dark">
-                                            Assign to Finance Staff <span class="text-danger">*</span>
-                                        </label>
-                                        <select name="assigned_finance_staff_id" class="form-select form-select-sm" required>
-                                            <option value="">-- Choose Finance Staff Member * --</option>
-                                            @foreach($financeStaff as $staff)
-                                                <option value="{{ $staff->id }}" {{ (old('assigned_finance_staff_id') == $staff->id || (Auth::id() == $staff->id && $loop->count == 1)) ? 'selected' : '' }}>
-                                                    👤 {{ $staff->name }} ({{ $staff->email }})
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                        <div class="form-text small text-muted" style="font-size:0.72rem;">This person will receive and disburse the expense.</div>
-                                    </div>
-
-                                    <div class="mb-3">
-                                        <label class="form-label small fw-bold text-uppercase text-dark">
                                             Select Funding / COA Account <span class="text-danger">*</span>
                                         </label>
                                         <select name="account_source" id="assignAccountSelect" class="form-select form-select-sm" required onchange="onAssignAccountChange(this)">
@@ -420,7 +405,15 @@
                                             @if(isset($bankAccounts) && $bankAccounts->count() > 0)
                                                 <optgroup label="🏦 Company Bank Accounts">
                                                     @foreach($bankAccounts as $bk)
-                                                        <option value="bank:{{ $bk->id }}" data-balance="{{ (float)($bk->current_balance ?? 0) }}" {{ $loop->first ? 'selected' : '' }}>
+                                                        @php
+                                                            $bkStaffId = $bk->assigned_to ?? $bk->coa?->assigned_to ?? '';
+                                                            $bkStaffName = $bk->assignedStaff?->name ?? $bk->coa?->manager?->name ?? '';
+                                                        @endphp
+                                                        <option value="bank:{{ $bk->id }}" 
+                                                                data-balance="{{ (float)($bk->current_balance ?? 0) }}"
+                                                                data-staff-id="{{ $bkStaffId }}"
+                                                                data-staff-name="{{ $bkStaffName }}"
+                                                                {{ $loop->first ? 'selected' : '' }}>
                                                             {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
                                                         </option>
                                                     @endforeach
@@ -429,7 +422,10 @@
                                             @if(isset($cashAccounts) && $cashAccounts->count() > 0)
                                                 <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
                                                     @foreach($cashAccounts as $ca)
-                                                        <option value="coa:{{ $ca->id }}" data-balance="{{ (float)$ca->current_balance }}">
+                                                        <option value="coa:{{ $ca->id }}" 
+                                                                data-balance="{{ (float)$ca->current_balance }}"
+                                                                data-staff-id="{{ $ca->assigned_to ?? '' }}"
+                                                                data-staff-name="{{ $ca->manager?->name ?? '' }}">
                                                             [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
                                                         </option>
                                                     @endforeach
@@ -438,7 +434,10 @@
                                             @if(isset($coaAccounts))
                                                 <optgroup label="📂 Other Asset / Funding Accounts">
                                                     @foreach($coaAccounts->whereNotIn('id', ($cashAccounts ?? collect())->pluck('id')) as $ca)
-                                                        <option value="coa:{{ $ca->id }}" data-balance="{{ (float)$ca->current_balance }}">
+                                                        <option value="coa:{{ $ca->id }}" 
+                                                                data-balance="{{ (float)$ca->current_balance }}"
+                                                                data-staff-id="{{ $ca->assigned_to ?? '' }}"
+                                                                data-staff-name="{{ $ca->manager?->name ?? '' }}">
                                                             [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
                                                         </option>
                                                     @endforeach
@@ -448,6 +447,25 @@
                                         <div class="small text-muted mt-1" id="assignAccountBalanceDisplay">
                                             <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.
                                         </div>
+                                        <div id="assignStaffAutoAlert" class="mt-2" style="display:none;"></div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-dark d-flex align-items-center justify-content-between">
+                                            <span>Assign to Finance Staff <span class="text-danger">*</span></span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.68rem;">
+                                                <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Auto-assigned from COA
+                                            </span>
+                                        </label>
+                                        <select name="assigned_finance_staff_id" id="assignedFinanceStaffSelect" class="form-select form-select-sm" required>
+                                            <option value="">-- Choose Finance Staff Member * --</option>
+                                            @foreach($financeStaff as $staff)
+                                                <option value="{{ $staff->id }}" {{ (old('assigned_finance_staff_id') == $staff->id || (Auth::id() == $staff->id && $loop->count == 1)) ? 'selected' : '' }}>
+                                                    👤 {{ $staff->name }} ({{ $staff->email }})
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <div class="form-text small text-muted" style="font-size:0.72rem;">Automatically selected when you choose a COA / Bank account. You may also change it manually if needed.</div>
                                     </div>
 
                                     <div class="mb-3">
@@ -588,11 +606,40 @@
                             function onAssignAccountChange(selectEl) {
                                 const selectedOpt = selectEl.options[selectEl.selectedIndex];
                                 const balDisplay = document.getElementById('assignAccountBalanceDisplay');
+                                const staffSelect = document.getElementById('assignedFinanceStaffSelect');
+                                const staffAlert = document.getElementById('assignStaffAutoAlert');
+
                                 if (selectedOpt && selectedOpt.value) {
                                     const bal = parseFloat(selectedOpt.getAttribute('data-balance')) || 0;
                                     if (balDisplay) {
                                         balDisplay.innerHTML = `<i class="fa-solid fa-wallet text-success me-1"></i> Selected Account Balance: <strong class="text-dark font-monospace">ETB ${bal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>`;
                                     }
+
+                                    const staffId = selectedOpt.getAttribute('data-staff-id');
+                                    const staffName = selectedOpt.getAttribute('data-staff-name');
+
+                                    if (staffSelect) {
+                                        if (staffId) {
+                                            let existingOpt = staffSelect.querySelector(`option[value="${staffId}"]`);
+                                            if (!existingOpt) {
+                                                existingOpt = new Option(`👤 ${staffName} (COA Custodian)`, staffId, true, true);
+                                                staffSelect.add(existingOpt);
+                                            }
+                                            staffSelect.value = staffId;
+                                            if (staffAlert) {
+                                                staffAlert.style.display = 'block';
+                                                staffAlert.innerHTML = `<div class="p-2 rounded bg-success bg-opacity-10 border border-success border-opacity-25 text-success small d-flex align-items-center"><i class="fa-solid fa-circle-check fs-6 me-2"></i><div>Auto-assigned to <strong>${staffName}</strong> (COA Custodian).</div></div>`;
+                                            }
+                                        } else {
+                                            if (staffAlert) {
+                                                staffAlert.style.display = 'block';
+                                                staffAlert.innerHTML = `<div class="p-2 rounded bg-light border text-muted small d-flex align-items-center"><i class="fa-solid fa-circle-info text-info me-2"></i><div>No custodian assigned to this COA in Chart of Accounts. Please choose a Finance staff member or leave default.</div></div>`;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if (staffAlert) staffAlert.style.display = 'none';
+                                    if (balDisplay) balDisplay.innerHTML = `<i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.`;
                                 }
                             }
                             function onSingleAccountChange(selectEl) {
