@@ -21,9 +21,17 @@
             </p>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <button type="button" class="btn btn-warning btn-sm shadow-sm px-3 fw-bold text-dark" data-bs-toggle="modal" data-bs-target="#sendReplacementModal">
-                <i class="fa-solid fa-money-bill-transfer me-1"></i> Send Replacement Money
+            <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-primary btn-sm shadow-sm px-3 fw-bold text-white">
+                <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask for Replenishment (Audit)
+            </a>
+            <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" class="btn btn-outline-primary btn-sm shadow-sm px-2.5 fw-semibold" title="View company Petty Cash Replenishments & Audit Queue">
+                <i class="fa-solid fa-scale-balanced me-1"></i> Audit Hub
+            </a>
+            @canany(['admin', 'global_admin', 'finance_head', 'store_manager'])
+            <button type="button" class="btn btn-outline-warning btn-sm shadow-sm px-2.5 fw-bold text-dark" data-bs-toggle="modal" data-bs-target="#sendReplacementModal" title="Direct spot disbursement voucher (Admin / Finance override)">
+                <i class="fa-solid fa-money-bill-transfer me-1"></i> Direct Disburse
             </button>
+            @endcanany
             @if($assignedStore)
                 <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-outline-secondary btn-sm shadow-sm">
                     <i class="fa-solid fa-boxes-stacked me-1"></i> View Stock
@@ -87,13 +95,14 @@
                         <div class="p-2 rounded-3" style="background: rgba(245,158,11,.12);">
                             <i class="fa-solid fa-coins fa-lg text-warning"></i>
                         </div>
+                    </div>
                     <div class="d-flex justify-content-between align-items-center mt-2">
                         <small class="text-muted" style="font-size:0.73rem;">
                             Fund: <strong>{{ $pettyCashAccount->name ?? 'Site Petty Cash' }}</strong> [{{ $pettyCashAccount->code ?? 'Site Fund' }}]
                         </small>
-                        <button type="button" class="btn btn-xs btn-outline-warning text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#sendReplacementModal">
-                            <i class="fa-solid fa-plus me-1"></i>Replenish
-                        </button>
+                        <a href="{{ route('store-keeper.petty-cash-purchases.create') }}" class="btn btn-xs btn-outline-primary fw-bold">
+                            <i class="fa-solid fa-hand-holding-dollar me-1"></i>Ask Replenish
+                        </a>
                     </div>
                 </div>
             </div>

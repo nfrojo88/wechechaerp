@@ -36,9 +36,14 @@
                     </div>
                 </div>
             </div>
-            <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm px-3 py-2 text-dark" data-bs-toggle="modal" data-bs-target="#sendReplacementModal" title="Send replacement money to Store Keeper">
-                <i class="fa-solid fa-money-bill-transfer me-1"></i> Send Replacement Money
+            <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm px-3 py-2 text-white" data-bs-toggle="modal" data-bs-target="#askReplenishmentModal" title="Ask for replacement money & submit directly to Internal Audit">
+                <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask for Replenishment (Send to Audit)
             </button>
+            @canany(['admin', 'global_admin', 'finance_head', 'finance_officer', 'store_manager'])
+            <button type="button" class="btn btn-outline-warning btn-sm fw-bold shadow-sm px-2.5 py-2 text-dark" data-bs-toggle="modal" data-bs-target="#sendReplacementModal" title="Direct spot disbursement voucher (Admin / Finance override)">
+                <i class="fa-solid fa-money-bill-transfer me-1"></i> Direct Disburse
+            </button>
+            @endcanany
         </div>
     </div>
 
@@ -127,26 +132,28 @@
                                 <i class="fa-solid fa-shield-halved text-success me-1"></i>Dedicated site petty cash fund for this store (isolated from corporate 1010).
                             </small>
 
-                            {{-- Zero / Low Balance Warning & Quick Send Trigger --}}
-                            <div class="p-2 rounded-3 border border-warning bg-warning bg-opacity-10 mt-2 {{ ($pettyCashAccount->current_balance ?? 0) <= 0 ? '' : 'd-none' }}" id="zeroBalanceAlert">
+                            {{-- Zero / Low Balance Warning & Quick Replenish Request Trigger --}}
+                            <div class="p-2.5 rounded-3 border border-warning bg-warning bg-opacity-10 mt-2 {{ ($pettyCashAccount->current_balance ?? 0) <= 0 ? '' : 'd-none' }}" id="zeroBalanceAlert">
                                 <div class="d-flex align-items-center gap-2 mb-2">
-                                    <i class="fa-solid fa-triangle-exclamation text-warning"></i>
+                                    <i class="fa-solid fa-triangle-exclamation text-warning fa-lg"></i>
                                     <small class="text-dark">
-                                        <strong>Fund balance is ETB 0.00:</strong> Store Keeper needs replacement money before making spot purchases.
+                                        <strong>Fund balance is ETB 0.00:</strong> Store Keeper needs replacement funds. Submit unreplenished purchases directly to Internal Audit for clearance.
                                     </small>
                                 </div>
-                                <button type="button" class="btn btn-warning btn-sm w-100 fw-bold shadow-xs py-1 text-dark" data-bs-toggle="modal" data-bs-target="#sendReplacementModal">
-                                    <i class="fa-solid fa-money-bill-transfer me-1"></i> Send Replacement Money Now
+                                <button type="button" class="btn btn-primary btn-sm w-100 fw-bold shadow-xs py-1.5" data-bs-toggle="modal" data-bs-target="#askReplenishmentModal">
+                                    <i class="fa-solid fa-hand-holding-dollar me-1"></i> Ask for Replenishment (Send to Audit)
                                 </button>
                             </div>
 
-                            <div class="mt-2 d-flex justify-content-between align-items-center">
-                                <a href="javascript:void(0)" class="text-primary small fw-semibold text-decoration-none" data-bs-toggle="modal" data-bs-target="#sendReplacementModal">
-                                    <i class="fa-solid fa-circle-plus me-1"></i>Send Replacement Money
+                            <div class="mt-2.5 d-flex justify-content-between align-items-center">
+                                <a href="javascript:void(0)" class="text-primary small fw-semibold text-decoration-none" data-bs-toggle="modal" data-bs-target="#askReplenishmentModal">
+                                    <i class="fa-solid fa-hand-holding-dollar me-1"></i>Ask for Replenishment
                                 </a>
-                                <a href="javascript:void(0)" class="text-muted small text-decoration-none" data-bs-toggle="modal" data-bs-target="#requestReplacementModal">
-                                    <i class="fa-solid fa-hand-holding-dollar me-1"></i>Request from Finance
+                                @canany(['admin', 'global_admin', 'finance_head', 'store_manager'])
+                                <a href="javascript:void(0)" class="text-muted small text-decoration-none" data-bs-toggle="modal" data-bs-target="#sendReplacementModal">
+                                    <i class="fa-solid fa-money-bill-transfer me-1"></i>Direct Disburse
                                 </a>
+                                @endcanany
                             </div>
                         </div>
 
@@ -507,52 +514,163 @@
     </div>
 </div>
 
-{{-- ── Modal: Request Replacement Money from Finance (Store Keeper) ────────── --}}
-<div class="modal fade" id="requestReplacementModal" tabindex="-1" aria-labelledby="requestReplacementModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+{{-- ── Modal: Ask for Replenishment (Send to Internal Audit) ─────────────────── --}}
+<div class="modal fade" id="askReplenishmentModal" tabindex="-1" aria-labelledby="askReplenishmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <form action="{{ route('store-keeper.petty-cash-purchases.request-replacement') }}" method="POST" enctype="multipart/form-data" id="requestReplacementForm">
+            <form action="{{ route('store-keeper.petty-cash-purchases.request-replacement') }}" method="POST" enctype="multipart/form-data" id="askReplenishmentForm">
                 @csrf
-                <div class="modal-header bg-primary text-white py-3">
-                    <h5 class="modal-title fw-bold mb-0" id="requestReplacementModalLabel">
-                        <i class="fa-solid fa-hand-holding-dollar me-2"></i>Request Replacement Money from Finance
-                    </h5>
+                <div class="modal-header py-3 text-white" style="background: linear-gradient(135deg, #1e3a8a, #2563eb);">
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="askReplenishmentModalLabel">
+                            <i class="fa-solid fa-hand-holding-dollar me-2"></i>Ask for Replenishment (Send to Audit)
+                        </h5>
+                        <small class="text-white-50" style="font-size:0.75rem;">
+                            Route spot purchase vouchers directly to Internal Audit for clearance &amp; fund replenishment
+                        </small>
+                    </div>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
-                    <input type="hidden" name="store_id" id="modalReqStoreId" value="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}">
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small text-dark">Requested Amount (ETB) <span class="text-danger">*</span></label>
-                        <div class="input-group input-group-sm">
-                            <span class="input-group-text fw-bold">ETB</span>
-                            <input type="number" step="0.01" min="1" name="requested_amount" class="form-control font-monospace fw-bold" placeholder="0.00" required>
+                    {{-- Store & Account Summary Ribbon --}}
+                    <div class="p-3 rounded-3 bg-light border mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Destination Store &amp; Site Fund</small>
+                            <span class="badge bg-primary px-2 py-1 me-2 font-monospace" id="modalAskStoreBadge">
+                                {{ $assignedStore->name ?? ($stores->first()->name ?? 'Site Store') }}
+                            </span>
+                            <strong class="text-dark small" id="modalAskAccountDisplay">
+                                {{ $pettyCashAccount->name ?? 'Site Petty Cash' }} [{{ $pettyCashAccount->code ?? 'N/A' }}]
+                            </strong>
+                        </div>
+                        <div>
+                            <span class="badge bg-warning text-dark font-monospace px-2.5 py-1.5" id="modalAskBalanceDisplay">
+                                Current Balance: ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}
+                            </span>
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small text-dark">Urgency Level</label>
-                        <select name="urgency" class="form-select form-select-sm">
-                            <option value="Normal">Normal</option>
-                            <option value="Urgent" selected>Urgent (Site Procurement Required)</option>
-                            <option value="Emergency">Emergency (Site Halt Risk)</option>
-                        </select>
+                    {{-- Active Pending / Under-Audit Alert --}}
+                    @if($pendingReplenishment)
+                    <div class="alert alert-info border-0 shadow-xs rounded-3 p-2.5 mb-3 d-flex align-items-center gap-2" role="alert">
+                        <i class="fa-solid fa-clock-rotate-left fa-lg text-info"></i>
+                        <small class="text-dark">
+                            <strong>Active Request In Progress:</strong> Replenishment <strong>#{{ $pendingReplenishment->request_no }}</strong> (ETB {{ number_format($pendingReplenishment->requested_amount, 2) }}) is currently 
+                            <span class="badge bg-primary text-uppercase">{{ str_replace('_', ' ', $pendingReplenishment->status) }}</span>. 
+                            <a href="{{ route('finance.replenishments.index', ['tab' => 'under_audit']) }}" target="_blank" class="fw-bold text-decoration-underline ms-1">View in Audit Hub &rarr;</a>
+                        </small>
+                    </div>
+                    @endif
+
+                    {{-- Unreplenished Purchases List / Breakdown --}}
+                    <div class="card border rounded-3 mb-3 bg-light bg-opacity-50">
+                        <div class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center border-bottom">
+                            <span class="small fw-bold text-dark">
+                                <i class="fa-solid fa-receipt text-primary me-1"></i> Spot Purchases to Replenish (<span id="modalUnreplCount">{{ $unreplenishedPurchases->count() }}</span>)
+                            </span>
+                            <strong class="text-danger font-monospace small" id="modalUnreplenishedTotalDisplay">
+                                Total Spent: ETB {{ number_format($unreplenishedTotal, 2) }}
+                            </strong>
+                        </div>
+                        <div class="card-body p-0">
+                            @if($unreplenishedPurchases->count() > 0)
+                            <div class="table-responsive" style="max-height: 150px; overflow-y: auto;">
+                                <table class="table table-sm table-hover mb-0 align-middle" style="font-size: 0.78rem;">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th class="ps-3">Purchase #</th>
+                                            <th>Date</th>
+                                            <th>Supplier</th>
+                                            <th>Receipt #</th>
+                                            <th class="text-end pe-3">Amount (ETB)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="modalUnreplenishedItemsList">
+                                        @foreach($unreplenishedPurchases as $p)
+                                        <tr>
+                                            <td class="ps-3 font-monospace fw-bold text-primary">{{ $p->purchase_no }}</td>
+                                            <td>{{ \Carbon\Carbon::parse($p->purchase_date)->format('M d, Y') }}</td>
+                                            <td>{{ $p->supplier_name }}</td>
+                                            <td class="font-monospace text-muted">{{ $p->receipt_no }}</td>
+                                            <td class="text-end pe-3 font-monospace fw-bold text-dark">{{ number_format($p->total_amount, 2) }}</td>
+                                        </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            @else
+                            <div class="p-3 text-center text-muted small" id="modalNoUnreplenishedNote">
+                                <i class="fa-solid fa-circle-check text-success me-1"></i> All previous spot purchases have been audited and cleared. You can submit an advance replenishment request.
+                            </div>
+                            @endif
+                        </div>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small text-dark">Reason &amp; Urgent Materials Needed <span class="text-danger">*</span></label>
-                        <textarea name="notes" class="form-control form-control-sm" rows="3" placeholder="Specify items required, e.g. Urgent tie wire, nails, fuel..." required></textarea>
+                    <input type="hidden" name="store_id" id="modalReqStoreId" value="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}">
+
+                    <div class="row g-3">
+                        {{-- Requested Amount --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Requested Amount (ETB) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text fw-bold">ETB</span>
+                                <input type="number" step="0.01" min="1" name="requested_amount" id="modalAskAmount" class="form-control font-monospace fw-bold fs-6" 
+                                    value="{{ $unreplenishedTotal > 0 ? number_format($unreplenishedTotal, 2, '.', '') : '' }}" placeholder="0.00" required>
+                            </div>
+                            <div class="d-flex gap-1 mt-1.5 flex-wrap">
+                                @if($unreplenishedTotal > 0)
+                                <button type="button" class="btn btn-xs btn-outline-primary py-0 px-1.5 quick-ask-btn" data-amt="{{ number_format($unreplenishedTotal, 2, '.', '') }}">
+                                    Exact Spent ({{ number_format($unreplenishedTotal, 2) }})
+                                </button>
+                                @endif
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-ask-btn" data-amt="5000">+5,000</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-ask-btn" data-amt="10000">+10,000</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-ask-btn" data-amt="25000">+25,000</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-ask-btn" data-amt="50000">+50,000</button>
+                            </div>
+                        </div>
+
+                        {{-- Urgency Level --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">Urgency Level <span class="text-danger">*</span></label>
+                            <select name="urgency" class="form-select form-select-sm">
+                                <option value="Normal">Normal Clearance</option>
+                                <option value="Urgent" selected>Urgent (Site Procurement Required)</option>
+                                <option value="Emergency">Emergency (Site Halt Risk)</option>
+                            </select>
+                            <small class="text-muted d-block mt-1" style="font-size:0.72rem;">Priority flag for Internal Audit inspection queue</small>
+                        </div>
+
+                        {{-- Purpose & Justification --}}
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-dark">Reason / Notes for Internal Audit</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Describe the reason or urgent site requirements...">Site Petty Cash replenishment for spot store material purchases and site consumables. Vouchers attached for audit clearance.</textarea>
+                        </div>
+
+                        {{-- Supporting Receipts / Summary PDF --}}
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-dark">Supporting Receipts / Batch Bills (Optional)</label>
+                            <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                            <small class="text-muted" style="font-size:0.72rem;">Upload combined receipts PDF or invoice scans if needed.</small>
+                        </div>
                     </div>
 
-                    <div class="mb-0">
-                        <label class="form-label fw-semibold small text-dark">Quotation / Supporting Bill (Optional)</label>
-                        <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png">
+                    {{-- Company Standard Audit System Callout --}}
+                    <div class="p-2.5 rounded-3 bg-primary bg-opacity-10 border border-primary border-opacity-25 mt-3 d-flex align-items-center gap-2 text-dark small">
+                        <i class="fa-solid fa-scale-balanced fa-lg text-primary"></i>
+                        <div>
+                            <strong>Standard Audit Clearance Workflow:</strong> This request and all individual spot vouchers will be routed directly to the <strong>Internal Audit Team queue</strong>. Once audited and cleared, Finance will disburse the replacement funds to this Site Petty Cash account.
+                        </div>
                     </div>
+
                 </div>
                 <div class="modal-footer bg-light py-2">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-4">
-                        <i class="fa-solid fa-paper-plane me-1"></i> Submit Request
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-4" id="submitAskReplenishBtn">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Submit to Internal Audit
                     </button>
                 </div>
             </form>
@@ -575,11 +693,21 @@ document.addEventListener('DOMContentLoaded', function() {
     const storeSelect = document.getElementById('storeSelect');
     const zeroBalanceAlert = document.getElementById('zeroBalanceAlert');
 
-    // Quick Amount Buttons in Modal
+    // Quick Amount Buttons in Replacement & Audit Modals
     document.querySelectorAll('.quick-amt-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             const amt = this.getAttribute('data-amt');
             const amtInput = document.getElementById('modalRepAmount');
+            if (amtInput) {
+                amtInput.value = parseFloat(amt).toFixed(2);
+            }
+        });
+    });
+
+    document.querySelectorAll('.quick-ask-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const amt = this.getAttribute('data-amt');
+            const amtInput = document.getElementById('modalAskAmount');
             if (amtInput) {
                 amtInput.value = parseFloat(amt).toFixed(2);
             }
@@ -616,18 +744,38 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // Modal updates
+        // Direct Disburse Modal updates
         const modalStoreId = document.getElementById('modalRepStoreId');
-        const modalReqStoreId = document.getElementById('modalReqStoreId');
         const modalBadge = document.getElementById('modalStoreNameBadge');
         const modalAccDisplay = document.getElementById('modalSitePettyAccountDisplay');
         const modalBalDisplay = document.getElementById('modalCurrentBalanceDisplay');
 
         if (modalStoreId) modalStoreId.value = stId;
-        if (modalReqStoreId) modalReqStoreId.value = stId;
         if (modalBadge) modalBadge.textContent = acc.store_name;
         if (modalAccDisplay) modalAccDisplay.textContent = acc.account_name + ' [' + acc.account_code + ']';
         if (modalBalDisplay) modalBalDisplay.textContent = 'Current Balance: ' + formatted;
+
+        // Ask Replenishment (Send to Audit) Modal updates
+        const askStoreId = document.getElementById('modalReqStoreId');
+        const askBadge = document.getElementById('modalAskStoreBadge');
+        const askAccDisplay = document.getElementById('modalAskAccountDisplay');
+        const askBalDisplay = document.getElementById('modalAskBalanceDisplay');
+        const askAmtInput = document.getElementById('modalAskAmount');
+        const unreplTotalDisplay = document.getElementById('modalUnreplenishedTotalDisplay');
+
+        if (askStoreId) askStoreId.value = stId;
+        if (askBadge) askBadge.textContent = acc.store_name;
+        if (askAccDisplay) askAccDisplay.textContent = acc.account_name + ' [' + acc.account_code + ']';
+        if (askBalDisplay) askBalDisplay.textContent = 'Current Balance: ' + formatted;
+
+        if (acc.unreplenished_total !== undefined) {
+            if (unreplTotalDisplay) {
+                unreplTotalDisplay.textContent = 'Total Spent: ETB ' + acc.unreplenished_total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+            if (askAmtInput && acc.unreplenished_total > 0) {
+                askAmtInput.value = acc.unreplenished_total.toFixed(2);
+            }
+        }
 
         // Auto-select keeper if matched
         const recipientSelect = document.getElementById('modalRecipientSelect');
@@ -642,6 +790,72 @@ document.addEventListener('DOMContentLoaded', function() {
     if (storeSelect) {
         storeSelect.addEventListener('change', function() {
             syncStoreInfo(this.value);
+        });
+    }
+
+    // AJAX Handler for Ask Replenishment (Send to Audit) Form
+    const askRepForm = document.getElementById('askReplenishmentForm');
+    if (askRepForm) {
+        askRepForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitAskReplenishBtn');
+            const originalBtnHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Submitting to Internal Audit...';
+
+            const formData = new FormData(this);
+
+            fetch(this.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnHtml;
+
+                if (data.success) {
+                    // Hide modal
+                    const modalEl = document.getElementById('askReplenishmentModal');
+                    const modalInst = bootstrap.Modal.getInstance(modalEl);
+                    if (modalInst) modalInst.hide();
+
+                    askRepForm.reset();
+
+                    // Show success banner at top of form
+                    const banner = document.createElement('div');
+                    banner.className = 'alert alert-success border-0 shadow-sm rounded-3 p-3 mb-4 d-flex flex-wrap justify-content-between align-items-center gap-3';
+                    banner.innerHTML = `
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="fa-solid fa-circle-check fa-2x text-success"></i>
+                            <div>
+                                <strong class="d-block text-dark fs-6">Replenishment Request #${data.request_no} Submitted Directly to Internal Audit!</strong>
+                                <span class="small text-muted">${data.message} (${data.vouchers_count || 0} purchase vouchers bundled).</span>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="${data.audit_url}" class="btn btn-sm btn-primary fw-bold px-3">
+                                <i class="fa-solid fa-scale-balanced me-1"></i> Track in Audit &amp; Replenishments Hub
+                            </a>
+                        </div>
+                    `;
+                    const formEl = document.getElementById('pettyCashPurchaseForm');
+                    formEl.parentNode.insertBefore(banner, formEl);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                } else {
+                    alert(data.message || 'Error submitting replenishment request.');
+                }
+            })
+            .catch(err => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnHtml;
+                console.error(err);
+                askRepForm.submit();
+            });
         });
     }
 

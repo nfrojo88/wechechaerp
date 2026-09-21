@@ -13,6 +13,7 @@ use App\Models\JournalEntryLine;
 use App\Models\PettyCashMaterialPurchase;
 use App\Models\PettyCashMaterialPurchaseItem;
 use App\Models\PettyCashReplenishment;
+use App\Models\PettyCashReplenishmentItem;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\SlipSequence;
@@ -361,26 +362,49 @@ class PettyCashMaterialPurchaseController extends Controller
         $targetStore = $assignedStore ?? $stores->first();
         $pettyCashAccount = $targetStore ? $this->resolveStoreSitePettyCash($targetStore, $user) : null;
 
-        // Map every store to its dedicated separate Site Petty Cash account & keeper details
-        $storesData = $stores->mapWithKeys(function ($st) use ($user) {
+        $replenishedPurchaseNos = PettyCashReplenishmentItem::pluck('reference')->filter()->toArray();
+
+        // Map every store to its dedicated separate Site Petty Cash account, keeper, and unreplenished expenses
+        $storesData = $stores->mapWithKeys(function ($st) use ($user, $replenishedPurchaseNos) {
             $acc = $this->resolveStoreSitePettyCash($st, $user);
             $keeper = $st->manager ?? $st->users()->first();
             $phone = $keeper?->phone ?? $keeper?->employee?->phone ?? $keeper?->employee?->mobile_phone ?? '';
+            $unreplSpent = (float) PettyCashMaterialPurchase::where('store_id', $st->id)
+                ->where('chart_of_account_id', $acc->id)
+                ->whereNotIn('purchase_no', $replenishedPurchaseNos)
+                ->sum('total_amount');
+
             return [$st->id => [
-                'store_id'     => $st->id,
-                'store_name'   => $st->name,
-                'store_code'   => $st->code,
-                'account_id'   => $acc->id,
-                'account_code' => $acc->code,
-                'account_name' => $acc->name,
-                'balance'      => (float) $acc->current_balance,
-                'keeper_id'    => $keeper?->id,
-                'keeper_name'  => $keeper?->name ?? 'Store Keeper',
-                'keeper_phone' => $phone,
+                'store_id'            => $st->id,
+                'store_name'          => $st->name,
+                'store_code'          => $st->code,
+                'account_id'          => $acc->id,
+                'account_code'        => $acc->code,
+                'account_name'        => $acc->name,
+                'balance'             => (float) $acc->current_balance,
+                'keeper_id'           => $keeper?->id,
+                'keeper_name'         => $keeper?->name ?? 'Store Keeper',
+                'keeper_phone'        => $phone,
+                'unreplenished_total' => $unreplSpent,
             ]];
         });
 
-        // Source Bank and Cash accounts for replacement money disbursement
+        // Unreplenished purchases for the target store
+        $unreplenishedPurchases = $targetStore && $pettyCashAccount ? PettyCashMaterialPurchase::where('store_id', $targetStore->id)
+            ->where('chart_of_account_id', $pettyCashAccount->id)
+            ->whereNotIn('purchase_no', $replenishedPurchaseNos)
+            ->latest('purchase_date')
+            ->get() : collect();
+
+        $unreplenishedTotal = (float) $unreplenishedPurchases->sum('total_amount');
+
+        // Check if there is already a pending or under_audit request
+        $pendingReplenishment = $pettyCashAccount ? PettyCashReplenishment::where('chart_of_account_id', $pettyCashAccount->id)
+            ->whereIn('status', [PettyCashReplenishment::STATUS_PENDING, PettyCashReplenishment::STATUS_UNDER_AUDIT])
+            ->latest()
+            ->first() : null;
+
+        // Source Bank and Cash accounts
         $sourceAccounts = ChartOfAccount::where('is_active', true)
             ->where('code', '!=', '1010')
             ->where(function ($q) {
@@ -406,7 +430,10 @@ class PettyCashMaterialPurchaseController extends Controller
             'pettyCashAccount',
             'storesData',
             'sourceAccounts',
-            'storeKeepers'
+            'storeKeepers',
+            'unreplenishedPurchases',
+            'unreplenishedTotal',
+            'pendingReplenishment'
         ));
     }
 
@@ -824,7 +851,8 @@ class PettyCashMaterialPurchaseController extends Controller
     }
 
     /**
-     * Store Keeper requests replenishment from Finance
+     * Store Keeper / User asks for Replacement Money directly routed to Internal Audit
+     * Uses company standard petty cash replenishment & audit workflow
      */
     public function requestReplacementMoney(Request $request)
     {
@@ -837,7 +865,7 @@ class PettyCashMaterialPurchaseController extends Controller
             'store_id'         => 'required|exists:stores,id',
             'requested_amount' => 'required|numeric|min:1',
             'urgency'          => 'nullable|string|max:50',
-            'notes'            => 'required|string|max:1000',
+            'notes'            => 'nullable|string|max:1000',
             'attachment'       => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
         ]);
 
@@ -853,41 +881,89 @@ class PettyCashMaterialPurchaseController extends Controller
         $countToday = PettyCashReplenishment::whereDate('created_at', now())->count() + 1;
         $requestNo = 'PCR-' . $today . '-' . str_pad($countToday, 4, '0', STR_PAD_LEFT);
 
-        $recipientPhone = $authUser->phone ?? $authUser->employee?->phone ?? null;
+        $recipientPhone = $authUser->phone ?? $authUser->employee?->phone ?? $authUser->employee?->mobile_phone ?? null;
 
-        $replenishment = PettyCashReplenishment::create([
-            'request_no'                 => $requestNo,
-            'chart_of_account_id'        => $siteAccount->id,
-            'requested_by'               => $authUser->id,
-            'requested_amount'           => $validated['requested_amount'],
-            'current_balance_at_request' => $siteAccount->current_balance,
-            'total_expenses_amount'      => 0,
-            'period_start_date'          => now(),
-            'period_end_date'            => now(),
-            'status'                     => PettyCashReplenishment::STATUS_PENDING,
-            'notes'                      => ($validated['urgency'] ? "[Urgency: {$validated['urgency']}] " : '') . $validated['notes'],
-            'attachment_path'            => $attachmentPath,
-            'store_id'                   => $store->id,
-            'recipient_name'             => $authUser->name,
-            'recipient_phone'            => $recipientPhone,
-        ]);
+        // Collect all unreplenished spot material purchases for this store & site petty cash fund
+        $replenishedPurchaseNos = PettyCashReplenishmentItem::pluck('reference')->filter()->toArray();
+        $unreplenishedPurchases = PettyCashMaterialPurchase::where('store_id', $store->id)
+            ->where('chart_of_account_id', $siteAccount->id)
+            ->whereNotIn('purchase_no', $replenishedPurchaseNos)
+            ->orderBy('purchase_date', 'asc')
+            ->get();
 
-        ActivityLog::log(
-            'requested',
-            "Store Keeper {$authUser->name} requested ETB " . number_format($validated['requested_amount'], 2) . " replacement money for Store '{$store->name}'.",
-            'Petty Cash Replenishment Request',
-            $replenishment
-        );
+        $totalExpenses = (float) $unreplenishedPurchases->sum('total_amount');
+
+        $replenishment = DB::transaction(function () use (
+            $requestNo, $siteAccount, $authUser, $validated, $totalExpenses, 
+            $unreplenishedPurchases, $attachmentPath, $store, $recipientPhone
+        ) {
+            // 1. Create standard PettyCashReplenishment with status STATUS_UNDER_AUDIT
+            $replenishment = PettyCashReplenishment::create([
+                'request_no'                 => $requestNo,
+                'chart_of_account_id'        => $siteAccount->id,
+                'requested_by'               => $authUser->id,
+                'requested_amount'           => $validated['requested_amount'],
+                'current_balance_at_request' => $siteAccount->current_balance,
+                'total_expenses_amount'      => $totalExpenses > 0 ? $totalExpenses : $validated['requested_amount'],
+                'period_start_date'          => $unreplenishedPurchases->min('purchase_date') ?? now(),
+                'period_end_date'            => $unreplenishedPurchases->max('purchase_date') ?? now(),
+                'status'                     => PettyCashReplenishment::STATUS_UNDER_AUDIT, // directly in Internal Audit queue
+                'notes'                      => ($validated['urgency'] ? "[Urgency: {$validated['urgency']}] " : '') . ($validated['notes'] ?? 'Site Petty Cash replenishment for spot material purchases'),
+                'attachment_path'            => $attachmentPath,
+                'store_id'                   => $store->id,
+                'recipient_name'             => $authUser->name,
+                'recipient_phone'            => $recipientPhone,
+                'reviewed_by'                => $authUser->id,
+                'reviewed_at'                => now(),
+            ]);
+
+            // 2. Attach each unreplenished spot purchase voucher as a PettyCashReplenishmentItem
+            foreach ($unreplenishedPurchases as $purchase) {
+                PettyCashReplenishmentItem::create([
+                    'petty_cash_replenishment_id' => $replenishment->id,
+                    'entry_date'                  => $purchase->purchase_date,
+                    'reference'                   => $purchase->purchase_no,
+                    'description'                 => "Spot Material Purchase [Receipt #{$purchase->receipt_no}] - Supplier: {$purchase->supplier_name}",
+                    'target_account_name'         => "Site Inventory / Materials",
+                    'amount'                      => $purchase->total_amount,
+                    'side'                        => 'debit',
+                    'status'                      => PettyCashReplenishmentItem::STATUS_PENDING,
+                ]);
+            }
+
+            // 3. Log into Audit Trail
+            ActivityLog::log(
+                'sent_to_audit',
+                "Store Keeper {$authUser->name} submitted replenishment request #{$requestNo} (ETB " . number_format($validated['requested_amount'], 2) . ") with " . count($unreplenishedPurchases) . " spot purchase vouchers directly to Internal Audit for store '{$store->name}' [{$siteAccount->code}].",
+                'Finance & Petty Cash Audit',
+                $replenishment,
+                [
+                    'request_no'          => $requestNo,
+                    'requested_amount'    => (float) $validated['requested_amount'],
+                    'expenses_total'      => $totalExpenses,
+                    'account'             => "[{$siteAccount->code}] {$siteAccount->name}",
+                    'store'               => $store->name,
+                    'vouchers_count'      => count($unreplenishedPurchases),
+                ]
+            );
+
+            return $replenishment;
+        });
+
+        $auditUrl = route('finance.replenishments.index', ['tab' => 'under_audit']);
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
-                'success'    => true,
-                'message'    => "Replacement request #{$requestNo} submitted to Finance Head successfully.",
-                'request_no' => $requestNo,
+                'success'        => true,
+                'message'        => "Replacement request #{$requestNo} submitted directly to Internal Audit! Internal Audit will inspect purchase vouchers, clear approval, and Finance will disburse the replacement money.",
+                'request_no'     => $requestNo,
+                'amount'         => (float) $validated['requested_amount'],
+                'vouchers_count' => count($unreplenishedPurchases),
+                'audit_url'      => $auditUrl,
             ]);
         }
 
-        return redirect()->back()->with('success', "Replacement request #{$requestNo} submitted to Finance Head for approval.");
+        return redirect()->back()->with('success', "Replacement request #{$requestNo} submitted directly to Internal Audit! Audit team will review vouchers and grant clearance.");
     }
 
     /**
