@@ -90,7 +90,7 @@
                                 </div>
                                 <input type="hidden" name="store_id" value="{{ $assignedStore->id }}">
                             @else
-                                <select name="store_id" class="form-select form-select-sm" required>
+                                <select name="store_id" id="storeSelect" class="form-select form-select-sm" required>
                                     <option value="">-- Select Store --</option>
                                     @foreach($stores as $st)
                                         <option value="{{ $st->id }}" {{ (old('store_id', $assignedStore->id ?? null) == $st->id) ? 'selected' : '' }}>
@@ -102,32 +102,27 @@
                             <small class="text-muted d-block mt-1" style="font-size:0.75rem;">Materials will be added to this store's stock.</small>
                         </div>
 
-                        {{-- Petty Cash Account --}}
+                        {{-- Dedicated Site Petty Cash Account --}}
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-dark small">
                                 Paying Petty Cash Account <span class="text-danger">*</span>
                             </label>
-                            @if($pettyCashAccount && $isStoreKeeper)
-                                <div class="p-2 rounded bg-light border d-flex align-items-center justify-content-between">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <i class="fa-solid fa-coins text-warning"></i>
-                                        <div>
-                                            <strong class="d-block small text-dark">{{ $pettyCashAccount->name }}</strong>
-                                            <small class="text-muted font-monospace">[{{ $pettyCashAccount->code }}]</small>
-                                        </div>
+                            <div class="p-2 rounded bg-light border d-flex align-items-center justify-content-between" id="pettyCashAccountCard">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-coins text-warning"></i>
+                                    <div>
+                                        <strong class="d-block small text-dark" id="pettyCashNameDisplay">{{ $pettyCashAccount->name ?? 'Site Petty Cash' }}</strong>
+                                        <small class="text-muted font-monospace" id="pettyCashCodeDisplay">[{{ $pettyCashAccount->code ?? 'N/A' }}]</small>
                                     </div>
-                                    <span class="badge bg-warning text-dark font-monospace">ETB {{ number_format($pettyCashAccount->current_balance, 2) }}</span>
                                 </div>
-                                <input type="hidden" name="chart_of_account_id" value="{{ $pettyCashAccount->id }}">
-                            @else
-                                <select name="chart_of_account_id" class="form-select form-select-sm" required>
-                                    @foreach($pettyCashAccounts as $pca)
-                                        <option value="{{ $pca->id }}" {{ (old('chart_of_account_id', $pettyCashAccount->id ?? null) == $pca->id) ? 'selected' : '' }}>
-                                            [{{ $pca->code }}] {{ $pca->name }} (Balance: ETB {{ number_format($pca->current_balance, 2) }})
-                                        </option>
-                                    @endforeach
-                                </select>
-                            @endif
+                                <span class="badge bg-warning text-dark font-monospace" id="pettyCashBalanceDisplay">
+                                    ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}
+                                </span>
+                            </div>
+                            <input type="hidden" name="chart_of_account_id" id="pettyCashAccountIdInput" value="{{ $pettyCashAccount->id ?? '' }}">
+                            <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
+                                <i class="fa-solid fa-shield-halved text-success me-1"></i>Dedicated site petty cash fund for this store (isolated from corporate 1010).
+                            </small>
                         </div>
 
                         {{-- Purchase Date --}}
@@ -334,13 +329,40 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     let rowIndex = 1;
-    const availablePettyCash = parseFloat("{{ $pettyCashAccount->current_balance ?? 0 }}") || 0;
+    let availablePettyCash = parseFloat("{{ $pettyCashAccount->current_balance ?? 0 }}") || 0;
+    const storesData = @json($storesData ?? []);
 
     const tbody = document.getElementById('itemsTbody');
     const addRowBtn = document.getElementById('addRowBtn');
     const grandTotalDisplay = document.getElementById('grandTotalDisplay');
     const totalItemsBadge = document.getElementById('totalItemsBadge');
     const alertDiv = document.getElementById('insufficientBalanceAlert');
+    const storeSelect = document.getElementById('storeSelect');
+
+    // Dynamic Site Petty Cash Switcher when store changes
+    if (storeSelect) {
+        storeSelect.addEventListener('change', function() {
+            const stId = this.value;
+            if (stId && storesData[stId]) {
+                const acc = storesData[stId];
+                const pettyName = document.getElementById('pettyCashNameDisplay');
+                const pettyCode = document.getElementById('pettyCashCodeDisplay');
+                const pettyBadge = document.getElementById('pettyCashBalanceDisplay');
+                const topBalance = document.getElementById('currentPettyCashDisplay');
+                const accInput = document.getElementById('pettyCashAccountIdInput');
+
+                if (pettyName) pettyName.textContent = acc.account_name;
+                if (pettyCode) pettyCode.textContent = '[' + acc.account_code + ']';
+                const formatted = 'ETB ' + acc.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                if (pettyBadge) pettyBadge.textContent = formatted;
+                if (topBalance) topBalance.textContent = formatted;
+                if (accInput) accInput.value = acc.account_id;
+
+                availablePettyCash = parseFloat(acc.balance) || 0;
+                recalculate();
+            }
+        });
+    }
 
     // Product template options from existing select
     const productOptionsHtml = document.querySelector('.product-select').innerHTML;

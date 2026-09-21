@@ -76,7 +76,7 @@
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <p class="text-muted fw-semibold mb-1" style="font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase;">Active Petty Cash Balance</p>
+                            <p class="text-muted fw-semibold mb-1" style="font-size: 0.72rem; letter-spacing: .06em; text-transform: uppercase;">Site Petty Cash Balance</p>
                             <h3 class="fw-bold text-warning mb-0">
                                 ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}
                             </h3>
@@ -86,7 +86,7 @@
                         </div>
                     </div>
                     <small class="text-muted mt-2 d-block" style="font-size:0.73rem;">
-                        Fund: <strong>{{ $pettyCashAccount->name ?? 'Standard Petty Cash' }}</strong> [{{ $pettyCashAccount->code ?? '1010' }}]
+                        Dedicated Fund: <strong>{{ $pettyCashAccount->name ?? 'Site Petty Cash' }}</strong> [{{ $pettyCashAccount->code ?? 'Site Fund' }}]
                     </small>
                 </div>
             </div>

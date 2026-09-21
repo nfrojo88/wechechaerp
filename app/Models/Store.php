@@ -19,6 +19,7 @@ class Store extends Model
         'project_id',
         'manager_id',
         'notes',
+        'petty_cash_account_id',
     ];
 
     protected $casts = [
@@ -48,5 +49,10 @@ class Store extends Model
     public function slipSequences()
     {
         return $this->hasMany(SlipSequence::class);
+    }
+
+    public function pettyCashAccount()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'petty_cash_account_id');
     }
 }

@@ -70,6 +70,12 @@ class PettyCashMaterialPurchaseController extends Controller
                     $table->index(['purchase_id', 'product_id'], 'pcmp_items_purchase_prod_idx');
                 });
             }
+
+            if (Schema::hasTable('stores') && !Schema::hasColumn('stores', 'petty_cash_account_id')) {
+                Schema::table('stores', function (Blueprint $table) {
+                    $table->foreignId('petty_cash_account_id')->nullable()->constrained('chart_of_accounts')->nullOnDelete();
+                });
+            }
         } catch (\Throwable $e) {
             // Silently continue if schema cannot be created here
         }
@@ -107,30 +113,84 @@ class PettyCashMaterialPurchaseController extends Controller
     }
 
     /**
-     * Resolve active Petty Cash Account for the user
+     * Resolve or automatically create a dedicated separate Site Petty Cash account for the Store.
+     * Strictly avoids linking to corporate '1010' Petty Cash account.
      */
-    protected function resolvePettyCashAccount(?User $user): ?ChartOfAccount
+    public function resolveStoreSitePettyCash(Store $store, ?User $user = null): ChartOfAccount
     {
-        if (!$user) {
-            return null;
+        // 1. Direct link on store
+        if (Schema::hasColumn('stores', 'petty_cash_account_id') && !empty($store->petty_cash_account_id)) {
+            $existing = ChartOfAccount::find($store->petty_cash_account_id);
+            if ($existing && $existing->code !== '1010') {
+                return $existing;
+            }
         }
 
-        // 1. Direct assigned custodian account
-        $assigned = ChartOfAccount::where('assigned_to', $user->id)->first();
-        if ($assigned) {
-            return $assigned;
-        }
-
-        // 2. Default Petty Cash account (code 1010)
-        $default = ChartOfAccount::where('code', '1010')->first();
-        if ($default) {
-            return $default;
-        }
-
-        // 3. Fallback: Any cash asset account with 'petty' in name
-        return ChartOfAccount::where('type', 'asset')
-            ->where('name', 'like', '%petty%')
+        // 2. Find by store pattern: [STORE:{id}] or code 1010-{id} or 'Site Petty Cash - {store->name}'
+        $patternAccount = ChartOfAccount::where('type', 'asset')
+            ->where('code', '!=', '1010')
+            ->where(function ($q) use ($store) {
+                $q->where('code', '1010-' . str_pad($store->id, 3, '0', STR_PAD_LEFT))
+                  ->orWhere('code', 'PC-' . $store->id)
+                  ->orWhere('name', 'Site Petty Cash - ' . $store->name)
+                  ->orWhere('description', 'like', '%[STORE:' . $store->id . ']%');
+            })
             ->first();
+
+        if ($patternAccount) {
+            if (Schema::hasColumn('stores', 'petty_cash_account_id') && $store->petty_cash_account_id !== $patternAccount->id) {
+                try {
+                    $store->update(['petty_cash_account_id' => $patternAccount->id]);
+                } catch (\Throwable $e) {}
+            }
+            return $patternAccount;
+        }
+
+        // 3. If user has an assigned custodian account that is NOT 1010
+        if ($user) {
+            $userAssigned = ChartOfAccount::where('assigned_to', $user->id)
+                ->where('code', '!=', '1010')
+                ->first();
+            if ($userAssigned) {
+                if (Schema::hasColumn('stores', 'petty_cash_account_id')) {
+                    try {
+                        $store->update(['petty_cash_account_id' => $userAssigned->id]);
+                    } catch (\Throwable $e) {}
+                }
+                return $userAssigned;
+            }
+        }
+
+        // 4. Automatically create dedicated Site Petty Cash account for this store
+        $baseCode = '1010-' . str_pad($store->id, 3, '0', STR_PAD_LEFT);
+        $code = $baseCode;
+        $counter = 1;
+        while (ChartOfAccount::where('code', $code)->exists()) {
+            $code = $baseCode . '-' . $counter;
+            $counter++;
+        }
+
+        $siteAccount = ChartOfAccount::create([
+            'code'            => $code,
+            'name'            => 'Site Petty Cash - ' . $store->name,
+            'type'            => 'asset',
+            'subtype'         => 'cash',
+            'is_active'       => true,
+            'is_system'       => false,
+            'opening_balance' => 0.00,
+            'current_balance' => 0.00,
+            'description'     => "Dedicated Site Petty Cash fund for Store: {$store->name} ({$store->code}) [STORE:{$store->id}]",
+            'assigned_to'     => $store->manager_id ?? $user?->id ?? Auth::id(),
+            'sort_order'      => 10,
+        ]);
+
+        if (Schema::hasColumn('stores', 'petty_cash_account_id')) {
+            try {
+                $store->update(['petty_cash_account_id' => $siteAccount->id]);
+            } catch (\Throwable $e) {}
+        }
+
+        return $siteAccount;
     }
 
     /**
@@ -198,7 +258,16 @@ class PettyCashMaterialPurchaseController extends Controller
         $totalPurchases = $statsQuery->count();
 
         $stores = Store::where('is_active', true)->orderBy('name')->get();
-        $pettyCashAccount = $this->resolvePettyCashAccount($user);
+
+        $activeStore = $assignedStore;
+        if (!$activeStore && $request->filled('store_id')) {
+            $activeStore = Store::find($request->store_id);
+        }
+        if (!$activeStore) {
+            $activeStore = $stores->first();
+        }
+
+        $pettyCashAccount = $activeStore ? $this->resolveStoreSitePettyCash($activeStore, $user) : null;
 
         return view('store-keeper.petty-cash-purchases.index', compact(
             'purchases',
@@ -225,16 +294,23 @@ class PettyCashMaterialPurchaseController extends Controller
 
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $products = Product::where('is_active', true)->orderBy('name')->get();
-        $pettyCashAccount = $this->resolvePettyCashAccount($user);
 
-        // All active petty cash / cash accounts if user wants to switch (admins/managers)
-        $pettyCashAccounts = ChartOfAccount::where('is_active', true)
-            ->where(function ($q) {
-                $q->where('type', 'asset')
-                  ->orWhere('name', 'like', '%cash%');
-            })
-            ->orderBy('code')
-            ->get();
+        $targetStore = $assignedStore ?? $stores->first();
+        $pettyCashAccount = $targetStore ? $this->resolveStoreSitePettyCash($targetStore, $user) : null;
+
+        // Map every store to its dedicated separate Site Petty Cash account
+        $storesData = $stores->mapWithKeys(function ($st) use ($user) {
+            $acc = $this->resolveStoreSitePettyCash($st, $user);
+            return [$st->id => [
+                'store_id'     => $st->id,
+                'store_name'   => $st->name,
+                'store_code'   => $st->code,
+                'account_id'   => $acc->id,
+                'account_code' => $acc->code,
+                'account_name' => $acc->name,
+                'balance'      => (float) $acc->current_balance,
+            ]];
+        });
 
         return view('store-keeper.petty-cash-purchases.create', compact(
             'assignedStore',
@@ -242,7 +318,7 @@ class PettyCashMaterialPurchaseController extends Controller
             'stores',
             'products',
             'pettyCashAccount',
-            'pettyCashAccounts'
+            'storesData'
         ));
     }
 
@@ -282,13 +358,9 @@ class PettyCashMaterialPurchaseController extends Controller
 
         $store = Store::findOrFail($validated['store_id']);
 
-        // Determine Petty Cash account
-        $coaId = $validated['chart_of_account_id'] ?? null;
-        if (!$coaId) {
-            $defaultCoa = $this->resolvePettyCashAccount($user);
-            $coaId = $defaultCoa?->id;
-        }
-        $pettyCashAccount = $coaId ? ChartOfAccount::find($coaId) : null;
+        // Determine dedicated separate Site Petty Cash account (NEVER 1010)
+        $pettyCashAccount = $this->resolveStoreSitePettyCash($store, $user);
+        $coaId = $pettyCashAccount->id;
 
         // Handle attachment upload
         $attachmentPath = null;
