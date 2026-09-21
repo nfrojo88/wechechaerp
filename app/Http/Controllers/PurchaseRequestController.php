@@ -48,15 +48,31 @@ class PurchaseRequestController extends Controller
         })->first();
 
         if (!$project) {
-            $project = Project::firstOrCreate(
-                ['name' => 'Head Office'],
-                [
-                    'code' => 'HO-001',
-                    'status' => 'active',
-                    'location' => 'Head Office',
+            $creatorId = Auth::id() ?: (\App\Models\User::first()?->id ?: 1);
+            $hoCode = 'HO-001';
+            $seq = 1;
+            while (Project::where('code', $hoCode)->exists()) {
+                $seq++;
+                $hoCode = 'HO-' . str_pad($seq, 3, '0', STR_PAD_LEFT);
+            }
+
+            try {
+                $project = Project::create([
+                    'name'        => 'Head Office',
+                    'code'        => $hoCode,
+                    'status'      => 'active',
+                    'location'    => 'Head Office',
                     'description' => 'Head Office / Central Administration',
-                ]
-            );
+                    'created_by'  => $creatorId,
+                ]);
+            } catch (\Throwable $e) {
+                $project = Project::first() ?: Project::create([
+                    'name'       => 'Head Office',
+                    'code'       => 'HO-' . time(),
+                    'status'     => 'active',
+                    'created_by' => $creatorId,
+                ]);
+            }
         }
 
         return $project;
@@ -81,16 +97,25 @@ class PurchaseRequestController extends Controller
         })->first();
 
         if (!$store && $project) {
-            $store = Store::firstOrCreate(
-                ['name' => 'Head Office Store'],
-                [
-                    'code' => 'HO-STR-01',
-                    'is_active' => true,
-                    'type' => 'main',
+            $storeCode = 'HO-STR-01';
+            $seq = 1;
+            while (Store::where('code', $storeCode)->exists()) {
+                $seq++;
+                $storeCode = 'HO-STR-' . str_pad($seq, 2, '0', STR_PAD_LEFT);
+            }
+
+            try {
+                $store = Store::create([
+                    'name'       => 'Head Office Store',
+                    'code'       => $storeCode,
+                    'is_active'  => true,
+                    'type'       => 'main',
                     'project_id' => $project->id,
-                    'notes' => 'Head Office Central Store',
-                ]
-            );
+                    'notes'      => 'Head Office Central Store',
+                ]);
+            } catch (\Throwable $e) {
+                $store = Store::where('is_active', true)->first();
+            }
         }
 
         return $store;
