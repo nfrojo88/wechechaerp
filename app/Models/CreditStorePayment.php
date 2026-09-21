@@ -8,6 +8,7 @@ class CreditStorePayment extends Model
 {
     protected $fillable = [
         'credit_store_ledger_id',
+        'expense_request_id',
         'payment_date',
         'amount',
         'payment_method',
@@ -29,6 +30,11 @@ class CreditStorePayment extends Model
     public function ledger()
     {
         return $this->belongsTo(CreditStoreLedger::class, 'credit_store_ledger_id');
+    }
+
+    public function expenseRequest()
+    {
+        return $this->belongsTo(ExpenseRequest::class, 'expense_request_id');
     }
 
     public function bankAccount()

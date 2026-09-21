@@ -164,7 +164,7 @@ class ExpenseRequestController extends Controller
             $tab = 'my_requests';
         }
 
-        // Scope to match requests submitted by this user OR assigned to this employee profile
+        // Scope to match requests submitted by this user OR assigned to this employee profile OR assigned to this user as finance staff
         $baseUserScope = function ($q) use ($user, $userEmpId) {
             $q->where('user_id', $user->id);
             if ($userEmpId) {
@@ -173,31 +173,41 @@ class ExpenseRequestController extends Controller
             $q->orWhereHas('employee', function ($e) use ($user) {
                 $e->where('user_id', $user->id);
             });
+            $q->orWhere('assigned_finance_staff_id', $user->id)
+              ->orWhere('finance_staff_id', $user->id);
         };
 
-        // Counters for personal badges (strictly real employee expense requests)
+        $filterNonProcurementScope = function ($q) {
+            $q->where(function ($sub) {
+                $sub->whereNull('purchase_request_id')
+                    ->where('request_number', 'not like', 'EXP-PR-%')
+                    ->where('category', '!=', 'Material');
+            })
+            // Always allow Credit Store Settlement expense requests
+            ->orWhere('request_number', 'like', 'EXP-CR-%')
+            ->orWhere('other_reason', 'Credit Store Purchase Settlement');
+            if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'credit_store_ledger_id')) {
+                $q->orWhereNotNull('credit_store_ledger_id');
+            }
+        };
+
+        // Counters for personal badges (employee expense requests + assigned credit store settlements)
         $counters = [
             'my_requests'      => ExpenseRequest::where($baseUserScope)
-                ->whereNull('purchase_request_id')
-                ->where('request_number', 'not like', 'EXP-PR-%')
-                ->where('category', '!=', 'Material')
+                ->where($filterNonProcurementScope)
                 ->whereNotIn('status', [ExpenseRequest::STATUS_PAID, ExpenseRequest::STATUS_REJECTED])
                 ->count(),
             'paid_history'     => ExpenseRequest::where($baseUserScope)
-                ->whereNull('purchase_request_id')
-                ->where('request_number', 'not like', 'EXP-PR-%')
-                ->where('category', '!=', 'Material')
+                ->where($filterNonProcurementScope)
                 ->where('status', ExpenseRequest::STATUS_PAID)
                 ->count(),
             'rejected_history' => ExpenseRequest::where($baseUserScope)
-                ->whereNull('purchase_request_id')
-                ->where('request_number', 'not like', 'EXP-PR-%')
-                ->where('category', '!=', 'Material')
+                ->where($filterNonProcurementScope)
                 ->where('status', ExpenseRequest::STATUS_REJECTED)
                 ->count(),
         ];
 
-        // Build query for logged-in user's own requests and assigned requests (excluding material procurement requests)
+        // Build query for logged-in user's own requests and assigned requests
         $query = ExpenseRequest::with([
             'user',
             'employee',
@@ -219,9 +229,7 @@ class ExpenseRequestController extends Controller
             'purchaseRequest.gmDecisions',
         ])
         ->where($baseUserScope)
-        ->whereNull('purchase_request_id')
-        ->where('request_number', 'not like', 'EXP-PR-%')
-        ->where('category', '!=', 'Material');
+        ->where($filterNonProcurementScope);
 
         switch ($tab) {
             case 'paid_history':
@@ -992,6 +1000,54 @@ class ExpenseRequestController extends Controller
             // 5. If this is a Petty Cash Replenishment, TOP UP the Petty Cash Account & fulfill Replenishment
             if ($isPettyCash) {
                 $this->handlePettyCashReplenishmentFulfillment($expenseRequest, $disbursedAmount, $paymentRef, $user);
+            }
+
+            // 6. If linked to a Credit Store Ledger, record payment & liquidate the ledger
+            $creditLedger = null;
+            if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'credit_store_ledger_id') && $expenseRequest->credit_store_ledger_id) {
+                $creditLedger = \App\Models\CreditStoreLedger::find($expenseRequest->credit_store_ledger_id);
+            }
+            if (!$creditLedger && $expenseRequest->purchase_request_id) {
+                $creditLedger = \App\Models\CreditStoreLedger::where('purchase_request_id', $expenseRequest->purchase_request_id)->first();
+            }
+
+            if ($creditLedger) {
+                try {
+                    $settleAmount = (float)$gross; // Full gross value being liquidated on credit balance
+                    $paymentNotes = "Disbursed via Expense #{$expenseRequest->request_number}";
+                    if ($vatAmount > 0) $paymentNotes .= " | VAT: ETB {$vatAmount}";
+                    if ($withholdingAmount > 0) $paymentNotes .= " | 3% WHT: -ETB {$withholdingAmount}";
+                    $paymentNotes .= " | Net Disbursed: ETB {$disbursedAmount}";
+                    if (!empty($validated['payment_notes'])) $paymentNotes .= " | " . $validated['payment_notes'];
+
+                    $paymentData = [
+                        'credit_store_ledger_id' => $creditLedger->id,
+                        'payment_date'           => now()->toDateString(),
+                        'amount'                 => $settleAmount,
+                        'payment_method'         => $expenseRequest->bank_account_id ? 'bank_transfer' : 'cash',
+                        'bank_account_id'        => $expenseRequest->bank_account_id,
+                        'coa_account_id'         => $expenseRequest->coa_id ?? $expenseRequest->chart_of_account_id,
+                        'reference_no'           => $paymentRef,
+                        'receipt_path'           => $attachmentUrl ?? $withholdingReceiptUrl,
+                        'notes'                  => $paymentNotes,
+                        'recorded_by'            => $user->id,
+                    ];
+
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('credit_store_payments', 'expense_request_id')) {
+                        $paymentData['expense_request_id'] = $expenseRequest->id;
+                    }
+
+                    \App\Models\CreditStorePayment::create($paymentData);
+
+                    $creditLedger->increment('paid_amount', $settleAmount);
+                    $newPaid = (float)$creditLedger->fresh()->paid_amount;
+                    $totalCredit = (float)$creditLedger->credit_amount;
+
+                    $newStatus = $newPaid >= $totalCredit ? 'fully_paid' : 'partially_paid';
+                    $creditLedger->update(['status' => $newStatus]);
+                } catch (\Throwable $cle) {
+                    Log::error("CreditStoreLedger auto-liquidation error: " . $cle->getMessage());
+                }
             }
 
             DB::commit();

@@ -19,6 +19,7 @@ class ExpenseRequest extends Model
         'employee_id',
         'maintenance_request_id',
         'purchase_request_id',
+        'credit_store_ledger_id',
         'letter_id',
         'project_id',
         'category',
@@ -202,6 +203,16 @@ class ExpenseRequest extends Model
         return $this->belongsTo(\App\Models\Letter::class, 'letter_id');
     }
 
+    public function purchaseRequest()
+    {
+        return $this->belongsTo(\App\Models\PurchaseRequest::class, 'purchase_request_id');
+    }
+
+    public function creditStoreLedger()
+    {
+        return $this->belongsTo(\App\Models\CreditStoreLedger::class, 'credit_store_ledger_id');
+    }
+
     /**
      * Linked Project.
      */
@@ -249,8 +260,11 @@ class ExpenseRequest extends Model
 
     public function assignedFinanceStaff()
     {
-        return $this->belongsTo(User::class, 'assigned_finance_staff_id');
+        return $this->belongsTo(User::class, 'assigned_finance_staff_id')->withDefault(function () {
+            return $this->financeStaff;
+        });
     }
+
 
     /**
      * Finance Staff/Admin who processed payment.

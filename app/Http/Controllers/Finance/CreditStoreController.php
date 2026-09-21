@@ -8,6 +8,8 @@ use App\Models\CreditStorePayment;
 use App\Models\ChartOfAccount;
 use App\Models\BankAccount;
 use App\Models\Expense;
+use App\Models\ExpenseRequest;
+use App\Models\User;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Project;
@@ -123,7 +125,116 @@ class CreditStoreController extends Controller
 
         $bankAccounts = BankAccount::orderBy('bank_name')->get();
 
-        return view('finance.credit-store.show', compact('ledger', 'coaAccounts', 'cashAccounts', 'bankAccounts'));
+        // Finance Staff users available for payment assignment
+        $financeStaff = User::whereHas('roles', function ($q) {
+            $q->whereIn('name', ['Finance staff', 'finance_staff', 'Finance head', 'finance_head', 'cashier', 'accountant', 'admin', 'global_admin']);
+        })->orWhereHas('employee', function($q) {
+            $q->where('department', 'like', '%Finance%');
+        })->orderBy('name')->get();
+
+        if ($financeStaff->isEmpty()) {
+            $financeStaff = User::where('is_active', true)->orderBy('name')->get();
+        }
+
+        // Fetch linked expense requests for this credit store
+        $linkedExpenseRequests = ExpenseRequest::with(['assignedFinanceStaff', 'paidBy', 'chartOfAccount', 'bankAccount'])
+            ->where(function($q) use ($creditStore) {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'credit_store_ledger_id')) {
+                    $q->where('credit_store_ledger_id', $creditStore->id);
+                }
+                if ($creditStore->purchase_request_id) {
+                    $q->orWhere('purchase_request_id', $creditStore->purchase_request_id);
+                }
+                $q->orWhere('description', 'like', "%PR #{$creditStore->pr_no}%");
+            })
+            ->latest()
+            ->get();
+
+        return view('finance.credit-store.show', compact('ledger', 'coaAccounts', 'cashAccounts', 'bankAccounts', 'financeStaff', 'linkedExpenseRequests'));
+    }
+
+    /**
+     * Finance Head assigns a payment amount from COA/Bank to a Finance Staff member.
+     * This creates an ExpenseRequest so the assigned person can process it in the Expenses section with VAT & Withholding Tax.
+     */
+    public function assignExpense(Request $request, CreditStoreLedger $creditStore)
+    {
+        $ledger = $creditStore;
+        $remaining = $ledger->remaining_amount;
+
+        $request->validate([
+            'amount'                    => 'required|numeric|min:0.01|max:' . ($remaining > 0 ? $remaining : 999999999),
+            'account_source'            => 'required|string',
+            'assigned_finance_staff_id' => 'required|exists:users,id',
+            'category'                  => 'nullable|string',
+            'notes'                     => 'nullable|string|max:1000',
+        ]);
+
+        $amount = (float)$request->amount;
+
+        // Resolve funding accounts
+        $bankAccountId = null;
+        $fundingCoaId = null;
+
+        if ($request->filled('account_source')) {
+            $parts = explode(':', $request->account_source);
+            if (count($parts) === 2) {
+                if ($parts[0] === 'bank') {
+                    $bankAccountId = (int)$parts[1];
+                    $bank = BankAccount::find($bankAccountId);
+                    $fundingCoaId = $bank?->coa_id;
+                } elseif ($parts[0] === 'coa') {
+                    $fundingCoaId = (int)$parts[1];
+                }
+            }
+        }
+
+        // Generate Expense Request Number
+        $prClean = $ledger->pr_no ? preg_replace('/[^0-9]/', '', $ledger->pr_no) : $ledger->id;
+        $seq = ExpenseRequest::where('category', 'like', '%Credit%')->count() + 1;
+        $reqNo = 'EXP-CR-' . ($prClean ?: $ledger->id) . '-' . str_pad($seq, 2, '0', STR_PAD_LEFT);
+
+        while (ExpenseRequest::where('request_number', $reqNo)->exists()) {
+            $seq++;
+            $reqNo = 'EXP-CR-' . ($prClean ?: $ledger->id) . '-' . str_pad($seq, 2, '0', STR_PAD_LEFT);
+        }
+
+        $category = $request->input('category', 'Material (Credit Settlement)');
+        $assignedStaff = User::find($request->assigned_finance_staff_id);
+
+        $createData = [
+            'request_number'            => $reqNo,
+            'user_id'                   => Auth::id(),
+            'purchase_request_id'       => $ledger->purchase_request_id,
+            'project_id'                => $ledger->project_id,
+            'category'                  => $category,
+            'other_reason'              => 'Credit Store Purchase Settlement',
+            'description'               => "Credit Purchase Settlement: PR #{$ledger->pr_no}"
+                                          . ($ledger->supplier_name ? " — Supplier: {$ledger->supplier_name}" : '')
+                                          . ($ledger->project ? " — Project: {$ledger->project->name}" : ''),
+            'amount'                    => $amount,
+            'gross_amount'              => $amount,
+            'vat_type'                  => 'none',
+            'has_withholding'           => false,
+            'net_amount'                => $amount,
+            'status'                    => ExpenseRequest::STATUS_ASSIGNED, // 'Assigned to Finance'
+            'finance_head_id'           => Auth::id(),
+            'bank_account_id'           => $bankAccountId,
+            'coa_id'                    => $fundingCoaId,
+            'chart_of_account_id'       => $fundingCoaId,
+            'assigned_finance_staff_id' => $assignedStaff->id,
+            'finance_staff_id'          => $assignedStaff->id,
+            'finance_assigned_at'       => now(),
+            'notes'                     => $request->notes ?? "Assigned from Credit Store Ledger for PR #{$ledger->pr_no}",
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'credit_store_ledger_id')) {
+            $createData['credit_store_ledger_id'] = $ledger->id;
+        }
+
+        $expenseReq = ExpenseRequest::create($createData);
+
+        return back()->with('success', "✅ Payment of ETB " . number_format($amount, 2) . " assigned to {$assignedStaff->name} (Request #{$reqNo}). It is now available in the Expenses section to process with VAT and 3% Withholding Tax.");
     }
 
     public function recordPayment(Request $request, CreditStoreLedger $creditStore)

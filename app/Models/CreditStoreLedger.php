@@ -57,6 +57,11 @@ class CreditStoreLedger extends Model
         return $this->hasMany(CreditStorePayment::class, 'credit_store_ledger_id')->latest('payment_date');
     }
 
+    public function expenseRequests()
+    {
+        return $this->hasMany(ExpenseRequest::class, 'credit_store_ledger_id')->latest();
+    }
+
     public function getRemainingAmountAttribute(): float
     {
         return max(0, (float)$this->credit_amount - (float)$this->paid_amount);

@@ -38,8 +38,12 @@ class ApprovalHubController extends Controller
             'coa',
             'bankAccount'
         ])
-        ->whereNull('purchase_request_id')
-        ->where('request_number', 'not like', 'EXP-PR-%')
+        ->where(function ($q) {
+            $q->where(function ($sub) {
+                $sub->whereNull('purchase_request_id')
+                    ->where('request_number', 'not like', 'EXP-PR-%');
+            })->orWhere('request_number', 'like', 'EXP-CR-%');
+        })
         ->latest()
         ->get()
         ->map(function ($req) {

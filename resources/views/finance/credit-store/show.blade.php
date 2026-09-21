@@ -162,10 +162,119 @@
                 </div>
             </div>
 
+            <!-- Active Expense Assignments & Tax Deductions Card -->
+            <div class="card border-0 shadow-sm rounded-3 mb-4">
+                <div class="card-header bg-white py-3 px-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary text-white rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                            <i class="fa-solid fa-file-invoice-dollar"></i>
+                        </span>
+                        <div>
+                            <h6 class="mb-0 fw-bold text-dark">Active Expense Assignments &amp; Tax Deductions</h6>
+                            <small class="text-muted">Settlement requests assigned to Finance Staff with VAT &amp; 3% Withholding Tax tracking</small>
+                        </div>
+                    </div>
+                    <span class="badge bg-primary-subtle text-primary border border-primary px-2.5 py-1">
+                        {{ isset($linkedExpenseRequests) ? $linkedExpenseRequests->count() : 0 }} Request(s)
+                    </span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.875rem;">
+                        <thead class="bg-light text-muted small text-uppercase">
+                            <tr>
+                                <th class="ps-3">Request #</th>
+                                <th>Assigned Staff</th>
+                                <th class="text-end">Gross Amount</th>
+                                <th>VAT / Withholding Tax</th>
+                                <th class="text-end">Net Disbursed</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-center pe-3">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse($linkedExpenseRequests ?? [] as $exp)
+                                <tr>
+                                    <td class="ps-3">
+                                        <div class="fw-bold font-monospace text-primary">{{ $exp->request_number }}</div>
+                                        <small class="text-muted">{{ $exp->created_at->format('M d, Y') }}</small>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="avatar-circle-sm bg-info-subtle text-info fw-bold rounded-circle d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 0.75rem;">
+                                                {{ substr($exp->assignedFinanceStaff?->name ?? $exp->financeStaff?->name ?? 'F', 0, 1) }}
+                                            </div>
+                                            <div>
+                                                <div class="fw-semibold text-dark">{{ $exp->assignedFinanceStaff?->name ?? $exp->financeStaff?->name ?? 'Finance Staff' }}</div>
+                                                <small class="text-muted" style="font-size: 0.72rem;">{{ $exp->assignedFinanceStaff?->email ?? '' }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="text-end fw-bold font-monospace text-dark">
+                                        {{ number_format($exp->amount, 2) }} ETB
+                                    </td>
+                                    <td>
+                                        @if($exp->status === \App\Models\ExpenseRequest::STATUS_PAID)
+                                            <div class="d-flex flex-column gap-1">
+                                                @if($exp->vat_amount > 0)
+                                                    <span class="badge bg-info-subtle text-info border border-info" style="font-size: 0.72rem;">
+                                                        <i class="fa-solid fa-receipt me-1"></i> VAT ({{ $exp->vat_type }}): +ETB {{ number_format($exp->vat_amount, 2) }}
+                                                    </span>
+                                                @else
+                                                    <span class="badge bg-light text-muted border" style="font-size: 0.72rem;">No VAT</span>
+                                                @endif
+                                                @if($exp->has_withholding && $exp->withholding_tax > 0)
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger" style="font-size: 0.72rem;">
+                                                        <i class="fa-solid fa-shield-halved me-1"></i> WHT ({{ $exp->withholding_rate ?? 3 }}%): -ETB {{ number_format($exp->withholding_tax, 2) }}
+                                                    </span>
+                                                @endif
+                                            </div>
+                                        @else
+                                            <span class="badge bg-warning-subtle text-warning border border-warning" style="font-size: 0.72rem;">
+                                                <i class="fa-solid fa-hourglass-half me-1"></i> VAT &amp; 3% WHT applied at payment
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="text-end fw-bold font-monospace {{ $exp->status === \App\Models\ExpenseRequest::STATUS_PAID ? 'text-success' : 'text-muted' }}">
+                                        {{ number_format($exp->net_amount ?? $exp->amount, 2) }} ETB
+                                    </td>
+                                    <td class="text-center">
+                                        @if($exp->status === \App\Models\ExpenseRequest::STATUS_PAID)
+                                            <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
+                                                <i class="fa-solid fa-check-circle me-1"></i> Paid &amp; Liquidated
+                                            </span>
+                                        @elseif($exp->status === \App\Models\ExpenseRequest::STATUS_ASSIGNED || $exp->status === \App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED)
+                                            <span class="badge bg-primary-subtle text-primary border border-primary px-2 py-1">
+                                                <i class="fa-solid fa-clock me-1"></i> Assigned to Finance
+                                            </span>
+                                        @else
+                                            <span class="badge bg-secondary-subtle text-secondary border px-2 py-1">
+                                                {{ $exp->status }}
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center pe-3">
+                                        <a href="{{ route('expense-requests.index') }}" class="btn btn-sm btn-outline-primary py-1 px-2 shadow-xs" title="Open in Expenses Section">
+                                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> Open in Expenses
+                                        </a>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="7" class="text-center py-4 text-muted">
+                                        <i class="fa-solid fa-hand-holding-dollar fa-2x text-secondary opacity-25 mb-2"></i>
+                                        <p class="mb-0 small">No expense assignments created yet. Use the <strong>"Assign to Finance"</strong> tab on the right to assign payments with VAT &amp; Withholding Tax.</p>
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Payment & Receipt History -->
             <div class="card border-0 shadow-sm rounded-3">
                 <div class="card-header bg-white py-3 px-3 border-bottom d-flex align-items-center justify-content-between">
-                    <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-receipt me-2 text-success"></i> Payment History & Uploaded Receipts</h6>
+                    <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-receipt me-2 text-success"></i> Payment History &amp; Uploaded Receipts</h6>
                     <span class="badge bg-success-subtle text-success border border-success">{{ $ledger->payments->count() }} Payment(s)</span>
                 </div>
                 <div class="table-responsive">
@@ -226,7 +335,7 @@
                                 <tr>
                                     <td colspan="6" class="text-center py-4 text-muted">
                                         <i class="fas fa-receipt fa-2x text-secondary opacity-25 mb-2"></i>
-                                        <p class="mb-0 small">No payments recorded yet. Use the form on the right to record a payment and upload a receipt.</p>
+                                        <p class="mb-0 small">No payments recorded yet. Use the settlement form on the right to record a payment or assign to finance.</p>
                                     </td>
                                 </tr>
                             @endforelse
@@ -236,131 +345,256 @@
             </div>
         </div>
 
-        <!-- Right Side: Record Payment Form & Guidance -->
+        <!-- Right Side: Settlement / Payment Form & Guidance -->
         <div class="col-12 col-lg-4">
-            <!-- Record Payment Form -->
+            <!-- Settlement Action Card -->
             <div class="card border-0 shadow-sm rounded-3 mb-4 border-top border-4 {{ $ledger->remaining_amount > 0 ? 'border-primary' : 'border-success' }}">
-                <div class="card-header bg-white py-3 px-3 border-bottom">
-                    <h6 class="mb-0 fw-bold text-dark">
-                        <i class="fas fa-money-bill-wave text-success me-2"></i>
-                        @if($ledger->remaining_amount > 0)
-                            Record Supplier Payment
-                        @else
-                            Credit Fully Settled
-                        @endif
-                    </h6>
+                <div class="card-header bg-white py-2 px-3 border-bottom">
+                    @if($ledger->remaining_amount > 0)
+                        <!-- Navigation Tabs: Assign to Finance Staff vs Direct Quick Payment -->
+                        <ul class="nav nav-pills nav-fill small fw-bold gap-1" id="settlementTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active py-2 px-2" id="assign-tab" data-bs-toggle="pill" data-bs-target="#tab-assign-finance" type="button" role="tab" aria-controls="tab-assign-finance" aria-selected="true">
+                                    <i class="fa-solid fa-user-tag text-primary me-1"></i> Assign to Finance (VAT/WHT)
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-2 px-2 text-muted" id="direct-tab" data-bs-toggle="pill" data-bs-target="#tab-direct-payment" type="button" role="tab" aria-controls="tab-direct-payment" aria-selected="false">
+                                    <i class="fa-solid fa-bolt text-warning me-1"></i> Quick Pay
+                                </button>
+                            </li>
+                        </ul>
+                    @else
+                        <h6 class="mb-0 fw-bold text-success py-1">
+                            <i class="fas fa-check-circle me-1"></i> Credit Fully Settled
+                        </h6>
+                    @endif
                 </div>
                 <div class="card-body p-3">
                     @if($ledger->remaining_amount > 0)
-                        <form action="{{ route('finance.credit-store.record-payment', $ledger) }}" method="POST" enctype="multipart/form-data">
-                            @csrf
-
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
-                                <div class="input-group input-group-sm">
-                                    <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" class="form-control fw-bold" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required>
-                                    <span class="input-group-text bg-light fw-semibold">ETB</span>
+                        <div class="tab-content" id="settlementTabsContent">
+                            <!-- TAB 1: Assign to Finance Staff (Expense with VAT & Withholding Tax) -->
+                            <div class="tab-pane fade show active" id="tab-assign-finance" role="tabpanel" aria-labelledby="assign-tab">
+                                <div class="alert alert-primary bg-primary bg-opacity-10 border-0 p-2.5 rounded-3 mb-3 small">
+                                    <div class="fw-bold text-primary mb-1">
+                                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i> Process via Expenses with Tax
+                                    </div>
+                                    <div class="text-muted" style="font-size: 0.76rem; line-height: 1.45;">
+                                        Assign this payment to a Finance staff member. They will see it in their <strong>Expenses section</strong>, apply <strong>15% VAT</strong> and <strong>3% Withholding Tax</strong>, upload the WHT slip, and disburse payment. This credit ledger will auto-liquidate upon payment!
+                                    </div>
                                 </div>
-                                <div class="form-text small text-muted">Max payable: {{ number_format($ledger->remaining_amount, 2) }} ETB</div>
-                            </div>
 
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Payment Date <span class="text-danger">*</span></label>
-                                <input type="date" name="payment_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
-                            </div>
+                                <form action="{{ route('finance.credit-store.assign-expense', $ledger) }}" method="POST">
+                                    @csrf
 
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Payment Method <span class="text-danger">*</span></label>
-                                <select name="payment_method" class="form-select form-select-sm" required>
-                                    <option value="bank_transfer" selected>Bank Transfer (Disbursement)</option>
-                                    <option value="cash">Cash Payment</option>
-                                    <option value="cheque">Cheque</option>
-                                    <option value="other">Other Method</option>
-                                </select>
-                            </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" class="form-control fw-bold fs-6" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required>
+                                            <span class="input-group-text bg-light fw-bold text-primary">ETB</span>
+                                        </div>
+                                        <div class="form-text small text-muted">Max payable: <strong>{{ number_format($ledger->remaining_amount, 2) }} ETB</strong></div>
+                                    </div>
 
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-dark">
-                                    Select Paying Account <span class="text-danger">*</span>
-                                </label>
-                                <select name="account_source" id="singlePaymentAccountSelect" class="form-select form-select-sm" required onchange="onSingleAccountChange(this)">
-                                    <option value="">-- Choose Bank or Cash Account * --</option>
-                                    @if(isset($bankAccounts) && $bankAccounts->count() > 0)
-                                        <optgroup label="🏦 Company Bank Accounts">
-                                            @foreach($bankAccounts as $bk)
-                                                <option value="bank:{{ $bk->id }}" data-method="bank_transfer" data-balance="{{ (float)($bk->current_balance ?? 0) }}" {{ $loop->first ? 'selected' : '' }}>
-                                                    {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-dark">
+                                            Assign to Finance Staff <span class="text-danger">*</span>
+                                        </label>
+                                        <select name="assigned_finance_staff_id" class="form-select form-select-sm" required>
+                                            <option value="">-- Choose Finance Staff Member * --</option>
+                                            @foreach($financeStaff as $staff)
+                                                <option value="{{ $staff->id }}" {{ (old('assigned_finance_staff_id') == $staff->id || (Auth::id() == $staff->id && $loop->count == 1)) ? 'selected' : '' }}>
+                                                    👤 {{ $staff->name }} ({{ $staff->email }})
                                                 </option>
                                             @endforeach
-                                        </optgroup>
-                                    @endif
-                                    @if(isset($cashAccounts) && $cashAccounts->count() > 0)
-                                        <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
-                                            @foreach($cashAccounts as $ca)
-                                                <option value="coa:{{ $ca->id }}" data-method="cash" data-balance="{{ (float)$ca->current_balance }}">
-                                                    [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
-                                                </option>
-                                            @endforeach
-                                        </optgroup>
-                                    @endif
-                                    @if(isset($coaAccounts))
-                                        <optgroup label="📂 Other Asset / Funding Accounts">
-                                            @foreach($coaAccounts->whereNotIn('id', ($cashAccounts ?? collect())->pluck('id')) as $ca)
-                                                <option value="coa:{{ $ca->id }}" data-method="other" data-balance="{{ (float)$ca->current_balance }}">
-                                                    [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
-                                                </option>
-                                            @endforeach
-                                        </optgroup>
-                                    @endif
-                                </select>
-                                <div class="small text-muted mt-1" id="singleAccountBalanceDisplay">
-                                    <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.
-                                </div>
+                                        </select>
+                                        <div class="form-text small text-muted" style="font-size:0.72rem;">This person will receive and disburse the expense.</div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-dark">
+                                            Select Funding / COA Account <span class="text-danger">*</span>
+                                        </label>
+                                        <select name="account_source" id="assignAccountSelect" class="form-select form-select-sm" required onchange="onAssignAccountChange(this)">
+                                            <option value="">-- Choose Bank or Cash Account * --</option>
+                                            @if(isset($bankAccounts) && $bankAccounts->count() > 0)
+                                                <optgroup label="🏦 Company Bank Accounts">
+                                                    @foreach($bankAccounts as $bk)
+                                                        <option value="bank:{{ $bk->id }}" data-balance="{{ (float)($bk->current_balance ?? 0) }}" {{ $loop->first ? 'selected' : '' }}>
+                                                            {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
+                                                        </option>
+                                                    @endforeach
+                                                </optgroup>
+                                            @endif
+                                            @if(isset($cashAccounts) && $cashAccounts->count() > 0)
+                                                <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
+                                                    @foreach($cashAccounts as $ca)
+                                                        <option value="coa:{{ $ca->id }}" data-balance="{{ (float)$ca->current_balance }}">
+                                                            [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                        </option>
+                                                    @endforeach
+                                                </optgroup>
+                                            @endif
+                                            @if(isset($coaAccounts))
+                                                <optgroup label="📂 Other Asset / Funding Accounts">
+                                                    @foreach($coaAccounts->whereNotIn('id', ($cashAccounts ?? collect())->pluck('id')) as $ca)
+                                                        <option value="coa:{{ $ca->id }}" data-balance="{{ (float)$ca->current_balance }}">
+                                                            [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                        </option>
+                                                    @endforeach
+                                                </optgroup>
+                                            @endif
+                                        </select>
+                                        <div class="small text-muted mt-1" id="assignAccountBalanceDisplay">
+                                            <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Expense Category</label>
+                                        <select name="category" class="form-select form-select-sm">
+                                            <option value="Material (Credit Settlement)" selected>Material (Credit Settlement)</option>
+                                            <option value="Service">Service</option>
+                                            <option value="Contract Work">Contract Work</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Notes / Instructions</label>
+                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="e.g. Please process payment with 15% VAT and deduct 3% Withholding Tax..."></textarea>
+                                    </div>
+
+                                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm py-2">
+                                        <i class="fa-solid fa-paper-plane me-1"></i> Assign to Finance &amp; Send to Expenses
+                                    </button>
+                                </form>
                             </div>
 
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Reference / Cheque / Transaction No</label>
-                                <input type="text" name="reference_no" class="form-control form-control-sm" placeholder="e.g. TXN-984321 / CHQ-0012">
-                            </div>
+                            <!-- TAB 2: Direct Quick Payment (Direct Payment Form) -->
+                            <div class="tab-pane fade" id="tab-direct-payment" role="tabpanel" aria-labelledby="direct-tab">
+                                <form action="{{ route('finance.credit-store.record-payment', $ledger) }}" method="POST" enctype="multipart/form-data">
+                                    @csrf
 
-                            <div class="mb-3">
-                                <div class="card border rounded-3 bg-light shadow-xs">
-                                    <div class="card-header bg-white py-2 px-3 d-flex align-items-center justify-content-between border-bottom">
-                                        <span class="small fw-bold text-dark text-uppercase">
-                                            <i class="fa-solid fa-receipt text-primary me-1"></i> Receipt Proof
-                                        </span>
-                                        <div class="form-check form-switch mb-0">
-                                            <input class="form-check-input" type="checkbox" role="switch" id="singleNoReceiptToggle" name="no_receipt" value="1" onchange="toggleSingleReceiptMode(this.checked)">
-                                            <label class="form-check-label small fw-bold text-dark" for="singleNoReceiptToggle">
-                                                <span class="badge bg-warning text-dark border border-warning px-2 py-0.5">
-                                                    <i class="fa-solid fa-ban me-1"></i> Pay Without Receipt
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" class="form-control fw-bold" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required>
+                                            <span class="input-group-text bg-light fw-semibold">ETB</span>
+                                        </div>
+                                        <div class="form-text small text-muted">Max payable: {{ number_format($ledger->remaining_amount, 2) }} ETB</div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Date <span class="text-danger">*</span></label>
+                                        <input type="date" name="payment_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Method <span class="text-danger">*</span></label>
+                                        <select name="payment_method" class="form-select form-select-sm" required>
+                                            <option value="bank_transfer" selected>Bank Transfer (Disbursement)</option>
+                                            <option value="cash">Cash Payment</option>
+                                            <option value="cheque">Cheque</option>
+                                            <option value="other">Other Method</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-dark">
+                                            Select Paying Account <span class="text-danger">*</span>
+                                        </label>
+                                        <select name="account_source" id="singlePaymentAccountSelect" class="form-select form-select-sm" required onchange="onSingleAccountChange(this)">
+                                            <option value="">-- Choose Bank or Cash Account * --</option>
+                                            @if(isset($bankAccounts) && $bankAccounts->count() > 0)
+                                                <optgroup label="🏦 Company Bank Accounts">
+                                                    @foreach($bankAccounts as $bk)
+                                                        <option value="bank:{{ $bk->id }}" data-method="bank_transfer" data-balance="{{ (float)($bk->current_balance ?? 0) }}" {{ $loop->first ? 'selected' : '' }}>
+                                                            {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
+                                                        </option>
+                                                    @endforeach
+                                                </optgroup>
+                                            @endif
+                                            @if(isset($cashAccounts) && $cashAccounts->count() > 0)
+                                                <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
+                                                    @foreach($cashAccounts as $ca)
+                                                        <option value="coa:{{ $ca->id }}" data-method="cash" data-balance="{{ (float)$ca->current_balance }}">
+                                                            [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                        </option>
+                                                    @endforeach
+                                                </optgroup>
+                                            @endif
+                                            @if(isset($coaAccounts))
+                                                <optgroup label="📂 Other Asset / Funding Accounts">
+                                                    @foreach($coaAccounts->whereNotIn('id', ($cashAccounts ?? collect())->pluck('id')) as $ca)
+                                                        <option value="coa:{{ $ca->id }}" data-method="other" data-balance="{{ (float)$ca->current_balance }}">
+                                                            [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                        </option>
+                                                    @endforeach
+                                                </optgroup>
+                                            @endif
+                                        </select>
+                                        <div class="small text-muted mt-1" id="singleAccountBalanceDisplay">
+                                            <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Reference / Cheque / Transaction No</label>
+                                        <input type="text" name="reference_no" class="form-control form-control-sm" placeholder="e.g. TXN-984321 / CHQ-0012">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <div class="card border rounded-3 bg-light shadow-xs">
+                                            <div class="card-header bg-white py-2 px-3 d-flex align-items-center justify-content-between border-bottom">
+                                                <span class="small fw-bold text-dark text-uppercase">
+                                                    <i class="fa-solid fa-receipt text-primary me-1"></i> Receipt Proof
                                                 </span>
-                                            </label>
+                                                <div class="form-check form-switch mb-0">
+                                                    <input class="form-check-input" type="checkbox" role="switch" id="singleNoReceiptToggle" name="no_receipt" value="1" onchange="toggleSingleReceiptMode(this.checked)">
+                                                    <label class="form-check-label small fw-bold text-dark" for="singleNoReceiptToggle">
+                                                        <span class="badge bg-warning text-dark border border-warning px-2 py-0.5">
+                                                            <i class="fa-solid fa-ban me-1"></i> Pay Without Receipt
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div class="card-body p-2.5">
+                                                <div id="singleWithReceiptDiv">
+                                                    <input type="file" name="receipt_file" class="form-control form-control-sm bg-white" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                                    <div class="form-text small text-muted" style="font-size:0.72rem;">Attach bank slip, cheque scan, or signed voucher.</div>
+                                                </div>
+                                                <div id="singleWithoutReceiptDiv" class="p-2 rounded-2 border border-warning bg-warning bg-opacity-10 d-none">
+                                                    <small class="text-dark d-block mb-1"><i class="fa-solid fa-circle-check text-warning me-1"></i> Paying without receipt selected.</small>
+                                                    <input type="text" name="no_receipt_reason" class="form-control form-control-sm bg-white" placeholder="Optional reason (e.g. Direct bank debit, Trust credit)">
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div class="card-body p-2.5">
-                                        <div id="singleWithReceiptDiv">
-                                            <input type="file" name="receipt_file" class="form-control form-control-sm bg-white" accept=".pdf,.jpg,.jpeg,.png,.webp">
-                                            <div class="form-text small text-muted" style="font-size:0.72rem;">Attach bank slip, cheque scan, or signed voucher.</div>
-                                        </div>
-                                        <div id="singleWithoutReceiptDiv" class="p-2 rounded-2 border border-warning bg-warning bg-opacity-10 d-none">
-                                            <small class="text-dark d-block mb-1"><i class="fa-solid fa-circle-check text-warning me-1"></i> Paying without receipt selected.</small>
-                                            <input type="text" name="no_receipt_reason" class="form-control form-control-sm bg-white" placeholder="Optional reason (e.g. Direct bank debit, Trust credit)">
-                                        </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-bold text-uppercase text-muted">Payment Notes</label>
+                                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional remarks on this payment..."></textarea>
                                     </div>
-                                </div>
-                            </div>
 
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Payment Notes</label>
-                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional remarks on this payment..."></textarea>
+                                    <button type="submit" class="btn btn-success btn-sm w-100 fw-bold shadow-sm py-2" id="singleSubmitBtn">
+                                        <i class="fas fa-check-circle me-1"></i> Record Payment &amp; Liquidate Ledger
+                                    </button>
+                                </form>
                             </div>
+                        </div>
 
-                            <button type="submit" class="btn btn-success btn-sm w-100 fw-bold shadow-sm py-2" id="singleSubmitBtn">
-                                <i class="fas fa-check-circle me-1"></i> Record Payment &amp; Liquidate Ledger
-                            </button>
-                        </form>
                         <script>
+                            function onAssignAccountChange(selectEl) {
+                                const selectedOpt = selectEl.options[selectEl.selectedIndex];
+                                const balDisplay = document.getElementById('assignAccountBalanceDisplay');
+                                if (selectedOpt && selectedOpt.value) {
+                                    const bal = parseFloat(selectedOpt.getAttribute('data-balance')) || 0;
+                                    if (balDisplay) {
+                                        balDisplay.innerHTML = `<i class="fa-solid fa-wallet text-success me-1"></i> Selected Account Balance: <strong class="text-dark font-monospace">ETB ${bal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>`;
+                                    }
+                                }
+                            }
                             function onSingleAccountChange(selectEl) {
                                 const selectedOpt = selectEl.options[selectEl.selectedIndex];
                                 const methodSelect = document.querySelector('select[name="payment_method"]');
@@ -397,8 +631,10 @@
                                 }
                             }
                             document.addEventListener('DOMContentLoaded', () => {
-                                const sel = document.getElementById('singlePaymentAccountSelect');
-                                if (sel) onSingleAccountChange(sel);
+                                const selSingle = document.getElementById('singlePaymentAccountSelect');
+                                if (selSingle) onSingleAccountChange(selSingle);
+                                const selAssign = document.getElementById('assignAccountSelect');
+                                if (selAssign) onAssignAccountChange(selAssign);
                             });
                         </script>
                     @else
