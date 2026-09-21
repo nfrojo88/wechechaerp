@@ -277,29 +277,77 @@ class CreditStoreController extends Controller
         $remaining = $ledger->remaining_amount;
 
         $request->validate([
-            'amount'            => 'required|numeric|min:0.01|max:' . ($remaining > 0 ? $remaining : 999999999),
-            'payment_date'      => 'required|date',
-            'payment_method'    => 'required|string|in:cash,bank_transfer,cheque,other',
-            'account_source'    => 'nullable|string',
-            'coa_account_id'    => 'nullable|exists:chart_of_accounts,id',
-            'bank_account_id'   => 'nullable|exists:bank_accounts,id',
-            'no_receipt'        => 'nullable|boolean',
-            'no_receipt_reason' => 'nullable|string|max:255',
-            'reference_no'      => 'nullable|string|max:150',
-            'receipt_file'      => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
-            'notes'             => 'nullable|string',
+            'amount'                     => 'required|numeric|min:0.01|max:' . ($remaining > 0 ? $remaining : 999999999),
+            'payment_date'               => 'required|date',
+            'payment_method'             => 'required|string|in:cash,bank_transfer,cheque,other',
+            'account_source'             => 'nullable|string',
+            'coa_account_id'             => 'nullable|exists:chart_of_accounts,id',
+            'bank_account_id'            => 'nullable|exists:bank_accounts,id',
+            'vat_type'                   => 'nullable|string|in:none,exclusive,vat_b,inclusive',
+            'vat_rate'                   => 'nullable|numeric',
+            'has_withholding'            => 'nullable|boolean',
+            'withholding_rate'           => 'nullable|numeric',
+            'withholding_receipt'        => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'withholding_receipt_number' => 'nullable|string|max:100',
+            'no_receipt'                 => 'nullable|boolean',
+            'no_receipt_reason'          => 'nullable|string|max:255',
+            'reference_no'               => 'nullable|string|max:150',
+            'receipt_file'               => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'notes'                      => 'nullable|string',
         ]);
 
-        $amount = (float)$request->amount;
+        $gross = (float)$request->amount;
+        $vatType = $request->input('vat_type', 'none');
+        $vatRate = (float)$request->input('vat_rate', 15.00);
+        $hasWithholding = $request->boolean('has_withholding');
+        $withholdingRate = (float)$request->input('withholding_rate', 3.00);
+
+        $vatAmount = 0.0;
+        $baseAmount = $gross;
+        $withholdingAmount = 0.0;
+        $netAmount = $gross;
+
+        if ($vatType === 'exclusive') {
+            $vatAmount = round($gross * ($vatRate / 100), 2);
+            $baseAmount = $gross;
+            $totalGrossWithVat = $gross + $vatAmount;
+            if ($hasWithholding) {
+                $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+            }
+            $netAmount = round($totalGrossWithVat - $withholdingAmount, 2);
+        } elseif ($vatType === 'inclusive' || $vatType === 'vat_b') {
+            $baseAmount = round($gross / (1 + ($vatRate / 100)), 2);
+            $vatAmount = round($gross - $baseAmount, 2);
+            if ($hasWithholding) {
+                $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+            }
+            $netAmount = round($gross - $withholdingAmount, 2);
+        } else {
+            $baseAmount = $gross;
+            $vatAmount = 0.0;
+            if ($hasWithholding) {
+                $withholdingAmount = round($baseAmount * ($withholdingRate / 100), 2);
+            }
+            $netAmount = round($gross - $withholdingAmount, 2);
+        }
+
+        $disbursedAmount = $netAmount > 0 ? $netAmount : $gross;
+        $settledCreditAmount = $gross;
+
         $filePath = null;
         $originalFilename = null;
-
         $isNoReceipt = $request->boolean('no_receipt');
 
         if (!$isNoReceipt && $request->hasFile('receipt_file')) {
             $file = $request->file('receipt_file');
             $filePath = FileUploadService::upload($file, 'credit_receipts');
             $originalFilename = $file->getClientOriginalName();
+        }
+
+        $withholdingReceiptPath = null;
+        if ($request->hasFile('withholding_receipt')) {
+            $wFile = $request->file('withholding_receipt');
+            $withholdingReceiptPath = FileUploadService::upload($wFile, 'withholding_receipts');
         }
 
         // Resolve funding accounts
@@ -328,12 +376,27 @@ class CreditStoreController extends Controller
             $paymentNotes = trim($paymentNotes . " [Paid without receipt{$reason}]");
         }
 
-        DB::transaction(function () use ($ledger, $request, $amount, $filePath, $originalFilename, $bankAccountId, $fundingCoaId, $paymentNotes) {
+        $taxSummary = [];
+        if ($vatType !== 'none' && $vatAmount > 0) {
+            $taxSummary[] = "VAT ({$vatType}): +ETB " . number_format($vatAmount, 2);
+        }
+        if ($hasWithholding && $withholdingAmount > 0) {
+            $taxSummary[] = "WHT (3%): -ETB " . number_format($withholdingAmount, 2);
+        }
+        if (!empty($taxSummary)) {
+            $paymentNotes = trim($paymentNotes . " [" . implode(', ', $taxSummary) . " | Disbursed: ETB " . number_format($disbursedAmount, 2) . "]");
+        }
+
+        DB::transaction(function () use (
+            $ledger, $request, $settledCreditAmount, $gross, $vatType, $vatRate, $vatAmount,
+            $hasWithholding, $withholdingRate, $withholdingAmount, $disbursedAmount,
+            $filePath, $originalFilename, $withholdingReceiptPath, $bankAccountId, $fundingCoaId, $paymentNotes
+        ) {
             // 1. Create Payment Record
-            $payment = CreditStorePayment::create([
+            $paymentData = [
                 'credit_store_ledger_id' => $ledger->id,
                 'payment_date'           => $request->payment_date,
-                'amount'                 => $amount,
+                'amount'                 => $settledCreditAmount,
                 'payment_method'         => $request->payment_method,
                 'bank_account_id'        => $bankAccountId,
                 'coa_account_id'         => $fundingCoaId,
@@ -342,7 +405,22 @@ class CreditStoreController extends Controller
                 'original_filename'      => $originalFilename,
                 'notes'                  => $paymentNotes,
                 'recorded_by'            => Auth::id(),
-            ]);
+            ];
+
+            if (\Illuminate\Support\Facades\Schema::hasColumn('credit_store_payments', 'gross_amount')) {
+                $paymentData['gross_amount'] = $gross;
+                $paymentData['vat_type'] = $vatType;
+                $paymentData['vat_rate'] = $vatRate;
+                $paymentData['vat_amount'] = $vatAmount;
+                $paymentData['has_withholding'] = $hasWithholding;
+                $paymentData['withholding_rate'] = $withholdingRate;
+                $paymentData['withholding_amount'] = $withholdingAmount;
+                $paymentData['withholding_receipt'] = $withholdingReceiptPath;
+                $paymentData['withholding_receipt_number'] = $request->input('withholding_receipt_number');
+                $paymentData['net_amount'] = $disbursedAmount;
+            }
+
+            $payment = CreditStorePayment::create($paymentData);
 
             // 2. Create Journal Entry
             $creditCoaId = $ledger->coa_account_id;
@@ -365,28 +443,45 @@ class CreditStoreController extends Controller
                         'posted_at'      => now(),
                     ]);
 
-                    // Debit: Cost of Material By Credit 5110
+                    // Debit: Cost of Material By Credit 5110 (Full settlement value)
                     JournalEntryLine::create([
                         'journal_entry_id' => $journal->id,
                         'account_id'       => $creditCoaId,
                         'side'             => 'debit',
-                        'amount'           => $amount,
+                        'amount'           => $settledCreditAmount,
                         'description'      => "Credit liquidation — PR #{$ledger->pr_no}",
                     ]);
 
-                    // Credit: Funding Source (Bank / Cash account)
+                    // Credit: Funding Source (Actual cash disbursed)
                     JournalEntryLine::create([
                         'journal_entry_id' => $journal->id,
                         'account_id'       => $fundingCoaId,
                         'side'             => 'credit',
-                        'amount'           => $amount,
+                        'amount'           => $disbursedAmount,
                         'description'      => "Disbursement for credit purchase PR #{$ledger->pr_no} (" . ucfirst(str_replace('_', ' ', $request->payment_method)) . ")",
                     ]);
 
-                    // Decrement funding source balance
-                    ChartOfAccount::where('id', $fundingCoaId)->decrement('current_balance', $amount);
+                    // If withholding tax deducted: Credit Withholding Tax account
+                    if ($withholdingAmount > 0) {
+                        $whtAccount = ChartOfAccount::where('name', 'like', '%Withholding%')
+                            ->orWhere('code', '1300')
+                            ->orWhere('code', 'like', '2%')
+                            ->first();
+                        $whtAccountId = $whtAccount?->id ?: $creditCoaId;
+
+                        JournalEntryLine::create([
+                            'journal_entry_id' => $journal->id,
+                            'account_id'       => $whtAccountId,
+                            'side'             => 'credit',
+                            'amount'           => $withholdingAmount,
+                            'description'      => "Withholding tax deducted (3%) — PR #{$ledger->pr_no}",
+                        ]);
+                    }
+
+                    // Decrement funding source balance by actual disbursed cash
+                    ChartOfAccount::where('id', $fundingCoaId)->decrement('current_balance', $disbursedAmount);
                     if ($bankAccountId) {
-                        BankAccount::where('id', $bankAccountId)->decrement('current_balance', $amount);
+                        BankAccount::where('id', $bankAccountId)->decrement('current_balance', $disbursedAmount);
                     }
 
                     $payment->update(['journal_entry_id' => $journal->id]);
@@ -401,7 +496,7 @@ class CreditStoreController extends Controller
                     'project_id'   => $ledger->project_id,
                     'category'     => 'material',
                     'description'  => "Credit Settlement: PR #{$ledger->pr_no} (" . ($ledger->supplier_name ?: 'Material Purchase') . ")" . ($request->reference_no ? " [Ref: {$request->reference_no}]" : ""),
-                    'amount'       => $amount,
+                    'amount'       => $settledCreditAmount,
                     'expense_date' => $request->payment_date,
                     'status'       => 'approved',
                     'created_by'   => Auth::id(),
@@ -413,8 +508,60 @@ class CreditStoreController extends Controller
                 \Illuminate\Support\Facades\Log::error("CreditExpenseCreate error: " . $ex->getMessage());
             }
 
-            // 4. Update Ledger balances and status
-            $newPaid = (float)$ledger->paid_amount + $amount;
+            // 4. Auto-log Paid ExpenseRequest to sync with Tax Reports & Expenses Analytics
+            try {
+                $prClean = $ledger->pr_no ? preg_replace('/[^0-9]/', '', $ledger->pr_no) : $ledger->id;
+                $expReqNo = 'EXP-QP-' . ($prClean ?: $ledger->id) . '-' . str_pad(ExpenseRequest::count() + 1, 2, '0', STR_PAD_LEFT);
+                while (ExpenseRequest::where('request_number', $expReqNo)->exists()) {
+                    $expReqNo = 'EXP-QP-' . ($prClean ?: $ledger->id) . '-' . rand(10, 99);
+                }
+
+                $expReqData = [
+                    'request_number'             => $expReqNo,
+                    'user_id'                    => Auth::id(),
+                    'purchase_request_id'        => $ledger->purchase_request_id,
+                    'project_id'                 => $ledger->project_id,
+                    'category'                   => 'Material (Credit Settlement)',
+                    'other_reason'               => 'Quick Pay Credit Purchase Settlement',
+                    'description'                => "Credit Purchase Settlement (Quick Pay): PR #{$ledger->pr_no}" . ($ledger->supplier_name ? " — Supplier: {$ledger->supplier_name}" : ''),
+                    'amount'                     => $settledCreditAmount,
+                    'gross_amount'               => $gross,
+                    'vat_type'                   => $vatType,
+                    'vat_rate'                   => $vatRate,
+                    'vat_amount'                 => $vatAmount,
+                    'has_withholding'            => $hasWithholding,
+                    'withholding_rate'           => $withholdingRate,
+                    'withholding_amount'         => $withholdingAmount,
+                    'net_amount'                 => $disbursedAmount,
+                    'status'                     => ExpenseRequest::STATUS_PAID,
+                    'paid_by'                    => Auth::id(),
+                    'paid_at'                    => now(),
+                    'finance_head_id'            => Auth::id(),
+                    'finance_staff_id'           => Auth::id(),
+                    'bank_account_id'            => $bankAccountId,
+                    'coa_id'                     => $fundingCoaId,
+                    'chart_of_account_id'        => $fundingCoaId,
+                    'payment_reference'          => $request->reference_no,
+                    'payment_notes'              => $paymentNotes,
+                    'attachment'                 => $filePath,
+                    'withholding_receipt'        => $withholdingReceiptPath,
+                    'withholding_receipt_number' => $request->input('withholding_receipt_number'),
+                ];
+
+                if (\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'credit_store_ledger_id')) {
+                    $expReqData['credit_store_ledger_id'] = $ledger->id;
+                }
+
+                $expenseRequest = ExpenseRequest::create($expReqData);
+                if (\Illuminate\Support\Facades\Schema::hasColumn('credit_store_payments', 'expense_request_id')) {
+                    $payment->update(['expense_request_id' => $expenseRequest->id]);
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("QuickPay ExpenseRequest create: " . $e->getMessage());
+            }
+
+            // 5. Update Ledger balances and status
+            $newPaid = (float)$ledger->paid_amount + $settledCreditAmount;
             $newStatus = ($newPaid >= (float)$ledger->credit_amount) ? 'fully_paid' : 'partially_paid';
 
             $ledger->update([
@@ -424,8 +571,12 @@ class CreditStoreController extends Controller
         });
 
         $receiptMsg = $isNoReceipt ? " (without receipt)" : "";
+        $taxMsg = "";
+        if ($withholdingAmount > 0) {
+            $taxMsg = " with 3% Withholding Tax deducted (-ETB " . number_format($withholdingAmount, 2) . ", Net Disbursed: ETB " . number_format($disbursedAmount, 2) . ")";
+        }
         return redirect()->route('finance.credit-store.show', $ledger)
-            ->with('success', "Payment of " . number_format($amount, 2) . " ETB recorded successfully{$receiptMsg}. Deducted from Credit Ledger and logged into Expenses.");
+            ->with('success', "Payment of " . number_format($settledCreditAmount, 2) . " ETB recorded successfully{$receiptMsg}{$taxMsg}. Deducted from Credit Ledger and logged into Expenses.");
     }
 
     public function batchPayment(Request $request)

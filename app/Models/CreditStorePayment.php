@@ -20,11 +20,28 @@ class CreditStorePayment extends Model
         'notes',
         'journal_entry_id',
         'recorded_by',
+        'gross_amount',
+        'vat_type',
+        'vat_rate',
+        'vat_amount',
+        'has_withholding',
+        'withholding_rate',
+        'withholding_amount',
+        'withholding_receipt',
+        'withholding_receipt_number',
+        'net_amount',
     ];
 
     protected $casts = [
-        'payment_date' => 'date',
-        'amount'       => 'decimal:2',
+        'payment_date'       => 'date',
+        'amount'             => 'decimal:2',
+        'gross_amount'       => 'decimal:2',
+        'vat_rate'           => 'decimal:2',
+        'vat_amount'         => 'decimal:2',
+        'has_withholding'    => 'boolean',
+        'withholding_rate'   => 'decimal:2',
+        'withholding_amount' => 'decimal:2',
+        'net_amount'         => 'decimal:2',
     ];
 
     public function ledger()

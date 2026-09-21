@@ -297,6 +297,21 @@
                                     </td>
                                     <td class="text-end fw-bold text-success font-monospace">
                                         {{ number_format($pmt->amount, 2) }} ETB
+                                        @if(($pmt->vat_amount ?? 0) > 0)
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle d-block mt-1 font-monospace" style="font-size:0.68rem;">
+                                                + VAT ({{ $pmt->vat_type }}): {{ number_format($pmt->vat_amount, 2) }}
+                                            </span>
+                                        @endif
+                                        @if(($pmt->withholding_amount ?? 0) > 0)
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle d-block mt-1 font-monospace" style="font-size:0.68rem;">
+                                                - WHT (3%): {{ number_format($pmt->withholding_amount, 2) }}
+                                            </span>
+                                        @endif
+                                        @if($pmt->net_amount && $pmt->net_amount != $pmt->amount)
+                                            <span class="text-muted d-block mt-1" style="font-size:0.7rem;">
+                                                Disbursed: <strong class="text-dark">{{ number_format($pmt->net_amount, 2) }} ETB</strong>
+                                            </span>
+                                        @endif
                                     </td>
                                     <td>
                                         <span class="badge bg-light text-dark border text-uppercase" style="font-size: 0.75rem;">
@@ -319,11 +334,16 @@
                                     </td>
                                     <td class="text-center">
                                         @if($pmt->receipt_path)
-                                            <a href="{{ asset($pmt->receipt_path) }}" target="_blank" class="btn btn-sm btn-outline-success py-1 px-2 shadow-sm" title="View / Download Receipt">
+                                            <a href="{{ asset($pmt->receipt_path) }}" target="_blank" class="btn btn-sm btn-outline-success py-1 px-2 shadow-sm d-inline-block mb-1" title="View / Download Receipt">
                                                 <i class="fas fa-paperclip me-1"></i> Receipt
                                             </a>
                                         @else
-                                            <span class="text-muted small font-italic">No receipt</span>
+                                            <span class="text-muted small font-italic d-block mb-1">No receipt</span>
+                                        @endif
+                                        @if($pmt->withholding_receipt)
+                                            <a href="{{ asset($pmt->withholding_receipt) }}" target="_blank" class="btn btn-sm btn-outline-danger py-0 px-2 shadow-xs d-inline-block" style="font-size:0.7rem;" title="View Withholding Slip">
+                                                <i class="fa-solid fa-file-invoice-dollar me-1"></i> WHT Slip
+                                            </a>
                                         @endif
                                     </td>
                                     <td class="small text-muted">
@@ -497,10 +517,89 @@
                                     <div class="mb-3">
                                         <label class="form-label small fw-bold text-uppercase text-muted">Payment Amount (ETB) <span class="text-danger">*</span></label>
                                         <div class="input-group input-group-sm">
-                                            <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" class="form-control fw-bold" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required>
-                                            <span class="input-group-text bg-light fw-semibold">ETB</span>
+                                            <input type="number" step="0.01" min="0.01" max="{{ $ledger->remaining_amount }}" name="amount" id="quickPayAmountInput" class="form-control fw-bold fs-6" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}" required oninput="recalculateQuickPayTax()">
+                                            <span class="input-group-text bg-light fw-bold text-primary">ETB</span>
                                         </div>
-                                        <div class="form-text small text-muted">Max payable: {{ number_format($ledger->remaining_amount, 2) }} ETB</div>
+                                        <div class="form-text small text-muted">Max payable: <strong>{{ number_format($ledger->remaining_amount, 2) }} ETB</strong></div>
+                                    </div>
+
+                                    {{-- VAT & Withholding Tax Options for Quick Pay --}}
+                                    <div class="card border rounded-3 p-2.5 mb-3 bg-light shadow-xs">
+                                        <div class="d-flex align-items-center justify-content-between mb-2">
+                                            <span class="small fw-bold text-dark text-uppercase">
+                                                <i class="fa-solid fa-percent text-success me-1"></i> VAT &amp; Withholding Options
+                                            </span>
+                                            <span class="badge bg-success-subtle text-success border border-success px-2 py-0.5" style="font-size:0.68rem;">
+                                                Tax Options
+                                            </span>
+                                        </div>
+
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label small fw-semibold text-dark mb-1">VAT Option (ቫት)</label>
+                                                <select name="vat_type" id="quickPayVatType" class="form-select form-select-sm" onchange="recalculateQuickPayTax()">
+                                                    <option value="none" selected>No VAT (0% / ያለ ቫት)</option>
+                                                    <option value="exclusive">15% VAT Added (+15% ተጨማሪ ቫት)</option>
+                                                    <option value="vat_b">15% VAT Included / VAT B (ከቫት 15% ጋር የተካተተ - ቫት ቢ)</option>
+                                                </select>
+                                                <input type="hidden" name="vat_rate" id="quickPayVatRate" value="15.00">
+                                                <input type="hidden" name="vat_amount" id="quickPayVatAmount" value="0.00">
+                                            </div>
+                                            <div class="col-12 col-md-6">
+                                                <label class="form-label small fw-semibold text-dark mb-1">Withholding Tax (የቅድመ ግብር)</label>
+                                                <div class="form-check form-switch pt-1">
+                                                    <input class="form-check-input" type="checkbox" role="switch" name="has_withholding" value="1" id="quickPayWithholdingToggle" onchange="recalculateQuickPayTax()">
+                                                    <label class="form-check-label small fw-semibold text-dark" for="quickPayWithholdingToggle">
+                                                        Apply 3% Withholding
+                                                    </label>
+                                                </div>
+                                                <input type="hidden" name="withholding_rate" id="quickPayWithholdingRate" value="3.00">
+                                                <input type="hidden" name="withholding_amount" id="quickPayWithholdingAmount" value="0.00">
+                                                <input type="hidden" name="net_amount" id="quickPayNetAmount" value="{{ number_format($ledger->remaining_amount, 2, '.', '') }}">
+                                            </div>
+                                        </div>
+
+                                        {{-- Real-time Tax Breakdown Summary --}}
+                                        <div class="p-2 bg-white rounded-2 border">
+                                            <div class="row text-center g-1 small">
+                                                <div class="col-3 border-end">
+                                                    <span class="text-muted d-block" style="font-size:0.7rem;">Base (Taxable)</span>
+                                                    <strong class="text-dark font-monospace" id="quickDisplayBaseAmount">ETB {{ number_format($ledger->remaining_amount, 2) }}</strong>
+                                                </div>
+                                                <div class="col-3 border-end">
+                                                    <span class="text-muted d-block" style="font-size:0.7rem;">VAT (15%)</span>
+                                                    <strong class="text-info font-monospace" id="quickDisplayVatAmount">+ ETB 0.00</strong>
+                                                </div>
+                                                <div class="col-3 border-end">
+                                                    <span class="text-muted d-block" style="font-size:0.7rem;">WHT (3%)</span>
+                                                    <strong class="text-danger font-monospace" id="quickDisplayWhtAmount">- ETB 0.00</strong>
+                                                </div>
+                                                <div class="col-3">
+                                                    <span class="text-muted d-block" style="font-size:0.7rem;">Net Disbursed</span>
+                                                    <strong class="text-success font-monospace" id="quickDisplayNetAmount">ETB {{ number_format($ledger->remaining_amount, 2) }}</strong>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {{-- Withholding Slip Upload (Shown when Withholding is checked) --}}
+                                        <div id="quickPayWithholdingSection" class="mt-2 p-2 bg-white rounded-2 border border-danger-subtle" style="display:none;">
+                                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                                <label class="form-label small fw-bold text-danger text-uppercase mb-0" style="font-size:0.72rem;">
+                                                    <i class="fa-solid fa-file-invoice-dollar me-1"></i>Withholding Slip Upload (የቅድመ ግብር ደረሰኝ)
+                                                </label>
+                                                <span class="badge bg-danger-subtle text-danger px-1.5 py-0" style="font-size:0.65rem;">3% WHT Slip</span>
+                                            </div>
+                                            <div class="row g-2">
+                                                <div class="col-12 col-md-7">
+                                                    <input type="file" name="withholding_receipt" id="quickPayWithholdingReceipt" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                                    <small class="text-muted" style="font-size:0.7rem;">Upload WHT image or PDF slip.</small>
+                                                </div>
+                                                <div class="col-12 col-md-5">
+                                                    <input type="text" name="withholding_receipt_number" id="quickPayWithholdingReceiptNo" class="form-control form-control-sm" placeholder="Slip / Voucher #">
+                                                    <small class="text-muted" style="font-size:0.7rem;">WHT Serial # (Optional)</small>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
 
                                     <div class="mb-3">
@@ -665,7 +764,6 @@
                                     if (btn) {
                                         btn.classList.remove('btn-success');
                                         btn.classList.add('btn-warning', 'text-dark');
-                                        btn.innerHTML = '<i class="fa-solid fa-ban me-1"></i> Pay Without Receipt & Liquidate';
                                     }
                                 } else {
                                     if (withDiv) withDiv.classList.remove('d-none');
@@ -673,15 +771,94 @@
                                     if (btn) {
                                         btn.classList.remove('btn-warning', 'text-dark');
                                         btn.classList.add('btn-success');
-                                        btn.innerHTML = '<i class="fas fa-check-circle me-1"></i> Record Payment & Liquidate Ledger';
                                     }
                                 }
+                                recalculateQuickPayTax();
                             }
+
+                            function recalculateQuickPayTax() {
+                                const grossInput = document.getElementById('quickPayAmountInput');
+                                const vatTypeSelect = document.getElementById('quickPayVatType');
+                                const whtToggle = document.getElementById('quickPayWithholdingToggle');
+                                const whtSection = document.getElementById('quickPayWithholdingSection');
+
+                                if (!grossInput) return;
+                                const gross = parseFloat(grossInput.value) || 0;
+                                const vatType = vatTypeSelect ? vatTypeSelect.value : 'none';
+                                const vatRate = 15.00;
+                                const hasWht = whtToggle ? whtToggle.checked : false;
+                                const whtRate = 3.00;
+
+                                if (whtSection) {
+                                    whtSection.style.display = hasWht ? 'block' : 'none';
+                                }
+
+                                let vatAmount = 0.0;
+                                let baseAmount = gross;
+                                let whtAmount = 0.0;
+                                let netAmount = gross;
+
+                                if (vatType === 'exclusive') {
+                                    vatAmount = Math.round(gross * (vatRate / 100) * 100) / 100;
+                                    baseAmount = gross;
+                                    const totalGrossWithVat = gross + vatAmount;
+                                    if (hasWht) {
+                                        whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+                                    }
+                                    netAmount = Math.round((totalGrossWithVat - whtAmount) * 100) / 100;
+                                } else if (vatType === 'inclusive' || vatType === 'vat_b') {
+                                    baseAmount = Math.round((gross / (1 + (vatRate / 100))) * 100) / 100;
+                                    vatAmount = Math.round((gross - baseAmount) * 100) / 100;
+                                    if (hasWht) {
+                                        whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+                                    }
+                                    netAmount = Math.round((gross - whtAmount) * 100) / 100;
+                                } else {
+                                    baseAmount = gross;
+                                    vatAmount = 0.0;
+                                    if (hasWht) {
+                                        whtAmount = Math.round(baseAmount * (whtRate / 100) * 100) / 100;
+                                    }
+                                    netAmount = Math.round((gross - whtAmount) * 100) / 100;
+                                }
+
+                                // Set hidden inputs
+                                const hiddenVat = document.getElementById('quickPayVatAmount');
+                                const hiddenWht = document.getElementById('quickPayWithholdingAmount');
+                                const hiddenNet = document.getElementById('quickPayNetAmount');
+
+                                if (hiddenVat) hiddenVat.value = vatAmount.toFixed(2);
+                                if (hiddenWht) hiddenWht.value = whtAmount.toFixed(2);
+                                if (hiddenNet) hiddenNet.value = netAmount.toFixed(2);
+
+                                // Update display labels
+                                const dispBase = document.getElementById('quickDisplayBaseAmount');
+                                const dispVat = document.getElementById('quickDisplayVatAmount');
+                                const dispWht = document.getElementById('quickDisplayWhtAmount');
+                                const dispNet = document.getElementById('quickDisplayNetAmount');
+                                const submitBtn = document.getElementById('singleSubmitBtn');
+
+                                const fmt = num => 'ETB ' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                                if (dispBase) dispBase.innerText = fmt(baseAmount);
+                                if (dispVat) dispVat.innerText = '+ ' + fmt(vatAmount);
+                                if (dispWht) dispWht.innerText = '- ' + fmt(whtAmount);
+                                if (dispNet) dispNet.innerText = fmt(netAmount);
+
+                                if (submitBtn) {
+                                    const isNoReceipt = document.getElementById('singleNoReceiptToggle')?.checked;
+                                    const icon = isNoReceipt ? '<i class="fa-solid fa-ban me-1"></i>' : '<i class="fas fa-check-circle me-1"></i>';
+                                    const receiptTxt = isNoReceipt ? 'Pay Without Receipt' : 'Record Payment';
+                                    submitBtn.innerHTML = `${icon} ${receiptTxt} & Liquidate (Disburse: ${fmt(netAmount)})`;
+                                }
+                            }
+
                             document.addEventListener('DOMContentLoaded', () => {
                                 const selSingle = document.getElementById('singlePaymentAccountSelect');
                                 if (selSingle) onSingleAccountChange(selSingle);
                                 const selAssign = document.getElementById('assignAccountSelect');
                                 if (selAssign) onAssignAccountChange(selAssign);
+                                recalculateQuickPayTax();
                             });
                         </script>
                     @else
