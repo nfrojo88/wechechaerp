@@ -36,6 +36,9 @@
                     </div>
                 </div>
             </div>
+            <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm px-3 py-2 text-dark" data-bs-toggle="modal" data-bs-target="#sendReplacementModal" title="Send replacement money to Store Keeper">
+                <i class="fa-solid fa-money-bill-transfer me-1"></i> Send Replacement Money
+            </button>
         </div>
     </div>
 
@@ -123,6 +126,28 @@
                             <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
                                 <i class="fa-solid fa-shield-halved text-success me-1"></i>Dedicated site petty cash fund for this store (isolated from corporate 1010).
                             </small>
+
+                            {{-- Zero / Low Balance Warning & Quick Send Trigger --}}
+                            <div class="p-2 rounded-3 border border-warning bg-warning bg-opacity-10 mt-2 {{ ($pettyCashAccount->current_balance ?? 0) <= 0 ? '' : 'd-none' }}" id="zeroBalanceAlert">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <i class="fa-solid fa-triangle-exclamation text-warning"></i>
+                                    <small class="text-dark">
+                                        <strong>Fund balance is ETB 0.00:</strong> Store Keeper needs replacement money before making spot purchases.
+                                    </small>
+                                </div>
+                                <button type="button" class="btn btn-warning btn-sm w-100 fw-bold shadow-xs py-1 text-dark" data-bs-toggle="modal" data-bs-target="#sendReplacementModal">
+                                    <i class="fa-solid fa-money-bill-transfer me-1"></i> Send Replacement Money Now
+                                </button>
+                            </div>
+
+                            <div class="mt-2 d-flex justify-content-between align-items-center">
+                                <a href="javascript:void(0)" class="text-primary small fw-semibold text-decoration-none" data-bs-toggle="modal" data-bs-target="#sendReplacementModal">
+                                    <i class="fa-solid fa-circle-plus me-1"></i>Send Replacement Money
+                                </a>
+                                <a href="javascript:void(0)" class="text-muted small text-decoration-none" data-bs-toggle="modal" data-bs-target="#requestReplacementModal">
+                                    <i class="fa-solid fa-hand-holding-dollar me-1"></i>Request from Finance
+                                </a>
+                            </div>
                         </div>
 
                         {{-- Purchase Date --}}
@@ -325,6 +350,216 @@
     </div>
 </div>
 
+{{-- ── Modal: Send Replacement Money to Store Keeper ─────────────────────── --}}
+<div class="modal fade" id="sendReplacementModal" tabindex="-1" aria-labelledby="sendReplacementModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form action="{{ route('store-keeper.petty-cash-purchases.send-replacement') }}" method="POST" enctype="multipart/form-data" id="sendReplacementForm">
+                @csrf
+                <div class="modal-header bg-warning text-dark py-3">
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="sendReplacementModalLabel">
+                            <i class="fa-solid fa-money-bill-transfer me-2"></i>Send Replacement Money to Store Keeper
+                        </h5>
+                        <small class="text-dark-50" style="font-size:0.75rem;">Disburse spot replenishment funds into this Store's Site Petty Cash account</small>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+
+                    {{-- Store & Fund Summary Ribbon --}}
+                    <div class="p-3 rounded-3 bg-light border mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.68rem;">Destination Store &amp; Site Fund</small>
+                            <span class="badge bg-primary px-2 py-1 me-2 font-monospace" id="modalStoreNameBadge">
+                                {{ $assignedStore->name ?? ($stores->first()->name ?? 'Site Store') }}
+                            </span>
+                            <strong class="text-dark small" id="modalSitePettyAccountDisplay">
+                                {{ $pettyCashAccount->name ?? 'Site Petty Cash' }} [{{ $pettyCashAccount->code ?? 'N/A' }}]
+                            </strong>
+                        </div>
+                        <div>
+                            <span class="badge bg-warning text-dark font-monospace px-2.5 py-1.5" id="modalCurrentBalanceDisplay">
+                                Current Balance: ETB {{ number_format($pettyCashAccount->current_balance ?? 0, 2) }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <input type="hidden" name="store_id" id="modalRepStoreId" value="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}">
+
+                    <div class="row g-3">
+                        {{-- Recipient Store Keeper --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Recipient Store Keeper <span class="text-danger">*</span>
+                            </label>
+                            <select name="recipient_id" id="modalRecipientSelect" class="form-select form-select-sm" required>
+                                @foreach($storeKeepers as $k)
+                                    @php
+                                        $kPhone = $k->phone ?? $k->employee?->phone ?? $k->employee?->mobile_phone ?? '';
+                                    @endphp
+                                    <option value="{{ $k->id }}" data-store="{{ $k->store_id }}" data-phone="{{ $kPhone }}"
+                                        {{ (optional($assignedStore)->manager_id == $k->id || Auth::id() == $k->id) ? 'selected' : '' }}>
+                                        {{ $k->name }} ({{ $k->email }}) {{ $kPhone ? '— ' . $kPhone : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="text-muted d-block mt-1" style="font-size:0.72rem;">Custodian responsible for this site fund</small>
+                        </div>
+
+                        {{-- Disbursing / Source Account --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Source Funding Account (Bank / Cash) <span class="text-danger">*</span>
+                            </label>
+                            <select name="source_coa_id" id="modalSourceCoaSelect" class="form-select form-select-sm" required>
+                                <option value="">-- Choose Paying Bank / Cash Account --</option>
+                                @foreach($sourceAccounts as $sa)
+                                    <option value="{{ $sa->id }}" {{ $loop->first ? 'selected' : '' }}>
+                                        [{{ $sa->code }}] {{ $sa->name }} (ETB {{ number_format($sa->current_balance, 2) }})
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="text-muted d-block mt-1" style="font-size:0.72rem;">Account credited for this cash transfer</small>
+                        </div>
+
+                        {{-- Replacement Amount (ETB) --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Replacement Amount (ETB) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text fw-bold">ETB</span>
+                                <input type="number" step="0.01" min="1" name="amount" id="modalRepAmount" class="form-control font-monospace fw-bold fs-6" placeholder="0.00" required>
+                            </div>
+                            <div class="d-flex gap-1 mt-1.5 flex-wrap">
+                                <span class="text-muted small me-1" style="font-size:0.72rem;">Quick:</span>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-amt-btn" data-amt="5000">+5,000</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-amt-btn" data-amt="10000">+10,000</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-amt-btn" data-amt="25000">+25,000</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1.5 quick-amt-btn" data-amt="50000">+50,000</button>
+                            </div>
+                        </div>
+
+                        {{-- Transfer Date --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Transfer / Disbursement Date <span class="text-danger">*</span>
+                            </label>
+                            <input type="date" name="transfer_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
+                        </div>
+
+                        {{-- Payment Method --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Payment Method / Mode <span class="text-danger">*</span>
+                            </label>
+                            <select name="payment_method" class="form-select form-select-sm" required>
+                                <option value="Bank Transfer / CBE Birr" selected>Bank Transfer (CBE / Commercial)</option>
+                                <option value="Cash in Hand">Cash on Hand (Direct Handover)</option>
+                                <option value="Telebirr / Mobile Money">Telebirr / Mobile Money</option>
+                                <option value="Awash Bank Transfer">Awash Bank Transfer</option>
+                                <option value="Cheque">Bank Cheque</option>
+                                <option value="Other">Other Mode</option>
+                            </select>
+                        </div>
+
+                        {{-- Reference / Voucher # --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Transfer / Voucher Ref # <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" name="reference_no" class="form-control form-control-sm font-monospace" placeholder="e.g. TRX-94821, VCH-2026-001, Cheque #" required>
+                        </div>
+
+                        {{-- Purpose / Reason --}}
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-dark">Disbursement Purpose &amp; Information</label>
+                            <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Describe the reason or urgent site requirements...">Site Petty Cash replacement fund for spot store materials and site consumables</textarea>
+                        </div>
+
+                        {{-- Attachment / Proof --}}
+                        <div class="col-md-7">
+                            <label class="form-label fw-semibold small text-dark">Bank Transfer Slip / Voucher Proof (Optional)</label>
+                            <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                        </div>
+
+                        {{-- SMS Notification Checkbox --}}
+                        <div class="col-md-5 d-flex align-items-center">
+                            <div class="form-check form-switch mt-3">
+                                <input class="form-check-input" type="checkbox" name="send_sms" value="1" id="modalSendSmsCheck" checked>
+                                <label class="form-check-label small fw-semibold text-dark" for="modalSendSmsCheck">
+                                    <i class="fa-solid fa-comment-sms text-success me-1"></i>Send SMS Alert to Keeper
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success btn-sm fw-bold px-4" id="submitRepBtn">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Confirm &amp; Send Replacement
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ── Modal: Request Replacement Money from Finance (Store Keeper) ────────── --}}
+<div class="modal fade" id="requestReplacementModal" tabindex="-1" aria-labelledby="requestReplacementModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form action="{{ route('store-keeper.petty-cash-purchases.request-replacement') }}" method="POST" enctype="multipart/form-data" id="requestReplacementForm">
+                @csrf
+                <div class="modal-header bg-primary text-white py-3">
+                    <h5 class="modal-title fw-bold mb-0" id="requestReplacementModalLabel">
+                        <i class="fa-solid fa-hand-holding-dollar me-2"></i>Request Replacement Money from Finance
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <input type="hidden" name="store_id" id="modalReqStoreId" value="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}">
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small text-dark">Requested Amount (ETB) <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text fw-bold">ETB</span>
+                            <input type="number" step="0.01" min="1" name="requested_amount" class="form-control font-monospace fw-bold" placeholder="0.00" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small text-dark">Urgency Level</label>
+                        <select name="urgency" class="form-select form-select-sm">
+                            <option value="Normal">Normal</option>
+                            <option value="Urgent" selected>Urgent (Site Procurement Required)</option>
+                            <option value="Emergency">Emergency (Site Halt Risk)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small text-dark">Reason &amp; Urgent Materials Needed <span class="text-danger">*</span></label>
+                        <textarea name="notes" class="form-control form-control-sm" rows="3" placeholder="Specify items required, e.g. Urgent tie wire, nails, fuel..." required></textarea>
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="form-label fw-semibold small text-dark">Quotation / Supporting Bill (Optional)</label>
+                        <input type="file" name="attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png">
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-4">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Submit Request
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -338,34 +573,164 @@ document.addEventListener('DOMContentLoaded', function() {
     const totalItemsBadge = document.getElementById('totalItemsBadge');
     const alertDiv = document.getElementById('insufficientBalanceAlert');
     const storeSelect = document.getElementById('storeSelect');
+    const zeroBalanceAlert = document.getElementById('zeroBalanceAlert');
+
+    // Quick Amount Buttons in Modal
+    document.querySelectorAll('.quick-amt-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const amt = this.getAttribute('data-amt');
+            const amtInput = document.getElementById('modalRepAmount');
+            if (amtInput) {
+                amtInput.value = parseFloat(amt).toFixed(2);
+            }
+        });
+    });
+
+    // Synchronize Store and Site Petty Cash info
+    function syncStoreInfo(stId) {
+        if (!stId || !storesData[stId]) return;
+        const acc = storesData[stId];
+
+        // Main Form updates
+        const pettyName = document.getElementById('pettyCashNameDisplay');
+        const pettyCode = document.getElementById('pettyCashCodeDisplay');
+        const pettyBadge = document.getElementById('pettyCashBalanceDisplay');
+        const topBalance = document.getElementById('currentPettyCashDisplay');
+        const accInput = document.getElementById('pettyCashAccountIdInput');
+
+        if (pettyName) pettyName.textContent = acc.account_name;
+        if (pettyCode) pettyCode.textContent = '[' + acc.account_code + ']';
+        const formatted = 'ETB ' + acc.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (pettyBadge) pettyBadge.textContent = formatted;
+        if (topBalance) topBalance.textContent = formatted;
+        if (accInput) accInput.value = acc.account_id;
+
+        availablePettyCash = parseFloat(acc.balance) || 0;
+
+        // Toggle zero balance alert
+        if (zeroBalanceAlert) {
+            if (availablePettyCash <= 0) {
+                zeroBalanceAlert.classList.remove('d-none');
+            } else {
+                zeroBalanceAlert.classList.add('d-none');
+            }
+        }
+
+        // Modal updates
+        const modalStoreId = document.getElementById('modalRepStoreId');
+        const modalReqStoreId = document.getElementById('modalReqStoreId');
+        const modalBadge = document.getElementById('modalStoreNameBadge');
+        const modalAccDisplay = document.getElementById('modalSitePettyAccountDisplay');
+        const modalBalDisplay = document.getElementById('modalCurrentBalanceDisplay');
+
+        if (modalStoreId) modalStoreId.value = stId;
+        if (modalReqStoreId) modalReqStoreId.value = stId;
+        if (modalBadge) modalBadge.textContent = acc.store_name;
+        if (modalAccDisplay) modalAccDisplay.textContent = acc.account_name + ' [' + acc.account_code + ']';
+        if (modalBalDisplay) modalBalDisplay.textContent = 'Current Balance: ' + formatted;
+
+        // Auto-select keeper if matched
+        const recipientSelect = document.getElementById('modalRecipientSelect');
+        if (recipientSelect && acc.keeper_id) {
+            recipientSelect.value = acc.keeper_id;
+        }
+
+        recalculate();
+    }
 
     // Dynamic Site Petty Cash Switcher when store changes
     if (storeSelect) {
         storeSelect.addEventListener('change', function() {
-            const stId = this.value;
-            if (stId && storesData[stId]) {
-                const acc = storesData[stId];
-                const pettyName = document.getElementById('pettyCashNameDisplay');
-                const pettyCode = document.getElementById('pettyCashCodeDisplay');
-                const pettyBadge = document.getElementById('pettyCashBalanceDisplay');
-                const topBalance = document.getElementById('currentPettyCashDisplay');
-                const accInput = document.getElementById('pettyCashAccountIdInput');
+            syncStoreInfo(this.value);
+        });
+    }
 
-                if (pettyName) pettyName.textContent = acc.account_name;
-                if (pettyCode) pettyCode.textContent = '[' + acc.account_code + ']';
-                const formatted = 'ETB ' + acc.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                if (pettyBadge) pettyBadge.textContent = formatted;
-                if (topBalance) topBalance.textContent = formatted;
-                if (accInput) accInput.value = acc.account_id;
+    // AJAX Handler for Send Replacement Form
+    const sendRepForm = document.getElementById('sendReplacementForm');
+    if (sendRepForm) {
+        sendRepForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const submitBtn = document.getElementById('submitRepBtn');
+            const originalBtnHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Disbursing Money...';
 
-                availablePettyCash = parseFloat(acc.balance) || 0;
-                recalculate();
-            }
+            const formData = new FormData(this);
+
+            fetch(this.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnHtml;
+
+                if (data.success) {
+                    // Update state
+                    const stId = formData.get('store_id');
+                    if (storesData[stId]) {
+                        storesData[stId].balance = data.new_balance;
+                    }
+                    availablePettyCash = parseFloat(data.new_balance) || 0;
+
+                    // Update UI balances
+                    const formatted = data.formatted_balance || ('ETB ' + availablePettyCash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                    const topBal = document.getElementById('currentPettyCashDisplay');
+                    const badgeBal = document.getElementById('pettyCashBalanceDisplay');
+                    if (topBal) topBal.textContent = formatted;
+                    if (badgeBal) badgeBal.textContent = formatted;
+
+                    if (zeroBalanceAlert) {
+                        zeroBalanceAlert.classList.add('d-none');
+                    }
+
+                    // Hide modal
+                    const modalEl = document.getElementById('sendReplacementModal');
+                    const modalInst = bootstrap.Modal.getInstance(modalEl);
+                    if (modalInst) modalInst.hide();
+
+                    sendRepForm.reset();
+
+                    // Show success banner at top of form
+                    const banner = document.createElement('div');
+                    banner.className = 'alert alert-success border-0 shadow-sm rounded-3 p-3 mb-4 d-flex justify-content-between align-items-center';
+                    banner.innerHTML = `
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-circle-check fa-lg text-success"></i>
+                            <div>
+                                <strong>Replacement Money Sent Successfully!</strong>
+                                <span class="d-block small text-dark">${data.message} Voucher #: <strong>${data.voucher_no}</strong></span>
+                            </div>
+                        </div>
+                        <a href="${data.voucher_url}" target="_blank" class="btn btn-sm btn-outline-success fw-bold">
+                            <i class="fa-solid fa-print me-1"></i> View / Print Voucher
+                        </a>
+                    `;
+                    const formEl = document.getElementById('pettyCashPurchaseForm');
+                    formEl.parentNode.insertBefore(banner, formEl);
+
+                    recalculate();
+                } else {
+                    alert(data.message || 'Error sending replacement money.');
+                }
+            })
+            .catch(err => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnHtml;
+                console.error(err);
+                // Fallback to regular form submission if AJAX fails
+                sendRepForm.submit();
+            });
         });
     }
 
     // Product template options from existing select
-    const productOptionsHtml = document.querySelector('.product-select').innerHTML;
+    const productOptionsHtml = document.querySelector('.product-select') ? document.querySelector('.product-select').innerHTML : '';
 
     function recalculate() {
         let grandTotal = 0;
@@ -442,50 +807,55 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.item-row').forEach(attachRowListeners);
 
     // Add row button
-    addRowBtn.addEventListener('click', function() {
-        const tr = document.createElement('tr');
-        tr.className = 'item-row';
-        tr.innerHTML = `
-            <td class="ps-3">
-                <select name="items[${rowIndex}][product_id]" class="form-select form-select-sm product-select" required>
-                    ${productOptionsHtml}
-                </select>
-            </td>
-            <td>
-                <input type="number" step="0.001" min="0.001" name="items[${rowIndex}][quantity]" class="form-control form-control-sm qty-input text-center fw-bold" placeholder="0.00" required>
-            </td>
-            <td>
-                <input type="text" name="items[${rowIndex}][unit]" class="form-control form-control-sm unit-input bg-light" placeholder="pcs" readonly>
-            </td>
-            <td>
-                <input type="number" step="0.01" min="0" name="items[${rowIndex}][unit_price]" class="form-control form-control-sm price-input text-end fw-bold" placeholder="0.00" required>
-            </td>
-            <td class="text-end">
-                <strong class="row-total-display font-monospace text-dark">0.00</strong>
-            </td>
-            <td class="text-center pe-3">
-                <button type="button" class="btn btn-sm btn-link text-danger p-0 remove-row-btn" title="Remove Row">
-                    <i class="fa-solid fa-trash-can"></i>
-                </button>
-            </td>
-        `;
+    if (addRowBtn) {
+        addRowBtn.addEventListener('click', function() {
+            const tr = document.createElement('tr');
+            tr.className = 'item-row';
+            tr.innerHTML = `
+                <td class="ps-3">
+                    <select name="items[${rowIndex}][product_id]" class="form-select form-select-sm product-select" required>
+                        ${productOptionsHtml}
+                    </select>
+                </td>
+                <td>
+                    <input type="number" step="0.001" min="0.001" name="items[${rowIndex}][quantity]" class="form-control form-control-sm qty-input text-center fw-bold" placeholder="0.00" required>
+                </td>
+                <td>
+                    <input type="text" name="items[${rowIndex}][unit]" class="form-control form-control-sm unit-input bg-light" placeholder="pcs" readonly>
+                </td>
+                <td>
+                    <input type="number" step="0.01" min="0" name="items[${rowIndex}][unit_price]" class="form-control form-control-sm price-input text-end fw-bold" placeholder="0.00" required>
+                </td>
+                <td class="text-end">
+                    <strong class="row-total-display font-monospace text-dark">0.00</strong>
+                </td>
+                <td class="text-center pe-3">
+                    <button type="button" class="btn btn-sm btn-link text-danger p-0 remove-row-btn" title="Remove Row">
+                        <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                </td>
+            `;
 
-        tbody.appendChild(tr);
-        attachRowListeners(tr);
-        rowIndex++;
-        recalculate();
-    });
+            tbody.appendChild(tr);
+            attachRowListeners(tr);
+            rowIndex++;
+            recalculate();
+        });
+    }
 
     // Form confirmation
-    document.getElementById('pettyCashPurchaseForm').addEventListener('submit', function(e) {
-        const rows = document.querySelectorAll('.item-row');
-        if (rows.length === 0) {
-            e.preventDefault();
-            alert('Please add at least one material item.');
-            return false;
-        }
-        return true;
-    });
+    const purchaseForm = document.getElementById('pettyCashPurchaseForm');
+    if (purchaseForm) {
+        purchaseForm.addEventListener('submit', function(e) {
+            const rows = document.querySelectorAll('.item-row');
+            if (rows.length === 0) {
+                e.preventDefault();
+                alert('Please add at least one material item.');
+                return false;
+            }
+            return true;
+        });
+    }
 });
 </script>
 @endpush

@@ -2204,10 +2204,13 @@ Route::middleware(['auth'])->group(function () {
 
     // ─── Store Keeper Petty Cash Material Purchases (Direct Spot Intake) ───────────
     Route::prefix('store-keeper/petty-cash-purchases')->name('store-keeper.petty-cash-purchases.')->group(function () {
-        Route::get('/',            [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'index'])->name('index');
-        Route::get('/create',      [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'create'])->name('create');
-        Route::post('/',           [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'store'])->name('store');
-        Route::get('/{purchase}',  [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'show'])->name('show');
+        Route::get('/',                                    [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'index'])->name('index');
+        Route::get('/create',                              [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'create'])->name('create');
+        Route::post('/',                                   [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'store'])->name('store');
+        Route::post('/send-replacement',                   [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'sendReplacementMoney'])->name('send-replacement');
+        Route::post('/request-replacement',                [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'requestReplacementMoney'])->name('request-replacement');
+        Route::get('/replacement-voucher/{replenishment}', [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'showReplacementVoucher'])->name('replacement-voucher');
+        Route::get('/{purchase}',                          [App\Http\Controllers\PettyCashMaterialPurchaseController::class, 'show'])->name('show');
     });
 
     // API / AJAX: Available Fixed Asset Units for HR assignment dropdown & return

@@ -26,6 +26,10 @@ class PettyCashReplenishment extends Model
         'status',
         'notes',
         'attachment_path',
+        'store_id',
+        'payment_method',
+        'recipient_phone',
+        'recipient_name',
         'finance_head_id',
         'fulfilled_amount',
         'source_coa_id',
@@ -82,6 +86,11 @@ class PettyCashReplenishment extends Model
         return $this->belongsTo(ChartOfAccount::class, 'chart_of_account_id');
     }
 
+
+    public function store()
+    {
+        return $this->belongsTo(Store::class, 'store_id');
+    }
 
     public function requester()
     {

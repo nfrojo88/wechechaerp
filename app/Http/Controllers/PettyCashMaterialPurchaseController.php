@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\ChartOfAccount;
 use App\Models\DeliveryReceipt;
 use App\Models\DeliveryReceiptItem;
@@ -11,12 +12,14 @@ use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\PettyCashMaterialPurchase;
 use App\Models\PettyCashMaterialPurchaseItem;
+use App\Models\PettyCashReplenishment;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\SlipSequence;
 use App\Models\Store;
 use App\Models\User;
 use App\Services\FileUploadService;
+use App\Services\SmsEthiopiaService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -75,6 +78,29 @@ class PettyCashMaterialPurchaseController extends Controller
                 Schema::table('stores', function (Blueprint $table) {
                     $table->foreignId('petty_cash_account_id')->nullable()->constrained('chart_of_accounts')->nullOnDelete();
                 });
+            }
+
+            if (Schema::hasTable('petty_cash_replenishments')) {
+                if (!Schema::hasColumn('petty_cash_replenishments', 'store_id')) {
+                    Schema::table('petty_cash_replenishments', function (Blueprint $table) {
+                        $table->foreignId('store_id')->nullable()->constrained('stores')->nullOnDelete();
+                    });
+                }
+                if (!Schema::hasColumn('petty_cash_replenishments', 'payment_method')) {
+                    Schema::table('petty_cash_replenishments', function (Blueprint $table) {
+                        $table->string('payment_method', 100)->nullable();
+                    });
+                }
+                if (!Schema::hasColumn('petty_cash_replenishments', 'recipient_phone')) {
+                    Schema::table('petty_cash_replenishments', function (Blueprint $table) {
+                        $table->string('recipient_phone', 50)->nullable();
+                    });
+                }
+                if (!Schema::hasColumn('petty_cash_replenishments', 'recipient_name')) {
+                    Schema::table('petty_cash_replenishments', function (Blueprint $table) {
+                        $table->string('recipient_name', 150)->nullable();
+                    });
+                }
             }
         } catch (\Throwable $e) {
             // Silently continue if schema cannot be created here
@@ -269,6 +295,40 @@ class PettyCashMaterialPurchaseController extends Controller
 
         $pettyCashAccount = $activeStore ? $this->resolveStoreSitePettyCash($activeStore, $user) : null;
 
+        // Active Bank & Cash accounts for replacement money disbursement
+        $sourceAccounts = ChartOfAccount::where('is_active', true)
+            ->where('code', '!=', '1010')
+            ->where(function ($q) {
+                $q->where('type', 'asset')
+                  ->where(function ($sub) {
+                      $sub->whereIn('subtype', ['cash_and_bank', 'bank', 'cash', 'current_asset'])
+                          ->orWhere('code', 'like', '1000%')
+                          ->orWhere('code', 'like', '1020%')
+                          ->orWhere('name', 'like', '%bank%')
+                          ->orWhere('name', 'like', '%cash%');
+                  });
+            })
+            ->orderBy('name')
+            ->get();
+
+        $storeKeepers = User::where('is_active', true)->orderBy('name')->get();
+
+        // Replenishment & Replacement money history
+        $replenishmentsQuery = PettyCashReplenishment::with(['chartOfAccount', 'sourceCoa', 'requester', 'financeHead', 'store'])
+            ->latest('fulfilled_at')
+            ->latest('id');
+
+        if ($isStoreKeeper && $assignedStore) {
+            $replenishmentsQuery->where(function ($q) use ($assignedStore, $user, $pettyCashAccount) {
+                $q->where('store_id', $assignedStore->id)
+                  ->orWhere('requested_by', $user->id);
+                if ($pettyCashAccount) {
+                    $q->orWhere('chart_of_account_id', $pettyCashAccount->id);
+                }
+            });
+        }
+        $replenishments = $replenishmentsQuery->paginate(15, ['*'], 'rep_page')->withQueryString();
+
         return view('store-keeper.petty-cash-purchases.index', compact(
             'purchases',
             'assignedStore',
@@ -276,7 +336,10 @@ class PettyCashMaterialPurchaseController extends Controller
             'stores',
             'totalSpent',
             'totalPurchases',
-            'pettyCashAccount'
+            'pettyCashAccount',
+            'sourceAccounts',
+            'storeKeepers',
+            'replenishments'
         ));
     }
 
@@ -298,9 +361,11 @@ class PettyCashMaterialPurchaseController extends Controller
         $targetStore = $assignedStore ?? $stores->first();
         $pettyCashAccount = $targetStore ? $this->resolveStoreSitePettyCash($targetStore, $user) : null;
 
-        // Map every store to its dedicated separate Site Petty Cash account
+        // Map every store to its dedicated separate Site Petty Cash account & keeper details
         $storesData = $stores->mapWithKeys(function ($st) use ($user) {
             $acc = $this->resolveStoreSitePettyCash($st, $user);
+            $keeper = $st->manager ?? $st->users()->first();
+            $phone = $keeper?->phone ?? $keeper?->employee?->phone ?? $keeper?->employee?->mobile_phone ?? '';
             return [$st->id => [
                 'store_id'     => $st->id,
                 'store_name'   => $st->name,
@@ -309,8 +374,29 @@ class PettyCashMaterialPurchaseController extends Controller
                 'account_code' => $acc->code,
                 'account_name' => $acc->name,
                 'balance'      => (float) $acc->current_balance,
+                'keeper_id'    => $keeper?->id,
+                'keeper_name'  => $keeper?->name ?? 'Store Keeper',
+                'keeper_phone' => $phone,
             ]];
         });
+
+        // Source Bank and Cash accounts for replacement money disbursement
+        $sourceAccounts = ChartOfAccount::where('is_active', true)
+            ->where('code', '!=', '1010')
+            ->where(function ($q) {
+                $q->where('type', 'asset')
+                  ->where(function ($sub) {
+                      $sub->whereIn('subtype', ['cash_and_bank', 'bank', 'cash', 'current_asset'])
+                          ->orWhere('code', 'like', '1000%')
+                          ->orWhere('code', 'like', '1020%')
+                          ->orWhere('name', 'like', '%bank%')
+                          ->orWhere('name', 'like', '%cash%');
+                  });
+            })
+            ->orderBy('name')
+            ->get();
+
+        $storeKeepers = User::where('is_active', true)->orderBy('name')->get();
 
         return view('store-keeper.petty-cash-purchases.create', compact(
             'assignedStore',
@@ -318,7 +404,9 @@ class PettyCashMaterialPurchaseController extends Controller
             'stores',
             'products',
             'pettyCashAccount',
-            'storesData'
+            'storesData',
+            'sourceAccounts',
+            'storeKeepers'
         ));
     }
 
@@ -561,5 +649,263 @@ class PettyCashMaterialPurchaseController extends Controller
         $purchase->load(['store', 'purchaser', 'chartOfAccount', 'items.product', 'deliveryReceipt', 'journalEntry.lines.account']);
 
         return view('store-keeper.petty-cash-purchases.show', compact('purchase'));
+    }
+
+    /**
+     * Send Replacement Money to Store Keeper with all information
+     * Direct disbursement from Bank/Cash into dedicated Site Petty Cash account
+     */
+    public function sendReplacementMoney(Request $request)
+    {
+        self::ensureSchema();
+
+        /** @var User $authUser */
+        $authUser = Auth::user();
+
+        $validated = $request->validate([
+            'store_id'         => 'required|exists:stores,id',
+            'source_coa_id'    => 'required|exists:chart_of_accounts,id',
+            'recipient_id'     => 'nullable|exists:users,id',
+            'amount'           => 'required|numeric|min:1',
+            'payment_method'   => 'required|string|max:100',
+            'reference_no'     => 'required|string|max:100',
+            'transfer_date'    => 'required|date',
+            'notes'            => 'nullable|string|max:1000',
+            'attachment'       => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'send_sms'         => 'nullable',
+        ]);
+
+        $store = Store::findOrFail($validated['store_id']);
+        $recipient = null;
+        if (!empty($validated['recipient_id'])) {
+            $recipient = User::find($validated['recipient_id']);
+        }
+        if (!$recipient) {
+            $recipient = $store->manager ?? $store->users()->first() ?? $authUser;
+        }
+
+        $sourceAccount = ChartOfAccount::findOrFail($validated['source_coa_id']);
+        $siteAccount = $this->resolveStoreSitePettyCash($store, $recipient);
+
+        $amount = (float) $validated['amount'];
+
+        $attachmentPath = null;
+        if ($request->hasFile('attachment')) {
+            $attachmentPath = FileUploadService::upload($request->file('attachment'), 'petty_cash_replenishments');
+        }
+
+        $replenishment = DB::transaction(function () use (
+            $store,
+            $recipient,
+            $sourceAccount,
+            $siteAccount,
+            $amount,
+            $validated,
+            $attachmentPath,
+            $authUser
+        ) {
+            // 1. Balance updates
+            $sourceAccount->decrement('current_balance', $amount);
+            $siteAccount->increment('current_balance', $amount);
+
+            // 2. Generate Request/Voucher Number
+            $today = date('Ymd');
+            $countToday = PettyCashReplenishment::whereDate('created_at', now())->count() + 1;
+            $requestNo = 'REP-' . $today . '-' . str_pad($countToday, 4, '0', STR_PAD_LEFT);
+
+            // 3. Create Journal Entry
+            $jeCount = JournalEntry::count() + 1;
+            $jeNo = 'JE-REP-' . $today . '-' . str_pad($jeCount, 4, '0', STR_PAD_LEFT);
+
+            $journalEntry = JournalEntry::create([
+                'entry_no'       => $jeNo,
+                'entry_date'     => $validated['transfer_date'],
+                'reference_type' => 'petty_cash_replacement',
+                'description'    => "Replacement money to Store Keeper {$recipient->name} for {$store->name} via {$validated['payment_method']} [Ref: {$validated['reference_no']}]",
+                'status'         => 'posted',
+                'created_by'     => $authUser->id,
+                'approved_by'    => $authUser->id,
+                'posted_at'      => now(),
+            ]);
+
+            // Debit Site Petty Cash (Asset increase)
+            JournalEntryLine::create([
+                'journal_entry_id' => $journalEntry->id,
+                'account_id'       => $siteAccount->id,
+                'description'      => "Petty cash replacement received for {$store->name} [{$siteAccount->code}]",
+                'side'             => 'debit',
+                'amount'           => $amount,
+            ]);
+
+            // Credit Source Account (Bank / Cash disbursed)
+            JournalEntryLine::create([
+                'journal_entry_id' => $journalEntry->id,
+                'account_id'       => $sourceAccount->id,
+                'description'      => "Disbursed to {$store->name} Store Keeper {$recipient->name} [Ref: {$validated['reference_no']}]",
+                'side'             => 'credit',
+                'amount'           => $amount,
+            ]);
+
+            // 4. Create Replenishment record
+            $recipientPhone = $recipient->phone ?? $recipient->employee?->phone ?? $recipient->employee?->mobile_phone ?? null;
+
+            $replenishment = PettyCashReplenishment::create([
+                'request_no'                 => $requestNo,
+                'chart_of_account_id'        => $siteAccount->id,
+                'source_coa_id'              => $sourceAccount->id,
+                'requested_by'               => $recipient->id,
+                'finance_head_id'            => $authUser->id,
+                'requested_amount'           => $amount,
+                'fulfilled_amount'           => $amount,
+                'current_balance_at_request' => $siteAccount->current_balance - $amount,
+                'total_expenses_amount'      => 0,
+                'period_start_date'          => now(),
+                'period_end_date'            => now(),
+                'status'                     => PettyCashReplenishment::STATUS_FULFILLED,
+                'notes'                      => $validated['notes'] ?? 'Site petty cash replacement disbursement',
+                'finance_notes'              => "Disbursed via {$validated['payment_method']} (Ref: {$validated['reference_no']})",
+                'fulfillment_reference'      => $validated['reference_no'],
+                'fulfilled_at'               => now(),
+                'journal_entry_id'           => $journalEntry->id,
+                'attachment_path'            => $attachmentPath,
+                'store_id'                   => $store->id,
+                'payment_method'             => $validated['payment_method'],
+                'recipient_phone'            => $recipientPhone,
+                'recipient_name'             => $recipient->name,
+            ]);
+
+            $journalEntry->update(['reference_id' => $replenishment->id]);
+
+            // 5. Activity Log
+            ActivityLog::log(
+                'disbursed',
+                "Disbursed ETB " . number_format($amount, 2) . " replacement petty cash to Store Keeper {$recipient->name} for store '{$store->name}' [Voucher #{$requestNo}].",
+                'Petty Cash Replacement',
+                $replenishment,
+                [
+                    'store'          => $store->name,
+                    'amount'         => $amount,
+                    'source_account' => "[{$sourceAccount->code}] {$sourceAccount->name}",
+                    'site_account'   => "[{$siteAccount->code}] {$siteAccount->name}",
+                    'voucher_no'     => $requestNo,
+                    'reference'      => $validated['reference_no'],
+                ]
+            );
+
+            // 6. Send SMS Notification to Store Keeper if requested
+            if (!empty($validated['send_sms']) && $recipientPhone) {
+                try {
+                    $smsService = app(SmsEthiopiaService::class);
+                    $formattedAmt = number_format($amount, 2);
+                    $newBal = number_format($siteAccount->current_balance, 2);
+                    $msg = "ConstructPro ERP: ETB {$formattedAmt} replacement petty cash has been credited for store {$store->name} via {$validated['payment_method']} (Ref: {$validated['reference_no']}). New available balance: ETB {$newBal}.";
+                    $smsService->sendMessage($recipientPhone, $msg);
+                } catch (\Throwable $e) {
+                    \Log::warning("Could not send SMS to store keeper: " . $e->getMessage());
+                }
+            }
+
+            return $replenishment;
+        });
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success'           => true,
+                'message'           => "ETB " . number_format($amount, 2) . " replacement money successfully sent to Store Keeper {$recipient->name}!",
+                'new_balance'       => (float) $siteAccount->current_balance,
+                'formatted_balance' => 'ETB ' . number_format($siteAccount->current_balance, 2),
+                'account_id'        => $siteAccount->id,
+                'voucher_no'        => $replenishment->request_no,
+                'voucher_url'       => route('store-keeper.petty-cash-purchases.replacement-voucher', $replenishment->id),
+            ]);
+        }
+
+        return redirect()->back()->with('success', "ETB " . number_format($amount, 2) . " replacement money sent successfully to Store Keeper {$recipient->name}! Voucher: {$replenishment->request_no}. Available Petty Cash updated to ETB " . number_format($siteAccount->current_balance, 2));
+    }
+
+    /**
+     * Store Keeper requests replenishment from Finance
+     */
+    public function requestReplacementMoney(Request $request)
+    {
+        self::ensureSchema();
+
+        /** @var User $authUser */
+        $authUser = Auth::user();
+
+        $validated = $request->validate([
+            'store_id'         => 'required|exists:stores,id',
+            'requested_amount' => 'required|numeric|min:1',
+            'urgency'          => 'nullable|string|max:50',
+            'notes'            => 'required|string|max:1000',
+            'attachment'       => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+        ]);
+
+        $store = Store::findOrFail($validated['store_id']);
+        $siteAccount = $this->resolveStoreSitePettyCash($store, $authUser);
+
+        $attachmentPath = null;
+        if ($request->hasFile('attachment')) {
+            $attachmentPath = FileUploadService::upload($request->file('attachment'), 'petty_cash_replenishments');
+        }
+
+        $today = date('Ymd');
+        $countToday = PettyCashReplenishment::whereDate('created_at', now())->count() + 1;
+        $requestNo = 'PCR-' . $today . '-' . str_pad($countToday, 4, '0', STR_PAD_LEFT);
+
+        $recipientPhone = $authUser->phone ?? $authUser->employee?->phone ?? null;
+
+        $replenishment = PettyCashReplenishment::create([
+            'request_no'                 => $requestNo,
+            'chart_of_account_id'        => $siteAccount->id,
+            'requested_by'               => $authUser->id,
+            'requested_amount'           => $validated['requested_amount'],
+            'current_balance_at_request' => $siteAccount->current_balance,
+            'total_expenses_amount'      => 0,
+            'period_start_date'          => now(),
+            'period_end_date'            => now(),
+            'status'                     => PettyCashReplenishment::STATUS_PENDING,
+            'notes'                      => ($validated['urgency'] ? "[Urgency: {$validated['urgency']}] " : '') . $validated['notes'],
+            'attachment_path'            => $attachmentPath,
+            'store_id'                   => $store->id,
+            'recipient_name'             => $authUser->name,
+            'recipient_phone'            => $recipientPhone,
+        ]);
+
+        ActivityLog::log(
+            'requested',
+            "Store Keeper {$authUser->name} requested ETB " . number_format($validated['requested_amount'], 2) . " replacement money for Store '{$store->name}'.",
+            'Petty Cash Replenishment Request',
+            $replenishment
+        );
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success'    => true,
+                'message'    => "Replacement request #{$requestNo} submitted to Finance Head successfully.",
+                'request_no' => $requestNo,
+            ]);
+        }
+
+        return redirect()->back()->with('success', "Replacement request #{$requestNo} submitted to Finance Head for approval.");
+    }
+
+    /**
+     * Printable Official Replacement / Disbursement Voucher
+     */
+    public function showReplacementVoucher($id)
+    {
+        self::ensureSchema();
+
+        $replenishment = PettyCashReplenishment::with([
+            'chartOfAccount',
+            'sourceCoa',
+            'requester',
+            'financeHead',
+            'store',
+            'journalEntry.lines.account'
+        ])->findOrFail($id);
+
+        return view('store-keeper.petty-cash-purchases.replacement-voucher', compact('replenishment'));
     }
 }
