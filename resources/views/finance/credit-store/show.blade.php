@@ -280,23 +280,42 @@
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Funding Bank Account</label>
-                                <select name="bank_account_id" class="form-select form-select-sm">
-                                    <option value="">-- Select Bank Account (Optional) --</option>
-                                    @foreach($bankAccounts as $bk)
-                                        <option value="{{ $bk->id }}">{{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: {{ number_format($bk->current_balance ?? 0, 2) }})</option>
-                                    @endforeach
+                                <label class="form-label small fw-bold text-uppercase text-dark">
+                                    Select Paying Account <span class="text-danger">*</span>
+                                </label>
+                                <select name="account_source" id="singlePaymentAccountSelect" class="form-select form-select-sm" required onchange="onSingleAccountChange(this)">
+                                    <option value="">-- Choose Bank or Cash Account * --</option>
+                                    @if(isset($bankAccounts) && $bankAccounts->count() > 0)
+                                        <optgroup label="🏦 Company Bank Accounts">
+                                            @foreach($bankAccounts as $bk)
+                                                <option value="bank:{{ $bk->id }}" data-method="bank_transfer" data-balance="{{ (float)($bk->current_balance ?? 0) }}" {{ $loop->first ? 'selected' : '' }}>
+                                                    {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
+                                                </option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
+                                    @if(isset($cashAccounts) && $cashAccounts->count() > 0)
+                                        <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
+                                            @foreach($cashAccounts as $ca)
+                                                <option value="coa:{{ $ca->id }}" data-method="cash" data-balance="{{ (float)$ca->current_balance }}">
+                                                    [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                </option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
+                                    @if(isset($coaAccounts))
+                                        <optgroup label="📂 Other Asset / Funding Accounts">
+                                            @foreach($coaAccounts->whereNotIn('id', ($cashAccounts ?? collect())->pluck('id')) as $ca)
+                                                <option value="coa:{{ $ca->id }}" data-method="other" data-balance="{{ (float)$ca->current_balance }}">
+                                                    [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                </option>
+                                            @endforeach
+                                        </optgroup>
+                                    @endif
                                 </select>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Funding Chart of Account (COA)</label>
-                                <select name="coa_account_id" class="form-select form-select-sm">
-                                    <option value="">-- Select COA Source --</option>
-                                    @foreach($coaAccounts as $ca)
-                                        <option value="{{ $ca->id }}">{{ $ca->code }} - {{ $ca->name }} (Bal: {{ number_format($ca->current_balance, 2) }})</option>
-                                    @endforeach
-                                </select>
+                                <div class="small text-muted mt-1" id="singleAccountBalanceDisplay">
+                                    <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this account.
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -305,9 +324,31 @@
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-muted">Upload Payment Receipt / Proof</label>
-                                <input type="file" name="receipt_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp">
-                                <div class="form-text small text-muted">Upload scanned receipt, bank slip, or payment confirmation (PDF, JPG, PNG).</div>
+                                <div class="card border rounded-3 bg-light shadow-xs">
+                                    <div class="card-header bg-white py-2 px-3 d-flex align-items-center justify-content-between border-bottom">
+                                        <span class="small fw-bold text-dark text-uppercase">
+                                            <i class="fa-solid fa-receipt text-primary me-1"></i> Receipt Proof
+                                        </span>
+                                        <div class="form-check form-switch mb-0">
+                                            <input class="form-check-input" type="checkbox" role="switch" id="singleNoReceiptToggle" name="no_receipt" value="1" onchange="toggleSingleReceiptMode(this.checked)">
+                                            <label class="form-check-label small fw-bold text-dark" for="singleNoReceiptToggle">
+                                                <span class="badge bg-warning text-dark border border-warning px-2 py-0.5">
+                                                    <i class="fa-solid fa-ban me-1"></i> Pay Without Receipt
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="card-body p-2.5">
+                                        <div id="singleWithReceiptDiv">
+                                            <input type="file" name="receipt_file" class="form-control form-control-sm bg-white" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                            <div class="form-text small text-muted" style="font-size:0.72rem;">Attach bank slip, cheque scan, or signed voucher.</div>
+                                        </div>
+                                        <div id="singleWithoutReceiptDiv" class="p-2 rounded-2 border border-warning bg-warning bg-opacity-10 d-none">
+                                            <small class="text-dark d-block mb-1"><i class="fa-solid fa-circle-check text-warning me-1"></i> Paying without receipt selected.</small>
+                                            <input type="text" name="no_receipt_reason" class="form-control form-control-sm bg-white" placeholder="Optional reason (e.g. Direct bank debit, Trust credit)">
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -315,10 +356,51 @@
                                 <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Optional remarks on this payment..."></textarea>
                             </div>
 
-                            <button type="submit" class="btn btn-success btn-sm w-100 fw-bold shadow-sm py-2">
-                                <i class="fas fa-check-circle me-1"></i> Record Payment & Liquidate Ledger
+                            <button type="submit" class="btn btn-success btn-sm w-100 fw-bold shadow-sm py-2" id="singleSubmitBtn">
+                                <i class="fas fa-check-circle me-1"></i> Record Payment &amp; Liquidate Ledger
                             </button>
                         </form>
+                        <script>
+                            function onSingleAccountChange(selectEl) {
+                                const selectedOpt = selectEl.options[selectEl.selectedIndex];
+                                const methodSelect = document.querySelector('select[name="payment_method"]');
+                                const balDisplay = document.getElementById('singleAccountBalanceDisplay');
+                                if (selectedOpt && selectedOpt.value) {
+                                    const method = selectedOpt.getAttribute('data-method') || 'bank_transfer';
+                                    const bal = parseFloat(selectedOpt.getAttribute('data-balance')) || 0;
+                                    if (methodSelect) methodSelect.value = method;
+                                    if (balDisplay) {
+                                        balDisplay.innerHTML = `<i class="fa-solid fa-wallet text-success me-1"></i> Selected Account Balance: <strong class="text-dark font-monospace">ETB ${bal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>`;
+                                    }
+                                }
+                            }
+                            function toggleSingleReceiptMode(isNoReceipt) {
+                                const withDiv = document.getElementById('singleWithReceiptDiv');
+                                const withoutDiv = document.getElementById('singleWithoutReceiptDiv');
+                                const btn = document.getElementById('singleSubmitBtn');
+                                if (isNoReceipt) {
+                                    if (withDiv) withDiv.classList.add('d-none');
+                                    if (withoutDiv) withoutDiv.classList.remove('d-none');
+                                    if (btn) {
+                                        btn.classList.remove('btn-success');
+                                        btn.classList.add('btn-warning', 'text-dark');
+                                        btn.innerHTML = '<i class="fa-solid fa-ban me-1"></i> Pay Without Receipt & Liquidate';
+                                    }
+                                } else {
+                                    if (withDiv) withDiv.classList.remove('d-none');
+                                    if (withoutDiv) withoutDiv.classList.add('d-none');
+                                    if (btn) {
+                                        btn.classList.remove('btn-warning', 'text-dark');
+                                        btn.classList.add('btn-success');
+                                        btn.innerHTML = '<i class="fas fa-check-circle me-1"></i> Record Payment & Liquidate Ledger';
+                                    }
+                                }
+                            }
+                            document.addEventListener('DOMContentLoaded', () => {
+                                const sel = document.getElementById('singlePaymentAccountSelect');
+                                if (sel) onSingleAccountChange(sel);
+                            });
+                        </script>
                     @else
                         <div class="text-center py-4">
                             <div class="text-success mb-2">

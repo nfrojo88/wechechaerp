@@ -56,6 +56,21 @@ class CreditStoreController extends Controller
             ->orderBy('code')
             ->get();
 
+        $cashAccounts = ChartOfAccount::where('is_active', true)
+            ->where('code', '!=', '5110')
+            ->where(function ($q) {
+                $q->where('type', 'asset')
+                  ->where(function ($sub) {
+                      $sub->whereIn('subtype', ['cash_and_bank', 'cash', 'current_asset'])
+                          ->orWhere('code', 'like', '1000%')
+                          ->orWhere('code', 'like', '1010%')
+                          ->orWhere('name', 'like', '%cash%')
+                          ->orWhere('name', 'like', '%petty%');
+                  });
+            })
+            ->orderBy('code')
+            ->get();
+
         $bankAccounts = BankAccount::orderBy('bank_name')->get();
 
         return view('finance.credit-store.index', compact(
@@ -67,6 +82,7 @@ class CreditStoreController extends Controller
             'countFullyPaid',
             'projects',
             'coaAccounts',
+            'cashAccounts',
             'bankAccounts'
         ));
     }
@@ -90,9 +106,24 @@ class CreditStoreController extends Controller
             ->orderBy('code')
             ->get();
 
+        $cashAccounts = ChartOfAccount::where('is_active', true)
+            ->where('code', '!=', '5110')
+            ->where(function ($q) {
+                $q->where('type', 'asset')
+                  ->where(function ($sub) {
+                      $sub->whereIn('subtype', ['cash_and_bank', 'cash', 'current_asset'])
+                          ->orWhere('code', 'like', '1000%')
+                          ->orWhere('code', 'like', '1010%')
+                          ->orWhere('name', 'like', '%cash%')
+                          ->orWhere('name', 'like', '%petty%');
+                  });
+            })
+            ->orderBy('code')
+            ->get();
+
         $bankAccounts = BankAccount::orderBy('bank_name')->get();
 
-        return view('finance.credit-store.show', compact('ledger', 'coaAccounts', 'bankAccounts'));
+        return view('finance.credit-store.show', compact('ledger', 'coaAccounts', 'cashAccounts', 'bankAccounts'));
     }
 
     public function recordPayment(Request $request, CreditStoreLedger $creditStore)
@@ -101,49 +132,74 @@ class CreditStoreController extends Controller
         $remaining = $ledger->remaining_amount;
 
         $request->validate([
-            'amount'         => 'required|numeric|min:0.01|max:' . ($remaining > 0 ? $remaining : 999999999),
-            'payment_date'   => 'required|date',
-            'payment_method' => 'required|string|in:cash,bank_transfer,cheque,other',
-            'coa_account_id' => 'nullable|exists:chart_of_accounts,id',
-            'bank_account_id'=> 'nullable|exists:bank_accounts,id',
-            'reference_no'   => 'nullable|string|max:150',
-            'receipt_file'   => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
-            'notes'          => 'nullable|string',
+            'amount'            => 'required|numeric|min:0.01|max:' . ($remaining > 0 ? $remaining : 999999999),
+            'payment_date'      => 'required|date',
+            'payment_method'    => 'required|string|in:cash,bank_transfer,cheque,other',
+            'account_source'    => 'nullable|string',
+            'coa_account_id'    => 'nullable|exists:chart_of_accounts,id',
+            'bank_account_id'   => 'nullable|exists:bank_accounts,id',
+            'no_receipt'        => 'nullable|boolean',
+            'no_receipt_reason' => 'nullable|string|max:255',
+            'reference_no'      => 'nullable|string|max:150',
+            'receipt_file'      => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'notes'             => 'nullable|string',
         ]);
 
         $amount = (float)$request->amount;
         $filePath = null;
         $originalFilename = null;
 
-        if ($request->hasFile('receipt_file')) {
+        $isNoReceipt = $request->boolean('no_receipt');
+
+        if (!$isNoReceipt && $request->hasFile('receipt_file')) {
             $file = $request->file('receipt_file');
             $filePath = FileUploadService::upload($file, 'credit_receipts');
             $originalFilename = $file->getClientOriginalName();
         }
 
-        DB::transaction(function () use ($ledger, $request, $amount, $filePath, $originalFilename) {
+        // Resolve funding accounts
+        $bankAccountId = $request->bank_account_id;
+        $fundingCoaId = $request->coa_account_id;
+
+        if ($request->filled('account_source')) {
+            $parts = explode(':', $request->account_source);
+            if (count($parts) === 2) {
+                if ($parts[0] === 'bank') {
+                    $bankAccountId = (int)$parts[1];
+                    $bank = BankAccount::find($bankAccountId);
+                    $fundingCoaId = $bank?->coa_id;
+                } elseif ($parts[0] === 'coa') {
+                    $fundingCoaId = (int)$parts[1];
+                }
+            }
+        } elseif (!$fundingCoaId && $bankAccountId) {
+            $bank = BankAccount::find($bankAccountId);
+            $fundingCoaId = $bank?->coa_id;
+        }
+
+        $paymentNotes = $request->notes ?? '';
+        if ($isNoReceipt) {
+            $reason = $request->filled('no_receipt_reason') ? " ({$request->no_receipt_reason})" : "";
+            $paymentNotes = trim($paymentNotes . " [Paid without receipt{$reason}]");
+        }
+
+        DB::transaction(function () use ($ledger, $request, $amount, $filePath, $originalFilename, $bankAccountId, $fundingCoaId, $paymentNotes) {
             // 1. Create Payment Record
             $payment = CreditStorePayment::create([
                 'credit_store_ledger_id' => $ledger->id,
                 'payment_date'           => $request->payment_date,
                 'amount'                 => $amount,
                 'payment_method'         => $request->payment_method,
-                'bank_account_id'        => $request->bank_account_id,
-                'coa_account_id'         => $request->coa_account_id,
+                'bank_account_id'        => $bankAccountId,
+                'coa_account_id'         => $fundingCoaId,
                 'reference_no'           => $request->reference_no,
                 'receipt_path'           => $filePath,
                 'original_filename'      => $originalFilename,
-                'notes'                  => $request->notes,
+                'notes'                  => $paymentNotes,
                 'recorded_by'            => Auth::id(),
             ]);
 
             // 2. Create Journal Entry
-            $fundingCoaId = $request->coa_account_id;
-            if (!$fundingCoaId && $request->bank_account_id) {
-                $bank = BankAccount::find($request->bank_account_id);
-                $fundingCoaId = $bank?->coa_id;
-            }
-
             $creditCoaId = $ledger->coa_account_id;
             if (!$creditCoaId) {
                 $c = ChartOfAccount::where('code', '5110')->first();
@@ -184,6 +240,9 @@ class CreditStoreController extends Controller
 
                     // Decrement funding source balance
                     ChartOfAccount::where('id', $fundingCoaId)->decrement('current_balance', $amount);
+                    if ($bankAccountId) {
+                        BankAccount::where('id', $bankAccountId)->decrement('current_balance', $amount);
+                    }
 
                     $payment->update(['journal_entry_id' => $journal->id]);
                 } catch (\Throwable $je) {
@@ -203,7 +262,7 @@ class CreditStoreController extends Controller
                     'created_by'   => Auth::id(),
                     'approved_by'  => Auth::id(),
                     'approved_at'  => now(),
-                    'notes'        => $request->notes,
+                    'notes'        => $paymentNotes,
                 ]);
             } catch (\Throwable $ex) {
                 \Illuminate\Support\Facades\Log::error("CreditExpenseCreate error: " . $ex->getMessage());
@@ -219,44 +278,71 @@ class CreditStoreController extends Controller
             ]);
         });
 
+        $receiptMsg = $isNoReceipt ? " (without receipt)" : "";
         return redirect()->route('finance.credit-store.show', $ledger)
-            ->with('success', "Payment of " . number_format($amount, 2) . " ETB recorded successfully. Deducted from Credit Ledger and logged into Expenses.");
+            ->with('success', "Payment of " . number_format($amount, 2) . " ETB recorded successfully{$receiptMsg}. Deducted from Credit Ledger and logged into Expenses.");
     }
 
     public function batchPayment(Request $request)
     {
         $request->validate([
-            'selected_ids'   => 'required|array|min:1',
-            'selected_ids.*' => 'exists:credit_store_ledgers,id',
-            'amounts'        => 'required|array',
-            'payment_date'   => 'required|date',
-            'payment_method' => 'required|string|in:cash,bank_transfer,cheque,other',
-            'coa_account_id' => 'nullable|exists:chart_of_accounts,id',
-            'bank_account_id'=> 'nullable|exists:bank_accounts,id',
-            'reference_no'   => 'nullable|string|max:150',
-            'receipt_file'   => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
-            'notes'          => 'nullable|string',
+            'selected_ids'        => 'required|array|min:1',
+            'selected_ids.*'      => 'exists:credit_store_ledgers,id',
+            'amounts'             => 'required|array',
+            'payment_date'        => 'required|date',
+            'payment_method'      => 'required|string|in:cash,bank_transfer,cheque,other',
+            'account_source'      => 'nullable|string',
+            'coa_account_id'      => 'nullable|exists:chart_of_accounts,id',
+            'bank_account_id'     => 'nullable|exists:bank_accounts,id',
+            'no_receipt'          => 'nullable|boolean',
+            'no_receipt_reason'   => 'nullable|string|max:255',
+            'reference_no'        => 'nullable|string|max:150',
+            'receipt_file'        => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'notes'               => 'nullable|string',
         ]);
 
+        $isNoReceipt = $request->boolean('no_receipt');
         $filePath = null;
         $originalFilename = null;
 
-        if ($request->hasFile('receipt_file')) {
+        if (!$isNoReceipt && $request->hasFile('receipt_file')) {
             $file = $request->file('receipt_file');
             $filePath = FileUploadService::upload($file, 'credit_receipts');
             $originalFilename = $file->getClientOriginalName();
         }
 
+        // Resolve funding accounts
+        $bankAccountId = $request->bank_account_id;
+        $fundingCoaId = $request->coa_account_id;
+
+        if ($request->filled('account_source')) {
+            $parts = explode(':', $request->account_source);
+            if (count($parts) === 2) {
+                if ($parts[0] === 'bank') {
+                    $bankAccountId = (int)$parts[1];
+                    $bank = BankAccount::find($bankAccountId);
+                    $fundingCoaId = $bank?->coa_id;
+                } elseif ($parts[0] === 'coa') {
+                    $fundingCoaId = (int)$parts[1];
+                }
+            }
+        } elseif (!$fundingCoaId && $bankAccountId) {
+            $bank = BankAccount::find($bankAccountId);
+            $fundingCoaId = $bank?->coa_id;
+        }
+
+        $baseNotes = $request->notes ?? '';
+        if ($isNoReceipt) {
+            $reason = $request->filled('no_receipt_reason') ? " ({$request->no_receipt_reason})" : "";
+            $baseNotes = trim($baseNotes . " [Batch settlement paid without receipt{$reason}]");
+        } else {
+            $baseNotes = trim($baseNotes . " (Batch settlement with shared receipt)");
+        }
+
         $totalPaidSum = 0;
         $processedCount = 0;
 
-        DB::transaction(function () use ($request, $filePath, $originalFilename, &$totalPaidSum, &$processedCount) {
-            $fundingCoaId = $request->coa_account_id;
-            if (!$fundingCoaId && $request->bank_account_id) {
-                $bank = BankAccount::find($request->bank_account_id);
-                $fundingCoaId = $bank?->coa_id;
-            }
-
+        DB::transaction(function () use ($request, $filePath, $originalFilename, $bankAccountId, $fundingCoaId, $baseNotes, &$totalPaidSum, &$processedCount) {
             foreach ($request->selected_ids as $ledgerId) {
                 $ledger = CreditStoreLedger::lockForUpdate()->find($ledgerId);
                 if (!$ledger) {
@@ -275,18 +361,18 @@ class CreditStoreController extends Controller
                     continue;
                 }
 
-                // 1. Create Payment Record linked to this single shared receipt
+                // 1. Create Payment Record
                 $payment = CreditStorePayment::create([
                     'credit_store_ledger_id' => $ledger->id,
                     'payment_date'           => $request->payment_date,
                     'amount'                 => $amount,
                     'payment_method'         => $request->payment_method,
-                    'bank_account_id'        => $request->bank_account_id,
-                    'coa_account_id'         => $request->coa_account_id,
+                    'bank_account_id'        => $bankAccountId,
+                    'coa_account_id'         => $fundingCoaId,
                     'reference_no'           => $request->reference_no,
                     'receipt_path'           => $filePath,
                     'original_filename'      => $originalFilename,
-                    'notes'                  => $request->notes ? ($request->notes . " (Batch settlement with single receipt)") : "Batch settlement with shared receipt",
+                    'notes'                  => $baseNotes,
                     'recorded_by'            => Auth::id(),
                 ]);
 
@@ -330,6 +416,9 @@ class CreditStoreController extends Controller
                         ]);
 
                         ChartOfAccount::where('id', $fundingCoaId)->decrement('current_balance', $amount);
+                        if ($bankAccountId) {
+                            BankAccount::where('id', $bankAccountId)->decrement('current_balance', $amount);
+                        }
 
                         $payment->update(['journal_entry_id' => $journal->id]);
                     } catch (\Throwable $je) {
@@ -349,7 +438,7 @@ class CreditStoreController extends Controller
                         'created_by'   => Auth::id(),
                         'approved_by'  => Auth::id(),
                         'approved_at'  => now(),
-                        'notes'        => $request->notes,
+                        'notes'        => $baseNotes,
                     ]);
                 } catch (\Throwable $ex) {
                     \Illuminate\Support\Facades\Log::error("BatchCreditExpenseCreate error: " . $ex->getMessage());
@@ -369,7 +458,8 @@ class CreditStoreController extends Controller
             }
         });
 
+        $receiptText = $isNoReceipt ? "without receipt" : "with shared receipt attached";
         return redirect()->route('finance.credit-store.index')
-            ->with('success', "Batch credit settlement complete! Recorded payment for {$processedCount} credit purchase(s) totaling " . number_format($totalPaidSum, 2) . " ETB with shared receipt attached.");
+            ->with('success', "Batch credit settlement complete! Recorded payment for {$processedCount} credit purchase(s) totaling " . number_format($totalPaidSum, 2) . " ETB {$receiptText}.");
     }
 }

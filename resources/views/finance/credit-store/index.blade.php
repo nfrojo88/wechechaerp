@@ -20,9 +20,12 @@
             </h1>
             <p class="text-muted small mb-0">Track materials purchased on credit, liquidate supplier liabilities, upload receipts, and record expenses.</p>
         </div>
-        <div class="d-flex gap-2">
-            <button type="button" class="btn btn-success btn-sm shadow-sm" id="headerBatchPayBtn" onclick="openBatchPaymentModal()" disabled>
-                <i class="fas fa-receipt me-1"></i> Settle Selected with 1 Receipt (<span id="headerBatchCount">0</span>)
+        <div class="d-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-success btn-sm shadow-sm fw-bold" id="headerBatchPayBtn" onclick="openBatchPaymentModal(false)" disabled>
+                <i class="fas fa-receipt me-1"></i> Settle with Receipt (<span id="headerBatchCount">0</span>)
+            </button>
+            <button type="button" class="btn btn-warning btn-sm shadow-sm text-dark fw-bold" id="headerBatchNoReceiptBtn" onclick="openBatchPaymentModal(true)" disabled>
+                <i class="fa-solid fa-ban me-1"></i> Pay Without Receipt (<span id="headerBatchCountNoRec">0</span>)
             </button>
             <a href="{{ route('purchase-requests.index') }}" class="btn btn-outline-secondary btn-sm shadow-sm">
                 <i class="fas fa-list me-1"></i> All Purchase Requests
@@ -181,7 +184,7 @@
                     <div class="small text-muted">
                         Total Remaining Balance: <strong class="text-danger font-monospace fs-6" id="batchTotalRemaining">0.00 ETB</strong>
                         <span class="mx-2">•</span>
-                        <span>Upload 1 shared receipt to liquidate all selected credits at once.</span>
+                        <span>Disburse from selected account with or without receipt proof.</span>
                     </div>
                 </div>
             </div>
@@ -189,9 +192,13 @@
                 <button type="button" class="btn btn-sm btn-outline-secondary bg-white shadow-sm" onclick="clearAllSelections()">
                     <i class="fas fa-times me-1"></i> Deselect All
                 </button>
-                <button type="button" class="btn btn-sm btn-success fw-bold shadow px-3 py-2 d-flex align-items-center gap-2" onclick="openBatchPaymentModal()">
-                    <i class="fa-solid fa-upload"></i>
-                    <span>Settle Selected with 1 Receipt</span>
+                <button type="button" class="btn btn-sm btn-success fw-bold shadow px-3 py-2 d-flex align-items-center gap-2" onclick="openBatchPaymentModal(false)">
+                    <i class="fa-solid fa-receipt"></i>
+                    <span>Settle with Receipt</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-warning text-dark fw-bold shadow px-3 py-2 d-flex align-items-center gap-2" onclick="openBatchPaymentModal(true)">
+                    <i class="fa-solid fa-ban"></i>
+                    <span>Pay Without Receipt</span>
                 </button>
             </div>
         </div>
@@ -311,8 +318,13 @@
                                             <i class="fas fa-paperclip"></i> Receipt
                                         </a>
                                     @endif
+                                    @if($isPayable)
+                                        <button type="button" class="btn btn-warning btn-sm text-dark fw-bold shadow-sm" onclick="paySingleCredit({{ $ledger->id }}, true)" title="Quickly pay this credit without uploading receipt">
+                                            <i class="fa-solid fa-ban me-1"></i> Pay No Receipt
+                                        </button>
+                                    @endif
                                     <a href="{{ route('finance.credit-store.show', $ledger) }}" class="btn btn-outline-primary btn-sm shadow-sm" title="View Details & Record Payment">
-                                        <i class="fas fa-credit-card me-1"></i> Manage & Pay
+                                        <i class="fas fa-credit-card me-1"></i> Manage
                                     </a>
                                     @if($ledger->purchase_request_id)
                                         <a href="{{ route('purchase-requests.show', $ledger->purchase_request_id) }}" class="btn btn-light btn-sm text-secondary border shadow-sm" title="View Purchase Request">
@@ -412,25 +424,69 @@
                         </div>
                     </div>
 
-                    <!-- Step 2: Shared Receipt & Payment Details -->
+                    <!-- Step 2: Disbursing Account & Receipt Option -->
                     <div class="card border shadow-sm rounded-3">
-                        <div class="card-header bg-light py-2 px-3">
+                        <div class="card-header bg-light py-2 px-3 d-flex align-items-center justify-content-between">
                             <span class="fw-bold text-dark small text-uppercase">
-                                <i class="fas fa-money-check-dollar text-success me-1"></i> 2. Shared Receipt & Payment Proof
+                                <i class="fas fa-money-check-dollar text-success me-1"></i> 2. Disbursing Account &amp; Receipt Option
+                            </span>
+                            <span id="modalReceiptModeBadge" class="badge bg-success-subtle text-success border border-success px-2 py-1 small">
+                                With Receipt Proof
                             </span>
                         </div>
                         <div class="card-body p-3">
                             <div class="row g-3">
-                                <!-- Upload Receipt File -->
+                                <!-- Unified Paying Account Selector -->
                                 <div class="col-12 col-md-6">
                                     <label class="form-label small fw-bold text-uppercase text-dark">
-                                        Upload Payment Receipt / Slip <span class="text-danger">*</span>
+                                        Select Paying / Disbursing Account <span class="text-danger">*</span>
                                     </label>
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text bg-light"><i class="fas fa-file-upload text-success"></i></span>
-                                        <input type="file" name="receipt_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                                    <select name="account_source" id="paymentAccountSelect" class="form-select form-select-sm" required onchange="onAccountSelectChange(this)">
+                                        <option value="">-- Choose Bank or Cash Account * --</option>
+                                        @if(isset($bankAccounts) && $bankAccounts->count() > 0)
+                                            <optgroup label="🏦 Company Bank Accounts">
+                                                @foreach($bankAccounts as $bk)
+                                                    <option value="bank:{{ $bk->id }}" data-method="bank_transfer" data-balance="{{ (float)($bk->current_balance ?? 0) }}" {{ $loop->first ? 'selected' : '' }}>
+                                                        {{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: ETB {{ number_format($bk->current_balance ?? 0, 2) }})
+                                                    </option>
+                                                @endforeach
+                                            </optgroup>
+                                        @endif
+                                        @if(isset($cashAccounts) && $cashAccounts->count() > 0)
+                                            <optgroup label="💵 Cash on Hand &amp; Site Petty Cash">
+                                                @foreach($cashAccounts as $ca)
+                                                    <option value="coa:{{ $ca->id }}" data-method="cash" data-balance="{{ (float)$ca->current_balance }}">
+                                                        [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                    </option>
+                                                @endforeach
+                                            </optgroup>
+                                        @endif
+                                        @if(isset($coaAccounts))
+                                            <optgroup label="📂 Other Asset / Funding Accounts">
+                                                @foreach($coaAccounts->whereNotIn('id', ($cashAccounts ?? collect())->pluck('id')) as $ca)
+                                                    <option value="coa:{{ $ca->id }}" data-method="other" data-balance="{{ (float)$ca->current_balance }}">
+                                                        [{{ $ca->code }}] {{ $ca->name }} (Bal: ETB {{ number_format($ca->current_balance, 2) }})
+                                                    </option>
+                                                @endforeach
+                                            </optgroup>
+                                        @endif
+                                    </select>
+                                    <div class="small text-muted mt-1" id="accountBalanceDisplay">
+                                        <i class="fa-solid fa-coins text-warning me-1"></i>Funds will be disbursed from this selected account.
                                     </div>
-                                    <div class="form-text small text-muted">Attach bank slip, cheque scan, or signed vendor voucher (PDF, JPG, PNG up to 10MB). Applied to all selected items.</div>
+                                </div>
+
+                                <!-- Payment Method -->
+                                <div class="col-12 col-md-3">
+                                    <label class="form-label small fw-bold text-uppercase text-dark">
+                                        Payment Method <span class="text-danger">*</span>
+                                    </label>
+                                    <select name="payment_method" id="paymentMethodSelect" class="form-select form-select-sm" required>
+                                        <option value="bank_transfer" selected>Bank Transfer (Disbursement)</option>
+                                        <option value="cheque">Cheque</option>
+                                        <option value="cash">Cash Payment</option>
+                                        <option value="other">Other Method</option>
+                                    </select>
                                 </div>
 
                                 <!-- Payment Date -->
@@ -441,39 +497,52 @@
                                     <input type="date" name="payment_date" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" required>
                                 </div>
 
-                                <!-- Payment Method -->
-                                <div class="col-12 col-md-3">
-                                    <label class="form-label small fw-bold text-uppercase text-dark">
-                                        Payment Method <span class="text-danger">*</span>
-                                    </label>
-                                    <select name="payment_method" class="form-select form-select-sm" required>
-                                        <option value="bank_transfer" selected>Bank Transfer (Disbursement)</option>
-                                        <option value="cheque">Cheque</option>
-                                        <option value="cash">Cash Payment</option>
-                                        <option value="other">Other Method</option>
-                                    </select>
-                                </div>
+                                <!-- Receipt Option Switch Card (Pay With vs Pay Without Receipt) -->
+                                <div class="col-12">
+                                    <div class="card border rounded-3 overflow-hidden shadow-xs bg-light">
+                                        <div class="card-header bg-white py-2 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2 border-bottom">
+                                            <span class="small fw-bold text-dark text-uppercase">
+                                                <i class="fa-solid fa-receipt text-primary me-1"></i> Receipt / Voucher Proof
+                                            </span>
+                                            <div class="form-check form-switch mb-0">
+                                                <input class="form-check-input" type="checkbox" role="switch" id="noReceiptToggle" name="no_receipt" value="1" onchange="toggleReceiptMode(this.checked)">
+                                                <label class="form-check-label small fw-bold text-dark" for="noReceiptToggle">
+                                                    <span class="badge bg-warning text-dark border border-warning px-2.5 py-1">
+                                                        <i class="fa-solid fa-ban me-1"></i> Pay Without Receipt
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="card-body p-3">
+                                            <!-- With Receipt View (Default) -->
+                                            <div id="withReceiptSection">
+                                                <label class="form-label small fw-semibold text-muted mb-1">
+                                                    Upload Payment Receipt / Slip <span class="text-muted small">(Optional / Recommended)</span>
+                                                </label>
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text bg-white"><i class="fas fa-file-upload text-success"></i></span>
+                                                    <input type="file" name="receipt_file" id="receiptFileInput" class="form-control form-control-sm bg-white" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                                </div>
+                                                <div class="form-text small text-muted">Attach bank slip, cheque scan, or signed vendor voucher (PDF, JPG, PNG up to 10MB). Applied to all selected items.</div>
+                                            </div>
 
-                                <!-- Funding Bank Account -->
-                                <div class="col-12 col-md-6">
-                                    <label class="form-label small fw-bold text-uppercase text-muted">Funding Bank Account</label>
-                                    <select name="bank_account_id" class="form-select form-select-sm">
-                                        <option value="">-- Select Bank Account (Optional) --</option>
-                                        @foreach($bankAccounts ?? [] as $bk)
-                                            <option value="{{ $bk->id }}">{{ $bk->bank_name }} - {{ $bk->account_number }} (Bal: {{ number_format($bk->current_balance ?? 0, 2) }})</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-
-                                <!-- Funding Chart of Account -->
-                                <div class="col-12 col-md-6">
-                                    <label class="form-label small fw-bold text-uppercase text-muted">Funding Chart of Account (COA)</label>
-                                    <select name="coa_account_id" class="form-select form-select-sm">
-                                        <option value="">-- Select COA Source (Optional) --</option>
-                                        @foreach($coaAccounts ?? [] as $ca)
-                                            <option value="{{ $ca->id }}">{{ $ca->code }} - {{ $ca->name }} (Bal: {{ number_format($ca->current_balance ?? 0, 2) }})</option>
-                                        @endforeach
-                                    </select>
+                                            <!-- Without Receipt View -->
+                                            <div id="withoutReceiptSection" class="p-3 rounded-2 border border-warning bg-warning bg-opacity-10 d-none">
+                                                <div class="d-flex align-items-center gap-2 text-dark small mb-1">
+                                                    <i class="fa-solid fa-circle-check text-warning fa-lg"></i>
+                                                    <strong>Pay Without Receipt Option Active:</strong>
+                                                </div>
+                                                <p class="small text-dark mb-2">
+                                                    You are choosing to pay and liquidate these supplier credits directly without uploading a receipt document. Funds will be deducted from your selected account and logged into Company Expenses immediately.
+                                                </p>
+                                                <div class="row g-2">
+                                                    <div class="col-12">
+                                                        <input type="text" name="no_receipt_reason" class="form-control form-control-sm bg-white" placeholder="Optional explanation (e.g., Direct bank debit, Trust credit settlement, Cash payout, Verbal approval)">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <!-- Reference No -->
@@ -497,7 +566,7 @@
                         <i class="fas fa-times me-1"></i> Cancel
                     </button>
                     <button type="submit" class="btn btn-success fw-bold shadow-sm px-4 py-2" id="submitBatchPaymentBtn">
-                        <i class="fas fa-check-circle me-1"></i> Record Batch Payment & Liquidate (<span id="modalBtnTotal">0.00 ETB</span>)
+                        <i class="fas fa-check-circle me-1"></i> <span id="modalSubmitBtnText">Record Batch Payment &amp; Liquidate</span> (<span id="modalBtnTotal">0.00 ETB</span>)
                     </button>
                 </div>
             </form>
@@ -546,22 +615,27 @@
         const totalRemainingEl = document.getElementById('batchTotalRemaining');
         const headerBtn = document.getElementById('headerBatchPayBtn');
         const headerCount = document.getElementById('headerBatchCount');
+        const headerNoRecBtn = document.getElementById('headerBatchNoReceiptBtn');
+        const headerNoRecCount = document.getElementById('headerBatchCountNoRec');
         const masterCb = document.getElementById('masterCheckbox');
 
         // Update counts and amounts
         if (countBadge) countBadge.textContent = count;
         if (headerCount) headerCount.textContent = count;
+        if (headerNoRecCount) headerNoRecCount.textContent = count;
         if (totalRemainingEl) totalRemainingEl.textContent = totalRemaining.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
 
         // Toggle UI visibility
         if (count > 0) {
             batchBar.classList.remove('d-none');
             batchBar.classList.add('d-flex');
-            headerBtn.removeAttribute('disabled');
+            if (headerBtn) headerBtn.removeAttribute('disabled');
+            if (headerNoRecBtn) headerNoRecBtn.removeAttribute('disabled');
         } else {
             batchBar.classList.add('d-none');
             batchBar.classList.remove('d-flex');
-            headerBtn.setAttribute('disabled', 'disabled');
+            if (headerBtn) headerBtn.setAttribute('disabled', 'disabled');
+            if (headerNoRecBtn) headerNoRecBtn.setAttribute('disabled', 'disabled');
         }
 
         // Check if all selectable are checked
@@ -591,7 +665,75 @@
         updateSelectionState();
     }
 
-    function openBatchPaymentModal() {
+    function paySingleCredit(ledgerId, isNoReceipt = false) {
+        clearAllSelections();
+        const cb = document.querySelector(`.credit-checkbox[value="${ledgerId}"]`);
+        if (cb) {
+            cb.checked = true;
+            updateSelectionState();
+            openBatchPaymentModal(isNoReceipt);
+        }
+    }
+
+    function toggleReceiptMode(isNoReceipt) {
+        const withSection = document.getElementById('withReceiptSection');
+        const withoutSection = document.getElementById('withoutReceiptSection');
+        const modeBadge = document.getElementById('modalReceiptModeBadge');
+        const submitBtnText = document.getElementById('modalSubmitBtnText');
+        const submitBtn = document.getElementById('submitBatchPaymentBtn');
+        const fileInput = document.getElementById('receiptFileInput');
+
+        if (isNoReceipt) {
+            if (withSection) withSection.classList.add('d-none');
+            if (withoutSection) withoutSection.classList.remove('d-none');
+            if (modeBadge) {
+                modeBadge.className = 'badge bg-warning-subtle text-dark border border-warning px-2 py-1 small';
+                modeBadge.innerHTML = '<i class="fa-solid fa-ban me-1"></i> Pay Without Receipt';
+            }
+            if (submitBtnText) submitBtnText.textContent = 'Pay Without Receipt & Liquidate';
+            if (submitBtn) {
+                submitBtn.classList.remove('btn-success');
+                submitBtn.classList.add('btn-warning', 'text-dark');
+            }
+            if (fileInput) fileInput.value = '';
+        } else {
+            if (withSection) withSection.classList.remove('d-none');
+            if (withoutSection) withoutSection.classList.add('d-none');
+            if (modeBadge) {
+                modeBadge.className = 'badge bg-success-subtle text-success border border-success px-2 py-1 small';
+                modeBadge.innerHTML = '<i class="fas fa-file-invoice me-1"></i> With Receipt Proof';
+            }
+            if (submitBtnText) submitBtnText.textContent = 'Record Payment & Liquidate';
+            if (submitBtn) {
+                submitBtn.classList.remove('btn-warning', 'text-dark');
+                submitBtn.classList.add('btn-success');
+            }
+        }
+    }
+
+    function onAccountSelectChange(selectEl) {
+        const selectedOpt = selectEl.options[selectEl.selectedIndex];
+        const methodSelect = document.getElementById('paymentMethodSelect');
+        const balDisplay = document.getElementById('accountBalanceDisplay');
+
+        if (selectedOpt && selectedOpt.value) {
+            const method = selectedOpt.getAttribute('data-method') || 'bank_transfer';
+            const bal = parseFloat(selectedOpt.getAttribute('data-balance')) || 0;
+
+            if (methodSelect) {
+                methodSelect.value = method;
+            }
+            if (balDisplay) {
+                balDisplay.innerHTML = `<i class="fa-solid fa-wallet text-success me-1"></i> Selected Account Balance: <strong class="text-dark font-monospace">ETB ${bal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</strong>`;
+            }
+        } else {
+            if (balDisplay) {
+                balDisplay.innerHTML = `<i class="fa-solid fa-coins text-warning me-1"></i> Funds will be disbursed from this selected account.`;
+            }
+        }
+    }
+
+    function openBatchPaymentModal(isNoReceipt = false) {
         if (selectedCredits.size === 0) {
             alert('Please select at least one credit purchase with an outstanding balance first.');
             return;
@@ -638,6 +780,19 @@
         document.getElementById('modalSumRemaining').textContent = sumRemaining.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
 
         recalcBatchModalTotal();
+
+        // Configure receipt mode
+        const toggle = document.getElementById('noReceiptToggle');
+        if (toggle) {
+            toggle.checked = isNoReceipt;
+            toggleReceiptMode(isNoReceipt);
+        }
+
+        // Trigger balance update on default account
+        const accSelect = document.getElementById('paymentAccountSelect');
+        if (accSelect) {
+            onAccountSelectChange(accSelect);
+        }
 
         const modalEl = document.getElementById('batchPaymentModal');
         const modal = new bootstrap.Modal(modalEl);
@@ -688,11 +843,11 @@
                     return false;
                 }
 
-                const fileInput = form.querySelector('input[type="file"][name="receipt_file"]');
-                if (fileInput && fileInput.files.length === 0) {
+                const accSelect = document.getElementById('paymentAccountSelect');
+                if (!accSelect || !accSelect.value) {
                     e.preventDefault();
-                    alert('Please upload a receipt file (proof of payment) to complete the multi-credit settlement.');
-                    fileInput.focus();
+                    alert('Please select the paying / disbursing bank or cash account.');
+                    if (accSelect) accSelect.focus();
                     return false;
                 }
             });
