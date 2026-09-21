@@ -745,19 +745,35 @@
                         {{-- Paying Bank / COA Account --}}
                         <div class="col-12 col-md-6">
                             <label class="form-label small fw-bold text-dark">Disbursement Account (Bank / COA) <span class="text-danger">*</span></label>
-                            <select name="account_source" id="settleVatAccountSource" class="form-select" required>
+                            <select name="account_source" id="settleVatAccountSource" class="form-select" onchange="syncAssignedStaff(this, 'settleVatStaffSelect', 'settleVatStaffBadge')" required>
                                 <option value="">-- Choose Funding Account --</option>
                                 <optgroup label="Bank Accounts (Commercial Banks)">
                                     @foreach($bankAccounts as $ba)
-                                        <option value="bank:{{ $ba->id }}">
+                                        @php
+                                            $baStaff = $ba->assignedStaff ?? ($ba->coa?->manager ?? null);
+                                            $baStaffId = $baStaff?->id ?? '';
+                                            $baStaffName = $baStaff?->name ?? '';
+                                        @endphp
+                                        <option value="bank:{{ $ba->id }}" 
+                                                data-assigned-staff-id="{{ $baStaffId }}" 
+                                                data-assigned-staff-name="{{ $baStaffName }}">
                                             {{ $ba->bank_name }} - {{ $ba->account_number }} (Bal: ETB {{ number_format($ba->current_balance, 2) }})
+                                            @if($baStaffName) [Custodian: {{ $baStaffName }}] @endif
                                         </option>
                                     @endforeach
                                 </optgroup>
                                 <optgroup label="Chart of Accounts (Cash &amp; Equivalents)">
                                     @foreach($chartOfAccounts as $coa)
-                                        <option value="coa:{{ $coa->id }}">
+                                        @php
+                                            $coaStaff = $coa->manager;
+                                            $coaStaffId = $coaStaff?->id ?? '';
+                                            $coaStaffName = $coaStaff?->name ?? '';
+                                        @endphp
+                                        <option value="coa:{{ $coa->id }}" 
+                                                data-assigned-staff-id="{{ $coaStaffId }}" 
+                                                data-assigned-staff-name="{{ $coaStaffName }}">
                                             {{ $coa->code }} - {{ $coa->name }} ({{ ucfirst($coa->subtype ?? $coa->type) }})
+                                            @if($coaStaffName) [Custodian: {{ $coaStaffName }}] @endif
                                         </option>
                                     @endforeach
                                 </optgroup>
@@ -766,13 +782,18 @@
 
                         {{-- Assign Finance Staff --}}
                         <div class="col-12 col-md-6">
-                            <label class="form-label small fw-bold text-dark">
-                                <i class="fa-solid fa-user-check text-primary me-1"></i> Assign Finance Staff to Pay <span class="text-danger">*</span>
-                            </label>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label small fw-bold text-dark mb-0">
+                                    <i class="fa-solid fa-user-check text-primary me-1"></i> Assign Finance Staff to Pay <span class="text-danger">*</span>
+                                </label>
+                                <span id="settleVatStaffBadge" class="badge bg-success-subtle text-success border border-success-subtle d-none" style="font-size:0.7rem;">
+                                    <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Auto-assigned from Account
+                                </span>
+                            </div>
                             <select name="assigned_finance_staff_id" id="settleVatStaffSelect" class="form-select" required>
                                 <option value="">-- Choose Finance Staff --</option>
                                 @foreach($financeStaff as $staff)
-                                    <option value="{{ $staff->id }}" {{ Auth::id() == $staff->id ? 'selected' : '' }}>
+                                    <option value="{{ $staff->id }}">
                                         {{ $staff->name }} ({{ $staff->email }})
                                     </option>
                                 @endforeach
@@ -881,19 +902,35 @@
                         {{-- Paying Bank / COA Account --}}
                         <div class="col-12 col-md-6">
                             <label class="form-label small fw-bold text-dark">Disbursement Account (Bank / COA) <span class="text-danger">*</span></label>
-                            <select name="account_source" id="settleWhtAccountSource" class="form-select" required>
+                            <select name="account_source" id="settleWhtAccountSource" class="form-select" onchange="syncAssignedStaff(this, 'settleWhtStaffSelect', 'settleWhtStaffBadge')" required>
                                 <option value="">-- Choose Funding Account --</option>
                                 <optgroup label="Bank Accounts (Commercial Banks)">
                                     @foreach($bankAccounts as $ba)
-                                        <option value="bank:{{ $ba->id }}">
+                                        @php
+                                            $baStaff = $ba->assignedStaff ?? ($ba->coa?->manager ?? null);
+                                            $baStaffId = $baStaff?->id ?? '';
+                                            $baStaffName = $baStaff?->name ?? '';
+                                        @endphp
+                                        <option value="bank:{{ $ba->id }}" 
+                                                data-assigned-staff-id="{{ $baStaffId }}" 
+                                                data-assigned-staff-name="{{ $baStaffName }}">
                                             {{ $ba->bank_name }} - {{ $ba->account_number }} (Bal: ETB {{ number_format($ba->current_balance, 2) }})
+                                            @if($baStaffName) [Custodian: {{ $baStaffName }}] @endif
                                         </option>
                                     @endforeach
                                 </optgroup>
                                 <optgroup label="Chart of Accounts (Cash &amp; Equivalents)">
                                     @foreach($chartOfAccounts as $coa)
-                                        <option value="coa:{{ $coa->id }}">
+                                        @php
+                                            $coaStaff = $coa->manager;
+                                            $coaStaffId = $coaStaff?->id ?? '';
+                                            $coaStaffName = $coaStaff?->name ?? '';
+                                        @endphp
+                                        <option value="coa:{{ $coa->id }}" 
+                                                data-assigned-staff-id="{{ $coaStaffId }}" 
+                                                data-assigned-staff-name="{{ $coaStaffName }}">
                                             {{ $coa->code }} - {{ $coa->name }} ({{ ucfirst($coa->subtype ?? $coa->type) }})
+                                            @if($coaStaffName) [Custodian: {{ $coaStaffName }}] @endif
                                         </option>
                                     @endforeach
                                 </optgroup>
@@ -902,13 +939,18 @@
 
                         {{-- Assign Finance Staff --}}
                         <div class="col-12 col-md-6">
-                            <label class="form-label small fw-bold text-dark">
-                                <i class="fa-solid fa-user-check text-primary me-1"></i> Assign Finance Staff to Pay <span class="text-danger">*</span>
-                            </label>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label small fw-bold text-dark mb-0">
+                                    <i class="fa-solid fa-user-check text-primary me-1"></i> Assign Finance Staff to Pay <span class="text-danger">*</span>
+                                </label>
+                                <span id="settleWhtStaffBadge" class="badge bg-success-subtle text-success border border-success-subtle d-none" style="font-size:0.7rem;">
+                                    <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Auto-assigned from Account
+                                </span>
+                            </div>
                             <select name="assigned_finance_staff_id" id="settleWhtStaffSelect" class="form-select" required>
                                 <option value="">-- Choose Finance Staff --</option>
                                 @foreach($financeStaff as $staff)
-                                    <option value="{{ $staff->id }}" {{ Auth::id() == $staff->id ? 'selected' : '' }}>
+                                    <option value="{{ $staff->id }}">
                                         {{ $staff->name }} ({{ $staff->email }})
                                     </option>
                                 @endforeach
@@ -1257,6 +1299,74 @@
 @endforeach
 
 <script>
+    function syncAssignedStaff(accountSelect, targetStaffSelectId, badgeId) {
+        if (!accountSelect) return;
+        const selectedOpt = accountSelect.options[accountSelect.selectedIndex];
+        if (!selectedOpt) return;
+
+        const staffId = selectedOpt.getAttribute('data-assigned-staff-id');
+        const staffName = selectedOpt.getAttribute('data-assigned-staff-name');
+        const staffSelect = document.getElementById(targetStaffSelectId);
+        const badge = badgeId ? document.getElementById(badgeId) : null;
+
+        if (!staffSelect) return;
+
+        if (staffId && staffId !== '' && staffId !== '0') {
+            let found = false;
+            for (let i = 0; i < staffSelect.options.length; i++) {
+                if (staffSelect.options[i].value == staffId) {
+                    staffSelect.selectedIndex = i;
+                    found = true;
+                    break;
+                }
+            }
+
+            // If not already in the select options, dynamically append and select
+            if (!found && staffName) {
+                const opt = new Option(staffName + ' (Account Custodian)', staffId, true, true);
+                staffSelect.add(opt);
+                staffSelect.value = staffId;
+            }
+
+            if (badge) {
+                badge.classList.remove('d-none');
+                badge.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles me-1"></i>Auto-assigned: ${staffName || 'Account Custodian'}`;
+            }
+
+            // Visual pulse on the assigned staff select
+            staffSelect.classList.add('border-success', 'bg-success', 'bg-opacity-10');
+            setTimeout(() => {
+                staffSelect.classList.remove('border-success', 'bg-success', 'bg-opacity-10');
+            }, 1200);
+        } else {
+            if (badge) {
+                badge.classList.add('d-none');
+            }
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const vatModal = document.getElementById('payVatModal');
+        if (vatModal) {
+            vatModal.addEventListener('shown.bs.modal', function() {
+                const acc = document.getElementById('settleVatAccountSource');
+                if (acc && acc.value) {
+                    syncAssignedStaff(acc, 'settleVatStaffSelect', 'settleVatStaffBadge');
+                }
+            });
+        }
+
+        const whtModal = document.getElementById('payWithholdingModal');
+        if (whtModal) {
+            whtModal.addEventListener('shown.bs.modal', function() {
+                const acc = document.getElementById('settleWhtAccountSource');
+                if (acc && acc.value) {
+                    syncAssignedStaff(acc, 'settleWhtStaffSelect', 'settleWhtStaffBadge');
+                }
+            });
+        }
+    });
+
     function togglePayNowVat(isChecked) {
         const fields = document.getElementById('payVatNowFields');
         const refInput = document.getElementById('settleVatPaymentRef');

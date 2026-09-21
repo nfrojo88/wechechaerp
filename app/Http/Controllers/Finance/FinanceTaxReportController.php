@@ -330,8 +330,8 @@ class FinanceTaxReportController extends Controller
         $records = $query->latest()->paginate(20)->withQueryString();
 
         // Available Bank Accounts & Chart of Accounts
-        $bankAccounts = BankAccount::with('assignedStaff')->orderBy('bank_name')->get();
-        $chartOfAccounts = ChartOfAccount::where('is_active', true)->orderBy('code')->get();
+        $bankAccounts = BankAccount::with(['assignedStaff', 'coa.manager'])->orderBy('bank_name')->get();
+        $chartOfAccounts = ChartOfAccount::with('manager')->where('is_active', true)->orderBy('code')->get();
 
         // Available Finance Staff for Assignment
         $financeStaff = User::whereHas('roles', function ($q) {
@@ -342,6 +342,7 @@ class FinanceTaxReportController extends Controller
 
         $custodianIds = $chartOfAccounts->pluck('assigned_to')
             ->concat($bankAccounts->pluck('assigned_to'))
+            ->concat($bankAccounts->map(fn($b) => $b->coa?->assigned_to))
             ->filter()->unique();
 
         if ($custodianIds->isNotEmpty()) {
