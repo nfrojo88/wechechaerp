@@ -66,6 +66,10 @@ class ExpenseRequest extends Model
         'audit_receipt_verified_by',
         'audit_escalated_3day_at',
         'audit_escalated_5day_at',
+        'tax_settlement_id',
+        'vat_settled',
+        'withholding_settled',
+        'tax_settled_at',
     ];
 
 
@@ -78,6 +82,9 @@ class ExpenseRequest extends Model
         'withholding_rate' => 'decimal:2',
         'withholding_amount' => 'decimal:2',
         'net_amount' => 'decimal:2',
+        'vat_settled' => 'boolean',
+        'withholding_settled' => 'boolean',
+        'tax_settled_at' => 'datetime',
         'employee_approved_at' => 'datetime',
         'hr_reviewed_at' => 'datetime',
         'gm_reviewed_at' => 'datetime',
@@ -235,6 +242,14 @@ class ExpenseRequest extends Model
     public function gmReviewer()
     {
         return $this->belongsTo(User::class, 'gm_reviewer_id');
+    }
+
+    /**
+     * Linked Tax Settlement / Remittance.
+     */
+    public function taxSettlement()
+    {
+        return $this->belongsTo(\App\Models\TaxSettlement::class, 'tax_settlement_id');
     }
 
     /**

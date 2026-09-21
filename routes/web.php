@@ -2062,6 +2062,9 @@ Route::middleware(['auth'])->group(function () {
     // VAT & Withholding Tax Deductions Ledger & Report
     Route::get('finance/tax-deductions', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'index'])->name('finance.tax-deductions.index');
     Route::get('finance/tax-deductions/export-csv', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'exportCsv'])->name('finance.tax-deductions.export-csv');
+    Route::post('finance/tax-deductions/settle', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'initiateSettlement'])->name('finance.tax-deductions.settle');
+    Route::post('finance/tax-deductions/settle/{settlement}/pay', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'recordPayment'])->name('finance.tax-deductions.settle.pay');
+    Route::post('finance/tax-deductions/settle/{settlement}/cancel', [App\Http\Controllers\Finance\FinanceTaxReportController::class, 'cancelSettlement'])->name('finance.tax-deductions.settle.cancel');
 
     Route::resource('payments', App\Http\Controllers\PaymentController::class)->only(['index','create','store','show']);
 
