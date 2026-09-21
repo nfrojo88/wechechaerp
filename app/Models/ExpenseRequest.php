@@ -67,9 +67,13 @@ class ExpenseRequest extends Model
         'audit_escalated_3day_at',
         'audit_escalated_5day_at',
         'tax_settlement_id',
+        'vat_settlement_id',
+        'withholding_settlement_id',
         'vat_settled',
         'withholding_settled',
         'tax_settled_at',
+        'vat_settled_at',
+        'withholding_settled_at',
     ];
 
 
@@ -85,6 +89,8 @@ class ExpenseRequest extends Model
         'vat_settled' => 'boolean',
         'withholding_settled' => 'boolean',
         'tax_settled_at' => 'datetime',
+        'vat_settled_at' => 'datetime',
+        'withholding_settled_at' => 'datetime',
         'employee_approved_at' => 'datetime',
         'hr_reviewed_at' => 'datetime',
         'gm_reviewed_at' => 'datetime',

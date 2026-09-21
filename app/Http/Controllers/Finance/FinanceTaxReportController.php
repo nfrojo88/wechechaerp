@@ -35,7 +35,7 @@ class FinanceTaxReportController extends Controller
                 Schema::create('tax_settlements', function (\Illuminate\Database\Schema\Blueprint $table) {
                     $table->id();
                     $table->string('settlement_number', 50)->unique();
-                    $table->string('tax_type', 30)->default('both');
+                    $table->string('tax_type', 30)->default('both'); // both, vat, withholding
                     $table->timestamp('period_from')->nullable();
                     $table->timestamp('period_to')->nullable();
                     $table->decimal('total_base_amount', 14, 2)->default(0);
@@ -63,6 +63,12 @@ class FinanceTaxReportController extends Controller
                     if (!Schema::hasColumn('expense_requests', 'tax_settlement_id')) {
                         $table->unsignedBigInteger('tax_settlement_id')->nullable()->index();
                     }
+                    if (!Schema::hasColumn('expense_requests', 'vat_settlement_id')) {
+                        $table->unsignedBigInteger('vat_settlement_id')->nullable()->index();
+                    }
+                    if (!Schema::hasColumn('expense_requests', 'withholding_settlement_id')) {
+                        $table->unsignedBigInteger('withholding_settlement_id')->nullable()->index();
+                    }
                     if (!Schema::hasColumn('expense_requests', 'vat_settled')) {
                         $table->boolean('vat_settled')->default(false)->index();
                     }
@@ -72,10 +78,16 @@ class FinanceTaxReportController extends Controller
                     if (!Schema::hasColumn('expense_requests', 'tax_settled_at')) {
                         $table->timestamp('tax_settled_at')->nullable();
                     }
+                    if (!Schema::hasColumn('expense_requests', 'vat_settled_at')) {
+                        $table->timestamp('vat_settled_at')->nullable();
+                    }
+                    if (!Schema::hasColumn('expense_requests', 'withholding_settled_at')) {
+                        $table->timestamp('withholding_settled_at')->nullable();
+                    }
                 });
             }
         } catch (\Throwable $e) {
-            // Silently log or ignore if already existing
+            // Silently ignore if already created
         }
     }
 
@@ -109,19 +121,47 @@ class FinanceTaxReportController extends Controller
                   });
             });
 
-        // Cycle Filtering (Active Cycle starts from zero after payment)
+        // Separate cycle filtering so VAT and Withholding settlements operate independently!
         if ($cycle === 'active') {
-            $query->where('vat_settled', false)
-                  ->where('withholding_settled', false)
-                  ->whereNull('tax_settlement_id');
+            if ($tab === 'vat') {
+                $query->where('vat_settled', false)->whereNull('vat_settlement_id');
+            } elseif ($tab === 'withholding') {
+                $query->where('withholding_settled', false)->whereNull('withholding_settlement_id');
+            } elseif ($tab === 'slips') {
+                $query->where('withholding_settled', false)->whereNull('withholding_settlement_id');
+            } else {
+                // 'all': Show records that have either unsettled VAT OR unsettled Withholding
+                $query->where(function ($q) {
+                    $q->where(function ($sub) {
+                        $sub->where('vat_settled', false)
+                            ->whereNull('vat_settlement_id')
+                            ->where(function ($v) {
+                                $v->where('vat_amount', '>', 0)
+                                  ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
+                            });
+                    })->orWhere(function ($sub) {
+                        $sub->where('withholding_settled', false)
+                            ->whereNull('withholding_settlement_id')
+                            ->where(function ($w) {
+                                $w->where('has_withholding', true)
+                                  ->orWhere('withholding_amount', '>', 0);
+                            });
+                    });
+                });
+            }
         } elseif ($cycle === 'settled') {
-            $query->where(function ($q) {
-                $q->where('vat_settled', true)
-                  ->orWhere('withholding_settled', true)
-                  ->orWhereNotNull('tax_settlement_id');
-            });
+            if ($tab === 'vat') {
+                $query->where('vat_settled', true);
+            } elseif ($tab === 'withholding' || $tab === 'slips') {
+                $query->where('withholding_settled', true);
+            } else {
+                $query->where(function ($q) {
+                    $q->where('vat_settled', true)
+                      ->orWhere('withholding_settled', true);
+                });
+            }
         }
-        // 'all' includes both active and settled
+        // 'all' cycle displays both active and settled without cycle restriction
 
         // Tab Filtering
         if ($tab === 'withholding') {
@@ -192,7 +232,9 @@ class FinanceTaxReportController extends Controller
         $totalGrossBase = $allTaxItems->sum(function ($item) {
             return (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
         });
-        $totalVatAmount = $allTaxItems->sum(function ($item) {
+
+        $totalVatAmount = $allTaxItems->sum(function ($item) use ($cycle) {
+            if ($cycle === 'active' && $item->vat_settled) return 0.0;
             if ((float)$item->vat_amount > 0) return (float)$item->vat_amount;
             $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
             $vatType = $item->vat_type ?? 'none';
@@ -205,33 +247,34 @@ class FinanceTaxReportController extends Controller
             }
             return 0.0;
         });
-        $totalWithholdingAmount = $allTaxItems->sum(function ($item) {
+
+        $totalWithholdingAmount = $allTaxItems->sum(function ($item) use ($cycle) {
+            if ($cycle === 'active' && $item->withholding_settled) return 0.0;
             return (float)$item->calculated_withholding_amount;
         });
+
         $totalNetDisbursed = $allTaxItems->sum(function ($item) {
             return (float)$item->effective_payable_amount;
         });
 
-        $totalWhtTransactions = $allTaxItems->filter(fn($item) => $item->has_withholding || (float)$item->withholding_amount > 0)->count();
+        $totalWhtTransactions = $allTaxItems->filter(fn($item) => ($item->has_withholding || (float)$item->withholding_amount > 0) && (!$cycle === 'active' || !$item->withholding_settled))->count();
         $slipsAttachedCount = $allTaxItems->filter(fn($item) => ($item->has_withholding || (float)$item->withholding_amount > 0) && !empty($item->withholding_receipt))->count();
-        $missingSlipsCount = $totalWhtTransactions - $slipsAttachedCount;
+        $missingSlipsCount = max(0, $totalWhtTransactions - $slipsAttachedCount);
 
-        // Unsettled pool available to pay right now (always computed across all active unsettled records)
-        $unsettledItems = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
+        // ── SEPARATED UNSETTLED METRICS ──────────────────────────────────────────
+        // 1. Unsettled VAT Pool
+        $unsettledVatItems = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
             ->where('vat_settled', false)
-            ->where('withholding_settled', false)
-            ->whereNull('tax_settlement_id')
+            ->whereNull('vat_settlement_id')
             ->where(function ($q) {
-                $q->where('has_withholding', true)
-                  ->orWhere('withholding_amount', '>', 0)
-                  ->orWhere('vat_amount', '>', 0)
+                $q->where('vat_amount', '>', 0)
                   ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
             })
             ->get();
 
-        $unsettledCount = $unsettledItems->count();
-        $unsettledBaseAmount = $unsettledItems->sum(fn($i) => (float)($i->gross_amount > 0 ? $i->gross_amount : $i->amount));
-        $unsettledVatAmount = $unsettledItems->sum(function ($item) {
+        $unsettledVatCount = $unsettledVatItems->count();
+        $unsettledVatBaseAmount = $unsettledVatItems->sum(fn($i) => (float)($i->gross_amount > 0 ? $i->gross_amount : $i->amount));
+        $unsettledVatAmount = $unsettledVatItems->sum(function ($item) {
             if ((float)$item->vat_amount > 0) return (float)$item->vat_amount;
             $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
             $vatType = $item->vat_type ?? 'none';
@@ -244,8 +287,33 @@ class FinanceTaxReportController extends Controller
             }
             return 0.0;
         });
-        $unsettledWhtAmount = $unsettledItems->sum(fn($i) => (float)$i->calculated_withholding_amount);
+
+        // 2. Unsettled Withholding Tax Pool
+        $unsettledWhtItems = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
+            ->where('withholding_settled', false)
+            ->whereNull('withholding_settlement_id')
+            ->where(function ($q) {
+                $q->where('has_withholding', true)
+                  ->orWhere('withholding_amount', '>', 0);
+            })
+            ->get();
+
+        $unsettledWhtCount = $unsettledWhtItems->count();
+        $unsettledWhtBaseAmount = $unsettledWhtItems->sum(fn($i) => (float)($i->gross_amount > 0 ? $i->gross_amount : $i->amount));
+        $unsettledWhtAmount = $unsettledWhtItems->sum(fn($i) => (float)$i->calculated_withholding_amount);
+
+        // Combined totals for convenience
         $unsettledTotalTax = $unsettledVatAmount + $unsettledWhtAmount;
+        $unsettledCount = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
+            ->where(function ($q) {
+                $q->where(function ($sub) {
+                    $sub->where('vat_settled', false)->whereNull('vat_settlement_id')
+                        ->where(function ($v) { $v->where('vat_amount', '>', 0)->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']); });
+                })->orWhere(function ($sub) {
+                    $sub->where('withholding_settled', false)->whereNull('withholding_settlement_id')
+                        ->where(function ($w) { $w->where('has_withholding', true)->orWhere('withholding_amount', '>', 0); });
+                });
+            })->count();
 
         // Active pending settlement(s) assigned to finance staff
         $pendingSettlements = TaxSettlement::with(['financeHead', 'assignedStaff', 'bankAccount', 'chartOfAccount'])
@@ -298,8 +366,11 @@ class FinanceTaxReportController extends Controller
             'slipsAttachedCount',
             'missingSlipsCount',
             'unsettledCount',
-            'unsettledBaseAmount',
+            'unsettledVatCount',
+            'unsettledVatBaseAmount',
             'unsettledVatAmount',
+            'unsettledWhtCount',
+            'unsettledWhtBaseAmount',
             'unsettledWhtAmount',
             'unsettledTotalTax',
             'pendingSettlements',
@@ -311,7 +382,7 @@ class FinanceTaxReportController extends Controller
     }
 
     /**
-     * Initiate a Tax Payment / Remittance (Finance Head assigns Finance Staff or pays immediately).
+     * Initiate a Tax Payment / Remittance for VAT or Withholding (Finance Head assigns Finance Staff or pays immediately).
      */
     public function initiateSettlement(Request $request)
     {
@@ -350,40 +421,46 @@ class FinanceTaxReportController extends Controller
             }
         }
 
-        // Query all unsettled records matching the tax type
-        $query = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
-            ->where('vat_settled', false)
-            ->where('withholding_settled', false)
-            ->whereNull('tax_settlement_id');
+        // Query unsettled records based on the specific tax_type selected
+        $query = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID);
 
         if ($taxType === 'vat') {
-            $query->where(function ($q) {
-                $q->where('vat_amount', '>', 0)
-                  ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
-            });
+            $query->where('vat_settled', false)
+                  ->whereNull('vat_settlement_id')
+                  ->where(function ($q) {
+                      $q->where('vat_amount', '>', 0)
+                        ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
+                  });
         } elseif ($taxType === 'withholding') {
-            $query->where(function ($q) {
-                $q->where('has_withholding', true)
-                  ->orWhere('withholding_amount', '>', 0);
-            });
+            $query->where('withholding_settled', false)
+                  ->whereNull('withholding_settlement_id')
+                  ->where(function ($q) {
+                      $q->where('has_withholding', true)
+                        ->orWhere('withholding_amount', '>', 0);
+                  });
         } else {
             $query->where(function ($q) {
-                $q->where('has_withholding', true)
-                  ->orWhere('withholding_amount', '>', 0)
-                  ->orWhere('vat_amount', '>', 0)
-                  ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
+                $q->where(function ($sub) {
+                    $sub->where('vat_settled', false)->whereNull('vat_settlement_id')
+                        ->where(function ($v) { $v->where('vat_amount', '>', 0)->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']); });
+                })->orWhere(function ($sub) {
+                    $sub->where('withholding_settled', false)->whereNull('withholding_settlement_id')
+                        ->where(function ($w) { $w->where('has_withholding', true)->orWhere('withholding_amount', '>', 0); });
+                });
             });
         }
 
         $records = $query->orderBy('created_at')->get();
 
         if ($records->isEmpty()) {
-            return back()->with('error', 'No unsettled tax deduction records found to pay in this cycle.');
+            $taxName = $taxType === 'vat' ? 'VAT' : ($taxType === 'withholding' ? '3% Withholding Tax' : 'tax');
+            return back()->with('error', "No unsettled {$taxName} records found to pay in this cycle.");
         }
 
         // Calculate amounts
         $totalBase = $records->sum(fn($i) => (float)($i->gross_amount > 0 ? $i->gross_amount : $i->amount));
         $vatSum = $records->sum(function ($item) {
+            if ($item->vat_settled) return 0.0;
             if ((float)$item->vat_amount > 0) return (float)$item->vat_amount;
             $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
             $vatType = $item->vat_type ?? 'none';
@@ -396,7 +473,11 @@ class FinanceTaxReportController extends Controller
             }
             return 0.0;
         });
-        $whtSum = $records->sum(fn($i) => (float)$i->calculated_withholding_amount);
+
+        $whtSum = $records->sum(function ($item) {
+            if ($item->withholding_settled) return 0.0;
+            return (float)$item->calculated_withholding_amount;
+        });
 
         $totalPayable = 0.0;
         if ($taxType === 'vat') {
@@ -433,7 +514,13 @@ class FinanceTaxReportController extends Controller
             $periodFrom, $periodTo, $assignedStaffId, $bankAccountId, $coaId,
             $payNow, $request, $validated
         ) {
-            $settlementNumber = TaxSettlement::generateSettlementNumber();
+            $prefix = $taxType === 'vat' ? 'TAX-VAT-' : ($taxType === 'withholding' ? 'TAX-WHT-' : 'TAX-REM-');
+            $settlementCount = TaxSettlement::whereYear('created_at', date('Y'))->whereMonth('created_at', date('m'))->count() + 1;
+            $settlementNumber = $prefix . date('Ym') . '-' . str_pad($settlementCount, 3, '0', STR_PAD_LEFT);
+            while (TaxSettlement::where('settlement_number', $settlementNumber)->exists()) {
+                $settlementCount++;
+                $settlementNumber = $prefix . date('Ym') . '-' . str_pad($settlementCount, 3, '0', STR_PAD_LEFT);
+            }
 
             $attachmentPath = null;
             if ($request->hasFile('attachment')) {
@@ -466,22 +553,39 @@ class FinanceTaxReportController extends Controller
                 'payment_notes'             => $validated['payment_notes'] ?? null,
             ]);
 
-            // Link matching expense requests
-            $updatePayload = [
-                'tax_settlement_id' => $settlement->id,
-            ];
-
-            if ($payNow) {
-                $updatePayload['tax_settled_at'] = now();
-                if ($taxType === 'vat' || $taxType === 'both') {
+            // Link matching expense requests based on the specific tax_type
+            $recordIds = $records->pluck('id');
+            if ($taxType === 'vat') {
+                $updatePayload = ['vat_settlement_id' => $settlement->id];
+                if ($payNow) {
                     $updatePayload['vat_settled'] = true;
+                    $updatePayload['vat_settled_at'] = now();
+                    $updatePayload['tax_settled_at'] = now();
                 }
-                if ($taxType === 'withholding' || $taxType === 'both') {
+                ExpenseRequest::whereIn('id', $recordIds)->update($updatePayload);
+            } elseif ($taxType === 'withholding') {
+                $updatePayload = ['withholding_settlement_id' => $settlement->id];
+                if ($payNow) {
                     $updatePayload['withholding_settled'] = true;
+                    $updatePayload['withholding_settled_at'] = now();
+                    $updatePayload['tax_settled_at'] = now();
                 }
+                ExpenseRequest::whereIn('id', $recordIds)->update($updatePayload);
+            } else {
+                $updatePayload = [
+                    'tax_settlement_id'         => $settlement->id,
+                    'vat_settlement_id'         => $settlement->id,
+                    'withholding_settlement_id' => $settlement->id,
+                ];
+                if ($payNow) {
+                    $updatePayload['vat_settled']            = true;
+                    $updatePayload['withholding_settled']    = true;
+                    $updatePayload['vat_settled_at']         = now();
+                    $updatePayload['withholding_settled_at'] = now();
+                    $updatePayload['tax_settled_at']         = now();
+                }
+                ExpenseRequest::whereIn('id', $recordIds)->update($updatePayload);
             }
-
-            ExpenseRequest::whereIn('id', $records->pluck('id'))->update($updatePayload);
 
             // If Paid Now with Bank Account, decrement balance & record transaction
             if ($payNow && $bankAccountId && $totalPayable > 0) {
@@ -489,6 +593,12 @@ class FinanceTaxReportController extends Controller
                 if ($bankAccount) {
                     $bankAccount->decrement('current_balance', $totalPayable);
                     $newBalance = $bankAccount->fresh()->current_balance;
+
+                    $taxDesc = match($taxType) {
+                        'vat' => "VAT Payment (15%) to ERCA: ETB {$totalPayable}",
+                        'withholding' => "3% Withholding Tax Remittance to ERCA: ETB {$totalPayable}",
+                        default => "Tax Settlement (VAT & WHT) to ERCA: ETB {$totalPayable}"
+                    };
 
                     BankTransaction::create([
                         'bank_account_id'  => $bankAccount->id,
@@ -499,19 +609,20 @@ class FinanceTaxReportController extends Controller
                         'reference_no'     => $settlement->payment_reference ?? $settlementNumber,
                         'reference_type'   => 'TaxSettlement',
                         'reference_id'     => $settlement->id,
-                        'description'      => "Tax Payment #{$settlementNumber} to ERCA: VAT ETB {$vatSum}, WHT ETB {$whtSum}",
+                        'description'      => "{$taxDesc} (Settlement #{$settlementNumber})",
                         'is_reconciled'    => true,
                     ]);
                 }
             }
 
+            $taxLabel = $taxType === 'vat' ? 'VAT (15%)' : ($taxType === 'withholding' ? '3% Withholding Tax' : 'VAT & Withholding Tax');
             if ($payNow) {
-                return redirect()->route('finance.tax-deductions.index', ['cycle' => 'active'])
-                    ->with('success', "Tax Payment #{$settlementNumber} for ETB " . number_format($totalPayable, 2) . " processed! Active tax balance has reset to ETB 0.00 and is starting from zero.");
+                return redirect()->route('finance.tax-deductions.index', ['cycle' => 'active', 'tab' => $taxType === 'vat' ? 'vat' : ($taxType === 'withholding' ? 'withholding' : 'all')])
+                    ->with('success', "{$taxLabel} Payment #{$settlementNumber} for ETB " . number_format($totalPayable, 2) . " processed! Active balance has reset to ETB 0.00 and starts from zero.");
             } else {
                 $staffName = $settlement->assignedStaff?->name ?? 'Finance Staff';
-                return redirect()->route('finance.tax-deductions.index', ['cycle' => 'active'])
-                    ->with('success', "Tax Payment Request #{$settlementNumber} for ETB " . number_format($totalPayable, 2) . " created and assigned to {$staffName}. Once they submit the payment receipt, the ledger resets to zero.");
+                return redirect()->route('finance.tax-deductions.index', ['cycle' => 'active', 'tab' => $taxType === 'vat' ? 'vat' : ($taxType === 'withholding' ? 'withholding' : 'all')])
+                    ->with('success', "{$taxLabel} Payment Request #{$settlementNumber} for ETB " . number_format($totalPayable, 2) . " created and assigned to {$staffName}. Once they submit the payment slip, the balance resets to zero.");
             }
         });
     }
@@ -575,19 +686,29 @@ class FinanceTaxReportController extends Controller
                 'payment_notes'     => $validated['payment_notes'] ?? null,
             ]);
 
-            // Mark all linked expense requests as settled
+            // Mark linked expense requests as settled based on tax_type
             $taxType = $settlement->tax_type;
-            $updatePayload = [
-                'tax_settled_at' => now(),
-            ];
-            if ($taxType === 'vat' || $taxType === 'both') {
-                $updatePayload['vat_settled'] = true;
+            if ($taxType === 'vat') {
+                ExpenseRequest::where('vat_settlement_id', $settlement->id)->update([
+                    'vat_settled'    => true,
+                    'vat_settled_at' => now(),
+                    'tax_settled_at' => now(),
+                ]);
+            } elseif ($taxType === 'withholding') {
+                ExpenseRequest::where('withholding_settlement_id', $settlement->id)->update([
+                    'withholding_settled'    => true,
+                    'withholding_settled_at' => now(),
+                    'tax_settled_at'         => now(),
+                ]);
+            } else {
+                ExpenseRequest::where('tax_settlement_id', $settlement->id)->update([
+                    'vat_settled'            => true,
+                    'withholding_settled'    => true,
+                    'vat_settled_at'         => now(),
+                    'withholding_settled_at' => now(),
+                    'tax_settled_at'         => now(),
+                ]);
             }
-            if ($taxType === 'withholding' || $taxType === 'both') {
-                $updatePayload['withholding_settled'] = true;
-            }
-
-            ExpenseRequest::where('tax_settlement_id', $settlement->id)->update($updatePayload);
 
             // Deduct from bank account if applicable
             if ($bankAccountId && $settlement->total_tax_paid > 0) {
@@ -595,6 +716,12 @@ class FinanceTaxReportController extends Controller
                 if ($bankAccount) {
                     $bankAccount->decrement('current_balance', $settlement->total_tax_paid);
                     $newBalance = $bankAccount->fresh()->current_balance;
+
+                    $taxDesc = match($taxType) {
+                        'vat' => "VAT Payment (15%) to ERCA: ETB {$settlement->total_tax_paid}",
+                        'withholding' => "3% Withholding Tax Remittance to ERCA: ETB {$settlement->total_tax_paid}",
+                        default => "Tax Settlement to ERCA: ETB {$settlement->total_tax_paid}"
+                    };
 
                     BankTransaction::create([
                         'bank_account_id'  => $bankAccount->id,
@@ -605,14 +732,15 @@ class FinanceTaxReportController extends Controller
                         'reference_no'     => $validated['payment_reference'],
                         'reference_type'   => 'TaxSettlement',
                         'reference_id'     => $settlement->id,
-                        'description'      => "Tax Payment #{$settlement->settlement_number} to ERCA: VAT ETB {$settlement->vat_amount}, WHT ETB {$settlement->withholding_amount}",
+                        'description'      => "{$taxDesc} (Settlement #{$settlement->settlement_number})",
                         'is_reconciled'    => true,
                     ]);
                 }
             }
 
-            return redirect()->route('finance.tax-deductions.index', ['cycle' => 'active'])
-                ->with('success', "Payment for Tax Settlement #{$settlement->settlement_number} (ETB " . number_format($settlement->total_tax_paid, 2) . ") confirmed and uploaded! Current tax ledger reset to zero.");
+            $taxLabel = $taxType === 'vat' ? 'VAT (15%)' : ($taxType === 'withholding' ? '3% Withholding Tax' : 'Tax');
+            return redirect()->route('finance.tax-deductions.index', ['cycle' => 'active', 'tab' => $taxType === 'vat' ? 'vat' : ($taxType === 'withholding' ? 'withholding' : 'all')])
+                ->with('success', "Payment for {$taxLabel} Settlement #{$settlement->settlement_number} (ETB " . number_format($settlement->total_tax_paid, 2) . ") confirmed and uploaded! Active {$taxLabel} balance has reset to ETB 0.00.");
         });
     }
 
@@ -628,10 +756,25 @@ class FinanceTaxReportController extends Controller
         }
 
         DB::transaction(function () use ($settlement) {
-            ExpenseRequest::where('tax_settlement_id', $settlement->id)
-                ->where('vat_settled', false)
-                ->where('withholding_settled', false)
-                ->update(['tax_settlement_id' => null]);
+            $taxType = $settlement->tax_type;
+            if ($taxType === 'vat') {
+                ExpenseRequest::where('vat_settlement_id', $settlement->id)
+                    ->where('vat_settled', false)
+                    ->update(['vat_settlement_id' => null]);
+            } elseif ($taxType === 'withholding') {
+                ExpenseRequest::where('withholding_settlement_id', $settlement->id)
+                    ->where('withholding_settled', false)
+                    ->update(['withholding_settlement_id' => null]);
+            } else {
+                ExpenseRequest::where('tax_settlement_id', $settlement->id)
+                    ->where('vat_settled', false)
+                    ->where('withholding_settled', false)
+                    ->update([
+                        'tax_settlement_id'         => null,
+                        'vat_settlement_id'         => null,
+                        'withholding_settlement_id' => null,
+                    ]);
+            }
 
             $settlement->update(['status' => TaxSettlement::STATUS_CANCELLED]);
         });
@@ -667,14 +810,31 @@ class FinanceTaxReportController extends Controller
             });
 
         if ($cycle === 'active') {
-            $query->where('vat_settled', false)
-                  ->where('withholding_settled', false)
-                  ->whereNull('tax_settlement_id');
+            if ($tab === 'vat') {
+                $query->where('vat_settled', false)->whereNull('vat_settlement_id');
+            } elseif ($tab === 'withholding' || $tab === 'slips') {
+                $query->where('withholding_settled', false)->whereNull('withholding_settlement_id');
+            } else {
+                $query->where(function ($q) {
+                    $q->where(function ($sub) {
+                        $sub->where('vat_settled', false)->whereNull('vat_settlement_id')
+                            ->where(function ($v) { $v->where('vat_amount', '>', 0)->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']); });
+                    })->orWhere(function ($sub) {
+                        $sub->where('withholding_settled', false)->whereNull('withholding_settlement_id')
+                            ->where(function ($w) { $w->where('has_withholding', true)->orWhere('withholding_amount', '>', 0); });
+                    });
+                });
+            }
         } elseif ($cycle === 'settled') {
-            $query->where(function ($q) {
-                $q->where('vat_settled', true)
-                  ->orWhere('withholding_settled', true);
-            });
+            if ($tab === 'vat') {
+                $query->where('vat_settled', true);
+            } elseif ($tab === 'withholding' || $tab === 'slips') {
+                $query->where('withholding_settled', true);
+            } else {
+                $query->where(function ($q) {
+                    $q->where('vat_settled', true)->orWhere('withholding_settled', true);
+                });
+            }
         }
 
         if ($tab === 'withholding') {
@@ -734,14 +894,15 @@ class FinanceTaxReportController extends Controller
                 'VAT Type',
                 'VAT Rate (%)',
                 'VAT Amount (ETB)',
+                'VAT Settled',
                 'Withholding Tax (3% WHT ETB)',
+                'WHT Settled',
                 'Net Disbursed / Paid (ETB)',
                 'Payment Reference',
                 'Paid At',
                 'Paying Account',
                 'WHT Receipt Serial #',
                 'WHT Receipt Attached',
-                'Settlement Status',
                 'Status',
             ]);
 
@@ -754,7 +915,6 @@ class FinanceTaxReportController extends Controller
                     'inclusive', 'vat_b' => '15% VAT B Included',
                     default => 'No VAT (0%)',
                 };
-                $settlementStatus = $item->vat_settled || $item->withholding_settled ? 'Settled (Paid to ERCA)' : 'Active (Unsettled)';
 
                 fputcsv($handle, [
                     $item->request_number,
@@ -766,14 +926,15 @@ class FinanceTaxReportController extends Controller
                     $vatLabel,
                     number_format((float)($item->vat_rate ?? 15.00), 2, '.', ''),
                     number_format((float)($item->vat_amount ?? 0), 2, '.', ''),
+                    $item->vat_settled ? 'YES' : 'NO',
                     number_format($wht, 2, '.', ''),
+                    $item->withholding_settled ? 'YES' : 'NO',
                     number_format($net, 2, '.', ''),
                     $item->payment_reference ?? 'N/A',
                     optional($item->paid_at)->format('Y-m-d H:i') ?? 'Pending',
                     $item->chartOfAccount->name ?? ($item->bankAccount->bank_name ?? 'Default Petty Cash'),
                     $item->withholding_receipt_number ?? 'N/A',
                     !empty($item->withholding_receipt) ? 'YES' : 'NO',
-                    $settlementStatus,
                     $item->status,
                 ]);
             }

@@ -28,25 +28,39 @@
     {{-- Pending Settlements Notification Banner --}}
     @if(isset($pendingSettlements) && $pendingSettlements->isNotEmpty())
         @foreach($pendingSettlements as $ps)
-            <div class="alert alert-warning border-0 rounded-4 shadow-sm mb-4 d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3 p-3 p-md-4 bg-warning bg-opacity-10 border-start border-4 border-warning">
+            @php
+                $isVatOnly = $ps->tax_type === 'vat';
+                $isWhtOnly = $ps->tax_type === 'withholding';
+                $borderClass = $isVatOnly ? 'border-info' : ($isWhtOnly ? 'border-danger' : 'border-warning');
+                $bgClass = $isVatOnly ? 'bg-info' : ($isWhtOnly ? 'bg-danger' : 'bg-warning');
+                $iconClass = $isVatOnly ? 'fa-percent' : ($isWhtOnly ? 'fa-hand-holding-dollar' : 'fa-hourglass-half');
+                $taxTitle = $isVatOnly ? '15% VAT REMITTANCE ASSIGNED' : ($isWhtOnly ? '3% WITHHOLDING TAX ASSIGNED' : 'TAX REMITTANCE ASSIGNED (VAT + WHT)');
+            @endphp
+            <div class="alert border-0 rounded-4 shadow-sm mb-4 d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3 p-3 p-md-4 {{ $bgClass }} bg-opacity-10 border-start border-4 {{ $borderClass }}">
                 <div class="d-flex align-items-start gap-3">
-                    <div class="p-3 bg-warning text-dark rounded-circle shadow-xs fs-4">
-                        <i class="fa-solid fa-hourglass-half"></i>
+                    <div class="p-3 {{ $bgClass }} text-white rounded-circle shadow-xs fs-4">
+                        <i class="fa-solid {{ $iconClass }}"></i>
                     </div>
                     <div>
                         <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-                            <span class="badge bg-warning text-dark fw-bold px-2 py-1">TAX REMITTANCE ASSIGNED</span>
+                            <span class="badge {{ $bgClass }} text-white fw-bold px-2 py-1">{{ $taxTitle }}</span>
                             <span class="fw-bold text-dark fs-6">{{ $ps->settlement_number }}</span>
                             <span class="text-muted small">({{ optional($ps->created_at)->format('M d, Y H:i') }})</span>
                         </div>
                         <div class="text-dark small">
-                            Finance Head assigned: <strong class="text-primary">{{ $ps->assignedStaff?->name ?? 'Finance Staff' }}</strong> &bull; 
-                            Tax Amount to Pay: <strong class="text-danger fs-6">ETB {{ number_format($ps->total_tax_paid, 2) }}</strong> 
-                            <span class="text-muted">(VAT: ETB {{ number_format($ps->vat_amount, 2) }} | 3% WHT: ETB {{ number_format($ps->withholding_amount, 2) }})</span> &bull; 
+                            Finance Head assigned: <strong class="text-primary">{{ $ps->financeHead?->name ?? 'Finance Head' }}</strong> &rarr; <strong class="text-success">{{ $ps->assignedStaff?->name ?? 'Finance Staff' }}</strong> &bull; 
+                            @if($isVatOnly)
+                                VAT to Pay: <strong class="text-info fs-6">ETB {{ number_format($ps->vat_amount, 2) }}</strong> &bull;
+                            @elseif($isWhtOnly)
+                                3% WHT to Pay: <strong class="text-danger fs-6">ETB {{ number_format($ps->withholding_amount, 2) }}</strong> &bull;
+                            @else
+                                Total Tax to Pay: <strong class="text-danger fs-6">ETB {{ number_format($ps->total_tax_paid, 2) }}</strong> 
+                                <span class="text-muted">(VAT: ETB {{ number_format($ps->vat_amount, 2) }} | 3% WHT: ETB {{ number_format($ps->withholding_amount, 2) }})</span> &bull; 
+                            @endif
                             Covering <strong>{{ $ps->records_count }}</strong> tax deduction records.
                         </div>
                         <div class="text-muted small mt-1">
-                            <i class="fa-solid fa-circle-info me-1 text-warning"></i>
+                            <i class="fa-solid fa-circle-info me-1 text-primary"></i>
                             Awaiting Finance Staff to disburse tax payment to ERCA / Bank and upload official receipt slip.
                         </div>
                     </div>
@@ -81,9 +95,24 @@
             </div>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
-            {{-- Pay VAT & Withhold Action Button --}}
-            <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payTaxModal">
-                <i class="fa-solid fa-money-bill-transfer me-1"></i> Pay VAT &amp; Withhold (Reset to Zero)
+            {{-- Separate Action 1: Pay 15% VAT --}}
+            <button type="button" class="btn btn-info text-white btn-sm rounded-pill px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                <i class="fa-solid fa-percent me-1"></i> Pay 15% VAT
+                @if($unsettledVatAmount > 0)
+                    <span class="badge bg-white text-info ms-1">ETB {{ number_format($unsettledVatAmount, 2) }}</span>
+                @else
+                    <span class="badge bg-white text-muted ms-1">ETB 0.00</span>
+                @endif
+            </button>
+
+            {{-- Separate Action 2: Pay 3% Withholding Tax --}}
+            <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
+                <i class="fa-solid fa-hand-holding-dollar me-1"></i> Pay 3% Withholding Tax
+                @if($unsettledWhtAmount > 0)
+                    <span class="badge bg-white text-danger ms-1">ETB {{ number_format($unsettledWhtAmount, 2) }}</span>
+                @else
+                    <span class="badge bg-white text-muted ms-1">ETB 0.00</span>
+                @endif
             </button>
 
             <button type="button" onclick="window.print()" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
@@ -162,7 +191,12 @@
                     <span class="badge bg-info-subtle text-info rounded-pill"><i class="fa-solid fa-percent"></i></span>
                 </div>
                 <div class="fs-4 fw-bold text-info">+ ETB {{ number_format($totalVatAmount, 2) }}</div>
-                <div class="text-muted small" style="font-size:0.75rem;">ጠቅላላ የተጨመረ/የተካተተ ቫት</div>
+                <div class="d-flex justify-content-between align-items-center mt-1">
+                    <span class="text-muted small" style="font-size:0.75rem;">ጠቅላላ የተጨመረ/የተካተተ ቫት</span>
+                    <button type="button" class="btn btn-outline-info btn-sm rounded-pill px-2 py-0 fw-semibold" style="font-size:0.7rem;" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                        Pay VAT &rarr;
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -174,7 +208,12 @@
                     <span class="badge bg-danger-subtle text-danger rounded-pill"><i class="fa-solid fa-hand-holding-dollar"></i></span>
                 </div>
                 <div class="fs-4 fw-bold text-danger">- ETB {{ number_format($totalWithholdingAmount, 2) }}</div>
-                <div class="text-muted small" style="font-size:0.75rem;">ጠቅላላ የተቀነሰ 3% ቅድመ ግብር</div>
+                <div class="d-flex justify-content-between align-items-center mt-1">
+                    <span class="text-muted small" style="font-size:0.75rem;">ጠቅላላ የተቀነሰ 3% ቅድመ ግብር</span>
+                    <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-2 py-0 fw-semibold" style="font-size:0.7rem;" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
+                        Pay WHT &rarr;
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -219,9 +258,14 @@
                         <small class="text-muted">History of VAT &amp; Withholding Tax batches remitted to ERCA with proof of payment slips.</small>
                     </div>
                 </div>
-                <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#payTaxModal">
-                    <i class="fa-solid fa-plus me-1"></i> New Tax Remittance
-                </button>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-info text-white btn-sm rounded-pill px-3 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                        <i class="fa-solid fa-percent me-1"></i> Remit VAT (15%)
+                    </button>
+                    <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
+                        <i class="fa-solid fa-hand-holding-dollar me-1"></i> Remit 3% Withholding
+                    </button>
+                </div>
             </div>
 
             <div class="table-responsive">
@@ -314,10 +358,15 @@
                                 <td colspan="12" class="text-center py-5">
                                     <div class="text-muted fs-5 mb-2"><i class="fa-solid fa-folder-open text-secondary fs-2"></i></div>
                                     <div class="fw-bold text-dark">No Tax Remittance Batches Recorded Yet</div>
-                                    <p class="text-muted small mb-3">When you click "Pay VAT &amp; Withhold", settlements will be logged here with complete ERCA proof slips.</p>
-                                    <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#payTaxModal">
-                                        <i class="fa-solid fa-money-bill-transfer me-1"></i> Pay VAT &amp; Withhold Now
-                                    </button>
+                                    <p class="text-muted small mb-3">When you remit taxes to ERCA, settlements will be logged here with complete bank deposit &amp; ERCA proof slips.</p>
+                                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                        <button type="button" class="btn btn-info text-white btn-sm rounded-pill px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                                            <i class="fa-solid fa-percent me-1"></i> Pay 15% VAT Now
+                                        </button>
+                                        <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
+                                            <i class="fa-solid fa-hand-holding-dollar me-1"></i> Pay 3% Withholding Now
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         @endforelse
@@ -552,19 +601,43 @@
 
                                 {{-- Cycle / Settle Status --}}
                                 <td>
-                                    @if($isSettled)
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill">
-                                            <i class="fa-solid fa-check me-1"></i> Settled (Paid ERCA)
-                                        </span>
-                                    @elseif($item->tax_settlement_id)
-                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill">
-                                            <i class="fa-solid fa-hourglass-half me-1"></i> Remittance Pending
-                                        </span>
-                                    @else
-                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill">
-                                            <i class="fa-solid fa-clock me-1"></i> Active (Unsettled)
-                                        </span>
-                                    @endif
+                                    <div class="d-flex flex-column gap-1">
+                                        @if((float)($item->vat_amount ?? 0) > 0 || in_array($item->vat_type, ['exclusive', 'inclusive', 'vat_b']))
+                                            @if($item->vat_settled)
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill" style="font-size: 0.68rem;" title="VAT Settled {{ optional($item->vat_settled_at)->format('M d, Y') }}">
+                                                    <i class="fa-solid fa-check me-1"></i>VAT Paid
+                                                </span>
+                                            @elseif($item->vat_settlement_id)
+                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill" style="font-size: 0.68rem;">
+                                                    <i class="fa-solid fa-clock me-1"></i>VAT Pending
+                                                </span>
+                                            @else
+                                                <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill" style="font-size: 0.68rem;">
+                                                    <i class="fa-solid fa-bolt me-1"></i>VAT Active
+                                                </span>
+                                            @endif
+                                        @endif
+
+                                        @if($hasWht)
+                                            @if($item->withholding_settled)
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill" style="font-size: 0.68rem;" title="3% WHT Settled {{ optional($item->withholding_settled_at)->format('M d, Y') }}">
+                                                    <i class="fa-solid fa-check me-1"></i>WHT Paid
+                                                </span>
+                                            @elseif($item->withholding_settlement_id)
+                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill" style="font-size: 0.68rem;">
+                                                    <i class="fa-solid fa-clock me-1"></i>WHT Pending
+                                                </span>
+                                            @else
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill" style="font-size: 0.68rem;">
+                                                    <i class="fa-solid fa-bolt me-1"></i>WHT Active
+                                                </span>
+                                            @endif
+                                        @endif
+
+                                        @if(!((float)($item->vat_amount ?? 0) > 0 || in_array($item->vat_type, ['exclusive', 'inclusive', 'vat_b'])) && !$hasWht)
+                                            <span class="text-muted small">—</span>
+                                        @endif
+                                    </div>
                                 </td>
 
                                 {{-- Actions --}}
@@ -621,16 +694,16 @@
 
 </div>
 
-{{-- ── MODAL: Pay VAT & Withholding (Finance Head Assigns or Pays) ───────────── --}}
-<div class="modal fade" id="payTaxModal" tabindex="-1" aria-labelledby="payTaxModalLabel" aria-hidden="true">
+{{-- ── MODAL 1: Pay 15% VAT Only ───────────────────────────────────────────── --}}
+<div class="modal fade" id="payVatModal" tabindex="-1" aria-labelledby="payVatModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <div class="modal-header bg-danger text-white py-3 px-4">
+            <div class="modal-header bg-info text-white py-3 px-4">
                 <div class="d-flex align-items-center gap-2">
-                    <i class="fa-solid fa-money-bill-transfer fs-5"></i>
+                    <i class="fa-solid fa-percent fs-5"></i>
                     <div>
-                        <h5 class="modal-title fw-bold mb-0" id="payTaxModalLabel">Pay VAT &amp; Withholding Tax</h5>
-                        <small class="text-white-50">Settle taxes with ERCA / Bank and start active cycle from zero (0.00)</small>
+                        <h5 class="modal-title fw-bold mb-0" id="payVatModalLabel">Pay 15% VAT to ERCA</h5>
+                        <small class="text-white-50">Settle accrued VAT liabilities with ERCA / Bank and start VAT cycle from zero (0.00)</small>
                     </div>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -638,56 +711,41 @@
 
             <form method="POST" action="{{ route('finance.tax-deductions.settle') }}" enctype="multipart/form-data">
                 @csrf
+                <input type="hidden" name="tax_type" value="vat">
 
                 <div class="modal-body p-4">
-                    {{-- Summary of Unsettled Amounts --}}
+                    {{-- Summary of Unsettled VAT Amounts --}}
                     <div class="p-3 bg-light rounded-4 border mb-4">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="small fw-bold text-uppercase text-muted">Currently Unsettled Tax Liabilities</span>
-                            <span class="badge bg-danger rounded-pill">{{ $unsettledCount }} Unpaid Records</span>
+                            <span class="small fw-bold text-uppercase text-muted">Currently Unsettled VAT Liabilities</span>
+                            <span class="badge bg-info rounded-pill">{{ $unsettledVatCount }} Unpaid VAT Records</span>
                         </div>
                         <div class="row g-2 text-center">
-                            <div class="col-4">
+                            <div class="col-6">
                                 <div class="bg-white p-2 rounded-3 border">
-                                    <div class="text-muted small" style="font-size:0.75rem;">15% VAT Accrued</div>
-                                    <div class="fw-bold text-info font-monospace fs-6">+ ETB {{ number_format($unsettledVatAmount, 2) }}</div>
+                                    <div class="text-muted small" style="font-size:0.75rem;">Base Invoiced Amount</div>
+                                    <div class="fw-bold text-dark font-monospace fs-6">ETB {{ number_format($unsettledVatBaseAmount, 2) }}</div>
                                 </div>
                             </div>
-                            <div class="col-4">
-                                <div class="bg-white p-2 rounded-3 border">
-                                    <div class="text-muted small" style="font-size:0.75rem;">3% WHT Deducted</div>
-                                    <div class="fw-bold text-danger font-monospace fs-6">- ETB {{ number_format($unsettledWhtAmount, 2) }}</div>
-                                </div>
-                            </div>
-                            <div class="col-4">
-                                <div class="bg-white p-2 rounded-3 border border-danger">
-                                    <div class="text-muted small" style="font-size:0.75rem;">Total Tax to Pay</div>
-                                    <div class="fw-bold text-danger font-monospace fs-6">ETB {{ number_format($unsettledTotalTax, 2) }}</div>
+                            <div class="col-6">
+                                <div class="bg-white p-2 rounded-3 border border-info">
+                                    <div class="text-muted small" style="font-size:0.75rem;">15% VAT Accrued to Remit</div>
+                                    <div class="fw-bold text-info font-monospace fs-5">+ ETB {{ number_format($unsettledVatAmount, 2) }}</div>
                                 </div>
                             </div>
                         </div>
                         <div class="text-muted small mt-2" style="font-size: 0.78rem;">
-                            <i class="fa-solid fa-circle-info text-primary me-1"></i>
-                            Once paid or assigned, all these records will be stamped as settled and your active compliance ledger will <strong>start from zero (ETB 0.00)</strong>.
+                            <i class="fa-solid fa-circle-info text-info me-1"></i>
+                            Once paid or assigned, all <strong>{{ $unsettledVatCount }}</strong> records will have VAT stamped as settled and your active VAT liability will <strong>start from zero (ETB 0.00)</strong>. Withholding tax remains untouched.
                         </div>
                     </div>
 
                     {{-- Form Fields --}}
                     <div class="row g-3">
-                        {{-- Tax Type to Pay --}}
-                        <div class="col-12 col-md-6">
-                            <label class="form-label small fw-bold text-dark">Select Taxes to Pay <span class="text-danger">*</span></label>
-                            <select name="tax_type" id="settleTaxType" class="form-select" required>
-                                <option value="both" selected>Both VAT (15%) + 3% Withholding Tax (ETB {{ number_format($unsettledTotalTax, 2) }})</option>
-                                <option value="vat">15% VAT Only (ETB {{ number_format($unsettledVatAmount, 2) }})</option>
-                                <option value="withholding">3% Withholding Tax Only (ETB {{ number_format($unsettledWhtAmount, 2) }})</option>
-                            </select>
-                        </div>
-
                         {{-- Paying Bank / COA Account --}}
                         <div class="col-12 col-md-6">
                             <label class="form-label small fw-bold text-dark">Disbursement Account (Bank / COA) <span class="text-danger">*</span></label>
-                            <select name="account_source" id="settleAccountSource" class="form-select" required>
+                            <select name="account_source" id="settleVatAccountSource" class="form-select" required>
                                 <option value="">-- Choose Funding Account --</option>
                                 <optgroup label="Bank Accounts (Commercial Banks)">
                                     @foreach($bankAccounts as $ba)
@@ -707,11 +765,11 @@
                         </div>
 
                         {{-- Assign Finance Staff --}}
-                        <div class="col-12">
+                        <div class="col-12 col-md-6">
                             <label class="form-label small fw-bold text-dark">
-                                <i class="fa-solid fa-user-check text-primary me-1"></i> Assign Finance Staff to Process &amp; Pay <span class="text-danger">*</span>
+                                <i class="fa-solid fa-user-check text-primary me-1"></i> Assign Finance Staff to Pay <span class="text-danger">*</span>
                             </label>
-                            <select name="assigned_finance_staff_id" id="settleStaffSelect" class="form-select" required>
+                            <select name="assigned_finance_staff_id" id="settleVatStaffSelect" class="form-select" required>
                                 <option value="">-- Choose Finance Staff --</option>
                                 @foreach($financeStaff as $staff)
                                     <option value="{{ $staff->id }}" {{ Auth::id() == $staff->id ? 'selected' : '' }}>
@@ -719,40 +777,43 @@
                                     </option>
                                 @endforeach
                             </select>
-                            <small class="text-muted d-block mt-1">
-                                The Finance Head assigns this tax disbursement task to the selected Finance Staff. The staff member will execute the payment with ERCA / Bank and upload the payment proof slip.
+                        </div>
+
+                        <div class="col-12">
+                            <small class="text-muted d-block">
+                                The Finance Head assigns this VAT remittance task to the selected Finance Staff. The staff member will remit VAT to ERCA / Bank and upload the payment proof slip.
                             </small>
                         </div>
 
                         {{-- Instant Payment Toggle --}}
                         <div class="col-12">
                             <div class="form-check form-switch p-3 bg-light rounded-3 border">
-                                <input class="form-check-input ms-0 me-2" type="checkbox" name="pay_now" value="1" id="payNowCheckbox" onchange="togglePayNowFields(this.checked)">
-                                <label class="form-check-label fw-bold text-dark" for="payNowCheckbox">
-                                    Record Payment Now (I have already executed the tax payment and have the bank/ERCA receipt)
+                                <input class="form-check-input ms-0 me-2" type="checkbox" name="pay_now" value="1" id="payVatNowCheckbox" onchange="togglePayNowVat(this.checked)">
+                                <label class="form-check-label fw-bold text-dark" for="payVatNowCheckbox">
+                                    Record VAT Payment Now (I have already paid ERCA and have the bank/ERCA receipt)
                                 </label>
-                                <div class="text-muted small ps-4">Check this if the payment was already completed at the bank or ERCA and you want to enter the receipt reference and upload the slip immediately.</div>
+                                <div class="text-muted small ps-4">Check this if VAT was already remitted to ERCA and you want to enter the receipt reference and upload the slip immediately.</div>
                             </div>
                         </div>
 
                         {{-- Expanded Instant Payment Fields --}}
-                        <div id="payNowFields" class="row g-3 mt-1" style="display: none;">
+                        <div id="payVatNowFields" class="row g-3 mt-1" style="display: none;">
                             <div class="col-12 col-md-6">
-                                <label class="form-label small fw-bold text-dark">Payment Reference / ERCA Receipt # <span class="text-danger">*</span></label>
-                                <input type="text" name="payment_reference" id="settlePaymentRef" class="form-control" placeholder="e.g. ETAX-2026-98124 or Bank Slip #">
+                                <label class="form-label small fw-bold text-dark">ERCA Receipt / Bank Ref # <span class="text-danger">*</span></label>
+                                <input type="text" name="payment_reference" id="settleVatPaymentRef" class="form-control" placeholder="e.g. VAT-2026-98124 or CBE Ref">
                             </div>
                             <div class="col-12 col-md-6">
                                 <label class="form-label small fw-bold text-dark">Payment Date <span class="text-danger">*</span></label>
                                 <input type="date" name="payment_date" class="form-control" value="{{ date('Y-m-d') }}">
                             </div>
                             <div class="col-12">
-                                <label class="form-label small fw-bold text-dark">Upload Bank Deposit Slip / ERCA Tax Receipt</label>
+                                <label class="form-label small fw-bold text-dark">Upload Bank Deposit Slip / ERCA VAT Receipt</label>
                                 <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
                                 <small class="text-muted">Attach stamped bank voucher, ERCA e-tax clearance slip, or deposit receipt (PDF/Image max 10MB).</small>
                             </div>
                             <div class="col-12">
                                 <label class="form-label small fw-bold text-dark">Payment Notes</label>
-                                <textarea name="payment_notes" class="form-control" rows="2" placeholder="Optional notes regarding this tax settlement..."></textarea>
+                                <textarea name="payment_notes" class="form-control" rows="2" placeholder="Optional notes regarding this VAT settlement..."></textarea>
                             </div>
                         </div>
                     </div>
@@ -760,8 +821,144 @@
 
                 <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-between">
                     <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger rounded-pill px-4 shadow-sm fw-semibold">
-                        <i class="fa-solid fa-circle-check me-1"></i> Confirm &amp; Start from Zero
+                    <button type="submit" class="btn btn-info text-white rounded-pill px-4 shadow-sm fw-semibold" {{ $unsettledVatCount === 0 ? 'disabled' : '' }}>
+                        <i class="fa-solid fa-circle-check me-1"></i> Confirm VAT Payment &amp; Start from Zero
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ── MODAL 2: Pay 3% Withholding Tax Only ─────────────────────────────────── --}}
+<div class="modal fade" id="payWithholdingModal" tabindex="-1" aria-labelledby="payWithholdingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-danger text-white py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-hand-holding-dollar fs-5"></i>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="payWithholdingModalLabel">Pay 3% Withholding Tax to ERCA</h5>
+                        <small class="text-white-50">Remit deducted 3% withholding taxes to ERCA / Bank and start Withholding cycle from zero (0.00)</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form method="POST" action="{{ route('finance.tax-deductions.settle') }}" enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="tax_type" value="withholding">
+
+                <div class="modal-body p-4">
+                    {{-- Summary of Unsettled WHT Amounts --}}
+                    <div class="p-3 bg-light rounded-4 border mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small fw-bold text-uppercase text-muted">Currently Unsettled 3% Withholding Tax</span>
+                            <span class="badge bg-danger rounded-pill">{{ $unsettledWhtCount }} Unpaid WHT Records</span>
+                        </div>
+                        <div class="row g-2 text-center">
+                            <div class="col-6">
+                                <div class="bg-white p-2 rounded-3 border">
+                                    <div class="text-muted small" style="font-size:0.75rem;">Base Invoiced Amount</div>
+                                    <div class="fw-bold text-dark font-monospace fs-6">ETB {{ number_format($unsettledWhtBaseAmount, 2) }}</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="bg-white p-2 rounded-3 border border-danger">
+                                    <div class="text-muted small" style="font-size:0.75rem;">3% WHT Deducted to Remit</div>
+                                    <div class="fw-bold text-danger font-monospace fs-5">- ETB {{ number_format($unsettledWhtAmount, 2) }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="text-muted small mt-2" style="font-size: 0.78rem;">
+                            <i class="fa-solid fa-circle-info text-danger me-1"></i>
+                            Once paid or assigned, all <strong>{{ $unsettledWhtCount }}</strong> records will have 3% Withholding stamped as settled and your active Withholding liability will <strong>start from zero (ETB 0.00)</strong>. VAT liability remains untouched.
+                        </div>
+                    </div>
+
+                    {{-- Form Fields --}}
+                    <div class="row g-3">
+                        {{-- Paying Bank / COA Account --}}
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small fw-bold text-dark">Disbursement Account (Bank / COA) <span class="text-danger">*</span></label>
+                            <select name="account_source" id="settleWhtAccountSource" class="form-select" required>
+                                <option value="">-- Choose Funding Account --</option>
+                                <optgroup label="Bank Accounts (Commercial Banks)">
+                                    @foreach($bankAccounts as $ba)
+                                        <option value="bank:{{ $ba->id }}">
+                                            {{ $ba->bank_name }} - {{ $ba->account_number }} (Bal: ETB {{ number_format($ba->current_balance, 2) }})
+                                        </option>
+                                    @endforeach
+                                </optgroup>
+                                <optgroup label="Chart of Accounts (Cash &amp; Equivalents)">
+                                    @foreach($chartOfAccounts as $coa)
+                                        <option value="coa:{{ $coa->id }}">
+                                            {{ $coa->code }} - {{ $coa->name }} ({{ ucfirst($coa->subtype ?? $coa->type) }})
+                                        </option>
+                                    @endforeach
+                                </optgroup>
+                            </select>
+                        </div>
+
+                        {{-- Assign Finance Staff --}}
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small fw-bold text-dark">
+                                <i class="fa-solid fa-user-check text-primary me-1"></i> Assign Finance Staff to Pay <span class="text-danger">*</span>
+                            </label>
+                            <select name="assigned_finance_staff_id" id="settleWhtStaffSelect" class="form-select" required>
+                                <option value="">-- Choose Finance Staff --</option>
+                                @foreach($financeStaff as $staff)
+                                    <option value="{{ $staff->id }}" {{ Auth::id() == $staff->id ? 'selected' : '' }}>
+                                        {{ $staff->name }} ({{ $staff->email }})
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <small class="text-muted d-block">
+                                The Finance Head assigns this 3% Withholding tax remittance task to the selected Finance Staff. The staff member will remit funds to ERCA / Bank and upload the payment proof slip.
+                            </small>
+                        </div>
+
+                        {{-- Instant Payment Toggle --}}
+                        <div class="col-12">
+                            <div class="form-check form-switch p-3 bg-light rounded-3 border">
+                                <input class="form-check-input ms-0 me-2" type="checkbox" name="pay_now" value="1" id="payWhtNowCheckbox" onchange="togglePayNowWht(this.checked)">
+                                <label class="form-check-label fw-bold text-dark" for="payWhtNowCheckbox">
+                                    Record WHT Payment Now (I have already paid ERCA and have the bank/ERCA receipt)
+                                </label>
+                                <div class="text-muted small ps-4">Check this if 3% Withholding was already remitted to ERCA and you want to enter the receipt reference and upload the slip immediately.</div>
+                            </div>
+                        </div>
+
+                        {{-- Expanded Instant Payment Fields --}}
+                        <div id="payWhtNowFields" class="row g-3 mt-1" style="display: none;">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label small fw-bold text-dark">ERCA Receipt / Bank Ref # <span class="text-danger">*</span></label>
+                                <input type="text" name="payment_reference" id="settleWhtPaymentRef" class="form-control" placeholder="e.g. WHT-2026-98124 or CBE Ref">
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label small fw-bold text-dark">Payment Date <span class="text-danger">*</span></label>
+                                <input type="date" name="payment_date" class="form-control" value="{{ date('Y-m-d') }}">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-bold text-dark">Upload Bank Deposit Slip / ERCA WHT Receipt</label>
+                                <input type="file" name="attachment" class="form-control" accept=".pdf,.jpg,.jpeg,.png">
+                                <small class="text-muted">Attach stamped bank voucher, ERCA e-tax clearance slip, or deposit receipt (PDF/Image max 10MB).</small>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small fw-bold text-dark">Payment Notes</label>
+                                <textarea name="payment_notes" class="form-control" rows="2" placeholder="Optional notes regarding this Withholding Tax settlement..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-between">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger rounded-pill px-4 shadow-sm fw-semibold" {{ $unsettledWhtCount === 0 ? 'disabled' : '' }}>
+                        <i class="fa-solid fa-circle-check me-1"></i> Confirm WHT Payment &amp; Start from Zero
                     </button>
                 </div>
             </form>
@@ -773,14 +970,22 @@
 @if(isset($pendingSettlements) && $pendingSettlements->isNotEmpty())
     @foreach($pendingSettlements as $ps)
         <div class="modal fade" id="recordPaymentModal{{ $ps->id }}" tabindex="-1" aria-hidden="true">
+            @php
+                $isVatOnly = $ps->tax_type === 'vat';
+                $isWhtOnly = $ps->tax_type === 'withholding';
+                $modalBg = $isVatOnly ? 'bg-info' : ($isWhtOnly ? 'bg-danger' : 'bg-success');
+                $modalIcon = $isVatOnly ? 'fa-percent' : ($isWhtOnly ? 'fa-hand-holding-dollar' : 'fa-file-invoice-dollar');
+                $modalTitle = $isVatOnly ? "Record 15% VAT Payment: {$ps->settlement_number}" : ($isWhtOnly ? "Record 3% Withholding Tax Payment: {$ps->settlement_number}" : "Record Tax Payment: {$ps->settlement_number}");
+                $modalSubtitle = $isVatOnly ? "Upload bank slip & ERCA VAT receipt to reset VAT ledger to zero" : ($isWhtOnly ? "Upload bank slip & ERCA receipt to reset Withholding ledger to zero" : "Upload bank slip & ERCA receipt to settle taxes and reset ledger to zero");
+            @endphp
             <div class="modal-dialog modal-dialog-centered modal-lg">
                 <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-                    <div class="modal-header bg-success text-white py-3 px-4">
+                    <div class="modal-header {{ $modalBg }} text-white py-3 px-4">
                         <div class="d-flex align-items-center gap-2">
-                            <i class="fa-solid fa-file-invoice-dollar fs-5"></i>
+                            <i class="fa-solid {{ $modalIcon }} fs-5"></i>
                             <div>
-                                <h5 class="modal-title fw-bold mb-0">Record Tax Payment: {{ $ps->settlement_number }}</h5>
-                                <small class="text-white-50">Upload bank slip &amp; ERCA receipt to settle taxes and reset ledger to zero</small>
+                                <h5 class="modal-title fw-bold mb-0">{{ $modalTitle }}</h5>
+                                <small class="text-white-50">{{ $modalSubtitle }}</small>
                             </div>
                         </div>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
@@ -793,24 +998,52 @@
                             {{-- Remittance Breakdown Info --}}
                             <div class="p-3 bg-light rounded-4 border mb-4">
                                 <div class="row g-2 text-center">
-                                    <div class="col-4">
-                                        <div class="bg-white p-2 rounded-3 border">
-                                            <div class="text-muted small" style="font-size:0.75rem;">VAT to Remit</div>
-                                            <div class="fw-bold text-info font-monospace fs-6">ETB {{ number_format($ps->vat_amount, 2) }}</div>
+                                    @if($isVatOnly)
+                                        <div class="col-6">
+                                            <div class="bg-white p-2 rounded-3 border">
+                                                <div class="text-muted small" style="font-size:0.75rem;">Base Invoiced Amount</div>
+                                                <div class="fw-bold text-dark font-monospace fs-6">ETB {{ number_format($ps->total_base_amount, 2) }}</div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-4">
-                                        <div class="bg-white p-2 rounded-3 border">
-                                            <div class="text-muted small" style="font-size:0.75rem;">3% WHT to Remit</div>
-                                            <div class="fw-bold text-danger font-monospace fs-6">ETB {{ number_format($ps->withholding_amount, 2) }}</div>
+                                        <div class="col-6">
+                                            <div class="bg-white p-2 rounded-3 border border-info">
+                                                <div class="text-muted small" style="font-size:0.75rem;">15% VAT Paid to ERCA</div>
+                                                <div class="fw-bold text-info font-monospace fs-6">ETB {{ number_format($ps->vat_amount, 2) }}</div>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="col-4">
-                                        <div class="bg-white p-2 rounded-3 border border-success">
-                                            <div class="text-muted small" style="font-size:0.75rem;">Total Tax Amount Paid</div>
-                                            <div class="fw-bold text-success font-monospace fs-6">ETB {{ number_format($ps->total_tax_paid, 2) }}</div>
+                                    @elseif($isWhtOnly)
+                                        <div class="col-6">
+                                            <div class="bg-white p-2 rounded-3 border">
+                                                <div class="text-muted small" style="font-size:0.75rem;">Base Invoiced Amount</div>
+                                                <div class="fw-bold text-dark font-monospace fs-6">ETB {{ number_format($ps->total_base_amount, 2) }}</div>
+                                            </div>
                                         </div>
-                                    </div>
+                                        <div class="col-6">
+                                            <div class="bg-white p-2 rounded-3 border border-danger">
+                                                <div class="text-muted small" style="font-size:0.75rem;">3% WHT Paid to ERCA</div>
+                                                <div class="fw-bold text-danger font-monospace fs-6">ETB {{ number_format($ps->withholding_amount, 2) }}</div>
+                                            </div>
+                                        </div>
+                                    @else
+                                        <div class="col-4">
+                                            <div class="bg-white p-2 rounded-3 border">
+                                                <div class="text-muted small" style="font-size:0.75rem;">VAT to Remit</div>
+                                                <div class="fw-bold text-info font-monospace fs-6">ETB {{ number_format($ps->vat_amount, 2) }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="bg-white p-2 rounded-3 border">
+                                                <div class="text-muted small" style="font-size:0.75rem;">3% WHT to Remit</div>
+                                                <div class="fw-bold text-danger font-monospace fs-6">ETB {{ number_format($ps->withholding_amount, 2) }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="bg-white p-2 rounded-3 border border-success">
+                                                <div class="text-muted small" style="font-size:0.75rem;">Total Tax Amount Paid</div>
+                                                <div class="fw-bold text-success font-monospace fs-6">ETB {{ number_format($ps->total_tax_paid, 2) }}</div>
+                                            </div>
+                                        </div>
+                                    @endif
                                 </div>
                                 <div class="small text-muted mt-2 text-center">
                                     Assigned by: <strong>{{ $ps->financeHead?->name ?? 'Finance Head' }}</strong> &bull; 
@@ -1024,6 +1257,28 @@
 @endforeach
 
 <script>
+    function togglePayNowVat(isChecked) {
+        const fields = document.getElementById('payVatNowFields');
+        const refInput = document.getElementById('settleVatPaymentRef');
+        if (fields) {
+            fields.style.display = isChecked ? 'flex' : 'none';
+        }
+        if (refInput) {
+            refInput.required = isChecked;
+        }
+    }
+
+    function togglePayNowWht(isChecked) {
+        const fields = document.getElementById('payWhtNowFields');
+        const refInput = document.getElementById('settleWhtPaymentRef');
+        if (fields) {
+            fields.style.display = isChecked ? 'flex' : 'none';
+        }
+        if (refInput) {
+            refInput.required = isChecked;
+        }
+    }
+
     function togglePayNowFields(isChecked) {
         const fields = document.getElementById('payNowFields');
         const refInput = document.getElementById('settlePaymentRef');

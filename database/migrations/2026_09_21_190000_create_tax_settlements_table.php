@@ -48,14 +48,26 @@ return new class extends Migration
                 if (!Schema::hasColumn('expense_requests', 'tax_settlement_id')) {
                     $table->unsignedBigInteger('tax_settlement_id')->nullable()->after('status')->index();
                 }
+                if (!Schema::hasColumn('expense_requests', 'vat_settlement_id')) {
+                    $table->unsignedBigInteger('vat_settlement_id')->nullable()->after('tax_settlement_id')->index();
+                }
+                if (!Schema::hasColumn('expense_requests', 'withholding_settlement_id')) {
+                    $table->unsignedBigInteger('withholding_settlement_id')->nullable()->after('vat_settlement_id')->index();
+                }
                 if (!Schema::hasColumn('expense_requests', 'vat_settled')) {
-                    $table->boolean('vat_settled')->default(false)->after('tax_settlement_id')->index();
+                    $table->boolean('vat_settled')->default(false)->after('withholding_settlement_id')->index();
                 }
                 if (!Schema::hasColumn('expense_requests', 'withholding_settled')) {
                     $table->boolean('withholding_settled')->default(false)->after('vat_settled')->index();
                 }
                 if (!Schema::hasColumn('expense_requests', 'tax_settled_at')) {
                     $table->timestamp('tax_settled_at')->nullable()->after('withholding_settled');
+                }
+                if (!Schema::hasColumn('expense_requests', 'vat_settled_at')) {
+                    $table->timestamp('vat_settled_at')->nullable()->after('tax_settled_at');
+                }
+                if (!Schema::hasColumn('expense_requests', 'withholding_settled_at')) {
+                    $table->timestamp('withholding_settled_at')->nullable()->after('vat_settled_at');
                 }
             });
         }
@@ -68,17 +80,11 @@ return new class extends Migration
     {
         if (Schema::hasTable('expense_requests')) {
             Schema::table('expense_requests', function (Blueprint $table) {
-                if (Schema::hasColumn('expense_requests', 'tax_settled_at')) {
-                    $table->dropColumn('tax_settled_at');
-                }
-                if (Schema::hasColumn('expense_requests', 'withholding_settled')) {
-                    $table->dropColumn('withholding_settled');
-                }
-                if (Schema::hasColumn('expense_requests', 'vat_settled')) {
-                    $table->dropColumn('vat_settled');
-                }
-                if (Schema::hasColumn('expense_requests', 'tax_settlement_id')) {
-                    $table->dropColumn('tax_settlement_id');
+                $cols = ['withholding_settled_at', 'vat_settled_at', 'tax_settled_at', 'withholding_settled', 'vat_settled', 'withholding_settlement_id', 'vat_settlement_id', 'tax_settlement_id'];
+                foreach ($cols as $col) {
+                    if (Schema::hasColumn('expense_requests', $col)) {
+                        $table->dropColumn($col);
+                    }
                 }
             });
         }
