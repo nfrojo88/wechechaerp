@@ -361,29 +361,31 @@
 <!-- BATCH SETTLEMENT & MULTI-CREDIT SINGLE RECEIPT MODAL            -->
 <!-- =============================================================== -->
 <div class="modal fade" id="batchPaymentModal" tabindex="-1" aria-labelledby="batchPaymentModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-        <div class="modal-content border-0 shadow-lg rounded-3">
-            <div class="modal-header bg-success text-white py-3">
-                <div class="d-flex align-items-center gap-2">
-                    <div class="rounded-circle bg-white text-success p-2 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;">
-                        <i class="fa-solid fa-receipt fs-5"></i>
-                    </div>
-                    <div>
-                        <h5 class="modal-title fw-bold mb-0" id="batchPaymentModalLabel">Batch Credit Settlement (Upload 1 Receipt)</h5>
-                        <small class="text-white-50">Settle multiple selected credit purchases using one payment receipt & voucher proof</small>
-                    </div>
-                </div>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-
-            <form action="{{ route('finance.credit-store.batch-payment') }}" method="POST" enctype="multipart/form-data" id="batchPaymentForm">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="max-height: 94vh;">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden d-flex flex-column" style="max-height: 92vh;">
+            <form action="{{ route('finance.credit-store.batch-payment') }}" method="POST" enctype="multipart/form-data" id="batchPaymentForm" class="d-flex flex-column h-100 overflow-hidden m-0">
                 @csrf
-                <div class="modal-body p-4">
+                <!-- Sticky Header -->
+                <div class="modal-header py-3 px-4 flex-shrink-0 text-white" id="batchModalHeader" style="background: linear-gradient(135deg, #059669 0%, #047857 100%); transition: all 0.3s ease;">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="rounded-circle bg-white text-success p-2 d-flex align-items-center justify-content-center shadow-sm" style="width: 40px; height: 40px;" id="batchModalIconBox">
+                            <i class="fa-solid fa-receipt fs-5" id="batchModalIcon"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0" id="batchPaymentModalLabel">Batch Credit Settlement (Upload 1 Receipt)</h5>
+                            <small class="text-white-50" id="batchModalSubtitle">Settle multiple selected credit purchases using one payment receipt &amp; voucher proof</small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <!-- Fully Scrollable Modal Body -->
+                <div class="modal-body p-4 flex-grow-1" style="overflow-y: auto; max-height: calc(92vh - 140px);">
                     <!-- Instruction alert -->
-                    <div class="alert alert-light border shadow-sm rounded-3 mb-4 d-flex align-items-start gap-3">
+                    <div class="alert alert-light border shadow-sm rounded-3 mb-4 d-flex align-items-start gap-3" id="batchInstructionAlert">
                         <i class="fa-solid fa-circle-info text-info fs-4 mt-1"></i>
                         <div class="small">
-                            <strong>How this works:</strong> The single uploaded receipt (bank slip, cheque copy, or supplier voucher) will be automatically linked to all selected purchase requests. Separate double-entry journal entries and company expense records will be generated for each credit item, fully updating their remaining balances.
+                            <strong>How this works:</strong> The payment will be automatically distributed to each selected purchase request. Separate double-entry journal entries and company expense records will be generated for each credit item, fully updating their remaining balances.
                         </div>
                     </div>
 
@@ -391,13 +393,13 @@
                     <div class="card border shadow-sm rounded-3 mb-4">
                         <div class="card-header bg-light py-2 px-3 d-flex align-items-center justify-content-between">
                             <span class="fw-bold text-dark small text-uppercase">
-                                <i class="fas fa-list-check text-primary me-1"></i> 1. Selected Credits & Payment Amounts
+                                <i class="fas fa-list-check text-primary me-1"></i> 1. Selected Credits &amp; Payment Amounts
                             </span>
                             <span class="badge bg-primary rounded-pill" id="modalSelectedCountBadge">0 Selected</span>
                         </div>
-                        <div class="table-responsive">
+                        <div class="table-responsive" style="max-height: 220px; overflow-y: auto;">
                             <table class="table table-hover table-sm align-middle mb-0" style="font-size: 0.85rem;">
-                                <thead class="bg-light text-muted small text-uppercase">
+                                <thead class="bg-light text-muted small text-uppercase sticky-top" style="z-index: 1;">
                                     <tr>
                                         <th class="ps-3">PR #</th>
                                         <th>Project</th>
@@ -410,7 +412,7 @@
                                 <tbody id="batchModalItemsBody">
                                     <!-- Populated via JavaScript -->
                                 </tbody>
-                                <tfoot class="bg-light border-top">
+                                <tfoot class="bg-light border-top sticky-bottom" style="z-index: 1;">
                                     <tr>
                                         <th colspan="4" class="text-end ps-3 text-uppercase small text-muted">Total Settlement Amount:</th>
                                         <th class="text-end text-muted font-monospace" id="modalSumRemaining">0.00 ETB</th>
@@ -561,8 +563,9 @@
                     </div>
                 </div>
 
-                <div class="modal-footer bg-light py-3 px-4 d-flex align-items-center justify-content-between">
-                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                <!-- Pinned Sticky Footer Always in View -->
+                <div class="modal-footer bg-white border-top py-3 px-4 d-flex align-items-center justify-content-between flex-shrink-0 shadow-sm" style="z-index: 10;">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-3 fw-semibold" data-bs-dismiss="modal">
                         <i class="fas fa-times me-1"></i> Cancel
                     </button>
                     <button type="submit" class="btn btn-success fw-bold shadow-sm px-4 py-2" id="submitBatchPaymentBtn">
@@ -682,32 +685,49 @@
         const submitBtnText = document.getElementById('modalSubmitBtnText');
         const submitBtn = document.getElementById('submitBatchPaymentBtn');
         const fileInput = document.getElementById('receiptFileInput');
+        const header = document.getElementById('batchModalHeader');
+        const modalTitle = document.getElementById('batchPaymentModalLabel');
+        const modalSub = document.getElementById('batchModalSubtitle');
+        const icon = document.getElementById('batchModalIcon');
+        const iconBox = document.getElementById('batchModalIconBox');
 
         if (isNoReceipt) {
             if (withSection) withSection.classList.add('d-none');
             if (withoutSection) withoutSection.classList.remove('d-none');
             if (modeBadge) {
-                modeBadge.className = 'badge bg-warning-subtle text-dark border border-warning px-2 py-1 small';
+                modeBadge.className = 'badge bg-warning text-dark border border-warning px-2.5 py-1 small fw-bold shadow-xs';
                 modeBadge.innerHTML = '<i class="fa-solid fa-ban me-1"></i> Pay Without Receipt';
             }
             if (submitBtnText) submitBtnText.textContent = 'Pay Without Receipt & Liquidate';
             if (submitBtn) {
                 submitBtn.classList.remove('btn-success');
                 submitBtn.classList.add('btn-warning', 'text-dark');
+                submitBtn.innerHTML = '<i class="fa-solid fa-ban me-1"></i> <span id="modalSubmitBtnText">Pay Without Receipt & Liquidate</span> (<span id="modalBtnTotal">' + (document.getElementById('modalBtnTotal')?.textContent || '0.00 ETB') + '</span>)';
             }
             if (fileInput) fileInput.value = '';
+            if (header) header.style.background = 'linear-gradient(135deg, #1e293b 0%, #334155 100%)';
+            if (modalTitle) modalTitle.textContent = 'Batch Credit Settlement (Pay Without Receipt)';
+            if (modalSub) modalSub.textContent = 'Directly liquidate supplier liabilities from chosen account without receipt slip';
+            if (icon) icon.className = 'fa-solid fa-ban text-warning fs-5';
+            if (iconBox) iconBox.className = 'rounded-circle bg-dark text-warning p-2 d-flex align-items-center justify-content-center shadow-sm border border-warning';
         } else {
             if (withSection) withSection.classList.remove('d-none');
             if (withoutSection) withoutSection.classList.add('d-none');
             if (modeBadge) {
-                modeBadge.className = 'badge bg-success-subtle text-success border border-success px-2 py-1 small';
+                modeBadge.className = 'badge bg-success-subtle text-success border border-success px-2.5 py-1 small fw-bold';
                 modeBadge.innerHTML = '<i class="fas fa-file-invoice me-1"></i> With Receipt Proof';
             }
-            if (submitBtnText) submitBtnText.textContent = 'Record Payment & Liquidate';
+            if (submitBtnText) submitBtnText.textContent = 'Record Batch Payment & Liquidate';
             if (submitBtn) {
                 submitBtn.classList.remove('btn-warning', 'text-dark');
                 submitBtn.classList.add('btn-success');
+                submitBtn.innerHTML = '<i class="fas fa-check-circle me-1"></i> <span id="modalSubmitBtnText">Record Batch Payment & Liquidate</span> (<span id="modalBtnTotal">' + (document.getElementById('modalBtnTotal')?.textContent || '0.00 ETB') + '</span>)';
             }
+            if (header) header.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)';
+            if (modalTitle) modalTitle.textContent = 'Batch Credit Settlement (Upload 1 Receipt)';
+            if (modalSub) modalSub.textContent = 'Settle multiple selected credit purchases using one payment receipt & voucher proof';
+            if (icon) icon.className = 'fa-solid fa-receipt text-success fs-5';
+            if (iconBox) iconBox.className = 'rounded-circle bg-white text-success p-2 d-flex align-items-center justify-content-center shadow-sm';
         }
     }
 
@@ -854,4 +874,27 @@
         }
     });
 </script>
+
+<style>
+    /* Unlocked Smooth Modal & Table Scrollbars */
+    #batchPaymentModal .modal-body::-webkit-scrollbar,
+    #batchPaymentModal .table-responsive::-webkit-scrollbar {
+        width: 7px;
+        height: 7px;
+    }
+    #batchPaymentModal .modal-body::-webkit-scrollbar-track,
+    #batchPaymentModal .table-responsive::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 4px;
+    }
+    #batchPaymentModal .modal-body::-webkit-scrollbar-thumb,
+    #batchPaymentModal .table-responsive::-webkit-scrollbar-thumb {
+        background: #94a3b8;
+        border-radius: 4px;
+    }
+    #batchPaymentModal .modal-body::-webkit-scrollbar-thumb:hover,
+    #batchPaymentModal .table-responsive::-webkit-scrollbar-thumb:hover {
+        background: #64748b;
+    }
+</style>
 @endsection
