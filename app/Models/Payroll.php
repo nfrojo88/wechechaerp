@@ -120,7 +120,7 @@ class Payroll extends Model
      * Calculate unexcused absences (explicit absent days, half days, and unrecorded workdays without approved leave).
      * Daily deduction rate = Basic Salary / 30 per missed day.
      */
-    public static function calculateUnexcusedAbsences(int $employeeId, int $month, int $year): array
+    public static function calculateUnexcusedAbsences(int $employeeId, int $month, int $year, ?string $cutoffDate = null): array
     {
         $employee = Employee::find($employeeId);
         if (!$employee) {
@@ -137,8 +137,23 @@ class Payroll extends Model
             });
 
         $daysInMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->daysInMonth;
-        $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
-        $cutoffDay = $isCurrentMonth ? (int)date('j') : $daysInMonth;
+        if ($cutoffDate) {
+            try {
+                $parsedCutoff = \Carbon\Carbon::parse($cutoffDate);
+                if ($parsedCutoff->year == $year && $parsedCutoff->month == $month) {
+                    $cutoffDay = min((int) $parsedCutoff->day, $daysInMonth);
+                } else {
+                    $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
+                    $cutoffDay = $isCurrentMonth ? (int)date('j') : $daysInMonth;
+                }
+            } catch (\Throwable $e) {
+                $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
+                $cutoffDay = $isCurrentMonth ? (int)date('j') : $daysInMonth;
+            }
+        } else {
+            $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
+            $cutoffDay = $isCurrentMonth ? (int)date('j') : $daysInMonth;
+        }
 
         // Start day (if employee joined during this month)
         $startDay = 1;
