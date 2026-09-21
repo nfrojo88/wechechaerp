@@ -203,11 +203,6 @@ class ExpenseRequest extends Model
         return $this->belongsTo(\App\Models\Letter::class, 'letter_id');
     }
 
-    public function purchaseRequest()
-    {
-        return $this->belongsTo(\App\Models\PurchaseRequest::class, 'purchase_request_id');
-    }
-
     public function creditStoreLedger()
     {
         return $this->belongsTo(\App\Models\CreditStoreLedger::class, 'credit_store_ledger_id');
