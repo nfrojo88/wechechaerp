@@ -192,10 +192,16 @@ class Payroll extends Model
 
             if (isset($attendances[$dateStr])) {
                 $att = $attendances[$dateStr];
+                $isSaturday = \Carbon\Carbon::parse($dateStr)->isSaturday();
+
                 if ($att->status === 'absent') {
                     $unexcusedDays += 1.0;
                     $absentDates[] = $dateStr;
                 } elseif ($att->status === 'half_day') {
+                    if ($isSaturday && (!empty($att->morning_in) || ($att->hours_worked ?? 0) >= 2.0)) {
+                        // Official Saturday policy is morning session only; treated as full attendance
+                        continue;
+                    }
                     $unexcusedDays += 0.5;
                     $absentDates[] = $dateStr . ' (Half Day)';
                 } elseif (in_array($att->status, ['leave', 'holiday', 'weekend'])) {

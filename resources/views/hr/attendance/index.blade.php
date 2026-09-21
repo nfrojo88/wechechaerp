@@ -421,25 +421,31 @@
                                 </div>
                             </td>
                             <td class="text-center">
-                                <div class="d-flex justify-content-center align-items-center gap-1">
-                                    @if($a->afternoon_in)
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" 
-                                              title="Afternoon Clock In • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($a->afternoon_in) }}">
-                                            <i class="fas fa-arrow-right me-1"></i>{{ substr($a->afternoon_in, 0, 5) }}
-                                        </span>
-                                    @else
-                                        <span class="badge bg-light text-muted border px-2 py-1" title="No Afternoon Clock In">—</span>
-                                    @endif
-                                    <span class="text-muted small">&bull;</span>
-                                    @if($a->afternoon_out)
-                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1" 
-                                              title="Afternoon Clock Out • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($a->afternoon_out) }}">
-                                            <i class="fas fa-arrow-left me-1"></i>{{ substr($a->afternoon_out, 0, 5) }}
-                                        </span>
-                                    @else
-                                        <span class="badge bg-light text-muted border px-2 py-1" title="No Afternoon Clock Out">—</span>
-                                    @endif
-                                </div>
+                                @if($a->attendance_date && $a->attendance_date->isSaturday() && empty($a->afternoon_in) && empty($a->afternoon_out))
+                                    <span class="badge bg-light text-muted border px-2 py-1" style="font-size: 0.72rem;" title="Saturday Afternoon is non-working by official policy">
+                                        <i class="fa-solid fa-mug-saucer me-1 text-warning"></i>Off (እረፍት)
+                                    </span>
+                                @else
+                                    <div class="d-flex justify-content-center align-items-center gap-1">
+                                        @if($a->afternoon_in)
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" 
+                                                  title="Afternoon Clock In • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($a->afternoon_in) }}">
+                                                <i class="fas fa-arrow-right me-1"></i>{{ substr($a->afternoon_in, 0, 5) }}
+                                            </span>
+                                        @else
+                                            <span class="badge bg-light text-muted border px-2 py-1" title="No Afternoon Clock In">—</span>
+                                        @endif
+                                        <span class="text-muted small">&bull;</span>
+                                        @if($a->afternoon_out)
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1" 
+                                                  title="Afternoon Clock Out • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($a->afternoon_out) }}">
+                                                <i class="fas fa-arrow-left me-1"></i>{{ substr($a->afternoon_out, 0, 5) }}
+                                            </span>
+                                        @else
+                                            <span class="badge bg-light text-muted border px-2 py-1" title="No Afternoon Clock Out">—</span>
+                                        @endif
+                                    </div>
+                                @endif
                             </td>
                             <td class="text-center">
                                 @if($a->hours_worked > 0)
@@ -458,14 +464,19 @@
                                         'holiday' => 'secondary',
                                         'weekend' => 'light'
                                     ];
+                                    $rowStatus = $a->status;
+                                    // Ensure Saturday morning attendees are displayed as Present
+                                    if ($a->attendance_date && $a->attendance_date->isSaturday() && $rowStatus === 'half_day' && ($a->morning_in || $a->hours_worked >= 2.0)) {
+                                        $rowStatus = 'present';
+                                    }
                                 @endphp
                                 @if(str_contains($a->notes ?? '', 'On-Site'))
                                     <span class="badge text-white px-2 py-1 shadow-sm" style="background-color: #8b5cf6;" title="{{ $a->notes }}">
                                         <i class="fa-solid fa-person-digging me-1"></i>On Site (ሳይት ላይ)
                                     </span>
                                 @else
-                                    <span class="badge bg-{{ $statusColors[$a->status] ?? 'secondary' }}">
-                                        {{ ucfirst(str_replace('_', ' ', $a->status)) }}
+                                    <span class="badge bg-{{ $statusColors[$rowStatus] ?? 'secondary' }}">
+                                        {{ ucfirst(str_replace('_', ' ', $rowStatus)) }}
                                     </span>
                                 @endif
                             </td>

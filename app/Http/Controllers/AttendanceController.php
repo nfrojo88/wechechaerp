@@ -54,6 +54,48 @@ class AttendanceController extends Controller
             });
         }
 
+        // ── Auto-heal & Normalize Saturday Attendance Records ─────────────────
+        // Under company policy, Saturday operates strictly on a Morning Session (4.0 hrs).
+        // Employees who attended the morning session or worked their hours (>= 2.0h or had morning punches)
+        // are recognized as FULLY 'present', NOT 'half_day'.
+        try {
+            $driver = \Illuminate\Support\Facades\DB::connection()->getDriverName();
+            if ($driver === 'sqlite') {
+                Attendance::whereRaw("strftime('%w', attendance_date) = '6'")
+                    ->where('status', 'half_day')
+                    ->where(function ($q) {
+                        $q->whereNotNull('morning_in')
+                          ->orWhereNotNull('morning_out')
+                          ->orWhereNotNull('check_in')
+                          ->orWhere('hours_worked', '>=', 2.0);
+                    })
+                    ->update(['status' => 'present']);
+            } else {
+                Attendance::whereRaw('DAYOFWEEK(attendance_date) = 7')
+                    ->where('status', 'half_day')
+                    ->where(function ($q) {
+                        $q->whereNotNull('morning_in')
+                          ->orWhereNotNull('morning_out')
+                          ->orWhereNotNull('check_in')
+                          ->orWhere('hours_worked', '>=', 2.0);
+                    })
+                    ->update(['status' => 'present']);
+            }
+        } catch (\Throwable $e) {
+            $targetDate = $selectedDate ?: (request('date_from') ?: today()->toDateString());
+            if (\Carbon\Carbon::parse($targetDate)->isSaturday()) {
+                Attendance::whereDate('attendance_date', $targetDate)
+                    ->where('status', 'half_day')
+                    ->where(function ($q) {
+                        $q->whereNotNull('morning_in')
+                          ->orWhereNotNull('morning_out')
+                          ->orWhereNotNull('check_in')
+                          ->orWhere('hours_worked', '>=', 2.0);
+                    })
+                    ->update(['status' => 'present']);
+            }
+        }
+
         $attendances = $query->paginate(30)->withQueryString();
 
         // Fetch distinct available dates from attendance records for quick date navigation
@@ -68,6 +110,22 @@ class AttendanceController extends Controller
 
         // Determine date for statistics cards
         $statsDate = $selectedDate ?: (request('date_from') ?: ($availableDates->first() ?? today()->toDateString()));
+        $isSaturdayStats = !empty($statsDate) && \Carbon\Carbon::parse($statsDate)->isSaturday();
+
+        if ($isSaturdayStats) {
+            // Guarantee any Saturday records for this stats date with morning attendance are updated to present
+            try {
+                Attendance::whereDate('attendance_date', $statsDate)
+                    ->where('status', 'half_day')
+                    ->where(function ($q) {
+                        $q->whereNotNull('morning_in')
+                          ->orWhereNotNull('morning_out')
+                          ->orWhereNotNull('check_in')
+                          ->orWhere('hours_worked', '>=', 2.0);
+                    })
+                    ->update(['status' => 'present']);
+            } catch (\Throwable $e) {}
+        }
 
         $stats = [
             'date'      => $statsDate,
@@ -646,22 +704,6 @@ class AttendanceController extends Controller
                     continue;
                 }
 
-                // Determine status
-                $hasMorningIn   = !empty($info['morning_in']);
-                $hasAfternoonIn = !empty($info['afternoon_in']);
-
-                if ($hasMorningIn && $hasAfternoonIn) {
-                    $status = 'present';
-                } elseif ($hasMorningIn || $hasAfternoonIn) {
-                    $status = 'half_day';
-                } elseif (!empty($info['absent_morning']) && !empty($info['absent_afternoon'])) {
-                    $status = 'absent';
-                } elseif (!empty($info['absent_morning']) || !empty($info['absent_afternoon'])) {
-                    $status = 'half_day';
-                } else {
-                    $status = 'absent';
-                }
-
                 // Calculate hours worked
                 $hours = (float) $info['work_hours'];
                 if ($hours == 0) {
@@ -678,6 +720,36 @@ class AttendanceController extends Controller
                             $aOut = Carbon::createFromFormat('H:i', $info['afternoon_out']);
                             $hours += max(0, round($aOut->diffInMinutes($aIn) / 60, 2));
                         } catch (\Exception $e) {}
+                    }
+                }
+
+                // Determine status (aware of Saturday morning-only work policy)
+                $hasMorningIn   = !empty($info['morning_in']);
+                $hasAfternoonIn = !empty($info['afternoon_in']);
+                $dateCarbon     = Carbon::parse($date);
+                $isSaturday     = $dateCarbon->isSaturday();
+
+                if ($isSaturday) {
+                    // On Saturday, official work is Morning Session Only (4.0 hrs).
+                    // If employee clocked in or out in morning, or worked hours >= 2.0, they are FULLY PRESENT.
+                    if ($hasMorningIn || !empty($info['morning_out']) || ($hours >= 2.0)) {
+                        $status = 'present';
+                    } elseif (!empty($info['absent_morning'])) {
+                        $status = 'absent';
+                    } else {
+                        $status = 'present';
+                    }
+                } else {
+                    if ($hasMorningIn && $hasAfternoonIn) {
+                        $status = 'present';
+                    } elseif ($hasMorningIn || $hasAfternoonIn) {
+                        $status = 'half_day';
+                    } elseif (!empty($info['absent_morning']) && !empty($info['absent_afternoon'])) {
+                        $status = 'absent';
+                    } elseif (!empty($info['absent_morning']) || !empty($info['absent_afternoon'])) {
+                        $status = 'half_day';
+                    } else {
+                        $status = 'absent';
                     }
                 }
 
