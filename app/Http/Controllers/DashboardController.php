@@ -760,10 +760,16 @@ class DashboardController extends Controller
             ->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
             ->count(), 0);
 
+        // Head Office Purchase Requests
+        $myPurchaseRequestsCount = $this->safe(fn() => \App\Models\PurchaseRequest::where('requested_by', $user->id)->count(), 0);
+        $pendingPurchaseRequestsCount = $this->safe(fn() => \App\Models\PurchaseRequest::where('requested_by', $user->id)->whereNotIn('status', ['received', 'cancelled', 'rejected'])->count(), 0);
+        $recentPurchaseRequests = $this->safe(fn() => \App\Models\PurchaseRequest::with(['project', 'store', 'items.product'])->where('requested_by', $user->id)->latest()->take(5)->get(), collect());
+
         return view('dashboard.secretary', compact(
             'totalLetters', 'incomingLettersCount', 'outgoingLettersCount', 'pendingLetters', 'closedLetters', 'myLettersCount',
             'myLetters', 'recentLetters', 'incomingLetters', 'outgoingLetters', 'employeeLettersCount', 'recentEmployeeLetters',
-            'myExpenseRequests', 'myExpenseCount', 'myOfficeRequests', 'myOfficeRequestsCount', 'pendingOfficeRequestsCount'
+            'myExpenseRequests', 'myExpenseCount', 'myOfficeRequests', 'myOfficeRequestsCount', 'pendingOfficeRequestsCount',
+            'myPurchaseRequestsCount', 'pendingPurchaseRequestsCount', 'recentPurchaseRequests'
         ));
     }
 

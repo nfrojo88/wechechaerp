@@ -12,12 +12,12 @@ class StorePolicy
 
     public function viewAny(User $user)
     {
-        return $user->hasPermissionTo('stores.view');
+        return $user->hasRole('secretary') || $user->hasPermissionTo('stores.view');
     }
 
     public function view(User $user, Store $store)
     {
-        if ($user->hasRole('global_admin') || $user->hasRole('admin')) {
+        if ($user->hasRole('global_admin') || $user->hasRole('admin') || $user->hasRole('secretary')) {
             return true;
         }
 

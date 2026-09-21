@@ -33,14 +33,92 @@ class PurchaseRequestController extends Controller
         return redirect()->route('procurement.my-queue', $request->query());
     }
 
+    /**
+     * Resolve Head Office Project
+     */
+    protected function getHeadOfficeProject(): Project
+    {
+        $project = Project::where(function($q) {
+            $q->where('name', 'like', '%Head Office%')
+              ->orWhere('name', 'like', '%HeadOffice%')
+              ->orWhere('name', 'like', '%Central%')
+              ->orWhere('name', 'like', '%HQ%')
+              ->orWhere('name', 'like', '%ዋና ቢሮ%')
+              ->orWhere('code', 'like', '%HO%');
+        })->first();
+
+        if (!$project) {
+            $project = Project::firstOrCreate(
+                ['name' => 'Head Office'],
+                [
+                    'code' => 'HO-001',
+                    'status' => 'active',
+                    'location' => 'Head Office',
+                    'description' => 'Head Office / Central Administration',
+                ]
+            );
+        }
+
+        return $project;
+    }
+
+    /**
+     * Resolve Head Office Store
+     */
+    protected function getHeadOfficeStore(?Project $project = null): ?Store
+    {
+        $query = Store::where('is_active', true);
+        
+        $store = (clone $query)->where(function($q) use ($project) {
+            $q->where('name', 'like', '%Head Office%')
+              ->orWhere('name', 'like', '%HeadOffice%')
+              ->orWhere('name', 'like', '%Main%')
+              ->orWhere('name', 'like', '%Central%')
+              ->orWhere('name', 'like', '%ዋና ቢሮ%');
+            if ($project) {
+                $q->orWhere('project_id', $project->id);
+            }
+        })->first();
+
+        if (!$store && $project) {
+            $store = Store::firstOrCreate(
+                ['name' => 'Head Office Store'],
+                [
+                    'code' => 'HO-STR-01',
+                    'is_active' => true,
+                    'type' => 'main',
+                    'project_id' => $project->id,
+                    'notes' => 'Head Office Central Store',
+                ]
+            );
+        }
+
+        return $store;
+    }
+
     // ─── Create / Store ──────────────────────────────────────────────────────
     public function create()
     {
-        $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
-        if ($projects->isEmpty()) {
-            $projects = Project::orderBy('name')->get();
+        $user = Auth::user();
+        $isSecretary = $user && $user->hasRole('secretary') && !$user->hasAnyRole(['admin', 'global_admin', 'gm', 'purchase_manager', 'coordinator']);
+
+        if ($isSecretary) {
+            $hoProject = $this->getHeadOfficeProject();
+            $hoStore = $this->getHeadOfficeStore($hoProject);
+
+            $projects = collect([$hoProject]);
+            $stores = $hoStore ? collect([$hoStore]) : Store::where('is_active', true)->where('project_id', $hoProject->id)->get();
+            if ($stores->isEmpty() && $hoStore) {
+                $stores = collect([$hoStore]);
+            }
+        } else {
+            $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
+            if ($projects->isEmpty()) {
+                $projects = Project::orderBy('name')->get();
+            }
+            $stores = Store::where('is_active', true)->get();
         }
-        $stores           = Store::where('is_active', true)->get();
+
         $products = Product::orderBy('name')->get()->map(function($product) {
             $latestPriceRecord = \App\Models\MaterialPrice::where('product_id', $product->id)
                 ->orderBy('effective_date', 'desc')
@@ -50,11 +128,29 @@ class PurchaseRequestController extends Controller
             return $product;
         });
         $materialRequests = MaterialRequest::where('status', 'approved')->get();
-        return view('procurement.purchase-requests.create', compact('projects', 'stores', 'products', 'materialRequests'));
+
+        return view('procurement.purchase-requests.create', compact('projects', 'stores', 'products', 'materialRequests', 'isSecretary'));
     }
 
     public function store(Request $request)
     {
+        $user = Auth::user();
+        $isSecretary = $user && $user->hasRole('secretary') && !$user->hasAnyRole(['admin', 'global_admin', 'gm', 'purchase_manager', 'coordinator']);
+
+        if ($isSecretary) {
+            $hoProject = $this->getHeadOfficeProject();
+            $hoStore = $this->getHeadOfficeStore($hoProject);
+
+            $request->merge([
+                'project_id' => $hoProject->id,
+            ]);
+            if ($hoStore) {
+                $request->merge([
+                    'store_id' => $hoStore->id,
+                ]);
+            }
+        }
+
         $request->validate([
             'project_id'          => 'required|exists:projects,id',
             'store_id'            => 'nullable|exists:stores,id',
@@ -69,10 +165,11 @@ class PurchaseRequestController extends Controller
             'items.*.unit'        => 'required|string|max:20',
         ]);
 
-        DB::transaction(function () use ($request) {
+        DB::transaction(function () use ($request, $isSecretary) {
             $no = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
 
-            $pr = PurchaseRequest::create([
+            $isOfficeRequest = $isSecretary || $request->boolean('is_office_request');
+            $prData = [
                 'pr_no'               => $no,
                 'project_id'          => $request->project_id,
                 'store_id'            => $request->store_id,
@@ -80,11 +177,15 @@ class PurchaseRequestController extends Controller
                 'material_request_id' => $request->material_request_id,
                 'priority'            => $request->priority,
                 'type'                => $request->type,
+                'is_office_request'   => $isOfficeRequest,
+                'office_purpose'      => $isOfficeRequest ? ($request->office_purpose ?? 'Head Office Purchase Request') : null,
                 'required_date'       => $request->required_date,
                 'justification'       => $request->justification,
                 'status'              => PurchaseRequest::STATUS_DRAFT,
                 'current_owner_role'  => 'coordinator', // Will be resolved if needed
-            ]);
+            ];
+
+            $pr = PurchaseRequest::create($prData);
             $pr->update(['current_owner_role' => $this->lifecycle->resolveOwnerRole('coordinator', $pr)]);
 
             foreach ($request->items as $item) {
@@ -109,7 +210,7 @@ class PurchaseRequestController extends Controller
             }
         });
 
-        return redirect()->route('procurement.my-queue')->with('success', 'Purchase Request created.');
+        return redirect()->route('procurement.my-queue')->with('success', 'Purchase Request created successfully.');
     }
 
     // ─── Show ────────────────────────────────────────────────────────────────

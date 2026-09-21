@@ -8,24 +8,60 @@
     </div>
     <form action="{{ route('purchase-requests.store') }}" method="POST">
         @csrf
+        @if($isSecretary ?? false)
+        <div class="alert alert-info border-info bg-info bg-opacity-10 d-flex align-items-center gap-2 mb-3 shadow-sm rounded-3">
+            <i class="fa-solid fa-building-circle-check text-info fs-4"></i>
+            <div>
+                <strong>Head Office Requisition:</strong> As Secretary, this purchase request is automatically configured for <strong>Head Office Project</strong> and <strong>Head Office Store</strong>.
+            </div>
+        </div>
+        @endif
+
         <div class="row g-3">
             <div class="col-md-8">
                 <div class="card shadow-sm">
-                    <div class="card-header fw-semibold">Request Details</div>
+                    <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+                        <span>Request Details</span>
+                        @if($isSecretary ?? false)
+                            <span class="badge bg-primary-subtle text-primary border border-primary"><i class="fa-solid fa-shield-halved me-1"></i> Secretary Requisition</span>
+                        @endif
+                    </div>
                     <div class="card-body">
                         <div class="row g-3">
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Project <span class="text-danger">*</span></label>
-                                <select name="project_id" id="project_select" class="form-select" required>
-                                    <option value="">-- Select Project --</option>
-                                    @foreach($projects as $p)<option value="{{ $p->id }}" {{ old('project_id') == $p->id ? 'selected' : '' }}>{{ $p->name }}</option>@endforeach
+                                <label class="form-label fw-semibold">
+                                    Project <span class="text-danger">*</span>
+                                    @if($isSecretary ?? false)
+                                        <span class="badge bg-primary-subtle text-primary border border-primary ms-1"><i class="fa-solid fa-building me-1"></i> Head Office Only</span>
+                                    @endif
+                                </label>
+                                <select name="project_id" id="project_select" class="form-select {{ ($isSecretary ?? false) ? 'bg-light' : '' }}" required>
+                                    @if(!($isSecretary ?? false))
+                                        <option value="">-- Select Project --</option>
+                                    @endif
+                                    @foreach($projects as $p)
+                                        <option value="{{ $p->id }}" {{ (old('project_id') == $p->id || ($isSecretary ?? false) || $loop->count == 1) ? 'selected' : '' }}>
+                                            {{ $p->name }}
+                                        </option>
+                                    @endforeach
                                 </select>
                             </div>
                             <div class="col-md-6">
-                                <label class="form-label fw-semibold">Store</label>
-                                <select name="store_id" id="store_select" class="form-select">
-                                    <option value="">-- Select Store --</option>
-                                    @foreach($stores as $s)<option value="{{ $s->id }}" data-project-id="{{ $s->project_id }}" {{ old('store_id') == $s->id ? 'selected' : '' }}>{{ $s->name }}</option>@endforeach
+                                <label class="form-label fw-semibold">
+                                    Store
+                                    @if($isSecretary ?? false)
+                                        <span class="badge bg-info-subtle text-info border border-info ms-1"><i class="fa-solid fa-warehouse me-1"></i> Head Office Store</span>
+                                    @endif
+                                </label>
+                                <select name="store_id" id="store_select" class="form-select {{ ($isSecretary ?? false) ? 'bg-light' : '' }}">
+                                    @if(!($isSecretary ?? false))
+                                        <option value="">-- Select Store --</option>
+                                    @endif
+                                    @foreach($stores as $s)
+                                        <option value="{{ $s->id }}" data-project-id="{{ $s->project_id }}" {{ (old('store_id') == $s->id || ($isSecretary ?? false) || $loop->count == 1) ? 'selected' : '' }}>
+                                            {{ $s->name }}
+                                        </option>
+                                    @endforeach
                                 </select>
                             </div>
                             <div class="col-md-4">

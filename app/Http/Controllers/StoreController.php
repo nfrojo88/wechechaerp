@@ -28,6 +28,14 @@ class StoreController extends Controller
                 $assignedProjectIds = $user->projects()->pluck('projects.id');
                 $query->whereIn('project_id', $assignedProjectIds);
             }
+        } elseif ($user && $user->hasRole('secretary') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager'])) {
+            $query->where(function($q) {
+                $q->where('name', 'like', '%Head Office%')
+                  ->orWhere('name', 'like', '%HeadOffice%')
+                  ->orWhere('name', 'like', '%Main%')
+                  ->orWhere('name', 'like', '%Central%')
+                  ->orWhere('name', 'like', '%ዋና ቢሮ%');
+            });
         }
         
         if ($request->filled('search')) {

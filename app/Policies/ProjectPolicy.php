@@ -12,12 +12,12 @@ class ProjectPolicy
 
     public function viewAny(User $user)
     {
-        return $user->hasPermissionTo('projects.view');
+        return $user->hasRole('secretary') || $user->hasPermissionTo('projects.view');
     }
 
     public function view(User $user, Project $project)
     {
-        return $user->hasPermissionTo('projects.view');
+        return $user->hasRole('secretary') || $user->hasPermissionTo('projects.view');
     }
 
     public function create(User $user)

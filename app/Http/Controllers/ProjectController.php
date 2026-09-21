@@ -26,6 +26,15 @@ class ProjectController extends Controller
                 $assignedProjectIds->push($user->store->project_id);
             }
             $query->whereIn('id', $assignedProjectIds->unique());
+        } elseif ($user && $user->hasRole('secretary') && !$user->hasAnyRole(['admin', 'global_admin', 'gm', 'planning_manager'])) {
+            $query->where(function($q) {
+                $q->where('name', 'like', '%Head Office%')
+                  ->orWhere('name', 'like', '%HeadOffice%')
+                  ->orWhere('name', 'like', '%HQ%')
+                  ->orWhere('name', 'like', '%Central%')
+                  ->orWhere('name', 'like', '%ዋና ቢሮ%')
+                  ->orWhere('code', 'like', '%HO%');
+            });
         }
         
         if ($request->filled('search')) {

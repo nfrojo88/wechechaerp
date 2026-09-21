@@ -379,6 +379,9 @@ class RolesAndPermissionsSeeder extends Seeder
             'secretary' => [
                 'projects.view', 'schedule.view',
                 'hr.view',
+                'stores.view',
+                'purchases.requests.create',
+                'purchases.view',
             ],
 
             'general_service' => [

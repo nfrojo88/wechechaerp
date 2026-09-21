@@ -15,6 +15,9 @@
             </p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ route('purchase-requests.create') }}" class="btn btn-success shadow-sm">
+                <i class="fa-solid fa-cart-plus me-1"></i> New Purchase Request (HO)
+            </a>
             <a href="{{ route('letters.create') }}" class="btn btn-primary shadow-sm">
                 <i class="fa-solid fa-pen-to-square me-1"></i> Register New Letter
             </a>
@@ -167,6 +170,12 @@
                     <i class="fa-solid fa-bolt text-warning me-1"></i>Quick Actions:
                 </span>
                 <div class="d-flex flex-wrap gap-2">
+                    <a href="{{ route('purchase-requests.create') }}" class="btn btn-success btn-sm px-3">
+                        <i class="fa-solid fa-cart-plus me-1"></i> Create Purchase Request (HO)
+                    </a>
+                    <a href="{{ route('procurement.my-queue') }}" class="btn btn-outline-primary btn-sm px-3">
+                        <i class="fa-solid fa-list-check me-1"></i> My PRs ({{ $myPurchaseRequestsCount ?? 0 }})
+                    </a>
                     <a href="{{ route('letters.create') }}" class="btn btn-primary btn-sm px-3">
                         <i class="fa-solid fa-plus me-1"></i> Register New Letter
                     </a>
@@ -648,6 +657,45 @@
                             <span><i class="fa-solid fa-plus-circle text-primary me-2"></i>Register New Letter</span>
                             <i class="fa-solid fa-chevron-right text-muted small"></i>
                         </a>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Head Office Purchase Requests Card --}}
+            <div class="card border-0 shadow-sm rounded-3 mb-4">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-dark">
+                        <i class="fa-solid fa-cart-shopping text-primary me-2"></i>Head Office Purchase Requests
+                    </h6>
+                    <div class="d-flex gap-1">
+                        <a href="{{ route('purchase-requests.create') }}" class="btn btn-sm btn-outline-success py-1 px-2" title="New Purchase Request">
+                            <i class="fa-solid fa-plus me-1"></i> New
+                        </a>
+                        <a href="{{ route('procurement.my-queue') }}" class="btn btn-sm btn-outline-primary py-1 px-2" title="View All in My Queue">
+                            <i class="fa-solid fa-list me-1"></i> All
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        @forelse($recentPurchaseRequests ?? [] as $pr)
+                            <a href="{{ route('purchase-requests.show', $pr->id) }}" class="list-group-item list-group-item-action px-3 py-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="fw-bold text-primary font-monospace" style="font-size:0.82rem;">{{ $pr->pr_no }}</div>
+                                        <small class="text-muted">{{ $pr->created_at->format('M d, Y') }} &bull; {{ $pr->items->count() }} item(s)</small>
+                                    </div>
+                                    <span class="badge bg-light text-dark border" style="font-size:0.7rem;">
+                                        {{ ucfirst(str_replace('_', ' ', $pr->status)) }}
+                                    </span>
+                                </div>
+                            </a>
+                        @empty
+                            <div class="p-3 text-center text-muted small">
+                                No Head Office purchase requests created yet.
+                                <a href="{{ route('purchase-requests.create') }}" class="d-block mt-1">Create one now &rarr;</a>
+                            </div>
+                        @endforelse
                     </div>
                 </div>
             </div>

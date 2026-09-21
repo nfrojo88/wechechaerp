@@ -980,6 +980,34 @@
                 <span>Ask / Request Leave</span>
             </a>
         </li>
+        <hr class="sidebar-section-divider">
+        <li style="padding: 0.35rem 0.9rem 0.1rem;">
+            <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+                <i class="fa-solid fa-building me-1 text-primary"></i> Head Office Procurement
+            </small>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('purchase-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-requests.create') ? 'active' : '' }}">
+                <i class="fa-solid fa-cart-plus text-success"></i>
+                <span>New Purchase Request</span>
+                <span class="badge bg-primary-subtle text-primary border border-primary rounded-pill ms-auto" style="font-size:0.65rem;">HO Only</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.my-queue') || (request()->routeIs('purchase-requests.*') && !request()->routeIs('purchase-requests.create')) ? 'active' : '' }}">
+                <i class="fa-solid fa-clipboard-list text-info"></i>
+                <span>My Purchase Requests</span>
+                @php
+                    $secPrCount = 0;
+                    try {
+                        $secPrCount = \App\Models\PurchaseRequest::where('requested_by', auth()->id())->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($secPrCount > 0)
+                    <span class="badge bg-info text-dark rounded-pill ms-auto">{{ $secPrCount }}</span>
+                @endif
+            </a>
+        </li>
         @endif
 
         @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser && !$isAuditorUser && !$isSiteEngineer)
@@ -1187,7 +1215,7 @@
 
         {{-- Masters --}}
 
-        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isSecretary && !$isStoreKeeper && !$isStoreManager && !$isAuditorUser))
+        @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isStoreKeeper && !$isStoreManager && !$isAuditorUser))
         @if($isCoordinator || (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['projects.view', 'planning.view', 'schedule.view', 'stores.view', 'stores.create', 'stores.edit', 'stores.delete', 'products.view', 'products.create', 'products.edit', 'products.delete']))))
 
         @if($isCoordinator || (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['projects.view', 'planning.view', 'schedule.view']))))
