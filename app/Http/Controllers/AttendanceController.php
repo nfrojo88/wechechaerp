@@ -1007,11 +1007,29 @@ class AttendanceController extends Controller
      */
     public function syncZkteco(Request $request)
     {
-        $date  = $request->input('date', now()->format('Y-m-d'));
-        $force = $request->boolean('force', false);
+        $startDateInput = $request->input('start_date') ?: $request->input('date', now()->format('Y-m-d'));
+        $endDateInput   = $request->input('end_date') ?: $startDateInput;
+        $force          = $request->boolean('force', false);
 
         try {
-            $args = ['--date' => $date];
+            $start = \Carbon\Carbon::parse($startDateInput)->format('Y-m-d');
+            $end   = \Carbon\Carbon::parse($endDateInput)->format('Y-m-d');
+        } catch (\Throwable $e) {
+            $start = now()->format('Y-m-d');
+            $end   = now()->format('Y-m-d');
+        }
+
+        if ($start > $end) {
+            $temp = $start;
+            $start = $end;
+            $end = $temp;
+        }
+
+        try {
+            $args = [
+                '--from' => $start,
+                '--to'   => $end,
+            ];
             if ($force) {
                 $args['--force'] = true;
             }
@@ -1019,9 +1037,11 @@ class AttendanceController extends Controller
             Artisan::call('zkteco:sync', $args);
             $output = trim(Artisan::output());
 
+            $label = ($start === $end) ? $start : "{$start} to {$end}";
+
             return redirect()
-                ->route('attendance.deviceLogs')
-                ->with('success', "ZKTeco sync completed for {$date}. " . ($output ? strip_tags($output) : ''));
+                ->route('attendance.deviceLogs', ['date_from' => $start, 'date_to' => $end])
+                ->with('success', "ZKTeco device punch sync completed for {$label}. " . ($output ? strip_tags($output) : ''));
 
         } catch (\Exception $e) {
             return redirect()

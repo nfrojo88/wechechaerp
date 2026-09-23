@@ -18,10 +18,13 @@ class SyncZktecoAttendance extends Command
      * Usage:
      *   php artisan zkteco:sync               ← syncs today
      *   php artisan zkteco:sync --date=2026-07-20
+     *   php artisan zkteco:sync --from=2026-07-01 --to=2026-07-20
      *   php artisan zkteco:sync --date=2026-07-20 --force    ← re-sync already synced
      */
     protected $signature = 'zkteco:sync
                             {--date= : Date to sync in Y-m-d format (default: today)}
+                            {--from= : Start date to sync in Y-m-d format}
+                            {--to= : End date to sync in Y-m-d format}
                             {--force : Re-sync records that were already synced}
                             {--all : Sync ALL dates (use carefully)}';
 
@@ -31,6 +34,8 @@ class SyncZktecoAttendance extends Command
     {
         $forceResync = $this->option('force');
         $syncAll     = $this->option('all');
+        $from        = $this->option('from');
+        $to          = $this->option('to');
 
         if ($syncAll) {
             $dates = DB::table('device_attendance_logs')
@@ -49,6 +54,27 @@ class SyncZktecoAttendance extends Command
             $this->info("Syncing " . count($dates) . " dates...");
             foreach ($dates as $date) {
                 $this->syncDate($date, $forceResync);
+            }
+        } elseif ($from || $to) {
+            try {
+                $startDate = $from ? Carbon::parse($from) : ($to ? Carbon::parse($to) : now());
+                $endDate   = $to ? Carbon::parse($to) : ($from ? Carbon::parse($from) : now());
+            } catch (\Throwable $e) {
+                $this->error("Invalid date format in --from or --to: " . $e->getMessage());
+                return self::FAILURE;
+            }
+
+            if ($startDate->gt($endDate)) {
+                $temp = $startDate;
+                $startDate = $endDate;
+                $endDate = $temp;
+            }
+
+            $current = $startDate->copy();
+            $this->info("Syncing date range: {$startDate->format('Y-m-d')} to {$endDate->format('Y-m-d')}");
+            while ($current->lte($endDate)) {
+                $this->syncDate($current->format('Y-m-d'), $forceResync);
+                $current->addDay();
             }
         } else {
             $date = $this->option('date') ?? now()->format('Y-m-d');

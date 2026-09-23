@@ -80,29 +80,41 @@
         <div class="col-md-5">
             <div class="card border-0 shadow-sm h-100 border-start border-4 border-primary">
                 <div class="card-body">
-                    <h6 class="fw-bold mb-3">
+                    <h6 class="fw-bold mb-2">
                         <i class="fa-solid fa-rotate text-primary me-2"></i>Sync Punches → Attendance
                     </h6>
                     <p class="small text-muted mb-3">
-                        Sync automatically runs every 5 minutes. Use this to trigger an immediate sync.
+                        Sync automatically runs every 5 minutes. Use this to trigger an immediate sync for a single date or date range.
                     </p>
-                    <form method="POST" action="{{ route('attendance.zkteco-sync') }}">
+                    <form method="POST" action="{{ route('attendance.zkteco-sync') }}" id="zktecoSyncForm">
                         @csrf
-                        <div class="row g-2 align-items-end">
-                            <div class="col">
-                                <label class="form-label small fw-semibold">Date</label>
-                                <input type="date" name="date" class="form-control form-control-sm"
-                                       value="{{ request('date', now()->format('Y-m-d')) }}">
+                        <div class="row g-2 align-items-end mb-2">
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold mb-1 text-dark">
+                                    <i class="far fa-calendar-alt text-primary me-1"></i>Start Date
+                                </label>
+                                <input type="date" name="start_date" id="syncStartDate" class="form-control form-control-sm"
+                                       value="{{ request('start_date', request('date_from', now()->format('Y-m-d'))) }}" required>
                             </div>
-                            <div class="col-auto">
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="checkbox" name="force" value="1" id="forceSync">
-                                    <label class="form-check-label small" for="forceSync">Re-sync existing</label>
-                                </div>
+                            <div class="col-6">
+                                <label class="form-label small fw-semibold mb-1 text-dark">
+                                    <i class="far fa-calendar-check text-success me-1"></i>End Date
+                                </label>
+                                <input type="date" name="end_date" id="syncEndDate" class="form-control form-control-sm"
+                                       value="{{ request('end_date', request('date_to', now()->format('Y-m-d'))) }}" required>
                             </div>
                         </div>
-                        <div class="d-flex gap-2 mt-3">
-                            <button type="submit" class="btn btn-primary btn-sm flex-fill">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="force" value="1" id="forceSync">
+                                <label class="form-check-label small text-muted" for="forceSync">Re-sync existing</label>
+                            </div>
+                            <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-primary small" onclick="setSyncToToday()">
+                                <i class="fas fa-calendar-day me-1"></i>Today Only
+                            </button>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary btn-sm flex-fill" id="syncNowBtn">
                                 <i class="fa-solid fa-rotate me-1"></i>Sync Now
                             </button>
                             <a href="{{ route('attendance.index') }}" class="btn btn-outline-success btn-sm">
@@ -260,3 +272,23 @@
     </div>
 </div>
 @endsection
+
+@push('scripts')
+<script>
+function setSyncToToday() {
+    const today = '{{ now()->format("Y-m-d") }}';
+    const s = document.getElementById('syncStartDate');
+    const e = document.getElementById('syncEndDate');
+    if (s) s.value = today;
+    if (e) e.value = today;
+}
+
+document.getElementById('zktecoSyncForm')?.addEventListener('submit', function() {
+    const btn = document.getElementById('syncNowBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Syncing...';
+    }
+});
+</script>
+@endpush
