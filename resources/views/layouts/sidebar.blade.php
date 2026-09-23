@@ -36,6 +36,26 @@
         <span>GM Executive Dashboard</span>
     </a>
 </li>
+<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
+    <a href="{{ route('gm.maintenance-approvals.index') }}" class="sidebar-nav-link {{ request()->routeIs('gm.maintenance-approvals.*') ? 'active' : '' }}" style="font-weight:600;">
+        <i class="fa-solid fa-wrench text-warning"></i>
+        <span>Maintenance Approvals</span>
+        @php
+            $sbGmPendingMaintCount = 0;
+            try {
+                $sbGmPendingMaintCount = \App\Models\ExpenseRequest::where(function($q) {
+                    $q->whereNotNull('maintenance_request_id')->orWhere('category', 'Maintenance');
+                })->whereIn('status', [\App\Models\ExpenseRequest::STATUS_PENDING_GM, 'Pending (GM Review)', 'pending_gm'])->count()
+                + \App\Models\MaterialRequest::where(function($q) {
+                    $q->whereNotNull('maintenance_request_id')->orWhere('source', 'like', 'Maintenance%');
+                })->whereIn('status', ['pending_gm', 'pending', 'pending_approval'])->count();
+            } catch (\Throwable $e) {}
+        @endphp
+        @if($sbGmPendingMaintCount > 0)
+            <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.65rem;">{{ $sbGmPendingMaintCount }}</span>
+        @endif
+    </a>
+</li>
 
 {{-- Quick Action: Ask Money --}}
 <li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">

@@ -13,7 +13,24 @@
                 <i class="fas fa-chart-line text-primary me-2"></i>General Manager Executive Dashboard
             </h1>
         </div>
+@php
+    $gmPendingMaintApprovals = 0;
+    try {
+        $gmPendingMaintApprovals = \App\Models\ExpenseRequest::where(function($q) {
+            $q->whereNotNull('maintenance_request_id')->orWhere('category', 'Maintenance');
+        })->whereIn('status', [\App\Models\ExpenseRequest::STATUS_PENDING_GM, 'Pending (GM Review)', 'pending_gm'])->count()
+        + \App\Models\MaterialRequest::where(function($q) {
+            $q->whereNotNull('maintenance_request_id')->orWhere('source', 'like', 'Maintenance%');
+        })->whereIn('status', ['pending_gm', 'pending', 'pending_approval'])->count();
+    } catch (\Throwable $e) {}
+@endphp
         <div class="d-flex gap-2 flex-wrap align-items-center">
+            <a href="{{ route('gm.maintenance-approvals.index') }}" class="btn btn-outline-warning btn-sm rounded-pill px-3 shadow-sm position-relative">
+                <i class="fa-solid fa-wrench me-1"></i>Maintenance Approvals
+                @if(($gmPendingMaintApprovals ?? 0) > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-1">{{ $gmPendingMaintApprovals }}</span>
+                @endif
+            </a>
             <a href="{{ route('procurement.my-queue', ['status' => 'pending_gm']) }}" class="btn btn-outline-danger btn-sm rounded-pill px-3 shadow-sm position-relative">
                 <i class="fa-solid fa-cart-arrow-down me-1"></i>PR Decisions
                 @if(($kpi['pending_gm_prs'] ?? 0) > 0)
@@ -43,6 +60,23 @@
             </a>
         </div>
     </div>
+
+    @if(($gmPendingMaintApprovals ?? 0) > 0)
+        <div class="alert alert-warning border-0 shadow-sm rounded-4 mb-4 p-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-circle bg-warning bg-opacity-25 p-2 text-warning-emphasis d-flex align-items-center justify-content-center" style="width:42px;height:42px;">
+                    <i class="fa-solid fa-wrench fs-5"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-0 text-dark">Pending Maintenance Approvals (Ask Money &amp; Ask Material)</h6>
+                    <small class="text-secondary">You have <strong>{{ $gmPendingMaintApprovals }}</strong> repair funding/material request(s) awaiting your decision before passing to Finance or Store.</small>
+                </div>
+            </div>
+            <a href="{{ route('gm.maintenance-approvals.index') }}" class="btn btn-sm btn-warning text-dark fw-bold rounded-pill px-4 shadow-xs">
+                <i class="fa-solid fa-gavel me-1"></i>Review Approvals
+            </a>
+        </div>
+    @endif
 
     {{-- ═══ EXECUTIVE KPI CARDS ════════════════════════════════════════════════ --}}
     <div class="row g-3 mb-4">

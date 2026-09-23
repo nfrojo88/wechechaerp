@@ -181,13 +181,14 @@
                                         <td>
                                             @php
                                                 $mrBadge = match($mr->status) {
-                                                    'sent_to_store_manager' => ['class' => 'bg-warning text-dark', 'label' => 'Sent to Store Manager'],
+                                                    'pending_gm'            => ['class' => 'bg-warning text-dark', 'label' => 'Awaiting GM Approval'],
+                                                    'sent_to_store_manager' => ['class' => 'bg-info text-white',   'label' => 'GM Approved → Sent to Store Manager'],
                                                     'pending', 'pending_planning' => ['class' => 'bg-warning text-dark', 'label' => 'Pending'],
                                                     'planning_approved'     => ['class' => 'bg-info text-dark',    'label' => 'Planning Approved'],
                                                     'issued'                => ['class' => 'bg-success',           'label' => 'Issued from Store'],
                                                     'processed'             => ['class' => 'bg-info text-dark',    'label' => 'Processed by Store'],
-                                                    'needs_purchase', 'sent_to_pr' => ['class' => 'bg-primary',   'label' => 'In Procurement (PR)'],
-                                                    'rejected'              => ['class' => 'bg-danger',            'label' => 'Rejected'],
+                                                    'needs_purchase', 'sent_to_pr' => ['class' => 'bg-primary',   'label' => 'GM Approved → In Procurement (PR)'],
+                                                    'rejected'              => ['class' => 'bg-danger',            'label' => 'Rejected by GM'],
                                                     default                 => ['class' => 'bg-secondary',         'label' => ucfirst(str_replace('_', ' ', $mr->status))],
                                                 };
                                             @endphp
@@ -209,6 +210,11 @@
                                             <span class="small text-muted">{{ optional($mr->required_date)->format('d M Y') ?? '—' }}</span>
                                         </td>
                                         <td class="text-end">
+                                            @if(in_array($mr->status, ['pending_gm', 'pending']) && auth()->check() && (auth()->user()->hasAnyRole(['gm', 'general_manager', 'admin', 'global_admin'])))
+                                                <a href="{{ route('gm.maintenance-approvals.index', ['tab' => 'materials', 'search' => $mr->reference_number]) }}" class="btn btn-sm btn-warning text-dark fw-bold rounded-pill px-3 me-1">
+                                                    <i class="fa-solid fa-gavel me-1"></i>Review as GM
+                                                </a>
+                                            @endif
                                             <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
                                                 <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View
                                             </a>
@@ -285,11 +291,18 @@
                                             <small class="text-muted d-block">ETB</small>
                                         </td>
                                         <td>
-                                            {!! $exp->status_badge !!}
+                                            @if($exp->status === \App\Models\ExpenseRequest::STATUS_PENDING_GM)
+                                                <span class="badge bg-warning text-dark"><i class="fa-solid fa-user-shield me-1"></i>Awaiting GM Approval</span>
+                                            @elseif(in_array($exp->status, [\App\Models\ExpenseRequest::STATUS_APPROVED_ASSIGNED, \App\Models\ExpenseRequest::STATUS_ASSIGNED]))
+                                                <span class="badge bg-primary text-white"><i class="fa-solid fa-file-invoice-dollar me-1"></i>GM Approved → Assigned to Finance</span>
+                                            @else
+                                                {!! $exp->status_badge !!}
+                                            @endif
+
                                             @if($exp->status === \App\Models\ExpenseRequest::STATUS_PAID && $exp->paid_at)
                                                 <small class="text-muted d-block" style="font-size:0.75rem;">Paid {{ $exp->paid_at->format('d M') }}</small>
                                             @elseif($exp->status === \App\Models\ExpenseRequest::STATUS_SENT_TO_STORE)
-                                                <small class="text-warning text-dark d-block mt-1 fw-semibold" style="font-size:0.75rem;">
+                                                <small class="text-info text-dark d-block mt-1 fw-semibold" style="font-size:0.75rem;">
                                                     <i class="fa-solid fa-boxes-stacked me-1"></i>Routed to Store Manager
                                                 </small>
                                             @elseif($exp->status === \App\Models\ExpenseRequest::STATUS_REJECTED)
@@ -305,6 +318,11 @@
                                             <span class="small text-muted">{{ $exp->created_at->format('d M Y') }}</span>
                                         </td>
                                         <td class="text-end">
+                                            @if(in_array($exp->status, [\App\Models\ExpenseRequest::STATUS_PENDING_GM, 'Pending (GM Review)', 'pending_gm']) && auth()->check() && (auth()->user()->hasAnyRole(['gm', 'general_manager', 'admin', 'global_admin'])))
+                                                <a href="{{ route('gm.maintenance-approvals.index', ['tab' => 'expenses', 'search' => $exp->request_number]) }}" class="btn btn-sm btn-warning text-dark fw-bold rounded-pill px-3 me-1">
+                                                    <i class="fa-solid fa-gavel me-1"></i>Review as GM
+                                                </a>
+                                            @endif
                                             <a href="{{ route('expense-requests.index', ['tab' => 'my_requests', 'search' => $exp->request_number]) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
                                                 <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View
                                             </a>

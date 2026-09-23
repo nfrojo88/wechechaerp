@@ -458,7 +458,7 @@ class GeneralServiceController extends Controller
             'maintenance_request_id' => $maintenanceRequest->id,
             'reference_number'       => $refNumber,
             'source'                 => 'Maintenance — ' . $maintenanceRequest->request_no,
-            'status'                 => 'sent_to_store_manager',
+            'status'                 => 'pending_gm',
             'required_date'          => $validated['required_date'],
             'notes'                  => $validated['notes'] ?? ("Maintenance for {$maintenanceRequest->request_no} — {$maintenanceRequest->asset_name}"),
             'created_by'             => auth()->id(),
@@ -495,11 +495,11 @@ class GeneralServiceController extends Controller
 
         \App\Models\ActivityLog::log(
             'created',
-            "General Service submitted Material Request #{$materialRequest->reference_number} ({$itemCount} item(s)) linked to Maintenance {$maintenanceRequest->request_no} and routed to Store Manager for procurement/issuance",
+            "General Service submitted Material Request #{$materialRequest->reference_number} ({$itemCount} item(s)) linked to Maintenance {$maintenanceRequest->request_no} and routed to General Manager (GM) for approval",
             'Maintenance Requests',
             $maintenanceRequest
         );
 
-        return back()->with('success', "Material Request #{$materialRequest->reference_number} with {$itemCount} item(s) created and sent to Store Manager for procurement & stock fulfillment!");
+        return back()->with('success', "Material Request #{$materialRequest->reference_number} with {$itemCount} item(s) created and submitted to General Manager (GM) for review & approval!");
     }
 }

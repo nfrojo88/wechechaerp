@@ -1522,6 +1522,14 @@ Route::middleware(['auth'])->group(function () {
     // ─── Dashboard placeholders (will be replaced per phase) ──────────────────
     Route::get('/dashboard/admin',          [App\Http\Controllers\DashboardController::class, 'admin'])->name('dashboard.admin');
     Route::get('/dashboard/gm',             [App\Http\Controllers\DashboardController::class, 'gm'])->name('dashboard.gm');
+
+    // ─── General Manager (GM) Maintenance & Operations Approvals ─────────────
+    Route::prefix('gm')->name('gm.')->group(function () {
+        Route::get('/maintenance-approvals',                            [App\Http\Controllers\GMMaintenanceApprovalController::class, 'index'])->name('maintenance-approvals.index');
+        Route::post('/maintenance-approvals/expense/{expenseRequest}',   [App\Http\Controllers\GMMaintenanceApprovalController::class, 'approveExpense'])->name('maintenance-approvals.approve-expense');
+        Route::post('/maintenance-approvals/material/{materialRequest}', [App\Http\Controllers\GMMaintenanceApprovalController::class, 'approveMaterial'])->name('maintenance-approvals.approve-material');
+    });
+
     Route::get('/dashboard/planning',       [App\Http\Controllers\DashboardController::class, 'planning'])->name('dashboard.planning');
     Route::get('/dashboard/coordinator',    [App\Http\Controllers\DashboardController::class, 'coordinator'])->name('dashboard.coordinator');
     Route::get('/dashboard/secretary',      [App\Http\Controllers\DashboardController::class, 'secretary'])->name('dashboard.secretary');
