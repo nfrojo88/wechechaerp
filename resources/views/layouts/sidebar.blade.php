@@ -60,6 +60,15 @@
         <span>VAT &amp; WHT Tax Ledger</span>
     </a>
 </li>
+{{-- Quick Action: Receipt Analyzer --}}
+@if(auth()->check() && auth()->user()->hasAnyPermission(['manage-receipts','view-receipts']))
+<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
+    <a href="{{ route('receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('receipts.*') ? 'active' : '' }}" style="font-weight:600;">
+        <i class="fa-solid fa-magnifying-glass text-warning"></i>
+        <span>Receipt Analyzer</span>
+    </a>
+</li>
+@endif
 @if(auth()->check() && auth()->user()->hasRole('global_admin'))
 @php
     if (!\Illuminate\Support\Facades\Route::has('admin.announcements.index')) {
@@ -883,6 +892,14 @@
                 <span>VAT &amp; Withholding Tax</span>
             </a>
         </li>
+        @if(auth()->check() && auth()->user()->hasAnyPermission(['manage-receipts','view-receipts']))
+        <li class="sidebar-nav-item">
+            <a href="{{ route('receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('receipts.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-magnifying-glass text-warning"></i>
+                <span>Receipt Analyzer</span>
+            </a>
+        </li>
+        @endif
         <li class="sidebar-nav-item">
             <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-plus text-info"></i>

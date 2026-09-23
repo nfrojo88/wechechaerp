@@ -44,74 +44,115 @@ Route::any('iclock/push', [App\Http\Controllers\ZkTecoAdmsController::class, 'pu
 
 // Git pull deployment route (triggers server-side git pull from GitHub)
 Route::get('/deploy-from-github', function () {
-    $output = [];
-    $return = 0;
+    $base = base_path();
+    $steps = [];
 
-    // Run git pull with auto-discard of local server changes
-    exec('cd ' . base_path() . ' && git fetch origin main 2>&1 && git reset --hard origin/main 2>&1', $output, $return);
-    $pullResult = implode("\n", $output);
+    // ── Step 1: Git pull (force-reset to origin/main) ─────────────────────
+    $gitOut = [];
+    exec("cd {$base} && git fetch origin main 2>&1 && git reset --hard origin/main 2>&1", $gitOut, $gitCode);
+    $steps['git_pull'] = [
+        'label'  => '① Git Pull (origin/main)',
+        'output' => implode("\n", $gitOut),
+        'ok'     => $gitCode === 0,
+    ];
 
-    // Clear caches & run migrations
-    $cacheOutput = [];
-    exec('cd ' . base_path() . ' && php artisan config:clear 2>&1 && php artisan route:clear 2>&1 && php artisan view:clear 2>&1 && php artisan migrate --force 2>&1', $cacheOutput);
-    $cacheResult = implode("\n", $cacheOutput);
+    // ── Step 2: Composer install (install new packages like tesseract_ocr) ─
+    $composerOut = [];
+    exec("cd {$base} && composer install --no-interaction --no-dev --optimize-autoloader 2>&1", $composerOut, $composerCode);
+    $steps['composer'] = [
+        'label'  => '② Composer Install',
+        'output' => implode("\n", $composerOut),
+        'ok'     => $composerCode === 0,
+    ];
 
-    // Reset web server OPcache
-    if (function_exists('opcache_reset')) {
-        @opcache_reset();
+    // ── Step 3: Install Tesseract OCR binary (safe to re-run) ──────────────
+    $tessOut = [];
+    exec('which tesseract 2>&1', $tessCheck);
+    if (empty($tessCheck)) {
+        // Not installed yet — try installing (requires server to have apt-get & DEBIAN_FRONTEND)
+        exec('DEBIAN_FRONTEND=noninteractive apt-get install -y tesseract-ocr 2>&1', $tessOut, $tessCode);
+    } else {
+        $tessOut  = ['Tesseract already installed: ' . trim($tessCheck[0])];
+        $tessCode = 0;
     }
+    $steps['tesseract'] = [
+        'label'  => '③ Tesseract OCR Binary',
+        'output' => implode("\n", $tessOut),
+        'ok'     => $tessCode === 0,
+    ];
 
-    // Ensure payrolls columns directly
+    // ── Step 4: Clear caches ───────────────────────────────────────────────
+    $cacheOut = [];
+    exec("cd {$base} && php artisan config:clear 2>&1 && php artisan route:clear 2>&1 && php artisan view:clear 2>&1", $cacheOut);
+    $steps['cache'] = [
+        'label'  => '④ Cache Clear',
+        'output' => implode("\n", $cacheOut),
+        'ok'     => true,
+    ];
+
+    // ── Step 5: Run migrations ─────────────────────────────────────────────
+    $migrateOut = [];
+    exec("cd {$base} && php artisan migrate --force 2>&1", $migrateOut, $migrateCode);
+    $steps['migrate'] = [
+        'label'  => '⑤ Database Migrations',
+        'output' => implode("\n", $migrateOut),
+        'ok'     => $migrateCode === 0,
+    ];
+
+    // ── Step 6: Storage link ───────────────────────────────────────────────
+    $storageOut = [];
+    exec("cd {$base} && php artisan storage:link --force 2>&1", $storageOut);
+    $steps['storage'] = [
+        'label'  => '⑥ Storage Link (php artisan storage:link)',
+        'output' => implode("\n", $storageOut),
+        'ok'     => true,
+    ];
+
+    // ── Step 7: Fix payroll schema columns (inline safety net) ────────────
     try {
         if (\Illuminate\Support\Facades\Schema::hasTable('payrolls')) {
             \Illuminate\Support\Facades\Schema::table('payrolls', function (\Illuminate\Database\Schema\Blueprint $table) {
-                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'company_pension')) {
-                    $table->decimal('company_pension', 15, 2)->default(0)->after('pension');
-                }
-                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'taxable_income')) {
-                    $table->decimal('taxable_income', 15, 2)->default(0)->after('company_pension');
-                }
-                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'loan_deduction')) {
-                    $table->decimal('loan_deduction', 15, 2)->default(0)->after('deductions');
-                }
-                if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'absence_deduction')) {
-                    $table->decimal('absence_deduction', 15, 2)->default(0)->after('loan_deduction');
+                foreach (['company_pension','taxable_income','loan_deduction','absence_deduction'] as $col) {
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', $col)) {
+                        $table->decimal($col, 15, 2)->default(0);
+                    }
                 }
                 if (!\Illuminate\Support\Facades\Schema::hasColumn('payrolls', 'absent_days')) {
-                    $table->integer('absent_days')->default(0)->after('absence_deduction');
+                    $table->integer('absent_days')->default(0);
                 }
             });
         }
     } catch (\Throwable $e) {}
 
-    // Ensure employee_experience start_date is nullable
-    try {
-        if (\Illuminate\Support\Facades\Schema::hasTable('employee_experience')) {
-            \Illuminate\Support\Facades\DB::statement("ALTER TABLE `employee_experience` MODIFY `start_date` DATE NULL;");
-        }
-    } catch (\Throwable $e) {}
+    // ── Step 8: Reset OPcache ─────────────────────────────────────────────
+    if (function_exists('opcache_reset')) { @opcache_reset(); }
 
-        // Ensure subcon_agreements columns exist
-        try {
-            if (\Illuminate\Support\Facades\Schema::hasTable('subcon_agreements')) {
-                if (!\Illuminate\Support\Facades\Schema::hasColumn('subcon_agreements', 'agreement_file')) {
-                    \Illuminate\Support\Facades\Schema::table('subcon_agreements', function (\Illuminate\Database\Schema\Blueprint $table) {
-                        $table->string('agreement_file', 500)->nullable();
-                    });
-                }
-            }
-        } catch (\Throwable $e) {}
+    // ── Render HTML report ────────────────────────────────────────────────
+    $allOk = collect($steps)->every(fn($s) => $s['ok']);
+    $html  = "<div style='font-family:sans-serif;max-width:960px;margin:32px auto;border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.13);'>";
+    $html .= "<div style='background:linear-gradient(135deg," . ($allOk ? "#065f46,#10b981" : "#991b1b,#ef4444") . ");padding:26px 32px;color:#fff;'>";
+    $html .= "<h2 style='margin:0;font-size:22px;'>" . ($allOk ? "✅" : "⚠️") . " Deploy from GitHub — " . ($allOk ? "All Steps Passed" : "Some Steps Failed") . "</h2>";
+    $html .= "<p style='margin:6px 0 0;opacity:.85;'>Deployed at: " . date('Y-m-d H:i:s') . "</p></div>";
+    $html .= "<div style='padding:28px 32px;background:#fff;'>";
 
-    $color = ($return === 0) ? 'green' : 'red';
-    $icon  = ($return === 0) ? '✅' : '❌';
+    foreach ($steps as $key => $step) {
+        $bg    = $step['ok'] ? '#f0fdf4' : '#fef2f2';
+        $border= $step['ok'] ? '#bbf7d0' : '#fecaca';
+        $icon  = $step['ok'] ? '✅' : '❌';
+        $html .= "<h3 style='color:#374151;font-size:15px;margin-top:20px;margin-bottom:8px;'>{$icon} {$step['label']}</h3>";
+        $output = trim($step['output']) !== '' ? htmlspecialchars($step['output']) : '(no output)';
+        $html .= "<pre style='background:{$bg};border:1px solid {$border};padding:14px;border-radius:8px;overflow-x:auto;color:#1e293b;font-size:12px;line-height:1.6;max-height:200px;overflow-y:auto;'>{$output}</pre>";
+    }
 
-    return "<h2 style='font-family:sans-serif;color:{$color}'>{$icon} Git Pull Result (exit: {$return})</h2>"
-         . "<pre style='background:#f1f5f9;padding:16px;border-radius:8px'>" . htmlspecialchars($pullResult) . "</pre>"
-         . "<h3 style='font-family:sans-serif'>Cache Clear Output:</h3>"
-         . "<pre style='background:#f1f5f9;padding:16px;border-radius:8px'>" . htmlspecialchars($cacheResult) . "</pre>"
-         . "<p><a href='/run-migrations' style='color:blue;'>→ Run Migrations</a> | "
-         . "<a href='/fix-storage-link' style='color:green;'>→ Fix Storage Link (Fix Image 404)</a></p>";
+    $html .= "<div style='margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;'>";
+    $html .= "<a href='/deploy-from-github' style='background:#7c3aed;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>🚀 Deploy Again</a>";
+    $html .= "<a href='/run-migrations' style='background:#10b981;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>🗄️ Run Migrations Only</a>";
+    $html .= "<a href='/dashboard' style='background:#2563eb;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:14px;'>🏠 Go to Dashboard</a>";
+    $html .= "</div></div></div>";
+
+    return $html;
 });
+
 
 // One-click migration route for all pending migrations
 Route::get('/run-migrations', function () {
@@ -2328,6 +2369,18 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/{announcement}',                      [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'show'])->name('show');
         Route::post('/{announcement}/toggle-publish',      [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'togglePublish'])->name('toggle-publish');
         Route::delete('/{announcement}',                   [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'destroy'])->name('destroy');
+    });
+
+    // ─── Receipt Analyzer & Expense Tracking ─────────────────────────────────────
+    Route::prefix('receipts')->name('receipts.')->group(function () {
+        Route::get('/',                                [App\Http\Controllers\ReceiptController::class, 'index'])->name('index');
+        Route::get('/create',                          [App\Http\Controllers\ReceiptController::class, 'create'])->name('create');
+        Route::post('/',                               [App\Http\Controllers\ReceiptController::class, 'store'])->name('store');
+        Route::get('/{receipt}',                       [App\Http\Controllers\ReceiptController::class, 'show'])->name('show');
+        Route::put('/{receipt}',                       [App\Http\Controllers\ReceiptController::class, 'update'])->name('update');
+        Route::post('/{receipt}/approve',              [App\Http\Controllers\ReceiptController::class, 'approve'])->name('approve');
+        Route::post('/{receipt}/reject',               [App\Http\Controllers\ReceiptController::class, 'reject'])->name('reject');
+        Route::delete('/{receipt}',                    [App\Http\Controllers\ReceiptController::class, 'destroy'])->name('destroy');
     });
 });
 
