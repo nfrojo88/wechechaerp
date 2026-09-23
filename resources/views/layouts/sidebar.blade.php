@@ -18,9 +18,9 @@
 <div class="sidebar-scroll">
     <ul class="sidebar-nav">
 
-@role('global_admin|admin')
+@role('global_admin|admin|gm|general_manager|General Manager|GM')
 {{-- ════════════════════════════════════════════════════════════
-     GLOBAL ADMIN: ROLE-GROUPED COLLAPSIBLE ACCORDION SIDEBAR
+     GLOBAL ADMIN & GM EXECUTIVE: ROLE-GROUPED SIDEBAR
 ═══════════════════════════════════════════════════════════════ --}}
 
 {{-- ① Dashboard --}}
