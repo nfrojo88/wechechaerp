@@ -26,6 +26,15 @@ putenv('COMPOSER_CACHE_DIR=/tmp/.composer/cache');
 
 $steps = [];
 
+// ── Step 0: Git pull (force reset to origin/main) ─────────────────────────
+$out0 = []; $code0 = 0;
+exec("cd {$base} && git fetch origin main 2>&1 && git reset --hard origin/main 2>&1", $out0, $code0);
+$steps[] = [
+    'label'  => 'git pull (fetch & reset to origin/main)',
+    'output' => implode("\n", $out0),
+    'ok'     => $code0 === 0,
+];
+
 // ── Step 1: composer install (restores dev packages like filp/whoops) ─────
 $out1 = []; $code1 = 0;
 exec("cd {$base} && composer install --no-interaction --ignore-platform-reqs 2>&1", $out1, $code1);
