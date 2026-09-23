@@ -64,10 +64,17 @@ Route::get('/deploy-from-github', function () {
     putenv('COMPOSER_CACHE_DIR=/tmp/.composer/cache');
     $composerOut  = [];
     $composerCode = 0;
-    // composer.json was edited manually so the lock file is out of sync.
-    // Use 'composer update <package>' to regenerate the lock for only the
-    // new package without upgrading every other dependency.
-    exec("cd {$base} && composer update thiagoalessio/tesseract_ocr --no-interaction --no-dev --optimize-autoloader 2>&1", $composerOut, $composerCode);
+    // Step 2a: Restore full vendor dir (including dev packages like filp/whoops)
+    // This fixes the server if --no-dev previously stripped dev packages.
+    $composerInstallOut = [];
+    exec("cd {$base} && composer install --no-interaction --ignore-platform-reqs 2>&1", $composerInstallOut, $installCode);
+
+    // Step 2b: Now update only the new package to sync the lock file
+    $composerOut  = $composerInstallOut; // include install output in report
+    $composerCode = 0;
+    exec("cd {$base} && composer update thiagoalessio/tesseract_ocr --no-interaction --optimize-autoloader 2>&1", $composerOut, $composerCode);
+    // If install succeeded but update failed, still show combined output
+    if ($installCode !== 0 && $composerCode === 0) { $composerCode = $installCode; }
     $steps['composer'] = [
         'label'  => '② Composer Install',
         'output' => implode("\n", $composerOut),
