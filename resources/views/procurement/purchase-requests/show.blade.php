@@ -46,7 +46,13 @@
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW:
-                $canActOnCurrentStage = $isGlobalAdmin || in_array('store_manager', $rawUserRoles);
+                if ($isFinalIntake ?? false) {
+                    // Final intake must be done by Store Keeper (or Admin), not Store Manager
+                    $canActOnCurrentStage = $isGlobalAdmin || in_array('store_keeper', $rawUserRoles) || in_array('storekeeper', $rawUserRoles) || in_array('store_clerk', $rawUserRoles);
+                } else {
+                    // Initial store review belongs to Store Manager
+                    $canActOnCurrentStage = $isGlobalAdmin || in_array('store_manager', $rawUserRoles);
+                }
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER:
@@ -148,6 +154,8 @@
                         <tr><th class="ps-3 text-muted">Current Role Owner</th><td>
                             @if($purchaseRequest->current_owner_role === 'global_admin')
                                 <span class="badge bg-warning text-dark"><i class="fas fa-user-shield me-1"></i>Global Admin (Unassigned Role)</span>
+                            @elseif(($isFinalIntake ?? false) && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-bold"><i class="fas fa-boxes-packing me-1"></i>Store Keeper (Final Intake)</span>
                             @else
                                 <span class="badge bg-secondary bg-opacity-10 text-dark"><i class="fas fa-user-tag me-1"></i>{{ ucfirst(str_replace('_', ' ', $purchaseRequest->current_owner_role ?? 'Completed')) }}</span>
                             @endif
@@ -690,7 +698,7 @@
                             <div class="alert alert-info py-2 px-3 small mb-3 border-start border-4 border-info">
                                 <div class="fw-bold mb-1"><i class="fas fa-credit-card me-1"></i> Credit Purchase (COA 5110)</div>
                                 <div class="text-muted">Account: <strong class="text-dark">Cost Of Material By Credit 5110</strong></div>
-                                <div class="text-muted mt-1">This request will be routed directly to the <strong>Store Manager</strong> for material intake and tracked in the <strong>Credit Store Ledger</strong>.</div>
+                                <div class="text-muted mt-1">This request will be routed directly to the <strong>Store Keeper</strong> for material intake and tracked in the <strong>Credit Store Ledger</strong>.</div>
                             </div>
 
                             @php
@@ -827,7 +835,7 @@
                                 <i class="fas fa-file-invoice me-1"></i> Upload Purchase Receipt
                             </h6>
                             <p class="small text-muted mb-0">
-                                Payment of <strong>{{ number_format($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount, 2) }} ETB</strong> disbursed. Upload vendor receipt and send directly to Store Manager for material intake.
+                                Payment of <strong>{{ number_format($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount, 2) }} ETB</strong> disbursed. Upload vendor receipt and send directly to Store Keeper for material intake.
                             </p>
                         </div>
                         <form action="{{ route('purchase-requests.upload-receipt', $purchaseRequest) }}" method="POST" enctype="multipart/form-data">
@@ -887,12 +895,15 @@
                             <button class="btn btn-info text-white btn-sm w-100"><i class="fas fa-truck me-1"></i> Book Driver</button>
                         </form>
 
-                    <!-- STAGE 9 Final: Store Manager Final Intake & Stock In -->
+                    <!-- STAGE 9 Final: Store Keeper Final Intake & Stock In -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && ($isFinalIntake ?? false))
                         <div class="mb-3">
-                            <h6 class="fw-bold text-success mb-1">
-                                <i class="fas fa-boxes-packing text-success me-1"></i> Receive Products & Stock In
-                            </h6>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <h6 class="fw-bold text-success mb-0">
+                                    <i class="fas fa-boxes-packing text-success me-1"></i> Store Keeper: Receive Products &amp; Stock In
+                                </h6>
+                                <span class="badge bg-success text-white"><i class="fas fa-user-check me-1"></i>Store Keeper Action</span>
+                            </div>
                             <p class="small text-muted mb-0">
                                 Verify received quantities, assign the receiving slip (GRN / Model 19), and intake products directly into store inventory.
                             </p>
@@ -905,7 +916,7 @@
                                 <label class="form-label small fw-bold text-uppercase text-muted">Receiving Store <span class="text-danger">*</span></label>
                                 <select name="store_id" id="intakeStoreSelect" class="form-select form-select-sm" required onchange="fetchStoreSlipSequence(this.value)">
                                     @foreach($stores as $st)
-                                        <option value="{{ $st->id }}" {{ ($purchaseRequest->store_id == $st->id) ? 'selected' : '' }}>
+                                        <option value="{{ $st->id }}" {{ (($purchaseRequest->store_id ?? ($userStoreId ?? null)) == $st->id) ? 'selected' : '' }}>
                                             {{ $st->name }} ({{ $st->location ?? 'Store' }})
                                         </option>
                                     @endforeach
@@ -1130,6 +1141,23 @@
                             </form>
                         </div>
                         @endif
+                    @elseif(($isFinalIntake ?? false) && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                        <h6 class="fw-bold text-success mb-1">
+                            <i class="fas fa-boxes-packing text-success me-1"></i> Awaiting Store Keeper Final Intake
+                        </h6>
+                        <p class="small text-muted mb-3">
+                            The purchase is complete and materials have arrived. The <strong>Store Keeper</strong> (not the Store Manager) is responsible for physically inspecting goods, verifying counts, and entering the receiving slip (GRN / Model 19) into store inventory.
+                        </p>
+                        <div class="p-3 bg-light rounded border text-start small">
+                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                <span class="text-muted">Workflow Status:</span>
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-bold">Pending Store Keeper Intake</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Action Required By:</span>
+                                <span class="fw-bold text-success"><i class="fas fa-user-check me-1"></i>Store Keeper</span>
+                            </div>
+                        </div>
                     @else
                         <h6 class="fw-bold text-dark mb-1">Stage Controls Locked (Sent)</h6>
                         <p class="small text-muted mb-3">

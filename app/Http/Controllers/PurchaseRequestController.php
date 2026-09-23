@@ -505,7 +505,9 @@ class PurchaseRequestController extends Controller
             ])->exists()
         );
 
-        $targetStoreId = $purchaseRequest->store_id ?? ($stores->first()?->id ?? null);
+        $authUser = Auth::user();
+        $userStoreId = $authUser?->store_id ?? \App\Models\Store::where('manager_id', $authUser?->id)->value('id');
+        $targetStoreId = $purchaseRequest->store_id ?? ($userStoreId ?? ($stores->first()?->id ?? null));
         $receiveSlipSequence = null;
         $nextReceiveSlipNo = null;
         if ($targetStoreId) {
@@ -516,7 +518,7 @@ class PurchaseRequestController extends Controller
             $nextReceiveSlipNo = $receiveSlipSequence ? $receiveSlipSequence->formatSlipNumber($receiveSlipSequence->current_slip_no) : null;
         }
 
-                $availableProducts = \App\Models\Product::where('is_active', true)->orderBy('name')->get();
+        $availableProducts = \App\Models\Product::where('is_active', true)->orderBy('name')->get();
 
         $prDeliveryReceipts = \App\Models\DeliveryReceipt::where('purchase_request_id', $purchaseRequest->id)
             ->with(['items.product', 'store', 'receivedBy'])
@@ -526,7 +528,7 @@ class PurchaseRequestController extends Controller
         return view('procurement.purchase-requests.show', compact(
             'purchaseRequest', 'stockAvailability', 'transferAvailability', 'prTransfers', 'coaAccounts',
             'financeStaff', 'drivers', 'suppliers', 'stores', 'pricingBenchmarks',
-            'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo', 'availableProducts', 'prDeliveryReceipts'
+            'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo', 'availableProducts', 'prDeliveryReceipts', 'userStoreId'
         ));
 
     }
@@ -1512,13 +1514,23 @@ class PurchaseRequestController extends Controller
             $request->scheduled_at,
             $request->booking_notes
         );
-        return back()->with('success', 'Driver booked. Store Manager notified for final intake.');
+        return back()->with('success', 'Driver booked. Store Keeper notified for final intake.');
     }
 
-    // ─── STAGE 9 Final: Store Intake ─────────────────────────────────────────
+    // ─── STAGE 9 Final: Store Intake (Store Keeper Action) ────────────────────
     public function storeIntake(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['store_manager', 'store_keeper', 'store', 'admin', 'global_admin']);
+        $user = Auth::user();
+        $userRoles = $user ? $user->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isStoreKeeper = in_array('store_keeper', $userRoles) || in_array('storekeeper', $userRoles) || in_array('store_clerk', $userRoles);
+        $isAdmin = in_array('global_admin', $userRoles) || in_array('admin', $userRoles);
+
+        if (!$isStoreKeeper && !$isAdmin) {
+            if (in_array('store_manager', $userRoles)) {
+                return back()->with('error', 'Unauthorized: Final intake and receiving slip must be fulfilled by the Store Keeper, not the Store Manager.');
+            }
+            abort(403, 'Unauthorized: Only the Store Keeper can perform final material intake.');
+        }
         
         $request->validate([
             'store_id'      => 'nullable|exists:stores,id',

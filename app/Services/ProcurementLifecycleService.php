@@ -55,6 +55,7 @@ class ProcurementLifecycleService
             'market_research'  => ['market_research', 'Market Research', 'marketing', 'Marketing', 'marketing_officer'],
             'gm'               => ['gm', 'GM', 'general_manager', 'General Manager'],
             'store_manager'    => ['store_manager', 'Store Manager', 'store', 'Store'],
+            'store_keeper'     => ['store_keeper', 'Store Keeper', 'storekeeper', 'Storekeeper', 'store_clerk'],
             'finance_head'     => ['finance_head', 'Finance Head', 'finance_manager', 'Finance Manager', 'cfo', 'CFO'],
             'finance'          => ['finance', 'Finance', 'accountant', 'Accountant', 'finance_staff'],
             'general_service'  => ['general_service', 'General Service', 'dispatcher', 'fleet_manager'],
@@ -361,10 +362,10 @@ class ProcurementLifecycleService
                     ]
                 );
 
-                // 5. Route directly to Store Manager for material intake
+                // 5. Route directly to Store Keeper for material intake
                 $nextStatus   = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
-                $rawNextRole  = 'store_manager';
-                $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Credit — COA 5110) — ready for material intake. Open: " . url("/purchase-requests/{$pr->id}");
+                $rawNextRole  = 'store_keeper';
+                $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Credit — COA 5110) — ready for Store Keeper material intake. Open: " . url("/purchase-requests/{$pr->id}");
             } else { // pay_and_buy
                 // Pre-create/update ProcurementPayment with the chosen proforma amount
                 ProcurementPayment::updateOrCreate(
@@ -467,15 +468,15 @@ class ProcurementLifecycleService
             ]
         );
 
-        // Advance directly to Store Manager for material intake
-        $targetRole = $this->resolveOwnerRole('store_manager', $pr);
+        // Advance directly to Store Keeper for material intake
+        $targetRole = $this->resolveOwnerRole('store_keeper', $pr);
         $pr->update([
             'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
             'current_owner_role' => $targetRole,
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'finance_credit_approved_direct_intake', 'finance_head', $notes);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} credit authorized (COA 5110) — ready for material intake. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} credit authorized (COA 5110) — ready for Store Keeper material intake. Open: " . url("/purchase-requests/{$pr->id}"));
     }
 
     /**
@@ -684,7 +685,7 @@ class ProcurementLifecycleService
         ]);
 
         if ($sendToStore) {
-            $targetRole = $this->resolveOwnerRole('store_manager', $pr);
+            $targetRole = $this->resolveOwnerRole('store_keeper', $pr);
             $pr->update([
                 'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
                 'current_owner_role' => $targetRole,
@@ -756,9 +757,9 @@ class ProcurementLifecycleService
             'booked_by'           => Auth::id(),
         ]);
 
-        $targetRole = $this->resolveOwnerRole('store_manager', $pr);
+        $targetRole = $this->resolveOwnerRole('store_keeper', $pr);
         $pr->update([
-            'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW, // Store Manager does intake
+            'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW, // Store Keeper does intake
             'current_owner_role' => $targetRole,
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'driver_booked', 'general_service', $notes);
@@ -992,18 +993,18 @@ class ProcurementLifecycleService
                     'current_owner_role' => null,
                 ]);
 
-                $this->log($pr, $from, PurchaseRequest::STATUS_INTAKE_COMPLETE, 'store_intake_complete', 'store_manager', 
+                $this->log($pr, $from, PurchaseRequest::STATUS_INTAKE_COMPLETE, 'store_intake_complete', 'store_keeper', 
                     "Full material intake completed into store (Slip #{$slipNo}). " . ($notes ?? ''));
             } else {
                 // Keep PR in pending_store_review for subsequent delivery slips
                 $pr->update([
                     'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
                     'store_id'           => $storeId,
-                    'current_owner_role' => 'store_manager',
+                    'current_owner_role' => 'store_keeper',
                 ]);
 
                 $remText = implode(', ', $remainingSummaries);
-                $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'partial_store_intake', 'store_manager', 
+                $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'partial_store_intake', 'store_keeper', 
                     "Partial intake recorded (Slip #{$slipNo}). {$remText}. Awaiting additional delivery slip(s) to fulfill balance. " . ($notes ?? ''));
             }
 

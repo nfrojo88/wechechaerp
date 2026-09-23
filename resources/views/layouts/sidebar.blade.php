@@ -1302,6 +1302,40 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-boxes-packing text-primary"></i>
+                <span>Procurement Intake</span>
+                @php
+                    $skPendingIntakeCount = 0;
+                    try {
+                        $skPendingIntakeCount = \App\Models\PurchaseRequest::where('status', \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                            ->where(function($q) {
+                                $q->where('current_owner_role', 'store_keeper')
+                                  ->orWhereNotNull('payment_id')
+                                  ->orWhereHas('payment')
+                                  ->orWhereHas('creditLedger')
+                                  ->orWhereHas('driverBooking')
+                                  ->orWhereHas('receipt')
+                                  ->orWhereHas('workflowLogs', function($lq) {
+                                      $lq->whereIn('action', [
+                                          'gm_approve_buy_by_credit',
+                                          'gm_approve_credit_direct_store',
+                                          'finance_credit_approved',
+                                          'finance_credit_approved_direct_intake',
+                                          'driver_booked',
+                                          'receipt_verified',
+                                          'partial_store_intake'
+                                      ]);
+                                  });
+                            })->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($skPendingIntakeCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $skPendingIntakeCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ \Illuminate\Support\Facades\Route::has('store-keeper.weekly-material-demand') ? route('store-keeper.weekly-material-demand') : (\Illuminate\Support\Facades\Route::has('store-manager.weekly-material-demand') ? route('store-manager.weekly-material-demand') : url('/store-keeper/weekly-material-demand')) }}" class="sidebar-nav-link {{ request()->routeIs('*weekly-material-demand*') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-check text-success"></i>
                 <span>Weekly Material Demand</span>
@@ -1421,7 +1455,17 @@
                 @php
                     $smQueueCount = 0;
                     try {
-                        $smQueueCount = \App\Models\PurchaseRequest::where('current_owner_role', 'store_manager')->count();
+                        $smQueueCount = \App\Models\PurchaseRequest::where('current_owner_role', 'store_manager')
+                            ->where(function ($q) {
+                                $q->where('status', '!=', \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                  ->orWhere(function ($sq) {
+                                      $sq->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                         ->whereDoesntHave('payment')
+                                         ->whereDoesntHave('creditLedger')
+                                         ->whereDoesntHave('driverBooking')
+                                         ->whereDoesntHave('receipt');
+                                  });
+                            })->count();
                     } catch (\Throwable $e) {}
                 @endphp
                 @if($smQueueCount > 0)

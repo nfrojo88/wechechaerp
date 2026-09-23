@@ -131,6 +131,7 @@ class ProcurementSmsService
             'market_research'  => ['market_research', 'Market Research', 'marketing', 'Marketing', 'marketing_officer'],
             'gm'               => ['gm', 'GM', 'general_manager', 'General Manager'],
             'store_manager'    => ['store_manager', 'Store Manager', 'store', 'Store'],
+            'store_keeper'     => ['store_keeper', 'Store Keeper', 'storekeeper', 'Storekeeper', 'store_clerk'],
             'finance_head'     => ['finance_head', 'Finance Head', 'finance_manager', 'Finance Manager', 'cfo', 'CFO'],
             'finance'          => ['finance', 'Finance', 'accountant', 'Accountant', 'finance_staff'],
             'general_service'  => ['general_service', 'General Service', 'dispatcher', 'fleet_manager'],

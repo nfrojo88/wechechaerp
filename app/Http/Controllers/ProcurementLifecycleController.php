@@ -30,6 +30,11 @@ class ProcurementLifecycleController extends Controller
         $isGm = $user->hasRole('gm') || $user->hasRole('general_manager');
         $isAuditor = $user->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']) || in_array('auditor', $roles) || in_array('audit', $roles);
 
+        $isStoreKeeper = $user->hasAnyRole(['store_keeper', 'Store Keeper', 'storekeeper', 'Storekeeper']) || in_array('store_keeper', $roles) || in_array('storekeeper', $roles);
+        $isStoreManager = $user->hasRole('store_manager');
+        $isPurchaseManager = $user->hasRole('purchase_manager');
+        $isFinanceHead = $user->hasRole('finance_head') || $user->hasRole('finance_manager') || $user->hasRole('finance') || $user->hasRole('accountant');
+
         // 1. Identify owner roles to query
         $targetRoles = [];
         if ($isAdmin || $isAuditor) {
@@ -44,7 +49,8 @@ class ProcurementLifecycleController extends Controller
                 $targetRoles[] = 'hr';
                 $targetRoles[] = 'coordinator';
             }
-            if ($user->hasRole('store_manager'))      $targetRoles[] = 'store_manager';
+            if ($isStoreKeeper)                       $targetRoles[] = 'store_keeper';
+            if ($isStoreManager)                      $targetRoles[] = 'store_manager';
             if ($user->hasRole('purchase_manager'))   $targetRoles[] = 'purchase_manager';
             if ($user->hasRole('purchase'))           $targetRoles[] = 'purchase';
             if ($user->hasRole('market_research'))    $targetRoles[] = 'market_research';
@@ -55,20 +61,76 @@ class ProcurementLifecycleController extends Controller
             if ($user->hasRole('planning'))           $targetRoles[] = 'planning';
         }
 
-        $isStoreManager = $user->hasRole('store_manager');
-        $isPurchaseManager = $user->hasRole('purchase_manager');
-        $isFinanceHead = $user->hasRole('finance_head') || $user->hasRole('finance_manager') || $user->hasRole('finance') || $user->hasRole('accountant');
-
         // 2. Fetch PRs awaiting action by this user's role(s)
         $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'materialRequest', 'items'])
             ->latest();
 
         if (!$isAdmin && !$isAuditor) {
-            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm, $user) {
-                $q->whereIn('current_owner_role', $targetRoles)
-                  ->orWhere('requested_by', $user->id);
+            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm, $isStoreKeeper, $isStoreManager, $user) {
+                $q->where(function ($roleQ) use ($targetRoles, $isStoreManager, $isStoreKeeper) {
+                    if ($isStoreManager && !$isStoreKeeper) {
+                        // Store Manager must NOT see or fulfill final intake! Only initial Stage 2 smart split
+                        $roleQ->where(function ($smQ) {
+                            $smQ->where('current_owner_role', 'store_manager')
+                                ->where(function ($notFinalQ) {
+                                    $notFinalQ->where('status', '!=', PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                              ->orWhere(function ($stage2Only) {
+                                                  $stage2Only->where('status', PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                                                             ->whereDoesntHave('payment')
+                                                             ->whereDoesntHave('creditLedger')
+                                                             ->whereDoesntHave('driverBooking')
+                                                             ->whereDoesntHave('receipt')
+                                                             ->whereDoesntHave('workflowLogs', function ($wlQ) {
+                                                                 $wlQ->whereIn('action', [
+                                                                     'gm_approve_buy_by_credit',
+                                                                     'gm_approve_credit_direct_store',
+                                                                     'finance_credit_approved',
+                                                                     'finance_credit_approved_direct_intake',
+                                                                     'driver_booked',
+                                                                     'receipt_verified',
+                                                                     'partial_store_intake',
+                                                                 ]);
+                                                             });
+                                              });
+                                });
+                        });
+                        $otherRoles = array_diff($targetRoles, ['store_manager']);
+                        if (!empty($otherRoles)) {
+                            $roleQ->orWhereIn('current_owner_role', $otherRoles);
+                        }
+                    } else {
+                        $roleQ->whereIn('current_owner_role', $targetRoles);
+                    }
+                })->orWhere('requested_by', $user->id);
+
                 if ($isHr || $isCoordinator || $isGm) {
                     $q->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+                }
+
+                if ($isStoreKeeper) {
+                    // Store Keeper sees all PRs awaiting final material intake & receiving
+                    $q->orWhere(function ($skQ) {
+                        $skQ->where('status', PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
+                            ->where(function ($finalQ) {
+                                $finalQ->where('current_owner_role', 'store_keeper')
+                                       ->orWhereNotNull('payment_id')
+                                       ->orWhereHas('payment')
+                                       ->orWhereHas('creditLedger')
+                                       ->orWhereHas('driverBooking')
+                                       ->orWhereHas('receipt')
+                                       ->orWhereHas('workflowLogs', function ($lq) {
+                                           $lq->whereIn('action', [
+                                               'gm_approve_buy_by_credit',
+                                               'gm_approve_credit_direct_store',
+                                               'finance_credit_approved',
+                                               'finance_credit_approved_direct_intake',
+                                               'driver_booked',
+                                               'receipt_verified',
+                                               'partial_store_intake',
+                                           ]);
+                                       });
+                            });
+                    });
                 }
             });
         }
@@ -205,7 +267,7 @@ class ProcurementLifecycleController extends Controller
         return view('procurement.lifecycle.my-queue', compact(
             'myPrs', 'emergencyMrs', 'materialRequestsQueue', 'kpi', 'projects',
             'myCreatedPrs', 'myCreatedMrs', 'completedPrs', 'allPrs', 'activeTab',
-            'isHr', 'isCoordinator', 'isStoreManager', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm'
+            'isHr', 'isCoordinator', 'isStoreManager', 'isStoreKeeper', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm'
         ));
     }
 }

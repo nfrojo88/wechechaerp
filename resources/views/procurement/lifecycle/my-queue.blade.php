@@ -6,6 +6,7 @@
     $isGlobalAdmin = in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles);
     $isAuditorUser = !empty($isAuditor) || in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
     $isStoreManagerUser = in_array('store_manager', $rawUserRoles);
+    $isStoreKeeperUser = !empty($isStoreKeeper) || in_array('store_keeper', $rawUserRoles) || in_array('storekeeper', $rawUserRoles) || in_array('store_clerk', $rawUserRoles);
     $isCoordinatorUser = in_array('coordinator', $rawUserRoles);
     $isHrUser = in_array('hr_manager', $rawUserRoles) || in_array('hr_officer', $rawUserRoles) || in_array('hr', $rawUserRoles);
     $isPurchaseManagerUser = in_array('purchase_manager', $rawUserRoles) || in_array('procurement_manager', $rawUserRoles);
@@ -344,8 +345,30 @@
                                         elseif ($pr->status === 'pending_finance' && $isFinanceHeadUser) $canActOnThisPr = true;
                                     } else {
                                         $owner = $pr->current_owner_role;
-                                        if ($owner === 'store_manager' && $isStoreManagerUser) $canActOnThisPr = true;
-                                        elseif (in_array($owner, ['purchase_manager', 'procurement_manager']) && $isPurchaseManagerUser) $canActOnThisPr = true;
+                                        $isFinalIntakeStage = ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW) && (
+                                            $owner === 'store_keeper' ||
+                                            $pr->payment !== null || 
+                                            $pr->creditLedger !== null || 
+                                            $pr->driverBooking !== null || 
+                                            $pr->receipt !== null ||
+                                            $pr->workflowLogs()->whereIn('action', [
+                                                'gm_approve_buy_by_credit',
+                                                'gm_approve_credit_direct_store',
+                                                'finance_credit_approved',
+                                                'finance_credit_approved_direct_intake',
+                                                'driver_booked',
+                                                'receipt_verified',
+                                                'partial_store_intake'
+                                            ])->exists()
+                                        );
+
+                                        if ($isFinalIntakeStage) {
+                                            if ($isStoreKeeperUser) $canActOnThisPr = true;
+                                        } elseif ($owner === 'store_manager' && $isStoreManagerUser) {
+                                            $canActOnThisPr = true;
+                                        } elseif ($owner === 'store_keeper' && $isStoreKeeperUser) {
+                                            $canActOnThisPr = true;
+                                        } elseif (in_array($owner, ['purchase_manager', 'procurement_manager']) && $isPurchaseManagerUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['purchase', 'procurement_team', 'purchaser', 'buyer']) && $isProcurementTeamUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['marketing', 'market_research']) && $isMarketingUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['gm', 'general_manager']) && $isGmUser) $canActOnThisPr = true;
@@ -383,16 +406,28 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="badge bg-secondary bg-opacity-10 text-dark">
-                                        <i class="fas fa-user-tag me-1"></i> {{ ucfirst(str_replace('_', ' ', $pr->current_owner_role ?? 'None')) }}
-                                    </span>
+                                    @if(!empty($isFinalIntakeStage))
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-semibold">
+                                            <i class="fas fa-boxes-packing me-1"></i> Store Keeper
+                                        </span>
+                                    @else
+                                        <span class="badge bg-secondary bg-opacity-10 text-dark">
+                                            <i class="fas fa-user-tag me-1"></i> {{ ucfirst(str_replace('_', ' ', $pr->current_owner_role ?? 'None')) }}
+                                        </span>
+                                    @endif
                                 </td>
                                 <td>{{ $pr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
                                     @if($canActOnThisPr)
-                                        <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-primary fw-bold shadow-sm">
-                                            <i class="fas fa-bolt me-1"></i> Take Action
-                                        </a>
+                                        @if(!empty($isFinalIntakeStage))
+                                            <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-success fw-bold shadow-sm">
+                                                <i class="fas fa-boxes-packing me-1"></i> Fulfill Intake
+                                            </a>
+                                        @else
+                                            <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-primary fw-bold shadow-sm">
+                                                <i class="fas fa-bolt me-1"></i> Take Action
+                                            </a>
+                                        @endif
                                     @else
                                         <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-outline-secondary">
                                             <i class="fas fa-eye me-1"></i> View Details
