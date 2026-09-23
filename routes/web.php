@@ -64,7 +64,10 @@ Route::get('/deploy-from-github', function () {
     putenv('COMPOSER_CACHE_DIR=/tmp/.composer/cache');
     $composerOut  = [];
     $composerCode = 0;
-    exec("cd {$base} && composer install --no-interaction --no-dev --optimize-autoloader 2>&1", $composerOut, $composerCode);
+    // composer.json was edited manually so the lock file is out of sync.
+    // Use 'composer update <package>' to regenerate the lock for only the
+    // new package without upgrading every other dependency.
+    exec("cd {$base} && composer update thiagoalessio/tesseract_ocr --no-interaction --no-dev --optimize-autoloader 2>&1", $composerOut, $composerCode);
     $steps['composer'] = [
         'label'  => '② Composer Install',
         'output' => implode("\n", $composerOut),
