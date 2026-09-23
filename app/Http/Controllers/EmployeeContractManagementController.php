@@ -8,6 +8,7 @@ use App\Models\ContractAmendment;
 use App\Models\ContractRenewal;
 use App\Models\ContractApproval;
 use App\Models\Employee;
+use App\Models\Project;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -82,9 +83,10 @@ class EmployeeContractManagementController extends Controller
         $this->authorize('create', EmployeeContract::class);
 
         $employees = Employee::where('status', 'active')->orderBy('full_name')->get();
+        $projects = Project::whereIn('status', ['active', 'in_progress', 'planning'])->orderBy('name')->get();
         $contractTypes = ['Permanent', 'Temporary', 'Contract', 'Casual', 'Probation'];
 
-        return view('hr-manager.contracts.create', compact('employees', 'contractTypes'));
+        return view('hr-manager.contracts.create', compact('employees', 'contractTypes', 'projects'));
     }
 
     /**
