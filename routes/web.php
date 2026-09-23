@@ -54,6 +54,8 @@ Route::get('/deploy-from-github', function () {
         'label'  => '① Git Pull (origin/main)',
         'output' => implode("\n", $gitOut),
         'ok'     => $gitCode === 0,
+    ];
+
     // ── Step 2: Composer — sync lock file & install new packages ──────────
     // putenv() sets env vars for the current PHP process before exec().
     putenv('HOME=/tmp');
