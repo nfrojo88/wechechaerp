@@ -57,9 +57,14 @@ Route::get('/deploy-from-github', function () {
     ];
 
     // ── Step 2: Composer install (install new packages like tesseract_ocr) ─
-    // HOME & COMPOSER_HOME must be set — the web server user has no home dir
-    $composerOut = [];
-    exec("HOME=/tmp COMPOSER_HOME=/tmp cd {$base} && composer install --no-interaction --no-dev --optimize-autoloader 2>&1", $composerOut, $composerCode);
+    // putenv() sets env vars for the current PHP process before exec() is
+    // called — this is more reliable than shell inline VAR=val for builtins.
+    putenv('HOME=/tmp');
+    putenv('COMPOSER_HOME=/tmp/.composer');
+    putenv('COMPOSER_CACHE_DIR=/tmp/.composer/cache');
+    $composerOut  = [];
+    $composerCode = 0;
+    exec("cd {$base} && composer install --no-interaction --no-dev --optimize-autoloader 2>&1", $composerOut, $composerCode);
     $steps['composer'] = [
         'label'  => '② Composer Install',
         'output' => implode("\n", $composerOut),
