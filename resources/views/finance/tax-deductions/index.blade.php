@@ -5,22 +5,22 @@
 @section('content')
 <div class="container-fluid px-3 px-md-4 py-4">
 
-    {{-- Alerts --}}
+    {{-- System Flash Alerts --}}
     @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm rounded-4 mb-4" role="alert">
-            <div class="d-flex align-items-center gap-2">
-                <i class="fa-solid fa-circle-check fs-5 text-success"></i>
-                <div>{{ session('success') }}</div>
+        <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm rounded-4 mb-4 d-flex align-items-center gap-3 p-3 bg-success bg-opacity-10 border-start border-4 border-success" role="alert">
+            <div class="p-2 bg-success text-white rounded-circle shadow-xs fs-5">
+                <i class="fa-solid fa-circle-check"></i>
             </div>
+            <div class="flex-grow-1 text-dark fw-medium">{{ session('success') }}</div>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     @endif
     @if(session('error'))
-        <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm rounded-4 mb-4" role="alert">
-            <div class="d-flex align-items-center gap-2">
-                <i class="fa-solid fa-triangle-exclamation fs-5 text-danger"></i>
-                <div>{{ session('error') }}</div>
+        <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm rounded-4 mb-4 d-flex align-items-center gap-3 p-3 bg-danger bg-opacity-10 border-start border-4 border-danger" role="alert">
+            <div class="p-2 bg-danger text-white rounded-circle shadow-xs fs-5">
+                <i class="fa-solid fa-triangle-exclamation"></i>
             </div>
+            <div class="flex-grow-1 text-dark fw-medium">{{ session('error') }}</div>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     @endif
@@ -31,216 +31,328 @@
             @php
                 $isVatOnly = $ps->tax_type === 'vat';
                 $isWhtOnly = $ps->tax_type === 'withholding';
-                $borderClass = $isVatOnly ? 'border-info' : ($isWhtOnly ? 'border-danger' : 'border-warning');
-                $bgClass = $isVatOnly ? 'bg-info' : ($isWhtOnly ? 'bg-danger' : 'bg-warning');
+                $themeColor = $isVatOnly ? 'info' : ($isWhtOnly ? 'danger' : 'warning');
                 $iconClass = $isVatOnly ? 'fa-percent' : ($isWhtOnly ? 'fa-hand-holding-dollar' : 'fa-hourglass-half');
-                $taxTitle = $isVatOnly ? '15% VAT REMITTANCE ASSIGNED' : ($isWhtOnly ? '3% WITHHOLDING TAX ASSIGNED' : 'TAX REMITTANCE ASSIGNED (VAT + WHT)');
+                $taxTitle = $isVatOnly ? '15% VAT Remittance Assigned' : ($isWhtOnly ? '3% Withholding Tax Assigned' : 'Tax Remittance Assigned (VAT + WHT)');
             @endphp
-            <div class="alert border-0 rounded-4 shadow-sm mb-4 d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3 p-3 p-md-4 {{ $bgClass }} bg-opacity-10 border-start border-4 {{ $borderClass }}">
-                <div class="d-flex align-items-start gap-3">
-                    <div class="p-3 {{ $bgClass }} text-white rounded-circle shadow-xs fs-4">
-                        <i class="fa-solid {{ $iconClass }}"></i>
+            <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden border-start border-4 border-{{ $themeColor }} bg-white">
+                <div class="card-body p-3 p-md-4">
+                    <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="p-3 bg-{{ $themeColor }} bg-opacity-10 text-{{ $themeColor }} rounded-4 fs-4 flex-shrink-0">
+                                <i class="fa-solid {{ $iconClass }}"></i>
+                            </div>
+                            <div>
+                                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                    <span class="badge bg-{{ $themeColor }}-subtle text-{{ $themeColor }} border border-{{ $themeColor }}-subtle fw-bold px-2.5 py-1 rounded-pill small">
+                                        {{ $taxTitle }}
+                                    </span>
+                                    <span class="fw-bold text-dark font-monospace">{{ $ps->settlement_number }}</span>
+                                    <span class="text-muted small">({{ optional($ps->created_at)->format('M d, Y H:i') }})</span>
+                                </div>
+                                <div class="text-dark small">
+                                    Finance Head assigned: <strong class="text-primary">{{ $ps->financeHead?->name ?? 'Finance Head' }}</strong> &rarr; <strong class="text-success">{{ $ps->assignedStaff?->name ?? 'Finance Staff' }}</strong> &bull; 
+                                    @if($isVatOnly)
+                                        VAT to Pay: <strong class="text-info fs-6">ETB {{ number_format($ps->vat_amount, 2) }}</strong> &bull;
+                                    @elseif($isWhtOnly)
+                                        3% WHT to Pay: <strong class="text-danger fs-6">ETB {{ number_format($ps->withholding_amount, 2) }}</strong> &bull;
+                                    @else
+                                        Total Tax to Pay: <strong class="text-danger fs-6">ETB {{ number_format($ps->total_tax_paid, 2) }}</strong> 
+                                        <span class="text-muted">(VAT: ETB {{ number_format($ps->vat_amount, 2) }} | 3% WHT: ETB {{ number_format($ps->withholding_amount, 2) }})</span> &bull; 
+                                    @endif
+                                    Covering <strong>{{ $ps->records_count }}</strong> tax deduction records.
+                                </div>
+                                <div class="text-muted small mt-1 d-flex align-items-center gap-1">
+                                    <i class="fa-solid fa-circle-info text-primary"></i>
+                                    <span>Awaiting Finance Staff to disburse tax payment to ERCA / Bank and upload official receipt slip.</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap ms-lg-auto">
+                            <button type="button" class="btn btn-success btn-sm rounded-pill px-3 py-1.5 shadow-sm fw-semibold" 
+                                    data-bs-toggle="modal" data-bs-target="#recordPaymentModal{{ $ps->id }}">
+                                <i class="fa-solid fa-file-circle-check me-1"></i> Record Payment &amp; Upload Slip
+                            </button>
+                            <form method="POST" action="{{ route('finance.tax-deductions.settle.cancel', $ps) }}" onsubmit="return confirm('Cancel this tax remittance request and return records to active pool?');" class="d-inline">
+                                @csrf
+                                <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill px-3 py-1.5">
+                                    <i class="fa-solid fa-xmark me-1"></i> Cancel
+                                </button>
+                            </form>
+                        </div>
                     </div>
-                    <div>
-                        <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
-                            <span class="badge {{ $bgClass }} text-white fw-bold px-2 py-1">{{ $taxTitle }}</span>
-                            <span class="fw-bold text-dark fs-6">{{ $ps->settlement_number }}</span>
-                            <span class="text-muted small">({{ optional($ps->created_at)->format('M d, Y H:i') }})</span>
-                        </div>
-                        <div class="text-dark small">
-                            Finance Head assigned: <strong class="text-primary">{{ $ps->financeHead?->name ?? 'Finance Head' }}</strong> &rarr; <strong class="text-success">{{ $ps->assignedStaff?->name ?? 'Finance Staff' }}</strong> &bull; 
-                            @if($isVatOnly)
-                                VAT to Pay: <strong class="text-info fs-6">ETB {{ number_format($ps->vat_amount, 2) }}</strong> &bull;
-                            @elseif($isWhtOnly)
-                                3% WHT to Pay: <strong class="text-danger fs-6">ETB {{ number_format($ps->withholding_amount, 2) }}</strong> &bull;
-                            @else
-                                Total Tax to Pay: <strong class="text-danger fs-6">ETB {{ number_format($ps->total_tax_paid, 2) }}</strong> 
-                                <span class="text-muted">(VAT: ETB {{ number_format($ps->vat_amount, 2) }} | 3% WHT: ETB {{ number_format($ps->withholding_amount, 2) }})</span> &bull; 
-                            @endif
-                            Covering <strong>{{ $ps->records_count }}</strong> tax deduction records.
-                        </div>
-                        <div class="text-muted small mt-1">
-                            <i class="fa-solid fa-circle-info me-1 text-primary"></i>
-                            Awaiting Finance Staff to disburse tax payment to ERCA / Bank and upload official receipt slip.
-                        </div>
-                    </div>
-                </div>
-                <div class="d-flex align-items-center gap-2 flex-wrap mt-2 mt-lg-0">
-                    <button type="button" class="btn btn-success btn-sm rounded-pill px-3 shadow-sm fw-semibold" 
-                            data-bs-toggle="modal" data-bs-target="#recordPaymentModal{{ $ps->id }}">
-                        <i class="fa-solid fa-file-circle-check me-1"></i> Record Payment &amp; Upload Receipt
-                    </button>
-                    <form method="POST" action="{{ route('finance.tax-deductions.settle.cancel', $ps) }}" onsubmit="return confirm('Cancel this tax remittance request and return records to active pool?');" class="d-inline">
-                        @csrf
-                        <button type="submit" class="btn btn-outline-danger btn-sm rounded-pill px-3">
-                            <i class="fa-solid fa-xmark me-1"></i> Cancel
-                        </button>
-                    </form>
                 </div>
             </div>
         @endforeach
     @endif
 
-    {{-- Header & Actions --}}
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-4">
-        <div>
-            <div class="d-flex align-items-center gap-2">
-                <div class="p-2 rounded-3 bg-danger bg-opacity-10 text-danger fs-4">
-                    <i class="fa-solid fa-receipt"></i>
+    {{-- ── Main Header & Action Hub ───────────────────────────────────────────── --}}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden">
+        <div class="card-body p-3 p-md-4">
+            <div class="d-flex flex-column flex-xl-row justify-content-between align-items-start align-items-xl-center gap-3">
+                {{-- Title & Subtitle --}}
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-3 rounded-4 bg-primary bg-opacity-10 text-primary fs-3 flex-shrink-0">
+                        <i class="fa-solid fa-scale-balanced"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <h1 class="h4 fw-bold text-dark mb-0">VAT &amp; Withholding Tax Deductions Ledger</h1>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2.5 py-1 small fw-semibold">
+                                <i class="fa-solid fa-shield-halved me-1"></i>ERCA Compliance
+                            </span>
+                        </div>
+                        <p class="text-muted small mb-0 mt-1">የቫት እና የ3% ቅድመ ግብር ተቀናሾች መከታተያ፣ ክፍያ እና የሂሳብ ሪፖርት ማጠቃለያ</p>
+                    </div>
                 </div>
-                <div>
-                    <h2 class="h4 fw-bold text-dark mb-0">VAT &amp; Withholding Tax Deductions</h2>
-                    <p class="text-muted small mb-0">የቫት እና የ3% ቅድመ ግብር ተቀናሾች መከታተያ እና ሪፖርት (Tax Compliance Ledger)</p>
+
+                {{-- Action Button Groups --}}
+                <div class="d-flex align-items-center gap-2 flex-wrap w-100 w-xl-auto justify-content-xl-end">
+                    {{-- Primary Tax Settlement Actions --}}
+                    <div class="btn-group shadow-sm rounded-pill overflow-hidden" role="group">
+                        {{-- Pay 15% VAT --}}
+                        <button type="button" class="btn btn-info text-white btn-sm px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                            <i class="fa-solid fa-percent"></i>
+                            <span>Pay 15% VAT</span>
+                            <span class="badge bg-white text-info rounded-pill ms-1 font-monospace">
+                                ETB {{ number_format($unsettledVatAmount, 2) }}
+                            </span>
+                        </button>
+
+                        {{-- Pay 3% Withholding Tax --}}
+                        <button type="button" class="btn btn-danger btn-sm px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
+                            <i class="fa-solid fa-hand-holding-dollar"></i>
+                            <span>Pay 3% WHT</span>
+                            <span class="badge bg-white text-danger rounded-pill ms-1 font-monospace">
+                                ETB {{ number_format($unsettledWhtAmount, 2) }}
+                            </span>
+                        </button>
+                    </div>
+
+                    {{-- Utilities Group --}}
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{{ route('finance.tax-deductions.export-csv', request()->query()) }}" class="btn btn-outline-success btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5">
+                            <i class="fa-solid fa-file-excel"></i>
+                            <span class="d-none d-sm-inline">Export CSV</span>
+                        </a>
+                        <button type="button" onclick="window.print()" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5">
+                            <i class="fa-solid fa-print"></i>
+                            <span class="d-none d-sm-inline">Print</span>
+                        </button>
+                        <a href="{{ route('expenses.index') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5">
+                            <i class="fa-solid fa-arrow-left"></i>
+                            <span class="d-none d-sm-inline">Approvals Hub</span>
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            {{-- Separate Action 1: Pay 15% VAT --}}
-            <button type="button" class="btn btn-info text-white btn-sm rounded-pill px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payVatModal">
-                <i class="fa-solid fa-percent me-1"></i> Pay 15% VAT
-                @if($unsettledVatAmount > 0)
-                    <span class="badge bg-white text-info ms-1">ETB {{ number_format($unsettledVatAmount, 2) }}</span>
-                @else
-                    <span class="badge bg-white text-muted ms-1">ETB 0.00</span>
-                @endif
-            </button>
+    </div>
 
-            {{-- Separate Action 2: Pay 3% Withholding Tax --}}
-            <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
-                <i class="fa-solid fa-hand-holding-dollar me-1"></i> Pay 3% Withholding Tax
-                @if($unsettledWhtAmount > 0)
-                    <span class="badge bg-white text-danger ms-1">ETB {{ number_format($unsettledWhtAmount, 2) }}</span>
-                @else
-                    <span class="badge bg-white text-muted ms-1">ETB 0.00</span>
-                @endif
-            </button>
+    {{-- ── Cycle Switcher Navigation Bar ───────────────────────────────────────── --}}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden">
+        <div class="card-body p-2 p-md-3">
+            <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-2">
+                <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                    <span class="small fw-bold text-muted text-uppercase me-2 d-none d-md-inline-block ps-2">
+                        <i class="fa-solid fa-layer-group text-primary me-1"></i> Cycle:
+                    </span>
 
-            <button type="button" onclick="window.print()" class="btn btn-outline-secondary btn-sm rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-print me-1"></i> Print Report
-            </button>
-            <a href="{{ route('finance.tax-deductions.export-csv', request()->query()) }}" class="btn btn-success btn-sm rounded-pill px-3 shadow-xs fw-semibold">
-                <i class="fa-solid fa-file-excel me-1"></i> Export to CSV (ERCA)
-            </a>
-            <a href="{{ route('expenses.index') }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-xs">
-                <i class="fa-solid fa-arrow-left me-1"></i> Approvals Hub
-            </a>
+                    {{-- Current Active Period --}}
+                    <a href="{{ route('finance.tax-deductions.index', array_merge(request()->except('page', 'settlements_page'), ['cycle' => 'active', 'tab' => $tab === 'settlements' ? 'all' : $tab])) }}" 
+                       class="btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ $cycle === 'active' && $tab !== 'settlements' ? 'btn-primary shadow-xs' : 'btn-light text-secondary border-0' }}">
+                        <i class="fa-solid fa-bolt text-warning"></i>
+                        <span>Current Active Period</span>
+                        @if($unsettledCount > 0)
+                            <span class="badge {{ $cycle === 'active' && $tab !== 'settlements' ? 'bg-white text-primary' : 'bg-warning-subtle text-dark' }} rounded-pill ms-1">{{ $unsettledCount }}</span>
+                        @else
+                            <span class="badge bg-success text-white rounded-pill ms-1">Clean (0)</span>
+                        @endif
+                    </a>
+
+                    {{-- All-Time Ledger --}}
+                    <a href="{{ route('finance.tax-deductions.index', array_merge(request()->except('page', 'settlements_page'), ['cycle' => 'all', 'tab' => $tab === 'settlements' ? 'all' : $tab])) }}" 
+                       class="btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ $cycle === 'all' && $tab !== 'settlements' ? 'btn-primary shadow-xs' : 'btn-light text-secondary border-0' }}">
+                        <i class="fa-solid fa-book-bookmark"></i>
+                        <span>All-Time Full Ledger</span>
+                    </a>
+
+                    {{-- Past Settled Records --}}
+                    <a href="{{ route('finance.tax-deductions.index', array_merge(request()->except('page', 'settlements_page'), ['cycle' => 'settled', 'tab' => $tab === 'settlements' ? 'all' : $tab])) }}" 
+                       class="btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ $cycle === 'settled' && $tab !== 'settlements' ? 'btn-primary shadow-xs' : 'btn-light text-secondary border-0' }}">
+                        <i class="fa-solid fa-circle-check text-success"></i>
+                        <span>Past Settled (ERCA)</span>
+                    </a>
+
+                    {{-- Tax Payment Settlements --}}
+                    <a href="{{ route('finance.tax-deductions.index', array_merge(request()->except('page', 'settlements_page'), ['tab' => 'settlements'])) }}" 
+                       class="btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ $tab === 'settlements' ? 'btn-danger shadow-xs text-white' : 'btn-light text-danger border-0' }}">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                        <span>Tax Remittance Batches</span>
+                        <span class="badge {{ $tab === 'settlements' ? 'bg-white text-danger' : 'bg-danger-subtle text-danger' }} rounded-pill ms-1">
+                            {{ $settlements->total() }}
+                        </span>
+                    </a>
+                </div>
+
+                {{-- Status Indicator Pill --}}
+                <div class="pe-2 mt-2 mt-lg-0">
+                    @if($cycle === 'active')
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1.5 rounded-pill small fw-medium d-inline-flex align-items-center gap-1">
+                            <i class="fa-solid fa-rotate-right"></i>
+                            <span>Active Period: Accumulating Liabilities</span>
+                        </span>
+                    @elseif($cycle === 'settled')
+                        <span class="badge bg-info-subtle text-info border border-info-subtle px-2.5 py-1.5 rounded-pill small fw-medium d-inline-flex align-items-center gap-1">
+                            <i class="fa-solid fa-box-archive"></i>
+                            <span>Archived: Paid to ERCA</span>
+                        </span>
+                    @else
+                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1.5 rounded-pill small fw-medium d-inline-flex align-items-center gap-1">
+                            <i class="fa-solid fa-database"></i>
+                            <span>All Historical Records</span>
+                        </span>
+                    @endif
+                </div>
+            </div>
         </div>
     </div>
 
-    {{-- Cycle Switcher Navigation Bar --}}
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 bg-white p-2 rounded-4 shadow-xs border">
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            <span class="small fw-bold text-muted text-uppercase ms-2 me-1"><i class="fa-solid fa-filter me-1 text-primary"></i>View Cycle:</span>
-            
-            <a href="{{ route('finance.tax-deductions.index', array_merge(request()->except('page', 'settlements_page'), ['cycle' => 'active', 'tab' => $tab === 'settlements' ? 'all' : $tab])) }}" 
-               class="btn btn-sm rounded-pill px-3 fw-semibold {{ $cycle === 'active' && $tab !== 'settlements' ? 'btn-primary shadow-xs' : 'btn-light text-secondary' }}">
-                <i class="fa-solid fa-bolt me-1 text-warning"></i> Current Active Period (Start from Zero)
-                @if($unsettledCount > 0)
-                    <span class="badge bg-white text-primary ms-1">{{ $unsettledCount }}</span>
-                @else
-                    <span class="badge bg-success text-white ms-1">0 - Clean</span>
-                @endif
-            </a>
-
-            <a href="{{ route('finance.tax-deductions.index', array_merge(request()->except('page', 'settlements_page'), ['cycle' => 'all', 'tab' => $tab === 'settlements' ? 'all' : $tab])) }}" 
-               class="btn btn-sm rounded-pill px-3 fw-semibold {{ $cycle === 'all' && $tab !== 'settlements' ? 'btn-primary shadow-xs' : 'btn-light text-secondary' }}">
-                <i class="fa-solid fa-layer-group me-1"></i> All-Time Full Ledger
-            </a>
-
-            <a href="{{ route('finance.tax-deductions.index', array_merge(request()->except('page', 'settlements_page'), ['cycle' => 'settled', 'tab' => $tab === 'settlements' ? 'all' : $tab])) }}" 
-               class="btn btn-sm rounded-pill px-3 fw-semibold {{ $cycle === 'settled' && $tab !== 'settlements' ? 'btn-primary shadow-xs' : 'btn-light text-secondary' }}">
-                <i class="fa-solid fa-circle-check me-1 text-success"></i> Past Settled Records (Paid to ERCA)
-            </a>
-
-            <a href="{{ route('finance.tax-deductions.index', array_merge(request()->except('page', 'settlements_page'), ['tab' => 'settlements'])) }}" 
-               class="btn btn-sm rounded-pill px-3 fw-semibold {{ $tab === 'settlements' ? 'btn-danger shadow-xs text-white' : 'btn-light text-danger' }}">
-                <i class="fa-solid fa-file-invoice-dollar me-1"></i> Tax Payment Settlements ({{ $settlements->total() }})
-            </a>
-        </div>
-
-        <div class="me-2 text-muted small">
-            @if($cycle === 'active')
-                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"><i class="fa-solid fa-rotate-right me-1"></i>Active Cycle: Accumulating</span>
-            @elseif($cycle === 'settled')
-                <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1"><i class="fa-solid fa-box-archive me-1"></i>Archived Paid Taxes</span>
-            @else
-                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1"><i class="fa-solid fa-database me-1"></i>All Records</span>
-            @endif
-        </div>
-    </div>
-
-    {{-- KPI Metric Summary Cards --}}
+    {{-- ── KPI Metric Summary Cards ───────────────────────────────────────────── --}}
     <div class="row g-3 mb-4">
-        {{-- Total Base Invoiced --}}
+        {{-- Card 1: Base Invoiced --}}
         <div class="col-12 col-sm-6 col-xl">
-            <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white border-start border-4 border-primary">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="text-muted small text-uppercase fw-bold">Base Invoiced Amount</span>
-                    <span class="badge bg-primary-subtle text-primary rounded-pill"><i class="fa-solid fa-file-invoice"></i></span>
-                </div>
-                <div class="fs-4 fw-bold text-dark">ETB {{ number_format($totalGrossBase, 2) }}</div>
-                <div class="text-muted small" style="font-size:0.75rem;">ጠቅላላ የመነሻ ዋጋ</div>
-            </div>
-        </div>
-
-        {{-- Total VAT --}}
-        <div class="col-12 col-sm-6 col-xl">
-            <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white border-start border-4 border-info">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="text-muted small text-uppercase fw-bold">Total VAT (15% / VAT B)</span>
-                    <span class="badge bg-info-subtle text-info rounded-pill"><i class="fa-solid fa-percent"></i></span>
-                </div>
-                <div class="fs-4 fw-bold text-info">+ ETB {{ number_format($totalVatAmount, 2) }}</div>
-                <div class="d-flex justify-content-between align-items-center mt-1">
-                    <span class="text-muted small" style="font-size:0.75rem;">ጠቅላላ የተጨመረ/የተካተተ ቫት</span>
-                    <button type="button" class="btn btn-outline-info btn-sm rounded-pill px-2 py-0 fw-semibold" style="font-size:0.7rem;" data-bs-toggle="modal" data-bs-target="#payVatModal">
-                        Pay VAT &rarr;
-                    </button>
+            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-primary">
+                <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem; letter-spacing: 0.5px;">Base Invoiced</span>
+                            <span class="text-muted" style="font-size: 0.7rem;">ጠቅላላ የመነሻ ዋጋ</span>
+                        </div>
+                        <div class="p-2.5 bg-primary bg-opacity-10 text-primary rounded-3 fs-5">
+                            <i class="fa-solid fa-file-invoice"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="fs-4 fw-bold text-dark font-monospace mb-1">ETB {{ number_format($totalGrossBase, 2) }}</div>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
+                            Gross Purchases
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        {{-- Total Withholding Tax --}}
+        {{-- Card 2: Total VAT --}}
         <div class="col-12 col-sm-6 col-xl">
-            <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white border-start border-4 border-danger">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="text-muted small text-uppercase fw-bold">Withholding Tax (3%)</span>
-                    <span class="badge bg-danger-subtle text-danger rounded-pill"><i class="fa-solid fa-hand-holding-dollar"></i></span>
-                </div>
-                <div class="fs-4 fw-bold text-danger">- ETB {{ number_format($totalWithholdingAmount, 2) }}</div>
-                <div class="d-flex justify-content-between align-items-center mt-1">
-                    <span class="text-muted small" style="font-size:0.75rem;">ጠቅላላ የተቀነሰ 3% ቅድመ ግብር</span>
-                    <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-2 py-0 fw-semibold" style="font-size:0.7rem;" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
-                        Pay WHT &rarr;
-                    </button>
+            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-info">
+                <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem; letter-spacing: 0.5px;">VAT (15% / VAT B)</span>
+                            <span class="text-muted" style="font-size: 0.7rem;">ጠቅላላ የተጨመረ ቫት</span>
+                        </div>
+                        <div class="p-2.5 bg-info bg-opacity-10 text-info rounded-3 fs-5">
+                            <i class="fa-solid fa-percent"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="fs-4 fw-bold text-info font-monospace mb-1">+ ETB {{ number_format($totalVatAmount, 2) }}</div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
+                                Accrued VAT
+                            </span>
+                            <button type="button" class="btn btn-link text-info p-0 text-decoration-none fw-semibold small" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                                Pay VAT &rarr;
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        {{-- Total Net Disbursed --}}
+        {{-- Card 3: Total Withholding Tax --}}
         <div class="col-12 col-sm-6 col-xl">
-            <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white border-start border-4 border-success">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="text-muted small text-uppercase fw-bold">Net Disbursed / Paid</span>
-                    <span class="badge bg-success-subtle text-success rounded-pill"><i class="fa-solid fa-circle-check"></i></span>
+            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-danger">
+                <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem; letter-spacing: 0.5px;">Withholding Tax (3%)</span>
+                            <span class="text-muted" style="font-size: 0.7rem;">የተቀነሰ 3% ቅድመ ግብር</span>
+                        </div>
+                        <div class="p-2.5 bg-danger bg-opacity-10 text-danger rounded-3 fs-5">
+                            <i class="fa-solid fa-hand-holding-dollar"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="fs-4 fw-bold text-danger font-monospace mb-1">- ETB {{ number_format($totalWithholdingAmount, 2) }}</div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
+                                Deducted WHT
+                            </span>
+                            <button type="button" class="btn btn-link text-danger p-0 text-decoration-none fw-semibold small" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
+                                Pay WHT &rarr;
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                <div class="fs-4 fw-bold text-success">ETB {{ number_format($totalNetDisbursed, 2) }}</div>
-                <div class="text-muted small" style="font-size:0.75rem;">ጠቅላላ የተጣራ የተከፈለ</div>
             </div>
         </div>
 
-        {{-- Verified Slips Count --}}
+        {{-- Card 4: Net Disbursed --}}
         <div class="col-12 col-sm-6 col-xl">
-            <div class="card border-0 shadow-sm rounded-4 h-100 p-3 bg-white border-start border-4 border-warning">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="text-muted small text-uppercase fw-bold">Verified WHT Slips</span>
-                    <span class="badge bg-warning-subtle text-warning rounded-pill"><i class="fa-solid fa-paperclip"></i></span>
+            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-success">
+                <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem; letter-spacing: 0.5px;">Net Disbursed</span>
+                            <span class="text-muted" style="font-size: 0.7rem;">ጠቅላላ የተጣራ የተከፈለ</span>
+                        </div>
+                        <div class="p-2.5 bg-success bg-opacity-10 text-success rounded-3 fs-5">
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="fs-4 fw-bold text-success font-monospace mb-1">ETB {{ number_format($totalNetDisbursed, 2) }}</div>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
+                            Effective Payout
+                        </span>
+                    </div>
                 </div>
-                <div class="d-flex align-items-baseline gap-2">
-                    <span class="fs-4 fw-bold text-success">{{ $slipsAttachedCount }}</span>
-                    <span class="text-muted small">/ {{ $totalWhtTransactions }} Verified</span>
+            </div>
+        </div>
+
+        {{-- Card 5: Verified WHT Slips --}}
+        <div class="col-12 col-sm-6 col-xl">
+            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-warning">
+                <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem; letter-spacing: 0.5px;">Verified WHT Slips</span>
+                            <span class="text-muted" style="font-size: 0.7rem;">የተረጋገጡ ደረሰኞች</span>
+                        </div>
+                        <div class="p-2.5 bg-warning bg-opacity-10 text-warning rounded-3 fs-5">
+                            <i class="fa-solid fa-paperclip"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-baseline gap-1.5 mb-1">
+                            <span class="fs-4 fw-bold text-dark font-monospace">{{ $slipsAttachedCount }}</span>
+                            <span class="text-muted small">/ {{ $totalWhtTransactions }}</span>
+                            @if($totalWhtTransactions > 0 && $slipsAttachedCount === $totalWhtTransactions)
+                                <span class="badge bg-success text-white rounded-pill ms-auto small" style="font-size: 0.65rem;">100%</span>
+                            @elseif($missingSlipsCount > 0)
+                                <span class="badge bg-danger-subtle text-danger rounded-pill ms-auto small" style="font-size: 0.65rem;">{{ $missingSlipsCount }} Missing</span>
+                            @endif
+                        </div>
+                        <div class="progress" style="height: 5px;">
+                            @php
+                                $whtSlipPercent = $totalWhtTransactions > 0 ? min(100, round(($slipsAttachedCount / $totalWhtTransactions) * 100)) : 100;
+                            @endphp
+                            <div class="progress-bar bg-warning" role="progressbar" style="width: {{ $whtSlipPercent }}%"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="text-muted small" style="font-size:0.75rem;">የተያያዙ እና የተረጋገጡ ደረሰኞች</div>
             </div>
         </div>
     </div>
@@ -248,9 +360,9 @@
     @if($tab === 'settlements')
         {{-- ── Settlements History Table ───────────────────────────────────────── --}}
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4 bg-white">
-            <div class="card-header bg-white border-bottom py-3 px-4 d-flex align-items-center justify-content-between">
+            <div class="card-header bg-white border-bottom py-3 px-4 d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
                 <div class="d-flex align-items-center gap-2">
-                    <div class="p-2 rounded-3 bg-danger bg-opacity-10 text-danger">
+                    <div class="p-2 rounded-3 bg-danger bg-opacity-10 text-danger fs-5">
                         <i class="fa-solid fa-file-invoice-dollar"></i>
                     </div>
                     <div>
@@ -259,31 +371,31 @@
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <button type="button" class="btn btn-info text-white btn-sm rounded-pill px-3 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                    <button type="button" class="btn btn-info text-white btn-sm rounded-pill px-3 py-1.5 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#payVatModal">
                         <i class="fa-solid fa-percent me-1"></i> Remit VAT (15%)
                     </button>
-                    <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
-                        <i class="fa-solid fa-hand-holding-dollar me-1"></i> Remit 3% Withholding
+                    <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 py-1.5 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
+                        <i class="fa-solid fa-hand-holding-dollar me-1"></i> Remit 3% WHT
                     </button>
                 </div>
             </div>
 
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light small text-uppercase fw-bold">
+                    <thead class="bg-light-subtle text-muted text-uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
                         <tr>
-                            <th class="ps-4">Settlement #</th>
-                            <th>Date / Period</th>
-                            <th>Tax Type</th>
-                            <th class="text-end">Base Amount</th>
-                            <th class="text-end text-info">VAT Paid</th>
-                            <th class="text-end text-danger">WHT Paid</th>
-                            <th class="text-end text-dark fw-bold">Total Paid (ETB)</th>
-                            <th>Assigned Staff</th>
-                            <th>Paying Account</th>
-                            <th>Receipt Slip</th>
-                            <th>Status</th>
-                            <th class="text-center pe-4">Actions</th>
+                            <th class="ps-4 py-3">Settlement #</th>
+                            <th class="py-3">Date / Period</th>
+                            <th class="py-3">Tax Type</th>
+                            <th class="py-3 text-end">Base Amount</th>
+                            <th class="py-3 text-end text-info">VAT Paid</th>
+                            <th class="py-3 text-end text-danger">WHT Paid</th>
+                            <th class="py-3 text-end text-dark">Total Remitted</th>
+                            <th class="py-3">Assigned Staff</th>
+                            <th class="py-3">Paying Account</th>
+                            <th class="py-3 text-center">Receipt Slip</th>
+                            <th class="py-3">Status</th>
+                            <th class="py-3 text-center pe-4">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -294,18 +406,18 @@
                                     <small class="text-muted">{{ $st->records_count }} records covered</small>
                                 </td>
                                 <td>
-                                    <div>{{ optional($st->created_at)->format('d M Y, h:i A') }}</div>
+                                    <div class="text-dark small fw-medium">{{ optional($st->created_at)->format('d M Y, h:i A') }}</div>
                                     @if($st->paid_at)
                                         <small class="text-success"><i class="fa-solid fa-check me-1"></i>Paid: {{ $st->paid_at->format('d M Y') }}</small>
                                     @endif
                                 </td>
                                 <td>
                                     @if($st->tax_type === 'both')
-                                        <span class="badge bg-primary-subtle text-primary">VAT (15%) + WHT (3%)</span>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2.5 py-1">VAT (15%) + WHT (3%)</span>
                                     @elseif($st->tax_type === 'vat')
-                                        <span class="badge bg-info-subtle text-info">VAT (15%) Only</span>
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2.5 py-1">VAT (15%) Only</span>
                                     @else
-                                        <span class="badge bg-danger-subtle text-danger">3% Withholding Only</span>
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2.5 py-1">3% Withholding Only</span>
                                     @endif
                                 </td>
                                 <td class="text-end font-monospace small">ETB {{ number_format($st->total_base_amount, 2) }}</td>
@@ -313,40 +425,46 @@
                                 <td class="text-end font-monospace text-danger small">- ETB {{ number_format($st->withholding_amount, 2) }}</td>
                                 <td class="text-end font-monospace fw-bold text-dark">ETB {{ number_format($st->total_tax_paid, 2) }}</td>
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $st->assignedStaff?->name ?? 'Unassigned' }}</div>
+                                    <div class="fw-semibold text-dark small">{{ $st->assignedStaff?->name ?? 'Unassigned' }}</div>
                                     @if($st->financeHead)
                                         <small class="text-muted" style="font-size: 0.72rem;">By: {{ $st->financeHead->name }}</small>
                                     @endif
                                 </td>
                                 <td>
-                                    <div class="small fw-semibold">{{ $st->chartOfAccount->name ?? ($st->bankAccount->bank_name ?? 'Bank/COA') }}</div>
+                                    <div class="small fw-medium text-dark">{{ $st->chartOfAccount->name ?? ($st->bankAccount->bank_name ?? 'Bank/COA') }}</div>
                                     @if($st->payment_reference)
                                         <small class="text-muted font-monospace" style="font-size:0.7rem;">Ref: {{ $st->payment_reference }}</small>
                                     @endif
                                 </td>
-                                <td>
+                                <td class="text-center">
                                     @if($st->attachment)
-                                        <a href="{{ asset($st->attachment) }}" target="_blank" class="btn btn-xs btn-outline-success rounded-pill px-2 py-0" style="font-size:0.75rem;">
+                                        <a href="{{ asset($st->attachment) }}" target="_blank" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-0.5 shadow-xs" style="font-size:0.75rem;">
                                             <i class="fa-solid fa-paperclip me-1"></i> Bank Receipt
                                         </a>
                                     @else
-                                        <span class="badge bg-light text-muted border">No slip</span>
+                                        <span class="badge bg-light text-muted border rounded-pill">No slip</span>
                                     @endif
                                 </td>
                                 <td>
                                     @if($st->status === 'paid')
-                                        <span class="badge bg-success rounded-pill px-2.5 py-1"><i class="fa-solid fa-check me-1"></i>Paid to ERCA</span>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1 small">
+                                            <i class="fa-solid fa-check me-1"></i>Paid to ERCA
+                                        </span>
                                     @elseif($st->status === 'pending_payment')
-                                        <span class="badge bg-warning text-dark rounded-pill px-2.5 py-1"><i class="fa-solid fa-clock me-1"></i>Pending Payment</span>
+                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2.5 py-1 small">
+                                            <i class="fa-solid fa-clock me-1"></i>Pending Payment
+                                        </span>
                                     @else
-                                        <span class="badge bg-secondary rounded-pill px-2.5 py-1">{{ ucfirst($st->status) }}</span>
+                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle rounded-pill px-2.5 py-1 small">
+                                            {{ ucfirst($st->status) }}
+                                        </span>
                                     @endif
                                 </td>
                                 <td class="text-center pe-4">
                                     @if($st->status === 'pending_payment')
-                                        <button type="button" class="btn btn-sm btn-success rounded-pill px-3 shadow-xs" 
+                                        <button type="button" class="btn btn-sm btn-success rounded-pill px-3 py-1 shadow-xs fw-medium" 
                                                 data-bs-toggle="modal" data-bs-target="#recordPaymentModal{{ $st->id }}">
-                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i> Pay
+                                            <i class="fa-solid fa-file-invoice-dollar me-1"></i> Settle
                                         </button>
                                     @else
                                         <span class="text-muted small"><i class="fa-solid fa-circle-check text-success"></i> Settled</span>
@@ -356,14 +474,16 @@
                         @empty
                             <tr>
                                 <td colspan="12" class="text-center py-5">
-                                    <div class="text-muted fs-5 mb-2"><i class="fa-solid fa-folder-open text-secondary fs-2"></i></div>
-                                    <div class="fw-bold text-dark">No Tax Remittance Batches Recorded Yet</div>
-                                    <p class="text-muted small mb-3">When you remit taxes to ERCA, settlements will be logged here with complete bank deposit &amp; ERCA proof slips.</p>
+                                    <div class="text-muted mb-2"><i class="fa-solid fa-folder-open text-secondary fs-1"></i></div>
+                                    <h6 class="fw-bold text-dark">No Tax Remittance Batches Recorded Yet</h6>
+                                    <p class="text-muted small mb-3 mx-auto" style="max-width: 480px;">
+                                        When you remit accrued taxes to ERCA, settlements will be logged here with complete bank deposit &amp; ERCA tax clearance proof slips.
+                                    </p>
                                     <div class="d-flex justify-content-center gap-2 flex-wrap">
-                                        <button type="button" class="btn btn-info text-white btn-sm rounded-pill px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                                        <button type="button" class="btn btn-info text-white btn-sm rounded-pill px-3 py-1.5 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payVatModal">
                                             <i class="fa-solid fa-percent me-1"></i> Pay 15% VAT Now
                                         </button>
-                                        <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
+                                        <button type="button" class="btn btn-danger btn-sm rounded-pill px-3 py-1.5 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
                                             <i class="fa-solid fa-hand-holding-dollar me-1"></i> Pay 3% Withholding Now
                                         </button>
                                     </div>
@@ -384,54 +504,62 @@
     @else
         {{-- ── Active / Ledger View ─────────────────────────────────────────────── --}}
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4 bg-white">
+            {{-- Secondary Sub-Tabs --}}
             <div class="card-header bg-white border-bottom py-3 px-4">
                 <ul class="nav nav-pills card-header-pills gap-2 flex-wrap">
                     <li class="nav-item">
-                        <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'all' || $tab === 'paid' ? 'active bg-primary text-white shadow-sm' : 'text-secondary' }}" 
+                        <a class="nav-link rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ $tab === 'all' || $tab === 'paid' ? 'active bg-primary text-white shadow-sm' : 'text-secondary bg-light' }}" 
                            href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'all'])) }}">
-                            <i class="fa-solid fa-receipt me-1"></i> All Tax Items ({{ $totalRecords }})
+                            <i class="fa-solid fa-receipt"></i>
+                            <span>All Tax Items</span>
+                            <span class="badge {{ $tab === 'all' || $tab === 'paid' ? 'bg-white text-primary' : 'bg-secondary-subtle text-secondary' }} rounded-pill ms-1">{{ $totalRecords }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'withholding' ? 'active bg-danger text-white shadow-sm' : 'text-secondary' }}" 
+                        <a class="nav-link rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ $tab === 'withholding' ? 'active bg-danger text-white shadow-sm' : 'text-secondary bg-light' }}" 
                            href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'withholding'])) }}">
-                            <i class="fa-solid fa-scissors me-1"></i> 3% Withholding Tax ({{ $totalWhtTransactions }})
+                            <i class="fa-solid fa-scissors"></i>
+                            <span>3% Withholding Tax</span>
+                            <span class="badge {{ $tab === 'withholding' ? 'bg-white text-danger' : 'bg-secondary-subtle text-secondary' }} rounded-pill ms-1">{{ $totalWhtTransactions }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'vat' ? 'active bg-info text-white shadow-sm' : 'text-secondary' }}" 
+                        <a class="nav-link rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ $tab === 'vat' ? 'active bg-info text-white shadow-sm' : 'text-secondary bg-light' }}" 
                            href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'vat'])) }}">
-                            <i class="fa-solid fa-percent me-1"></i> VAT Applied
+                            <i class="fa-solid fa-percent"></i>
+                            <span>VAT Applied</span>
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link rounded-pill px-3 py-1 fw-semibold {{ $tab === 'slips' ? 'active bg-success text-white shadow-sm' : 'text-secondary' }}" 
+                        <a class="nav-link rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ $tab === 'slips' ? 'active bg-success text-white shadow-sm' : 'text-secondary bg-light' }}" 
                            href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'slips'])) }}">
-                            <i class="fa-solid fa-file-circle-check me-1"></i> WHT Slips Attached ({{ $slipsAttachedCount }})
+                            <i class="fa-solid fa-file-circle-check"></i>
+                            <span>WHT Slips Attached</span>
+                            <span class="badge {{ $tab === 'slips' ? 'bg-white text-success' : 'bg-secondary-subtle text-secondary' }} rounded-pill ms-1">{{ $slipsAttachedCount }}</span>
                         </a>
                     </li>
                 </ul>
             </div>
 
-            {{-- Filter Inputs --}}
-            <div class="card-body p-3 p-md-4 bg-light-subtle border-bottom">
+            {{-- Filter Bar --}}
+            <div class="card-body p-3 p-md-4 bg-light bg-opacity-50 border-bottom">
                 <form method="GET" action="{{ route('finance.tax-deductions.index') }}" class="row g-2 align-items-center">
                     <input type="hidden" name="tab" value="{{ $tab }}">
                     <input type="hidden" name="cycle" value="{{ $cycle }}">
 
                     <div class="col-12 col-md-3">
-                        <div class="input-group input-group-sm">
-                            <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
-                            <input type="text" name="search" class="form-control form-control-sm border-start-0" 
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                            <input type="text" name="search" class="form-control border-start-0" 
                                    placeholder="Search Ref, Voucher, Requester..." value="{{ request('search') }}">
                         </div>
                     </div>
 
                     <div class="col-6 col-md-2">
-                        <select name="category" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <select name="category" class="form-select" onchange="this.form.submit()">
                             <option value="">All Categories</option>
                             <option value="Service" {{ request('category') === 'Service' ? 'selected' : '' }}>🤝 Service (አገልግሎት)</option>
-                            <option value="Contract Work" {{ request('category') === 'Contract Work' ? 'selected' : '' }}>📝 Contract Work (የኮንትራት ስራ)</option>
+                            <option value="Contract Work" {{ request('category') === 'Contract Work' ? 'selected' : '' }}>📝 Contract Work (የኮንትራት)</option>
                             <option value="Transport" {{ request('category') === 'Transport' ? 'selected' : '' }}>🚚 Transport (ትራንስፖርት)</option>
                             <option value="Loading & Unloading" {{ request('category') === 'Loading & Unloading' ? 'selected' : '' }}>📦 Loading &amp; Unloading</option>
                             <option value="Maintenance" {{ request('category') === 'Maintenance' ? 'selected' : '' }}>🔧 Maintenance</option>
@@ -440,7 +568,7 @@
                     </div>
 
                     <div class="col-6 col-md-2">
-                        <select name="vat_type" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <select name="vat_type" class="form-select" onchange="this.form.submit()">
                             <option value="">All VAT Types</option>
                             <option value="exclusive" {{ request('vat_type') === 'exclusive' ? 'selected' : '' }}>15% Added (+15% ቫት)</option>
                             <option value="vat_b" {{ request('vat_type') === 'vat_b' ? 'selected' : '' }}>15% Included (VAT B)</option>
@@ -449,19 +577,19 @@
                     </div>
 
                     <div class="col-6 col-md-2">
-                        <input type="date" name="from_date" class="form-control form-control-sm" value="{{ request('from_date') }}" title="From Date">
+                        <input type="date" name="from_date" class="form-control" value="{{ request('from_date') }}" title="From Date" placeholder="From Date">
                     </div>
 
                     <div class="col-6 col-md-2">
-                        <input type="date" name="to_date" class="form-control form-control-sm" value="{{ request('to_date') }}" title="To Date">
+                        <input type="date" name="to_date" class="form-control" value="{{ request('to_date') }}" title="To Date" placeholder="To Date">
                     </div>
 
-                    <div class="col-12 col-md-1 d-flex gap-1">
-                        <button type="submit" class="btn btn-primary btn-sm flex-fill" title="Apply Filter">
+                    <div class="col-12 col-md-1 d-flex gap-1.5">
+                        <button type="submit" class="btn btn-primary flex-fill" title="Apply Filter">
                             <i class="fa-solid fa-filter"></i>
                         </button>
                         @if(request('search') || request('category') || request('vat_type') || request('from_date') || request('to_date'))
-                            <a href="{{ route('finance.tax-deductions.index', ['tab' => $tab, 'cycle' => $cycle]) }}" class="btn btn-outline-danger btn-sm" title="Clear Filters">
+                            <a href="{{ route('finance.tax-deductions.index', ['tab' => $tab, 'cycle' => $cycle]) }}" class="btn btn-outline-danger" title="Clear Filters">
                                 <i class="fa-solid fa-xmark"></i>
                             </a>
                         @endif
@@ -472,19 +600,19 @@
             {{-- Tax Deductions Table --}}
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light small text-uppercase fw-bold">
+                    <thead class="bg-light-subtle text-muted text-uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
                         <tr>
-                            <th class="ps-4">Voucher / Ref #</th>
-                            <th>Requester / Project</th>
-                            <th>Category</th>
-                            <th class="text-end">Base Invoiced (ETB)</th>
-                            <th class="text-end">VAT (15% / VAT B)</th>
-                            <th class="text-end text-danger">3% Withholding Tax</th>
-                            <th class="text-end text-success">Net Paid (ETB)</th>
-                            <th>Paying Account</th>
-                            <th class="text-center">WHT Slip</th>
-                            <th>Cycle Status</th>
-                            <th class="text-center pe-4">Actions</th>
+                            <th class="ps-4 py-3">Voucher / Ref #</th>
+                            <th class="py-3">Requester / Project</th>
+                            <th class="py-3">Category</th>
+                            <th class="py-3 text-end">Base Invoiced</th>
+                            <th class="py-3 text-end">VAT (15%)</th>
+                            <th class="py-3 text-end text-danger">3% Withholding</th>
+                            <th class="py-3 text-end text-success">Net Paid</th>
+                            <th class="py-3">Paying Account</th>
+                            <th class="py-3 text-center">WHT Slip</th>
+                            <th class="py-3">Cycle Status</th>
+                            <th class="py-3 text-center pe-4">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y">
@@ -502,7 +630,7 @@
                                     <div class="fw-bold font-monospace text-primary">{{ $item->request_number }}</div>
                                     <div class="small text-muted">{{ optional($item->created_at)->format('d M Y, h:i A') }}</div>
                                     @if($item->payment_reference)
-                                        <span class="badge bg-light text-dark border font-monospace" style="font-size: 0.7rem;">
+                                        <span class="badge bg-light text-dark border font-monospace mt-1" style="font-size: 0.68rem;">
                                             Ref: {{ $item->payment_reference }}
                                         </span>
                                     @endif
@@ -510,17 +638,17 @@
 
                                 {{-- Requester / Project --}}
                                 <td>
-                                    <div class="fw-semibold text-dark">{{ $item->user->name ?? ($item->employee->full_name ?? 'N/A') }}</div>
+                                    <div class="fw-semibold text-dark small">{{ $item->user->name ?? ($item->employee->full_name ?? 'N/A') }}</div>
                                     @if($item->project_id && $item->project)
-                                        <span class="badge bg-light text-secondary border fw-normal" style="font-size: 0.7rem;">
+                                        <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
                                             <i class="fa-solid fa-building me-1"></i>{{ $item->project->name }}
                                         </span>
                                     @elseif($item->purchaseRequest)
-                                        <span class="badge bg-light text-secondary border fw-normal" style="font-size: 0.7rem;">
+                                        <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
                                             <i class="fa-solid fa-cart-shopping me-1"></i>PR #{{ $item->purchaseRequest->pr_number ?? $item->purchaseRequest->id }}
                                         </span>
                                     @elseif($item->creditStoreLedger)
-                                        <span class="badge bg-light text-secondary border fw-normal" style="font-size: 0.7rem;">
+                                        <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
                                             <i class="fa-solid fa-truck-ramp-box me-1"></i>Credit Store #{{ $item->creditStoreLedger->id }}
                                         </span>
                                     @endif
@@ -537,21 +665,21 @@
                                             default => 'primary'
                                         };
                                     @endphp
-                                    <span class="badge bg-{{ $catColor }}-subtle text-{{ $catColor }} border border-{{ $catColor }}-subtle">
+                                    <span class="badge bg-{{ $catColor }}-subtle text-{{ $catColor }} border border-{{ $catColor }}-subtle rounded-pill px-2.5 py-1 small">
                                         {{ $item->category }}
                                     </span>
                                 </td>
 
                                 {{-- Base Invoiced --}}
-                                <td class="text-end font-monospace fw-semibold">
+                                <td class="text-end font-monospace fw-semibold small">
                                     ETB {{ number_format($gross, 2) }}
                                 </td>
 
                                 {{-- VAT --}}
-                                <td class="text-end font-monospace">
+                                <td class="text-end font-monospace small">
                                     @if((float)($item->vat_amount ?? 0) > 0)
                                         <span class="text-info fw-bold">+ ETB {{ number_format((float)$item->vat_amount, 2) }}</span>
-                                        <div class="text-muted small" style="font-size:0.7rem;">
+                                        <div class="text-muted" style="font-size:0.68rem;">
                                             {{ $item->vat_type === 'vat_b' ? 'VAT B (15% Incl.)' : '15% Added' }}
                                         </div>
                                     @else
@@ -560,39 +688,39 @@
                                 </td>
 
                                 {{-- Withholding Tax (3%) --}}
-                                <td class="text-end font-monospace">
+                                <td class="text-end font-monospace small">
                                     @if($hasWht && $wht > 0)
                                         <span class="text-danger fw-bold">- ETB {{ number_format($wht, 2) }}</span>
-                                        <div class="text-muted small" style="font-size:0.7rem;">3% WHT Deducted</div>
+                                        <div class="text-muted" style="font-size:0.68rem;">3% Deducted</div>
                                     @else
                                         <span class="text-muted small">—</span>
                                     @endif
                                 </td>
 
                                 {{-- Net Disbursed --}}
-                                <td class="text-end font-monospace fw-bold text-success">
+                                <td class="text-end font-monospace fw-bold text-success small">
                                     ETB {{ number_format($net, 2) }}
                                 </td>
 
                                 {{-- Paying Account --}}
                                 <td>
-                                    <div class="small fw-semibold text-dark">
+                                    <div class="small fw-medium text-dark">
                                         {{ $item->chartOfAccount->name ?? ($item->bankAccount->bank_name ?? 'Petty Cash') }}
                                     </div>
                                     @if($item->paidBy)
-                                        <small class="text-muted" style="font-size: 0.72rem;">Paid by: {{ $item->paidBy->name }}</small>
+                                        <small class="text-muted" style="font-size: 0.7rem;">By: {{ $item->paidBy->name }}</small>
                                     @endif
                                 </td>
 
                                 {{-- WHT Slip Status --}}
                                 <td class="text-center">
                                     @if(!empty($item->withholding_receipt))
-                                        <a href="{{ $item->withholding_receipt_url }}" target="_blank" class="btn btn-xs btn-outline-danger rounded-pill px-2 py-0" style="font-size:0.75rem;" title="View Attached 3% WHT Receipt Slip">
-                                            <i class="fa-solid fa-paperclip me-1"></i> Slip Uploaded
+                                        <a href="{{ $item->withholding_receipt_url }}" target="_blank" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-0.5 shadow-xs" style="font-size:0.75rem;" title="View Attached 3% WHT Receipt Slip">
+                                            <i class="fa-solid fa-paperclip me-1"></i> Slip
                                         </a>
                                     @elseif($hasWht)
-                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size:0.7rem;" title="Withholding applied but slip not yet attached">
-                                            <i class="fa-solid fa-triangle-exclamation me-1"></i> Missing Slip
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0.5" style="font-size:0.68rem;" title="Withholding applied but slip not yet attached">
+                                            <i class="fa-solid fa-triangle-exclamation me-1"></i> Missing
                                         </span>
                                     @else
                                         <span class="text-muted small">—</span>
@@ -604,15 +732,15 @@
                                     <div class="d-flex flex-column gap-1">
                                         @if((float)($item->vat_amount ?? 0) > 0 || in_array($item->vat_type, ['exclusive', 'inclusive', 'vat_b']))
                                             @if($item->vat_settled)
-                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill" style="font-size: 0.68rem;" title="VAT Settled {{ optional($item->vat_settled_at)->format('M d, Y') }}">
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;" title="VAT Settled {{ optional($item->vat_settled_at)->format('M d, Y') }}">
                                                     <i class="fa-solid fa-check me-1"></i>VAT Paid
                                                 </span>
                                             @elseif($item->vat_settlement_id)
-                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill" style="font-size: 0.68rem;">
+                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
                                                     <i class="fa-solid fa-clock me-1"></i>VAT Pending
                                                 </span>
                                             @else
-                                                <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill" style="font-size: 0.68rem;">
+                                                <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
                                                     <i class="fa-solid fa-bolt me-1"></i>VAT Active
                                                 </span>
                                             @endif
@@ -620,15 +748,15 @@
 
                                         @if($hasWht)
                                             @if($item->withholding_settled)
-                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill" style="font-size: 0.68rem;" title="3% WHT Settled {{ optional($item->withholding_settled_at)->format('M d, Y') }}">
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;" title="3% WHT Settled {{ optional($item->withholding_settled_at)->format('M d, Y') }}">
                                                     <i class="fa-solid fa-check me-1"></i>WHT Paid
                                                 </span>
                                             @elseif($item->withholding_settlement_id)
-                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill" style="font-size: 0.68rem;">
+                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
                                                     <i class="fa-solid fa-clock me-1"></i>WHT Pending
                                                 </span>
                                             @else
-                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill" style="font-size: 0.68rem;">
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
                                                     <i class="fa-solid fa-bolt me-1"></i>WHT Active
                                                 </span>
                                             @endif
@@ -642,7 +770,7 @@
 
                                 {{-- Actions --}}
                                 <td class="text-center pe-4">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2.5 shadow-xs" 
+                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2.5 py-1 shadow-xs" 
                                             data-bs-toggle="modal" data-bs-target="#taxDetailModal{{ $item->id }}" title="View Full Tax Details">
                                         <i class="fa-solid fa-eye"></i>
                                     </button>
@@ -653,27 +781,28 @@
                                 <td colspan="11" class="text-center py-5">
                                     @if($cycle === 'active')
                                         <div class="py-4">
-                                            <div class="p-3 bg-success bg-opacity-10 text-success rounded-circle d-inline-block fs-2 mb-3">
+                                            <div class="p-3 bg-success bg-opacity-10 text-success rounded-circle d-inline-block fs-1 mb-3">
                                                 <i class="fa-solid fa-circle-check"></i>
                                             </div>
-                                            <h5 class="fw-bold text-dark">Starting from Zero: All Taxes Are Clean &amp; Settled!</h5>
+                                            <h5 class="fw-bold text-dark">Starting from Zero: All Taxes Are Settled!</h5>
                                             <p class="text-muted small mx-auto" style="max-width: 480px;">
-                                                All VAT and 3% Withholding Tax deductions for previous purchases have been remitted to ERCA. 
+                                                All VAT and 3% Withholding Tax liabilities from previous periods have been remitted to ERCA. 
                                                 The current active cycle starts from zero (ETB 0.00). Any new taxable payments made will accumulate here.
                                             </p>
-                                            <div class="d-flex justify-content-center gap-2 mt-3">
-                                                <a href="{{ route('finance.tax-deductions.index', ['cycle' => 'all']) }}" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+                                            <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
+                                                <a href="{{ route('finance.tax-deductions.index', ['cycle' => 'all']) }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-1.5">
                                                     <i class="fa-solid fa-layer-group me-1"></i> View All-Time Tax Ledger
                                                 </a>
-                                                <a href="{{ route('finance.tax-deductions.index', ['tab' => 'settlements']) }}" class="btn btn-outline-danger btn-sm rounded-pill px-3">
-                                                    <i class="fa-solid fa-receipt me-1"></i> View Past Tax Remittances
+                                                <a href="{{ route('finance.tax-deductions.index', ['tab' => 'settlements']) }}" class="btn btn-outline-danger btn-sm rounded-pill px-3 py-1.5">
+                                                    <i class="fa-solid fa-file-invoice-dollar me-1"></i> View Past Remittance Batches
                                                 </a>
                                             </div>
                                         </div>
                                     @else
                                         <div class="text-muted py-4">
-                                            <i class="fa-solid fa-receipt fs-2 mb-2 d-block text-secondary"></i>
-                                            No tax deduction records found matching your filters.
+                                            <i class="fa-solid fa-receipt fs-1 mb-2 d-block text-secondary"></i>
+                                            <h6 class="fw-bold text-dark">No Tax Records Found</h6>
+                                            <p class="text-muted small mb-0">Try changing your search terms or filter criteria.</p>
                                         </div>
                                     @endif
                                 </td>
@@ -722,13 +851,13 @@
                         </div>
                         <div class="row g-2 text-center">
                             <div class="col-6">
-                                <div class="bg-white p-2 rounded-3 border">
+                                <div class="bg-white p-2.5 rounded-3 border">
                                     <div class="text-muted small" style="font-size:0.75rem;">Base Invoiced Amount</div>
                                     <div class="fw-bold text-dark font-monospace fs-6">ETB {{ number_format($unsettledVatBaseAmount, 2) }}</div>
                                 </div>
                             </div>
                             <div class="col-6">
-                                <div class="bg-white p-2 rounded-3 border border-info">
+                                <div class="bg-white p-2.5 rounded-3 border border-info">
                                     <div class="text-muted small" style="font-size:0.75rem;">15% VAT Accrued to Remit</div>
                                     <div class="fw-bold text-info font-monospace fs-5">+ ETB {{ number_format($unsettledVatAmount, 2) }}</div>
                                 </div>
@@ -879,13 +1008,13 @@
                         </div>
                         <div class="row g-2 text-center">
                             <div class="col-6">
-                                <div class="bg-white p-2 rounded-3 border">
+                                <div class="bg-white p-2.5 rounded-3 border">
                                     <div class="text-muted small" style="font-size:0.75rem;">Base Invoiced Amount</div>
                                     <div class="fw-bold text-dark font-monospace fs-6">ETB {{ number_format($unsettledWhtBaseAmount, 2) }}</div>
                                 </div>
                             </div>
                             <div class="col-6">
-                                <div class="bg-white p-2 rounded-3 border border-danger">
+                                <div class="bg-white p-2.5 rounded-3 border border-danger">
                                     <div class="text-muted small" style="font-size:0.75rem;">3% WHT Deducted to Remit</div>
                                     <div class="fw-bold text-danger font-monospace fs-5">- ETB {{ number_format($unsettledWhtAmount, 2) }}</div>
                                 </div>
@@ -1042,46 +1171,46 @@
                                 <div class="row g-2 text-center">
                                     @if($isVatOnly)
                                         <div class="col-6">
-                                            <div class="bg-white p-2 rounded-3 border">
+                                            <div class="bg-white p-2.5 rounded-3 border">
                                                 <div class="text-muted small" style="font-size:0.75rem;">Base Invoiced Amount</div>
                                                 <div class="fw-bold text-dark font-monospace fs-6">ETB {{ number_format($ps->total_base_amount, 2) }}</div>
                                             </div>
                                         </div>
                                         <div class="col-6">
-                                            <div class="bg-white p-2 rounded-3 border border-info">
+                                            <div class="bg-white p-2.5 rounded-3 border border-info">
                                                 <div class="text-muted small" style="font-size:0.75rem;">15% VAT Paid to ERCA</div>
                                                 <div class="fw-bold text-info font-monospace fs-6">ETB {{ number_format($ps->vat_amount, 2) }}</div>
                                             </div>
                                         </div>
                                     @elseif($isWhtOnly)
                                         <div class="col-6">
-                                            <div class="bg-white p-2 rounded-3 border">
+                                            <div class="bg-white p-2.5 rounded-3 border">
                                                 <div class="text-muted small" style="font-size:0.75rem;">Base Invoiced Amount</div>
                                                 <div class="fw-bold text-dark font-monospace fs-6">ETB {{ number_format($ps->total_base_amount, 2) }}</div>
                                             </div>
                                         </div>
                                         <div class="col-6">
-                                            <div class="bg-white p-2 rounded-3 border border-danger">
+                                            <div class="bg-white p-2.5 rounded-3 border border-danger">
                                                 <div class="text-muted small" style="font-size:0.75rem;">3% WHT Paid to ERCA</div>
                                                 <div class="fw-bold text-danger font-monospace fs-6">ETB {{ number_format($ps->withholding_amount, 2) }}</div>
                                             </div>
                                         </div>
                                     @else
                                         <div class="col-4">
-                                            <div class="bg-white p-2 rounded-3 border">
+                                            <div class="bg-white p-2.5 rounded-3 border">
                                                 <div class="text-muted small" style="font-size:0.75rem;">VAT to Remit</div>
                                                 <div class="fw-bold text-info font-monospace fs-6">ETB {{ number_format($ps->vat_amount, 2) }}</div>
                                             </div>
                                         </div>
                                         <div class="col-4">
-                                            <div class="bg-white p-2 rounded-3 border">
+                                            <div class="bg-white p-2.5 rounded-3 border">
                                                 <div class="text-muted small" style="font-size:0.75rem;">3% WHT to Remit</div>
                                                 <div class="fw-bold text-danger font-monospace fs-6">ETB {{ number_format($ps->withholding_amount, 2) }}</div>
                                             </div>
                                         </div>
                                         <div class="col-4">
-                                            <div class="bg-white p-2 rounded-3 border border-success">
-                                                <div class="text-muted small" style="font-size:0.75rem;">Total Tax Amount Paid</div>
+                                            <div class="bg-white p-2.5 rounded-3 border border-success">
+                                                <div class="text-muted small" style="font-size:0.75rem;">Total Tax Remitted</div>
                                                 <div class="fw-bold text-success font-monospace fs-6">ETB {{ number_format($ps->total_tax_paid, 2) }}</div>
                                             </div>
                                         </div>
@@ -1182,7 +1311,7 @@
             <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
                 <div class="modal-header bg-light border-bottom py-3 px-4">
                     <div class="d-flex align-items-center gap-2">
-                        <span class="badge bg-primary rounded-pill font-monospace">{{ $item->request_number }}</span>
+                        <span class="badge bg-primary rounded-pill font-monospace px-2.5 py-1">{{ $item->request_number }}</span>
                         <h6 class="modal-title fw-bold text-dark mb-0">Tax Deduction Voucher Details</h6>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -1191,25 +1320,25 @@
                     {{-- Tax Figures Grid --}}
                     <div class="row g-2 mb-3 text-center">
                         <div class="col-6 col-md-3">
-                            <div class="p-2 bg-light rounded-3 border">
+                            <div class="p-2.5 bg-light rounded-3 border">
                                 <div class="small text-muted" style="font-size:0.75rem;">Base Amount</div>
                                 <div class="fw-bold font-monospace text-dark">ETB {{ number_format($gross, 2) }}</div>
                             </div>
                         </div>
                         <div class="col-6 col-md-3">
-                            <div class="p-2 bg-light rounded-3 border">
+                            <div class="p-2.5 bg-light rounded-3 border border-info">
                                 <div class="small text-muted" style="font-size:0.75rem;">VAT Rate / Amount</div>
                                 <div class="fw-bold font-monospace text-info">+ ETB {{ number_format((float)($item->vat_amount ?? 0), 2) }}</div>
                             </div>
                         </div>
                         <div class="col-6 col-md-3">
-                            <div class="p-2 bg-light rounded-3 border">
+                            <div class="p-2.5 bg-light rounded-3 border border-danger">
                                 <div class="small text-muted" style="font-size:0.75rem;">3% Withholding Tax</div>
                                 <div class="fw-bold font-monospace text-danger">- ETB {{ number_format($wht, 2) }}</div>
                             </div>
                         </div>
                         <div class="col-6 col-md-3">
-                            <div class="p-2 bg-light rounded-3 border border-success">
+                            <div class="p-2.5 bg-light rounded-3 border border-success">
                                 <div class="small text-muted" style="font-size:0.75rem;">Net Disbursed</div>
                                 <div class="fw-bold font-monospace text-success">ETB {{ number_format($net, 2) }}</div>
                             </div>
@@ -1400,5 +1529,4 @@
         }
     }
 </script>
-
 @endsection
