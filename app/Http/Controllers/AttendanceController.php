@@ -1000,12 +1000,23 @@ class AttendanceController extends Controller
 
         $logs = $query->paginate(50);
 
-        // Compute diagnostics about raw biometric punches in database
-        $totalLogsCount     = \App\Models\DeviceAttendanceLog::count();
-        $earliestPunch      = \App\Models\DeviceAttendanceLog::min('punch_time');
-        $latestPunch        = \App\Models\DeviceAttendanceLog::max('punch_time');
-        $unlinkedCount      = \App\Models\DeviceAttendanceLog::whereDoesntHave('employee')->count();
-        $distinctDatesCount = \App\Models\DeviceAttendanceLog::selectRaw('DATE(punch_time) as d')->distinct()->count('d');
+        // Compute diagnostics about raw biometric punches in database safely
+        try {
+            $totalLogsCount     = \App\Models\DeviceAttendanceLog::count();
+            $earliestPunch      = \App\Models\DeviceAttendanceLog::min('punch_time');
+            $latestPunch        = \App\Models\DeviceAttendanceLog::max('punch_time');
+            $unlinkedCount      = \App\Models\DeviceAttendanceLog::whereDoesntHave('employee')->count();
+            $distinctDatesCount = \Illuminate\Support\Facades\DB::table('device_attendance_logs')
+                ->whereNotNull('punch_time')
+                ->selectRaw('COUNT(DISTINCT DATE(punch_time)) as cnt')
+                ->value('cnt') ?? 0;
+        } catch (\Throwable $e) {
+            $totalLogsCount     = 0;
+            $earliestPunch      = null;
+            $latestPunch        = null;
+            $unlinkedCount      = 0;
+            $distinctDatesCount = 0;
+        }
 
         return view('hr.attendance.device_logs', compact(
             'logs',
