@@ -46,6 +46,31 @@ class GMMaintenanceApprovalController extends Controller
         $search = trim($request->get('search', ''));
         $tab = $request->get('tab', 'pending'); // pending, expenses, materials, history
 
+        // 0. Maintenance & Repair Tickets (Incoming & Active Reports)
+        $ticketQuery = MaintenanceRequest::with([
+                'employee',
+                'reportedBy',
+                'assignedTo',
+                'fixedAssetUnit',
+                'expenseRequests',
+                'materialRequests.items.product'
+            ])
+            ->when($search !== '', function ($q) use ($search) {
+                $q->where(function ($sq) use ($search) {
+                    $sq->where('request_no', 'like', "%{$search}%")
+                       ->orWhere('asset_name', 'like', "%{$search}%")
+                       ->orWhere('asset_code', 'like', "%{$search}%")
+                       ->orWhere('description', 'like', "%{$search}%")
+                       ->orWhereHas('employee', function ($eq) use ($search) {
+                           $eq->where('first_name', 'like', "%{$search}%")
+                              ->orWhere('last_name', 'like', "%{$search}%");
+                       });
+                });
+            });
+
+        $maintenanceTickets = $ticketQuery->latest()->get();
+        $pendingTicketsCount = $maintenanceTickets->whereIn('status', ['pending', 'in_progress'])->count();
+
         // 1. Pending Expense Requests (Ask Money)
         $expenseQuery = ExpenseRequest::with([
                 'maintenanceRequest.employee',
@@ -130,24 +155,28 @@ class GMMaintenanceApprovalController extends Controller
             ->take(30)
             ->get();
 
-        // 4. Stores and Finance Staff for assignment in modals
+        // 4. Stores, Staff and Finance Staff for assignment in modals
         $stores = Store::where('is_active', true)->get();
+        $staff = User::where('is_active', true)->orderBy('name')->get();
         $financeStaff = User::whereHas('roles', function ($q) {
             $q->whereIn('name', ['finance', 'Finance', 'finance_officer', 'finance_head', 'finance_manager', 'accountant', 'cashier']);
         })->get();
 
         // 5. Aggregate KPIs
-        $totalPendingCount = $pendingExpenses->count() + $pendingMaterials->count();
+        $totalPendingCount = $pendingExpenses->count() + $pendingMaterials->count() + $maintenanceTickets->where('status', 'pending')->count();
         $totalPendingExpenseAmount = (float) $pendingExpenses->sum('amount');
         $totalPendingMaterialItems = $pendingMaterials->sum(fn($mr) => $mr->items->count());
         $totalDecidedCount = $decidedExpenses->count() + $decidedMaterials->count();
 
         return view('gm.maintenance-approvals.index', compact(
+            'maintenanceTickets',
+            'pendingTicketsCount',
             'pendingExpenses',
             'pendingMaterials',
             'decidedExpenses',
             'decidedMaterials',
             'stores',
+            'staff',
             'financeStaff',
             'totalPendingCount',
             'totalPendingExpenseAmount',
@@ -156,6 +185,51 @@ class GMMaintenanceApprovalController extends Controller
             'tab',
             'search'
         ));
+    }
+
+    /**
+     * Approve and update a Maintenance & Repair Ticket as GM.
+     */
+    public function approveTicket(Request $request, MaintenanceRequest $maintenanceRequest)
+    {
+        $this->checkGmAuthorization();
+
+        $validated = $request->validate([
+            'status'                => 'required|in:pending,in_progress,sent_to_store_manager,resolved,closed',
+            'assigned_to_user_id'   => 'nullable|exists:users,id',
+            'replacement_condition' => 'nullable|in:in_maintenance,unrepairable_damage',
+            'gm_notes'              => 'nullable|string|max:2000',
+        ]);
+
+        $data = [
+            'status'              => $validated['status'],
+            'assigned_to_user_id' => $validated['assigned_to_user_id'] ?? $maintenanceRequest->assigned_to_user_id,
+        ];
+
+        if ($validated['status'] === 'sent_to_store_manager') {
+            $data['replacement_action'] = 'sent_to_store_manager';
+            $data['replacement_condition'] = $validated['replacement_condition'] ?? 'in_maintenance';
+            $data['sent_to_store_manager_at'] = now();
+        }
+
+        if ($validated['status'] === 'resolved' && !$maintenanceRequest->resolved_at) {
+            $data['resolved_at'] = now();
+        }
+
+        if (!empty($validated['gm_notes'])) {
+            $data['admin_notes'] = ($maintenanceRequest->admin_notes ? ($maintenanceRequest->admin_notes . "\n") : '') . "[GM Directive " . now()->format('d M Y') . "]: " . $validated['gm_notes'];
+        }
+
+        $maintenanceRequest->update($data);
+
+        ActivityLog::log(
+            'updated',
+            "GM reviewed and updated Maintenance Ticket #{$maintenanceRequest->request_no} status to '" . ucfirst(str_replace('_', ' ', $validated['status'])) . "'" . (!empty($validated['gm_notes']) ? " (Note: {$validated['gm_notes']})" : ''),
+            'Maintenance Requests',
+            $maintenanceRequest
+        );
+
+        return back()->with('success', "Maintenance Ticket #{$maintenanceRequest->request_no} status updated to '" . ucfirst(str_replace('_', ' ', $validated['status'])) . "' by GM!");
     }
 
     /**

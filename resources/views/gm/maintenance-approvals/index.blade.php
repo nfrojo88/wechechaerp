@@ -19,7 +19,7 @@
                 <i class="fa-solid fa-list-check text-primary me-2"></i>Maintenance &amp; Operations Approvals
             </h1>
             <p class="text-muted small mb-0 mt-1">
-                Executive sign-off for General Service repair budgets (Ask Money) and store spare parts (Ask Material). Approved requests are routed immediately to Finance or Store.
+                Executive sign-off for General Service repair tickets, maintenance budgets (Ask Money), and store spare parts (Ask Material). Approved requests are routed immediately to the appropriate section.
             </p>
         </div>
         <div class="d-flex gap-2 flex-wrap align-items-center">
@@ -34,18 +34,18 @@
 
     {{-- KPI Highlights --}}
     <div class="row g-3 mb-4">
-        {{-- Total Pending --}}
+        {{-- Maintenance Reports / Tickets --}}
         <div class="col-xl-3 col-sm-6">
             <div class="card border-0 shadow-sm rounded-4 h-100" style="border-left: 4px solid #f59e0b !important;">
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <span class="text-uppercase text-secondary fw-bold small" style="font-size: 0.72rem; letter-spacing: 0.5px;">Pending Decisions</span>
-                            <h3 class="fw-bold mb-0 text-dark mt-1">{{ $totalPendingCount }}</h3>
-                            <small class="text-muted">{{ $pendingExpenses->count() }} Money · {{ $pendingMaterials->count() }} Material</small>
+                            <span class="text-uppercase text-secondary fw-bold small" style="font-size: 0.72rem; letter-spacing: 0.5px;">Maintenance Tickets</span>
+                            <h3 class="fw-bold mb-0 text-dark mt-1">{{ $maintenanceTickets->count() }}</h3>
+                            <small class="text-muted">{{ $pendingTicketsCount }} active / pending review</small>
                         </div>
                         <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(245, 158, 11, 0.12); width: 50px; height: 50px;">
-                            <i class="fa-solid fa-hourglass-half text-warning fs-4"></i>
+                            <i class="fa-solid fa-wrench text-warning fs-4"></i>
                         </div>
                     </div>
                 </div>
@@ -94,8 +94,8 @@
                 <div class="card-body p-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <span class="text-uppercase text-secondary fw-bold small" style="font-size: 0.72rem; letter-spacing: 0.5px;">Decided / Passed to Section</span>
-                            <h3 class="fw-bold mb-0 text-indigo mt-1">{{ $totalDecidedCount }}</h3>
+                            <span class="text-uppercase text-secondary fw-bold small" style="font-size: 0.72rem; letter-spacing: 0.5px;">Decided / Processed</span>
+                            <h3 class="fw-bold mb-0 text-dark mt-1">{{ $totalDecidedCount }}</h3>
                             <small class="text-muted">Passed to Finance or Store</small>
                         </div>
                         <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: rgba(99, 102, 241, 0.12); width: 50px; height: 50px;">
@@ -120,6 +120,13 @@
                             @if($totalPendingCount > 0)
                                 <span class="badge {{ $tab === 'pending' ? 'bg-white text-primary' : 'bg-warning text-dark' }} rounded-pill ms-1">{{ $totalPendingCount }}</span>
                             @endif
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ route('gm.maintenance-approvals.index', ['tab' => 'tickets', 'search' => $search]) }}" 
+                           class="nav-link rounded-pill px-3 py-2 fw-semibold {{ $tab === 'tickets' ? 'active shadow-sm' : 'text-dark bg-light' }}">
+                            <i class="fa-solid fa-wrench me-1 text-warning"></i>Maintenance Tickets
+                            <span class="badge {{ $tab === 'tickets' ? 'bg-white text-primary' : 'bg-warning text-dark' }} rounded-pill ms-1">{{ $maintenanceTickets->count() }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
@@ -167,9 +174,240 @@
     </div>
 
     {{-- ═══════════════════════════════════════════════════════════════════════════
-         TAB CONTENT: 1. PENDING (BOTH OR FILTERED)
+         TAB CONTENT: 1. PENDING (MAINTENANCE TICKETS + ASK MONEY + ASK MATERIAL)
     ═══════════════════════════════════════════════════════════════════════════════ --}}
-    @if(in_array($tab, ['pending', 'expenses', 'materials']))
+    @if(in_array($tab, ['pending', 'tickets', 'expenses', 'materials']))
+
+        {{-- SECTION 0: INCOMING MAINTENANCE & REPAIR REPORTS (MAINTENANCE TICKETS) --}}
+        @if($tab === 'pending' || $tab === 'tickets')
+            <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+                <div class="card-header bg-white border-0 py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center bg-warning bg-opacity-25" style="width:38px;height:38px;">
+                            <i class="fa-solid fa-wrench text-warning"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-0 fw-bold text-dark">Incoming Maintenance &amp; Repair Reports</h5>
+                            <small class="text-muted">Direct issue reports submitted by employees &amp; equipment operators awaiting GM executive approval &amp; routing.</small>
+                        </div>
+                    </div>
+                    <span class="badge bg-warning bg-opacity-15 text-dark rounded-pill px-3 py-1 fw-bold">
+                        {{ $maintenanceTickets->count() }} Total Tickets
+                    </span>
+                </div>
+
+                <div class="card-body p-0">
+                    @if($maintenanceTickets->isNotEmpty())
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+                                <thead class="table-light text-secondary small text-uppercase" style="font-size: 0.75rem;">
+                                    <tr>
+                                        <th class="ps-4 py-3">Request #</th>
+                                        <th class="py-3">Reported By / Asset</th>
+                                        <th class="py-3">Issue Type &amp; Urgency</th>
+                                        <th class="py-3">Status</th>
+                                        <th class="py-3">Assigned To</th>
+                                        <th class="py-3">Linked Requisitions</th>
+                                        <th class="py-3 pe-4 text-end">GM Executive Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($maintenanceTickets as $mReq)
+                                    @php
+                                        $urgencyBadge = match($mReq->urgency) {
+                                            'critical' => ['class' => 'bg-danger text-white', 'icon' => 'fa-fire', 'label' => 'Critical'],
+                                            'urgent'   => ['class' => 'bg-warning text-dark', 'icon' => 'fa-triangle-exclamation', 'label' => 'Urgent'],
+                                            'normal'   => ['class' => 'bg-info bg-opacity-25 text-info-emphasis border border-info border-opacity-25', 'icon' => 'fa-info-circle', 'label' => 'Normal'],
+                                            default    => ['class' => 'bg-secondary bg-opacity-25 text-secondary', 'icon' => 'fa-circle-down', 'label' => 'Low'],
+                                        };
+                                        $statusBadge = match($mReq->status) {
+                                            'pending'               => ['class' => 'bg-warning text-dark', 'icon' => 'fa-clock', 'label' => 'Pending'],
+                                            'in_progress'           => ['class' => 'bg-primary text-white', 'icon' => 'fa-wrench', 'label' => 'In Progress'],
+                                            'sent_to_store_manager' => ['class' => 'bg-info text-white', 'icon' => 'fa-warehouse', 'label' => 'Sent to Store'],
+                                            'resolved'              => ['class' => 'bg-success text-white', 'icon' => 'fa-circle-check', 'label' => 'Resolved'],
+                                            'closed'                => ['class' => 'bg-secondary text-white', 'icon' => 'fa-lock', 'label' => 'Closed'],
+                                            default                 => ['class' => 'bg-light text-dark', 'icon' => 'fa-circle', 'label' => ucfirst(str_replace('_', ' ', $mReq->status))],
+                                        };
+                                    @endphp
+                                    <tr>
+                                        {{-- Request # --}}
+                                        <td class="ps-4 py-3">
+                                            <a href="{{ route('general-service.maintenance.show', $mReq->id) }}" class="fw-bold text-dark font-monospace text-decoration-none">
+                                                {{ $mReq->request_no }}
+                                            </a>
+                                            <div class="text-muted" style="font-size:0.75rem;">{{ $mReq->created_at->diffForHumans() }}</div>
+                                        </td>
+
+                                        {{-- Asset & Reporter --}}
+                                        <td class="py-3">
+                                            <div class="fw-bold text-dark">{{ $mReq->asset_name }}</div>
+                                            @if($mReq->asset_code)
+                                                <span class="badge bg-dark font-monospace px-2 py-0 me-1" style="font-size:0.7rem;">{{ $mReq->asset_code }}</span>
+                                            @endif
+                                            <span class="text-muted small">
+                                                <i class="fa-solid fa-user me-1 text-primary"></i>{{ $mReq->employee->full_name ?? ($mReq->reportedBy->name ?? 'Staff') }}
+                                            </span>
+                                        </td>
+
+                                        {{-- Issue Type & Urgency --}}
+                                        <td class="py-3">
+                                            <div class="d-flex flex-column gap-1">
+                                                <span class="badge bg-light text-dark border px-2 py-1 text-capitalize align-self-start" style="font-size:0.75rem;">
+                                                    <i class="fa-solid fa-tag me-1 text-warning"></i>{{ str_replace('_', ' ', $mReq->issue_type) }}
+                                                </span>
+                                                <span class="badge {{ $urgencyBadge['class'] }} px-2 py-0 align-self-start" style="font-size:0.7rem;">
+                                                    <i class="fa-solid {{ $urgencyBadge['icon'] }} me-1"></i>{{ $urgencyBadge['label'] }}
+                                                </span>
+                                            </div>
+                                        </td>
+
+                                        {{-- Status --}}
+                                        <td class="py-3">
+                                            <span class="badge {{ $statusBadge['class'] }} px-2 py-1">
+                                                <i class="fa-solid {{ $statusBadge['icon'] }} me-1"></i>{{ $statusBadge['label'] }}
+                                            </span>
+                                        </td>
+
+                                        {{-- Assigned To --}}
+                                        <td class="py-3 text-muted small">
+                                            @if($mReq->assignedTo)
+                                                <div class="d-flex align-items-center gap-1 text-dark fw-semibold">
+                                                    <i class="fa-solid fa-user-gear text-primary"></i>
+                                                    <span>{{ $mReq->assignedTo->name }}</span>
+                                                </div>
+                                            @else
+                                                <span class="text-muted fst-italic">Unassigned</span>
+                                            @endif
+                                        </td>
+
+                                        {{-- Linked Requisitions (Ask Money / Ask Material) --}}
+                                        <td class="py-3">
+                                            <div class="d-flex flex-column gap-1">
+                                                {{-- Money --}}
+                                                @if($mReq->expenseRequests->isNotEmpty())
+                                                    @foreach($mReq->expenseRequests as $lkExp)
+                                                        <div class="small">
+                                                            <span class="badge bg-success bg-opacity-10 text-success fw-bold font-monospace">
+                                                                <i class="fa-solid fa-hand-holding-dollar me-1"></i>{{ number_format($lkExp->amount, 2) }} ETB
+                                                            </span>
+                                                            <span class="badge bg-light text-muted border small">{{ ucfirst(str_replace('_', ' ', $lkExp->status)) }}</span>
+                                                        </div>
+                                                    @endforeach
+                                                @else
+                                                    <span class="text-muted small" style="font-size: 0.75rem;">No Money Asked</span>
+                                                @endif
+
+                                                {{-- Material --}}
+                                                @if($mReq->materialRequests->isNotEmpty())
+                                                    <div class="small">
+                                                        <span class="badge bg-primary bg-opacity-10 text-primary fw-semibold">
+                                                            <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $mReq->materialRequests->count() }} Material Req(s)
+                                                        </span>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        </td>
+
+                                        {{-- GM Actions --}}
+                                        <td class="py-3 pe-4 text-end">
+                                            <div class="d-flex justify-content-end gap-2 flex-wrap">
+                                                <button type="button" class="btn btn-warning btn-sm text-dark fw-bold rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#grantGmApprovalModal{{ $mReq->id }}">
+                                                    <i class="fa-solid fa-gavel me-1"></i>Grant Approval / Action
+                                                </button>
+                                                <a href="{{ route('general-service.maintenance.show', $mReq->id) }}" class="btn btn-outline-secondary btn-sm rounded-pill px-2" title="Open Full Maintenance Details">
+                                                    <i class="fa-solid fa-arrow-up-right-from-square"></i>
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+
+                                    {{-- MODAL: Grant GM Approval & Update Status --}}
+                                    <div class="modal fade" id="grantGmApprovalModal{{ $mReq->id }}" tabindex="-1" aria-hidden="true">
+                                        <div class="modal-dialog modal-dialog-centered">
+                                            <div class="modal-content rounded-4 border-0 shadow">
+                                                <div class="modal-header bg-warning text-dark py-3 px-4 rounded-top-4">
+                                                    <h5 class="modal-title fw-bold">
+                                                        <i class="fa-solid fa-gavel me-2"></i>Executive Approval: Ticket #{{ $mReq->request_no }}
+                                                    </h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                </div>
+                                                <form action="{{ route('gm.maintenance-approvals.approve-ticket', $mReq) }}" method="POST">
+                                                    @csrf
+                                                    <div class="modal-body p-4">
+                                                        <div class="alert alert-warning bg-warning bg-opacity-10 border-warning border-opacity-25 rounded-3 mb-3">
+                                                            <div class="fw-bold text-dark">{{ $mReq->asset_name }} ({{ $mReq->asset_code ?: 'No Code' }})</div>
+                                                            <div class="small text-muted mt-1">{{ $mReq->description }}</div>
+                                                        </div>
+
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold small text-uppercase text-secondary">
+                                                                Executive Status Decision <span class="text-danger">*</span>
+                                                            </label>
+                                                            <select name="status" class="form-select form-select-lg rounded-3" required onchange="document.getElementById('gm_rep_opts_{{ $mReq->id }}').style.display = (this.value === 'sent_to_store_manager') ? 'block' : 'none';">
+                                                                <option value="in_progress" {{ $mReq->status === 'in_progress' ? 'selected' : '' }}>🔧 Approved → In Progress / Under Repair</option>
+                                                                <option value="sent_to_store_manager" {{ $mReq->status === 'sent_to_store_manager' ? 'selected' : '' }}>📦 Approved → Send to Store Manager (Request Replacement Unit)</option>
+                                                                <option value="resolved" {{ $mReq->status === 'resolved' ? 'selected' : '' }}>✅ Approved → Resolved / Fixed</option>
+                                                                <option value="closed" {{ $mReq->status === 'closed' ? 'selected' : '' }}>🔒 Closed</option>
+                                                                <option value="pending" {{ $mReq->status === 'pending' ? 'selected' : '' }}>⏳ Keep Pending Review</option>
+                                                            </select>
+                                                        </div>
+
+                                                        {{-- Replacement Options when Sent to Store Manager --}}
+                                                        <div class="mb-3" id="gm_rep_opts_{{ $mReq->id }}" style="{{ $mReq->status === 'sent_to_store_manager' ? '' : 'display:none;' }}">
+                                                            <label class="form-label fw-bold text-dark small text-uppercase">Replacement Type</label>
+                                                            <div class="d-flex gap-2">
+                                                                <div class="form-check form-check-inline border p-2 rounded-3 bg-light flex-fill">
+                                                                    <input class="form-check-input ms-1 me-2" type="radio" name="replacement_condition" id="rep_cond_maint_{{ $mReq->id }}" value="in_maintenance" checked>
+                                                                    <label class="form-check-label small fw-bold text-dark" for="rep_cond_maint_{{ $mReq->id }}">Temporary Unit</label>
+                                                                </div>
+                                                                <div class="form-check form-check-inline border p-2 rounded-3 bg-light flex-fill">
+                                                                    <input class="form-check-input ms-1 me-2" type="radio" name="replacement_condition" id="rep_cond_dmg_{{ $mReq->id }}" value="unrepairable_damage">
+                                                                    <label class="form-check-label small fw-bold text-danger" for="rep_cond_dmg_{{ $mReq->id }}">Permanent Unit</label>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="mb-3">
+                                                            <label class="form-label fw-semibold small text-uppercase text-secondary">Assign Technician / Lead</label>
+                                                            <select name="assigned_to_user_id" class="form-select rounded-3">
+                                                                <option value="">— Unassigned —</option>
+                                                                @foreach($staff as $stf)
+                                                                    <option value="{{ $stf->id }}" {{ $mReq->assigned_to_user_id == $stf->id ? 'selected' : '' }}>
+                                                                        {{ $stf->name }}
+                                                                    </option>
+                                                                @endforeach
+                                                            </select>
+                                                        </div>
+
+                                                        <div class="mb-2">
+                                                            <label class="form-label fw-semibold small text-uppercase text-secondary">GM Directives / Remarks</label>
+                                                            <textarea name="gm_notes" class="form-control rounded-3" rows="3" placeholder="Enter executive feedback, expected completion timeline, or maintenance instructions..."></textarea>
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer bg-light border-0 py-3 px-4 rounded-bottom-4">
+                                                        <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                                                        <button type="submit" class="btn btn-warning text-dark fw-bold rounded-pill px-4 shadow-sm">
+                                                            <i class="fa-solid fa-floppy-disk me-2"></i>Apply GM Approval
+                                                        </button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="p-4 bg-light rounded-bottom-4 text-center">
+                            <i class="fa-solid fa-circle-check text-success fs-3 mb-2"></i>
+                            <h6 class="fw-bold text-dark mb-1">No Maintenance Reports Found</h6>
+                            <p class="text-muted small mb-0">No active maintenance issues or repair tickets submitted.</p>
+                        </div>
+                    @endif
+                </div>
+            </div>
+        @endif
 
         {{-- SECTION A: PENDING EXPENSES ("ASK MONEY") --}}
         @if($tab === 'pending' || $tab === 'expenses')

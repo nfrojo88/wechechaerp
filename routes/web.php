@@ -1525,9 +1525,10 @@ Route::middleware(['auth'])->group(function () {
 
     // ─── General Manager (GM) Maintenance & Operations Approvals ─────────────
     Route::prefix('gm')->name('gm.')->group(function () {
-        Route::get('/maintenance-approvals',                            [App\Http\Controllers\GMMaintenanceApprovalController::class, 'index'])->name('maintenance-approvals.index');
-        Route::post('/maintenance-approvals/expense/{expenseRequest}',   [App\Http\Controllers\GMMaintenanceApprovalController::class, 'approveExpense'])->name('maintenance-approvals.approve-expense');
-        Route::post('/maintenance-approvals/material/{materialRequest}', [App\Http\Controllers\GMMaintenanceApprovalController::class, 'approveMaterial'])->name('maintenance-approvals.approve-material');
+        Route::get('/maintenance-approvals',                               [App\Http\Controllers\GMMaintenanceApprovalController::class, 'index'])->name('maintenance-approvals.index');
+        Route::post('/maintenance-approvals/ticket/{maintenanceRequest}',  [App\Http\Controllers\GMMaintenanceApprovalController::class, 'approveTicket'])->name('maintenance-approvals.approve-ticket');
+        Route::post('/maintenance-approvals/expense/{expenseRequest}',     [App\Http\Controllers\GMMaintenanceApprovalController::class, 'approveExpense'])->name('maintenance-approvals.approve-expense');
+        Route::post('/maintenance-approvals/material/{materialRequest}',   [App\Http\Controllers\GMMaintenanceApprovalController::class, 'approveMaterial'])->name('maintenance-approvals.approve-material');
     });
 
     Route::get('/dashboard/planning',       [App\Http\Controllers\DashboardController::class, 'planning'])->name('dashboard.planning');
