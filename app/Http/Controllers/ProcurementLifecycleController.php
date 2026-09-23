@@ -113,7 +113,6 @@ class ProcurementLifecycleController extends Controller
                         $skQ->where('status', PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                             ->where(function ($finalQ) {
                                 $finalQ->where('current_owner_role', 'store_keeper')
-                                       ->orWhereNotNull('payment_id')
                                        ->orWhereHas('payment')
                                        ->orWhereHas('creditLedger')
                                        ->orWhereHas('driverBooking')

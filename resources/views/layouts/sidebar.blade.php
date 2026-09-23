@@ -1311,7 +1311,6 @@
                         $skPendingIntakeCount = \App\Models\PurchaseRequest::where('status', \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                             ->where(function($q) {
                                 $q->where('current_owner_role', 'store_keeper')
-                                  ->orWhereNotNull('payment_id')
                                   ->orWhereHas('payment')
                                   ->orWhereHas('creditLedger')
                                   ->orWhereHas('driverBooking')
