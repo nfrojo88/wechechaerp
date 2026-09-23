@@ -83,38 +83,77 @@
                     <h6 class="fw-bold mb-2">
                         <i class="fa-solid fa-rotate text-primary me-2"></i>Sync Punches → Attendance
                     </h6>
-                    <p class="small text-muted mb-3">
-                        Sync automatically runs every 5 minutes. Use this to trigger an immediate sync for a single date or date range.
+                    <p class="small text-muted mb-2">
+                        Sync raw biometric device punch logs into the employee Attendance table.
                     </p>
+
+                    {{-- Database logs summary --}}
+                    @if(isset($totalLogsCount) && $totalLogsCount > 0)
+                        <div class="alert alert-info py-2 px-2 mb-2 small rounded-2">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
+                                <div>
+                                    <i class="fa-solid fa-database text-primary me-1"></i>
+                                    <strong>{{ $totalLogsCount }}</strong> punches found in system 
+                                    @if($earliestPunch && $latestPunch)
+                                        <br><span class="text-muted">Dates:</span> <strong>{{ \Carbon\Carbon::parse($earliestPunch)->format('M d, Y') }}</strong> to <strong>{{ \Carbon\Carbon::parse($latestPunch)->format('M d, Y') }}</strong>
+                                    @endif
+                                </div>
+                                @if($earliestPunch && $latestPunch)
+                                    <button type="button" class="btn btn-sm btn-primary py-0 px-2 shadow-xs" style="font-size: 0.75rem;"
+                                            onclick="setLogDates('{{ \Carbon\Carbon::parse($earliestPunch)->format('Y-m-d') }}', '{{ \Carbon\Carbon::parse($latestPunch)->format('Y-m-d') }}')">
+                                        Use Stored Dates
+                                    </button>
+                                @endif
+                            </div>
+                        </div>
+                    @else
+                        <div class="alert alert-warning py-2 px-2 mb-2 small rounded-2">
+                            <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>
+                            <strong>No biometric punches found in database.</strong> The attendance device has not sent punch records to the server yet.
+                        </div>
+                    @endif
+
+                    @if(isset($unlinkedCount) && $unlinkedCount > 0)
+                        <div class="alert alert-warning py-1 px-2 mb-2 small rounded-2" style="font-size: 0.78rem;">
+                            <i class="fa-solid fa-unlink text-danger me-1"></i>
+                            <strong>{{ $unlinkedCount }}</strong> punch logs have Device IDs not linked to an employee.
+                        </div>
+                    @endif
+
                     <form method="POST" action="{{ route('attendance.zkteco-sync') }}" id="zktecoSyncForm">
                         @csrf
-                        <div class="row g-2 align-items-end mb-2">
+                        <div class="row g-2 align-items-end mb-2" id="dateInputsRow">
                             <div class="col-6">
                                 <label class="form-label small fw-semibold mb-1 text-dark">
                                     <i class="far fa-calendar-alt text-primary me-1"></i>Start Date
                                 </label>
                                 <input type="date" name="start_date" id="syncStartDate" class="form-control form-control-sm"
-                                       value="{{ request('start_date', request('date_from', now()->format('Y-m-d'))) }}" required>
+                                       value="{{ request('start_date', (isset($earliestPunch) && $earliestPunch ? \Carbon\Carbon::parse($earliestPunch)->format('Y-m-d') : now()->format('Y-m-d'))) }}" required>
                             </div>
                             <div class="col-6">
                                 <label class="form-label small fw-semibold mb-1 text-dark">
                                     <i class="far fa-calendar-check text-success me-1"></i>End Date
                                 </label>
                                 <input type="date" name="end_date" id="syncEndDate" class="form-control form-control-sm"
-                                       value="{{ request('end_date', request('date_to', now()->format('Y-m-d'))) }}" required>
+                                       value="{{ request('end_date', (isset($latestPunch) && $latestPunch ? \Carbon\Carbon::parse($latestPunch)->format('Y-m-d') : now()->format('Y-m-d'))) }}" required>
                             </div>
                         </div>
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+
+                        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-1">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="sync_all" value="1" id="syncAllCheck" onchange="toggleSyncAll(this.checked)">
+                                <label class="form-check-label small fw-semibold text-primary" for="syncAllCheck">
+                                    Sync ALL Available Dates
+                                </label>
+                            </div>
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="force" value="1" id="forceSync">
                                 <label class="form-check-label small text-muted" for="forceSync">Re-sync existing</label>
                             </div>
-                            <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-primary small" onclick="setSyncToToday()">
-                                <i class="fas fa-calendar-day me-1"></i>Today Only
-                            </button>
                         </div>
+
                         <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-primary btn-sm flex-fill" id="syncNowBtn">
+                            <button type="submit" class="btn btn-primary btn-sm flex-fill shadow-xs" id="syncNowBtn">
                                 <i class="fa-solid fa-rotate me-1"></i>Sync Now
                             </button>
                             <a href="{{ route('attendance.index') }}" class="btn btn-outline-success btn-sm">
@@ -134,12 +173,12 @@
                 <div class="col-md-3">
                     <label class="form-label fw-semibold small">Date From</label>
                     <input type="date" name="date_from" class="form-control"
-                           value="{{ request('date_from', now()->startOfDay()->format('Y-m-d')) }}">
+                           value="{{ request('date_from', '') }}">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label fw-semibold small">Date To</label>
                     <input type="date" name="date_to" class="form-control"
-                           value="{{ request('date_to', now()->format('Y-m-d')) }}">
+                           value="{{ request('date_to', '') }}">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label fw-semibold small">Link Status</label>
@@ -281,6 +320,30 @@ function setSyncToToday() {
     const e = document.getElementById('syncEndDate');
     if (s) s.value = today;
     if (e) e.value = today;
+    const chk = document.getElementById('syncAllCheck');
+    if (chk) { chk.checked = false; toggleSyncAll(false); }
+}
+
+function setLogDates(start, end) {
+    const s = document.getElementById('syncStartDate');
+    const e = document.getElementById('syncEndDate');
+    if (s) s.value = start;
+    if (e) e.value = end;
+    const chk = document.getElementById('syncAllCheck');
+    if (chk) { chk.checked = false; toggleSyncAll(false); }
+}
+
+function toggleSyncAll(isAll) {
+    const s = document.getElementById('syncStartDate');
+    const e = document.getElementById('syncEndDate');
+    if (s) {
+        s.disabled = isAll;
+        s.required = !isAll;
+    }
+    if (e) {
+        e.disabled = isAll;
+        e.required = !isAll;
+    }
 }
 
 document.getElementById('zktecoSyncForm')?.addEventListener('submit', function() {

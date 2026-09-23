@@ -999,7 +999,22 @@ class AttendanceController extends Controller
         }
 
         $logs = $query->paginate(50);
-        return view('hr.attendance.device_logs', compact('logs'));
+
+        // Compute diagnostics about raw biometric punches in database
+        $totalLogsCount     = \App\Models\DeviceAttendanceLog::count();
+        $earliestPunch      = \App\Models\DeviceAttendanceLog::min('punch_time');
+        $latestPunch        = \App\Models\DeviceAttendanceLog::max('punch_time');
+        $unlinkedCount      = \App\Models\DeviceAttendanceLog::whereDoesntHave('employee')->count();
+        $distinctDatesCount = \App\Models\DeviceAttendanceLog::selectRaw('DATE(punch_time) as d')->distinct()->count('d');
+
+        return view('hr.attendance.device_logs', compact(
+            'logs',
+            'totalLogsCount',
+            'earliestPunch',
+            'latestPunch',
+            'unlinkedCount',
+            'distinctDatesCount'
+        ));
     }
 
     /**
@@ -1007,25 +1022,34 @@ class AttendanceController extends Controller
      */
     public function syncZkteco(Request $request)
     {
-        $startDateInput = $request->input('start_date') ?: $request->input('date', now()->format('Y-m-d'));
-        $endDateInput   = $request->input('end_date') ?: $startDateInput;
-        $force          = $request->boolean('force', false);
+        $syncAll = $request->boolean('sync_all', false);
+        $force   = $request->boolean('force', false);
 
-        try {
-            $start = \Carbon\Carbon::parse($startDateInput)->format('Y-m-d');
-            $end   = \Carbon\Carbon::parse($endDateInput)->format('Y-m-d');
-        } catch (\Throwable $e) {
-            $start = now()->format('Y-m-d');
-            $end   = now()->format('Y-m-d');
-        }
+        if ($syncAll) {
+            $args = ['--all' => true];
+            if ($force) {
+                $args['--force'] = true;
+            }
+            $label = "all available dates in system";
+            $redirectParams = [];
+        } else {
+            $startDateInput = $request->input('start_date') ?: $request->input('date', now()->format('Y-m-d'));
+            $endDateInput   = $request->input('end_date') ?: $startDateInput;
 
-        if ($start > $end) {
-            $temp = $start;
-            $start = $end;
-            $end = $temp;
-        }
+            try {
+                $start = \Carbon\Carbon::parse($startDateInput)->format('Y-m-d');
+                $end   = \Carbon\Carbon::parse($endDateInput)->format('Y-m-d');
+            } catch (\Throwable $e) {
+                $start = now()->format('Y-m-d');
+                $end   = now()->format('Y-m-d');
+            }
 
-        try {
+            if ($start > $end) {
+                $temp = $start;
+                $start = $end;
+                $end = $temp;
+            }
+
             $args = [
                 '--from' => $start,
                 '--to'   => $end,
@@ -1034,13 +1058,16 @@ class AttendanceController extends Controller
                 $args['--force'] = true;
             }
 
+            $label = ($start === $end) ? $start : "{$start} to {$end}";
+            $redirectParams = ['date_from' => $start, 'date_to' => $end];
+        }
+
+        try {
             Artisan::call('zkteco:sync', $args);
             $output = trim(Artisan::output());
 
-            $label = ($start === $end) ? $start : "{$start} to {$end}";
-
             return redirect()
-                ->route('attendance.deviceLogs', ['date_from' => $start, 'date_to' => $end])
+                ->route('attendance.deviceLogs', $redirectParams)
                 ->with('success', "ZKTeco device punch sync completed for {$label}. " . ($output ? strip_tags($output) : ''));
 
         } catch (\Exception $e) {
