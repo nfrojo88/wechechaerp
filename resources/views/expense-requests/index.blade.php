@@ -175,13 +175,20 @@
                                     <i class="fa-solid {{ $catIcon }} me-1 text-primary"></i>
                                     {{ $req->category }}
                                 </span>
-                                @if($req->category === 'Transport')
+                                @if(in_array($req->category, ['Transport', 'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading']))
                                     <div class="mt-1 p-2 rounded-2 bg-light border border-info-subtle small shadow-xs" style="font-size: 0.74rem; line-height: 1.45; min-width: 200px;">
                                         @if($req->employee)
-                                            <div class="text-truncate mb-1" title="Transport Beneficiary / Driver: {{ $req->employee->full_name }}">
+                                            <div class="text-truncate mb-1" title="Beneficiary / Driver / Handler: {{ $req->employee->full_name }}">
                                                 <i class="fa-solid fa-id-badge text-info me-1"></i>
                                                 <span class="text-muted">For:</span>
                                                 <strong class="text-dark">{{ $req->employee->full_name }}</strong>
+                                            </div>
+                                        @endif
+                                        @if($req->project)
+                                            <div class="text-truncate mb-1" title="Project / Site: {{ $req->project->name }}">
+                                                <i class="fa-solid fa-helmet-safety text-warning me-1"></i>
+                                                <span class="text-muted">Project:</span>
+                                                <strong class="text-dark">{{ $req->project->name }}</strong>
                                             </div>
                                         @endif
                                         <div class="text-truncate mb-1" title="Asked By: {{ $req->user->name ?? 'Requester' }}">
@@ -215,6 +222,10 @@
                                                 </span>
                                             @endif
                                         </div>
+                                    </div>
+                                @elseif($req->project)
+                                    <div class="mt-1 small text-muted text-truncate" style="max-width: 180px;" title="Project / Site: {{ $req->project->name }}">
+                                        <i class="fa-solid fa-helmet-safety text-warning me-1"></i>{{ $req->project->name }}
                                     </div>
                                 @endif
                                 @if($req->category === 'Other' && $req->other_reason)
@@ -1466,6 +1477,32 @@
                             </div>
                         </div>
 
+                        {{-- Project Selection (Mandatory for Loading & Unloading, Optional for other expenses) --}}
+                        <div class="col-12" id="projectSelectGroup">
+                            <div class="p-3 bg-light rounded-3 border border-1 shadow-sm" id="projectContainer">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label fw-bold text-dark mb-0">
+                                        <i class="fa-solid fa-helmet-safety text-warning me-1"></i>Project / Site (የስራ ፕሮጀክት / ሳይት ይምረጡ)
+                                        <span class="text-danger" id="projectRequiredAsterisk" style="display: none;">*</span>
+                                    </label>
+                                    <span class="badge bg-secondary-subtle text-secondary px-2 py-1" id="projectCategoryBadge">
+                                        Optional / እንደ አስፈላጊነቱ
+                                    </span>
+                                </div>
+                                <select name="project_id" id="projectSelect" class="form-select fw-semibold mt-1">
+                                    <option value="">-- Select Project / Site (ፕሮጀክት ይምረጡ) --</option>
+                                    @foreach($projects ?? [] as $proj)
+                                        <option value="{{ $proj->id }}">
+                                            🏗️ {{ $proj->name }} @if(!empty($proj->code))({{ $proj->code }})@endif @if(!empty($proj->location)) — {{ $proj->location }}@endif
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <small class="text-muted d-block mt-1" id="projectHelpText">
+                                    <i class="fa-solid fa-circle-info me-1"></i>Select the destination project site for this expense request.
+                                </small>
+                            </div>
+                        </div>
+
                         {{-- Employee Selection for Transport / Loading & Unloading Expense --}}
                         <div class="col-12" id="employeeSelectGroup" style="display: none;">
                             <div class="p-3 bg-light border border-info border-2 rounded-3 shadow-sm position-relative overflow-hidden">
@@ -1640,12 +1677,47 @@ function toggleCategoryOptions() {
     const employeeGroup = document.getElementById('employeeSelectGroup');
     const employeeSelect = document.getElementById('employeeSelect');
 
+    const projectContainer = document.getElementById('projectContainer');
+    const projectSelect = document.getElementById('projectSelect');
+    const projectAsterisk = document.getElementById('projectRequiredAsterisk');
+    const projectBadge = document.getElementById('projectCategoryBadge');
+    const projectHelpText = document.getElementById('projectHelpText');
+
     if (category === 'Other') {
         if (group) group.style.display = 'block';
         if (input) input.required = true;
     } else {
         if (group) group.style.display = 'none';
         if (input) input.required = false;
+    }
+
+    // Dynamic Project Selection Configuration
+    if (category === 'Loading & Unloading') {
+        if (projectContainer) {
+            projectContainer.className = 'p-3 bg-warning-subtle rounded-3 border border-warning border-2 shadow-sm';
+        }
+        if (projectAsterisk) projectAsterisk.style.display = 'inline';
+        if (projectSelect) projectSelect.required = true;
+        if (projectBadge) {
+            projectBadge.className = 'badge bg-warning text-dark px-2 py-1 fw-bold';
+            projectBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i>Required for Loading &amp; Unloading (ለመጫን/ማውረድ ግዴታ)';
+        }
+        if (projectHelpText) {
+            projectHelpText.innerHTML = '<i class="fa-solid fa-check-circle text-warning me-1"></i><strong>Mandatory:</strong> Please select the construction project / site destination for this loading &amp; unloading expense.';
+        }
+    } else {
+        if (projectContainer) {
+            projectContainer.className = 'p-3 bg-light rounded-3 border border-1 shadow-sm';
+        }
+        if (projectAsterisk) projectAsterisk.style.display = 'none';
+        if (projectSelect) projectSelect.required = false;
+        if (projectBadge) {
+            projectBadge.className = 'badge bg-secondary-subtle text-secondary px-2 py-1';
+            projectBadge.innerHTML = 'Optional / እንደ አስፈላጊነቱ';
+        }
+        if (projectHelpText) {
+            projectHelpText.innerHTML = '<i class="fa-solid fa-circle-info me-1"></i>Select the destination project site for this expense request.';
+        }
     }
 
     if (category === 'Transport' || category === 'Loading & Unloading') {
@@ -1903,11 +1975,23 @@ document.addEventListener('DOMContentLoaded', function() {
         createForm.addEventListener('submit', function (e) {
             const category = document.getElementById('categorySelect').value;
             const employeeSelect = document.getElementById('employeeSelect');
-            if (category === 'Transport') {
+            const projectSelect = document.getElementById('projectSelect');
+
+            if (category === 'Transport' || category === 'Loading & Unloading') {
                 if (!employeeSelect || !employeeSelect.value) {
                     e.preventDefault();
-                    alert('Strict Requirement: You must select and assign another employee or driver for transport requests. Self-assignment is prohibited. (ራስዎን መምረጥ አይፈቀድም፤ እባክዎ ሌላ ሰራተኛ ወይም አሽከርካሪ ይምረጡ)።');
+                    const label = category === 'Transport' ? 'Transport (ለትራንስፖርት)' : 'Loading & Unloading (ለመጫን እና ማውረድ)';
+                    alert('Strict Requirement: You must select and assign another employee or driver/handler for ' + label + ' requests. Self-assignment is prohibited. (ራስዎን መምረጥ አይፈቀድም፤ እባክዎ ሌላ ሰራተኛ ወይም አሽከርካሪ ይምረጡ)።');
                     employeeSelect?.focus();
+                    return false;
+                }
+            }
+
+            if (category === 'Loading & Unloading') {
+                if (!projectSelect || !projectSelect.value) {
+                    e.preventDefault();
+                    alert('Strict Requirement: You must select a Project / Site for Loading & Unloading requests. (እባክዎ ለመጫን እና ማውረድ ወጪ የስራ ፕሮጀክት / ሳይት ይምረጡ)።');
+                    projectSelect?.focus();
                     return false;
                 }
             }

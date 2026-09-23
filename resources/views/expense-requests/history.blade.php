@@ -78,14 +78,24 @@
                                     <i class="fa-solid {{ $catIcon }} me-1 text-primary"></i>
                                     {{ $req->category }}
                                 </span>
-                                @if($req->category === 'Transport')
+                                @if(in_array($req->category, ['Transport', 'Loading & Unloading', 'Loading / Unloading', 'Loading Unloading']))
                                     <div class="mt-1 small" style="font-size: 0.72rem; line-height: 1.35;">
+                                        @if($req->employee)
+                                            <div class="text-truncate text-muted"><i class="fa-solid fa-id-badge text-info me-1"></i>For: <strong class="text-dark">{{ $req->employee->full_name }}</strong></div>
+                                        @endif
+                                        @if($req->project)
+                                            <div class="text-truncate text-muted"><i class="fa-solid fa-helmet-safety text-warning me-1"></i>Project: <strong class="text-dark">{{ $req->project->name }}</strong></div>
+                                        @endif
                                         <div class="text-truncate text-muted"><i class="fa-solid fa-user-pen text-primary me-1"></i>Asked by: <strong class="text-dark">{{ $req->user->name ?? 'N/A' }}</strong></div>
                                         @php
                                             $hAppr = (is_array($req->approver_info ?? null) ? $req->approver_info : (method_exists($req, 'getApproverInfoAttribute') ? $req->getApproverInfoAttribute() : []));
                                             $hName = $hAppr['name'] ?? ($req->gmApprover->name ?? $req->gmReviewer->name ?? $req->hrReviewer->name ?? $req->paidBy->name ?? 'Authorized');
                                         @endphp
                                         <div class="text-truncate text-muted"><i class="fa-solid fa-check-circle text-success me-1"></i>Approved: <strong class="text-success">{{ $hName }}</strong></div>
+                                    </div>
+                                @elseif($req->project)
+                                    <div class="mt-1 small text-muted text-truncate" style="max-width: 170px;" title="Project / Site: {{ $req->project->name }}">
+                                        <i class="fa-solid fa-helmet-safety text-warning me-1"></i>{{ $req->project->name }}
                                     </div>
                                 @endif
                             </td>

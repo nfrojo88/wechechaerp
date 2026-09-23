@@ -211,6 +211,7 @@ class ExpenseRequestController extends Controller
         $query = ExpenseRequest::with([
             'user',
             'employee',
+            'project',
             'hrReviewer',
             'gmApprover',
             'gmReviewer',
@@ -316,6 +317,14 @@ class ExpenseRequestController extends Controller
 
         $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
 
+        // Projects for loading/unloading and site expenses
+        $projects = \App\Models\Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])
+            ->orderBy('name')
+            ->get();
+        if ($projects->isEmpty()) {
+            $projects = \App\Models\Project::orderBy('name')->get();
+        }
+
         return view('expense-requests.index', compact(
             'requests',
             'counters',
@@ -325,7 +334,8 @@ class ExpenseRequestController extends Controller
             'financeStaff',
             'coaBankAccounts',
             'employees',
-            'stores'
+            'stores',
+            'projects'
         ));
     }
 
@@ -339,6 +349,7 @@ class ExpenseRequestController extends Controller
         $expenseRequest->load([
             'user',
             'employee',
+            'project',
             'hrReviewer',
             'gmApprover',
             'financeHead',
@@ -411,6 +422,7 @@ class ExpenseRequestController extends Controller
     {
         $validated = $request->validate([
             'employee_id' => 'nullable|exists:employees,id',
+            'project_id' => 'nullable|exists:projects,id',
             'category' => 'required|string|in:Service,Transport,Office Material,Loading & Unloading,Loading / Unloading,Loading Unloading,Contract Work,Maintenance,Other',
             'other_reason' => 'required_if:category,Other|nullable|string|max:255',
             'service_type' => 'nullable|string|max:100',
@@ -441,12 +453,20 @@ class ExpenseRequestController extends Controller
         }
 
         $targetEmployeeId = $request->filled('employee_id') ? (int)$request->input('employee_id') : null;
+        $targetProjectId = $request->filled('project_id') ? (int)$request->input('project_id') : null;
 
         // STRICT ENFORCEMENT: Transport & Loading/Unloading requests must assign another employee or driver
         if (in_array($category, ['Transport', 'Loading & Unloading'])) {
             if (!$targetEmployeeId) {
                 $categoryLabel = $category === 'Transport' ? 'transport (ለትራንስፖርት)' : 'loading & unloading (ለመጫን እና ማውረድ)';
                 return back()->with('error', "Strict Policy: You must assign another employee or driver for {$categoryLabel} requests. (እባክዎ ተጠቃሚ ሰራተኛ ወይም አሽከርካሪ ይምረጡ።)")->withInput();
+            }
+        }
+
+        // STRICT ENFORCEMENT: Loading & Unloading requests must also select a project / site
+        if ($category === 'Loading & Unloading') {
+            if (!$targetProjectId) {
+                return back()->with('error', "Strict Policy: You must select a Project / Site for loading & unloading requests. (እባክዎ ለመጫን እና ማውረድ ወጪ የስራ ፕሮጀክት / ሳይት ይምረጡ።)")->withInput();
             }
         }
 
@@ -558,6 +578,7 @@ class ExpenseRequestController extends Controller
             'request_number' => $requestNumber,
             'user_id' => $user->id,
             'employee_id' => $targetEmployeeId,
+            'project_id' => $targetProjectId,
             'maintenance_request_id' => $request->input('maintenance_request_id'),
             'category' => $category,
             'service_type' => $validated['service_type'] ?? null,
@@ -1353,6 +1374,7 @@ class ExpenseRequestController extends Controller
         $query = ExpenseRequest::with([
             'user',
             'employee',
+            'project',
             'hrReviewer',
             'gmApprover',
             'gmReviewer',
