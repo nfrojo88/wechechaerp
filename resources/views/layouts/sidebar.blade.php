@@ -60,15 +60,7 @@
         <span>VAT &amp; WHT Tax Ledger</span>
     </a>
 </li>
-{{-- Quick Action: Receipt Analyzer --}}
-@if(auth()->check() && auth()->user()->hasAnyPermission(['manage-receipts','view-receipts']))
-<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
-    <a href="{{ route('receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('receipts.*') ? 'active' : '' }}" style="font-weight:600;">
-        <i class="fa-solid fa-magnifying-glass text-warning"></i>
-        <span>Receipt Analyzer</span>
-    </a>
-</li>
-@endif
+{{-- Quick Action: Receipt Analyzer now shown inside Finance & Audit group below --}}
 @if(auth()->check() && auth()->user()->hasRole('global_admin'))
 @php
     if (!\Illuminate\Support\Facades\Route::has('admin.announcements.index')) {
@@ -707,6 +699,21 @@
     <a href="{{ route('finance.replenishments.index') }}" class="sidebar-nav-link {{ request()->routeIs('finance.replenishments.*') ? 'active' : '' }}">
         <i class="fa-solid fa-shield-halved text-warning"></i>
         <span>Petty Cash Audit</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('receipts.index') }}" class="sidebar-nav-link {{ request()->routeIs('receipts.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-magnifying-glass-dollar text-success"></i>
+        <span>Receipt Analyzer</span>
+        @php
+            $pendingReceiptsCount = 0;
+            try {
+                $pendingReceiptsCount = \App\Models\Receipt::where('status', 'pending')->count();
+            } catch (\Throwable $e) {}
+        @endphp
+        @if($pendingReceiptsCount > 0)
+            <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.65rem;">{{ $pendingReceiptsCount }}</span>
+        @endif
     </a>
 </li>
 
