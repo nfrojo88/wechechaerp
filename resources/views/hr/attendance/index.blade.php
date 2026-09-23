@@ -46,37 +46,7 @@
     </div>
     @endif
 
-    <!-- Filter Section -->
-    <div class="card border-0 shadow-sm mb-3">
-        <div class="card-body">
-            <form method="GET" action="{{ route('attendance.index') }}" class="row g-3 align-items-end">
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold">Specific Date</label>
-                    <input type="date" name="date" class="form-control" value="{{ request('date', $selectedDate ?? '') }}">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Date From</label>
-                    <input type="date" name="date_from" class="form-control" value="{{ request('date_from') }}">
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">Date To</label>
-                    <input type="date" name="date_to" class="form-control" value="{{ request('date_to') }}">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Employee / Device ID</label>
-                    <input type="text" name="employee" class="form-control" placeholder="Name, code, or device ID..." value="{{ request('employee') }}">
-                </div>
-                <div class="col-md-2 d-flex gap-2">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="fas fa-filter me-1"></i>Filter
-                    </button>
-                    <a href="{{ route('attendance.index') }}" class="btn btn-outline-secondary" title="Reset Filters">
-                        <i class="fas fa-redo"></i>
-                    </a>
-                </div>
-            </form>
-        </div>
-    </div>
+
 
     <!-- Official Work Hours & Schedule Card (Working Time vs Non-Working/Break Time) -->
     <div class="card border-0 shadow-sm mb-3 bg-white rounded-3">
@@ -219,106 +189,174 @@
         </div>
     </div>
 
-    {{-- Quick Date Navigator (Shows all uploaded dates) --}}
-    @if(isset($availableDates) && $availableDates->count() > 0)
-    <div class="card border-0 shadow-sm mb-4 bg-white">
-        <div class="card-body py-2 px-3">
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-primary rounded-circle p-2"><i class="far fa-calendar-alt text-white"></i></span>
-                    <div>
-                        <span class="fw-bold small text-dark d-block">Jump to Uploaded Date:</span>
-                        <small class="text-muted">Click any date to see that day's attendance</small>
+    {{-- Clean Month, Date & Filter Toolbar --}}
+    <div class="card border-0 shadow-sm mb-4 bg-white rounded-3">
+        <div class="card-body p-3">
+            <form method="GET" action="{{ route('attendance.index') }}" id="attendanceFilterForm">
+                <div class="row g-2 align-items-end">
+                    
+                    {{-- Select Month --}}
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <label class="form-label small fw-bold text-dark mb-1">
+                            <i class="far fa-calendar text-primary me-1"></i>Select Month (ወር)
+                        </label>
+                        <select name="month" id="filterMonth" class="form-select" onchange="onMonthFilterChange(this.value)">
+                            <option value="">All Months (ሁሉም ወራት)</option>
+                            @foreach($availableMonths ?? [] as $m)
+                                <option value="{{ $m['value'] }}" {{ request('month', $selectedMonth ?? '') === $m['value'] ? 'selected' : '' }}>
+                                    {{ $m['label_en'] }} @if(!empty($m['label_et'])) ({{ $m['label_et'] }}) @endif
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    {{-- Select Specific Date --}}
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <label class="form-label small fw-bold text-dark mb-1">
+                            <i class="far fa-calendar-check text-success me-1"></i>Select Date (ቀን)
+                        </label>
+                        <select name="date" id="filterDate" class="form-select">
+                            <option value="">All Dates in Selected Period</option>
+                            @foreach($availableDatesWithLabels ?? [] as $item)
+                                <option value="{{ $item['date'] }}" 
+                                        data-month="{{ $item['month'] }}"
+                                        {{ request('date', $selectedDate ?? '') === $item['date'] ? 'selected' : '' }}>
+                                    {{ $item['full_label'] }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    {{-- Status Filter --}}
+                    <div class="col-6 col-sm-6 col-lg-2">
+                        <label class="form-label small fw-bold text-dark mb-1">
+                            <i class="fas fa-tag text-secondary me-1"></i>Status
+                        </label>
+                        <select name="status" class="form-select">
+                            <option value="">All Statuses</option>
+                            <option value="present" {{ request('status') === 'present' ? 'selected' : '' }}>Present</option>
+                            <option value="half_day" {{ request('status') === 'half_day' ? 'selected' : '' }}>Half Day</option>
+                            <option value="absent" {{ request('status') === 'absent' ? 'selected' : '' }}>Absent</option>
+                            <option value="leave" {{ request('status') === 'leave' ? 'selected' : '' }}>Leave</option>
+                        </select>
+                    </div>
+
+                    {{-- Employee / Device ID Search --}}
+                    <div class="col-6 col-sm-6 col-lg-2">
+                        <label class="form-label small fw-bold text-dark mb-1">
+                            <i class="fas fa-search text-secondary me-1"></i>Employee / ID
+                        </label>
+                        <input type="text" name="employee" class="form-control" 
+                               placeholder="Name or Device ID..." value="{{ request('employee') }}">
+                    </div>
+
+                    {{-- Filter Buttons --}}
+                    <div class="col-12 col-lg-2 d-flex gap-1">
+                        <button type="submit" class="btn btn-primary flex-grow-1 shadow-xs">
+                            <i class="fas fa-filter me-1"></i>Filter
+                        </button>
+                        <a href="{{ route('attendance.index') }}" class="btn btn-outline-secondary" title="Reset all filters">
+                            <i class="fas fa-redo"></i>
+                        </a>
+                        <button type="button" class="btn btn-outline-info" data-bs-toggle="collapse" 
+                                data-bs-target="#customDateRangeCollapse" title="Custom Date Range">
+                            <i class="fas fa-calendar-alt"></i>
+                        </button>
                     </div>
                 </div>
-                <div class="d-flex align-items-center gap-1 flex-wrap">
-                    <a href="{{ route('attendance.index') }}" 
-                       class="btn btn-sm {{ !request('date') && !request('date_from') ? 'btn-dark' : 'btn-outline-secondary' }} rounded-pill px-3">
-                        <i class="fas fa-list me-1"></i>All Dates
-                    </a>
-                    @foreach($availableDates as $dt)
-                        @php
-                            $isActive = request('date') === $dt || (request('date_from') === $dt && request('date_to') === $dt);
-                            $cDate = \Carbon\Carbon::parse($dt);
-                            $etDate = \App\Helpers\EthiopianCalendar::toEthiopian($dt);
-                        @endphp
-                        <a href="{{ route('attendance.index', ['date' => $dt]) }}" 
-                           class="btn btn-sm {{ $isActive ? 'btn-primary shadow fw-bold' : 'btn-outline-primary' }} rounded-pill px-3 py-1">
-                            <i class="far fa-calendar-check me-1"></i>{{ $cDate->format('M d, Y') }} ({{ $cDate->format('D') }})
-                            @if(!empty($etDate['short_am']))
-                                <span class="badge {{ $isActive ? 'bg-white text-primary' : 'bg-primary-subtle text-primary' }} ms-1">
-                                    {{ $etDate['short_am'] }}
-                                </span>
-                            @endif
-                        </a>
-                    @endforeach
+
+                {{-- Optional Expandable Custom Date Range (Date From & To) --}}
+                <div class="collapse {{ (request('date_from') || request('date_to')) ? 'show' : '' }} mt-3 pt-2 border-top" id="customDateRangeCollapse">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-12 col-md-auto text-muted small fw-semibold">
+                            <i class="fas fa-calendar-week me-1 text-info"></i>Custom Date Range:
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">From</span>
+                                <input type="date" name="date_from" id="dateFromInput" class="form-control" value="{{ request('date_from') }}">
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">To</span>
+                                <input type="date" name="date_to" id="dateToInput" class="form-control" value="{{ request('date_to') }}">
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-auto">
+                            <small class="text-muted">(Overrides single month/date when dates are set)</small>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            </form>
         </div>
     </div>
-    @endif
 
     <!-- Statistics Cards -->
-    <div class="row mb-4">
-        @php
-            $targetDateFormatted = isset($stats['date']) ? \Carbon\Carbon::parse($stats['date'])->format('M d, Y') : 'Today';
-            $targetEtFormatted = isset($stats['date']) ? \App\Helpers\EthiopianCalendar::format($stats['date'], 'am') : \App\Helpers\EthiopianCalendar::format(today(), 'am');
-        @endphp
-        <div class="col-md-3">
-            <div class="card border-left-success shadow h-100 py-2">
-                <div class="card-body py-2">
+    <div class="row mb-4 g-3">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 border-start border-4 border-success shadow-sm h-100 py-2 bg-white">
+                <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                        Present on {{ $targetDateFormatted }}
+                        Present &bull; {{ $stats['title'] ?? 'Selected Period' }}
                     </div>
+                    @if(!empty($stats['et_title']))
                     <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
-                        🇪🇹 {{ $targetEtFormatted }}
+                        🇪🇹 {{ $stats['et_title'] }}
                     </small>
-                    <div class="h5 mb-0 font-weight-bold text-gray-800">
+                    @endif
+                    <div class="h4 mb-0 font-weight-bold text-gray-800">
                         {{ $stats['present'] ?? 0 }}
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-left-danger shadow h-100 py-2">
-                <div class="card-body py-2">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 border-start border-4 border-danger shadow-sm h-100 py-2 bg-white">
+                <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
-                        Absent on {{ $targetDateFormatted }}
+                        Absent &bull; {{ $stats['title'] ?? 'Selected Period' }}
                     </div>
+                    @if(!empty($stats['et_title']))
                     <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
-                        🇪🇹 {{ $targetEtFormatted }}
+                        🇪🇹 {{ $stats['et_title'] }}
                     </small>
-                    <div class="h5 mb-0 font-weight-bold text-gray-800">
+                    @endif
+                    <div class="h4 mb-0 font-weight-bold text-gray-800">
                         {{ $stats['absent'] ?? 0 }}
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-left-warning shadow h-100 py-2">
-                <div class="card-body py-2">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 border-start border-4 border-warning shadow-sm h-100 py-2 bg-white">
+                <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                        Half Day on {{ $targetDateFormatted }}
+                        Half Day &bull; {{ $stats['title'] ?? 'Selected Period' }}
                     </div>
+                    @if(!empty($stats['et_title']))
                     <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
-                        🇪🇹 {{ $targetEtFormatted }}
+                        🇪🇹 {{ $stats['et_title'] }}
                     </small>
-                    <div class="h5 mb-0 font-weight-bold text-gray-800">
+                    @endif
+                    <div class="h4 mb-0 font-weight-bold text-gray-800">
                         {{ $stats['half_day'] ?? 0 }}
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-left-info shadow h-100 py-2">
-                <div class="card-body py-2">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 border-start border-4 border-info shadow-sm h-100 py-2 bg-white">
+                <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                        Leave on {{ $targetDateFormatted }}
+                        Leave &bull; {{ $stats['title'] ?? 'Selected Period' }}
                     </div>
+                    @if(!empty($stats['et_title']))
                     <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
-                        🇪🇹 {{ $targetEtFormatted }}
+                        🇪🇹 {{ $stats['et_title'] }}
                     </small>
-                    <div class="h5 mb-0 font-weight-bold text-gray-800">
+                    @endif
+                    <div class="h4 mb-0 font-weight-bold text-gray-800">
                         {{ $stats['leave'] ?? 0 }}
                     </div>
                 </div>
@@ -1011,11 +1049,59 @@ if (importForm && submitBtn) {
     });
 }
 
-// Auto-open modal if there was a warning/error from import
-@if(session('warning') || session('error'))
-    var importModal = new bootstrap.Modal(document.getElementById('importDeviceModal'));
-    importModal.show();
-@endif
+// Synchronize Month and Date dropdowns
+function onMonthFilterChange(selectedMonth) {
+    const dateSelect = document.getElementById('filterDate');
+    if (!dateSelect) return;
+    const options = dateSelect.querySelectorAll('option');
+    let currentMatchFound = false;
+
+    options.forEach(opt => {
+        if (!opt.value) {
+            opt.hidden = false;
+            return;
+        }
+        const optMonth = opt.getAttribute('data-month');
+        if (!selectedMonth || optMonth === selectedMonth) {
+            opt.hidden = false;
+            if (opt.selected) currentMatchFound = true;
+        } else {
+            opt.hidden = true;
+            if (opt.selected) opt.selected = false;
+        }
+    });
+
+    if (selectedMonth && !currentMatchFound) {
+        dateSelect.value = '';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const monthSelect = document.getElementById('filterMonth');
+    const dateSelect = document.getElementById('filterDate');
+
+    if (monthSelect && monthSelect.value) {
+        onMonthFilterChange(monthSelect.value);
+    }
+
+    if (dateSelect) {
+        dateSelect.addEventListener('change', function() {
+            const selectedOpt = this.options[this.selectedIndex];
+            if (selectedOpt && selectedOpt.getAttribute('data-month') && monthSelect) {
+                const optMonth = selectedOpt.getAttribute('data-month');
+                if (monthSelect.value !== optMonth) {
+                    monthSelect.value = optMonth;
+                }
+            }
+        });
+    }
+
+    // Auto-open modal if there was a warning/error from import
+    @if(session('warning') || session('error'))
+        var importModal = new bootstrap.Modal(document.getElementById('importDeviceModal'));
+        if (importModal) importModal.show();
+    @endif
+});
 </script>
 @endpush
 

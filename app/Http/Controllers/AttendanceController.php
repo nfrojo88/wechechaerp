@@ -16,10 +16,18 @@ class AttendanceController extends Controller
     {
         $query = Attendance::with('employee')->whereHas('employee')->latest('attendance_date');
 
-        // Filter by specific single date or date range
+        // Filter by specific single date, month, or date range
         $selectedDate = request('date');
+        $selectedMonth = request('month');
+
         if ($selectedDate) {
             $query->whereDate('attendance_date', $selectedDate);
+        } elseif ($selectedMonth) {
+            $parts = explode('-', $selectedMonth);
+            if (count($parts) === 2) {
+                $query->whereYear('attendance_date', (int)$parts[0])
+                      ->whereMonth('attendance_date', (int)$parts[1]);
+            }
         } else {
             if (request('date_from')) {
                 $query->whereDate('attendance_date', '>=', request('date_from'));
@@ -98,48 +106,98 @@ class AttendanceController extends Controller
 
         $attendances = $query->paginate(30)->withQueryString();
 
-        // Fetch distinct available dates from attendance records for quick date navigation
+        // Fetch distinct available dates from attendance records for navigation
         $availableDates = Attendance::select('attendance_date')
             ->distinct()
-            ->orderBy('attendance_date', 'asc')
-            ->limit(30)
+            ->whereNotNull('attendance_date')
+            ->orderBy('attendance_date', 'desc')
             ->get()
             ->map(fn($a) => $a->attendance_date ? $a->attendance_date->format('Y-m-d') : null)
             ->filter()
             ->values();
 
-        // Determine date for statistics cards
-        $statsDate = $selectedDate ?: (request('date_from') ?: ($availableDates->first() ?? today()->toDateString()));
-        $isSaturdayStats = !empty($statsDate) && \Carbon\Carbon::parse($statsDate)->isSaturday();
+        // Build list of distinct available months with English & Ethiopian labels
+        $availableMonths = $availableDates->map(function ($dt) {
+            $c = \Carbon\Carbon::parse($dt);
+            $et = \App\Helpers\EthiopianCalendar::toEthiopian($dt);
+            $etMonthName = $et['month_am'] ?? '';
+            return [
+                'value'    => $c->format('Y-m'),
+                'label_en' => $c->format('F Y'),
+                'label_et' => $etMonthName ? ($etMonthName . ' ' . ($et['year'] ?? '')) : '',
+            ];
+        })->unique('value')->values();
 
-        if ($isSaturdayStats) {
-            // Guarantee any Saturday records for this stats date with morning attendance are updated to present
-            try {
-                Attendance::whereDate('attendance_date', $statsDate)
-                    ->where('status', 'half_day')
-                    ->where(function ($q) {
-                        $q->whereNotNull('morning_in')
-                          ->orWhereNotNull('morning_out')
-                          ->orWhereNotNull('check_in')
-                          ->orWhere('hours_worked', '>=', 2.0);
-                    })
-                    ->update(['status' => 'present']);
-            } catch (\Throwable $e) {}
+        // Build rich labels for each date
+        $availableDatesWithLabels = $availableDates->map(function ($dt) {
+            $c = \Carbon\Carbon::parse($dt);
+            $et = \App\Helpers\EthiopianCalendar::toEthiopian($dt);
+            $etBadge = $et['short_am'] ?? '';
+            return [
+                'date'       => $dt,
+                'month'      => $c->format('Y-m'),
+                'label_en'   => $c->format('M d, Y (D)'),
+                'label_et'   => $etBadge,
+                'full_label' => $c->format('M d, Y (D)') . ($etBadge ? ' — ' . $etBadge : ''),
+            ];
+        });
+
+        // Determine date/period for statistics cards
+        $statsQuery = Attendance::query();
+        if ($selectedDate) {
+            $statsTitle = \Carbon\Carbon::parse($selectedDate)->format('M d, Y');
+            $statsEt = \App\Helpers\EthiopianCalendar::format($selectedDate, 'am');
+            $statsQuery->whereDate('attendance_date', $selectedDate);
+            $statsDate = $selectedDate;
+        } elseif ($selectedMonth) {
+            $mParts = explode('-', $selectedMonth);
+            $mYear = (int)$mParts[0];
+            $mNum = (int)$mParts[1];
+            $statsTitle = \Carbon\Carbon::createFromFormat('Y-m', $selectedMonth)->format('F Y');
+            $etM = \App\Helpers\EthiopianCalendar::toEthiopian($selectedMonth . '-01');
+            $statsEt = ($etM['month_am'] ?? '') . ' ' . ($etM['year'] ?? '');
+            $statsQuery->whereYear('attendance_date', $mYear)->whereMonth('attendance_date', $mNum);
+            $statsDate = $selectedMonth;
+        } elseif (request('date_from') || request('date_to')) {
+            $statsTitle = 'Selected Date Range';
+            $statsEt = (request('date_from') ?: '—') . ' to ' . (request('date_to') ?: '—');
+            if (request('date_from')) $statsQuery->whereDate('attendance_date', '>=', request('date_from'));
+            if (request('date_to')) $statsQuery->whereDate('attendance_date', '<=', request('date_to'));
+            $statsDate = request('date_from') ?: today()->toDateString();
+        } else {
+            $fallbackDate = $availableDates->first() ?? today()->toDateString();
+            $statsTitle = \Carbon\Carbon::parse($fallbackDate)->format('M d, Y');
+            $statsEt = \App\Helpers\EthiopianCalendar::format($fallbackDate, 'am');
+            $statsQuery->whereDate('attendance_date', $fallbackDate);
+            $statsDate = $fallbackDate;
         }
 
         $stats = [
             'date'      => $statsDate,
-            'present'   => Attendance::whereDate('attendance_date', $statsDate)->where('status', 'present')->count(),
-            'half_day'  => Attendance::whereDate('attendance_date', $statsDate)->where('status', 'half_day')->count(),
-            'absent'    => Attendance::whereDate('attendance_date', $statsDate)->where('status', 'absent')->count(),
-            'leave'     => Attendance::whereDate('attendance_date', $statsDate)->where('status', 'leave')->count(),
+            'title'     => $statsTitle,
+            'et_title'  => $statsEt,
+            'present'   => (clone $statsQuery)->where('status', 'present')->count(),
+            'half_day'  => (clone $statsQuery)->where('status', 'half_day')->count(),
+            'absent'    => (clone $statsQuery)->where('status', 'absent')->count(),
+            'leave'     => (clone $statsQuery)->where('status', 'leave')->count(),
         ];
 
         $allEmployees = Employee::where('status', 'active')->orderBy('full_name')->get();
         $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
         $projects     = \App\Models\Project::orderBy('name')->get();
 
-        return view('hr.attendance.index', compact('attendances', 'availableDates', 'stats', 'selectedDate', 'allEmployees', 'workSchedule', 'projects'));
+        return view('hr.attendance.index', compact(
+            'attendances',
+            'availableDates',
+            'availableMonths',
+            'availableDatesWithLabels',
+            'stats',
+            'selectedDate',
+            'selectedMonth',
+            'allEmployees',
+            'workSchedule',
+            'projects'
+        ));
     }
 
     /**
