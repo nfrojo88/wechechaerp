@@ -54,32 +54,22 @@ Route::get('/deploy-from-github', function () {
         'label'  => '① Git Pull (origin/main)',
         'output' => implode("\n", $gitOut),
         'ok'     => $gitCode === 0,
-    ];
-
-    // ── Step 2: Composer install (install new packages like tesseract_ocr) ─
-    // putenv() sets env vars for the current PHP process before exec() is
-    // called — this is more reliable than shell inline VAR=val for builtins.
+    // ── Step 2: Composer — sync lock file & install new packages ──────────
+    // putenv() sets env vars for the current PHP process before exec().
     putenv('HOME=/tmp');
     putenv('COMPOSER_HOME=/tmp/.composer');
     putenv('COMPOSER_CACHE_DIR=/tmp/.composer/cache');
     $composerOut  = [];
     $composerCode = 0;
-    // Step 2a: Restore full vendor dir (including dev packages like filp/whoops)
-    // This fixes the server if --no-dev previously stripped dev packages.
-    $composerInstallOut = [];
-    exec("cd {$base} && composer install --no-interaction --ignore-platform-reqs 2>&1", $composerInstallOut, $installCode);
-
-    // Step 2b: Now update only the new package to sync the lock file
-    $composerOut  = $composerInstallOut; // include install output in report
-    $composerCode = 0;
+    // 'composer update <pkg>' resolves the lock file AND installs in one pass.
+    // We target only the new package so other dependencies are not upgraded.
     exec("cd {$base} && composer update thiagoalessio/tesseract_ocr --no-interaction --optimize-autoloader 2>&1", $composerOut, $composerCode);
-    // If install succeeded but update failed, still show combined output
-    if ($installCode !== 0 && $composerCode === 0) { $composerCode = $installCode; }
     $steps['composer'] = [
-        'label'  => '② Composer Install',
+        'label'  => '② Composer (sync lock + install packages)',
         'output' => implode("\n", $composerOut),
         'ok'     => $composerCode === 0,
     ];
+
 
     // ── Step 3: Install Tesseract OCR binary (safe to re-run) ──────────────
     // Use 'command -v' + exit code — unlike 'which 2>&1', this never puts
