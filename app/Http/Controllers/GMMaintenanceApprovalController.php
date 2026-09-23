@@ -195,11 +195,19 @@ class GMMaintenanceApprovalController extends Controller
         $this->checkGmAuthorization();
 
         $validated = $request->validate([
-            'status'                => 'required|in:pending,in_progress,sent_to_store_manager,resolved,closed',
-            'assigned_to_user_id'   => 'nullable|exists:users,id',
-            'replacement_condition' => 'nullable|in:in_maintenance,unrepairable_damage',
-            'gm_notes'              => 'nullable|string|max:2000',
+            'status'                       => 'required|in:pending,in_progress,sent_to_store_manager,resolved,closed',
+            'assigned_to_user_id'          => 'nullable|exists:users,id',
+            'replacement_condition'        => 'nullable|in:in_maintenance,unrepairable_damage',
+            'gm_notes'                     => 'nullable|string|max:2000',
+            'route_money_to_coordinator'   => 'nullable|boolean',
+            'route_material_to_store'      => 'nullable|boolean',
+            'create_expense_amount'        => 'nullable|numeric|min:0.01',
+            'create_expense_notes'         => 'nullable|string|max:1000',
+            'create_material_store_id'     => 'nullable|exists:stores,id',
+            'create_material_notes'        => 'nullable|string|max:1000',
         ]);
+
+        $user = auth()->user();
 
         $data = [
             'status'              => $validated['status'],
@@ -222,19 +230,164 @@ class GMMaintenanceApprovalController extends Controller
 
         $maintenanceRequest->update($data);
 
+        $activityDetails = ["GM approved Ticket #{$maintenanceRequest->request_no} (Status: " . ucfirst(str_replace('_', ' ', $validated['status'])) . ")"];
+
+        // ── 1. Route Money to Coordinator Expenses Approval Section ─────────────
+        $shouldRouteMoney = $request->boolean('route_money_to_coordinator', true);
+        if ($shouldRouteMoney) {
+            $linkedExpenses = $maintenanceRequest->expenseRequests;
+            if ($linkedExpenses->isNotEmpty()) {
+                foreach ($linkedExpenses as $lkExp) {
+                    if ($lkExp->status !== ExpenseRequest::STATUS_PAID) {
+                        $lkExp->update([
+                            'status'           => ExpenseRequest::STATUS_PENDING_HR,
+                            'gm_reviewer_id'   => $user->id,
+                            'gm_approver_id'   => $user->id,
+                            'gm_reviewed_at'   => now(),
+                            'gm_approved_at'   => now(),
+                            'description'      => $lkExp->description . "\n[GM Approval: Forwarded to Coordinator Expenses Approval section]",
+                        ]);
+
+                        ActivityLog::log(
+                            'approved',
+                            "GM approved Maintenance #{$maintenanceRequest->request_no} and routed Expense Request #{$lkExp->request_number} to Coordinator Expenses Approval section",
+                            'Expense Requests',
+                            $lkExp
+                        );
+                    }
+                }
+                $activityDetails[] = "routed " . $linkedExpenses->count() . " expense request(s) to Coordinator";
+            } elseif (!empty($validated['create_expense_amount'])) {
+                // Auto-create new Expense Request sent directly to Coordinator
+                $reqNo = 'EXP-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(Str::random(3));
+                while (ExpenseRequest::where('request_number', $reqNo)->exists()) {
+                    $reqNo = 'EXP-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(Str::random(4));
+                }
+
+                $newExp = ExpenseRequest::create([
+                    'request_number'         => $reqNo,
+                    'user_id'                => $user->id,
+                    'employee_id'            => $maintenanceRequest->employee_id,
+                    'maintenance_request_id' => $maintenanceRequest->id,
+                    'category'               => ExpenseRequest::CATEGORY_MAINTENANCE,
+                    'amount'                 => $validated['create_expense_amount'],
+                    'gross_amount'           => $validated['create_expense_amount'],
+                    'net_amount'             => $validated['create_expense_amount'],
+                    'description'            => "Maintenance repair budget for {$maintenanceRequest->asset_name} (#{$maintenanceRequest->request_no}). GM Directive: " . ($validated['create_expense_notes'] ?? 'Approved by GM for Coordinator review & disbursement.'),
+                    'status'                 => ExpenseRequest::STATUS_PENDING_HR,
+                    'gm_reviewer_id'         => $user->id,
+                    'gm_approver_id'         => $user->id,
+                    'gm_reviewed_at'         => now(),
+                    'gm_approved_at'         => now(),
+                ]);
+
+                ActivityLog::log(
+                    'created',
+                    "GM created Expense Request #{$newExp->request_number} (ETB {$newExp->amount}) and forwarded to Coordinator Expenses Approval section",
+                    'Expense Requests',
+                    $newExp
+                );
+                $activityDetails[] = "created Expense Request #{$newExp->request_number} sent to Coordinator";
+            }
+        }
+
+        // ── 2. Route Materials to Store Manager (Add to PR Cycle) ────────────────
+        $shouldRouteMaterial = $request->boolean('route_material_to_store', true) || $validated['status'] === 'sent_to_store_manager';
+        if ($shouldRouteMaterial) {
+            $linkedMaterials = $maintenanceRequest->materialRequests;
+            if ($linkedMaterials->isNotEmpty()) {
+                foreach ($linkedMaterials as $lkMat) {
+                    $lkMat->update([
+                        'status'      => 'sent_to_store_manager',
+                        'approved_by' => $user->id,
+                        'approved_at' => now(),
+                        'notes'       => ($lkMat->notes ?: '') . "\n[GM Approval: Forwarded to Store Manager for fulfillment & PR purchase cycle]",
+                    ]);
+
+                    ActivityLog::log(
+                        'approved',
+                        "GM approved Maintenance #{$maintenanceRequest->request_no} and routed Material Request #{$lkMat->reference_number} to Store Manager for PR cycle",
+                        'Material Requests',
+                        $lkMat
+                    );
+                }
+                $activityDetails[] = "routed " . $linkedMaterials->count() . " material request(s) to Store Manager for PR cycle";
+            } elseif ($validated['status'] === 'sent_to_store_manager' || !empty($validated['create_material_notes'])) {
+                // Auto-create new Material Request for Store Manager & PR cycle
+                $targetStoreId = $validated['create_material_store_id'] ?? Store::where('is_active', true)->first()?->id;
+                $project = \App\Models\Project::whereIn('status', ['active', 'in_progress'])->first() ?? \App\Models\Project::first();
+
+                // Ensure maintenance_request_id column exists
+                if (Schema::hasTable('material_requests') && !Schema::hasColumn('material_requests', 'maintenance_request_id')) {
+                    Schema::table('material_requests', function ($table) {
+                        $table->unsignedBigInteger('maintenance_request_id')->nullable()->index();
+                    });
+                }
+
+                $ticketPart = str_replace('MNT-', '', $maintenanceRequest->request_no);
+                $refNo = 'MR-MNT-' . $ticketPart . '-' . strtoupper(Str::random(3));
+                while (MaterialRequest::where('reference_number', $refNo)->exists()) {
+                    $refNo = 'MR-MNT-' . $ticketPart . '-' . strtoupper(Str::random(4));
+                }
+
+                $repCondition = $validated['replacement_condition'] ?? 'in_maintenance';
+                $condLabel = $repCondition === 'unrepairable_damage' ? 'Permanent Replacement' : 'Temporary Maintenance Unit';
+
+                $newMat = MaterialRequest::create([
+                    'project_id'             => $project?->id,
+                    'destination_store_id'   => $targetStoreId,
+                    'maintenance_request_id' => $maintenanceRequest->id,
+                    'reference_number'       => $refNo,
+                    'source'                 => "Maintenance ({$condLabel}) — {$maintenanceRequest->request_no}",
+                    'status'                 => 'sent_to_store_manager',
+                    'required_date'          => now()->addDays(2),
+                    'notes'                  => "GM Directive: Replacement Unit / Spare Parts for {$maintenanceRequest->asset_name} ({$maintenanceRequest->asset_code}). Condition: {$condLabel}. " . ($validated['create_material_notes'] ?? 'Store Manager: Fulfill from stock or route directly into PR purchase cycle.'),
+                    'created_by'             => $user->id,
+                    'approved_by'            => $user->id,
+                    'approved_at'            => now(),
+                ]);
+
+                $product = Product::firstOrCreate(
+                    ['name' => "Replacement Unit / Parts for {$maintenanceRequest->asset_name}"],
+                    [
+                        'sku'       => 'MNT-' . strtoupper(Str::random(6)),
+                        'unit'      => 'pcs',
+                        'category'  => 'Maintenance / Replacement',
+                        'is_active' => true,
+                    ]
+                );
+
+                $newMat->items()->create([
+                    'product_id'         => $product->id,
+                    'quantity_requested' => 1,
+                    'notes'              => "Maintenance Ticket #{$maintenanceRequest->request_no}: {$maintenanceRequest->asset_name} ({$condLabel})",
+                ]);
+
+                ActivityLog::log(
+                    'created',
+                    "GM created Material Request #{$newMat->reference_number} and forwarded to Store Manager for PR purchase cycle",
+                    'Material Requests',
+                    $newMat
+                );
+                $activityDetails[] = "created Material Request #{$newMat->reference_number} sent to Store Manager for PR cycle";
+            }
+        }
+
         ActivityLog::log(
             'updated',
-            "GM reviewed and updated Maintenance Ticket #{$maintenanceRequest->request_no} status to '" . ucfirst(str_replace('_', ' ', $validated['status'])) . "'" . (!empty($validated['gm_notes']) ? " (Note: {$validated['gm_notes']})" : ''),
+            implode('; ', $activityDetails),
             'Maintenance Requests',
             $maintenanceRequest
         );
 
-        return back()->with('success', "Maintenance Ticket #{$maintenanceRequest->request_no} status updated to '" . ucfirst(str_replace('_', ' ', $validated['status'])) . "' by GM!");
+        $msg = "Maintenance Ticket #{$maintenanceRequest->request_no} approved! " . implode(', ', array_slice($activityDetails, 1));
+        return back()->with('success', rtrim($msg, ', '));
     }
 
     /**
      * Process GM Decision for an Expense Request ("Ask Money").
      * Options:
+     * - approve_coordinator: GM approves and sends to Coordinator Expenses Approval section for budget review.
      * - approve_finance: passes to Finance section (Finance Head/Staff) for disbursement.
      * - send_to_store: GM directs to fulfill via store inventory instead of cash; creates Material Request.
      * - reject: returns with rejection reason.
@@ -244,7 +397,7 @@ class GMMaintenanceApprovalController extends Controller
         $this->checkGmAuthorization();
 
         $validated = $request->validate([
-            'action'                     => 'required|in:approve_finance,send_to_store,reject',
+            'action'                     => 'required|in:approve_coordinator,approve_finance,send_to_store,reject',
             'rejection_reason'           => 'required_if:action,reject|nullable|string|max:1000',
             'destination_store_id'       => 'nullable|exists:stores,id',
             'assigned_finance_staff_id'  => 'nullable|exists:users,id',
@@ -378,7 +531,45 @@ class GMMaintenanceApprovalController extends Controller
             return back()->with('success', "Expense Request #{$expenseRequest->request_number} rerouted to Store Manager! Material Request #{$materialRequest->reference_number} created and passed to Store section.");
         }
 
-        // ── Option C: Approve & Pass to Finance ───────────────────────────────────────
+        // ── Option C: Approve & Send to Coordinator Expenses Approval ───────────────
+        if ($validated['action'] === 'approve_coordinator') {
+            $desc = $expenseRequest->description;
+            if (!empty($validated['gm_notes'])) {
+                $desc .= "\n[GM Directive for Coordinator: " . $validated['gm_notes'] . "]";
+            } else {
+                $desc .= "\n[GM Approved: Sent to Coordinator Expenses Approval section]";
+            }
+
+            $expenseRequest->update([
+                'status'           => ExpenseRequest::STATUS_PENDING_HR,
+                'gm_reviewer_id'   => $user->id,
+                'gm_approver_id'   => $user->id,
+                'gm_reviewed_at'   => now(),
+                'gm_approved_at'   => now(),
+                'description'      => $desc,
+                'rejection_reason' => null,
+            ]);
+
+            if ($maintReq) {
+                ActivityLog::log(
+                    'approved',
+                    "GM approved Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " and sent to Coordinator Expenses Approval section",
+                    'Maintenance Requests',
+                    $maintReq
+                );
+            }
+
+            ActivityLog::log(
+                'approved',
+                "GM approved Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " and sent to Coordinator Expenses Approval section",
+                'Expense Requests',
+                $expenseRequest
+            );
+
+            return back()->with('success', "Expense Request #{$expenseRequest->request_number} (ETB " . number_format($expenseRequest->amount, 2) . ") approved by GM and sent to Coordinator Expenses Approval section!");
+        }
+
+        // ── Option D: Approve & Pass to Finance ───────────────────────────────────────
         $desc = $expenseRequest->description;
         if (!empty($validated['gm_notes'])) {
             $desc .= "\n[GM Approval Directive: " . $validated['gm_notes'] . "]";
