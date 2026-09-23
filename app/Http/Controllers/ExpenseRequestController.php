@@ -442,10 +442,11 @@ class ExpenseRequestController extends Controller
 
         $targetEmployeeId = $request->filled('employee_id') ? (int)$request->input('employee_id') : null;
 
-        // STRICT ENFORCEMENT: Transport requests must assign another employee or driver
-        if ($category === 'Transport') {
+        // STRICT ENFORCEMENT: Transport & Loading/Unloading requests must assign another employee or driver
+        if (in_array($category, ['Transport', 'Loading & Unloading'])) {
             if (!$targetEmployeeId) {
-                return back()->with('error', 'Strict Policy: You must assign another employee or driver for transport requests. (ለትራንስፖርት ወጪ ሌላ ተጠቃሚ ሰራተኛ ወይም አሽከርካሪ መምረጥ ግዴታ ነው።)')->withInput();
+                $categoryLabel = $category === 'Transport' ? 'transport (ለትራንስፖርት)' : 'loading & unloading (ለመጫን እና ማውረድ)';
+                return back()->with('error', "Strict Policy: You must assign another employee or driver for {$categoryLabel} requests. (እባክዎ ተጠቃሚ ሰራተኛ ወይም አሽከርካሪ ይምረጡ።)")->withInput();
             }
         }
 
@@ -468,8 +469,8 @@ class ExpenseRequestController extends Controller
             }
         }
 
-        // For non-transport categories without an explicit assigned employee, default to requester's employee profile
-        if (!$targetEmployeeId && $category !== 'Transport') {
+        // For non-transport / non-loading categories without an explicit assigned employee, default to requester's employee profile
+        if (!$targetEmployeeId && !in_array($category, ['Transport', 'Loading & Unloading'])) {
             $targetEmployeeId = $userEmployeeId;
         }
 

@@ -1466,21 +1466,21 @@
                             </div>
                         </div>
 
-                        {{-- Employee Selection for Transport / Expense --}}
+                        {{-- Employee Selection for Transport / Loading & Unloading Expense --}}
                         <div class="col-12" id="employeeSelectGroup" style="display: none;">
                             <div class="p-3 bg-light border border-info border-2 rounded-3 shadow-sm position-relative overflow-hidden">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <label class="form-label fw-bold text-dark mb-0 fs-6">
-                                        <i class="fa-solid fa-user-tag text-info me-1"></i>Assign Beneficiary Employee / Driver (ተጠቃሚ ሰራተኛ / አሽከርካሪ ይምረጡ) <span class="text-danger" id="employeeRequiredAsterisk">*</span>
+                                        <i class="fa-solid fa-user-tag text-info me-1"></i>Assign Beneficiary Employee / Driver / Handler (ተጠቃሚ ሰራተኛ / አሽከርካሪ ይምረጡ) <span class="text-danger" id="employeeRequiredAsterisk">*</span>
                                     </label>
-                                    <span class="badge bg-info text-white px-2 py-1"><i class="fa-solid fa-truck-ramp-box me-1"></i>Transport Money Allocation</span>
+                                    <span class="badge bg-info text-white px-2 py-1" id="employeeCategoryBadge"><i class="fa-solid fa-truck-ramp-box me-1"></i>Transport &amp; Loading Allocation</span>
                                 </div>
                                 @php
                                     $currentEmpId = auth()->user()->employee?->id;
                                     $currentUserId = auth()->id();
                                 @endphp
                                 <select name="employee_id" id="employeeSelect" class="form-select form-select-lg fw-semibold mt-1 border-info">
-                                    <option value="" selected disabled>-- Select Another Employee / Driver (ሌላ ሰራተኛ/አሽከርካሪ ይምረጡ) --</option>
+                                    <option value="" selected disabled>-- Select Another Employee / Driver / Handler (ሌላ ሰራተኛ/አሽከርካሪ ይምረጡ) --</option>
                                     @foreach($employees ?? [] as $emp)
                                         @if(($currentEmpId && $emp->id == $currentEmpId) || ($emp->user_id && $emp->user_id == $currentUserId))
                                             @continue
@@ -1496,7 +1496,7 @@
                                     <i class="fa-solid fa-ban text-danger fs-5"></i>
                                     <div>
                                         <strong class="text-danger d-block">Strict Policy: Self-Assignment Prohibited (ራስዎን መምረጥ በጥብቅ የተከለከለ ነው)</strong>
-                                        <span class="text-dark" style="font-size: 0.8rem;">You cannot assign transport money to yourself. You must select the actual beneficiary driver or employee who will receive the funds.</span>
+                                        <span class="text-dark" style="font-size: 0.8rem;">You cannot assign transport or loading/unloading money to yourself. You must select the actual beneficiary driver or employee who will receive the funds.</span>
                                     </div>
                                 </div>
 
@@ -1504,7 +1504,7 @@
                                     <i class="fa-solid fa-shield-halved text-success fs-5"></i>
                                     <div>
                                         <strong class="text-dark d-block">First Approval Step: Assigned Employee Confirmation</strong>
-                                        <span class="text-muted" style="font-size: 0.8rem;">This transport request will first be sent to the assigned employee/driver for confirmation, then route to <strong>HR or Coordinator</strong> and GM/Finance.</span>
+                                        <span class="text-muted" style="font-size: 0.8rem;">This request will first be sent to the assigned employee/driver for confirmation, then route to <strong>HR or Coordinator</strong> and GM/Finance.</span>
                                     </div>
                                 </div>
                             </div>
@@ -1648,10 +1648,20 @@ function toggleCategoryOptions() {
         if (input) input.required = false;
     }
 
-    if (category === 'Transport') {
+    if (category === 'Transport' || category === 'Loading & Unloading') {
         if (employeeGroup) employeeGroup.style.display = 'block';
         if (employeeSelect) {
             employeeSelect.required = true;
+        }
+        const badge = document.getElementById('employeeCategoryBadge');
+        if (badge) {
+            if (category === 'Loading & Unloading') {
+                badge.className = 'badge bg-warning text-dark px-2 py-1';
+                badge.innerHTML = '<i class="fa-solid fa-dolly me-1"></i>Loading &amp; Unloading Allocation';
+            } else {
+                badge.className = 'badge bg-info text-white px-2 py-1';
+                badge.innerHTML = '<i class="fa-solid fa-truck-ramp-box me-1"></i>Transport Money Allocation';
+            }
         }
     } else {
         if (employeeGroup) employeeGroup.style.display = 'none';
