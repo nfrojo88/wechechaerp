@@ -57,8 +57,9 @@ Route::get('/deploy-from-github', function () {
     ];
 
     // ── Step 2: Composer install (install new packages like tesseract_ocr) ─
+    // HOME & COMPOSER_HOME must be set — the web server user has no home dir
     $composerOut = [];
-    exec("cd {$base} && composer install --no-interaction --no-dev --optimize-autoloader 2>&1", $composerOut, $composerCode);
+    exec("HOME=/tmp COMPOSER_HOME=/tmp cd {$base} && composer install --no-interaction --no-dev --optimize-autoloader 2>&1", $composerOut, $composerCode);
     $steps['composer'] = [
         'label'  => '② Composer Install',
         'output' => implode("\n", $composerOut),
@@ -66,19 +67,31 @@ Route::get('/deploy-from-github', function () {
     ];
 
     // ── Step 3: Install Tesseract OCR binary (safe to re-run) ──────────────
-    $tessOut = [];
-    exec('which tesseract 2>&1', $tessCheck);
-    if (empty($tessCheck)) {
-        // Not installed yet — try installing (requires server to have apt-get & DEBIAN_FRONTEND)
-        exec('DEBIAN_FRONTEND=noninteractive apt-get install -y tesseract-ocr 2>&1', $tessOut, $tessCode);
-    } else {
-        $tessOut  = ['Tesseract already installed: ' . trim($tessCheck[0])];
+    // Use 'command -v' + exit code — unlike 'which 2>&1', this never puts
+    // error text into stdout, so $whichCode=0 means found, non-zero means missing.
+    $tessOut  = [];
+    $tessCode = 0;
+    exec('command -v tesseract', $tessPath, $whichCode);
+    if ($whichCode === 0) {
+        $tessOut  = ['Tesseract already installed: ' . trim($tessPath[0] ?? 'found')];
         $tessCode = 0;
+    } else {
+        // Not installed — try apt-get (works on cPanel/CloudLinux if server allows it)
+        exec('DEBIAN_FRONTEND=noninteractive apt-get install -y tesseract-ocr 2>&1', $tessOut, $tessCode);
+        if ($tessCode !== 0) {
+            // apt-get blocked (shared host) — add a clear manual instruction
+            $tessOut[] = '';
+            $tessOut[] = '⚠️  apt-get is not available to the web user.';
+            $tessOut[] = 'SSH into the server and run: sudo apt-get install -y tesseract-ocr';
+            $tessOut[] = 'Then visit /deploy-from-github again — this step will be skipped automatically once installed.';
+            // Don\'t fail the whole deploy for this — it\'s a one-time manual step
+            $tessCode = 0;
+        }
     }
     $steps['tesseract'] = [
         'label'  => '③ Tesseract OCR Binary',
         'output' => implode("\n", $tessOut),
-        'ok'     => $tessCode === 0,
+        'ok'     => true, // never block deploy over this; SSH install is the fallback
     ];
 
     // ── Step 4: Clear caches ───────────────────────────────────────────────
