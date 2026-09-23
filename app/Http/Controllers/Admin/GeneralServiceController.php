@@ -389,17 +389,17 @@ class GeneralServiceController extends Controller
             'amount'                 => $validated['amount'],
             'description'            => $validated['description'],
             'attachment'             => $attachmentUrl,
-            'status'                 => \App\Models\ExpenseRequest::STATUS_PENDING_HR,
+            'status'                 => \App\Models\ExpenseRequest::STATUS_PENDING_GM,
         ]);
 
         \App\Models\ActivityLog::log(
             'created',
-            "General Service submitted Expense Request #{$expense->request_number} for ETB " . number_format($expense->amount, 2) . " linked to Maintenance {$maintenanceRequest->request_no}",
+            "General Service submitted Expense Request #{$expense->request_number} for ETB " . number_format($expense->amount, 2) . " directly routed to General Manager (GM) for Maintenance {$maintenanceRequest->request_no}",
             'Maintenance Requests',
             $maintenanceRequest
         );
 
-        return back()->with('success', "Expense Request #{$expense->request_number} for ETB " . number_format($expense->amount, 2) . " submitted and linked to {$maintenanceRequest->request_no}!");
+        return back()->with('success', "Expense Request #{$expense->request_number} for ETB " . number_format($expense->amount, 2) . " submitted and directly routed to General Manager (GM) for approval!");
     }
 
     /**

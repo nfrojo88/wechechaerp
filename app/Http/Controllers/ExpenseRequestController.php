@@ -314,6 +314,8 @@ class ExpenseRequestController extends Controller
                 ->get();
         }
 
+        $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
+
         return view('expense-requests.index', compact(
             'requests',
             'counters',
@@ -322,7 +324,8 @@ class ExpenseRequestController extends Controller
             'chartOfAccounts',
             'financeStaff',
             'coaBankAccounts',
-            'employees'
+            'employees',
+            'stores'
         ));
     }
 
@@ -687,31 +690,35 @@ class ExpenseRequestController extends Controller
     }
 
     /**
-     * Step 2 — GM Review (only for requests > 5000 ETB).
+     * Step 2 — GM Review (Approves to Finance, Sends to Store Manager, or Rejects).
      */
     public function gmReview(Request $request, ExpenseRequest $expenseRequest)
     {
         $this->authorize('gmReview', $expenseRequest);
 
         $validated = $request->validate([
-            'action' => 'required|in:approve,reject',
-            'rejection_reason' => 'nullable|string|max:1000',
+            'action'               => 'required|in:approve,approve_finance,send_to_store,reject',
+            'rejection_reason'     => 'nullable|string|max:1000',
+            'destination_store_id' => 'nullable|exists:stores,id',
+            'store_id'             => 'nullable|exists:stores,id',
+            'gm_notes'             => 'nullable|string|max:2000',
         ]);
 
-        if ($expenseRequest->status !== ExpenseRequest::STATUS_PENDING_GM) {
+        if (!in_array($expenseRequest->status, [ExpenseRequest::STATUS_PENDING_GM, 'Pending (GM Review)'])) {
             return back()->with('error', 'Request is not in GM review state.');
         }
 
         $user = auth()->user();
 
+        // ── Option A: Reject ──────────────────────────────────────────────────────────
         if ($validated['action'] === 'reject') {
             $reason = !empty($validated['rejection_reason']) ? $validated['rejection_reason'] : 'Rejected by General Manager (GM)';
             $expenseRequest->update([
-                'status' => ExpenseRequest::STATUS_REJECTED,
-                'gm_reviewer_id' => $user->id,
-                'gm_approver_id' => $user->id,
-                'gm_reviewed_at' => now(),
-                'gm_approved_at' => now(),
+                'status'           => ExpenseRequest::STATUS_REJECTED,
+                'gm_reviewer_id'   => $user->id,
+                'gm_approver_id'   => $user->id,
+                'gm_reviewed_at'   => now(),
+                'gm_approved_at'   => now(),
                 'rejection_reason' => $reason,
             ]);
 
@@ -720,22 +727,141 @@ class ExpenseRequestController extends Controller
                 $pcr = \App\Models\PettyCashReplenishment::where('request_no', $pcrNo)->first();
                 if ($pcr) {
                     $pcr->update([
-                        'status' => \App\Models\PettyCashReplenishment::STATUS_REJECTED,
-                        'rejected_at' => now(),
+                        'status'           => \App\Models\PettyCashReplenishment::STATUS_REJECTED,
+                        'rejected_at'      => now(),
                         'rejection_reason' => 'GM Rejected: ' . $reason,
                     ]);
                 }
             }
 
+            if ($expenseRequest->maintenanceRequest) {
+                \App\Models\ActivityLog::log(
+                    'rejected',
+                    "GM rejected Expense Request #{$expenseRequest->request_number} linked to Maintenance {$expenseRequest->maintenanceRequest->request_no}: {$reason}",
+                    'Maintenance Requests',
+                    $expenseRequest->maintenanceRequest
+                );
+            }
+
+            \App\Models\ActivityLog::log(
+                'rejected',
+                "GM rejected Expense Request #{$expenseRequest->request_number}: {$reason}",
+                'Expense Requests',
+                $expenseRequest
+            );
+
             return back()->with('success', "Request #{$expenseRequest->request_number} rejected by GM.");
         }
 
+        // ── Option B: Send to Store Manager (Material / Spare Parts Fulfillment) ──────
+        if ($validated['action'] === 'send_to_store') {
+            $gmDirectives = !empty($validated['gm_notes']) ? $validated['gm_notes'] : 'GM directed to fulfill materials/parts from store inventory rather than cash disbursement.';
+
+            // 1. Resolve store
+            $targetStoreId = $validated['destination_store_id'] ?? $validated['store_id'] ?? null;
+            $store = $targetStoreId ? \App\Models\Store::find($targetStoreId) : \App\Models\Store::where('is_active', true)->first();
+            $storeId = $store?->id;
+
+            // 2. Resolve project
+            $projectId = $expenseRequest->project_id;
+            if (!$projectId && $store) {
+                $projectId = $store->project_id;
+            }
+            if (!$projectId) {
+                $project = \App\Models\Project::whereIn('status', ['active', 'in_progress', 'planning'])->first() ?? \App\Models\Project::first();
+                $projectId = $project?->id;
+            }
+
+            // 3. Ensure material_requests table has maintenance_request_id column
+            if (\Illuminate\Support\Facades\Schema::hasTable('material_requests') && !\Illuminate\Support\Facades\Schema::hasColumn('material_requests', 'maintenance_request_id')) {
+                \Illuminate\Support\Facades\Schema::table('material_requests', function ($table) {
+                    $table->unsignedBigInteger('maintenance_request_id')->nullable()->index();
+                });
+            }
+
+            // 4. Generate reference number
+            $maintReq = $expenseRequest->maintenanceRequest;
+            $ticketPart = $maintReq ? str_replace('MNT-', '', $maintReq->request_no) : $expenseRequest->id;
+            $refNumber = 'MR-MNT-' . $ticketPart . '-' . strtoupper(\Illuminate\Support\Str::random(3));
+            while (\App\Models\MaterialRequest::where('reference_number', $refNumber)->exists()) {
+                $refNumber = 'MR-MNT-' . $ticketPart . '-' . strtoupper(\Illuminate\Support\Str::random(4));
+            }
+
+            // 5. Create Material Request for Store Manager
+            $materialRequest = \App\Models\MaterialRequest::create([
+                'project_id'             => $projectId,
+                'destination_store_id'   => $storeId,
+                'maintenance_request_id' => $expenseRequest->maintenance_request_id,
+                'reference_number'       => $refNumber,
+                'source'                 => 'Maintenance (GM Decision) — ' . ($maintReq ? $maintReq->request_no : $expenseRequest->request_number),
+                'status'                 => 'sent_to_store_manager',
+                'required_date'          => now()->addDays(2),
+                'notes'                  => "GM Directive: {$gmDirectives}\nExpense Request: #{$expenseRequest->request_number} (ETB " . number_format($expenseRequest->amount, 2) . ")\nPurpose: {$expenseRequest->description}",
+                'created_by'             => $user->id,
+            ]);
+
+            // Add requested item based on maintenance asset / description
+            $productName = $maintReq ? "Spare Parts / Repair Items for {$maintReq->asset_name}" : "Maintenance Supplies for {$expenseRequest->request_number}";
+            $product = \App\Models\Product::firstOrCreate(
+                ['name' => $productName],
+                [
+                    'sku'       => 'MNT-' . strtoupper(\Illuminate\Support\Str::random(6)),
+                    'unit'      => 'pcs',
+                    'category'  => 'Maintenance / Spare Parts',
+                    'is_active' => true,
+                ]
+            );
+
+            $materialRequest->items()->create([
+                'product_id'         => $product->id,
+                'quantity_requested' => 1,
+                'notes'              => "Expense #{$expenseRequest->request_number}: " . \Illuminate\Support\Str::limit($expenseRequest->description, 200),
+            ]);
+
+            // 6. Update Expense Request status
+            $expenseRequest->update([
+                'status'           => ExpenseRequest::STATUS_SENT_TO_STORE,
+                'gm_reviewer_id'   => $user->id,
+                'gm_approver_id'   => $user->id,
+                'gm_reviewed_at'   => now(),
+                'gm_approved_at'   => now(),
+                'rejection_reason' => null,
+            ]);
+
+            // 7. Update Maintenance Request status if linked
+            if ($maintReq) {
+                $maintReq->update([
+                    'status'                   => 'sent_to_store_manager',
+                    'replacement_action'       => 'sent_to_store_manager',
+                    'sent_to_store_manager_at' => now(),
+                ]);
+
+                \App\Models\ActivityLog::log(
+                    'updated',
+                    "GM reviewed Expense Request #{$expenseRequest->request_number} and routed to Store Manager for material fulfillment (Material Request #{$materialRequest->reference_number})",
+                    'Maintenance Requests',
+                    $maintReq
+                );
+            }
+
+            \App\Models\ActivityLog::log(
+                'updated',
+                "GM routed Expense Request #{$expenseRequest->request_number} to Store Manager. Generated Material Request #{$materialRequest->reference_number}",
+                'Expense Requests',
+                $expenseRequest
+            );
+
+            return back()->with('success', "Expense Request #{$expenseRequest->request_number} routed to Store Manager! Material Request #{$materialRequest->reference_number} created and sent to Store Manager for fulfillment.");
+        }
+
+        // ── Option C: Approve & Send to Finance (Cash Payment / Disbursement) ─────────
         $expenseRequest->update([
-            'status' => ExpenseRequest::STATUS_APPROVED_ASSIGNED,
-            'gm_reviewer_id' => $user->id,
-            'gm_approver_id' => $user->id,
-            'gm_reviewed_at' => now(),
-            'gm_approved_at' => now(),
+            'status'           => ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+            'gm_reviewer_id'   => $user->id,
+            'gm_approver_id'   => $user->id,
+            'gm_reviewed_at'   => now(),
+            'gm_approved_at'   => now(),
+            'rejection_reason' => null,
         ]);
 
         if (str_starts_with($expenseRequest->request_number, 'EXP-PCR-')) {
@@ -747,6 +873,22 @@ class ExpenseRequestController extends Controller
                 ]);
             }
         }
+
+        if ($expenseRequest->maintenanceRequest) {
+            \App\Models\ActivityLog::log(
+                'approved',
+                "GM approved Expense Request #{$expenseRequest->request_number} for ETB " . number_format($expenseRequest->amount, 2) . " and forwarded to Finance Head for disbursement",
+                'Maintenance Requests',
+                $expenseRequest->maintenanceRequest
+            );
+        }
+
+        \App\Models\ActivityLog::log(
+            'approved',
+            "GM approved Expense Request #{$expenseRequest->request_number} and forwarded to Finance Head for disbursement",
+            'Expense Requests',
+            $expenseRequest
+        );
 
         return back()->with('success', "Request #{$expenseRequest->request_number} approved by GM and sent to Finance Head for disbursement!");
     }

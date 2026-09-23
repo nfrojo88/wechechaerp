@@ -625,18 +625,64 @@
                             </div>
                         @endif
 
+                        @if($req->maintenanceRequest)
+                            <div class="alert alert-warning border border-warning d-flex align-items-center justify-content-between p-3 rounded-3 mb-3">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-wrench text-warning fs-5"></i>
+                                    <div>
+                                        <strong class="text-dark">Maintenance Request Ticket: {{ $req->maintenanceRequest->request_no }}</strong>
+                                        <span class="text-muted small d-block">Asset: <strong>{{ $req->maintenanceRequest->asset_name }}</strong> ({{ $req->maintenanceRequest->asset_code ?? 'Asset' }}) &bull; Issue: {{ $req->maintenanceRequest->issue_category ?? 'Maintenance' }}</span>
+                                    </div>
+                                </div>
+                                <a href="{{ route('general-service.maintenance.show', $req->maintenanceRequest) }}" target="_blank" class="btn btn-sm btn-outline-dark rounded-pill px-3">
+                                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Ticket
+                                </a>
+                            </div>
+                        @endif
+
+                        {{-- Store Routing Directive Card --}}
+                        <div class="card border border-primary border-opacity-25 rounded-3 mb-3 bg-light" id="gmStoreCard{{ $req->id }}">
+                            <div class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center">
+                                <strong class="text-dark small"><i class="fa-solid fa-warehouse text-primary me-1"></i>Store Manager Routing Directive (If sending to Store)</strong>
+                                <span class="badge bg-primary-subtle text-primary small">Store Fulfillment</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted mb-1">Target Warehouse / Store</label>
+                                        <select name="destination_store_id" class="form-select form-select-sm">
+                                            @foreach($stores ?? \App\Models\Store::where('is_active', true)->get() as $storeOption)
+                                                <option value="{{ $storeOption->id }}">
+                                                    {{ $storeOption->name }} ({{ $storeOption->code ?? 'Store' }})
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted mb-1">Instructions for Store Manager</label>
+                                        <input type="text" name="gm_notes" class="form-control form-control-sm" placeholder="e.g. Issue replacement spare parts from warehouse stock...">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-uppercase small text-muted">Rejection Reason (Optional)</label>
                             <textarea name="rejection_reason" class="form-control" rows="3" placeholder="State reason if rejecting (optional)..."></textarea>
                         </div>
                     </div>
-                    <div class="modal-footer bg-light border-top-0 d-flex justify-content-between">
+                    <div class="modal-footer bg-light border-top-0 d-flex justify-content-between flex-wrap gap-2">
                         <button type="submit" name="action" value="reject" class="btn btn-outline-danger">
                             <i class="fa-solid fa-times me-1"></i> Reject Request
                         </button>
-                        <button type="submit" name="action" value="approve" class="btn btn-success fw-bold px-3">
-                            <i class="fa-solid fa-check-double me-1"></i> Approve & Send to Finance Head
-                        </button>
+                        <div class="d-flex gap-2">
+                            <button type="submit" name="action" value="send_to_store" class="btn btn-primary fw-bold px-3 shadow-xs">
+                                <i class="fa-solid fa-warehouse me-1"></i> Send to Store Manager
+                            </button>
+                            <button type="submit" name="action" value="approve" class="btn btn-success fw-bold px-3 shadow-xs">
+                                <i class="fa-solid fa-money-bill-wave me-1"></i> Approve &amp; Send to Finance Head
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>

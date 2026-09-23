@@ -921,6 +921,21 @@
                                 </div>
                             @endif
 
+                            @if($req->maintenanceRequest)
+                                <div class="alert alert-warning border border-warning d-flex align-items-center justify-content-between p-3 rounded-3 mb-3">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="fa-solid fa-wrench text-warning fs-5"></i>
+                                        <div>
+                                            <strong class="text-dark">Maintenance Request Ticket: {{ $req->maintenanceRequest->request_no }}</strong>
+                                            <span class="text-muted small d-block">Asset: <strong>{{ $req->maintenanceRequest->asset_name }}</strong> ({{ $req->maintenanceRequest->asset_code ?? 'Asset' }}) &bull; Category: {{ $req->maintenanceRequest->issue_category ?? 'Maintenance' }}</span>
+                                        </div>
+                                    </div>
+                                    <a href="{{ route('general-service.maintenance.show', $req->maintenanceRequest) }}" target="_blank" class="btn btn-sm btn-outline-dark rounded-pill px-3">
+                                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Ticket
+                                    </a>
+                                </div>
+                            @endif
+
                             @if($req->attachment_url)
                                 <div class="mb-3 p-3 bg-light rounded-3 border d-flex justify-content-between align-items-center">
                                     <div>
@@ -935,15 +950,47 @@
 
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-dark">GM Action Decision</label>
-                                <select name="action" class="form-select" id="gmAction{{ $req->id }}" onchange="document.getElementById('gmReason{{ $req->id }}').style.display = this.value === 'reject' ? 'block' : 'none';">
-                                    <option value="approve">Approve (Send to Finance Head for Disbursement)</option>
-                                    <option value="reject">Reject Request</option>
+                                <select name="action" class="form-select fw-semibold" id="gmAction{{ $req->id }}" onchange="handleGmReviewAction{{ $req->id }}(this.value)">
+                                    <option value="approve">💰 Approve &amp; Send to Finance Head (Cash Disbursement)</option>
+                                    <option value="send_to_store">📦 Send to Store Manager (Material / Spare Parts Stock Fulfillment)</option>
+                                    <option value="reject">❌ Reject Request</option>
                                 </select>
                             </div>
+
+                            {{-- Store Selection & Notes (when send_to_store selected) --}}
+                            <div class="p-3 bg-light rounded-3 border mb-3" id="gmStoreContainer{{ $req->id }}" style="display: none;">
+                                <div class="d-flex align-items-center gap-2 mb-2 text-primary fw-bold small">
+                                    <i class="fa-solid fa-warehouse"></i> Route to Store Manager Directive
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small text-muted mb-1">Target Fulfillment Store</label>
+                                    <select name="destination_store_id" class="form-select form-select-sm">
+                                        @foreach($stores ?? \App\Models\Store::where('is_active', true)->get() as $storeOption)
+                                            <option value="{{ $storeOption->id }}">
+                                                {{ $storeOption->name }} ({{ $storeOption->code ?? 'Store' }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="mb-0">
+                                    <label class="form-label small text-muted mb-1">Instructions for Store Manager (Optional)</label>
+                                    <input type="text" name="gm_notes" class="form-control form-control-sm" placeholder="e.g. Issue replacement spare parts from warehouse stock instead of cash...">
+                                </div>
+                            </div>
+
                             <div class="mb-3" id="gmReason{{ $req->id }}" style="display: none;">
                                 <label class="form-label small fw-bold text-danger">Rejection Reason *</label>
                                 <textarea name="rejection_reason" class="form-control" rows="3" placeholder="State reason for GM rejection..."></textarea>
                             </div>
+
+                            <script>
+                            function handleGmReviewAction{{ $req->id }}(val) {
+                                const reasonBox = document.getElementById('gmReason{{ $req->id }}');
+                                const storeBox = document.getElementById('gmStoreContainer{{ $req->id }}');
+                                if (reasonBox) reasonBox.style.display = (val === 'reject') ? 'block' : 'none';
+                                if (storeBox) storeBox.style.display = (val === 'send_to_store') ? 'block' : 'none';
+                            }
+                            </script>
                         </div>
                         <div class="modal-footer bg-light border-0 py-3 px-4">
                             <button type="button" class="btn btn-secondary rounded-3" data-bs-dismiss="modal">Cancel</button>

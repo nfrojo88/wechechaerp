@@ -414,14 +414,33 @@
                                 <tbody>
                                     @foreach($pendingGmExpenses as $exp)
                                     <tr>
-                                        <td class="ps-3 fw-bold text-dark">#{{ $exp->id }}</td>
-                                        <td>{{ $exp->project->name ?? 'General' }}</td>
-                                        <td><span class="badge bg-light text-dark border">{{ ucfirst($exp->category ?? 'Expense') }}</span></td>
-                                        <td>{{ $exp->requester->name ?? 'Staff' }}</td>
-                                        <td class="text-end fw-bold text-warning">{{ number_format($exp->amount, 2) }}</td>
+                                        <td class="ps-3">
+                                            <div class="fw-bold font-monospace text-primary">{{ $exp->request_number ?? ('#' . $exp->id) }}</div>
+                                            @if($exp->maintenanceRequest)
+                                                <span class="badge bg-warning text-dark mt-1" style="font-size: 0.72rem;">
+                                                    <i class="fa-solid fa-wrench me-1"></i>MNT: {{ $exp->maintenanceRequest->request_no }}
+                                                </span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if($exp->maintenanceRequest)
+                                                <div class="fw-semibold text-dark">{{ $exp->maintenanceRequest->asset_name }}</div>
+                                                <small class="text-muted">{{ $exp->project->name ?? 'General Service' }}</small>
+                                            @else
+                                                <span class="text-dark">{{ $exp->project->name ?? 'Operations' }}</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-light text-dark border">{{ ucfirst($exp->category ?? 'Expense') }}</span>
+                                            @if($exp->other_reason)
+                                                <div class="text-muted small text-truncate" style="max-width: 140px;" title="{{ $exp->other_reason }}">{{ $exp->other_reason }}</div>
+                                            @endif
+                                        </td>
+                                        <td>{{ $exp->employee->full_name ?? ($exp->user->name ?? ($exp->requester->name ?? 'Staff')) }}</td>
+                                        <td class="text-end fw-bold font-monospace text-success">{{ number_format($exp->amount, 2) }}</td>
                                         <td class="text-end pe-3">
-                                            <a href="{{ route('expense-requests.show', $exp->id) }}" class="btn btn-sm btn-outline-warning text-dark rounded-pill px-2">
-                                                Review
+                                            <a href="{{ route('expenses.index', ['tab' => 'pending_gm', 'search' => $exp->request_number ?? $exp->id]) }}" class="btn btn-sm btn-warning text-dark rounded-pill px-3 fw-semibold shadow-xs">
+                                                <i class="fa-solid fa-user-shield me-1"></i>Review
                                             </a>
                                         </td>
                                     </tr>

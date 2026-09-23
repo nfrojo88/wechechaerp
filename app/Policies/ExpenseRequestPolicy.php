@@ -81,9 +81,9 @@ class ExpenseRequestPolicy
     public function gmReview(User $user, ExpenseRequest $expenseRequest): bool
     {
         $roleNames = strtolower(implode(' ', $user->getRoleNames()->toArray()));
-        $isGm = str_contains($roleNames, 'gm') || $user->hasRole('gm');
+        $isGm = str_contains($roleNames, 'gm') || $user->hasRole('gm') || $user->hasAnyRole(['General Manager', 'gm', 'admin', 'global_admin']);
 
-        return $isGm && $expenseRequest->status === 'Pending (GM Review)';
+        return $isGm && in_array($expenseRequest->status, [ExpenseRequest::STATUS_PENDING_GM, 'Pending (GM Review)']);
     }
 
     /**

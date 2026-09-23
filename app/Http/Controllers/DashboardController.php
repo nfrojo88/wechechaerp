@@ -325,10 +325,10 @@ class DashboardController extends Controller
 
         // 3. Pending GM Expense Requests
         $pendingGmExpenses = $this->safe(function () {
-            return \App\Models\ExpenseRequest::with(['project', 'requester'])
+            return \App\Models\ExpenseRequest::with(['project', 'requester', 'maintenanceRequest', 'employee', 'user'])
                 ->where('status', \App\Models\ExpenseRequest::STATUS_PENDING_GM)
                 ->latest()
-                ->take(10)
+                ->take(15)
                 ->get();
         }, collect());
 

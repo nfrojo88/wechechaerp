@@ -288,6 +288,10 @@
                                             {!! $exp->status_badge !!}
                                             @if($exp->status === \App\Models\ExpenseRequest::STATUS_PAID && $exp->paid_at)
                                                 <small class="text-muted d-block" style="font-size:0.75rem;">Paid {{ $exp->paid_at->format('d M') }}</small>
+                                            @elseif($exp->status === \App\Models\ExpenseRequest::STATUS_SENT_TO_STORE)
+                                                <small class="text-warning text-dark d-block mt-1 fw-semibold" style="font-size:0.75rem;">
+                                                    <i class="fa-solid fa-boxes-stacked me-1"></i>Routed to Store Manager
+                                                </small>
                                             @elseif($exp->status === \App\Models\ExpenseRequest::STATUS_REJECTED)
                                                 <small class="text-danger d-block mt-1" style="font-size:0.74rem;">
                                                     <i class="fa-solid fa-circle-xmark me-1"></i>{{ $exp->rejection_reason ?? 'Rejected' }}
@@ -706,8 +710,8 @@
                     </div>
 
                     <div class="alert alert-light border mt-3 mb-0 small text-muted">
-                        <i class="fa-solid fa-circle-info text-info me-1"></i>
-                        <strong>Approval Routing:</strong> Requests up to 5,000 ETB will be directly routed to HR. Requests above 5,000 ETB will automatically require General Manager (GM) approval before reaching Finance.
+                        <i class="fa-solid fa-circle-info text-primary me-1"></i>
+                        <strong>Direct GM Routing:</strong> Maintenance expense requests are routed directly to the <strong>General Manager (GM)</strong> for evaluation. The GM determines whether to approve &amp; send to <strong>Finance</strong> for disbursement or route to the <strong>Store Manager</strong> for material fulfillment from warehouse stock.
                     </div>
                 </div>
 

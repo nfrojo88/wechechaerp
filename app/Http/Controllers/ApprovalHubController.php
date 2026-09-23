@@ -56,6 +56,7 @@ class ApprovalHubController extends Controller
                 ExpenseRequest::STATUS_PENDING_GM           => ['Pending GM Review', 'pending_gm', 'info'],
                 ExpenseRequest::STATUS_APPROVED_ASSIGNED,
                 ExpenseRequest::STATUS_ASSIGNED             => ['Assigned to Finance', 'finance_queue', 'primary'],
+                ExpenseRequest::STATUS_SENT_TO_STORE        => ['Sent to Store Manager', 'sent_to_store', 'warning'],
                 ExpenseRequest::STATUS_PAID                 => ['Paid', 'paid', 'success'],
                 ExpenseRequest::STATUS_REJECTED             => ['Rejected', 'rejected', 'danger'],
                 default                                     => [$statusRaw ?? 'Pending', 'pending', 'secondary'],
@@ -571,6 +572,8 @@ class ApprovalHubController extends Controller
             ['path' => $request->url(), 'query' => $request->query()]
         );
 
+        $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
+
         return view('finance.approvals.index', compact(
             'paginatedItems',
             'projects',
@@ -580,6 +583,7 @@ class ApprovalHubController extends Controller
             'chartOfAccounts',
             'bankAccounts',
             'financeStaff',
+            'stores',
             'isAdmin',
             'isAuditor',
             'isHR',

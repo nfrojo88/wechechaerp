@@ -105,6 +105,7 @@ class ExpenseRequest extends Model
     public const STATUS_PENDING_GM = 'Pending (GM Review)';
     public const STATUS_APPROVED_ASSIGNED = 'Approved - Assigned to Finance';
     public const STATUS_ASSIGNED = 'Assigned to Finance';
+    public const STATUS_SENT_TO_STORE = 'Sent to Store Manager';
     public const STATUS_PAID = 'Paid';
     public const STATUS_REJECTED = 'Rejected';
 
@@ -440,6 +441,8 @@ class ExpenseRequest extends Model
             case self::STATUS_APPROVED_ASSIGNED:
             case self::STATUS_ASSIGNED:
                 return '<span class="badge bg-primary"><i class="fa-solid fa-file-invoice-dollar me-1"></i>Assigned to Finance</span>';
+            case self::STATUS_SENT_TO_STORE:
+                return '<span class="badge bg-warning text-dark"><i class="fa-solid fa-warehouse me-1"></i>Sent to Store Manager</span>';
             case self::STATUS_PAID:
                 return '<span class="badge bg-success"><i class="fa-solid fa-check-circle me-1"></i>Paid</span>';
             case self::STATUS_REJECTED:
