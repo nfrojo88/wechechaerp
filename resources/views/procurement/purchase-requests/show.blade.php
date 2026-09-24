@@ -64,7 +64,7 @@
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING:
-                $canActOnCurrentStage = $isGlobalAdmin || in_array('marketing', $rawUserRoles) || in_array('market_research', $rawUserRoles);
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('purchase_manager', $rawUserRoles) || in_array('procurement_manager', $rawUserRoles) || in_array('marketing', $rawUserRoles) || in_array('market_research', $rawUserRoles);
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION:
@@ -388,13 +388,13 @@
                             @endif
                         @endif
 
-                    <!-- STAGE 5a: Marketing Review -->
+                    <!-- STAGE 5a: Purchasing Manager Price Review & Decision -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING)
                         <div class="mb-3">
                             <h6 class="fw-bold text-dark mb-1">
-                                <i class="fas fa-chart-line text-primary me-1"></i> Market Price Intelligence Review
+                                <i class="fas fa-chart-line text-primary me-1"></i> Purchasing Manager Price Review & Decision
                             </h6>
-                            <p class="small text-muted mb-2">Compare Direct Buy pricing against Monthly Marketing Surveys and historical purchase prices to establish the benchmark for GM approval.</p>
+                            <p class="small text-muted mb-2">Review Direct Buy pricing against market benchmarks and monthly surveys to give decision and forward for GM approval.</p>
                         </div>
 
                         <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.add-marketing-variance') ? route('purchase-requests.add-marketing-variance', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/add-marketing-variance') }}" method="POST">
@@ -537,7 +537,7 @@
                             </div>
 
                             <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm py-2">
-                                <i class="fas fa-check-circle me-1"></i> Record Variance & Send to GM
+                                <i class="fas fa-check-circle me-1"></i> Approve Price & Send to GM
                             </button>
                         </form>
 

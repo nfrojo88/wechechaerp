@@ -68,7 +68,7 @@ class PurchaseRequest extends Model
             self::STATUS_TRANSFERRED                => 'Transferred',
             self::STATUS_PENDING_PROC_MANAGER       => 'Pending Procurement Manager',
             self::STATUS_PENDING_PROC_TEAM          => 'Pending Procurement Team',
-            self::STATUS_PENDING_MARKETING          => 'Pending Marketing Review',
+            self::STATUS_PENDING_MARKETING          => 'Pending PM Price Review',
             self::STATUS_PENDING_PROFORMA_SELECTION => 'Pending Proforma Selection',
             self::STATUS_PENDING_GM                 => 'Pending GM Decision',
             self::STATUS_PENDING_FINANCE            => 'Pending Finance (Credit)',

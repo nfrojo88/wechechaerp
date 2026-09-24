@@ -368,9 +368,15 @@
                                             $canActOnThisPr = true;
                                         } elseif ($owner === 'store_keeper' && $isStoreKeeperUser) {
                                             $canActOnThisPr = true;
-                                        } elseif (in_array($owner, ['purchase_manager', 'procurement_manager']) && $isPurchaseManagerUser) $canActOnThisPr = true;
-                                        elseif (in_array($owner, ['purchase', 'procurement_team', 'purchaser', 'buyer']) && $isProcurementTeamUser) $canActOnThisPr = true;
-                                        elseif (in_array($owner, ['marketing', 'market_research']) && $isMarketingUser) $canActOnThisPr = true;
+                                        } elseif (in_array($owner, ['purchase_manager', 'procurement_manager']) && $isPurchaseManagerUser) {
+                                            $canActOnThisPr = true;
+                                        } elseif ($pr->status === \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING && $isPurchaseManagerUser) {
+                                            $canActOnThisPr = true;
+                                        } elseif (in_array($owner, ['purchase', 'procurement_team', 'purchaser', 'buyer']) && $isProcurementTeamUser) {
+                                            $canActOnThisPr = true;
+                                        } elseif (in_array($owner, ['marketing', 'market_research']) && $isMarketingUser) {
+                                            $canActOnThisPr = true;
+                                        }
                                         elseif (in_array($owner, ['gm', 'general_manager']) && $isGmUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['finance_head', 'finance', 'finance_manager']) && $isFinanceHeadUser) $canActOnThisPr = true;
                                         elseif (in_array($owner, ['general_service', 'general_services']) && $isGeneralServiceUser) $canActOnThisPr = true;

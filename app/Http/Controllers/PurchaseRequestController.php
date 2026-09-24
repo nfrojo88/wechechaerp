@@ -1227,10 +1227,10 @@ class PurchaseRequestController extends Controller
         return back()->with('success', 'Proforma invoice removed.');
     }
 
-    // ─── STAGE 5a: Marketing Variance ───────────────────────────────────────
+    // ─── STAGE 5a: Purchasing Manager Price Review & Decision ───────────────────────────────────────
     public function addMarketingVariance(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['marketing', 'market_research']);
+        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager', 'admin', 'global_admin', 'marketing', 'market_research']);
         $request->validate([
             'market_price'       => 'required|numeric|min:0',
             'variance_notes'     => 'nullable|string',
@@ -1246,7 +1246,7 @@ class PurchaseRequestController extends Controller
             'variance_percentage' => $variancePct,
             'variance_notes'      => $request->variance_notes,
         ]);
-        return back()->with('success', 'Price variance recorded. Sent to GM.');
+        return back()->with('success', 'Direct Buy price review and decision recorded. Sent to GM.');
     }
 
     // ─── STAGE 5b: Select Proformas and send to GM ──────────────────────────

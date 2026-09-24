@@ -21,6 +21,13 @@ class ProcurementLifecycleController extends Controller
      */
     public function myQueue(Request $request)
     {
+        // Auto-heal: Ensure any direct buy PRs previously assigned to market_research are routed to purchase_manager
+        try {
+            PurchaseRequest::where('status', PurchaseRequest::STATUS_PENDING_MARKETING)
+                ->where('current_owner_role', 'market_research')
+                ->update(['current_owner_role' => 'purchase_manager']);
+        } catch (\Throwable $e) {}
+
         $user = Auth::user();
         $roles = $user->getRoleNames()->toArray();
 
@@ -32,7 +39,7 @@ class ProcurementLifecycleController extends Controller
 
         $isStoreKeeper = $user->hasAnyRole(['store_keeper', 'Store Keeper', 'storekeeper', 'Storekeeper']) || in_array('store_keeper', $roles) || in_array('storekeeper', $roles);
         $isStoreManager = $user->hasRole('store_manager');
-        $isPurchaseManager = $user->hasRole('purchase_manager');
+        $isPurchaseManager = $user->hasAnyRole(['purchase_manager', 'procurement_manager', 'Purchase Manager', 'Procurement Manager']) || in_array('purchase_manager', $roles) || in_array('procurement_manager', $roles);
         $isFinanceHead = $user->hasRole('finance_head') || $user->hasRole('finance_manager') || $user->hasRole('finance') || $user->hasRole('accountant');
 
         // 1. Identify owner roles to query
@@ -51,9 +58,11 @@ class ProcurementLifecycleController extends Controller
             }
             if ($isStoreKeeper)                       $targetRoles[] = 'store_keeper';
             if ($isStoreManager)                      $targetRoles[] = 'store_manager';
-            if ($user->hasRole('purchase_manager'))   $targetRoles[] = 'purchase_manager';
+            if ($isPurchaseManager) {
+                $targetRoles[] = 'purchase_manager';
+                $targetRoles[] = 'procurement_manager';
+            }
             if ($user->hasRole('purchase'))           $targetRoles[] = 'purchase';
-            if ($user->hasRole('market_research'))    $targetRoles[] = 'market_research';
             if ($isGm)                                $targetRoles[] = 'gm';
             if ($user->hasRole('finance_head'))       $targetRoles[] = 'finance_head';
             if ($user->hasRole('finance'))            $targetRoles[] = 'finance';
@@ -66,7 +75,7 @@ class ProcurementLifecycleController extends Controller
             ->latest();
 
         if (!$isAdmin && !$isAuditor) {
-            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm, $isStoreKeeper, $isStoreManager, $user) {
+            $prQuery->where(function ($q) use ($targetRoles, $isHr, $isCoordinator, $isGm, $isStoreKeeper, $isStoreManager, $isPurchaseManager, $user) {
                 $q->where(function ($roleQ) use ($targetRoles, $isStoreManager, $isStoreKeeper) {
                     if ($isStoreManager && !$isStoreKeeper) {
                         // Store Manager must NOT see or fulfill final intake! Only initial Stage 2 smart split
@@ -105,6 +114,11 @@ class ProcurementLifecycleController extends Controller
 
                 if ($isHr || $isCoordinator || $isGm) {
                     $q->orWhere('status', PurchaseRequest::STATUS_PENDING_HR_APPROVAL);
+                }
+
+                if ($isPurchaseManager) {
+                    $q->orWhere('status', PurchaseRequest::STATUS_PENDING_MARKETING);
+                    $q->orWhere('status', PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION);
                 }
 
                 if ($isStoreKeeper) {

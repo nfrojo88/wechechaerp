@@ -194,7 +194,7 @@ class ProcurementLifecycleService
             }
         }
 
-        $targetRole = $this->resolveOwnerRole('market_research', $pr);
+        $targetRole = $this->resolveOwnerRole('purchase_manager', $pr);
         $pr->update([
             'sourcing_method'       => 'direct_buy',
             'direct_buy_amount'     => $amount,
@@ -205,7 +205,7 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_MARKETING, 'submit_direct_buy_pricing', 'purchase', $notes);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} needs marketing price variance. Amount: " . number_format($amount, 2) . " ETB. Open: " . url("/purchase-requests/{$pr->id}"),
+            "ConstructPro: PR #{$pr->pr_no} Direct Buy pricing submitted (" . number_format($amount, 2) . " ETB) — awaiting Purchasing Manager review and decision. Open: " . url("/purchase-requests/{$pr->id}"),
             $pr->project_id,
             $pr->store_id
         );
@@ -230,7 +230,7 @@ class ProcurementLifecycleService
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    // STAGE 5a — Marketing Variance
+    // STAGE 5a — Purchasing Manager Price Review & Decision
     // ═══════════════════════════════════════════════════════════════════
 
     public function addMarketingVariance(PurchaseRequest $pr, array $data): void
@@ -249,9 +249,9 @@ class ProcurementLifecycleService
             'status'             => PurchaseRequest::STATUS_PENDING_GM,
             'current_owner_role' => $targetRole,
         ]);
-        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_GM, 'add_marketing_variance', 'market_research', $data['variance_notes'] ?? null);
+        $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_GM, 'add_marketing_variance', 'purchase_manager', $data['variance_notes'] ?? null);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} awaits your decision (Direct Buy + Marketing Review). Open: " . url("/purchase-requests/{$pr->id}"),
+            "ConstructPro: PR #{$pr->pr_no} awaits your decision (Direct Buy reviewed by Purchasing Manager). Open: " . url("/purchase-requests/{$pr->id}"),
             $pr->project_id,
             $pr->store_id
         );
