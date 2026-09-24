@@ -1578,6 +1578,25 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/maintenance',             [App\Http\Controllers\MaintenanceRequestController::class, 'store'])->name('maintenance.store');
     Route::get('/maintenance/{maintenanceRequest}', [App\Http\Controllers\MaintenanceRequestController::class, 'show'])->name('maintenance.show');
 
+    // ─── Foreman: Asset Maintenance Request Feature ────────────────────────────
+    Route::prefix('foreman')->name('foreman.')->group(function () {
+        // Fixed Asset Inventory (scoped to Foreman's site)
+        Route::get('fixed-assets', [App\Http\Controllers\ForemanController::class, 'fixedAssetsIndex'])->name('fixed-assets');
+
+        // Submit a maintenance request
+        Route::post('maintenance', [App\Http\Controllers\ForemanController::class, 'storeMaintenanceRequest'])->name('maintenance.store');
+
+        // My submitted requests tracker
+        Route::get('my-maintenance-requests', [App\Http\Controllers\ForemanController::class, 'myMaintenanceRequests'])->name('my-maintenance-requests');
+    });
+
+    // ─── Store Manager: Damaged Assets Panel ──────────────────────────────────
+    Route::prefix('store-manager/damaged-assets')->name('store-manager.damaged-assets.')->group(function () {
+        Route::get('/',                             [App\Http\Controllers\ForemanController::class, 'storeManagerDamagedAssets'])->name('index');
+        Route::post('{maintenanceRequest}/dispose', [App\Http\Controllers\ForemanController::class, 'disposeDamagedAsset'])->name('dispose');
+    });
+
+
     // ─── Phase 2 Core Masters ─────────────────────────────────────────────────
 
     // Users (admin only)

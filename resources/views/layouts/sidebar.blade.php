@@ -182,6 +182,7 @@
             <li><a href="{{ route('material-usages.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-usages.*') ? 'active' : '' }}"><i class="fa-solid fa-boxes-packing text-success"></i><span>Daily Consumption</span></a></li>
             <li><a href="{{ route('products.index') }}" class="sidebar-nav-link {{ request()->routeIs('products.*') ? 'active' : '' }}"><i class="fa-solid fa-book"></i><span>Material Catalog</span></a></li>
             <li><a href="{{ route('store-manager.fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.fixed-assets.*') ? 'active' : '' }}"><i class="fa-solid fa-truck-monster text-warning"></i><span>Fixed Assets</span></a></li>
+            <li><a href="{{ route('store-manager.damaged-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.damaged-assets.*') ? 'active' : '' }}"><i class="fa-solid fa-triangle-exclamation text-danger"></i><span>Damaged Assets</span></a></li>
             <li><a href="{{ route('store-manager.material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-clipboard-list text-danger"></i><span>Material Requests</span></a></li>
             <li><a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.*') ? 'active' : '' }}"><i class="fa-solid fa-truck-moving text-warning"></i><span>Transfers & Drivers</span></a></li>
             <li><a href="{{ route('store-manager.issued.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.issued.*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding"></i><span>Issued Materials</span></a></li>
@@ -1460,6 +1461,21 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('store-manager.damaged-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.damaged-assets.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-triangle-exclamation text-danger"></i>
+                <span>Damaged Assets</span>
+                @php
+                    $smDamagedCount = 0;
+                    try {
+                        $smDamagedCount = \App\Models\MaintenanceRequest::where('status', 'sent_to_store_manager')->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($smDamagedCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $smDamagedCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.transfers.create') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.create') ? 'active' : '' }}">
                 <i class="fa-solid fa-exchange-alt text-success"></i>
                 <span>Create Transfer</span>
@@ -2064,6 +2080,19 @@
             <a href="{{ route('issues.index') }}" class="sidebar-nav-link {{ request()->routeIs('issues.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-triangle-exclamation text-warning"></i>
                 <span>Report Issues</span>
+            </a>
+        </li>
+        {{-- ── Asset Maintenance Request Feature (Foreman) ── --}}
+        <li class="sidebar-nav-item">
+            <a href="{{ route('foreman.fixed-assets') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.fixed-assets') ? 'active' : '' }}">
+                <i class="fa-solid fa-truck-monster text-danger"></i>
+                <span>Site Fixed Assets</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('foreman.my-maintenance-requests') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.my-maintenance-requests') ? 'active' : '' }}">
+                <i class="fa-solid fa-wrench text-warning"></i>
+                <span>My Maintenance Requests</span>
             </a>
         </li>
         @endif
