@@ -32,6 +32,15 @@ class Inventory extends Model
         'last_movement_at' => 'datetime',
     ];
 
+    protected static function booted()
+    {
+        static::saved(function (Inventory $inventory) {
+            try {
+                FixedAsset::syncFromInventory($inventory->product_id);
+            } catch (\Throwable $e) {}
+        });
+    }
+
     public function store()
     {
         return $this->belongsTo(Store::class);

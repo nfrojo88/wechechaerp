@@ -14,6 +14,9 @@
             <p class="text-muted small mb-0">Centralized store inventory with auto-generated unit codes & strict quantity locks.</p>
         </div>
         <div class="d-flex gap-2">
+            <a href="{{ route('store-manager.fixed-assets.sync') }}" class="btn btn-outline-success btn-sm fw-semibold shadow-sm" title="Synchronize all matching items from live Store Inventory & Catalog">
+                <i class="fa-solid fa-arrows-rotate me-1"></i> Sync from Inventory
+            </a>
             <button type="button" class="btn btn-primary btn-sm fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#newAssetModal">
                 <i class="fa-solid fa-plus me-1"></i> New Fixed Asset
             </button>

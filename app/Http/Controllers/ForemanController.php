@@ -58,6 +58,11 @@ class ForemanController extends Controller
         $status   = $request->input('status');
         $category = $request->input('category');
 
+        // Auto-sync from Inventory & Catalog
+        try {
+            FixedAsset::syncFromInventory(null, $search);
+        } catch (\Throwable $e) {}
+
         // Build query for FixedAssetUnits at this site
         $unitsQuery = FixedAssetUnit::with(['parentAsset.store', 'assignedEmployee'])
             ->whereNull('fixed_asset_units.deleted_at')

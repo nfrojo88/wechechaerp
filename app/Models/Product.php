@@ -71,6 +71,15 @@ class Product extends Model
      */
     protected $hidden = [];
 
+    protected static function booted()
+    {
+        static::saved(function (Product $product) {
+            try {
+                FixedAsset::syncFromInventory($product->id);
+            } catch (\Throwable $e) {}
+        });
+    }
+
     /**
      * Scope a query to only include consumable products.
      */

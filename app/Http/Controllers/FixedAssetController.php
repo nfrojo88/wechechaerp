@@ -32,6 +32,23 @@ class FixedAssetController extends Controller
         $storeId  = $request->input('store_id');
         $tab      = $request->input('tab', 'all');
 
+        // Auto-sync from Store Inventory & Catalog (two-way automatic synchronization)
+        try {
+            FixedAsset::syncFromInventory(null, $search);
+
+            $faProductCount = Product::where('category', 'Fixed Asset')->count();
+            $faCount = FixedAsset::count();
+            if ($faProductCount < $faCount) {
+                FixedAsset::with(['store', 'units'])->chunk(50, function($assets) {
+                    foreach ($assets as $asset) {
+                        $asset->syncWithCatalogAndInventory();
+                    }
+                });
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("FixedAssetController auto-sync failed: " . $e->getMessage());
+        }
+
         // Fast Single-Query KPI Aggregation
         $unitStats = DB::table('fixed_asset_units')
             ->selectRaw("
@@ -54,19 +71,6 @@ class FixedAssetController extends Controller
         ];
 
         $effectiveStatus = $status ?: ($tab !== 'all' ? $tab : null);
-
-        // Auto-sync existing Fixed Assets to Material Catalog & Store Inventory if needed
-        try {
-            $faProductCount = Product::where('category', 'Fixed Asset')->count();
-            $faCount = FixedAsset::count();
-            if ($faProductCount < $faCount) {
-                FixedAsset::with(['store', 'units'])->chunk(50, function($assets) {
-                    foreach ($assets as $asset) {
-                        $asset->syncWithCatalogAndInventory();
-                    }
-                });
-            }
-        } catch (\Throwable $e) {}
 
         // Query for parent assets with eager-loaded units matching selected status
         $query = FixedAsset::with(['store', 'units' => function($q) use ($effectiveStatus, $search) {
@@ -559,5 +563,20 @@ class FixedAssetController extends Controller
         $unit->assignToEmployee($employee->id, auth()->id(), $validated['notes'] ?? null);
 
         return back()->with('success', "Unit {$unit->unit_code} assigned to {$employee->full_name} successfully!");
+    }
+
+    /**
+     * Manual sync trigger from UI: Sync all inventory items to Fixed Assets.
+     */
+    public function syncInventoryNow(Request $request)
+    {
+        try {
+            $count = FixedAsset::syncFromInventory();
+            return redirect()->route('store-manager.fixed-assets.index')
+                ->with('success', "✅ Successfully synchronized with Store Inventory! {$count} asset(s) updated/created.");
+        } catch (\Throwable $e) {
+            return redirect()->route('store-manager.fixed-assets.index')
+                ->with('error', "Sync failed: " . $e->getMessage());
+        }
     }
 }
