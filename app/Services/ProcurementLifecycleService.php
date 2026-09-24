@@ -40,6 +40,14 @@ class ProcurementLifecycleService
     public function __construct(private ProcurementSmsService $sms) {}
 
     /**
+     * Send notification SMS to a role for a specific PR stage transition.
+     */
+    public function notifyStageRole(int $purchaseRequestId, string $roleName, string $message, ?int $projectId = null, ?int $storeId = null): void
+    {
+        $this->sms->notifyRole($purchaseRequestId, $roleName, $message, $projectId, $storeId);
+    }
+
+    /**
      * Resolve target owner role. If no active users have this role,
      * route to 'global_admin' and log the system fallback.
      */
@@ -112,7 +120,10 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_PROC_MANAGER, 'send_to_procurement_manager', 'store_manager', $notes);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} needs review. Project: {$pr->project?->name}. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} needs review. Project: {$pr->project?->name}. Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -130,7 +141,10 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'send_back_to_store_manager', 'purchase_manager', $reason);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} returned to store. Reason: {$reason}. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} returned to store. Reason: {$reason}. Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
     }
 
     public function sendToProcurementTeam(PurchaseRequest $pr, string $sourcingMethod = 'proforma', string $notes = null): void
@@ -147,7 +161,10 @@ class ProcurementLifecycleService
         
         $methodLabel = $sourcingMethod === 'direct_buy' ? 'Direct Buy (add material prices)' : 'Proforma Sourcing (collect quotes)';
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} assigned for {$methodLabel}. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} assigned for {$methodLabel}. Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -188,7 +205,10 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_MARKETING, 'submit_direct_buy_pricing', 'purchase', $notes);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} needs marketing price variance. Amount: " . number_format($amount, 2) . " ETB. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} needs marketing price variance. Amount: " . number_format($amount, 2) . " ETB. Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
     }
 
     public function submitProformas(PurchaseRequest $pr, string $notes = null): void
@@ -203,7 +223,10 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION, 'submit_proformas', 'purchase', $notes);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} proformas submitted — please review and select. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} proformas submitted — please review and select. Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -228,7 +251,10 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_GM, 'add_marketing_variance', 'market_research', $data['variance_notes'] ?? null);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} awaits your decision (Direct Buy + Marketing Review). Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} awaits your decision (Direct Buy + Marketing Review). Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -251,7 +277,10 @@ class ProcurementLifecycleService
 
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_GM, 'send_proformas_to_gm', 'purchase_manager', $notes);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} awaits your decision with " . count($proformaIds) . " selected proforma quote(s). Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} awaits your decision with " . count($proformaIds) . " selected proforma quote(s). Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
     }
 
     public function gmDecide(
@@ -283,7 +312,15 @@ class ProcurementLifecycleService
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_REJECTED, 'gm_reject', 'gm', $notes);
             $this->sms->notifyRole($pr->id, 'purchase_manager',
-                "ConstructPro: PR #{$pr->pr_no} was REJECTED by GM. Reason: {$notes}. Open: " . url("/purchase-requests/{$pr->id}"));
+                "ConstructPro: PR #{$pr->pr_no} was REJECTED by GM. Reason: {$notes}. Open: " . url("/purchase-requests/{$pr->id}"),
+                $pr->project_id,
+                $pr->store_id
+            );
+            $this->sms->notifyRole($pr->id, 'coordinator',
+                "ConstructPro: PR #{$pr->pr_no} (" . ($pr->project?->name ?? 'Project') . ") was REJECTED by GM. Reason: {$notes}.",
+                $pr->project_id,
+                $pr->store_id
+            );
 
         } elseif ($decision === 'send_back') {
             $pr->update([
@@ -293,7 +330,10 @@ class ProcurementLifecycleService
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_PROC_MANAGER, 'gm_send_back', 'gm', $notes);
             $this->sms->notifyRole($pr->id, 'purchase_manager',
-                "ConstructPro: PR #{$pr->pr_no} returned by GM for revision. Notes: {$notes}. Open: " . url("/purchase-requests/{$pr->id}"));
+                "ConstructPro: PR #{$pr->pr_no} returned by GM for revision. Notes: {$notes}. Open: " . url("/purchase-requests/{$pr->id}"),
+                $pr->project_id,
+                $pr->store_id
+            );
 
         } elseif ($decision === 'approve') {
             // 1. Handle Selected Proforma Quote
@@ -411,7 +451,14 @@ class ProcurementLifecycleService
                 'current_owner_role' => $nextRole,
             ]);
             $this->log($pr, $from, $nextStatus, 'gm_approve_' . $paymentMethod, 'gm', $notes);
-            $this->sms->notifyRole($pr->id, $nextRole, $smsMessage);
+            $this->sms->notifyRole($pr->id, $nextRole, $smsMessage, $pr->project_id, $pr->store_id);
+
+            // Also notify coordinator that GM has approved
+            $this->sms->notifyRole($pr->id, 'coordinator',
+                "ConstructPro: PR #{$pr->pr_no} (" . ($pr->project?->name ?? 'Project') . ") has been APPROVED by GM (" . number_format($finalAmount, 2) . " ETB). Open: " . url("/purchase-requests/{$pr->id}"),
+                $pr->project_id,
+                $pr->store_id
+            );
         }
     }
 
@@ -476,7 +523,10 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'finance_credit_approved_direct_intake', 'finance_head', $notes);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} credit authorized (COA 5110) — ready for Store Keeper material intake. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} credit authorized (COA 5110) — ready for Store Keeper material intake. Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
     }
 
     /**
@@ -552,13 +602,16 @@ class ProcurementLifecycleService
 
         // SMS to the specific staff member assigned
         $staff = \App\Models\User::with('employee')->find($staffUserId);
-        $phone = $staff?->employee?->phone;
+        $phone = $staff ? $this->sms->resolveUserPhone($staff) : null;
         if ($phone) {
             $this->sms->send($pr->id, $phone, 'finance',
                 "ConstructPro: PR #{$pr->pr_no} payment of " . number_format($amount, 2) . " ETB assigned to you. Open: " . url("/purchase-requests/{$pr->id}"));
         } else {
             $this->sms->notifyRole($pr->id, $targetRole,
-                "ConstructPro: PR #{$pr->pr_no} payment of " . number_format($amount, 2) . " ETB assigned for disbursement. Open: " . url("/purchase-requests/{$pr->id}"));
+                "ConstructPro: PR #{$pr->pr_no} payment of " . number_format($amount, 2) . " ETB assigned for disbursement. Open: " . url("/purchase-requests/{$pr->id}"),
+                $pr->project_id,
+                $pr->store_id
+            );
         }
     }
 
@@ -662,7 +715,10 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD, 'finance_staff_paid', 'finance', $notes);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} payment completed (" . number_format($disbursedAmount, 2) . " ETB) — please upload vendor purchase receipt. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} payment completed (" . number_format($disbursedAmount, 2) . " ETB) — please upload vendor purchase receipt. Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -692,7 +748,10 @@ class ProcurementLifecycleService
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'receipt_uploaded_sent_to_store', 'purchase', $notes);
             $this->sms->notifyRole($pr->id, $targetRole,
-                "ConstructPro: PR #{$pr->pr_no} receipt uploaded — please perform material receiving and store intake. Open: " . url("/purchase-requests/{$pr->id}"));
+                "ConstructPro: PR #{$pr->pr_no} receipt uploaded — please perform material receiving and store intake. Open: " . url("/purchase-requests/{$pr->id}"),
+                $pr->project_id,
+                $pr->store_id
+            );
         } else {
             $targetRole = $this->resolveOwnerRole('finance', $pr);
             $pr->update([
@@ -701,7 +760,10 @@ class ProcurementLifecycleService
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY, 'receipt_uploaded', 'purchase', $notes);
             $this->sms->notifyRole($pr->id, $targetRole,
-                "ConstructPro: PR #{$pr->pr_no} receipt uploaded — please verify. Open: " . url("/purchase-requests/{$pr->id}"));
+                "ConstructPro: PR #{$pr->pr_no} receipt uploaded — please verify. Open: " . url("/purchase-requests/{$pr->id}"),
+                $pr->project_id,
+                $pr->store_id
+            );
         }
     }
 
@@ -725,7 +787,10 @@ class ProcurementLifecycleService
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_DRIVER, 'receipt_verified', 'finance', $verificationNotes);
             $this->sms->notifyRole($pr->id, $targetRole,
-                "ConstructPro: PR #{$pr->pr_no} receipt verified — please book a driver for delivery. Open: " . url("/purchase-requests/{$pr->id}"));
+                "ConstructPro: PR #{$pr->pr_no} receipt verified — please book a driver for delivery. Open: " . url("/purchase-requests/{$pr->id}"),
+                $pr->project_id,
+                $pr->store_id
+            );
         } else {
             // Rejected receipt: send back to Procurement Team to re-upload
             $targetRole = $this->resolveOwnerRole('purchase', $pr);
@@ -735,7 +800,10 @@ class ProcurementLifecycleService
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD, 'receipt_rejected', 'finance', $verificationNotes);
             $this->sms->notifyRole($pr->id, $targetRole,
-                "ConstructPro: PR #{$pr->pr_no} receipt rejected — please re-upload. Reason: {$verificationNotes}. Open: " . url("/purchase-requests/{$pr->id}"));
+                "ConstructPro: PR #{$pr->pr_no} receipt rejected — please re-upload. Reason: {$verificationNotes}. Open: " . url("/purchase-requests/{$pr->id}"),
+                $pr->project_id,
+                $pr->store_id
+            );
         }
     }
 
@@ -764,7 +832,26 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'driver_booked', 'general_service', $notes);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} driver booked — please perform final intake once goods arrive. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} driver booked — please perform final intake once goods arrive. Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
+
+        // Notify the assigned driver employee directly
+        try {
+            $driver = \App\Models\Employee::find($driverEmployeeId);
+            if ($driver && !empty($driver->phone)) {
+                $vehInfo = $vehicleNumber ? " (Vehicle: {$vehicleNumber})" : '';
+                $this->sms->send(
+                    $pr->id,
+                    $driver->phone,
+                    'driver',
+                    "ConstructPro: You are assigned driver for PR #{$pr->pr_no}{$vehInfo}. Project: " . ($pr->project?->name ?? 'Site') . ". Notes: " . ($notes ?: 'Please coordinate delivery with Store Keeper.')
+                );
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("ProcurementSMS driver dispatch error: " . $e->getMessage());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1015,19 +1102,28 @@ class ProcurementLifecycleService
             ];
         });
 
-        // 6. Notify Requester / Coordinator
+        // 6. Notify Requester and Coordinator
         $requester = $pr->requestedBy;
-        $phone = $requester?->employee?->phone;
+        $phone = $requester ? $this->sms->resolveUserPhone($requester) : null;
         if ($phone) {
             if ($intakeResult['is_full']) {
-                $this->sms->send($pr->id, $phone, 'coordinator',
+                $this->sms->send($pr->id, $phone, 'requester',
                     "ConstructPro: Your PR #{$pr->pr_no} items have been fully received (Slip #{$intakeResult['slip_no']}) and added to store inventory. Project: {$pr->project?->name}.");
             } else {
                 $remText = implode(', ', $intakeResult['remaining']);
-                $this->sms->send($pr->id, $phone, 'coordinator',
+                $this->sms->send($pr->id, $phone, 'requester',
                     "ConstructPro: Partial delivery received for PR #{$pr->pr_no} under Slip #{$intakeResult['slip_no']}. Remaining balance: {$remText}.");
             }
         }
+
+        // Also notify coordinator role
+        $this->sms->notifyRole(
+            $pr->id,
+            'coordinator',
+            "ConstructPro: PR #{$pr->pr_no} store intake recorded (Slip #{$intakeResult['slip_no']}). Project: {$pr->project?->name}. Status: " . ($intakeResult['is_full'] ? 'Full Delivery' : 'Partial Delivery'),
+            $pr->project_id,
+            $storeId
+        );
 
         return $intakeResult;
     }
@@ -1144,6 +1240,9 @@ class ProcurementLifecycleService
 
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_GM, 'finance_send_back_to_gm', 'finance_head', $reason);
         $this->sms->notifyRole($pr->id, $targetRole,
-            "ConstructPro: PR #{$pr->pr_no} was returned to GM by Finance Head. Reason: {$reason}. Open: " . url("/purchase-requests/{$pr->id}"));
+            "ConstructPro: PR #{$pr->pr_no} was returned to GM by Finance Head. Reason: {$reason}. Open: " . url("/purchase-requests/{$pr->id}"),
+            $pr->project_id,
+            $pr->store_id
+        );
     }
 }

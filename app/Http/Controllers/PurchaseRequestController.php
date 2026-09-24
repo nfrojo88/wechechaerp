@@ -190,7 +190,8 @@ class PurchaseRequestController extends Controller
             'items.*.unit'        => 'required|string|max:20',
         ]);
 
-        DB::transaction(function () use ($request, $isSecretary) {
+        $createdPr = null;
+        DB::transaction(function () use ($request, $isSecretary, &$createdPr) {
             $no = 'PR-' . date('Ymd') . '-' . str_pad(PurchaseRequest::withTrashed()->count() + 1, 4, '0', STR_PAD_LEFT);
 
             $isOfficeRequest = $isSecretary || $request->boolean('is_office_request');
@@ -212,6 +213,7 @@ class PurchaseRequestController extends Controller
 
             $pr = PurchaseRequest::create($prData);
             $pr->update(['current_owner_role' => $this->lifecycle->resolveOwnerRole('coordinator', $pr)]);
+            $createdPr = $pr;
 
             foreach ($request->items as $item) {
                 $prod = Product::find($item['product_id']);
@@ -234,6 +236,17 @@ class PurchaseRequestController extends Controller
                 ]);
             }
         });
+
+        if ($createdPr) {
+            $coordRole = $this->lifecycle->resolveOwnerRole('coordinator', $createdPr);
+            $this->lifecycle->notifyStageRole(
+                $createdPr->id,
+                $coordRole,
+                "ConstructPro: New PR #{$createdPr->pr_no} created for Project: " . ($createdPr->project?->name ?? 'General') . ". Awaiting coordinator review. Open: " . url("/purchase-requests/{$createdPr->id}"),
+                $createdPr->project_id,
+                $createdPr->store_id
+            );
+        }
 
         return redirect()->route('procurement.my-queue')->with('success', 'Purchase Request created successfully.');
     }
@@ -566,10 +579,31 @@ class PurchaseRequestController extends Controller
     public function submit(PurchaseRequest $purchaseRequest)
     {
         $this->authorizeStageRole($purchaseRequest, ['coordinator', 'site_engineer', 'requester', 'store_manager']);
+        $targetRole = $this->lifecycle->resolveOwnerRole('store_manager', $purchaseRequest);
         $purchaseRequest->update([
             'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
-            'current_owner_role' => $this->lifecycle->resolveOwnerRole('store_manager', $purchaseRequest),
+            'current_owner_role' => $targetRole,
         ]);
+
+        \App\Models\PrWorkflowLog::create([
+            'purchase_request_id' => $purchaseRequest->id,
+            'from_stage'          => PurchaseRequest::STATUS_DRAFT,
+            'to_stage'            => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+            'action'              => 'coordinator_submit_to_store',
+            'actor_role'          => 'coordinator',
+            'notes'               => 'Submitted draft PR to Store Manager for stock check.',
+            'actor_id'            => Auth::id(),
+            'created_at'          => now(),
+        ]);
+
+        $this->lifecycle->notifyStageRole(
+            $purchaseRequest->id,
+            $targetRole,
+            "ConstructPro: PR #{$purchaseRequest->pr_no} submitted by Coordinator for Project: " . ($purchaseRequest->project?->name ?? 'General') . ". Awaiting store inventory review. Open: " . url("/purchase-requests/{$purchaseRequest->id}"),
+            $purchaseRequest->project_id,
+            $purchaseRequest->store_id
+        );
+
         return back()->with('success', 'Purchase Request submitted to Store Manager.');
     }
 
@@ -667,6 +701,18 @@ class PurchaseRequestController extends Controller
 
         if (!$createdTransfer || $transferredCount === 0) {
             return back()->with('error', 'No valid items were selected for transfer.');
+        }
+
+        // Notify Store Keeper of target store
+        if ($createdTransfer) {
+            $toStore = Store::find($request->to_store_id);
+            $this->lifecycle->notifyStageRole(
+                $purchaseRequest->id,
+                'store_keeper',
+                "ConstructPro: Store Transfer {$createdTransfer->transfer_no} created for PR #{$purchaseRequest->pr_no} (" . ($purchaseRequest->project?->name ?? 'Project') . ") to store '" . ($toStore?->name ?? 'Store') . "'.",
+                $purchaseRequest->project_id,
+                $request->to_store_id
+            );
         }
 
         $remaining = $purchaseRequest->fresh()->items()->count();
@@ -943,6 +989,16 @@ class PurchaseRequestController extends Controller
                 'created_at'          => now(),
             ]);
         });
+
+        if ($newPr) {
+            $this->lifecycle->notifyStageRole(
+                $newPr->id,
+                'store_manager',
+                "ConstructPro: PR #{$newPr->pr_no} (" . count($itemIds) . " items) returned by Procurement Manager to Store. Reason: " . $request->reason . ". Open: " . url("/purchase-requests/{$newPr->id}"),
+                $newPr->project_id,
+                $newPr->store_id
+            );
+        }
 
         return back()->with('success', "Selected " . count($itemIds) . " item(s) split into PR #{$newPr->pr_no} and returned to Store Manager!");
     }
@@ -1363,6 +1419,15 @@ class PurchaseRequestController extends Controller
             'performed_by'        => auth()->id(),
             'performed_at'        => now(),
         ]);
+
+        $targetFinanceRole = $this->lifecycle->resolveOwnerRole('finance_head', $purchaseRequest);
+        $this->lifecycle->notifyStageRole(
+            $purchaseRequest->id,
+            $targetFinanceRole,
+            "ConstructPro: PR #{$purchaseRequest->pr_no} (" . number_format($finalAmount, 2) . " ETB) forwarded directly to Finance by " . auth()->user()->name . ". Open: " . url("/purchase-requests/{$purchaseRequest->id}"),
+            $purchaseRequest->project_id,
+            $purchaseRequest->store_id
+        );
 
         return back()->with('success', "PR #{$purchaseRequest->pr_no} (ETB " . number_format($finalAmount, 2) . ") sent directly to Finance Head for payment assignment. It now appears in the Expense section.");
     }

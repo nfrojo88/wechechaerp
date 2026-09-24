@@ -3,29 +3,35 @@
 namespace App\Services;
 
 use App\Models\ProcurementSmsLog;
+use App\Models\User;
+use App\Models\Employee;
+use App\Models\Project;
+use App\Models\Store;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Procurement SMS Service
  * 
- * Sends SMS notifications at each procurement lifecycle stage transition.
- * Uses Africa's Talking gateway (configurable via .env).
- * Falls back gracefully if credentials are not set.
+ * Sends real SMS notifications at each procurement lifecycle stage transition.
+ * Uses AfroMessage gateway (via SmsEthiopiaService) for verified Ethiopian SMS delivery.
+ * Falls back gracefully to Africa's Talking or simulated log if offline.
  */
 class ProcurementSmsService
 {
-    private string $apiKey;
-    private string $username;
-    private string $shortcode;
-    private bool   $enabled;
+    private SmsEthiopiaService $ethiopiaSms;
+    private string $atApiKey;
+    private string $atUsername;
+    private string $atShortcode;
+    private bool   $atEnabled;
 
-    public function __construct()
+    public function __construct(?SmsEthiopiaService $ethiopiaSms = null)
     {
-        $this->apiKey    = config('services.africastalking.api_key', '');
-        $this->username  = config('services.africastalking.username', 'sandbox');
-        $this->shortcode = config('services.africastalking.shortcode', '');
-        $this->enabled   = !empty($this->apiKey) && config('services.africastalking.enabled', false);
+        $this->ethiopiaSms = $ethiopiaSms ?? app(SmsEthiopiaService::class);
+        $this->atApiKey    = config('services.africastalking.api_key', '');
+        $this->atUsername  = config('services.africastalking.username', 'sandbox');
+        $this->atShortcode = config('services.africastalking.shortcode', '');
+        $this->atEnabled   = !empty($this->atApiKey) && config('services.africastalking.enabled', false);
     }
 
     /**
@@ -43,36 +49,61 @@ class ProcurementSmsService
             return;
         }
 
+        $formattedPhone = $this->normalizePhone($phone);
         $status = 'failed';
         $error  = null;
 
-        if ($this->enabled) {
-            try {
-                $response = $this->dispatchViaAfricasTalking($phone, $message);
-                $status   = $response ? 'sent' : 'failed';
-            } catch (\Throwable $e) {
-                $error = $e->getMessage();
-                Log::error("ProcurementSMS error: {$error}");
+        // 1. Primary gateway: AfroMessage (SmsEthiopiaService)
+        try {
+            $response = $this->ethiopiaSms->sendMessage($formattedPhone, $message);
+            if (!empty($response['success'])) {
+                $status = 'sent';
+                Log::info("ProcurementSMS sent via AfroMessage to {$formattedPhone} [{$recipientRole}] on PR #{$purchaseRequestId}");
+            } else {
+                $error = is_array($response['error'] ?? null)
+                    ? json_encode($response['error'])
+                    : ($response['message'] ?? 'AfroMessage dispatch failed');
+                Log::warning("ProcurementSMS AfroMessage failed for {$formattedPhone}: {$error}");
             }
-        } else {
-            // When not configured, log the message for debugging
-            Log::info("ProcurementSMS [SIMULATED] → {$phone} | {$recipientRole} | {$message}");
-            $status = 'sent'; // simulate success in dev
+        } catch (\Throwable $e) {
+            $error = 'AfroMessage exception: ' . $e->getMessage();
+            Log::error("ProcurementSMS AfroMessage error: {$error}");
         }
 
-        // Always log to DB for traceability
+        // 2. Fallback gateway: Africa's Talking (if enabled and AfroMessage didn't succeed)
+        if ($status !== 'sent' && $this->atEnabled) {
+            try {
+                $atResult = $this->dispatchViaAfricasTalking($formattedPhone, $message);
+                if ($atResult) {
+                    $status = 'sent';
+                    $error = null;
+                    Log::info("ProcurementSMS sent via Africa's Talking fallback to {$formattedPhone} [{$recipientRole}]");
+                }
+            } catch (\Throwable $e) {
+                $error = ($error ? $error . ' | ' : '') . 'AT error: ' . $e->getMessage();
+                Log::error("ProcurementSMS AT fallback error: " . $e->getMessage());
+            }
+        }
+
+        // 3. Fallback simulation log if neither gateway succeeded
+        if ($status !== 'sent' && empty($error)) {
+            Log::info("ProcurementSMS [SIMULATED] → {$formattedPhone} | {$recipientRole} | {$message}");
+            $status = 'sent';
+        }
+
+        // 4. Always log to DB for traceability
         try {
             DB::table('procurement_sms_logs')->insert([
                 'purchase_request_id' => $purchaseRequestId,
-                'recipient_phone'     => $phone,
-                'recipient_role'      => $recipientRole,
+                'recipient_phone'     => substr($formattedPhone, 0, 30),
+                'recipient_role'      => substr($recipientRole, 0, 60),
                 'message'             => $message,
                 'status'              => $status,
                 'error_message'       => $error,
                 'sent_at'             => now(),
             ]);
         } catch (\Throwable $e) {
-            Log::error("ProcurementSMS DB log failed: " . $e->getMessage());
+            Log::error("ProcurementSMS DB log insert failed: " . $e->getMessage());
         }
     }
 
@@ -81,12 +112,18 @@ class ProcurementSmsService
      * If someone is assigned to that role, sends to that person's phone.
      * If no one is assigned to that role (or no phone found), automatically routes
      * the notification SMS to the phone of the person assigned to the global_admin role.
+     *
+     * @param int         $purchaseRequestId
+     * @param string      $roleName
+     * @param string      $message
+     * @param int|null    $projectId Optional project ID for project-specific coordinators/engineers
+     * @param int|null    $storeId   Optional store ID for store-specific managers/keepers
      */
-    public function notifyRole(int $purchaseRequestId, string $roleName, string $message): void
+    public function notifyRole(int $purchaseRequestId, string $roleName, string $message, ?int $projectId = null, ?int $storeId = null): void
     {
         try {
             // 1. Find phones for users assigned to this role
-            $targetPhones = $this->getPhoneNumbersForRole($roleName);
+            $targetPhones = $this->getPhoneNumbersForRole($roleName, $projectId, $storeId);
 
             if (!empty($targetPhones)) {
                 // Someone is assigned to that role -> send to their phone
@@ -121,9 +158,36 @@ class ProcurementSmsService
     }
 
     /**
-     * Get phone numbers for all users assigned to the specified role.
+     * Send SMS directly to a specific User.
      */
-    public function getPhoneNumbersForRole(string $roleName): array
+    public function sendToUser(int $purchaseRequestId, User $user, string $recipientRole, string $message): void
+    {
+        $phone = $this->resolveUserPhone($user);
+        if ($phone) {
+            $this->send($purchaseRequestId, $phone, $recipientRole, $message);
+        } else {
+            $this->notifyRole($purchaseRequestId, $recipientRole, $message);
+        }
+    }
+
+    /**
+     * Send SMS directly to a specific Employee.
+     */
+    public function sendToEmployee(int $purchaseRequestId, Employee $employee, string $recipientRole, string $message): void
+    {
+        $phone = $employee->phone;
+        if (!empty($phone)) {
+            $this->send($purchaseRequestId, $this->normalizePhone($phone), $recipientRole, $message);
+        } else {
+            $this->notifyRole($purchaseRequestId, $recipientRole, $message);
+        }
+    }
+
+    /**
+     * Get phone numbers for all users assigned to the specified role.
+     * Optionally scoped by project or store for location-specific assignments.
+     */
+    public function getPhoneNumbersForRole(string $roleName, ?int $projectId = null, ?int $storeId = null): array
     {
         $aliases = [
             'purchase_manager' => ['purchase_manager', 'Purchase Manager', 'Procurement Manager', 'procurement_manager'],
@@ -133,25 +197,58 @@ class ProcurementSmsService
             'store_manager'    => ['store_manager', 'Store Manager', 'store', 'Store'],
             'store_keeper'     => ['store_keeper', 'Store Keeper', 'storekeeper', 'Storekeeper', 'store_clerk'],
             'finance_head'     => ['finance_head', 'Finance Head', 'finance_manager', 'Finance Manager', 'cfo', 'CFO'],
-            'finance'          => ['finance', 'Finance', 'accountant', 'Accountant', 'finance_staff'],
+            'finance'          => ['finance', 'Finance', 'accountant', 'Accountant', 'finance_staff', 'cashier', 'Cashier'],
             'general_service'  => ['general_service', 'General Service', 'dispatcher', 'fleet_manager'],
-            'coordinator'      => ['coordinator', 'Coordinator', 'project_coordinator', 'site_coordinator'],
+            'coordinator'      => ['coordinator', 'Coordinator', 'project_coordinator', 'site_coordinator', 'site_engineer'],
             'planning'         => ['planning', 'Planning', 'planning_manager', 'Planning Manager'],
             'global_admin'     => ['global_admin', 'admin', 'Global Admin', 'Admin'],
         ];
 
         $rolesToCheck = $aliases[$roleName] ?? [$roleName];
+        $phones = [];
 
         try {
-            $users = \App\Models\User::whereHas('roles', fn($q) => $q->whereIn('name', $rolesToCheck))
-                ->with('employee')
-                ->get();
+            // A. If Project is specified and checking coordinator / site engineer:
+            if ($projectId && in_array($roleName, ['coordinator', 'site_engineer'])) {
+                $project = Project::with(['users' => fn($q) => $q->whereHas('roles', fn($r) => $r->whereIn('name', $rolesToCheck))])->find($projectId);
+                if ($project && $project->users->isNotEmpty()) {
+                    foreach ($project->users as $u) {
+                        $p = $this->resolveUserPhone($u);
+                        if ($p) $phones[] = $p;
+                    }
+                }
+            }
 
-            $phones = [];
-            foreach ($users as $user) {
-                $phone = $this->resolveUserPhone($user);
-                if ($phone) {
-                    $phones[] = $phone;
+            // B. If Store is specified and checking store_manager / store_keeper:
+            if ($storeId && in_array($roleName, ['store_manager', 'store_keeper'])) {
+                $store = Store::with(['manager', 'users'])->find($storeId);
+                if ($store) {
+                    if ($roleName === 'store_manager' && $store->manager) {
+                        $p = $this->resolveUserPhone($store->manager);
+                        if ($p) $phones[] = $p;
+                    }
+                    if ($store->users && $store->users->isNotEmpty()) {
+                        foreach ($store->users as $su) {
+                            if ($su->roles()->whereIn('name', $rolesToCheck)->exists()) {
+                                $p = $this->resolveUserPhone($su);
+                                if ($p) $phones[] = $p;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // C. General role match (all active users assigned this role across the system)
+            if (empty($phones)) {
+                $users = User::whereHas('roles', fn($q) => $q->whereIn('name', $rolesToCheck))
+                    ->with('employee')
+                    ->get();
+
+                foreach ($users as $user) {
+                    $phone = $this->resolveUserPhone($user);
+                    if ($phone) {
+                        $phones[] = $phone;
+                    }
                 }
             }
 
@@ -163,27 +260,42 @@ class ProcurementSmsService
     }
 
     /**
-     * Resolve phone for a given User from Employee records.
+     * Resolve phone for a given User from User or Employee records.
      */
-    public function resolveUserPhone(\App\Models\User $user): ?string
+    public function resolveUserPhone(User $user): ?string
     {
-        // 1. Direct employee relation
-        $phone = $user->employee?->phone;
+        // 1. Direct user phone attribute (if defined on User model)
+        $phone = $user->phone ?? null;
 
-        // 2. Query Employee table by user_id
+        // 2. Direct employee relation
         if (empty($phone)) {
-            $phone = \App\Models\Employee::where('user_id', $user->id)
+            $phone = $user->employee?->phone;
+        }
+
+        // 3. Query Employee table by user_id
+        if (empty($phone)) {
+            $phone = Employee::where('user_id', $user->id)
                 ->whereNotNull('phone')
                 ->where('phone', '!=', '')
                 ->value('phone');
         }
 
-        // 3. Match Employee table by email
+        // 4. Match Employee table by email
         if (empty($phone) && !empty($user->email)) {
-            $phone = \App\Models\Employee::where('email', $user->email)
+            $phone = Employee::where('email', $user->email)
                 ->whereNotNull('phone')
                 ->where('phone', '!=', '')
                 ->value('phone');
+        }
+
+        // 5. Match Employee table by name
+        if (empty($phone) && !empty($user->name)) {
+            $phone = Employee::where(function($q) use ($user) {
+                $q->where('full_name', $user->name)
+                  ->orWhere('first_name', $user->name);
+            })->whereNotNull('phone')
+              ->where('phone', '!=', '')
+              ->value('phone');
         }
 
         return !empty($phone) ? $this->normalizePhone($phone) : null;
@@ -193,12 +305,12 @@ class ProcurementSmsService
     {
         $url  = 'https://api.africastalking.com/version1/messaging';
         $data = [
-            'username' => $this->username,
+            'username' => $this->atUsername,
             'to'       => $phone,
             'message'  => $message,
         ];
-        if ($this->shortcode) {
-            $data['from'] = $this->shortcode;
+        if ($this->atShortcode) {
+            $data['from'] = $this->atShortcode;
         }
 
         $ch = curl_init($url);
@@ -207,7 +319,7 @@ class ProcurementSmsService
             CURLOPT_POSTFIELDS     => http_build_query($data),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER     => [
-                'apiKey: ' . $this->apiKey,
+                'apiKey: ' . $this->atApiKey,
                 'Accept: application/json',
                 'Content-Type: application/x-www-form-urlencoded',
             ],
@@ -225,15 +337,15 @@ class ProcurementSmsService
         return true;
     }
 
-    private function normalizePhone(string $phone): string
+    public function normalizePhone(string $phone): string
     {
         $phone = preg_replace('/[^0-9+]/', '', $phone);
-        // Ethiopian numbers: starts with 09 → +2519
-        if (str_starts_with($phone, '09') && strlen($phone) === 10) {
+        // Ethiopian numbers: starts with 09 or 07 → +2519 or +2517
+        if ((str_starts_with($phone, '09') || str_starts_with($phone, '07')) && strlen($phone) === 10) {
             $phone = '+251' . substr($phone, 1);
-        }
-        // Already international
-        if (!str_starts_with($phone, '+')) {
+        } elseif (str_starts_with($phone, '251') && strlen($phone) === 12) {
+            $phone = '+' . $phone;
+        } elseif (!str_starts_with($phone, '+')) {
             $phone = '+' . $phone;
         }
         return $phone;
