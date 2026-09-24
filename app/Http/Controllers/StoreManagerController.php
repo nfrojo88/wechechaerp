@@ -2040,6 +2040,153 @@ class StoreManagerController extends Controller
     }
 
     /**
+     * Get detailed stock movements and manual adjustments history for a product.
+     */
+    public function productMovementHistory(Request $request, Product $product)
+    {
+        $storeId = $request->query('store_id');
+
+        $inventories = Inventory::where('product_id', $product->id)
+            ->when($storeId, fn($q) => $q->where('store_id', $storeId))
+            ->with('store')
+            ->get();
+
+        $inventoryIds = $inventories->pluck('id')->toArray();
+
+        $rawMovements = InventoryMovement::whereIn('inventory_id', $inventoryIds)
+            ->with(['inventory.store', 'performer'])
+            ->latest('created_at')
+            ->latest('id')
+            ->get();
+
+        $movements = $rawMovements->map(function ($m) use ($product) {
+            $type = strtolower($m->type ?? 'movement');
+            $qty = (float) $m->quantity;
+            $isPositive = $qty > 0;
+
+            // Determine friendly label, badge class, and icon
+            switch ($type) {
+                case 'in':
+                case 'purchase_intake':
+                case 'grn':
+                    $typeLabel = 'Stock Intake / GRN';
+                    $badgeClass = 'success';
+                    $icon = 'fa-arrow-down';
+                    break;
+                case 'transfer_in':
+                    $typeLabel = 'Transfer Received';
+                    $badgeClass = 'primary';
+                    $icon = 'fa-truck-arrow-right';
+                    break;
+                case 'transfer_out':
+                    $typeLabel = 'Transfer Dispatched';
+                    $badgeClass = 'info text-dark';
+                    $icon = 'fa-truck-ramp-box';
+                    break;
+                case 'out':
+                case 'issue':
+                case 'dispatch':
+                    $typeLabel = 'Stock Issue / Dispatch';
+                    $badgeClass = 'danger';
+                    $icon = 'fa-arrow-up';
+                    break;
+                case 'usage':
+                case 'material_usage':
+                    $typeLabel = 'Material Usage';
+                    $badgeClass = 'danger';
+                    $icon = 'fa-hammer';
+                    break;
+                case 'adjustment':
+                    $typeLabel = 'Manual Adjustment';
+                    $badgeClass = 'warning text-dark';
+                    $icon = 'fa-sliders';
+                    break;
+                case 'return':
+                    $typeLabel = 'Return to Store';
+                    $badgeClass = 'secondary';
+                    $icon = 'fa-rotate-left';
+                    break;
+                default:
+                    $typeLabel = ucfirst(str_replace('_', ' ', $type));
+                    $badgeClass = $isPositive ? 'success' : 'danger';
+                    $icon = 'fa-exchange-alt';
+                    break;
+            }
+
+            // Extract document / reference number if available
+            $refNo = null;
+            if ($m->reference_type && $m->reference_id) {
+                try {
+                    $refModel = $m->reference;
+                    if ($refModel) {
+                        $refNo = $refModel->transfer_no ?? $refModel->pr_no ?? $refModel->receipt_no ?? $refModel->reference_number ?? ('#' . $m->reference_id);
+                    }
+                } catch (\Throwable $e) {
+                    $refNo = '#' . $m->reference_id;
+                }
+            }
+            if (!$refNo && !empty($m->remarks)) {
+                if (preg_match('/(TR-[A-Za-z0-9\-]+|PR-[A-Za-z0-9\-]+|MR-[A-Za-z0-9\-]+|Slip:\s*([A-Za-z0-9\-]+)|#([A-Za-z0-9\-]+))/i', $m->remarks, $matches)) {
+                    $refNo = $matches[1] ?? $matches[0];
+                }
+            }
+
+            $isManualAdjustment = ($type === 'adjustment'
+                || stripos($m->remarks ?? '', 'adjustment') !== false
+                || stripos($m->reference_type ?? '', 'manual') !== false);
+
+            return [
+                'id'                 => $m->id,
+                'created_at'         => $m->created_at ? $m->created_at->format('M d, Y h:i A') : '—',
+                'created_at_human'   => $m->created_at ? $m->created_at->diffForHumans() : '',
+                'store_id'           => $m->inventory?->store_id,
+                'store_name'         => $m->inventory?->store?->name ?? 'N/A',
+                'store_type'         => ucfirst($m->inventory?->store?->type ?? 'Site Store'),
+                'type'               => $type,
+                'type_label'         => $typeLabel,
+                'badge_class'        => $badgeClass,
+                'icon'               => $icon,
+                'quantity'           => $qty,
+                'quantity_formatted' => ($isPositive ? '+' : '') . number_format($qty, 3) . ' ' . ($product->unit ?? 'pcs'),
+                'is_positive'        => $isPositive,
+                'reference_no'       => $refNo ?: '—',
+                'reference_type'     => class_basename($m->reference_type ?? ''),
+                'performed_by'       => $m->performer?->name ?? 'System',
+                'remarks'            => $m->remarks ?: '—',
+                'is_adjustment'      => $isManualAdjustment,
+            ];
+        });
+
+        $adjustments = $movements->filter(fn($m) => $m['is_adjustment'])->values();
+
+        $totalOnHand = (float) $inventories->sum('quantity_on_hand');
+        $totalReserved = (float) $inventories->sum('quantity_reserved');
+        $totalAvailable = max(0, $totalOnHand - $totalReserved);
+
+        return response()->json([
+            'success'     => true,
+            'product'     => [
+                'id'              => $product->id,
+                'name'            => $product->name,
+                'code'            => $product->code,
+                'unit'            => $product->unit ?? 'pcs',
+                'category'        => $product->category ?? 'General Material',
+                'total_on_hand'   => number_format($totalOnHand, 3),
+                'total_reserved'  => number_format($totalReserved, 3),
+                'total_available' => number_format($totalAvailable, 3),
+            ],
+            'summary'     => [
+                'total_movements'   => $movements->count(),
+                'total_adjustments' => $adjustments->count(),
+                'total_in'          => (float) $movements->where('quantity', '>', 0)->sum('quantity'),
+                'total_out'         => (float) abs($movements->where('quantity', '<', 0)->sum('quantity')),
+            ],
+            'movements'   => $movements->values(),
+            'adjustments' => $adjustments->values(),
+        ]);
+    }
+
+    /**
      * Helper method for safe execution
      */
     private function safe(callable $fn, $default = null)
