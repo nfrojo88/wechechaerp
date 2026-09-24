@@ -49,18 +49,29 @@ class AttendanceController extends Controller
             });
         }
 
-        // Filter by status or only records with punches added
+        // Filter by status or only records with punches added / site deployments
         if (request('status')) {
-            $query->where('status', request('status'));
+            if (request('status') === 'site' || request('status') === 'S') {
+                $query->where(function ($q) {
+                    $q->whereIn('status', ['site', 'S', 's', 'on_site'])
+                      ->orWhere('source', 'site_dispatch')
+                      ->orWhere('notes', 'like', '%On-Site%');
+                });
+            } else {
+                $query->where('status', request('status'));
+            }
         } elseif (!request()->has('show_all')) {
-            // "if not added don't show in attendance section": only show records with actual clock times
+            // "if not added don't show in attendance section": only show records with actual clock times OR on-site deployments
             $query->where(function ($q) {
                 $q->whereNotNull('morning_in')
                   ->orWhereNotNull('morning_out')
                   ->orWhereNotNull('afternoon_in')
                   ->orWhereNotNull('afternoon_out')
                   ->orWhereNotNull('check_in')
-                  ->orWhereNotNull('check_out');
+                  ->orWhereNotNull('check_out')
+                  ->orWhereIn('status', ['site', 'S', 's', 'on_site'])
+                  ->orWhere('source', 'site_dispatch')
+                  ->orWhere('notes', 'like', '%On-Site%');
             });
         }
 
@@ -179,8 +190,17 @@ class AttendanceController extends Controller
             'title'     => $statsTitle,
             'et_title'  => $statsEt,
             'present'   => (clone $statsQuery)->where('status', 'present')->count(),
+            'site'      => (clone $statsQuery)->where(function($q) {
+                $q->whereIn('status', ['site', 'S', 's', 'on_site'])
+                  ->orWhere('source', 'site_dispatch')
+                  ->orWhere('notes', 'like', '%On-Site%');
+            })->count(),
             'half_day'  => (clone $statsQuery)->where('status', 'half_day')->count(),
-            'absent'    => (clone $statsQuery)->where('status', 'absent')->count(),
+            'absent'    => (clone $statsQuery)->where('status', 'absent')
+                                              ->whereNotIn('status', ['site', 'S', 's', 'on_site'])
+                                              ->where(function($q) {
+                                                  $q->whereNull('notes')->orWhere('notes', 'not like', '%On-Site%');
+                                              })->count(),
             'leave'     => (clone $statsQuery)->where('status', 'leave')->count(),
         ];
 
@@ -203,80 +223,268 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Record Site Attendance when employee goes to a construction site.
-     * (Employee is on-site so not captured by office biometric device).
+     * Check if the authenticated user has permission to dispatch employees to site.
+     * Authorized: Planning Manager, Coordinator, Finance Head, HR, HR Officer, GM, Admin, Global Admin.
+     */
+    public static function canDeployToSite($user = null): bool
+    {
+        $user = $user ?: auth()->user();
+        if (!$user) return false;
+
+        $allowedRoles = [
+            'planning_manager', 'planning', 'technical_manager',
+            'coordinator', 'project_coordinator',
+            'finance_head', 'finance_manager', 'finance',
+            'hr', 'hr_manager', 'hr_officer',
+            'gm', 'general_manager',
+            'global_admin', 'admin', 'project_manager'
+        ];
+
+        return $user->hasAnyRole($allowedRoles) || (method_exists($user, 'can') && $user->can('attendance.manage'));
+    }
+
+    /**
+     * Dedicated Report & Dispatch Management Page for Site Deployments.
+     * Visible to HR, HR Officer, Planning Manager, Coordinator, Finance Head, and GM.
+     */
+    public function siteDeployments(Request $request)
+    {
+        if (!self::canDeployToSite()) {
+            abort(403, 'Unauthorized access. Only Planning Manager, Coordinator, Finance Head, HR, and GM can view or manage site deployments.');
+        }
+
+        $query = Attendance::with(['employee', 'decidedBy', 'siteProject'])
+            ->where(function ($q) {
+                $q->whereIn('status', ['S', 'site', 's', 'on_site'])
+                  ->orWhere('source', 'site_dispatch')
+                  ->orWhere('notes', 'like', '%On-Site%');
+            })
+            ->latest('attendance_date');
+
+        if ($request->filled('employee_id')) {
+            $query->where('employee_id', $request->employee_id);
+        }
+        if ($request->filled('project_id')) {
+            $query->where(function($q) use ($request) {
+                $q->where('site_project_id', $request->project_id)
+                  ->orWhere('notes', 'like', "%Project ID #{$request->project_id}%");
+            });
+        }
+        if ($request->filled('decided_by')) {
+            $query->where('decided_by', $request->decided_by);
+        }
+        if ($request->filled('date_from')) {
+            $query->whereDate('attendance_date', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('attendance_date', '<=', $request->date_to);
+        }
+
+        $deployments = $query->paginate(30)->withQueryString();
+
+        // Summary statistics for HR & management
+        $todayStr = today()->toDateString();
+        $thisMonth = today()->month;
+        $thisYear  = today()->year;
+
+        $stats = [
+            'today_count' => Attendance::whereDate('attendance_date', $todayStr)
+                ->where(function($q) {
+                    $q->whereIn('status', ['S', 'site', 's', 'on_site'])
+                      ->orWhere('notes', 'like', '%On-Site%');
+                })->count(),
+            'month_count' => Attendance::whereYear('attendance_date', $thisYear)
+                ->whereMonth('attendance_date', $thisMonth)
+                ->where(function($q) {
+                    $q->whereIn('status', ['S', 'site', 's', 'on_site'])
+                      ->orWhere('notes', 'like', '%On-Site%');
+                })->count(),
+            'total_count' => Attendance::where(function($q) {
+                    $q->whereIn('status', ['S', 'site', 's', 'on_site'])
+                      ->orWhere('notes', 'like', '%On-Site%');
+                })->count(),
+            'distinct_employees' => Attendance::where(function($q) {
+                    $q->whereIn('status', ['S', 'site', 's', 'on_site'])
+                      ->orWhere('notes', 'like', '%On-Site%');
+                })->distinct('employee_id')->count('employee_id'),
+        ];
+
+        $employees = Employee::where('status', 'active')->orderBy('full_name')->get();
+        $projects  = \App\Models\Project::orderBy('name')->get();
+        $decidedUsers = \App\Models\User::whereHas('roles', function($r) {
+            $r->whereIn('name', [
+                'planning_manager', 'planning', 'coordinator', 'finance_head',
+                'finance_manager', 'hr', 'hr_manager', 'hr_officer', 'gm',
+                'general_manager', 'admin', 'global_admin'
+            ]);
+        })->orderBy('name')->get();
+
+        return view('hr.attendance.site_deployments', compact(
+            'deployments', 'stats', 'employees', 'projects', 'decidedUsers'
+        ));
+    }
+
+    /**
+     * Record Site Attendance when Planning Manager, Coordinator, Finance Head, HR, or GM
+     * sends an employee to a construction site.
+     * Sets status to 'S', non-deductible in payroll, and records who decided it.
      */
     public function recordSiteAttendance(Request $request)
     {
+        if (!self::canDeployToSite()) {
+            abort(403, 'Unauthorized access. Only Planning Manager, Coordinator, Finance Head, HR, and GM can dispatch employees to site.');
+        }
+
         $validated = $request->validate([
-            'employee_id'    => 'required|exists:employees,id',
+            'employee_id'    => 'nullable|exists:employees,id',
+            'employee_ids'   => 'nullable|array',
+            'employee_ids.*' => 'exists:employees,id',
             'project_id'     => 'nullable|exists:projects,id',
             'site_name'      => 'nullable|string|max:255',
-            'attendance_date'=> 'required|date',
-            'task_notes'     => 'nullable|string|max:255',
+            'attendance_date'=> 'nullable|date',
+            'start_date'     => 'nullable|date',
+            'end_date'       => 'nullable|date',
+            'task_notes'     => 'nullable|string|max:500',
             'hours_worked'   => 'nullable|numeric|min:1|max:24',
         ]);
 
-        $employee = Employee::findOrFail($validated['employee_id']);
-        $date     = $validated['attendance_date'];
-        $hours    = (float) ($validated['hours_worked'] ?? 8.0);
+        // Support both single employee and multiple employees array
+        $employeeIds = [];
+        if (!empty($validated['employee_ids'])) {
+            $employeeIds = array_filter($validated['employee_ids']);
+        }
+        if (!empty($validated['employee_id'])) {
+            $employeeIds[] = $validated['employee_id'];
+        }
+        $employeeIds = array_unique($employeeIds);
+
+        if (empty($employeeIds)) {
+            return redirect()->back()->with('error', 'Please select at least one employee to dispatch to site.');
+        }
+
+        // Determine date range (supports single date or start to end range)
+        $startDateStr = $validated['start_date'] ?: ($validated['attendance_date'] ?: today()->toDateString());
+        $endDateStr   = $validated['end_date'] ?: $startDateStr;
+
+        try {
+            $start = Carbon::parse($startDateStr);
+            $end   = Carbon::parse($endDateStr);
+            if ($start->gt($end)) {
+                $temp = $start;
+                $start = $end;
+                $end = $temp;
+            }
+        } catch (\Throwable $e) {
+            $start = today();
+            $end   = today();
+        }
 
         $projectName = 'Job Site';
+        $siteProjectId = null;
         if (!empty($validated['project_id'])) {
             $proj = \App\Models\Project::find($validated['project_id']);
             if ($proj) {
                 $projectName = $proj->name;
+                $siteProjectId = $proj->id;
             }
         } elseif (!empty($validated['site_name'])) {
             $projectName = trim($validated['site_name']);
         }
 
-        $note = "On-Site: {$projectName}" . (!empty($validated['task_notes']) ? " ({$validated['task_notes']})" : "");
+        // Capture who decided this deployment
+        $user = auth()->user();
+        $decidedByName = $user ? $user->name : 'Authorized Manager';
+        $userRole = $user && $user->roles->first() ? $user->roles->first()->name : 'manager';
+        $decidedByRoleLabel = ucwords(str_replace('_', ' ', $userRole));
 
         $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
-        $dateCarbon = \Carbon\Carbon::parse($date);
-        $isSaturday = $dateCarbon->isSaturday();
+        $totalCreated = 0;
 
-        if ($isSaturday) {
-            $mIn   = $workSchedule['sat_morning_in'] ?? '08:30';
-            $mOut  = $workSchedule['sat_morning_out'] ?? '12:30';
-            $aIn   = null;
-            $aOut  = null;
-            $cIn   = $mIn;
-            $cOut  = $mOut;
-            $hours = (float)($workSchedule['sat_total_hours'] ?? 4.0);
-        } else {
-            $mIn   = $workSchedule['morning_in'] ?? '08:30';
-            $mOut  = $workSchedule['morning_out'] ?? '12:30';
-            $aIn   = $workSchedule['afternoon_in'] ?? '13:30';
-            $aOut  = $workSchedule['afternoon_out'] ?? '17:30';
-            $cIn   = $mIn;
-            $cOut  = $aOut;
-            $hours = (float)($workSchedule['total_hours'] ?? 8.0);
+        $currentDate = $start->copy();
+        while ($currentDate->lte($end)) {
+            $dateStr = $currentDate->toDateString();
+            $isSunday = $currentDate->isSunday();
+            $isSaturday = $currentDate->isSaturday();
+
+            // Skip Sundays (standard company rest day) unless it is a single-day explicit submission
+            if ($isSunday && $start->ne($end)) {
+                $currentDate->addDay();
+                continue;
+            }
+
+            if ($isSaturday) {
+                $mIn   = $workSchedule['sat_morning_in'] ?? '08:30';
+                $mOut  = $workSchedule['sat_morning_out'] ?? '12:30';
+                $aIn   = null;
+                $aOut  = null;
+                $cIn   = $mIn;
+                $cOut  = $mOut;
+                $hours = (float)($validated['hours_worked'] ?? ($workSchedule['sat_total_hours'] ?? 4.0));
+            } else {
+                $mIn   = $workSchedule['morning_in'] ?? '08:30';
+                $mOut  = $workSchedule['morning_out'] ?? '12:30';
+                $aIn   = $workSchedule['afternoon_in'] ?? '13:30';
+                $aOut  = $workSchedule['afternoon_out'] ?? '17:30';
+                $cIn   = $mIn;
+                $cOut  = $aOut;
+                $hours = (float)($validated['hours_worked'] ?? ($workSchedule['total_hours'] ?? 8.0));
+            }
+
+            $taskDesc = !empty($validated['task_notes']) ? $validated['task_notes'] : 'On-Site Duty';
+            $formattedNote = "On-Site [S]: {$projectName} | Task: {$taskDesc} | Decided by: {$decidedByName} ({$decidedByRoleLabel})";
+
+            foreach ($employeeIds as $empId) {
+                $data = [
+                    'status'         => 'S', // Using 'S' for site attendance, non-deductible in payroll
+                    'source'         => 'site_dispatch',
+                    'morning_in'     => $mIn,
+                    'morning_out'    => $mOut,
+                    'afternoon_in'   => $aIn,
+                    'afternoon_out'  => $aOut,
+                    'check_in'       => $cIn,
+                    'check_out'      => $cOut,
+                    'hours_worked'   => $hours,
+                    'notes'          => $formattedNote,
+                    'is_approved'    => true,
+                    'approved_by'    => $user?->id,
+                ];
+
+                // If schema supports extended site deployment columns, add them safely
+                if (\Illuminate\Support\Facades\Schema::hasColumn('attendance', 'decided_by')) {
+                    $data['decided_by']       = $user?->id;
+                    $data['decided_by_role']  = $decidedByRoleLabel;
+                    $data['site_project_id']  = $siteProjectId;
+                    $data['site_name']        = $projectName;
+                    $data['site_task']        = $taskDesc;
+                    $data['site_start_date']  = $start->toDateString();
+                    $data['site_end_date']    = $end->toDateString();
+                }
+
+                Attendance::updateOrCreate(
+                    [
+                        'employee_id'     => $empId,
+                        'attendance_date' => $dateStr,
+                    ],
+                    $data
+                );
+                $totalCreated++;
+            }
+
+            $currentDate->addDay();
         }
 
-        Attendance::updateOrCreate(
-            [
-                'employee_id'     => $employee->id,
-                'attendance_date' => $date,
-            ],
-            [
-                'status'         => 'present',
-                'source'         => 'manual',
-                'morning_in'     => $mIn,
-                'morning_out'    => $mOut,
-                'afternoon_in'   => $aIn,
-                'afternoon_out'  => $aOut,
-                'check_in'       => $cIn,
-                'check_out'      => $cOut,
-                'hours_worked'   => $hours,
-                'notes'          => $note,
-                'is_approved'    => true,
-                'approved_by'    => Auth::id(),
-            ]
+        $empCount = count($employeeIds);
+        $periodLabel = ($start->toDateString() === $end->toDateString())
+            ? $start->format('M d, Y')
+            : ($start->format('M d') . ' to ' . $end->format('M d, Y'));
+
+        ActivityLog::log(
+            'created',
+            "{$decidedByName} ({$decidedByRoleLabel}) deployed {$empCount} employee(s) to {$projectName} ({$periodLabel}). Status marked 'S' (Full pay / non-deductible).",
+            'Site Deployment / HR'
         );
 
-        return redirect()->back()->with('success', "On-site attendance recorded for {$employee->full_name} on {$projectName}.");
+        return redirect()->back()->with('success', "On-site attendance successfully recorded for {$empCount} employee(s) to {$projectName} ({$periodLabel}). Status marked as 'S' (credited full hours, non-deductible from payroll).");
     }
 
     /**

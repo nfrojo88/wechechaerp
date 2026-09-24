@@ -20,6 +20,9 @@
             <button type="button" class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#siteAttendanceModal">
                 <i class="fa-solid fa-person-digging me-1"></i>Employee On Site (ወደ ሳይት የወጣ)
             </button>
+            <a href="{{ route('attendance.site-deployments') }}" class="btn btn-outline-primary fw-semibold">
+                <i class="fa-solid fa-list-check me-1"></i>Site Deployments Report (ሪፖርት)
+            </a>
             <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#workScheduleModal">
                 <i class="fas fa-business-time me-1"></i>Work Schedule
             </button>
@@ -284,7 +287,7 @@
 
     <!-- Statistics Cards -->
     <div class="row mb-4 g-3">
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="card border-0 border-start border-4 border-success shadow-sm h-100 py-2 bg-white">
                 <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
@@ -301,7 +304,24 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
+            <div class="card border-0 border-start border-4 shadow-sm h-100 py-2 bg-white" style="border-left-color: #6366f1 !important;">
+                <div class="card-body py-2 px-3">
+                    <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #6366f1;">
+                        On Site (S) &bull; {{ $stats['title'] ?? 'Selected Period' }}
+                    </div>
+                    @if(!empty($stats['et_title']))
+                    <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
+                        🇪🇹 {{ $stats['et_title'] }}
+                    </small>
+                    @endif
+                    <div class="h4 mb-0 font-weight-bold" style="color: #6366f1;">
+                        {{ $stats['site'] ?? 0 }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md">
             <div class="card border-0 border-start border-4 border-danger shadow-sm h-100 py-2 bg-white">
                 <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
@@ -318,7 +338,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="card border-0 border-start border-4 border-warning shadow-sm h-100 py-2 bg-white">
                 <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
@@ -335,7 +355,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="card border-0 border-start border-4 border-info shadow-sm h-100 py-2 bg-white">
                 <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
@@ -498,9 +518,9 @@
                                         $rowStatus = 'present';
                                     }
                                 @endphp
-                                @if(str_contains($a->notes ?? '', 'On-Site'))
-                                    <span class="badge text-white px-2 py-1 shadow-sm" style="background-color: #8b5cf6;" title="{{ $a->notes }}">
-                                        <i class="fa-solid fa-person-digging me-1"></i>On Site (ሳይት ላይ)
+                                @if(in_array(strtolower($a->status), ['s', 'site', 'on_site']) || str_contains($a->notes ?? '', 'On-Site'))
+                                    <span class="badge text-white px-2 py-1 shadow-xs fw-bold" style="background-color: #6366f1;" title="{{ $a->notes }}">
+                                        <span class="badge bg-white text-dark me-1" style="font-size:0.75rem;">S</span> On Site (ሳይት ላይ)
                                     </span>
                                 @else
                                     <span class="badge bg-{{ $statusColors[$rowStatus] ?? 'secondary' }}">
@@ -704,61 +724,88 @@
 <div class="modal fade" id="siteAttendanceModal" tabindex="-1" aria-labelledby="siteAttendanceModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content border-0 shadow-lg">
-            <div class="modal-header bg-gradient text-white" style="background: linear-gradient(135deg, #0d6efd, #4f46e5);">
-                <h5 class="modal-title fw-bold" id="siteAttendanceModalLabel">
-                    <i class="fa-solid fa-person-digging me-2"></i>Record Employee On-Site Attendance (ወደ ሳይት የወጣ ሠራተኛ)
-                </h5>
+            <div class="modal-header bg-gradient text-white" style="background: linear-gradient(135deg, #4f46e5, #0d6efd);">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-person-digging fa-lg"></i>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="siteAttendanceModalLabel">
+                            Send Employee to Site (ወደ ሳይት የወጣ ሠራተኛ ምዝገባ)
+                        </h5>
+                        <small class="text-white text-opacity-75">Status marked S &bull; Full pay credited &bull; Never deducted from payroll</small>
+                    </div>
+                </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form action="{{ url('/attendance') }}" method="POST">
+            <form action="{{ route('attendance.record-site') }}" method="POST">
                 @csrf
-                <input type="hidden" name="action" value="record_site_attendance">
                 <div class="modal-body p-4">
+                    {{-- Decision Maker Banner --}}
+                    <div class="alert alert-light border border-primary-subtle d-flex align-items-center justify-content-between mb-3 py-2 px-3 rounded-3 shadow-xs">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-user-shield text-primary fs-5"></i>
+                            <div>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Authorized Decision Maker (ማን እንደወሰነ):</small>
+                                <strong class="text-dark">{{ auth()->user()->name }}</strong>
+                            </div>
+                        </div>
+                        <span class="badge bg-primary text-white px-2 py-1">
+                            {{ auth()->user()->roles->first()?->name ? ucwords(str_replace('_', ' ', auth()->user()->roles->first()->name)) : 'Manager' }}
+                        </span>
+                    </div>
+
                     <div class="alert alert-primary border border-primary-subtle d-flex align-items-center mb-4 py-2 px-3 rounded-3">
                         <i class="fa-solid fa-circle-info fa-lg me-3 text-primary"></i>
                         <div class="small">
-                            <strong>Biometric-free On-Site Attendance:</strong> Employees working at construction project sites are not captured by the office fingerprint machine. Submitting this credits their full working hours (<strong>{{ $workSchedule['total_hours'] ?? '8.0' }} hrs</strong>) as <strong>Present (ሳይት ላይ)</strong> with morning & afternoon shifts assigned.
+                            <strong>Biometric-Free On-Site Policy:</strong> Field staff working at construction sites are not captured by the office fingerprint device. This record credits full working hours (<strong>{{ $workSchedule['total_hours'] ?? '8.0' }} hrs</strong>) with morning &amp; afternoon shifts assigned and sets status to <strong>S (On Site)</strong>. <strong>No payroll deductions will occur.</strong>
                         </div>
                     </div>
 
                     <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold small text-muted text-uppercase">Employee (ሠራተኛ) <span class="text-danger">*</span></label>
-                            <select name="employee_id" class="form-select" required>
-                                <option value="">-- Select Employee --</option>
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold small text-muted text-uppercase">Employee(s) to Send (ወደ ሳይት የሚላኩ ሠራተኞች) <span class="text-danger">*</span></label>
+                            <select name="employee_ids[]" class="form-select" multiple required style="min-height: 90px;">
                                 @foreach($allEmployees ?? [] as $emp)
                                     <option value="{{ $emp->id }}">
                                         {{ $emp->full_name }} ({{ $emp->employee_code ?? 'EMP-'.$emp->id }}) - {{ $emp->department ?? 'Site Staff' }}
                                     </option>
                                 @endforeach
                             </select>
+                            <small class="text-muted">Hold Ctrl/Cmd to select multiple employees.</small>
                         </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-bold small text-muted text-uppercase">Attendance Date (ቀን) <span class="text-danger">*</span></label>
+                            <label class="form-label fw-bold small text-muted text-uppercase">Start Date (የመነሻ ቀን) <span class="text-danger">*</span></label>
                             <div class="input-group">
-                                <input type="date" name="attendance_date" id="site_attendance_date" class="form-control" value="{{ request('date', today()->toDateString()) }}" required onchange="updateSiteEthiopianDate(this.value)">
+                                <input type="date" name="start_date" id="site_attendance_date" class="form-control" value="{{ request('date', today()->toDateString()) }}" required onchange="updateSiteEthiopianDate(this.value)">
                                 <span class="input-group-text bg-white small font-monospace" id="site_et_date_preview">
                                     🇪🇹 {{ \App\Helpers\EthiopianCalendar::format(request('date', today()->toDateString()), 'am') }}
                                 </span>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-muted text-uppercase">End Date (የመጨረሻ ቀን) <span class="text-danger">*</span></label>
+                            <input type="date" name="end_date" id="site_attendance_end_date" class="form-control" value="{{ request('date', today()->toDateString()) }}" required>
+                            <small class="text-muted">Keep same as start date for a single day.</small>
+                        </div>
                     </div>
 
                     <div class="row g-3 mb-3">
                         <div class="col-md-7">
-                            <label class="form-label fw-bold small text-muted text-uppercase">Construction Project / Job Site (የግንባታ ፕሮጀክት / ሳይት)</label>
-                            <select name="project_id" class="form-select">
-                                <option value="">-- Select Project (or enter specific site below) --</option>
+                            <label class="form-label fw-bold small text-muted text-uppercase">Construction Project / Job Site (የግንባታ ፕሮጀክት / ሳይት) <span class="text-danger">*</span></label>
+                            <select name="project_id" class="form-select" required>
+                                <option value="">-- Select Project --</option>
                                 @foreach($projects ?? [] as $proj)
                                     <option value="{{ $proj->id }}">
                                         🏗️ {{ $proj->name }} @if(!empty($proj->code))({{ $proj->code }})@endif
                                     </option>
                                 @endforeach
                             </select>
-                            <input type="text" name="site_name" class="form-control form-control-sm mt-2" placeholder="Or enter specific job site / location name if not in list...">
+                            <input type="text" name="site_name" class="form-control form-control-sm mt-2" placeholder="Or enter specific site / location if not in list...">
                         </div>
                         <div class="col-md-5">
-                            <label class="form-label fw-bold small text-muted text-uppercase">Credited Hours (የሥራ ሰዓት)</label>
+                            <label class="form-label fw-bold small text-muted text-uppercase">Credited Hours / Day</label>
                             <div class="input-group">
                                 <input type="number" step="0.5" min="1" max="24" name="hours_worked" class="form-control" value="{{ $workSchedule['total_hours'] ?? '8.0' }}" required>
                                 <span class="input-group-text">Hours</span>
@@ -775,7 +822,7 @@
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary px-4 fw-bold">
-                        <i class="fa-solid fa-check me-1"></i>Record Site Attendance (ይመዝገቡ)
+                        <i class="fa-solid fa-check me-1"></i>Dispatch to Site (ይመዝገቡ)
                     </button>
                 </div>
             </form>

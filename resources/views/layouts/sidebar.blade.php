@@ -123,6 +123,28 @@
     </a>
 </li>
 @endif
+@php
+    $canSendToSite = auth()->check() && (
+        auth()->user()->hasAnyRole([
+            'planning_manager', 'planning', 'technical_manager',
+            'coordinator', 'Coordinator',
+            'finance_head', 'Finance head', 'finance_manager', 'finance',
+            'hr', 'hr_manager', 'hr_officer',
+            'gm', 'general_manager', 'General Manager',
+            'admin', 'global_admin', 'project_manager'
+        ]) || (isset($isCoordinator) && $isCoordinator)
+    );
+@endphp
+@if($canSendToSite)
+{{-- Quick Action: Send Employee to Site --}}
+<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
+    <a href="{{ route('attendance.site-deployments') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.site-deployments*') ? 'active' : '' }}" style="font-weight:600;">
+        <i class="fa-solid fa-person-digging text-primary"></i>
+        <span>Send to Site (ወደ ሳይት)</span>
+        <span class="badge bg-primary text-white rounded-pill ms-auto" style="font-size:0.6rem;">Status S</span>
+    </a>
+</li>
+@endif
 <hr class="sidebar-section-divider">
 
 {{-- ② Projects & Planning --}}
@@ -150,6 +172,7 @@
             <li><a href="{{ route('standard-works.index') }}" class="sidebar-nav-link {{ request()->routeIs('standard-works.*') ? 'active' : '' }}"><i class="fa-solid fa-ruler-combined"></i><span>Standard Works</span></a></li>
             <li><a href="{{ route('takeoff.index') }}" class="sidebar-nav-link {{ request()->routeIs('takeoff.*') ? 'active' : '' }}"><i class="fa-solid fa-ruler-combined"></i><span>Quantity Takeoff</span></a></li>
             <li><a href="{{ route('dispatches.index') }}" class="sidebar-nav-link {{ request()->routeIs('dispatches.*') ? 'active' : '' }}"><i class="fa-solid fa-truck-fast"></i><span>Weekly Dispatches</span></a></li>
+            <li><a href="{{ route('attendance.site-deployments') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.site-deployments*') ? 'active' : '' }}"><i class="fa-solid fa-person-digging text-primary"></i><span>Send to Site (ወደ ሳይት)</span></a></li>
             @if(\Illuminate\Support\Facades\Route::has('material-plans.index'))
             <li><a href="{{ route('material-plans.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-plans.*') ? 'active' : '' }}"><i class="fa-solid fa-list-check"></i><span>Material Plans</span></a></li>
             @endif
@@ -313,7 +336,8 @@
             <li><a href="{{ route('employees.history') }}" class="sidebar-nav-link {{ request()->routeIs('employees.history') ? 'active' : '' }}"><i class="fa-solid fa-user-clock text-warning"></i><span>Employee History</span></a></li>
             <li><a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.index') ? route('employee-letters.index') : url('/employee-letters') }}" class="sidebar-nav-link {{ request()->routeIs('employee-letters.*') ? 'active' : '' }}"><i class="fa-solid fa-envelope-open-text text-warning"></i><span>Employee Letters</span></a></li>
             <li><a href="{{ route('departments.index') }}" class="sidebar-nav-link {{ request()->routeIs('departments.*') ? 'active' : '' }}"><i class="fa-solid fa-building text-secondary"></i><span>Departments</span></a></li>
-            <li><a href="{{ route('attendance.index') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}"><i class="fa-solid fa-calendar-check text-success"></i><span>Attendance</span></a></li>
+            <li><a href="{{ route('attendance.index') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.index') ? 'active' : '' }}"><i class="fa-solid fa-calendar-check text-success"></i><span>Attendance</span></a></li>
+            <li><a href="{{ route('attendance.site-deployments') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.site-deployments*') ? 'active' : '' }}"><i class="fa-solid fa-person-digging text-primary"></i><span>Site Deployments (ወደ ሳይት)</span></a></li>
             <li><a href="{{ route('leave-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-calendar-minus text-info"></i><span>Leave Approvals</span></a></li>
             <li><a href="{{ route('payrolls.index') }}" class="sidebar-nav-link {{ request()->routeIs('payrolls.*') ? 'active' : '' }}"><i class="fa-solid fa-money-bill-wave text-success"></i><span>Payroll (HR)</span></a></li>
             <li><a href="{{ route('weekly-manpower.index') }}" class="sidebar-nav-link {{ request()->routeIs('weekly-manpower.*') ? 'active' : '' }}"><i class="fa-solid fa-chart-bar text-info"></i><span>Weekly Manpower</span></a></li>
@@ -1884,6 +1908,12 @@
             <a href="{{ route('coordinator.forecast') }}" class="sidebar-nav-link {{ request()->routeIs('coordinator.forecast') ? 'active' : '' }}">
                 <i class="fa-solid fa-chart-pie text-danger"></i>
                 <span>Forecast Demand</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('attendance.site-deployments') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.site-deployments*') ? 'active' : '' }}">
+                <i class="fa-solid fa-person-digging text-primary"></i>
+                <span>Send to Site (ወደ ሳይት)</span>
             </a>
         </li>
         @endif

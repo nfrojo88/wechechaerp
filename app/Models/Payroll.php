@@ -203,6 +203,14 @@ class Payroll extends Model
                 $att = $attendances[$dateStr];
                 $isSaturday = \Carbon\Carbon::parse($dateStr)->isSaturday();
 
+                // ── On-Site Duty Check: DO NOT DEDUCT FROM PAYROLL ───────────────
+                // Status 'S', 'site', 'on_site' or notes containing 'On-Site' indicates
+                // the employee was sent to a construction project site by an authorized head.
+                // This is full paid working duty; NEVER count as unexcused or absent!
+                if (in_array(strtolower((string)$att->status), ['s', 'site', 'on_site']) || str_contains((string)($att->notes ?? ''), 'On-Site')) {
+                    continue;
+                }
+
                 if ($att->status === 'absent') {
                     $unexcusedDays += 1.0;
                     $absentDates[] = $dateStr;

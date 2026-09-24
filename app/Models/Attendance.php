@@ -16,17 +16,32 @@ class Attendance extends Model
         'hours_worked', 'status', 'source', 'biometric_device_id',
         'notes', 'is_approved', 'approved_by',
         'overtime_hours', 'overtime_type', 'overtime_pay',
+        'decided_by', 'decided_by_role', 'site_project_id', 'site_name',
+        'site_task', 'site_start_date', 'site_end_date',
     ];
 
     protected $casts = [
         'attendance_date' => 'date',
+        'site_start_date' => 'date',
+        'site_end_date'   => 'date',
         'is_approved'     => 'boolean',
         'overtime_hours'  => 'decimal:2',
         'overtime_pay'    => 'decimal:2',
     ];
 
-    public function employee()   { return $this->belongsTo(Employee::class); }
-    public function approvedBy() { return $this->belongsTo(User::class, 'approved_by'); }
+    public function employee()    { return $this->belongsTo(Employee::class); }
+    public function approvedBy()  { return $this->belongsTo(User::class, 'approved_by'); }
+    public function decidedBy()   { return $this->belongsTo(User::class, 'decided_by'); }
+    public function siteProject() { return $this->belongsTo(Project::class, 'site_project_id'); }
+
+    /**
+     * Check if this record is an on-site deployment
+     */
+    public function isOnSite(): bool
+    {
+        return in_array(strtolower((string)$this->status), ['s', 'site', 'on_site'])
+            || str_contains((string)($this->notes ?? ''), 'On-Site');
+    }
 
     /**
      * OT type labels for display.
