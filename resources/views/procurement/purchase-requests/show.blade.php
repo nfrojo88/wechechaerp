@@ -27,6 +27,10 @@
     $isGlobalAdmin = in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles);
     $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
     
+    $isStoreReviewStage = ($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && !($isFinalIntake ?? false));
+    $isStoreManagerOnly = in_array('store_manager', $rawUserRoles) && !in_array('purchase_manager', $rawUserRoles) && !in_array('finance_head', $rawUserRoles) && !$isGlobalAdmin;
+    $hideMoneyColumns = $isStoreReviewStage || $isStoreManagerOnly;
+
     // Check whether the logged-in user can execute action controls for the current stage
     $canActOnCurrentStage = false;
     $currentRoleName = $purchaseRequest->current_owner_role;
@@ -184,22 +188,28 @@
                             <button class="btn btn-primary btn-sm w-100"><i class="fas fa-paper-plane me-1"></i> Submit to Store Manager</button>
                         </form>
 
-                    <!-- STAGE 2: Store Manager Review (Transfer vs Send to PR) -->
+                    <!-- STAGE 2: Store Manager Review (Transfer vs Send to Purchase) -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && !($isFinalIntake ?? false))
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-dark mb-1">
+                                <i class="fas fa-boxes-stacked text-primary me-1"></i> Store Manager Inventory Decision
+                            </h6>
+                            <p class="small text-muted mb-0">Review stock availability across stores. Decide which items to fulfill via <strong>Store Transfer</strong> or send to <strong>Purchase</strong>. (No pricing needed at this stage).</p>
+                        </div>
                         <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-outline-info btn-sm w-100 text-start py-2 fw-semibold" onclick="openSelectiveTransferModal()">
+                                <i class="fas fa-truck-ramp-box text-info me-1"></i> 🚚 Transfer Selected Items (<span class="selected-items-count fw-bold">0</span>)
+                            </button>
+                            <button type="button" class="btn btn-outline-success btn-sm w-100 text-start py-2 fw-semibold" onclick="openSelectiveSendPmModal()">
+                                <i class="fas fa-cart-shopping text-success me-1"></i> 🛒 Send Selected to Purchase (<span class="selected-items-count fw-bold">0</span>)
+                            </button>
                             <button type="button" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm py-2" data-bs-toggle="modal" data-bs-target="#splitAndProcessModal">
-                                <i class="fas fa-random me-1"></i> Smart Split: Transfer + Buy
-                            </button>
-                            <button type="button" class="btn btn-outline-info btn-sm w-100 text-start py-2" onclick="openSelectiveTransferModal()">
-                                <i class="fas fa-truck-ramp-box text-info me-1"></i> Transfer Selected Items (<span class="selected-items-count fw-bold">0</span>)
-                            </button>
-                            <button type="button" class="btn btn-outline-success btn-sm w-100 text-start py-2" onclick="openSelectiveSendPmModal()">
-                                <i class="fas fa-cart-shopping text-success me-1"></i> Send Selected to Purchase (<span class="selected-items-count fw-bold">0</span>)
+                                <i class="fas fa-random me-1"></i> Smart Split All: Transfer + Buy
                             </button>
                             <form action="{{ route('purchase-requests.send-to-pm', $purchaseRequest) }}" method="POST" class="mt-2 pt-2 border-top">
                                 @csrf
-                                <button class="btn btn-light border btn-sm w-100 text-muted" onclick="return confirm('Send ALL items on this PR directly to Procurement Manager?');">
-                                    <i class="fas fa-share me-1"></i> Send Entire PR to PM
+                                <button class="btn btn-light border btn-sm w-100 text-muted" onclick="return confirm('Send ALL items on this PR directly to Procurement Manager for purchase?');">
+                                    <i class="fas fa-share me-1"></i> Send Entire PR to Purchase
                                 </button>
                             </form>
                         </div>
@@ -1257,9 +1267,11 @@
                                     </th>
                                     <th class="text-center">Status</th>
                                     <th>Unit</th>
+                                    @if(!$hideMoneyColumns)
                                     <th>Est. Unit Cost</th>
                                     <th>Est. Total</th>
-                                    <th class="pe-3 text-end">Quick Action</th>
+                                    @endif
+                                    <th class="pe-3 text-end">{{ $isStoreReviewStage ? 'Store Decision' : 'Quick Action' }}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1383,32 +1395,19 @@
                                         @endif
                                     </td>
                                     <td><span class="badge bg-light text-dark border">{{ $item->unit }}</span></td>
+                                    @if(!$hideMoneyColumns)
                                     <td>{{ number_format($item->estimated_unit_cost ?? 0, 2) }} ETB</td>
                                     <td class="fw-bold text-primary">{{ number_format($item->estimated_total ?? ($reqQty * (float)($item->estimated_unit_cost ?? 0)), 2) }} ETB</td>
+                                    @endif
                                     <td class="pe-3 text-end">
-                                        <div class="btn-group btn-group-sm">
-                                            <!-- Edit / Update Item / Purchased Qty -->
-                                            <button type="button" class="btn btn-outline-secondary" title="Edit Item / Purchased Quantity"
-                                                    onclick="openEditPrItemModal({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}', {{ $reqQty }}, {{ $purchQty }}, '{{ addslashes($item->unit) }}', {{ (float)($item->estimated_unit_cost ?? 0) }}, '{{ addslashes($item->specifications ?? '') }}')">
-                                                <i class="fas fa-pen-to-square"></i>
-                                            </button>
-                                            @if($purchaseRequest->items->count() > 1 && !in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_CANCELLED]))
-                                            <button type="button" class="btn btn-outline-danger" title="Remove Item"
-                                                    onclick="confirmDeletePrItem({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}')">
-                                                <i class="fas fa-trash-can"></i>
-                                            </button>
-                                            @endif
-
+                                        <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
                                             @if($isSelectableStage)
                                                 @if($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
-                                                    @if($totalNetStock > 0 || $totalRawStock > 0)
-                                                    <button type="button" class="btn btn-outline-info" title="Quick Transfer this Item" onclick="quickTransferSingleItem({{ $item->id }})">
-                                                        <i class="fas fa-truck-ramp-box"></i> Transfer
+                                                    <button type="button" class="btn btn-outline-info btn-sm fw-semibold" title="Transfer this item from another store" onclick="quickTransferSingleItem({{ $item->id }})">
+                                                        <i class="fas fa-truck-ramp-box me-1"></i> Transfer
                                                     </button>
-                                                    @endif
-
-                                                    <button type="button" class="btn btn-outline-success" title="Quick Purchase this Item" onclick="quickPurchaseSingleItem({{ $item->id }})">
-                                                        <i class="fas fa-cart-shopping"></i> Purchase
+                                                    <button type="button" class="btn btn-outline-success btn-sm fw-semibold" title="Send this item to purchase" onclick="quickPurchaseSingleItem({{ $item->id }})">
+                                                        <i class="fas fa-cart-shopping me-1"></i> Purchase
                                                     </button>
                                                 @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER)
                                                     @if($hasStock)
@@ -1427,6 +1426,18 @@
                                                         <i class="fas fa-file-invoice-dollar"></i>
                                                     </button>
                                                 @endif
+                                            @endif
+
+                                            <!-- Edit / Update Item / Purchased Qty -->
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" title="Edit Item Details"
+                                                    onclick="openEditPrItemModal({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}', {{ $reqQty }}, {{ $purchQty }}, '{{ addslashes($item->unit) }}', {{ (float)($item->estimated_unit_cost ?? 0) }}, '{{ addslashes($item->specifications ?? '') }}')">
+                                                <i class="fas fa-pen-to-square"></i>
+                                            </button>
+                                            @if($purchaseRequest->items->count() > 1 && !in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_CANCELLED]))
+                                            <button type="button" class="btn btn-outline-danger btn-sm" title="Remove Item"
+                                                    onclick="confirmDeletePrItem({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}')">
+                                                <i class="fas fa-trash-can"></i>
+                                            </button>
                                             @endif
                                         </div>
                                     </td>
@@ -3308,6 +3319,7 @@ function submitQuickSupplier() {
                         </div>
                     </div>
 
+                    @if(!$hideMoneyColumns)
                     <div class="row g-2 mb-3">
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-muted text-uppercase">Unit</label>
@@ -3318,6 +3330,13 @@ function submitQuickSupplier() {
                             <input type="number" step="0.01" min="0" class="form-control" name="estimated_unit_cost" id="modalAddUnitCost" placeholder="0.00">
                         </div>
                     </div>
+                    @else
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Unit</label>
+                        <input type="text" class="form-control" name="unit" id="modalAddUnit" placeholder="e.g. Quintal, Pcs, Bag">
+                        <input type="hidden" name="estimated_unit_cost" id="modalAddUnitCost" value="0">
+                    </div>
+                    @endif
 
                     <div class="mb-2">
                         <label class="form-label fw-bold small text-muted text-uppercase">Specifications / Remarks</label>
@@ -3365,6 +3384,7 @@ function submitQuickSupplier() {
                         </div>
                     </div>
 
+                    @if(!$hideMoneyColumns)
                     <div class="row g-2 mb-3">
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-muted text-uppercase">Unit</label>
@@ -3375,6 +3395,13 @@ function submitQuickSupplier() {
                             <input type="number" step="0.01" min="0" class="form-control" name="estimated_unit_cost" id="modalEditUnitCost">
                         </div>
                     </div>
+                    @else
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">Unit</label>
+                        <input type="text" class="form-control" name="unit" id="modalEditUnit">
+                        <input type="hidden" name="estimated_unit_cost" id="modalEditUnitCost" value="0">
+                    </div>
+                    @endif
 
                     <div class="mb-2">
                         <label class="form-label fw-bold small text-muted text-uppercase">Specifications</label>
@@ -3418,8 +3445,8 @@ function openEditPrItemModal(itemId, productName, quantity, purchasedQty, unit, 
     document.getElementById('modalEditProductName').value = productName;
     document.getElementById('modalEditQuantity').value = quantity;
     document.getElementById('modalEditPurchasedQuantity').value = purchasedQty;
-    document.getElementById('modalEditUnit').value = unit;
-    document.getElementById('modalEditUnitCost').value = unitCost > 0 ? unitCost.toFixed(2) : '';
+    const costEl = document.getElementById('modalEditUnitCost');
+    if (costEl) costEl.value = unitCost > 0 ? unitCost.toFixed(2) : '0';
     document.getElementById('modalEditSpecifications').value = specs || '';
     
     const modal = new bootstrap.Modal(document.getElementById('editPrItemModal'));
