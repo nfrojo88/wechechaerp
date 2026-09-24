@@ -201,7 +201,9 @@ class EmployeeController extends Controller
             'model'        => $u->model,
         ])->values();
 
-        return view('hr.employees.create', compact('projects', 'departments', 'fixedAssetUnits', 'fixedAssetsJson'));
+        $roles = \Spatie\Permission\Models\Role::orderBy('name')->get();
+
+        return view('hr.employees.create', compact('projects', 'departments', 'fixedAssetUnits', 'fixedAssetsJson', 'roles'));
     }
 
     public function store(Request $request)
@@ -400,6 +402,15 @@ class EmployeeController extends Controller
             );
             
             $validated['user_id'] = $user->id;
+
+            // Assign Multiple System Roles if provided
+            $submittedRoles = $request->input('roles') ?? ($request->has('role') ? (array)$request->input('role') : []);
+            if (!empty($submittedRoles)) {
+                $validRoles = array_filter((array)$submittedRoles);
+                if (!empty($validRoles)) {
+                    $user->syncRoles($validRoles);
+                }
+            }
 
             // Strip nested arrays before Eloquent creation
             $employeeData = \Illuminate\Support\Arr::except($validated, ['fixed_asset_units', 'education', 'experience', 'licenses']);
@@ -694,7 +705,9 @@ class EmployeeController extends Controller
             'assigned_to'  => $u->assigned_to_employee_id,
         ])->values();
 
-        return view('hr.employees.edit', compact('employee', 'projects', 'departments', 'fixedAssetUnits', 'fixedAssetsJson'));
+        $roles = \Spatie\Permission\Models\Role::orderBy('name')->get();
+
+        return view('hr.employees.edit', compact('employee', 'projects', 'departments', 'fixedAssetUnits', 'fixedAssetsJson', 'roles'));
     }
 
     public function update(Request $request, Employee $employee)
@@ -1021,6 +1034,20 @@ class EmployeeController extends Controller
                 $smsService->sendNotification($employee->phone, $message);
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error('Failed to send phone update SMS: ' . $e->getMessage());
+            }
+        }
+
+        // Sync multiple roles for employee's linked user account
+        if ($request->has('roles') || $request->has('role')) {
+            $submittedRoles = $request->input('roles') ?? ($request->has('role') ? (array)$request->input('role') : []);
+            $validRoles = array_filter((array)$submittedRoles);
+            
+            $targetUser = $employee->user;
+            if (!$targetUser && $employee->email) {
+                $targetUser = \App\Models\User::where('email', $employee->email)->first();
+            }
+            if ($targetUser) {
+                $targetUser->syncRoles($validRoles);
             }
         }
 

@@ -766,6 +766,84 @@
                     </div>
                 </div>
 
+                {{-- Role Management & Active Role Switcher Card --}}
+                <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden" id="role-manager-section">
+                    <div class="card-header bg-white py-3 border-0 rounded-top-4 d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center">
+                            <div class="rounded-3 p-2 bg-primary bg-opacity-10 text-primary me-3">
+                                <i class="fa-solid fa-user-tag fa-lg text-primary"></i>
+                            </div>
+                            <div>
+                                <h5 class="card-title fw-bold mb-0">My Assigned Roles</h5>
+                                <small class="text-muted">Manage &amp; switch active workspace</small>
+                            </div>
+                        </div>
+                        <span class="badge bg-primary rounded-pill px-3 py-1 font-monospace" style="font-size:0.75rem;">
+                            Active: {{ $user->getActiveRoleLabel() }}
+                        </span>
+                    </div>
+                    <div class="card-body p-4 pt-2">
+                        <p class="text-muted small mb-3">
+                            You have been granted access to multiple roles. Switch your active role anytime to access the corresponding dashboard and modules.
+                        </p>
+
+                        <div class="list-group list-group-flush mb-3">
+                            @forelse($user->roles as $role)
+                                @php
+                                    $isActiveRole = ($role->name === $user->getActiveRole());
+                                    $roleTitle = ucfirst(str_replace(['_', '-'], ' ', $role->name));
+                                @endphp
+                                <div class="list-group-item px-0 py-3 d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 border-bottom">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="rounded-circle p-2 {{ $isActiveRole ? 'bg-success bg-opacity-10 text-success' : 'bg-light text-muted' }}" style="width: 38px; height: 38px; display:flex; align-items:center; justify-content:center;">
+                                            <i class="fa-solid {{ $isActiveRole ? 'fa-circle-check text-success' : 'fa-id-badge' }}"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold text-dark d-flex align-items-center gap-2">
+                                                <span>{{ $roleTitle }}</span>
+                                                @if($isActiveRole)
+                                                    <span class="badge bg-success bg-opacity-15 text-success border border-success border-opacity-25 rounded-pill px-2 py-0.5" style="font-size: 0.68rem;">
+                                                        <i class="fa-solid fa-check me-1"></i>Currently Active
+                                                    </span>
+                                                @endif
+                                            </div>
+                                            <small class="text-muted" style="font-size: 0.72rem;">Guard: {{ $role->guard_name ?? 'web' }}</small>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        @if(!$isActiveRole)
+                                            <form method="POST" action="{{ route('user.switch-role') }}" class="d-inline">
+                                                @csrf
+                                                <input type="hidden" name="role" value="{{ $role->name }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-primary fw-semibold px-3 rounded-pill shadow-xs">
+                                                    <i class="fa-solid fa-repeat me-1"></i> Switch to This Role
+                                                </button>
+                                            </form>
+                                        @else
+                                            <a href="{{ route('dashboard') }}" class="btn btn-sm btn-success fw-semibold px-3 rounded-pill shadow-xs">
+                                                <i class="fa-solid fa-gauge me-1"></i> Open Dashboard
+                                            </a>
+                                        @endif
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="text-center py-3 text-muted">
+                                    <i class="fa-solid fa-circle-info me-1"></i> No system roles assigned.
+                                </div>
+                            @endforelse
+                        </div>
+
+                        @if(auth()->user()->hasAnyRole(['admin', 'global_admin']))
+                            <div class="pt-2 border-top d-flex justify-content-between align-items-center">
+                                <small class="text-muted"><i class="fa-solid fa-shield-halved me-1"></i>Administrator Privileges</small>
+                                <a href="{{ route('admin.role-assignment.index') }}" class="btn btn-sm btn-link text-primary text-decoration-none fw-semibold p-0">
+                                    <i class="fa-solid fa-users-gear me-1"></i>Manage All Users' Roles &rarr;
+                                </a>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+
                 {{-- Change Password Security Card (Interactive Form) --}}
                 <div class="card border-0 shadow-sm rounded-4 mb-4">
                     <div class="card-header bg-white py-3 border-0 rounded-top-4">
@@ -863,10 +941,12 @@
                     <div>
                         <h2 class="h4 mb-1 fw-bold text-white">{{ $user->name }}</h2>
                         <p class="mb-0 text-white-50"><i class="fa-regular fa-envelope me-1"></i>{{ $user->email }}</p>
-                        <div class="mt-2">
+                        <div class="mt-2 d-flex flex-wrap align-items-center gap-1">
                             @foreach($user->roles as $role)
-                                <span class="badge bg-warning text-dark font-monospace text-uppercase me-1">
-                                    <i class="fa-solid fa-shield-halved me-1"></i>{{ str_replace('_', ' ', $role->name) }}
+                                @php $isAct = ($role->name === $user->getActiveRole()); @endphp
+                                <span class="badge {{ $isAct ? 'bg-success text-white' : 'bg-warning text-dark' }} font-monospace text-uppercase">
+                                    <i class="fa-solid {{ $isAct ? 'fa-circle-check' : 'fa-shield-halved' }} me-1"></i>{{ str_replace('_', ' ', $role->name) }}
+                                    @if($isAct) (Active) @endif
                                 </span>
                             @endforeach
                         </div>
@@ -875,9 +955,49 @@
             </div>
         </div>
 
-        <div class="row justify-content-center">
-            <div class="col-lg-6">
-                <div class="card border-0 shadow-sm rounded-4">
+        <div class="row">
+            {{-- Role Switcher Card --}}
+            <div class="col-lg-6 mb-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
+                    <div class="card-header bg-white py-3 border-0 d-flex justify-content-between align-items-center">
+                        <h5 class="card-title fw-bold mb-0"><i class="fa-solid fa-user-tag text-primary me-2"></i>My System Roles</h5>
+                        <span class="badge bg-primary rounded-pill px-3 py-1 font-monospace" style="font-size:0.75rem;">Active: {{ $user->getActiveRoleLabel() }}</span>
+                    </div>
+                    <div class="card-body p-4 pt-2">
+                        <p class="text-muted small mb-3">Switch your operational workspace role anytime:</p>
+                        <div class="list-group list-group-flush mb-3">
+                            @foreach($user->roles as $role)
+                                @php $isAct = ($role->name === $user->getActiveRole()); @endphp
+                                <div class="list-group-item px-0 py-2 d-flex justify-content-between align-items-center">
+                                    <span class="fw-semibold {{ $isAct ? 'text-primary' : 'text-dark' }}">
+                                        <i class="fa-solid {{ $isAct ? 'fa-circle-check text-success' : 'fa-circle-dot text-muted' }} me-2"></i>
+                                        {{ ucfirst(str_replace('_', ' ', $role->name)) }}
+                                    </span>
+                                    @if(!$isAct)
+                                        <form method="POST" action="{{ route('user.switch-role') }}" class="d-inline">
+                                            @csrf
+                                            <input type="hidden" name="role" value="{{ $role->name }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill px-3">Switch</button>
+                                        </form>
+                                    @else
+                                        <span class="badge bg-success rounded-pill px-2 py-1">Active</span>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                        @if(auth()->user()->hasAnyRole(['admin', 'global_admin']))
+                            <div class="pt-2 border-top">
+                                <a href="{{ route('admin.role-assignment.index') }}" class="btn btn-sm btn-outline-secondary w-100">
+                                    <i class="fa-solid fa-users-gear me-1"></i> Admin: Manage All System Roles
+                                </a>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6 mb-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100">
                     <div class="card-header bg-white py-3 border-0">
                         <h5 class="card-title fw-bold mb-0"><i class="fa-solid fa-key text-warning me-2"></i>Security & Password</h5>
                     </div>

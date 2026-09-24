@@ -84,4 +84,46 @@ class User extends Authenticatable
 
         return false;
     }
+
+    /**
+     * Get the currently active role name for this user (supports session-based active role switching).
+     */
+    public function getActiveRole(): ?string
+    {
+        $active = session('active_role');
+        if ($active && ($this->hasRole($active) || $this->hasAnyRole(['admin', 'global_admin']))) {
+            return $active;
+        }
+
+        return $this->roles->first()?->name;
+    }
+
+    /**
+     * Human-friendly formatted active role label.
+     */
+    public function getActiveRoleLabel(): string
+    {
+        $role = $this->getActiveRole();
+        if (!$role) {
+            return 'No Role Assigned';
+        }
+
+        return ucwords(str_replace(['_', '-'], ' ', $role));
+    }
+
+    /**
+     * Get array of all assigned role names.
+     */
+    public function getAllRoleNames(): array
+    {
+        return $this->roles->pluck('name')->toArray();
+    }
+
+    /**
+     * Check if user has multiple roles or admin switching capabilities.
+     */
+    public function hasMultipleRoles(): bool
+    {
+        return $this->roles->count() > 1 || $this->hasAnyRole(['admin', 'global_admin']);
+    }
 }

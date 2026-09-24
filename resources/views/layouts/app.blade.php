@@ -596,6 +596,79 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                         @endif
                     @endauth
 
+                    @auth
+                        @php
+                            $headerUser = auth()->user();
+                            $activeRole = $headerUser->getActiveRole();
+                            $activeRoleLabel = $headerUser->getActiveRoleLabel();
+                            $userRoles = $headerUser->roles;
+                        @endphp
+                        {{-- Header Role Switcher Button --}}
+                        <div class="dropdown me-2">
+                            <button class="btn btn-sm btn-outline-primary rounded-pill px-3 d-inline-flex align-items-center gap-1 shadow-xs fw-semibold" 
+                                    data-bs-toggle="dropdown" 
+                                    type="button" 
+                                    id="headerRoleButton" 
+                                    title="Active Role: {{ $activeRoleLabel }} (Click to switch)">
+                                <i class="fa-solid fa-user-tag text-primary"></i>
+                                <span class="d-none d-sm-inline text-muted small fw-normal">Role:</span>
+                                <span class="badge bg-primary text-white text-truncate" style="max-width: 140px;">
+                                    {{ $activeRoleLabel }}
+                                </span>
+                                @if($userRoles->count() > 1)
+                                    <span class="badge bg-light text-primary border rounded-pill ms-1" title="{{ $userRoles->count() }} assigned roles">
+                                        {{ $userRoles->count() }}
+                                    </span>
+                                @endif
+                                <i class="fa-solid fa-chevron-down ms-1 text-muted" style="font-size: 0.65rem;"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-2" style="min-width: 280px;" aria-labelledby="headerRoleButton">
+                                <li class="px-2 py-1 text-muted small fw-bold text-uppercase d-flex justify-content-between align-items-center" style="font-size: 0.68rem;">
+                                    <span><i class="fa-solid fa-repeat me-1 text-primary"></i> Switch Active Role</span>
+                                    <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill">{{ $userRoles->count() }} Assigned</span>
+                                </li>
+                                <li><hr class="dropdown-divider my-1"></li>
+                                @if($userRoles->isNotEmpty())
+                                    @foreach($userRoles as $r)
+                                        @php $isCurrent = ($r->name === $activeRole); @endphp
+                                        <li>
+                                            <form method="POST" action="{{ route('user.switch-role') }}" class="m-0 p-0">
+                                                @csrf
+                                                <input type="hidden" name="role" value="{{ $r->name }}">
+                                                <button type="submit" class="dropdown-item rounded-2 d-flex align-items-center justify-content-between py-2 px-2 {{ $isCurrent ? 'bg-primary text-white fw-bold active' : '' }}">
+                                                    <span class="d-flex align-items-center gap-2">
+                                                        <i class="fa-solid {{ $isCurrent ? 'fa-circle-check text-white' : 'fa-circle-dot text-muted' }}" style="font-size: 0.85rem;"></i>
+                                                        <span class="text-truncate">{{ ucfirst(str_replace(['_', '-'], ' ', $r->name)) }}</span>
+                                                    </span>
+                                                    @if($isCurrent)
+                                                        <span class="badge bg-white text-primary rounded-pill small" style="font-size: 0.65rem;">Active</span>
+                                                    @endif
+                                                </button>
+                                            </form>
+                                        </li>
+                                    @endforeach
+                                @else
+                                    <li class="px-3 py-2 text-muted small">No roles assigned yet.</li>
+                                @endif
+                                <li><hr class="dropdown-divider my-1"></li>
+                                <li>
+                                    <a class="dropdown-item small text-primary d-flex align-items-center gap-2 py-1" href="{{ route('profile.edit') }}#role-manager-section">
+                                        <i class="fa-solid fa-sliders"></i>
+                                        <span>Manage My Roles in Profile</span>
+                                    </a>
+                                </li>
+                                @if(auth()->user()->hasAnyRole(['admin', 'global_admin']))
+                                    <li>
+                                        <a class="dropdown-item small text-muted d-flex align-items-center gap-2 py-1" href="{{ route('admin.role-assignment.index') }}">
+                                            <i class="fa-solid fa-users-gear"></i>
+                                            <span>Admin: Assign All System Roles</span>
+                                        </a>
+                                    </li>
+                                @endif
+                            </ul>
+                        </div>
+                    @endauth
+
                     <div class="dropdown">
                         <a href="#" class="header-user-btn" data-bs-toggle="dropdown">
                             <div class="header-user-avatar">
@@ -614,12 +687,28 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                                     <div class="small text-muted text-truncate" style="font-size: 0.72rem; max-width: 200px;">{{ $authPettyCash->pluck('name')->implode(', ') }}</div>
                                 </li>
                             @endif
+                            <li class="px-3 py-2 bg-light border-bottom mb-1">
+                                <div class="small text-muted fw-bold text-uppercase" style="font-size: 0.68rem;">
+                                    <i class="fa-solid fa-user-tag text-primary me-1"></i> Current Role
+                                </div>
+                                <div class="fw-bold text-primary small d-flex align-items-center justify-content-between">
+                                    <span>{{ auth()->user()->getActiveRoleLabel() }}</span>
+                                    @if(auth()->user()->roles->count() > 1)
+                                        <span class="badge bg-primary text-white rounded-pill" style="font-size: 0.65rem;">{{ auth()->user()->roles->count() }} Roles</span>
+                                    @endif
+                                </div>
+                            </li>
                             <li><a class="dropdown-item" href="{{ route('profile.edit') }}"><i class="fa-solid fa-user me-2"></i> My Profile</a></li>
+                            <li>
+                                <a class="dropdown-item text-primary" href="{{ route('profile.edit') }}#role-manager-section">
+                                    <i class="fa-solid fa-repeat me-2"></i> Change / Manage Role
+                                </a>
+                            </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <form method="POST" action="{{ route('logout') }}">
                                     @csrf
-                                    <button type="submit" class="dropdown-item text-danger"><i class="fa-solid fa-sign-out-alt"></i> Logout</button>
+                                    <button type="submit" class="dropdown-item text-danger"><i class="fa-solid fa-sign-out-alt me-2"></i> Logout</button>
                                 </form>
                             </li>
                         </ul>

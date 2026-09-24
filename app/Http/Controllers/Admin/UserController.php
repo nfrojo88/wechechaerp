@@ -47,11 +47,20 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
+        $roleInputs = $request->input('roles') ?? ($request->has('role') ? (array)$request->input('role') : []);
+        $roleInputs = array_values(array_filter((array)$roleInputs));
+
+        if (empty($roleInputs)) {
+            return back()->withErrors(['roles' => 'Please select at least one system role.'])->withInput();
+        }
+
         $validated = $request->validate([
             'name'     => ['required', 'string', 'max:255'],
             'email'    => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'role'     => ['required', 'exists:roles,name'],
+            'roles'    => ['nullable', 'array'],
+            'roles.*'  => ['exists:roles,name'],
+            'role'     => ['nullable', 'string', 'exists:roles,name'],
             'store_id' => ['nullable', 'exists:stores,id'],
         ]);
 
@@ -74,9 +83,9 @@ class UserController extends Controller
             'is_active' => true,
         ]);
 
-        $user->assignRole($validated['role']);
+        $user->syncRoles($roleInputs);
 
-        return redirect()->route('users.index')->with('success', 'User created successfully.');
+        return redirect()->route('users.index')->with('success', 'User created with ' . count($roleInputs) . ' role(s) successfully.');
     }
 
     public function edit(User $user)
@@ -87,10 +96,19 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
+        $roleInputs = $request->input('roles') ?? ($request->has('role') ? (array)$request->input('role') : []);
+        $roleInputs = array_values(array_filter((array)$roleInputs));
+
+        if (empty($roleInputs)) {
+            return back()->withErrors(['roles' => 'Please select at least one system role.'])->withInput();
+        }
+
         $validated = $request->validate([
             'name'     => ['required', 'string', 'max:255'],
             'email'    => ['required', 'email', 'unique:users,email,' . $user->id],
-            'role'     => ['required', 'exists:roles,name'],
+            'roles'    => ['nullable', 'array'],
+            'roles.*'  => ['exists:roles,name'],
+            'role'     => ['nullable', 'string', 'exists:roles,name'],
             'store_id' => ['nullable', 'exists:stores,id'],
             'is_active'=> ['boolean'],
         ]);
@@ -109,9 +127,9 @@ class UserController extends Controller
             'is_active' => $request->boolean('is_active'),
         ]);
 
-        $user->syncRoles([$validated['role']]);
+        $user->syncRoles($roleInputs);
 
-        return redirect()->route('users.index')->with('success', 'User updated successfully.');
+        return redirect()->route('users.index')->with('success', 'User roles and details updated successfully.');
     }
 
     public function destroy(User $user)

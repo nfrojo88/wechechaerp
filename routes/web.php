@@ -1515,6 +1515,10 @@ Route::middleware(['auth'])->group(function () {
         return redirect($redirectUrl);
     })->name('dashboard');
 
+    // Multi-Role Switching Endpoints
+    Route::post('/role/switch', [App\Http\Controllers\RoleSwitchController::class, 'switchRole'])->name('user.switch-role');
+    Route::post('/role/reset',  [App\Http\Controllers\RoleSwitchController::class, 'resetActiveRole'])->name('user.reset-active-role');
+
     // Role Tester
     Route::get('/dev/roles', [App\Http\Controllers\RoleTesterController::class, 'index'])->name('dev.roles');
     Route::post('/dev/roles/login', [App\Http\Controllers\RoleTesterController::class, 'loginAsRole'])->name('dev.roles.login');

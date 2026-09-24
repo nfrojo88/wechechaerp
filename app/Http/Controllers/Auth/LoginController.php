@@ -114,7 +114,10 @@ class LoginController extends Controller
             return route('pending-role');
         }
 
-        $rawRole = $user->roles->first()->name;
+        $rawRole = (method_exists($user, 'getActiveRole') ? $user->getActiveRole() : null) ?? $user->roles->first()?->name;
+        if (!$rawRole) {
+            return route('pending-role');
+        }
         $role = strtolower(str_replace([' ', '-'], '_', trim($rawRole)));
         
         return match($role) {

@@ -204,6 +204,43 @@
                                value="{{ old('role_title', $employee->role_title) }}" placeholder="e.g. Site Engineer">
                     </div>
 
+                    {{-- System Roles Multi-Assignment --}}
+                    <div class="col-12">
+                        <div class="card border border-primary border-opacity-25 bg-primary bg-opacity-10 shadow-none rounded-3 p-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold text-primary mb-0">
+                                    <i class="fa-solid fa-user-shield me-1"></i>System Roles &amp; Dashboard Access (Assign Multi-Role)
+                                </label>
+                                <span class="badge bg-primary text-white">Multi-Role Enabled</span>
+                            </div>
+                            <p class="text-xs text-muted mb-2">
+                                Manage and change system roles for this employee. Multiple roles can be assigned simultaneously.
+                            </p>
+                            @php
+                                $existingUserRoles = $employee->user ? $employee->user->roles->pluck('name')->toArray() : [];
+                                $selectedRoles = old('roles', $existingUserRoles);
+                            @endphp
+                            <div class="row g-2" style="max-height: 200px; overflow-y: auto;">
+                                @if(isset($roles) && $roles->isNotEmpty())
+                                    @foreach($roles as $r)
+                                        <div class="col-md-4 col-sm-6">
+                                            <div class="form-check p-2 bg-white rounded border shadow-xs">
+                                                <input class="form-check-input ms-1 me-2" type="checkbox" name="roles[]" 
+                                                       value="{{ $r->name }}" id="emp_edit_role_{{ $r->id }}"
+                                                       {{ in_array($r->name, $selectedRoles) ? 'checked' : '' }}>
+                                                <label class="form-check-label small fw-semibold text-dark text-truncate d-block" for="emp_edit_role_{{ $r->id }}">
+                                                    {{ ucfirst(str_replace('_', ' ', $r->name)) }}
+                                                </label>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                @else
+                                    <div class="col-12 text-muted small">No system roles loaded.</div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+
                     {{-- National ID & TIN Fields --}}
                     <div class="col-12"><hr class="my-2"><small class="text-muted fw-bold"><i class="fa-solid fa-id-card me-1"></i>National ID &amp; Tax Information</small></div>
                     <div class="col-md-6">

@@ -1,6 +1,18 @@
 @php
     $authUser = auth()->user();
-    $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+    $allUserRoleNames = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+    
+    // Check if session has an active role that the user has (or if admin)
+    $activeRoleSession = session('active_role');
+    $activeRoleNormalized = $activeRoleSession ? strtolower(str_replace([' ', '-'], '_', trim($activeRoleSession))) : null;
+    
+    if ($activeRoleNormalized && ($authUser && ($authUser->hasAnyRole(['admin', 'global_admin']) || in_array($activeRoleNormalized, $allUserRoleNames)))) {
+        // Effective role is the switched active role
+        $rawUserRoles = [$activeRoleNormalized];
+    } else {
+        $rawUserRoles = $allUserRoleNames;
+    }
+
     $isGeneralServiceUser = in_array('general_service', $rawUserRoles) || in_array('general_services', $rawUserRoles);
     $isSiteStaffUser = in_array('site_engineer', $rawUserRoles) || in_array('foreman', $rawUserRoles);
     $isSecretary = in_array('secretary', $rawUserRoles);
@@ -10,15 +22,16 @@
     $isHrManager = in_array('hr_manager', $rawUserRoles);
     $isCoordinator = in_array('coordinator', $rawUserRoles);
     $isStoreManager = in_array('store_manager', $rawUserRoles);
-    $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
-    $isGmUser = in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['gm', 'general_manager', 'General Manager', 'GM']));
-    $isSiteEngineer = in_array('site_engineer', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['site_engineer', 'Site Engineer', 'site-engineer']));
+    $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles);
+    $isGmUser = in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles);
+    $isSiteEngineer = in_array('site_engineer', $rawUserRoles);
+    $isAdminOrGmSection = in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles) || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles);
 @endphp
 
 <div class="sidebar-scroll">
     <ul class="sidebar-nav">
 
-@role('global_admin|admin|gm|general_manager|General Manager|GM')
+@if($isAdminOrGmSection)
 {{-- ════════════════════════════════════════════════════════════
      GLOBAL ADMIN & GM EXECUTIVE: ROLE-GROUPED SIDEBAR
 ═══════════════════════════════════════════════════════════════ --}}
@@ -2657,7 +2670,7 @@
 
         @endif {{-- end if($isGmUser) --}}
 
-        @endrole
+        @endif {{-- end if($isAdminOrGmSection) --}}
     </ul>
 </div>
 
@@ -2667,6 +2680,8 @@
     </div>
     <div class="sidebar-footer-info">
         <div class="user-name">{{ auth()->user()->name ?? 'User' }}</div>
-        <div class="user-role">{{ ucfirst(str_replace('_', ' ', auth()->user()->roles->first()->name ?? 'Guest')) }}</div>
+        <div class="user-role text-truncate" title="Active Role: {{ auth()->user()->getActiveRoleLabel() }}">
+            <i class="fa-solid fa-user-tag me-1 text-primary"></i>{{ auth()->user()->getActiveRoleLabel() }}
+        </div>
     </div>
 </div>

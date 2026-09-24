@@ -187,20 +187,26 @@
                                     <td>{{ $u->email }}</td>
                                     <td>
                                         @if($u->roles->count() > 0)
-                                            <span class="badge bg-primary">{{ ucfirst(str_replace('_', ' ', $u->roles->first()->name)) }}</span>
+                                            <div class="d-flex flex-wrap gap-1">
+                                                @foreach($u->roles as $userRole)
+                                                    <span class="badge bg-primary py-1 px-2" style="font-size: 0.75rem;">
+                                                        <i class="fa-solid fa-tag me-1 text-light"></i>{{ ucfirst(str_replace('_', ' ', $userRole->name)) }}
+                                                    </span>
+                                                @endforeach
+                                            </div>
                                         @else
-                                            <span class="badge bg-warning text-dark">No Role</span>
+                                            <span class="badge bg-warning text-dark"><i class="fa-solid fa-circle-exclamation me-1"></i>No Role</span>
                                         @endif
                                     </td>
                                     <td class="text-end">
                                         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#assignModal{{ $u->id }}">
-                                            <i class="fa-solid fa-edit"></i> Edit
+                                            <i class="fa-solid fa-edit me-1"></i> Manage Roles ({{ $u->roles->count() }})
                                         </button>
                                         @if($u->roles->count() > 0)
                                         <form action="{{ route('admin.role-assignment.remove', $u) }}" method="POST" class="d-inline-block"
                                             onsubmit="return confirm('Remove all roles from {{ $u->name }}? They will lose dashboard access.');">
                                             @csrf
-                                            <button class="btn btn-sm btn-outline-danger">
+                                            <button class="btn btn-sm btn-outline-danger" title="Remove all roles">
                                                 <i class="fa-solid fa-times"></i>
                                             </button>
                                         </form>
@@ -231,7 +237,7 @@
                 @csrf
                 <div class="modal-header">
                     <h5 class="modal-title">
-                        <i class="fa-solid fa-user-tag me-2"></i>Assign Role — {{ $u->name }}
+                        <i class="fa-solid fa-user-tag me-2 text-primary"></i>Assign Roles — {{ $u->name }}
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
@@ -259,24 +265,33 @@
                     </div>
                     @endif
                     <p class="text-sm text-muted mb-3">
-                        Selecting a role grants this user access to the corresponding dashboard and features in the system.
+                        Select one or multiple roles for this employee. When assigned multiple roles, they can effortlessly switch their active role in the top header and in their profile.
                     </p>
                     <div class="mb-3">
-                        <label class="form-label fw-bold">System Role <span class="text-danger">*</span></label>
-                        <select name="role" class="form-select" required>
-                            <option value="">— Select a role —</option>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bold mb-0">System Roles <span class="text-danger">*</span></label>
+                            <small class="text-muted">Select all that apply</small>
+                        </div>
+                        <div class="row g-2 border rounded p-2 bg-light" style="max-height: 250px; overflow-y: auto;">
                             @foreach($roles as $role)
-                                <option value="{{ $role->name }}" {{ $u->hasRole($role->name) ? 'selected' : '' }}>
-                                    {{ ucfirst(str_replace('_', ' ', $role->name)) }}
-                                </option>
+                                <div class="col-12 col-sm-6">
+                                    <div class="form-check p-2 bg-white rounded border shadow-xs h-100">
+                                        <input class="form-check-input ms-1 me-2" type="checkbox" name="roles[]" 
+                                               value="{{ $role->name }}" id="role_{{ $u->id }}_{{ $role->id }}"
+                                               {{ $u->hasRole($role->name) ? 'checked' : '' }}>
+                                        <label class="form-check-label small fw-semibold text-dark text-truncate d-block" for="role_{{ $u->id }}_{{ $role->id }}">
+                                            {{ ucfirst(str_replace('_', ' ', $role->name)) }}
+                                        </label>
+                                    </div>
+                                </div>
                             @endforeach
-                        </select>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fa-solid fa-save me-1"></i> Save Role
+                    <button type="submit" class="btn btn-primary fw-bold">
+                        <i class="fa-solid fa-save me-1"></i> Save Assigned Roles
                     </button>
                 </div>
             </form>

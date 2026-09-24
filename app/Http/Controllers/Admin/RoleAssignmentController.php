@@ -46,20 +46,29 @@ class RoleAssignmentController extends Controller
 
     public function assign(Request $request, User $user)
     {
-        $request->validate([
-            'role' => 'required|exists:roles,name',
-        ]);
+        $submittedRoles = $request->input('roles') ?? ($request->has('role') ? (array)$request->input('role') : []);
+        $submittedRoles = array_values(array_filter((array)$submittedRoles));
 
-        // Sync roles (replace any existing role)
-        $user->syncRoles([$request->role]);
+        if (empty($submittedRoles)) {
+            return back()->with('error', 'Please select at least one role to assign.');
+        }
+
+        // Validate all role names
+        $validRoleCount = Role::whereIn('name', $submittedRoles)->count();
+        if ($validRoleCount !== count($submittedRoles)) {
+            return back()->with('error', 'One or more selected roles are invalid.');
+        }
+
+        // Sync roles (multi-role support)
+        $user->syncRoles($submittedRoles);
 
         \App\Models\ActivityLog::log(
             'updated',
-            'Admin assigned role "' . $request->role . '" to user ' . $user->name,
+            'Admin assigned role(s) [' . implode(', ', $submittedRoles) . '] to user ' . $user->name,
             'Admin/Roles'
         );
 
-        return back()->with('success', 'Role "' . $request->role . '" assigned to ' . $user->name . ' successfully.');
+        return back()->with('success', 'Assigned ' . count($submittedRoles) . ' role(s) to ' . $user->name . ' successfully.');
     }
 
     public function removeRole(User $user)
