@@ -1391,6 +1391,12 @@ Route::middleware(['auth'])->group(function () {
             ->name('admin.scratch-material-requests.index');
         Route::get('/admin/procurement/scratch-requests/export', [App\Http\Controllers\Admin\ScratchMaterialRequestController::class, 'exportCsv'])
             ->name('admin.scratch-material-requests.export');
+
+        // Biometric Device Logs & Attendance Reset (Admin & Global Admin Only)
+        Route::get('/admin/attendance/device-logs', [App\Http\Controllers\AttendanceController::class, 'adminDeviceLogs'])
+            ->name('admin.attendance.device-logs');
+        Route::post('/admin/attendance/clear-history', [App\Http\Controllers\AttendanceController::class, 'clearHistory'])
+            ->name('admin.attendance.clear-history');
     });
 
     // Support Tickets (All Employees)

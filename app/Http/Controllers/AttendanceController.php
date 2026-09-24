@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\DeviceAttendanceLog;
+use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Artisan;
@@ -972,19 +974,64 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Clear all attendance records & raw device logs to start from scratch.
+     * Clear attendance records & raw device logs (Restricted strictly to Admin & Global Admin).
      */
     public function clearHistory(Request $request)
     {
-        Attendance::truncate();
-        \App\Models\DeviceAttendanceLog::truncate();
+        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'global_admin'])) {
+            abort(403, 'Unauthorized access. Only Global Admin and Admin roles can clear attendance and device records.');
+        }
 
-        return redirect()->route('attendance.index')->with('success', 'All previous attendance history has been cleared successfully. You can now start uploading from scratch.');
+        $clearType = $request->input('clear_type', 'all');
+        $desc = '';
+        $msg = '';
+
+        if ($clearType === 'attendance') {
+            Attendance::truncate();
+            $desc = 'Employee Attendance records table';
+            $msg = 'All employee attendance records have been cleared successfully. Raw device punch logs were preserved.';
+        } elseif ($clearType === 'device_logs') {
+            DeviceAttendanceLog::truncate();
+            $desc = 'Raw Biometric Device punch logs table';
+            $msg = 'All raw biometric device punch logs have been cleared successfully. Employee attendance records were preserved.';
+        } else {
+            Attendance::truncate();
+            DeviceAttendanceLog::truncate();
+            $desc = 'Complete Master Wipe: All Attendance records and Biometric Device punch logs';
+            $msg = 'All attendance records and raw biometric logs have been completely wiped. You can start fresh.';
+        }
+
+        ActivityLog::log(
+            'deleted',
+            "Biometric/Attendance Reset: {$desc} wiped by " . (auth()->user()->name ?? 'Admin'),
+            'Attendance & Biometrics'
+        );
+
+        return redirect()->route('admin.attendance.device-logs')->with('success', $msg);
     }
 
+    /**
+     * Legacy / HR redirect: Redirect admins to admin.attendance.device-logs, block non-admins.
+     */
     public function deviceLogs()
     {
-        $query = \App\Models\DeviceAttendanceLog::with('employee')->latest('punch_time');
+        if (auth()->check() && auth()->user()->hasAnyRole(['admin', 'global_admin'])) {
+            return redirect()->route('admin.attendance.device-logs', request()->query());
+        }
+
+        abort(403, 'Unauthorized. Device punch logs and data maintenance is restricted to Admin & Global Admin.');
+    }
+
+    /**
+     * Admin view for raw device logs and attendance reset maintenance.
+     */
+    public function adminDeviceLogs()
+    {
+        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'global_admin'])) {
+            abort(403, 'Unauthorized. Device punch logs and data maintenance is restricted to Admin & Global Admin.');
+        }
+
+        $query = DeviceAttendanceLog::with('employee')->latest('punch_time');
 
         if (request('date_from')) {
             $query->whereDate('punch_time', '>=', request('date_from'));
@@ -1000,27 +1047,30 @@ class AttendanceController extends Controller
 
         $logs = $query->paginate(50);
 
-        // Compute diagnostics about raw biometric punches in database safely
+        // Compute diagnostics about raw biometric punches and attendances in database safely
         try {
-            $totalLogsCount     = \App\Models\DeviceAttendanceLog::count();
-            $earliestPunch      = \App\Models\DeviceAttendanceLog::min('punch_time');
-            $latestPunch        = \App\Models\DeviceAttendanceLog::max('punch_time');
-            $unlinkedCount      = \App\Models\DeviceAttendanceLog::whereDoesntHave('employee')->count();
-            $distinctDatesCount = \Illuminate\Support\Facades\DB::table('device_attendance_logs')
+            $totalLogsCount       = DeviceAttendanceLog::count();
+            $totalAttendanceCount = Attendance::count();
+            $earliestPunch        = DeviceAttendanceLog::min('punch_time');
+            $latestPunch          = DeviceAttendanceLog::max('punch_time');
+            $unlinkedCount        = DeviceAttendanceLog::whereDoesntHave('employee')->count();
+            $distinctDatesCount   = DB::table('device_attendance_logs')
                 ->whereNotNull('punch_time')
                 ->selectRaw('COUNT(DISTINCT DATE(punch_time)) as cnt')
                 ->value('cnt') ?? 0;
         } catch (\Throwable $e) {
-            $totalLogsCount     = 0;
-            $earliestPunch      = null;
-            $latestPunch        = null;
-            $unlinkedCount      = 0;
-            $distinctDatesCount = 0;
+            $totalLogsCount       = 0;
+            $totalAttendanceCount = 0;
+            $earliestPunch        = null;
+            $latestPunch          = null;
+            $unlinkedCount        = 0;
+            $distinctDatesCount   = 0;
         }
 
-        return view('hr.attendance.device_logs', compact(
+        return view('admin.attendance.device_logs', compact(
             'logs',
             'totalLogsCount',
+            'totalAttendanceCount',
             'earliestPunch',
             'latestPunch',
             'unlinkedCount',
@@ -1073,17 +1123,21 @@ class AttendanceController extends Controller
             $redirectParams = ['date_from' => $start, 'date_to' => $end];
         }
 
+        $targetRoute = (auth()->check() && auth()->user()->hasAnyRole(['admin', 'global_admin']))
+            ? 'admin.attendance.device-logs'
+            : 'attendance.index';
+
         try {
             Artisan::call('zkteco:sync', $args);
             $output = trim(Artisan::output());
 
             return redirect()
-                ->route('attendance.deviceLogs', $redirectParams)
+                ->route($targetRoute, $redirectParams)
                 ->with('success', "ZKTeco device punch sync completed for {$label}. " . ($output ? strip_tags($output) : ''));
 
         } catch (\Exception $e) {
             return redirect()
-                ->route('attendance.deviceLogs')
+                ->route($targetRoute)
                 ->with('error', 'Sync failed: ' . $e->getMessage());
         }
     }

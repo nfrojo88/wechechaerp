@@ -113,6 +113,16 @@
     </a>
 </li>
 @endif
+@if(auth()->check() && (auth()->user()->hasRole('global_admin') || auth()->user()->hasRole('admin')))
+{{-- Quick Action: Device Logs & Attendance Reset (Admin / Global Admin) --}}
+<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
+    <a href="{{ route('admin.attendance.device-logs') }}" class="sidebar-nav-link {{ request()->routeIs('admin.attendance.*') ? 'active' : '' }}" style="font-weight:600;">
+        <i class="fa-solid fa-fingerprint text-primary"></i>
+        <span>Device Logs &amp; Reset</span>
+        <span class="badge bg-danger text-white rounded-pill ms-auto" style="font-size:0.6rem;">Admin</span>
+    </a>
+</li>
+@endif
 <hr class="sidebar-section-divider">
 
 {{-- ② Projects & Planning --}}
@@ -2655,6 +2665,12 @@
             <a href="{{ route('admin.tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.tickets.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-ticket text-danger"></i>
                 <span>Support Tickets</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('admin.attendance.device-logs') }}" class="sidebar-nav-link {{ request()->routeIs('admin.attendance.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-fingerprint text-primary"></i>
+                <span>Device Logs &amp; Reset</span>
             </a>
         </li>
         @endrole

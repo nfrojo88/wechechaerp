@@ -26,16 +26,6 @@
             <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#importDeviceModal">
                 <i class="fas fa-file-excel me-1"></i>Bulk Upload (XLS)
             </button>
-            <a href="{{ route('attendance.deviceLogs') }}" class="btn btn-outline-info">
-                <i class="fa-solid fa-fingerprint me-1"></i>Device Logs
-            </a>
-            <form action="{{ route('attendance.clearHistory') }}" method="POST" class="d-inline"
-                  onsubmit="return confirm('⚠️ Are you sure you want to completely clear and wipe all previous attendance history? This will remove all records so you can start from scratch.');">
-                @csrf
-                <button type="submit" class="btn btn-outline-danger">
-                    <i class="fas fa-trash-alt me-1"></i>Clear
-                </button>
-            </form>
         </div>
     </div>
 
