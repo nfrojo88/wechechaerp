@@ -336,9 +336,21 @@
                     </div>
                     @endif
 
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <span class="text-muted">Total Contract Value:</span>
-                        <strong class="fs-5 text-dark">{{ number_format($subconAgreement->effective_total_amount, 2) }} ETB</strong>
+                    <div class="p-3 bg-light rounded-3 border mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1.5 small">
+                            <span class="text-muted">1. Base Work (Excl. VAT):</span>
+                            <strong class="text-dark">{{ number_format($subconAgreement->base_amount > 0 ? $subconAgreement->base_amount : ($subconAgreement->vat_type === 'inclusive' && $subconAgreement->vat_amount > 0 ? $subconAgreement->effective_total_amount - $subconAgreement->vat_amount : $subconAgreement->effective_total_amount), 2) }} ETB</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-1.5 small">
+                            <span class="text-muted">
+                                2. VAT ({{ $subconAgreement->vat_type === 'inclusive' ? '15% Included / VAT B' : ($subconAgreement->vat_type === 'none' ? '0% No VAT' : '+' . ($subconAgreement->vat_rate ?? 15) . '% Added') }}):
+                            </span>
+                            <strong class="text-success">{{ $subconAgreement->vat_amount > 0 ? '+' : '' }} {{ number_format($subconAgreement->vat_amount ?? 0, 2) }} ETB</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                            <span class="fw-bold text-dark">3. Gross Contract Value:</span>
+                            <strong class="text-primary fs-6">{{ number_format($subconAgreement->effective_total_amount, 2) }} ETB</strong>
+                        </div>
                     </div>
 
                     <div class="d-flex justify-content-between align-items-center mb-3">

@@ -45,7 +45,7 @@ class SubconAgreementController extends Controller
         }
 
         $agreements = $query->latest()->paginate(20)->withQueryString();
-        $projects = Project::where('status', 'active')->orderBy('name')->get();
+        $projects = Project::orderBy('name')->get();
 
         // Status counters
         $statusCounts = [
@@ -65,7 +65,10 @@ class SubconAgreementController extends Controller
      */
     public function create()
     {
-        $projects = Project::where('status', 'active')->orderBy('name')->get();
+        $projects = Project::orderBy('name')->get();
+        if ($projects->isEmpty()) {
+            $projects = Project::all();
+        }
         $suppliers = Supplier::where('status', 'active')->orderBy('name')->get();
         $takeoffs = TakeoffSheet::where('status', 'approved')->with('project')->latest()->get();
 
@@ -106,6 +109,10 @@ class SubconAgreementController extends Controller
             'start_date'          => 'required|date',
             'end_date'            => 'nullable|date|after_or_equal:start_date',
             'contract_value'      => 'nullable|numeric|min:0',
+            'base_amount'         => 'nullable|numeric|min:0',
+            'vat_type'            => 'nullable|string|in:none,inclusive,exclusive,vat_b',
+            'vat_rate'            => 'nullable|numeric|min:0|max:100',
+            'vat_amount'          => 'nullable|numeric|min:0',
             'unit_price_per_m2'   => 'nullable|numeric|min:0',
             'estimated_total_m2'  => 'nullable|numeric|min:0',
             'retention_percent'   => 'nullable|numeric|min:0|max:100',
@@ -140,14 +147,50 @@ class SubconAgreementController extends Controller
         }
 
         $agreement = DB::transaction(function () use ($request, $filePath, $subcontractorName) {
-            $no = 'SUB-' . date('Ymd') . '-' . str_pad(SubconAgreement::count() + 1, 4, '0', STR_PAD_LEFT);
+            $no           = 'SUB-' . date('Ymd') . '-' . str_pad(SubconAgreement::count() + 1, 4, '0', STR_PAD_LEFT);
             $retentionPct = (float)($request->retention_percent ?? 10.00);
+            $vatType      = $request->vat_type ?? 'exclusive';
+            $vatRate      = (float)($request->vat_rate ?? 15.00);
+            $baseAmt      = (float)($request->base_amount ?? 0);
             $contractVal  = (float)($request->contract_value ?? 0);
             $unitPriceM2  = $request->filled('unit_price_per_m2') ? (float)$request->unit_price_per_m2 : null;
             $estimatedM2  = $request->filled('estimated_total_m2') ? (float)$request->estimated_total_m2 : null;
 
-            if ($contractVal <= 0 && $unitPriceM2 && $estimatedM2) {
-                $contractVal = round($unitPriceM2 * $estimatedM2, 2);
+            if ($baseAmt <= 0 && $unitPriceM2 && $estimatedM2) {
+                $baseAmt = round($unitPriceM2 * $estimatedM2, 2);
+            }
+
+            // Determine VAT & Contract Value
+            if ($request->filled('vat_amount') && (float)$request->vat_amount > 0) {
+                $vatAmt = (float)$request->vat_amount;
+                if ($contractVal <= 0) {
+                    $contractVal = $baseAmt + $vatAmt;
+                }
+            } else {
+                if ($vatType === 'exclusive') {
+                    if ($baseAmt <= 0 && $contractVal > 0) {
+                        $baseAmt = $contractVal;
+                    }
+                    $vatAmt = round($baseAmt * ($vatRate / 100), 2);
+                    $contractVal = $baseAmt + $vatAmt;
+                } elseif ($vatType === 'inclusive' || $vatType === 'vat_b') {
+                    if ($contractVal <= 0 && $baseAmt > 0) {
+                        $contractVal = $baseAmt;
+                    }
+                    if ($contractVal > 0) {
+                        $baseAmt = round($contractVal / (1 + ($vatRate / 100)), 2);
+                        $vatAmt = round($contractVal - $baseAmt, 2);
+                    } else {
+                        $vatAmt = 0;
+                    }
+                } else {
+                    // none
+                    if ($baseAmt <= 0 && $contractVal > 0) {
+                        $baseAmt = $contractVal;
+                    }
+                    $vatAmt = 0;
+                    $contractVal = $baseAmt;
+                }
             }
 
             $agr = SubconAgreement::create([
@@ -163,7 +206,12 @@ class SubconAgreementController extends Controller
                 'end_date'             => $request->end_date,
                 'unit_price_per_m2'    => $unitPriceM2,
                 'estimated_total_m2'   => $estimatedM2,
+                'base_amount'          => $baseAmt,
+                'vat_type'             => $vatType,
+                'vat_rate'             => $vatRate,
+                'vat_amount'           => $vatAmt,
                 'contract_value'       => $contractVal,
+                'total_amount'         => $contractVal,
                 'retention_percent'    => $retentionPct,
                 'retention_amount'     => round($contractVal * ($retentionPct / 100), 2),
                 'terms_conditions'     => $request->terms_conditions,

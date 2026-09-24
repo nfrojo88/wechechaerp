@@ -52,8 +52,8 @@
                                 <select name="project_id" class="form-select @error('project_id') is-invalid @enderror" required>
                                     <option value="">-- Select Project --</option>
                                     @foreach($projects as $project)
-                                    <option value="{{ $project->id }}" @selected(old('project_id') == $project->id)>
-                                        {{ $project->project_name ?? $project->name }} ({{ $project->code ?? 'PRJ-' . $project->id }})
+                                    <option value="{{ $project->id }}" {{ old('project_id') == $project->id ? 'selected' : '' }}>
+                                        {{ $project->project_name ?? $project->name }} ({{ $project->code ?? 'PRJ-' . $project->id }}){{ $project->status && strtolower($project->status) !== 'active' ? ' [' . ucfirst(str_replace('_', ' ', $project->status)) . ']' : '' }}
                                     </option>
                                     @endforeach
                                 </select>
@@ -65,7 +65,7 @@
                                 <select name="supplier_id" id="supplierSelect" class="form-select @error('supplier_id') is-invalid @enderror">
                                     <option value="">-- Select from Registered Suppliers / Subcontractors --</option>
                                     @foreach($suppliers as $supplier)
-                                    <option value="{{ $supplier->id }}" @selected(old('supplier_id') == $supplier->id) data-contact="{{ $supplier->phone ?? $supplier->email ?? '' }}" data-person="{{ $supplier->contact_person ?? '' }}">
+                                    <option value="{{ $supplier->id }}" {{ old('supplier_id') == $supplier->id ? 'selected' : '' }} data-contact="{{ $supplier->phone ?? $supplier->email ?? '' }}" data-person="{{ $supplier->contact_person ?? '' }}">
                                         {{ $supplier->name }} {{ $supplier->contact_person ? '(' . $supplier->contact_person . ')' : '' }}
                                     </option>
                                     @endforeach
@@ -242,40 +242,113 @@
                             </div>
                         </div>
 
+                        <!-- Base Amount (Before VAT) -->
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                <label class="form-label fw-semibold text-dark mb-0">Total Contract Value (ETB)</label>
-                                <span class="badge bg-light text-muted border small" style="font-size:0.68rem;" id="contractValSourceBadge">Lump-Sum / Area</span>
+                                <label class="form-label fw-semibold text-dark mb-0">Base Amount (Before VAT)</label>
+                                <span class="badge bg-light text-muted border small" style="font-size:0.68rem;" id="baseAmountBadge">Excl. VAT</span>
+                            </div>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light fw-bold text-muted">ETB</span>
+                                <input type="number" step="0.01" min="0" name="base_amount" id="baseAmountInput" 
+                                       class="form-control fw-bold text-dark @error('base_amount') is-invalid @enderror" 
+                                       placeholder="0.00" value="{{ old('base_amount', 0) }}" oninput="updateTaxAndTotals('from_base')">
+                            </div>
+                            <small class="text-muted">Net agreed work amount (or auto-calculated from m² above).</small>
+                            @error('base_amount')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+
+                        <!-- VAT Treatment & Rate (ቫት) -->
+                        <div class="p-3 bg-light rounded-3 mb-3 border">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <label class="form-label fw-bold text-dark small mb-0">
+                                    <i class="fa-solid fa-receipt text-success me-1"></i>VAT (ተጨማሪ እሴት ታክስ)
+                                </label>
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:0.68rem;" id="vatBadge">+15% VAT Added</span>
+                            </div>
+                            
+                            <div class="mb-2">
+                                <label class="form-label text-muted small mb-1 fw-semibold" style="font-size:0.75rem;">VAT Mode</label>
+                                <select name="vat_type" id="vatTypeSelect" class="form-select form-select-sm" onchange="updateTaxAndTotals('from_base')">
+                                    <option value="exclusive" {{ old('vat_type', 'exclusive') === 'exclusive' ? 'selected' : '' }}>+15% VAT Added (Exclusive / ተጨማሪ ቫት)</option>
+                                    <option value="inclusive" {{ old('vat_type') === 'inclusive' ? 'selected' : '' }}>15% VAT Included (Inclusive / VAT B / ከቫት ጋር)</option>
+                                    <option value="none" {{ old('vat_type') === 'none' ? 'selected' : '' }}>No VAT (0% / ያለ ቫት / Exempt)</option>
+                                </select>
+                            </div>
+
+                            <div class="row g-2">
+                                <div class="col-5">
+                                    <label class="form-label text-muted small mb-1 fw-semibold" style="font-size:0.75rem;">Rate (%)</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="0.1" min="0" max="100" name="vat_rate" id="vatRateInput" 
+                                               class="form-control" value="{{ old('vat_rate', 15) }}" oninput="updateTaxAndTotals('from_base')">
+                                        <span class="input-group-text bg-white px-2 text-muted">%</span>
+                                    </div>
+                                </div>
+                                <div class="col-7">
+                                    <label class="form-label text-muted small mb-1 fw-semibold" style="font-size:0.75rem;">VAT Amount (ETB)</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white px-2 text-muted">ETB</span>
+                                        <input type="number" step="0.01" min="0" name="vat_amount" id="vatAmountInput" 
+                                               class="form-control fw-semibold text-success" placeholder="0.00" value="{{ old('vat_amount', 0) }}" oninput="updateTaxAndTotals('from_vat')">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Total Gross Contract Value -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold text-dark mb-0">Total Contract Value (With VAT)</label>
+                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small" style="font-size:0.68rem;" id="contractValSourceBadge">Gross Ceiling</span>
                             </div>
                             <div class="input-group">
                                 <span class="input-group-text bg-light fw-bold">ETB</span>
                                 <input type="number" step="0.01" min="0" name="contract_value" id="contractValueInput" 
                                        class="form-control form-control-lg fw-bold text-primary @error('contract_value') is-invalid @enderror" 
-                                       placeholder="0.00" value="{{ old('contract_value', 0) }}" oninput="updateCalculations()">
+                                       placeholder="0.00" value="{{ old('contract_value', 0) }}" oninput="updateTaxAndTotals('from_gross')">
                             </div>
-                            <small class="text-muted">Total agreed lump-sum, ceiling amount, or m² product.</small>
+                            <small class="text-muted">Total agreed contract ceiling amount (Gross including VAT).</small>
                             @error('contract_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>
 
+                        <!-- Retention Rate (%) -->
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-dark">Retention Rate (%)</label>
                             <div class="input-group">
                                 <input type="number" step="0.1" min="0" max="100" name="retention_percent" id="retentionPercentInput" 
                                        class="form-control @error('retention_percent') is-invalid @enderror" 
-                                       value="{{ old('retention_percent', 10) }}" oninput="updateCalculations()">
+                                       value="{{ old('retention_percent', 10) }}" oninput="updateTaxAndTotals('from_base')">
                                 <span class="input-group-text bg-light">%</span>
                             </div>
                             <small class="text-muted">Standard 10% guarantee retention.</small>
                         </div>
 
-                        <div class="p-3 bg-light rounded-3 mb-3 border">
-                            <div class="d-flex justify-content-between mb-2">
-                                <span class="text-muted small">Estimated Retention:</span>
-                                <strong class="text-dark" id="displayRetentionAmount">0.00 ETB</strong>
+                        <!-- Detailed Financial Summary Breakdown -->
+                        <div class="p-3 bg-light rounded-3 mb-3 border shadow-sm">
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-2 d-flex align-items-center justify-content-between" style="font-size:0.85rem;">
+                                <span><i class="fa-solid fa-list-check text-primary me-1"></i>Detailed Financial Summary</span>
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:0.68rem;" id="vatSummaryModeBadge">+15% VAT Added</span>
+                            </h6>
+                            <div class="d-flex justify-content-between mb-1.5 small">
+                                <span class="text-muted">1. Work Base (Excl. VAT):</span>
+                                <strong class="text-dark" id="displayBaseAmount">0.00 ETB</strong>
                             </div>
-                            <div class="d-flex justify-content-between">
-                                <span class="text-muted small">Net Payable Contract:</span>
-                                <strong class="text-success" id="displayNetPayable">0.00 ETB</strong>
+                            <div class="d-flex justify-content-between mb-1.5 small">
+                                <span class="text-muted">2. VAT Amount (<span id="displayVatRateLabel">15%</span>):</span>
+                                <strong class="text-success" id="displayVatAmount">+ 0.00 ETB</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2 pb-2 border-bottom">
+                                <span class="fw-bold text-dark">3. Gross Contract Value:</span>
+                                <strong class="text-primary fs-6" id="displayGrossContract">0.00 ETB</strong>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1.5 small">
+                                <span class="text-muted">4. Guarantee Retention (<span id="displayRetentionPctLabel">10%</span>):</span>
+                                <strong class="text-warning" id="displayRetentionAmount">- 0.00 ETB</strong>
+                            </div>
+                            <div class="d-flex justify-content-between pt-1">
+                                <span class="fw-bold text-dark">5. Net Payable to Subcontractor:</span>
+                                <strong class="text-success fs-6" id="displayNetPayable">0.00 ETB</strong>
                             </div>
                         </div>
 
@@ -284,7 +357,7 @@
                             <select name="takeoff_sheet_id" class="form-select">
                                 <option value="">-- No Takeoff Linked --</option>
                                 @foreach($takeoffs as $takeoff)
-                                <option value="{{ $takeoff->id }}" @selected(old('takeoff_sheet_id') == $takeoff->id)>
+                                <option value="{{ $takeoff->id }}" {{ old('takeoff_sheet_id') == $takeoff->id ? 'selected' : '' }}>
                                     {{ $takeoff->project->name ?? 'Takeoff #' . $takeoff->id }} ({{ $takeoff->created_at->format('M d, Y') }})
                                 </option>
                                 @endforeach
@@ -417,33 +490,41 @@
         const qty = parseFloat(document.getElementById('estimatedTotalM2Input')?.value) || 0;
         const badge = document.getElementById('m2CalculationBadge');
         const badgeText = document.getElementById('m2CalculationText');
-        const sourceBadge = document.getElementById('contractValSourceBadge');
         
         if (rate > 0 && qty > 0) {
             const calculatedTotal = (rate * qty).toFixed(2);
-            const contractInput = document.getElementById('contractValueInput');
-            if (contractInput) {
-                contractInput.value = calculatedTotal;
+            const baseInput = document.getElementById('baseAmountInput');
+            if (baseInput) {
+                baseInput.value = calculatedTotal;
             }
             if (badge && badgeText) {
                 badge.classList.remove('d-none');
                 badgeText.innerHTML = `Auto-calculated: <strong>${rate.toLocaleString('en-US', {minimumFractionDigits: 2})} ETB/m²</strong> &times; <strong>${qty.toLocaleString('en-US', {minimumFractionDigits: 2})} m²</strong> = <strong>${Number(calculatedTotal).toLocaleString('en-US', {minimumFractionDigits: 2})} ETB</strong>`;
             }
+            const sourceBadge = document.getElementById('contractValSourceBadge');
             if (sourceBadge) {
                 sourceBadge.textContent = 'm² Product';
                 sourceBadge.className = 'badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small';
             }
         } else {
             if (badge) badge.classList.add('d-none');
-            if (sourceBadge) {
-                sourceBadge.textContent = 'Lump-Sum / Area';
-                sourceBadge.className = 'badge bg-light text-muted border small';
-            }
         }
-        updateCalculations();
+        updateTaxAndTotals('from_base');
     }
 
-    function updateCalculations() {
+    function updateTaxAndTotals(origin = 'from_base') {
+        const vatType = document.getElementById('vatTypeSelect')?.value || 'exclusive';
+        const vatRate = parseFloat(document.getElementById('vatRateInput')?.value) || 0;
+        const baseInput = document.getElementById('baseAmountInput');
+        const vatInput = document.getElementById('vatAmountInput');
+        const grossInput = document.getElementById('contractValueInput');
+        const retentionInput = document.getElementById('retentionPercentInput');
+
+        let base = parseFloat(baseInput?.value) || 0;
+        let vat = parseFloat(vatInput?.value) || 0;
+        let gross = parseFloat(grossInput?.value) || 0;
+
+        // Check if BOQ breakdown items are present
         let itemsSum = 0;
         document.querySelectorAll('.item-row-total').forEach(el => {
             const val = parseFloat(el.textContent.replace(/,/g, '')) || 0;
@@ -455,23 +536,93 @@
             subtotalEl.textContent = itemsSum.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
         }
 
-        const contractInput = document.getElementById('contractValueInput');
-        const sourceBadge = document.getElementById('contractValSourceBadge');
-        if (itemsSum > 0 && contractInput) {
-            contractInput.value = itemsSum.toFixed(2);
+        if (itemsSum > 0) {
+            base = itemsSum;
+            if (baseInput) baseInput.value = base.toFixed(2);
+            origin = 'from_base';
+            const sourceBadge = document.getElementById('contractValSourceBadge');
             if (sourceBadge) {
                 sourceBadge.textContent = 'BOQ Breakdown';
                 sourceBadge.className = 'badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 small';
             }
         }
 
-        const totalVal = parseFloat(contractInput?.value) || itemsSum || 0;
-        const retentionPct = parseFloat(document.getElementById('retentionPercentInput')?.value) || 0;
-        const retentionAmt = totalVal * (retentionPct / 100);
-        const netPayable = totalVal - retentionAmt;
+        if (origin === 'from_gross') {
+            if (vatType === 'exclusive' || vatType === 'inclusive') {
+                if (vatRate > 0) {
+                    base = gross / (1 + (vatRate / 100));
+                    vat = gross - base;
+                } else {
+                    base = gross;
+                    vat = 0;
+                }
+            } else {
+                base = gross;
+                vat = 0;
+            }
+            if (baseInput) baseInput.value = base > 0 ? base.toFixed(2) : '0.00';
+            if (vatInput) vatInput.value = vat > 0 ? vat.toFixed(2) : '0.00';
+        } else if (origin === 'from_vat') {
+            gross = base + vat;
+            if (grossInput) grossInput.value = gross > 0 ? gross.toFixed(2) : '0.00';
+        } else {
+            // from_base (default)
+            if (vatType === 'exclusive') {
+                vat = base * (vatRate / 100);
+                gross = base + vat;
+            } else if (vatType === 'inclusive') {
+                vat = base * (vatRate / 100);
+                gross = base + vat;
+            } else {
+                // none
+                vat = 0;
+                gross = base;
+            }
+            if (vatInput) vatInput.value = vat > 0 ? vat.toFixed(2) : '0.00';
+            if (grossInput) grossInput.value = gross > 0 ? gross.toFixed(2) : '0.00';
+        }
 
-        document.getElementById('displayRetentionAmount').textContent = retentionAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
-        document.getElementById('displayNetPayable').textContent = netPayable.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+        // Update VAT badges
+        const vatBadge = document.getElementById('vatBadge');
+        const vatSummaryModeBadge = document.getElementById('vatSummaryModeBadge');
+        const vatRateLabel = document.getElementById('displayVatRateLabel');
+        if (vatRateLabel) vatRateLabel.textContent = `${vatRate}%`;
+
+        if (vatType === 'exclusive') {
+            if (vatBadge) { vatBadge.textContent = `+${vatRate}% VAT Added`; vatBadge.className = 'badge bg-success bg-opacity-10 text-success border border-success border-opacity-25'; }
+            if (vatSummaryModeBadge) { vatSummaryModeBadge.textContent = `+${vatRate}% VAT Added`; vatSummaryModeBadge.className = 'badge bg-success bg-opacity-10 text-success border border-success border-opacity-25'; }
+        } else if (vatType === 'inclusive') {
+            if (vatBadge) { vatBadge.textContent = `${vatRate}% VAT Included`; vatBadge.className = 'badge bg-info bg-opacity-10 text-info border border-info border-opacity-25'; }
+            if (vatSummaryModeBadge) { vatSummaryModeBadge.textContent = `${vatRate}% VAT Included`; vatSummaryModeBadge.className = 'badge bg-info bg-opacity-10 text-info border border-info border-opacity-25'; }
+        } else {
+            if (vatBadge) { vatBadge.textContent = `0% No VAT`; vatBadge.className = 'badge bg-secondary bg-opacity-10 text-secondary border'; }
+            if (vatSummaryModeBadge) { vatSummaryModeBadge.textContent = `0% No VAT`; vatSummaryModeBadge.className = 'badge bg-secondary bg-opacity-10 text-secondary border'; }
+        }
+
+        // Retention calculation
+        const retentionPct = parseFloat(retentionInput?.value) || 0;
+        const retentionAmt = gross * (retentionPct / 100);
+        const netPayable = gross - retentionAmt;
+
+        // Render summary displays
+        const fmt = (n) => Number(n || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+        const displayBase = document.getElementById('displayBaseAmount');
+        const displayVat = document.getElementById('displayVatAmount');
+        const displayGross = document.getElementById('displayGrossContract');
+        const displayRet = document.getElementById('displayRetentionAmount');
+        const displayNet = document.getElementById('displayNetPayable');
+        const displayRetPct = document.getElementById('displayRetentionPctLabel');
+
+        if (displayBase) displayBase.textContent = fmt(base);
+        if (displayVat) displayVat.textContent = (vat > 0 ? '+ ' : '') + fmt(vat);
+        if (displayGross) displayGross.textContent = fmt(gross);
+        if (displayRet) displayRet.textContent = (retentionAmt > 0 ? '- ' : '') + fmt(retentionAmt);
+        if (displayNet) displayNet.textContent = fmt(netPayable);
+        if (displayRetPct) displayRetPct.textContent = `${retentionPct}%`;
+    }
+
+    function updateCalculations() {
+        updateTaxAndTotals('from_base');
     }
 
     // Initial calculation on page load
@@ -481,7 +632,7 @@
         if (rate > 0 && qty > 0) {
             calculateFromM2();
         } else {
-            updateCalculations();
+            updateTaxAndTotals('from_base');
         }
     });
 </script>

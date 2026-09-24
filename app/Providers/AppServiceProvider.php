@@ -31,6 +31,11 @@ class AppServiceProvider extends ServiceProvider
     {
         \Illuminate\Pagination\Paginator::useBootstrap();
 
+        // Custom Blade directive for selected (ensures compatibility on all Laravel versions)
+        \Illuminate\Support\Facades\Blade::directive('selected', function ($expression) {
+            return "<?php if ({$expression}) echo 'selected'; ?>";
+        });
+
         // Ensure centralized public/uploads directory exists on server
         if (!file_exists(public_path('uploads'))) {
             @mkdir(public_path('uploads'), 0755, true);

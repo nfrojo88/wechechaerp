@@ -220,9 +220,16 @@
                                 @if($agreement->unit_price_per_m2 && $agreement->estimated_total_m2)
                                     <small class="text-primary d-block" style="font-size:0.72rem;">{{ number_format($agreement->unit_price_per_m2, 2) }} ETB/m² &bull; {{ number_format($agreement->estimated_total_m2, 1) }} m²</small>
                                 @endif
-                                @if($agreement->retention_percent > 0)
-                                    <small class="text-muted d-block" style="font-size:0.72rem;">Ret: {{ $agreement->retention_percent }}%</small>
-                                @endif
+                                <div class="d-flex justify-content-end gap-1 mt-0.5">
+                                    @if($agreement->vat_type && $agreement->vat_type !== 'none')
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" style="font-size:0.65rem;">
+                                            {{ $agreement->vat_type === 'inclusive' ? '15% Incl.' : '+15% VAT' }}
+                                        </span>
+                                    @endif
+                                    @if($agreement->retention_percent > 0)
+                                        <span class="badge bg-light text-muted border" style="font-size:0.65rem;">Ret: {{ $agreement->retention_percent }}%</span>
+                                    @endif
+                                </div>
                             </td>
                             <td class="text-center">
                                 @if($agreement->agreement_file)

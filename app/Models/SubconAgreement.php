@@ -17,6 +17,9 @@ class SubconAgreement extends Model
         'approved_at'        => 'datetime',
         'unit_price_per_m2'  => 'decimal:2',
         'estimated_total_m2' => 'decimal:2',
+        'base_amount'        => 'decimal:2',
+        'vat_rate'           => 'decimal:2',
+        'vat_amount'         => 'decimal:2',
     ];
 
     // Relationships
