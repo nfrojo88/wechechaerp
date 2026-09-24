@@ -1428,6 +1428,7 @@
                                                 @endif
                                             @endif
 
+                                            @if(!$isStoreReviewStage && !$isStoreManagerOnly)
                                             <!-- Edit / Update Item / Purchased Qty -->
                                             <button type="button" class="btn btn-outline-secondary btn-sm" title="Edit Item Details"
                                                     onclick="openEditPrItemModal({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}', {{ $reqQty }}, {{ $purchQty }}, '{{ addslashes($item->unit) }}', {{ (float)($item->estimated_unit_cost ?? 0) }}, '{{ addslashes($item->specifications ?? '') }}')">
@@ -1438,6 +1439,7 @@
                                                     onclick="confirmDeletePrItem({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}')">
                                                 <i class="fas fa-trash-can"></i>
                                             </button>
+                                            @endif
                                             @endif
                                         </div>
                                     </td>
