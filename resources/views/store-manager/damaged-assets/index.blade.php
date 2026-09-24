@@ -143,6 +143,7 @@
                                     @endif
                                 </td>
                                 <td class="text-end pe-4">
+                                    @if(auth()->user()->hasAnyRole(['store_manager', 'admin', 'global_admin']))
                                     <button type="button"
                                             class="btn btn-sm btn-outline-danger"
                                             data-bs-toggle="modal"
@@ -154,6 +155,9 @@
                                             onclick="fillActionModal(this)">
                                         <i class="fa-solid fa-gavel me-1"></i> Take Action
                                     </button>
+                                    @else
+                                        <span class="badge bg-secondary-subtle text-secondary border px-2 py-1"><i class="fa-solid fa-clock me-1"></i> Store Action Pending</span>
+                                    @endif
                                 </td>
                             </tr>
                             @endforeach

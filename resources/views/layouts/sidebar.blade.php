@@ -25,6 +25,7 @@
     $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles);
     $isGmUser = in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles);
     $isSiteEngineer = in_array('site_engineer', $rawUserRoles);
+    $isForeman = in_array('foreman', $rawUserRoles) || ($authUser && ($authUser->hasRole('foreman') || $authUser->hasRole('Foreman')));
     $isAdminOrGmSection = in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles) || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles);
 @endphp
 
@@ -427,6 +428,8 @@
             <li><a href="{{ route('dashboard.general_service') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.general_service') ? 'active' : '' }}"><i class="fa-solid fa-screwdriver-wrench text-warning"></i><span>GS Dashboard</span></a></li>
             <li><a href="{{ route('general-service.maintenance.index') }}" class="sidebar-nav-link {{ request()->routeIs('general-service.maintenance.*') ? 'active' : '' }}"><i class="fa-solid fa-wrench text-danger"></i><span>Maintenance Requests</span></a></li>
             <li><a href="{{ route('store-manager.fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.fixed-assets.*') ? 'active' : '' }}"><i class="fa-solid fa-truck-monster text-primary"></i><span>Workshop & Fixed Assets</span></a></li>
+            <li><a href="{{ route('foreman.fixed-assets') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.fixed-assets*') ? 'active' : '' }}"><i class="fa-solid fa-truck-monster text-danger"></i><span>Site Fixed Assets (Foreman)</span></a></li>
+            <li><a href="{{ route('foreman.my-maintenance-requests') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.my-maintenance-requests*') ? 'active' : '' }}"><i class="fa-solid fa-wrench text-warning"></i><span>Foreman Maintenance Requests</span></a></li>
             <li><a href="{{ route('material-damage-reports.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-damage-reports.*') ? 'active' : '' }}"><i class="fa-solid fa-triangle-exclamation text-warning"></i><span>Material Damage Reports</span></a></li>
         </ul>
     </div>
@@ -2050,8 +2053,13 @@
         @endif
 
         {{-- Foreman Tools --}}
-        @if(auth()->check() && (auth()->user()->hasAnyRole(['foreman', 'admin', 'global_admin'])))
-
+        @if(auth()->check() && ($isForeman || auth()->user()->hasAnyRole(['foreman', 'Foreman', 'admin', 'global_admin'])))
+        <hr class="sidebar-section-divider">
+        <li style="padding: 0.35rem 0.9rem 0.1rem;">
+            <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+                <i class="fa-solid fa-hard-hat text-warning me-1"></i> Foreman Tools
+            </small>
+        </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.foreman') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.foreman') ? 'active' : '' }}">
                 <i class="fa-solid fa-hard-hat text-primary"></i>
@@ -2084,15 +2092,43 @@
         </li>
         {{-- ── Asset Maintenance Request Feature (Foreman) ── --}}
         <li class="sidebar-nav-item">
-            <a href="{{ route('foreman.fixed-assets') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.fixed-assets') ? 'active' : '' }}">
+            <a href="{{ route('foreman.fixed-assets') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.fixed-assets*') ? 'active' : '' }}">
                 <i class="fa-solid fa-truck-monster text-danger"></i>
                 <span>Site Fixed Assets</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('foreman.my-maintenance-requests') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.my-maintenance-requests') ? 'active' : '' }}">
+            <a href="{{ route('foreman.my-maintenance-requests') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.my-maintenance-requests*') ? 'active' : '' }}">
                 <i class="fa-solid fa-wrench text-warning"></i>
                 <span>My Maintenance Requests</span>
+                @php
+                    $myMaintCount = 0;
+                    try {
+                        if (auth()->check()) {
+                            $myMaintCount = \App\Models\MaintenanceRequest::where('reported_by_user_id', auth()->id())
+                                ->whereNotIn('status', ['resolved', 'closed'])
+                                ->count();
+                        }
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($myMaintCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $myMaintCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('store-manager.damaged-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.damaged-assets.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-triangle-exclamation text-danger"></i>
+                <span>Damaged Assets</span>
+                @php
+                    $smDamagedCountForeman = 0;
+                    try {
+                        $smDamagedCountForeman = \App\Models\MaintenanceRequest::where('status', 'sent_to_store_manager')->count();
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($smDamagedCountForeman > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $smDamagedCountForeman }}</span>
+                @endif
             </a>
         </li>
         @endif

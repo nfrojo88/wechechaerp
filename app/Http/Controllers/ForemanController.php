@@ -214,8 +214,8 @@ class ForemanController extends Controller
     {
         $user = Auth::user();
 
-        // Only store manager, admin, global_admin
-        if (!$user->hasAnyRole(['store_manager', 'admin', 'global_admin'])) {
+        // Store manager, admin, global_admin, and foreman (read-only view)
+        if (!$user->hasAnyRole(['store_manager', 'admin', 'global_admin', 'foreman', 'Foreman'])) {
             abort(403, 'Access denied.');
         }
 
