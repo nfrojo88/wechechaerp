@@ -7,25 +7,23 @@ use Illuminate\Http\Request;
 
 class SubcontractorController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $agreements = SubconAgreement::with('project')->latest()->get();
-        return view('finance.subcontractors.index', compact('agreements'));
+        return redirect()->route('subcon-agreements.index');
     }
 
     public function create()
     {
-        return view('finance.subcontractors.create');
+        return redirect()->route('subcon-agreements.create');
     }
 
     public function store(Request $request)
     {
-        return redirect()->route('subcontractors.index')->with('success', 'Subcontractor agreement created.');
+        return app(SubconAgreementController::class)->store($request);
     }
 
     public function show(SubconAgreement $subcontractor)
     {
-        $subcontractor->load(['project', 'items.boqItem', 'ipcs']);
-        return view('finance.subcontractors.show', compact('subcontractor'));
+        return redirect()->route('subcon-agreements.show', $subcontractor);
     }
 }
