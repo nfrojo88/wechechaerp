@@ -106,6 +106,8 @@ class SubconAgreementController extends Controller
             'start_date'          => 'required|date',
             'end_date'            => 'nullable|date|after_or_equal:start_date',
             'contract_value'      => 'nullable|numeric|min:0',
+            'unit_price_per_m2'   => 'nullable|numeric|min:0',
+            'estimated_total_m2'  => 'nullable|numeric|min:0',
             'retention_percent'   => 'nullable|numeric|min:0|max:100',
             'terms_conditions'    => 'nullable|string',
             'agreement_file'      => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png,webp|max:20480',
@@ -141,6 +143,12 @@ class SubconAgreementController extends Controller
             $no = 'SUB-' . date('Ymd') . '-' . str_pad(SubconAgreement::count() + 1, 4, '0', STR_PAD_LEFT);
             $retentionPct = (float)($request->retention_percent ?? 10.00);
             $contractVal  = (float)($request->contract_value ?? 0);
+            $unitPriceM2  = $request->filled('unit_price_per_m2') ? (float)$request->unit_price_per_m2 : null;
+            $estimatedM2  = $request->filled('estimated_total_m2') ? (float)$request->estimated_total_m2 : null;
+
+            if ($contractVal <= 0 && $unitPriceM2 && $estimatedM2) {
+                $contractVal = round($unitPriceM2 * $estimatedM2, 2);
+            }
 
             $agr = SubconAgreement::create([
                 'agreement_no'         => $no,
@@ -153,6 +161,8 @@ class SubconAgreementController extends Controller
                 'work_description'     => $request->work_description,
                 'start_date'           => $request->start_date,
                 'end_date'             => $request->end_date,
+                'unit_price_per_m2'    => $unitPriceM2,
+                'estimated_total_m2'   => $estimatedM2,
                 'contract_value'       => $contractVal,
                 'retention_percent'    => $retentionPct,
                 'retention_amount'     => round($contractVal * ($retentionPct / 100), 2),

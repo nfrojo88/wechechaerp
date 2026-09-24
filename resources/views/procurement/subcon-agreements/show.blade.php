@@ -313,6 +313,29 @@
                     </h6>
                 </div>
                 <div class="card-body p-4">
+                    @if($subconAgreement->unit_price_per_m2 || $subconAgreement->estimated_total_m2)
+                    <div class="p-3 bg-light rounded-3 border mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-muted small fw-semibold">
+                                <i class="fa-solid fa-ruler-combined text-primary me-1"></i>Price per m²:
+                            </span>
+                            <strong class="text-dark">{{ $subconAgreement->unit_price_per_m2 ? number_format($subconAgreement->unit_price_per_m2, 2) . ' ETB / m²' : 'N/A' }}</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-muted small fw-semibold">
+                                <i class="fa-solid fa-vector-square text-secondary me-1"></i>Estimated Total Area:
+                            </span>
+                            <strong class="text-dark">{{ $subconAgreement->estimated_total_m2 ? number_format($subconAgreement->estimated_total_m2, 2) . ' m²' : 'N/A' }}</strong>
+                        </div>
+                        @if($subconAgreement->unit_price_per_m2 && $subconAgreement->estimated_total_m2)
+                        <div class="d-flex justify-content-between align-items-center pt-2 border-top">
+                            <span class="text-muted small fw-semibold">Calculated Area Total:</span>
+                            <strong class="text-primary">{{ number_format($subconAgreement->unit_price_per_m2 * $subconAgreement->estimated_total_m2, 2) }} ETB</strong>
+                        </div>
+                        @endif
+                    </div>
+                    @endif
+
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <span class="text-muted">Total Contract Value:</span>
                         <strong class="fs-5 text-dark">{{ number_format($subconAgreement->effective_total_amount, 2) }} ETB</strong>

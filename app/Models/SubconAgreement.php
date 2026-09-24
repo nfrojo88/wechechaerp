@@ -12,9 +12,11 @@ class SubconAgreement extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'start_date' => 'date',
-        'end_date'   => 'date',
-        'approved_at'=> 'datetime',
+        'start_date'         => 'date',
+        'end_date'           => 'date',
+        'approved_at'        => 'datetime',
+        'unit_price_per_m2'  => 'decimal:2',
+        'estimated_total_m2' => 'decimal:2',
     ];
 
     // Relationships

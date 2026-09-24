@@ -217,6 +217,9 @@
                             </td>
                             <td class="text-end">
                                 <strong class="text-dark">{{ number_format($agreement->effective_total_amount, 2) }} ETB</strong>
+                                @if($agreement->unit_price_per_m2 && $agreement->estimated_total_m2)
+                                    <small class="text-primary d-block" style="font-size:0.72rem;">{{ number_format($agreement->unit_price_per_m2, 2) }} ETB/m² &bull; {{ number_format($agreement->estimated_total_m2, 1) }} m²</small>
+                                @endif
                                 @if($agreement->retention_percent > 0)
                                     <small class="text-muted d-block" style="font-size:0.72rem;">Ret: {{ $agreement->retention_percent }}%</small>
                                 @endif

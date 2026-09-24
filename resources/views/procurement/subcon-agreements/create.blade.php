@@ -206,15 +206,54 @@
                         </h6>
                     </div>
                     <div class="card-body p-4">
+                        <!-- m² Rate & Estimation (Optional) -->
+                        <div class="p-3 bg-light rounded-3 mb-3 border">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <label class="form-label fw-bold text-dark small mb-0">
+                                    <i class="fa-solid fa-ruler-combined text-primary me-1"></i>m² Rate &amp; Area Estimation <span class="text-muted fw-normal">(Optional)</span>
+                                </label>
+                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size:0.68rem;">Area-Based</span>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="form-label text-muted small mb-1 fw-semibold" style="font-size:0.75rem;">Price per m² (ETB)</label>
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-white px-2 text-muted">ETB</span>
+                                        <input type="number" step="0.01" min="0" name="unit_price_per_m2" id="unitPriceM2Input" 
+                                               class="form-control @error('unit_price_per_m2') is-invalid @enderror" 
+                                               placeholder="0.00" value="{{ old('unit_price_per_m2') }}" oninput="calculateFromM2()">
+                                    </div>
+                                    @error('unit_price_per_m2')<div class="invalid-feedback d-block" style="font-size:0.7rem;">{{ $message }}</div>@enderror
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label text-muted small mb-1 fw-semibold" style="font-size:0.75rem;">Estimated Total m²</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" step="0.01" min="0" name="estimated_total_m2" id="estimatedTotalM2Input" 
+                                               class="form-control @error('estimated_total_m2') is-invalid @enderror" 
+                                               placeholder="0.00" value="{{ old('estimated_total_m2') }}" oninput="calculateFromM2()">
+                                        <span class="input-group-text bg-white px-2 text-muted">m²</span>
+                                    </div>
+                                    @error('estimated_total_m2')<div class="invalid-feedback d-block" style="font-size:0.7rem;">{{ $message }}</div>@enderror
+                                </div>
+                            </div>
+                            <div id="m2CalculationBadge" class="mt-2 text-primary small d-none" style="font-size:0.72rem;">
+                                <i class="fa-solid fa-calculator me-1"></i>
+                                <span id="m2CalculationText"></span>
+                            </div>
+                        </div>
+
                         <div class="mb-3">
-                            <label class="form-label fw-semibold text-dark">Total Contract Value (ETB)</label>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-semibold text-dark mb-0">Total Contract Value (ETB)</label>
+                                <span class="badge bg-light text-muted border small" style="font-size:0.68rem;" id="contractValSourceBadge">Lump-Sum / Area</span>
+                            </div>
                             <div class="input-group">
                                 <span class="input-group-text bg-light fw-bold">ETB</span>
                                 <input type="number" step="0.01" min="0" name="contract_value" id="contractValueInput" 
                                        class="form-control form-control-lg fw-bold text-primary @error('contract_value') is-invalid @enderror" 
                                        placeholder="0.00" value="{{ old('contract_value', 0) }}" oninput="updateCalculations()">
                             </div>
-                            <small class="text-muted">Total agreed lump-sum or ceiling amount.</small>
+                            <small class="text-muted">Total agreed lump-sum, ceiling amount, or m² product.</small>
                             @error('contract_value')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>
 
@@ -373,6 +412,37 @@
         updateCalculations();
     }
 
+    function calculateFromM2() {
+        const rate = parseFloat(document.getElementById('unitPriceM2Input')?.value) || 0;
+        const qty = parseFloat(document.getElementById('estimatedTotalM2Input')?.value) || 0;
+        const badge = document.getElementById('m2CalculationBadge');
+        const badgeText = document.getElementById('m2CalculationText');
+        const sourceBadge = document.getElementById('contractValSourceBadge');
+        
+        if (rate > 0 && qty > 0) {
+            const calculatedTotal = (rate * qty).toFixed(2);
+            const contractInput = document.getElementById('contractValueInput');
+            if (contractInput) {
+                contractInput.value = calculatedTotal;
+            }
+            if (badge && badgeText) {
+                badge.classList.remove('d-none');
+                badgeText.innerHTML = `Auto-calculated: <strong>${rate.toLocaleString('en-US', {minimumFractionDigits: 2})} ETB/m²</strong> &times; <strong>${qty.toLocaleString('en-US', {minimumFractionDigits: 2})} m²</strong> = <strong>${Number(calculatedTotal).toLocaleString('en-US', {minimumFractionDigits: 2})} ETB</strong>`;
+            }
+            if (sourceBadge) {
+                sourceBadge.textContent = 'm² Product';
+                sourceBadge.className = 'badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small';
+            }
+        } else {
+            if (badge) badge.classList.add('d-none');
+            if (sourceBadge) {
+                sourceBadge.textContent = 'Lump-Sum / Area';
+                sourceBadge.className = 'badge bg-light text-muted border small';
+            }
+        }
+        updateCalculations();
+    }
+
     function updateCalculations() {
         let itemsSum = 0;
         document.querySelectorAll('.item-row-total').forEach(el => {
@@ -386,8 +456,13 @@
         }
 
         const contractInput = document.getElementById('contractValueInput');
+        const sourceBadge = document.getElementById('contractValSourceBadge');
         if (itemsSum > 0 && contractInput) {
             contractInput.value = itemsSum.toFixed(2);
+            if (sourceBadge) {
+                sourceBadge.textContent = 'BOQ Breakdown';
+                sourceBadge.className = 'badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 small';
+            }
         }
 
         const totalVal = parseFloat(contractInput?.value) || itemsSum || 0;
@@ -401,7 +476,13 @@
 
     // Initial calculation on page load
     document.addEventListener('DOMContentLoaded', function() {
-        updateCalculations();
+        const rate = parseFloat(document.getElementById('unitPriceM2Input')?.value) || 0;
+        const qty = parseFloat(document.getElementById('estimatedTotalM2Input')?.value) || 0;
+        if (rate > 0 && qty > 0) {
+            calculateFromM2();
+        } else {
+            updateCalculations();
+        }
     });
 </script>
 @endpush
