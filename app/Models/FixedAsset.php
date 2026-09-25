@@ -149,38 +149,46 @@ class FixedAsset extends Model
     public function generateUnitsToMatchQuantity(array $defaultAttributes = []): int
     {
         $currentCount = $this->units()->count();
-        $targetQty = $this->total_quantity;
+        $targetQty = (int) $this->total_quantity;
         $created = 0;
 
         if ($currentCount >= $targetQty) {
             return 0;
         }
 
+        // Cap batch auto-generation per call to 50 to prevent PHP execution timeout
+        $maxToCreate = min($targetQty - $currentCount, 50);
+
         // Find max sequence number used so far
         $maxSeq = (int) $this->units()->max('sequence_number');
 
-        for ($i = $currentCount + 1; $i <= $targetQty; $i++) {
-            $maxSeq++;
-            $unitCode = $this->generateUnitCode($maxSeq);
-
-            // Avoid collisions if previously deleted or customized
-            while (FixedAssetUnit::where('unit_code', $unitCode)->exists()) {
+        FixedAssetUnit::$isSyncing = true;
+        try {
+            for ($i = 0; $i < $maxToCreate; $i++) {
                 $maxSeq++;
                 $unitCode = $this->generateUnitCode($maxSeq);
+
+                // Avoid collisions if previously deleted or customized
+                while (FixedAssetUnit::where('unit_code', $unitCode)->exists()) {
+                    $maxSeq++;
+                    $unitCode = $this->generateUnitCode($maxSeq);
+                }
+
+                FixedAssetUnit::create(array_merge([
+                    'fixed_asset_id'  => $this->id,
+                    'unit_code'       => $unitCode,
+                    'sequence_number' => $maxSeq,
+                    'status'          => FixedAssetUnit::STATUS_IN_STORE,
+                    'condition'       => 'good',
+                    'purchase_price'  => $this->unit_cost,
+                    'current_location'=> $this->store?->name ?? 'Main Store',
+                    'created_by'      => auth()->id(),
+                ], $defaultAttributes));
+
+                $created++;
             }
-
-            FixedAssetUnit::create(array_merge([
-                'fixed_asset_id'  => $this->id,
-                'unit_code'       => $unitCode,
-                'sequence_number' => $maxSeq,
-                'status'          => FixedAssetUnit::STATUS_IN_STORE,
-                'condition'       => 'good',
-                'purchase_price'  => $this->unit_cost,
-                'current_location'=> $this->store->name ?? 'Main Store',
-                'created_by'      => auth()->id(),
-            ], $defaultAttributes));
-
-            $created++;
+        } finally {
+            FixedAssetUnit::$isSyncing = false;
         }
 
         return $created;
@@ -319,6 +327,21 @@ class FixedAsset extends Model
             $query = Product::withTrashed();
 
             if ($specificProductId) {
+                $productCheck = Product::withTrashed()->find($specificProductId);
+                if (!$productCheck) {
+                    return 0;
+                }
+                $cat = strtolower(trim($productCheck->category ?? ''));
+                $subCat = strtolower(trim($productCheck->sub_category ?? ''));
+                $sku = strtoupper(trim($productCheck->sku ?? ''));
+                $isAsset = $cat === 'fixed asset' 
+                    || str_contains($cat, 'asset') 
+                    || str_contains($subCat, 'asset')
+                    || str_starts_with($sku, 'FA-') 
+                    || str_starts_with($sku, 'AST-');
+                if (!$isAsset) {
+                    return 0; // Not an asset product, do not create or sync fixed assets
+                }
                 $query->where('id', $specificProductId);
             } elseif ($searchQuery && strlen(trim($searchQuery)) >= 2) {
                 $cleanSearch = trim($searchQuery);

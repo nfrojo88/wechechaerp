@@ -53,14 +53,28 @@ class FixedAssetUnit extends Model
         'deleted_at'        => 'datetime',
     ];
 
+    public static bool $isSyncing = false;
+
     protected static function booted()
     {
         static::saved(function (FixedAssetUnit $unit) {
-            $unit->parentAsset?->syncWithCatalogAndInventory();
+            if (static::$isSyncing) return;
+            try {
+                static::$isSyncing = true;
+                $unit->parentAsset?->syncWithCatalogAndInventory();
+            } finally {
+                static::$isSyncing = false;
+            }
         });
 
         static::deleted(function (FixedAssetUnit $unit) {
-            $unit->parentAsset?->syncWithCatalogAndInventory();
+            if (static::$isSyncing) return;
+            try {
+                static::$isSyncing = true;
+                $unit->parentAsset?->syncWithCatalogAndInventory();
+            } finally {
+                static::$isSyncing = false;
+            }
         });
     }
 

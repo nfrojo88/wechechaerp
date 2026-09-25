@@ -32,12 +32,27 @@ class Inventory extends Model
         'last_movement_at' => 'datetime',
     ];
 
+    public static bool $isSyncing = false;
+
     protected static function booted()
     {
         static::saved(function (Inventory $inventory) {
+            if (static::$isSyncing) {
+                return;
+            }
+
             try {
-                FixedAsset::syncFromInventory($inventory->product_id);
-            } catch (\Throwable $e) {}
+                // Only sync if product is explicitly a Fixed Asset
+                $product = $inventory->relationLoaded('product') ? $inventory->product : Product::find($inventory->product_id);
+                if ($product && strtolower(trim($product->category ?? '')) === 'fixed asset') {
+                    static::$isSyncing = true;
+                    FixedAsset::syncFromInventory($inventory->product_id);
+                }
+            } catch (\Throwable $e) {
+                // Ignore sync errors during inventory update
+            } finally {
+                static::$isSyncing = false;
+            }
         });
     }
 

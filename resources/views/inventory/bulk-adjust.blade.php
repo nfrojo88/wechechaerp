@@ -447,8 +447,12 @@ function saveRowPromise(productId) {
             payload.unit_cost = cost;
         }
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
         fetch(SAVE_URL, {
             method  : 'POST',
+            signal  : controller.signal,
             headers : {
                 'Content-Type'     : 'application/json',
                 'Accept'           : 'application/json',
@@ -458,6 +462,7 @@ function saveRowPromise(productId) {
             body : JSON.stringify(payload),
         })
         .then(async res => {
+            clearTimeout(timeoutId);
             const data = await res.json().catch(() => ({ success: false, message: 'Invalid response from server' }));
             if (!res.ok || !data.success) {
                 if (data.errors) {
@@ -515,12 +520,14 @@ function saveRowPromise(productId) {
             resolve(data);
         })
         .catch(err => {
+            clearTimeout(timeoutId);
             setBtnState(saveBtn, 'normal');
+            const msg = err.name === 'AbortError' ? 'Server took too long to respond. Please try again.' : err.message;
             if (statusEl) {
-                statusEl.textContent = '✗ ' + err.message;
+                statusEl.textContent = '✗ ' + msg;
                 statusEl.className   = 'row-status err';
             }
-            showToast('error', 'Error: ' + err.message);
+            showToast('error', 'Error: ' + msg);
             reject(err);
         });
     });
