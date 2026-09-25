@@ -69,6 +69,233 @@
         {{-- Left Column: Request Details & Ask Money & Ask Material & Update Form --}}
         <div class="col-lg-8">
 
+            {{-- ── 0. EXECUTIVE 6-STEP WORKFLOW CONTROLLER CARD ────────────────── --}}
+            <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden border-top border-4 {{ $maintenanceRequest->gs_status === 'gm_returned_to_gs' ? 'border-danger' : ($maintenanceRequest->gs_status === 'gm_approved_initial' ? 'border-info' : ($maintenanceRequest->gs_status === 'approved' ? 'border-success' : 'border-warning')) }}">
+                <div class="card-header bg-white py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="rounded-circle p-2 text-warning d-flex align-items-center justify-content-center" style="width:36px;height:36px;background:rgba(245,158,11,0.12);">
+                            <i class="fa-solid fa-arrows-split-up-and-left fs-5"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-0 fw-bold text-dark">Maintenance Request Workflow Status</h5>
+                            <small class="text-muted">6-Step Lifecycle: Request &rarr; GS Review &rarr; GM Permission &rarr; Petty Cash &rarr; Finance &amp; Store</small>
+                        </div>
+                    </div>
+                    @php $gsBadge = $maintenanceRequest->gs_status_badge; @endphp
+                    <span class="badge {{ $gsBadge['class'] }} rounded-pill px-3 py-1.5 fs-6">
+                        <i class="fa-solid {{ $gsBadge['icon'] }} me-1"></i>{{ $gsBadge['label'] }}
+                    </span>
+                </div>
+                <div class="card-body p-4 bg-light bg-opacity-50">
+
+                    {{-- Step 1 / 2: GS hasn't sent to GM yet (pending_gs) --}}
+                    @if(in_array($maintenanceRequest->gs_status, ['pending_gs', null]))
+                        <div class="alert alert-warning border-0 shadow-xs rounded-3 p-3 mb-3">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="fa-solid fa-circle-question fs-4 text-warning mt-1"></i>
+                                <div>
+                                    <strong class="d-block text-dark">Step 2: General Service Review &amp; Permission Request</strong>
+                                    <p class="small text-muted mb-0">
+                                        Review the maintenance description below. If valid, send the request to the General Manager (GM) asking for permission to proceed ("go ahead and maintain this material").
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <form method="POST" action="{{ route('general-service.maintenance.submit-to-gm', $maintenanceRequest) }}" class="p-3 bg-white rounded-3 border">
+                            @csrf
+                            <label class="form-label fw-bold small text-uppercase text-secondary mb-1">General Service Notes to GM (Optional)</label>
+                            <textarea name="gs_notes" class="form-control rounded-3 mb-3" rows="2" placeholder="e.g. Asset inspection complete. Requesting permission to proceed with maintenance and repair..."></textarea>
+                            <button type="submit" class="btn btn-warning text-dark fw-bold rounded-pill px-4 shadow-sm">
+                                <i class="fa-solid fa-paper-plane me-2"></i>Send to GM Asking for Permission to Proceed
+                            </button>
+                        </form>
+
+                    {{-- Step 2: Submitted to GM, awaiting decision --}}
+                    @elseif($maintenanceRequest->gs_status === 'submitted_to_gm')
+                        <div class="alert alert-info border-0 shadow-xs rounded-3 p-3 mb-0">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="spinner-border spinner-border-sm text-info" role="status"></div>
+                                <div>
+                                    <strong class="d-block text-dark">Awaiting General Manager's Initial Decision</strong>
+                                    <p class="small text-muted mb-0">
+                                        The GM is reviewing this ticket to grant permission to proceed ("Approve") or send back with directives ("Return").
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                    {{-- Step 3: GM Approved initial permission -> GS adds Technician details & assigns Petty Cash Owner --}}
+                    @elseif($maintenanceRequest->gs_status === 'gm_approved_initial')
+                        <div class="alert alert-success border-0 shadow-xs rounded-3 p-3 mb-3">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="fa-solid fa-circle-check fs-4 text-success mt-1"></i>
+                                <div>
+                                    <strong class="d-block text-dark">Step 3: GM Granted Permission to Proceed!</strong>
+                                    <p class="small text-muted mb-0">
+                                        The General Manager has approved proceeding with maintenance on this asset. Please add the maintenance person contact details (record-keeping) and assign a Petty Cash Owner to route for final GM sign-off.
+                                    </p>
+                                    @if($maintenanceRequest->gm_initial_notes)
+                                        <div class="small text-dark fw-semibold mt-1"><i class="fa-solid fa-quote-left text-muted me-1"></i>GM Directives: {{ $maintenanceRequest->gm_initial_notes }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+
+                        <form method="POST" action="{{ route('general-service.maintenance.assign-petty-cash', $maintenanceRequest) }}" class="p-4 bg-white rounded-3 border">
+                            @csrf
+                            <h6 class="fw-bold text-dark mb-3"><i class="fa-solid fa-user-wrench me-2 text-primary"></i>Personnel &amp; Petty Cash Assignment</h6>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Maintenance Person's Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="maintenance_person_name" value="{{ old('maintenance_person_name', $maintenanceRequest->maintenance_person_name) }}" class="form-control rounded-3" placeholder="Full name of repair technician" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Account Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="maintenance_person_account" value="{{ old('maintenance_person_account', $maintenanceRequest->maintenance_person_account) }}" class="form-control rounded-3" placeholder="Bank / payment account name" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Phone Number <span class="text-danger">*</span> <small class="text-muted fw-normal">(record-keeping only)</small></label>
+                                    <input type="text" name="maintenance_person_phone" value="{{ old('maintenance_person_phone', $maintenanceRequest->maintenance_person_phone) }}" class="form-control rounded-3" placeholder="+251 9... / 09..." required>
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Assign Petty Cash Owner <span class="text-danger">*</span></label>
+                                    <select name="petty_cash_owner_id" class="form-select rounded-3" required>
+                                        <option value="">— Select Petty Cash Owner / Custodian —</option>
+                                        @foreach($pettyCashOwners as $owner)
+                                            <option value="{{ $owner->id }}" {{ old('petty_cash_owner_id', $maintenanceRequest->petty_cash_owner_id) == $owner->id ? 'selected' : '' }}>
+                                                {{ $owner->name }} ({{ $owner->email }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Estimated Money (ETB)</label>
+                                    <input type="number" step="0.01" name="money_amount" value="{{ old('money_amount', $maintenanceRequest->money_amount) }}" class="form-control rounded-3" placeholder="0.00">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Submission Remarks (Optional)</label>
+                                    <textarea name="notes" class="form-control rounded-3" rows="2" placeholder="Notes for GM review..."></textarea>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary fw-bold rounded-pill px-4 shadow-sm">
+                                <i class="fa-solid fa-paper-plane me-2"></i>Send to GM for Approval of Petty Cash Assignment
+                            </button>
+                        </form>
+
+                    {{-- Step 5: GM Returned the request -> GS adds Money, Time, Material + Personnel + Petty Cash Owner --}}
+                    @elseif($maintenanceRequest->gs_status === 'gm_returned_to_gs')
+                        <div class="alert alert-danger border-0 shadow-xs rounded-3 p-3 mb-3">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="fa-solid fa-rotate-left fs-4 text-danger mt-1"></i>
+                                <div>
+                                    <strong class="d-block text-dark">Step 5: Request Returned by General Manager</strong>
+                                    <p class="small text-muted mb-1">
+                                        GM returned this request. In addition to technician and Petty Cash details, you must include <strong>Money</strong>, <strong>Time</strong>, and <strong>Material</strong> requirements before resubmitting.
+                                    </p>
+                                    @if($maintenanceRequest->gm_return_reason)
+                                        <div class="p-2 rounded bg-white border border-danger-subtle small text-danger fw-semibold mt-2">
+                                            <i class="fa-solid fa-circle-exclamation me-1"></i>Return Reason: {{ $maintenanceRequest->gm_return_reason }}
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+
+                        <form method="POST" action="{{ route('general-service.maintenance.resubmit-returned', $maintenanceRequest) }}" class="p-4 bg-white rounded-3 border">
+                            @csrf
+                            <h6 class="fw-bold text-danger mb-3"><i class="fa-solid fa-file-circle-exclamation me-2"></i>Provide Money, Time, Material &amp; Assign Petty Cash Owner</h6>
+                            <div class="row g-3 mb-3">
+                                {{-- Money, Time, Material --}}
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-danger text-uppercase">Money Needed (ETB) <span class="text-danger">*</span></label>
+                                    <input type="number" step="0.01" name="money_amount" value="{{ old('money_amount', $maintenanceRequest->money_amount) }}" class="form-control rounded-3 border-danger-subtle" placeholder="e.g. 4500.00" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-danger text-uppercase">Time Estimate <span class="text-danger">*</span></label>
+                                    <input type="text" name="estimated_time" value="{{ old('estimated_time', $maintenanceRequest->estimated_time) }}" class="form-control rounded-3 border-danger-subtle" placeholder="e.g. 3 days / 5 hours" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Assign Petty Cash Owner <span class="text-danger">*</span></label>
+                                    <select name="petty_cash_owner_id" class="form-select rounded-3" required>
+                                        <option value="">— Select Petty Cash Owner —</option>
+                                        @foreach($pettyCashOwners as $owner)
+                                            <option value="{{ $owner->id }}" {{ old('petty_cash_owner_id', $maintenanceRequest->petty_cash_owner_id) == $owner->id ? 'selected' : '' }}>
+                                                {{ $owner->name }} ({{ $owner->email }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small fw-bold text-danger text-uppercase">Material / Spare Parts Details <span class="text-danger">*</span> <small class="text-muted fw-normal">(Will appear in Store Manager PR section)</small></label>
+                                    <textarea name="material_description" class="form-control rounded-3 border-danger-subtle" rows="2" placeholder="List required spare parts, lubricants, filters, or components..." required>{{ old('material_description', $maintenanceRequest->material_description) }}</textarea>
+                                </div>
+                                {{-- Personnel Info --}}
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Technician Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="maintenance_person_name" value="{{ old('maintenance_person_name', $maintenanceRequest->maintenance_person_name) }}" class="form-control rounded-3" placeholder="Technician name" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Account Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="maintenance_person_account" value="{{ old('maintenance_person_account', $maintenanceRequest->maintenance_person_account) }}" class="form-control rounded-3" placeholder="Account name" required>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Phone Number <span class="text-danger">*</span> <small class="text-muted fw-normal">(record-keeping only)</small></label>
+                                    <input type="text" name="maintenance_person_phone" value="{{ old('maintenance_person_phone', $maintenanceRequest->maintenance_person_phone) }}" class="form-control rounded-3" placeholder="Phone number" required>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small fw-bold text-secondary text-uppercase">Additional Notes (Optional)</label>
+                                    <textarea name="notes" class="form-control rounded-3" rows="2" placeholder="Notes for GM re-evaluation..."></textarea>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-danger text-white fw-bold rounded-pill px-4 shadow-sm">
+                                <i class="fa-solid fa-paper-plane me-2"></i>Resubmit to GM with Money, Time, &amp; Material
+                            </button>
+                        </form>
+
+                    {{-- Step 4 / 5: Pending GM Final Approval --}}
+                    @elseif($maintenanceRequest->gs_status === 'pending_gm_final')
+                        <div class="alert alert-primary border-0 shadow-xs rounded-3 p-3 mb-0">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                <div>
+                                    <strong class="d-block text-dark">Step 4 &amp; 5: Submitted to GM for Final Approval</strong>
+                                    <p class="small text-muted mb-0">
+                                        Petty Cash assignment and maintenance details are currently awaiting GM final approval. Once approved, the budget will automatically appear in <strong>Finance &rarr; Expenses</strong> and materials will appear in <strong>Store Manager &rarr; PR</strong>.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                    {{-- Step 4 / 5 Approved --}}
+                    @elseif($maintenanceRequest->gs_status === 'approved' || $maintenanceRequest->gm_final_approved_at)
+                        <div class="alert alert-success border-0 shadow-xs rounded-3 p-3 mb-0">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-circle-check fs-3 text-success"></i>
+                                    <div>
+                                        <strong class="text-dark">Fully Authorized by General Manager!</strong>
+                                        <div class="small text-muted">
+                                            Assigned Petty Cash Custodian: <strong>{{ $maintenanceRequest->pettyCashOwner->name ?? 'Assigned' }}</strong> |
+                                            Technician: <strong>{{ $maintenanceRequest->maintenance_person_name ?? 'N/A' }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <a href="{{ route('expenses.index') }}" class="btn btn-sm btn-outline-success rounded-pill px-3">
+                                        <i class="fa-solid fa-arrow-trend-down me-1"></i>Finance Expenses
+                                    </a>
+                                    <a href="{{ url('/procurement-lifecycle/queue') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                                        <i class="fa-solid fa-boxes-stacked me-1"></i>Store PR Section
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                </div>
+            </div>
+
             {{-- 1. Request Details Card --}}
             <div class="card border-0 shadow-sm rounded-4 mb-4">
                 <div class="card-header bg-white border-0 py-3 px-4 rounded-top-4 d-flex justify-content-between align-items-center">

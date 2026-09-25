@@ -36,7 +36,9 @@ class ApprovalHubController extends Controller
             'paidBy',
             'chartOfAccount',
             'coa',
-            'bankAccount'
+            'bankAccount',
+            'maintenanceRequest',
+            'pettyCashOwner',
         ])
         ->where(function ($q) {
             $q->where(function ($sub) {
@@ -62,9 +64,14 @@ class ApprovalHubController extends Controller
                 default                                     => [$statusRaw ?? 'Pending', 'pending', 'secondary'],
             };
 
-            $applicantName = $req->employee ? $req->employee->full_name : ($req->user->name ?? 'Employee');
-            $deptOrProject = $req->employee->department ?? ($req->user->department ?? 'General / Operations');
+            $applicantName = $req->pettyCashOwner
+                ? ($req->pettyCashOwner->name . ' (Petty Cash Owner)')
+                : ($req->employee ? $req->employee->full_name : ($req->user->name ?? 'Employee'));
+            $deptOrProject = $req->employee->department ?? ($req->user->department ?? 'General Service / Operations');
             $categoryName = $req->category . ($req->other_reason ? ' (' . $req->other_reason . ')' : '');
+            if ($req->maintenanceRequest) {
+                $categoryName .= ' [Ticket #' . $req->maintenanceRequest->request_no . ']';
+            }
 
             return (object) [
                 'id_raw'          => $req->id,

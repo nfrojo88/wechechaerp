@@ -54,6 +54,7 @@ class MaintenanceRequestController extends Controller
         $mr = MaintenanceRequest::create(array_merge($validated, [
             'employee_id'         => $employee->id,
             'status'              => 'pending',
+            'gs_status'           => 'pending_gs',
             'reported_by_user_id' => $user->id,
         ]));
 

@@ -22,6 +22,20 @@ class MaintenanceRequest extends Model
         'description',
         'urgency',
         'status',
+        'gs_status',
+        'maintenance_person_name',
+        'maintenance_person_account',
+        'maintenance_person_phone',
+        'petty_cash_owner_id',
+        'money_amount',
+        'estimated_time',
+        'material_description',
+        'gm_initial_status',
+        'gm_initial_action_at',
+        'gm_initial_notes',
+        'gm_return_reason',
+        'gm_final_approved_at',
+        'is_returned_flow',
         'admin_notes',
         'rejection_reason',
         'replacement_action',
@@ -40,7 +54,11 @@ class MaintenanceRequest extends Model
         'resolved_at' => 'datetime',
         'sent_to_store_manager_at' => 'datetime',
         'gm_approved_at' => 'datetime',
+        'gm_initial_action_at' => 'datetime',
+        'gm_final_approved_at' => 'datetime',
         'gm_decision_locked' => 'boolean',
+        'is_returned_flow' => 'boolean',
+        'money_amount' => 'decimal:2',
     ];
 
     // ─── Boot ─────────────────────────────────────────────────────────────────
@@ -59,6 +77,10 @@ class MaintenanceRequest extends Model
                     $candidate = 'MNT-' . str_pad($next, 4, '0', STR_PAD_LEFT);
                 }
                 $model->request_no = $candidate;
+            }
+
+            if (empty($model->gs_status)) {
+                $model->gs_status = 'pending_gs';
             }
         });
     }
@@ -90,6 +112,11 @@ class MaintenanceRequest extends Model
         return $this->belongsTo(User::class, 'gm_approver_id');
     }
 
+    public function pettyCashOwner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'petty_cash_owner_id');
+    }
+
     public function expenseRequests()
     {
         return $this->hasMany(ExpenseRequest::class, 'maintenance_request_id');
@@ -98,6 +125,22 @@ class MaintenanceRequest extends Model
     public function materialRequests()
     {
         return $this->hasMany(MaterialRequest::class, 'maintenance_request_id');
+    }
+
+    // ─── Accessors ────────────────────────────────────────────────────────────
+
+    public function getGsStatusBadgeAttribute(): array
+    {
+        return match($this->gs_status ?? 'pending_gs') {
+            'pending_gs'           => ['class' => 'bg-secondary bg-opacity-25 text-secondary border', 'label' => 'Awaiting General Service Review', 'icon' => 'fa-clock'],
+            'submitted_to_gm'      => ['class' => 'bg-warning text-dark', 'label' => 'Awaiting GM Permission', 'icon' => 'fa-paper-plane'],
+            'gm_approved_initial'  => ['class' => 'bg-info text-white', 'label' => 'GM Approved — Awaiting Petty Cash Assignment', 'icon' => 'fa-user-check'],
+            'gm_returned_to_gs'    => ['class' => 'bg-danger text-white', 'label' => 'Returned by GM (Details Needed)', 'icon' => 'fa-rotate-left'],
+            'pending_gm_final'     => ['class' => 'bg-primary text-white', 'label' => 'Pending GM Final Approval', 'icon' => 'fa-gavel'],
+            'approved'             => ['class' => 'bg-success text-white', 'label' => 'Approved &amp; Active', 'icon' => 'fa-circle-check'],
+            'rejected'             => ['class' => 'bg-dark text-white', 'label' => 'Rejected', 'icon' => 'fa-circle-xmark'],
+            default                => ['class' => 'bg-light text-dark border', 'label' => ucfirst(str_replace('_', ' ', $this->gs_status ?? 'pending')), 'icon' => 'fa-circle'],
+        };
     }
 
     // ─── Accessors ────────────────────────────────────────────────────────────

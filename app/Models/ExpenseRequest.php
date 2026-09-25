@@ -19,6 +19,7 @@ class ExpenseRequest extends Model
         'employee_id',
         'maintenance_request_id',
         'purchase_request_id',
+        'petty_cash_owner_id',
         'credit_store_ledger_id',
         'letter_id',
         'project_id',
@@ -199,6 +200,14 @@ class ExpenseRequest extends Model
     public function maintenanceRequest()
     {
         return $this->belongsTo(MaintenanceRequest::class, 'maintenance_request_id');
+    }
+
+    /**
+     * Assigned Petty Cash Owner (for General Service Maintenance petty cash disbursements).
+     */
+    public function pettyCashOwner()
+    {
+        return $this->belongsTo(User::class, 'petty_cash_owner_id');
     }
 
     /**

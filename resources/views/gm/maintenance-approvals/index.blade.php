@@ -349,9 +349,19 @@
                                         {{-- GM Actions --}}
                                         <td class="py-3 pe-4 text-end">
                                             <div class="d-flex justify-content-end gap-2 flex-wrap">
-                                                <button type="button" class="btn btn-warning btn-sm text-dark fw-bold rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#grantGmApprovalModal{{ $mReq->id }}">
-                                                    <i class="fa-solid fa-gavel me-1"></i>Grant Approval / Action
-                                                </button>
+                                                @if($mReq->gs_status === 'submitted_to_gm')
+                                                    <button type="button" class="btn btn-warning btn-sm text-dark fw-bold rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#gmInitialModal{{ $mReq->id }}">
+                                                        <i class="fa-solid fa-gavel me-1"></i>Review Permission
+                                                    </button>
+                                                @elseif($mReq->gs_status === 'pending_gm_final')
+                                                    <button type="button" class="btn btn-primary btn-sm text-white fw-bold rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#gmFinalModal{{ $mReq->id }}">
+                                                        <i class="fa-solid fa-check-double me-1"></i>Approve Petty Cash
+                                                    </button>
+                                                @else
+                                                    <button type="button" class="btn btn-secondary btn-sm text-white fw-bold rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#grantGmApprovalModal{{ $mReq->id }}">
+                                                        <i class="fa-solid fa-sliders me-1"></i>Manage Action
+                                                    </button>
+                                                @endif
                                                 <a href="{{ route('general-service.maintenance.show', $mReq->id) }}" class="btn btn-outline-secondary btn-sm rounded-pill px-2" title="Open Full Maintenance Details">
                                                     <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                                 </a>
@@ -947,6 +957,235 @@
     $allTicketModals = ($maintenanceTickets ?? collect())->concat($decidedTickets ?? collect())->unique('id');
 @endphp
 @foreach($allTicketModals as $mReq)
+
+{{-- ── A. STEP 2: GM INITIAL DECISION MODAL (APPROVE VS RETURN) ─────────────── --}}
+<div class="modal fade" id="gmInitialModal{{ $mReq->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header py-3 px-4 text-white" style="background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%) !important;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center text-warning" style="width:40px;height:40px;background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.35);flex-shrink:0;">
+                        <i class="fa-solid fa-gavel fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold text-white mb-0">Step 2: Executive Review — Ticket #{{ $mReq->request_no }}</h5>
+                        <small class="text-white-50">General Service asks: "Go ahead and maintain this material?"</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 bg-light">
+                {{-- Asset & Issue Summary --}}
+                <div class="p-3 bg-white rounded-3 border mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong class="text-dark fs-6">{{ $mReq->asset_name }}</strong>
+                        @if($mReq->asset_code)
+                            <span class="badge bg-dark font-monospace">{{ $mReq->asset_code }}</span>
+                        @endif
+                    </div>
+                    <div class="small text-muted mb-2">
+                        Reported by: <strong>{{ $mReq->employee->full_name ?? ($mReq->reportedBy->name ?? 'Staff') }}</strong> ({{ $mReq->employee->role_title ?? $mReq->employee->department ?? 'General' }})
+                    </div>
+                    <div class="p-2.5 rounded bg-light border-start border-4 border-warning small text-dark" style="white-space: pre-wrap;">
+                        {{ $mReq->description }}
+                    </div>
+                    @if($mReq->admin_notes)
+                        <div class="mt-2 pt-2 border-top small text-muted" style="white-space: pre-wrap;">
+                            <strong class="text-secondary"><i class="fa-solid fa-note-sticky me-1"></i>General Service Notes:</strong>
+                            {{ $mReq->admin_notes }}
+                        </div>
+                    @endif
+                </div>
+
+                <div class="row g-3">
+                    {{-- 1. Approve Path --}}
+                    <div class="col-md-6">
+                        <div class="card h-100 border-success shadow-xs rounded-3 bg-white p-3 d-flex flex-column justify-content-between">
+                            <div>
+                                <div class="d-flex align-items-center gap-2 mb-2 text-success">
+                                    <i class="fa-solid fa-circle-check fs-4"></i>
+                                    <h6 class="fw-bold mb-0 text-success">Approve Permission</h6>
+                                </div>
+                                <p class="small text-muted mb-3">
+                                    Authorize General Service to go ahead and proceed with maintenance. The request returns to GS to add technician details and assign a Petty Cash Owner for your final approval.
+                                </p>
+                            </div>
+                            <form action="{{ route('gm.maintenance-approvals.initial-decision', $mReq) }}" method="POST">
+                                @csrf
+                                <input type="hidden" name="action" value="approve">
+                                <div class="mb-3">
+                                    <label class="form-label small text-secondary fw-semibold">GM Directives / Remarks (Optional):</label>
+                                    <input type="text" name="gm_notes" class="form-control form-control-sm rounded-3" placeholder="e.g. Approved. Expedite repair within 2 days.">
+                                </div>
+                                <button type="submit" class="btn btn-success fw-bold w-100 rounded-pill py-2 shadow-sm">
+                                    <i class="fa-solid fa-check me-1"></i>Approve — Go Ahead &amp; Maintain
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    {{-- 2. Return Path --}}
+                    <div class="col-md-6">
+                        <div class="card h-100 border-danger shadow-xs rounded-3 bg-white p-3 d-flex flex-column justify-content-between">
+                            <div>
+                                <div class="d-flex align-items-center gap-2 mb-2 text-danger">
+                                    <i class="fa-solid fa-rotate-left fs-4"></i>
+                                    <h6 class="fw-bold mb-0 text-danger">Return Request</h6>
+                                </div>
+                                <p class="small text-muted mb-3">
+                                    Send request back to General Service. GS will be required to provide <strong>Money</strong>, <strong>Time</strong>, and <strong>Material</strong> requirements before resubmitting.
+                                </p>
+                            </div>
+                            <form action="{{ route('gm.maintenance-approvals.initial-decision', $mReq) }}" method="POST">
+                                @csrf
+                                <input type="hidden" name="action" value="return">
+                                <div class="mb-3">
+                                    <label class="form-label small text-danger fw-semibold">Return Reason / Feedback <span class="text-danger">*</span>:</label>
+                                    <textarea name="return_reason" class="form-control form-control-sm border-danger rounded-3" rows="2" placeholder="Specify why this is returned and request money/time/material estimates..." required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-outline-danger fw-bold w-100 rounded-pill py-2">
+                                    <i class="fa-solid fa-rotate-left me-1"></i>Return to General Service
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-white border-top py-2.5 px-4">
+                <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- ── B. STEP 4 & 5: GM FINAL APPROVAL MODAL (PETTY CASH & FINANCE/STORE ROUTING) --}}
+<div class="modal fade" id="gmFinalModal{{ $mReq->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form action="{{ route('gm.maintenance-approvals.final-approval', $mReq) }}" method="POST" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            @csrf
+            <div class="modal-header py-3 px-4 text-white" style="background: linear-gradient(135deg, #10b981 0%, #064e3b 100%) !important;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center text-white" style="width:40px;height:40px;background:rgba(255,255,255,0.2);flex-shrink:0;">
+                        <i class="fa-solid fa-file-signature fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold text-white mb-0">Step 4 &amp; 5: Executive Approval of Petty Cash — Ticket #{{ $mReq->request_no }}</h5>
+                        <small class="text-white-50">Approve Petty Cash assignment &amp; route to Finance Expenses &amp; Store PR</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 bg-light">
+                
+                {{-- If from Returned flow, highlight Money, Time, and Material --}}
+                @if($mReq->is_returned_flow || $mReq->money_amount || $mReq->estimated_time || $mReq->material_description)
+                    <div class="card border-primary border-opacity-50 shadow-xs rounded-3 bg-white p-3 mb-3">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="badge bg-primary text-white rounded-pill px-2.5 py-1">Returned Request Details</span>
+                            <span class="small text-muted">Provided by General Service upon return</span>
+                        </div>
+                        <div class="row g-2 text-dark">
+                            <div class="col-md-4">
+                                <div class="p-2.5 rounded bg-light border">
+                                    <small class="text-muted d-block text-uppercase fw-semibold" style="font-size:0.7rem;">Money Needed</small>
+                                    <strong class="text-success fs-6 font-monospace">ETB {{ number_format($mReq->money_amount ?? 0, 2) }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-2.5 rounded bg-light border">
+                                    <small class="text-muted d-block text-uppercase fw-semibold" style="font-size:0.7rem;">Time Estimate</small>
+                                    <strong class="text-dark fs-6">{{ $mReq->estimated_time ?? 'Standard' }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-2.5 rounded bg-light border">
+                                    <small class="text-muted d-block text-uppercase fw-semibold" style="font-size:0.7rem;">Petty Cash Custodian</small>
+                                    <strong class="text-primary fs-6">{{ $mReq->pettyCashOwner->name ?? 'Unassigned' }}</strong>
+                                </div>
+                            </div>
+                            @if($mReq->material_description)
+                                <div class="col-12 mt-2">
+                                    <div class="p-2.5 rounded bg-light border">
+                                        <small class="text-muted d-block text-uppercase fw-semibold" style="font-size:0.7rem;">Material / Spare Parts Requirements (Will appear in Store PR)</small>
+                                        <div class="small text-dark fw-semibold" style="white-space: pre-wrap;">{{ $mReq->material_description }}</div>
+                                    </div>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                @endif
+
+                {{-- Personnel Contact Info (Record-keeping only) --}}
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
+                    <h6 class="fw-bold text-secondary mb-2 small text-uppercase"><i class="fa-solid fa-address-card me-1"></i>Technician Contact Info (For Record-Keeping Only)</h6>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <div class="small text-muted">Technician Name:</div>
+                            <strong class="text-dark">{{ $mReq->maintenance_person_name ?? 'N/A' }}</strong>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="small text-muted">Account Name:</div>
+                            <strong class="text-dark">{{ $mReq->maintenance_person_account ?? 'N/A' }}</strong>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="small text-muted">Phone Number:</div>
+                            <strong class="text-dark">{{ $mReq->maintenance_person_phone ?? 'N/A' }}</strong>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Routing Confirmation Cards --}}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="p-3 bg-success bg-opacity-10 border border-success border-opacity-25 rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1 text-success">
+                                <i class="fa-solid fa-file-invoice-dollar fs-5"></i>
+                                <strong class="small text-uppercase">1. Finance &rarr; Expenses</strong>
+                            </div>
+                            <p class="small text-muted mb-0">
+                                Once approved, an Expense Request is confirmed under <strong>Maintenance</strong> for ETB {{ number_format($mReq->money_amount ?? 0, 2) }}, assigned to Petty Cash Custodian <strong>{{ $mReq->pettyCashOwner->name ?? 'Custodian' }}</strong>.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 bg-primary bg-opacity-10 border border-primary border-opacity-25 rounded-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-1 text-primary">
+                                <i class="fa-solid fa-boxes-stacked fs-5"></i>
+                                <strong class="small text-uppercase">2. Store Manager &rarr; PR Section</strong>
+                            </div>
+                            <p class="small text-muted mb-0">
+                                Material details are sent directly into the Store Manager's Purchase Request (PR) cycle for procurement or stock issue.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-secondary text-uppercase">Assign to Finance Officer / Cashier (Optional):</label>
+                    <select name="assigned_finance_staff_id" class="form-select rounded-3">
+                        <option value="">— Finance Disbursement Queue —</option>
+                        @foreach($financeStaff as $fStf)
+                            <option value="{{ $fStf->id }}">{{ $fStf->name }} ({{ $fStf->roles->pluck('name')->implode(', ') ?: 'Finance' }})</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="mb-0">
+                    <label class="form-label small fw-bold text-secondary text-uppercase">Executive Notes / Approval Directive (Optional):</label>
+                    <textarea name="gm_notes" class="form-control rounded-3" rows="2" placeholder="e.g. Petty cash assignment approved for immediate payout."></textarea>
+                </div>
+
+            </div>
+            <div class="modal-footer bg-white border-top py-3 px-4 d-flex justify-content-between align-items-center">
+                <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-success fw-bold rounded-pill px-5 shadow-sm">
+                    <i class="fa-solid fa-check-double me-2"></i>Approve Petty Cash &amp; Authorize Maintenance
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="modal fade" id="grantGmApprovalModal{{ $mReq->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="true">
     <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 1140px; margin: 1.5rem auto;">
         <form action="{{ route('gm.maintenance-approvals.approve-ticket', $mReq) }}" method="POST" id="gm_ticket_form_{{ $mReq->id }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" style="max-height: 90vh; display: flex; flex-direction: column;">

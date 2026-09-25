@@ -15,19 +15,95 @@ class GeneralServiceController extends Controller
     }
 
     /**
+     * Defensive schema verification for maintenance workflow columns.
+     */
+    protected function ensureWorkflowColumns(): void
+    {
+        if (\Illuminate\Support\Facades\Schema::hasTable('maintenance_requests')) {
+            \Illuminate\Support\Facades\Schema::table('maintenance_requests', function ($table) {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'gs_status')) {
+                    $table->string('gs_status', 50)->default('pending_gs')->index()->after('status');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'maintenance_person_name')) {
+                    $table->string('maintenance_person_name', 255)->nullable()->after('gs_status');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'maintenance_person_account')) {
+                    $table->string('maintenance_person_account', 255)->nullable()->after('maintenance_person_name');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'maintenance_person_phone')) {
+                    $table->string('maintenance_person_phone', 100)->nullable()->after('maintenance_person_account');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'petty_cash_owner_id')) {
+                    $table->unsignedBigInteger('petty_cash_owner_id')->nullable()->index()->after('maintenance_person_phone');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'money_amount')) {
+                    $table->decimal('money_amount', 15, 2)->nullable()->after('petty_cash_owner_id');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'estimated_time')) {
+                    $table->string('estimated_time', 150)->nullable()->after('money_amount');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'material_description')) {
+                    $table->text('material_description')->nullable()->after('estimated_time');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'gm_initial_status')) {
+                    $table->string('gm_initial_status', 50)->nullable()->after('material_description');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'gm_initial_action_at')) {
+                    $table->timestamp('gm_initial_action_at')->nullable()->after('gm_initial_status');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'gm_initial_notes')) {
+                    $table->text('gm_initial_notes')->nullable()->after('gm_initial_action_at');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'gm_return_reason')) {
+                    $table->text('gm_return_reason')->nullable()->after('gm_initial_notes');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'gm_final_approved_at')) {
+                    $table->timestamp('gm_final_approved_at')->nullable()->after('gm_return_reason');
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('maintenance_requests', 'is_returned_flow')) {
+                    $table->boolean('is_returned_flow')->default(false)->after('gm_final_approved_at');
+                }
+            });
+        }
+    }
+
+    /**
+     * Get eligible Petty Cash owners / custodians.
+     */
+    protected function getPettyCashOwners()
+    {
+        $pettyCashOwners = User::whereHas('assignedPettyCashAccounts')
+            ->orWhereHas('assignedAccounts')
+            ->orWhereHas('roles', fn($q) => $q->whereIn('name', ['admin', 'global_admin', 'store_keeper', 'store_manager', 'general_service', 'finance_officer', 'accountant']))
+            ->get(['id', 'name', 'email']);
+
+        if ($pettyCashOwners->isEmpty()) {
+            $pettyCashOwners = User::orderBy('name')->get(['id', 'name', 'email']);
+        }
+
+        return $pettyCashOwners;
+    }
+
+    /**
      * General Service Maintenance Dashboard — list all requests.
      */
     public function index(Request $request)
     {
+        $this->ensureWorkflowColumns();
+
         $query = MaintenanceRequest::with([
             'employee', 
             'reportedBy', 
             'assignedTo', 
+            'pettyCashOwner',
             'fixedAssetUnit.parentAsset',
             'expenseRequests',
             'materialRequests'
         ])->withTrashed(false);
 
+        if ($request->filled('gs_status')) {
+            $query->where('gs_status', $request->gs_status);
+        }
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
@@ -46,16 +122,25 @@ class GeneralServiceController extends Controller
         $requests = $query->latest()->paginate(20)->withQueryString();
 
         $stats = [
-            'pending'     => MaintenanceRequest::whereIn('status', ['pending', 'sent_to_store_manager'])->count(),
-            'in_progress' => MaintenanceRequest::where('status', 'in_progress')->count(),
-            'resolved'    => MaintenanceRequest::where('status', 'resolved')
-                ->whereDate('resolved_at', today())->count(),
-            'total'       => MaintenanceRequest::count(),
+            'pending'             => MaintenanceRequest::whereIn('status', ['pending', 'sent_to_store_manager'])->count(),
+            'pending_gs'          => MaintenanceRequest::where(function($q) {
+                                        $q->where('gs_status', 'pending_gs')->orWhereNull('gs_status');
+                                     })->whereNotIn('status', ['resolved', 'closed', 'rejected'])->count(),
+            'submitted_to_gm'     => MaintenanceRequest::where('gs_status', 'submitted_to_gm')->count(),
+            'gm_approved_initial' => MaintenanceRequest::where('gs_status', 'gm_approved_initial')->count(),
+            'gm_returned_to_gs'   => MaintenanceRequest::where('gs_status', 'gm_returned_to_gs')->count(),
+            'pending_gm_final'    => MaintenanceRequest::where('gs_status', 'pending_gm_final')->count(),
+            'in_progress'         => MaintenanceRequest::where('status', 'in_progress')->count(),
+            'resolved'            => MaintenanceRequest::where('status', 'resolved')
+                                        ->whereDate('resolved_at', today())->count(),
+            'total'               => MaintenanceRequest::count(),
         ];
 
         $staff = User::whereHas('roles', fn($q) => $q->whereIn('name', [
             'global_admin', 'admin', 'store_manager', 'general_service'
         ]))->get(['id', 'name']);
+
+        $pettyCashOwners = $this->getPettyCashOwners();
 
         $fixedAssetUnits = \App\Models\FixedAssetUnit::with(['parentAsset', 'assignedEmployee'])
             ->whereNull('deleted_at')
@@ -65,7 +150,7 @@ class GeneralServiceController extends Controller
         $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
         $products = \App\Models\Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit', 'category']);
 
-        return view('general-service.maintenance.index', compact('requests', 'stats', 'staff', 'fixedAssetUnits', 'employees', 'stores', 'products'));
+        return view('general-service.maintenance.index', compact('requests', 'stats', 'staff', 'pettyCashOwners', 'fixedAssetUnits', 'employees', 'stores', 'products'));
     }
 
     /**
@@ -286,6 +371,7 @@ class GeneralServiceController extends Controller
             'employee', 
             'reportedBy', 
             'assignedTo', 
+            'pettyCashOwner',
             'fixedAssetUnit.parentAsset',
             'expenseRequests.user',
             'expenseRequests.paidBy',
@@ -301,10 +387,12 @@ class GeneralServiceController extends Controller
             'global_admin', 'admin', 'store_manager', 'general_service'
         ]))->get(['id', 'name']);
 
+        $pettyCashOwners = $this->getPettyCashOwners();
+
         $stores = \App\Models\Store::where('is_active', true)->orderBy('name')->get();
         $products = \App\Models\Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'sku', 'unit', 'category']);
 
-        return view('general-service.maintenance.show', compact('maintenanceRequest', 'staff', 'stores', 'products'));
+        return view('general-service.maintenance.show', compact('maintenanceRequest', 'staff', 'pettyCashOwners', 'stores', 'products'));
     }
 
     /**
@@ -501,5 +589,181 @@ class GeneralServiceController extends Controller
         );
 
         return back()->with('success', "Material Request #{$materialRequest->reference_number} with {$itemCount} item(s) created and submitted to General Manager (GM) for review & approval!");
+    }
+
+    /**
+     * Step 2: General Service reviews maintenance request and submits to GM asking for permission to proceed.
+     */
+    public function submitToGm(Request $request, MaintenanceRequest $maintenanceRequest)
+    {
+        $this->ensureWorkflowColumns();
+
+        $request->validate([
+            'gs_notes' => 'nullable|string|max:2000',
+        ]);
+
+        $notes = $request->input('gs_notes');
+        $existingNotes = $maintenanceRequest->admin_notes ? ($maintenanceRequest->admin_notes . "\n") : '';
+        $timestamp = now()->format('d M Y, H:i');
+        $user = auth()->user();
+
+        $newNotes = $existingNotes . "[GS Review {$timestamp} by {$user->name}]: Sent to General Manager requesting permission to proceed with maintenance on this asset.";
+        if ($notes) {
+            $newNotes .= " Remarks: {$notes}";
+        }
+
+        $maintenanceRequest->update([
+            'gs_status'   => 'submitted_to_gm',
+            'admin_notes' => $newNotes,
+        ]);
+
+        \App\Models\ActivityLog::log(
+            'submitted',
+            "General Service submitted Maintenance #{$maintenanceRequest->request_no} ({$maintenanceRequest->asset_name}) to GM asking for permission to proceed",
+            'Maintenance Requests',
+            $maintenanceRequest
+        );
+
+        return back()->with('success', "Maintenance Request #{$maintenanceRequest->request_no} sent to GM asking for permission to proceed.");
+    }
+
+    /**
+     * Step 3: If GM Approves initial permission, General Service adds technician details and assigns Petty Cash Owner.
+     */
+    public function assignPettyCash(Request $request, MaintenanceRequest $maintenanceRequest)
+    {
+        $this->ensureWorkflowColumns();
+
+        $validated = $request->validate([
+            'maintenance_person_name'    => 'required|string|max:255',
+            'maintenance_person_account' => 'required|string|max:255',
+            'maintenance_person_phone'   => 'required|string|max:100',
+            'petty_cash_owner_id'        => 'required|exists:users,id',
+            'money_amount'               => 'nullable|numeric|min:0',
+            'notes'                      => 'nullable|string|max:2000',
+        ]);
+
+        $pettyCashOwner = User::find($validated['petty_cash_owner_id']);
+        $user = auth()->user();
+        $timestamp = now()->format('d M Y, H:i');
+
+        $existingNotes = $maintenanceRequest->admin_notes ? ($maintenanceRequest->admin_notes . "\n") : '';
+        $newNotes = $existingNotes . "[GS Assigned Petty Cash {$timestamp} by {$user->name}]: Assigned Petty Cash Owner: {$pettyCashOwner->name}. Technician: {$validated['maintenance_person_name']} (Acc: {$validated['maintenance_person_account']}, Tel: {$validated['maintenance_person_phone']}). Sent to GM for approval.";
+        if (!empty($validated['notes'])) {
+            $newNotes .= " Remarks: {$validated['notes']}";
+        }
+
+        $maintenanceRequest->update([
+            'maintenance_person_name'    => $validated['maintenance_person_name'],
+            'maintenance_person_account' => $validated['maintenance_person_account'],
+            'maintenance_person_phone'   => $validated['maintenance_person_phone'],
+            'petty_cash_owner_id'        => $validated['petty_cash_owner_id'],
+            'money_amount'               => $validated['money_amount'] ?? $maintenanceRequest->money_amount,
+            'gs_status'                  => 'pending_gm_final',
+            'admin_notes'                => $newNotes,
+        ]);
+
+        \App\Models\ActivityLog::log(
+            'updated',
+            "General Service assigned Petty Cash Owner ({$pettyCashOwner->name}) and technician ({$validated['maintenance_person_name']}) for Maintenance #{$maintenanceRequest->request_no} and routed to GM for final approval",
+            'Maintenance Requests',
+            $maintenanceRequest
+        );
+
+        return back()->with('success', "Technician details & Petty Cash assignment for Request #{$maintenanceRequest->request_no} submitted to General Manager for approval.");
+    }
+
+    /**
+     * Step 5: If GM Returns request, General Service provides Money, Time, Material details + technician and Petty Cash Owner.
+     */
+    public function resubmitReturned(Request $request, MaintenanceRequest $maintenanceRequest)
+    {
+        $this->ensureWorkflowColumns();
+
+        $validated = $request->validate([
+            'maintenance_person_name'    => 'required|string|max:255',
+            'maintenance_person_account' => 'required|string|max:255',
+            'maintenance_person_phone'   => 'required|string|max:100',
+            'petty_cash_owner_id'        => 'required|exists:users,id',
+            'money_amount'               => 'required|numeric|min:0',
+            'estimated_time'             => 'required|string|max:150',
+            'material_description'       => 'required|string|max:3000',
+            'notes'                      => 'nullable|string|max:2000',
+        ]);
+
+        $pettyCashOwner = User::find($validated['petty_cash_owner_id']);
+        $user = auth()->user();
+        $timestamp = now()->format('d M Y, H:i');
+
+        $existingNotes = $maintenanceRequest->admin_notes ? ($maintenanceRequest->admin_notes . "\n") : '';
+        $newNotes = $existingNotes . "[GS Resubmitted Returned Ticket {$timestamp} by {$user->name}]: Money: ETB " . number_format($validated['money_amount'], 2) . ", Est. Time: {$validated['estimated_time']}, Materials: {$validated['material_description']}. Assigned Petty Cash: {$pettyCashOwner->name}. Technician: {$validated['maintenance_person_name']} (Acc: {$validated['maintenance_person_account']}, Tel: {$validated['maintenance_person_phone']}).";
+        if (!empty($validated['notes'])) {
+            $newNotes .= " Remarks: {$validated['notes']}";
+        }
+
+        $maintenanceRequest->update([
+            'maintenance_person_name'    => $validated['maintenance_person_name'],
+            'maintenance_person_account' => $validated['maintenance_person_account'],
+            'maintenance_person_phone'   => $validated['maintenance_person_phone'],
+            'petty_cash_owner_id'        => $validated['petty_cash_owner_id'],
+            'money_amount'               => $validated['money_amount'],
+            'estimated_time'             => $validated['estimated_time'],
+            'material_description'       => $validated['material_description'],
+            'is_returned_flow'           => true,
+            'gs_status'                  => 'pending_gm_final',
+            'admin_notes'                => $newNotes,
+        ]);
+
+        // Auto-create/sync MaterialRequest if material details provided so Store Manager can fulfill/PR
+        if (!empty($validated['material_description'])) {
+            $defaultStore = \App\Models\Store::where('is_active', true)->first();
+            $project = \App\Models\Project::whereIn('status', ['active', 'in_progress'])->first() ?? \App\Models\Project::first();
+
+            $refNumber = 'MR-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(\Illuminate\Support\Str::random(3));
+            while (\App\Models\MaterialRequest::where('reference_number', $refNumber)->exists()) {
+                $refNumber = 'MR-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(\Illuminate\Support\Str::random(4));
+            }
+
+            $matReq = \App\Models\MaterialRequest::firstOrCreate(
+                ['maintenance_request_id' => $maintenanceRequest->id],
+                [
+                    'project_id'             => $project?->id,
+                    'destination_store_id'   => $defaultStore?->id,
+                    'reference_number'       => $refNumber,
+                    'source'                 => 'Maintenance — ' . $maintenanceRequest->request_no,
+                    'status'                 => 'sent_to_store_manager',
+                    'required_date'          => now()->addDays(2),
+                    'notes'                  => "Maintenance Materials: {$validated['material_description']}. Asset: {$maintenanceRequest->asset_name}. Est. Time: {$validated['estimated_time']}.",
+                    'created_by'             => $user->id,
+                ]
+            );
+
+            // Add standard material product line if empty
+            if ($matReq->items()->count() === 0) {
+                $product = \App\Models\Product::firstOrCreate(
+                    ['name' => "Parts/Materials for {$maintenanceRequest->asset_name}"],
+                    [
+                        'sku'       => 'MAT-MNT-' . strtoupper(\Illuminate\Support\Str::random(5)),
+                        'unit'      => 'pcs',
+                        'category'  => 'Maintenance / Spare Parts',
+                        'is_active' => true,
+                    ]
+                );
+                $matReq->items()->create([
+                    'product_id'         => $product->id,
+                    'quantity_requested' => 1,
+                    'notes'              => $validated['material_description'],
+                ]);
+            }
+        }
+
+        \App\Models\ActivityLog::log(
+            'updated',
+            "General Service resubmitted returned Maintenance #{$maintenanceRequest->request_no} with Money (ETB {$validated['money_amount']}), Time ({$validated['estimated_time']}), Materials, and Petty Cash Owner ({$pettyCashOwner->name}) to GM",
+            'Maintenance Requests',
+            $maintenanceRequest
+        );
+
+        return back()->with('success', "Returned Maintenance Request #{$maintenanceRequest->request_no} updated with Money, Time, Material & Petty Cash assignment, and submitted to General Manager!");
     }
 }

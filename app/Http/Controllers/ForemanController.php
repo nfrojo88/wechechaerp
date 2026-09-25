@@ -187,6 +187,7 @@ class ForemanController extends Controller
             'urgency'             => $validated['urgency'],
             'description'         => $validated['description'],
             'status'              => 'pending',
+            'gs_status'           => 'pending_gs',
             'reported_by_user_id' => $user->id,
         ]);
 

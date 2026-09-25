@@ -1537,6 +1537,8 @@ Route::middleware(['auth'])->group(function () {
     Route::prefix('gm')->name('gm.')->group(function () {
         Route::get('/maintenance-approvals',                               [App\Http\Controllers\GMMaintenanceApprovalController::class, 'index'])->name('maintenance-approvals.index');
         Route::post('/maintenance-approvals/ticket/{maintenanceRequest}',        [App\Http\Controllers\GMMaintenanceApprovalController::class, 'approveTicket'])->name('maintenance-approvals.approve-ticket');
+        Route::post('/maintenance-approvals/ticket/{maintenanceRequest}/initial-decision', [App\Http\Controllers\GMMaintenanceApprovalController::class, 'initialDecision'])->name('maintenance-approvals.initial-decision');
+        Route::post('/maintenance-approvals/ticket/{maintenanceRequest}/final-approval',   [App\Http\Controllers\GMMaintenanceApprovalController::class, 'finalApproval'])->name('maintenance-approvals.final-approval');
         Route::post('/maintenance-approvals/ticket/{maintenanceRequest}/unlock', [App\Http\Controllers\GMMaintenanceApprovalController::class, 'unlockTicket'])->name('maintenance-approvals.unlock-ticket');
         Route::post('/maintenance-approvals/expense/{expenseRequest}',           [App\Http\Controllers\GMMaintenanceApprovalController::class, 'approveExpense'])->name('maintenance-approvals.approve-expense');
         Route::post('/maintenance-approvals/material/{materialRequest}',         [App\Http\Controllers\GMMaintenanceApprovalController::class, 'approveMaterial'])->name('maintenance-approvals.approve-material');
@@ -1574,6 +1576,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/maintenance/{maintenanceRequest}/report',          [App\Http\Controllers\Admin\GeneralServiceController::class, 'report'])->name('maintenance.report');
         Route::match(['put', 'post'], '/maintenance/{maintenanceRequest}/status', [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.status');
         Route::post('/maintenance/{maintenanceRequest}/update-status',  [App\Http\Controllers\Admin\GeneralServiceController::class, 'updateStatus'])->name('maintenance.update-status');
+        Route::post('/maintenance/{maintenanceRequest}/submit-to-gm',      [App\Http\Controllers\Admin\GeneralServiceController::class, 'submitToGm'])->name('maintenance.submit-to-gm');
+        Route::post('/maintenance/{maintenanceRequest}/assign-petty-cash', [App\Http\Controllers\Admin\GeneralServiceController::class, 'assignPettyCash'])->name('maintenance.assign-petty-cash');
+        Route::post('/maintenance/{maintenanceRequest}/resubmit-returned', [App\Http\Controllers\Admin\GeneralServiceController::class, 'resubmitReturned'])->name('maintenance.resubmit-returned');
         Route::post('/maintenance/{maintenanceRequest}/ask-money',      [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMoney'])->name('maintenance.ask-money');
         Route::post('/maintenance/{maintenanceRequest}/ask-material',   [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMaterial'])->name('maintenance.ask-material');
     });
