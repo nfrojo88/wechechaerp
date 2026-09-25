@@ -51,9 +51,11 @@ class GMMaintenanceApprovalController extends Controller
                 'employee',
                 'reportedBy',
                 'assignedTo',
-                'fixedAssetUnit',
+                'fixedAssetUnit.parentAsset',
+                'fixedAssetUnit.assignedEmployee',
                 'expenseRequests',
-                'materialRequests.items.product'
+                'materialRequests.items.product',
+                'materialRequests.store'
             ])
             ->when($search !== '', function ($q) use ($search) {
                 $q->where(function ($sq) use ($search) {
@@ -195,7 +197,8 @@ class GMMaintenanceApprovalController extends Controller
         $this->checkGmAuthorization();
 
         $validated = $request->validate([
-            'status'                       => 'required|in:pending,in_progress,sent_to_store_manager,resolved,closed',
+            'status'                       => 'required|in:pending,in_progress,sent_to_store_manager,resolved,closed,rejected',
+            'rejection_reason'             => 'required_if:status,rejected|nullable|string|max:1000',
             'assigned_to_user_id'          => 'nullable|exists:users,id',
             'replacement_condition'        => 'nullable|in:in_maintenance,unrepairable_damage',
             'gm_notes'                     => 'nullable|string|max:2000',
@@ -208,6 +211,57 @@ class GMMaintenanceApprovalController extends Controller
         ]);
 
         $user = auth()->user();
+
+        // ── Handle Rejection ────────────────────────────────────────────────
+        if ($validated['status'] === 'rejected') {
+            $reason = trim($request->input('rejection_reason') ?? $validated['gm_notes'] ?? 'Rejected by Executive GM');
+
+            if (Schema::hasTable('maintenance_requests') && !Schema::hasColumn('maintenance_requests', 'rejection_reason')) {
+                Schema::table('maintenance_requests', function ($table) {
+                    $table->text('rejection_reason')->nullable()->after('admin_notes');
+                });
+            }
+
+            $updateData = [
+                'status'           => 'rejected',
+                'admin_notes'      => ($maintenanceRequest->admin_notes ? ($maintenanceRequest->admin_notes . "\n") : '') . "[GM Rejection " . now()->format('d M Y') . "]: " . $reason,
+                'rejection_reason' => $reason,
+            ];
+            $maintenanceRequest->update($updateData);
+
+            // Cancel/Reject linked pending expense requests
+            foreach ($maintenanceRequest->expenseRequests as $exp) {
+                if (in_array($exp->status, [ExpenseRequest::STATUS_PENDING_GM, 'Pending (GM Review)', 'pending_gm', ExpenseRequest::STATUS_PENDING_HR])) {
+                    $exp->update([
+                        'status'           => ExpenseRequest::STATUS_REJECTED,
+                        'gm_reviewer_id'   => $user->id,
+                        'gm_reviewed_at'   => now(),
+                        'rejection_reason' => $reason,
+                        'description'      => $exp->description . "\n[GM Rejection: Linked maintenance ticket rejected - {$reason}]",
+                    ]);
+                }
+            }
+
+            // Cancel/Reject linked pending material requests
+            foreach ($maintenanceRequest->materialRequests as $mr) {
+                if (in_array($mr->status, ['pending_gm', 'pending', 'pending_approval'])) {
+                    $mr->update([
+                        'status' => 'rejected',
+                        'notes'  => ($mr->notes ? ($mr->notes . "\n") : '') . "\n[GM Rejection: Linked maintenance ticket rejected - {$reason}]",
+                    ]);
+                }
+            }
+
+            ActivityLog::log(
+                'rejected',
+                "GM rejected Maintenance Ticket #{$maintenanceRequest->request_no}. Reason: {$reason}",
+                'Maintenance',
+                $maintenanceRequest
+            );
+
+            return redirect()->route('gm.maintenance-approvals.index')
+                ->with('warning', "Maintenance Ticket #{$maintenanceRequest->request_no} has been rejected. Reason: {$reason}");
+        }
 
         $data = [
             'status'              => $validated['status'],

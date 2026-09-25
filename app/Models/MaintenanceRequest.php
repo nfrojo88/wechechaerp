@@ -23,6 +23,7 @@ class MaintenanceRequest extends Model
         'urgency',
         'status',
         'admin_notes',
+        'rejection_reason',
         'replacement_action',
         'replacement_condition',
         'sent_to_store_manager_at',
@@ -98,8 +99,43 @@ class MaintenanceRequest extends Model
             'sent_to_store_manager'    => ['class' => 'bg-info text-dark',    'label' => 'Sent to Store Manager', 'icon' => 'fa-paper-plane'],
             'resolved'                 => ['class' => 'bg-success',           'label' => 'Resolved', 'icon' => 'fa-circle-check'],
             'closed'                   => ['class' => 'bg-secondary',         'label' => 'Closed', 'icon' => 'fa-xmark-circle'],
+            'rejected'                 => ['class' => 'bg-danger text-white', 'label' => 'Rejected', 'icon' => 'fa-circle-xmark'],
             default                    => ['class' => 'bg-light text-dark border', 'label' => ucfirst(str_replace('_', ' ', $this->status)), 'icon' => 'fa-circle'],
         };
+    }
+
+    /**
+     * Retrieve all previous maintenance requests for this asset.
+     */
+    public function getMaintenanceHistoryAttribute()
+    {
+        $assetUnitId = $this->fixed_asset_unit_id;
+        $assetCode = $this->asset_code;
+        $assetName = $this->asset_name;
+
+        return static::with(['assignedTo', 'expenseRequests', 'materialRequests.items.product', 'employee'])
+            ->where('id', '!=', $this->id)
+            ->where(function ($q) use ($assetUnitId, $assetCode, $assetName) {
+                $hasCond = false;
+                if ($assetUnitId) {
+                    $q->where('fixed_asset_unit_id', $assetUnitId);
+                    $hasCond = true;
+                }
+                if ($assetCode) {
+                    if ($hasCond) {
+                        $q->orWhere('asset_code', $assetCode);
+                    } else {
+                        $q->where('asset_code', $assetCode);
+                        $hasCond = true;
+                    }
+                }
+                if (!$hasCond && $assetName) {
+                    $q->where('asset_name', $assetName);
+                }
+            })
+            ->latest()
+            ->take(15)
+            ->get();
     }
 
     public function getUrgencyBadgeAttribute(): array
