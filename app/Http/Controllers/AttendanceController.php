@@ -319,14 +319,21 @@ class AttendanceController extends Controller
             ]);
         })->orderBy('name')->get();
 
+        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+
         return view('hr.attendance.site_deployments', compact(
-            'deployments', 'stats', 'employees', 'projects', 'decidedUsers'
+            'deployments', 'stats', 'employees', 'projects', 'decidedUsers', 'workSchedule'
         ));
     }
 
     /**
      * Record Site Attendance when Planning Manager, Coordinator, Finance Head, HR, or GM
      * sends an employee to a construction site.
+     * Supports Single Day or Date Range duration, and specific session/clock punches:
+     * - Full Day (Morning In/Out + Afternoon In/Out)
+     * - Morning Session Only (Morning In + Morning Out)
+     * - Afternoon Session Only (Afternoon In + Afternoon Out)
+     * - Custom Punches
      * Sets status to 'S', non-deductible in payroll, and records who decided it.
      */
     public function recordSiteAttendance(Request $request)
@@ -336,16 +343,27 @@ class AttendanceController extends Controller
         }
 
         $validated = $request->validate([
-            'employee_id'    => 'nullable|exists:employees,id',
-            'employee_ids'   => 'nullable|array',
-            'employee_ids.*' => 'exists:employees,id',
-            'project_id'     => 'nullable|exists:projects,id',
-            'site_name'      => 'nullable|string|max:255',
-            'attendance_date'=> 'nullable|date',
-            'start_date'     => 'nullable|date',
-            'end_date'       => 'nullable|date',
-            'task_notes'     => 'nullable|string|max:500',
-            'hours_worked'   => 'nullable|numeric|min:1|max:24',
+            'employee_id'           => 'nullable|exists:employees,id',
+            'employee_ids'          => 'nullable|array',
+            'employee_ids.*'        => 'exists:employees,id',
+            'project_id'            => 'nullable|exists:projects,id',
+            'site_name'             => 'nullable|string|max:255',
+            'duration_type'         => 'nullable|string|in:single_day,date_range',
+            'single_date'           => 'nullable|date',
+            'attendance_date'       => 'nullable|date',
+            'start_date'            => 'nullable|date',
+            'end_date'              => 'nullable|date',
+            'session_type'          => 'nullable|string|in:full_day,morning,afternoon,custom',
+            'include_morning_in'    => 'nullable',
+            'morning_in'            => 'nullable|string',
+            'include_morning_out'   => 'nullable',
+            'morning_out'           => 'nullable|string',
+            'include_afternoon_in'  => 'nullable',
+            'afternoon_in'          => 'nullable|string',
+            'include_afternoon_out' => 'nullable',
+            'afternoon_out'         => 'nullable|string',
+            'task_notes'            => 'nullable|string|max:500',
+            'hours_worked'          => 'nullable|numeric|min:0.5|max:24',
         ]);
 
         // Support both single employee and multiple employees array
@@ -362,9 +380,15 @@ class AttendanceController extends Controller
             return redirect()->back()->with('error', 'Please select at least one employee to dispatch to site.');
         }
 
-        // Determine date range (supports single date or start to end range)
-        $startDateStr = $validated['start_date'] ?: ($validated['attendance_date'] ?: today()->toDateString());
-        $endDateStr   = $validated['end_date'] ?: $startDateStr;
+        // Determine date range: single day vs date range
+        $durationType = $request->input('duration_type', 'single_day');
+        if ($durationType === 'single_day' && $request->filled('single_date')) {
+            $startDateStr = $request->input('single_date');
+            $endDateStr   = $request->input('single_date');
+        } else {
+            $startDateStr = $request->input('start_date') ?: ($request->input('single_date') ?: ($request->input('attendance_date') ?: today()->toDateString()));
+            $endDateStr   = $request->input('end_date') ?: $startDateStr;
+        }
 
         try {
             $start = Carbon::parse($startDateStr);
@@ -398,51 +422,112 @@ class AttendanceController extends Controller
         $decidedByRoleLabel = ucwords(str_replace('_', ' ', $userRole));
 
         $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
-        $totalCreated = 0;
+        $defaultMIn   = $workSchedule['morning_in'] ?? '08:30';
+        $defaultMOut  = $workSchedule['morning_out'] ?? '12:30';
+        $defaultAIn   = $workSchedule['afternoon_in'] ?? '13:30';
+        $defaultAOut  = $workSchedule['afternoon_out'] ?? '17:30';
 
+        $sessionType = $request->input('session_type', 'full_day');
+
+        // Resolve punches & session label
+        if ($sessionType === 'full_day') {
+            $configuredMIn  = $request->input('morning_in') ?: $defaultMIn;
+            $configuredMOut = $request->input('morning_out') ?: $defaultMOut;
+            $configuredAIn  = $request->input('afternoon_in') ?: $defaultAIn;
+            $configuredAOut = $request->input('afternoon_out') ?: $defaultAOut;
+            $sessionLabel   = "Full Day ({$configuredMIn}-{$configuredAOut})";
+            $sessionDefaultHours = 8.0;
+        } elseif ($sessionType === 'morning') {
+            $configuredMIn  = $request->input('morning_in') ?: $defaultMIn;
+            $configuredMOut = $request->input('morning_out') ?: $defaultMOut;
+            $configuredAIn  = null;
+            $configuredAOut = null;
+            $sessionLabel   = "Morning Session ({$configuredMIn}-{$configuredMOut})";
+            $sessionDefaultHours = 4.0;
+        } elseif ($sessionType === 'afternoon') {
+            $configuredMIn  = null;
+            $configuredMOut = null;
+            $configuredAIn  = $request->input('afternoon_in') ?: $defaultAIn;
+            $configuredAOut = $request->input('afternoon_out') ?: $defaultAOut;
+            $sessionLabel   = "Afternoon Session ({$configuredAIn}-{$configuredAOut})";
+            $sessionDefaultHours = 4.0;
+        } else {
+            // custom punch selection
+            $configuredMIn  = $request->has('include_morning_in')   ? ($request->input('morning_in') ?: $defaultMIn) : null;
+            $configuredMOut = $request->has('include_morning_out')  ? ($request->input('morning_out') ?: $defaultMOut) : null;
+            $configuredAIn  = $request->has('include_afternoon_in')  ? ($request->input('afternoon_in') ?: $defaultAIn) : null;
+            $configuredAOut = $request->has('include_afternoon_out') ? ($request->input('afternoon_out') ?: $defaultAOut) : null;
+
+            $tags = [];
+            if ($configuredMIn)  $tags[] = "M-In: {$configuredMIn}";
+            if ($configuredMOut) $tags[] = "M-Out: {$configuredMOut}";
+            if ($configuredAIn)  $tags[] = "A-In: {$configuredAIn}";
+            if ($configuredAOut) $tags[] = "A-Out: {$configuredAOut}";
+            $sessionLabel = !empty($tags) ? "Custom (" . implode(', ', $tags) . ")" : "Custom Session";
+
+            $calc = 0;
+            if ($configuredMIn && $configuredMOut) $calc += 4.0;
+            elseif ($configuredMIn || $configuredMOut) $calc += 2.0;
+            if ($configuredAIn && $configuredAOut) $calc += 4.0;
+            elseif ($configuredAIn || $configuredAOut) $calc += 2.0;
+            $sessionDefaultHours = $calc > 0 ? $calc : 8.0;
+        }
+
+        $totalCreated = 0;
         $currentDate = $start->copy();
+
         while ($currentDate->lte($end)) {
             $dateStr = $currentDate->toDateString();
             $isSunday = $currentDate->isSunday();
             $isSaturday = $currentDate->isSaturday();
 
-            // Skip Sundays (standard company rest day) unless it is a single-day explicit submission
+            // Skip Sundays (standard company rest day) unless single-day explicit submission
             if ($isSunday && $start->ne($end)) {
                 $currentDate->addDay();
                 continue;
             }
 
-            if ($isSaturday) {
-                $mIn   = $workSchedule['sat_morning_in'] ?? '08:30';
-                $mOut  = $workSchedule['sat_morning_out'] ?? '12:30';
-                $aIn   = null;
-                $aOut  = null;
-                $cIn   = $mIn;
-                $cOut  = $mOut;
-                $hours = (float)($validated['hours_worked'] ?? ($workSchedule['sat_total_hours'] ?? 4.0));
+            if ($isSaturday && $sessionType === 'full_day') {
+                $dayMIn   = $workSchedule['sat_morning_in'] ?? '08:30';
+                $dayMOut  = $workSchedule['sat_morning_out'] ?? '12:30';
+                $dayAIn   = null;
+                $dayAOut  = null;
+                $hours    = (float)($validated['hours_worked'] ?? ($workSchedule['sat_total_hours'] ?? 4.0));
             } else {
-                $mIn   = $workSchedule['morning_in'] ?? '08:30';
-                $mOut  = $workSchedule['morning_out'] ?? '12:30';
-                $aIn   = $workSchedule['afternoon_in'] ?? '13:30';
-                $aOut  = $workSchedule['afternoon_out'] ?? '17:30';
-                $cIn   = $mIn;
-                $cOut  = $aOut;
-                $hours = (float)($validated['hours_worked'] ?? ($workSchedule['total_hours'] ?? 8.0));
+                $dayMIn   = $configuredMIn;
+                $dayMOut  = $configuredMOut;
+                $dayAIn   = $configuredAIn;
+                $dayAOut  = $configuredAOut;
+                $hours    = (float)($validated['hours_worked'] ?? $sessionDefaultHours);
             }
 
+            $dayCIn  = $dayMIn ?: $dayAIn;
+            $dayCOut = $dayAOut ?: $dayMOut;
+
             $taskDesc = !empty($validated['task_notes']) ? $validated['task_notes'] : 'On-Site Duty';
-            $formattedNote = "On-Site [S]: {$projectName} | Task: {$taskDesc} | Decided by: {$decidedByName} ({$decidedByRoleLabel})";
+            $formattedNote = "On-Site [S]: {$projectName} | Session: {$sessionLabel} | Task: {$taskDesc} | Decided by: {$decidedByName} ({$decidedByRoleLabel})";
 
             foreach ($employeeIds as $empId) {
+                // If record exists (e.g., employee already clocked at office in morning), safely merge
+                $existing = Attendance::where('employee_id', $empId)->where('attendance_date', $dateStr)->first();
+
+                $finalMIn  = $dayMIn  !== null ? $dayMIn  : ($existing?->morning_in);
+                $finalMOut = $dayMOut !== null ? $dayMOut : ($existing?->morning_out);
+                $finalAIn  = $dayAIn  !== null ? $dayAIn  : ($existing?->afternoon_in);
+                $finalAOut = $dayAOut !== null ? $dayAOut : ($existing?->afternoon_out);
+
+                $finalCIn  = $finalMIn ?: ($finalAIn ?: ($existing?->check_in));
+                $finalCOut = $finalAOut ?: ($finalMOut ?: ($existing?->check_out));
+
                 $data = [
-                    'status'         => 'S', // Using 'S' for site attendance, non-deductible in payroll
+                    'status'         => 'S', // 'S' for site attendance, non-deductible in payroll
                     'source'         => 'site_dispatch',
-                    'morning_in'     => $mIn,
-                    'morning_out'    => $mOut,
-                    'afternoon_in'   => $aIn,
-                    'afternoon_out'  => $aOut,
-                    'check_in'       => $cIn,
-                    'check_out'      => $cOut,
+                    'morning_in'     => $finalMIn,
+                    'morning_out'    => $finalMOut,
+                    'afternoon_in'   => $finalAIn,
+                    'afternoon_out'  => $finalAOut,
+                    'check_in'       => $finalCIn,
+                    'check_out'      => $finalCOut,
                     'hours_worked'   => $hours,
                     'notes'          => $formattedNote,
                     'is_approved'    => true,
@@ -480,11 +565,14 @@ class AttendanceController extends Controller
 
         ActivityLog::log(
             'created',
-            "{$decidedByName} ({$decidedByRoleLabel}) deployed {$empCount} employee(s) to {$projectName} ({$periodLabel}). Status marked 'S' (Full pay / non-deductible).",
+            "{$decidedByName} ({$decidedByRoleLabel}) deployed {$empCount} employee(s) to {$projectName} ({$periodLabel}, {$sessionLabel}). Status marked 'S' (Full pay / non-deductible).",
             'Site Deployment / HR'
         );
 
-        return redirect()->back()->with('success', "On-site attendance successfully recorded for {$empCount} employee(s) to {$projectName} ({$periodLabel}). Status marked as 'S' (credited full hours, non-deductible from payroll).");
+        return redirect()->route('attendance.site-deployments')->with(
+            'success',
+            "Successfully sent {$empCount} employee(s) to {$projectName} for {$sessionLabel} ({$periodLabel}). Attendance status officially marked 'S' with {$hours}h credited (non-deductible in payroll)."
+        );
     }
 
     /**

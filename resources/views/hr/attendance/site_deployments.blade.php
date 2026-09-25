@@ -178,6 +178,7 @@
                             <th>Destination Project / Site (ሳይት)</th>
                             <th>Decided By (ማን እንደወሰነ)</th>
                             <th>Assignment / Notes (የሥራ ዝርዝር)</th>
+                            <th class="text-center">Session &amp; Clocking (ክፍለ ጊዜ)</th>
                             <th class="text-center">Status (ሁኔታ)</th>
                             <th class="text-center">Hours</th>
                             <th class="pe-3 text-end">Action</th>
@@ -261,9 +262,43 @@
                                     <span class="badge bg-light text-muted border">Authorized Manager</span>
                                 @endif
                             </td>
-                            <td style="max-width: 250px;">
+                            <td style="max-width: 230px;">
                                 <div class="text-truncate text-muted small" title="{{ $d->notes }}">
                                     {{ $d->site_task ?: ($d->notes ?: 'General On-Site Duties') }}
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                @php
+                                    $hasMIn  = !empty($d->morning_in);
+                                    $hasMOut = !empty($d->morning_out);
+                                    $hasAIn  = !empty($d->afternoon_in);
+                                    $hasAOut = !empty($d->afternoon_out);
+                                @endphp
+                                @if($hasMIn && $hasAOut)
+                                    <span class="badge bg-primary-subtle text-primary border border-primary px-2 py-0.5 small mb-1 d-inline-block">
+                                        <i class="fa-solid fa-sun text-warning me-1"></i>Full Day
+                                    </span>
+                                @elseif($hasMIn && !$hasAIn)
+                                    <span class="badge bg-warning-subtle text-dark border border-warning px-2 py-0.5 small mb-1 d-inline-block">
+                                        <i class="fa-solid fa-cloud-sun text-warning me-1"></i>Morning Only
+                                    </span>
+                                @elseif($hasAIn && !$hasMIn)
+                                    <span class="badge bg-info-subtle text-dark border border-info px-2 py-0.5 small mb-1 d-inline-block">
+                                        <i class="fa-solid fa-cloud-moon text-info me-1"></i>Afternoon Only
+                                    </span>
+                                @else
+                                    <span class="badge bg-light text-muted border px-2 py-0.5 small mb-1 d-inline-block">
+                                        Custom
+                                    </span>
+                                @endif
+                                <div class="small font-monospace text-muted d-flex flex-wrap justify-content-center gap-1" style="font-size:0.7rem;">
+                                    @if($hasMIn)<span class="badge bg-light text-dark border" title="Morning Clock In">M-In: {{ substr($d->morning_in, 0, 5) }}</span>@endif
+                                    @if($hasMOut)<span class="badge bg-light text-dark border" title="Morning Clock Out">M-Out: {{ substr($d->morning_out, 0, 5) }}</span>@endif
+                                    @if($hasAIn)<span class="badge bg-light text-dark border" title="Afternoon Clock In">A-In: {{ substr($d->afternoon_in, 0, 5) }}</span>@endif
+                                    @if($hasAOut)<span class="badge bg-light text-dark border" title="Afternoon Clock Out">A-Out: {{ substr($d->afternoon_out, 0, 5) }}</span>@endif
+                                    @if(!$hasMIn && !$hasMOut && !$hasAIn && !$hasAOut)
+                                        <span class="text-muted">Standard 8h</span>
+                                    @endif
                                 </div>
                             </td>
                             <td class="text-center">
@@ -381,14 +416,50 @@
                         </div>
                     </div>
 
-                    {{-- Date Range --}}
-                    <div class="row g-3 mb-3">
+                    {{-- Duration Selection: Single Day vs Date Range --}}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase d-flex justify-content-between align-items-center mb-1">
+                            <span>Deployment Duration Option (የቆይታ አማራጭ) <span class="text-danger">*</span></span>
+                            <span class="badge bg-primary-subtle text-primary border border-primary px-2" id="durationModeBadge">Single Day</span>
+                        </label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="radio" class="btn-check" name="duration_type" id="dur_single_day" value="single_day" checked onchange="toggleDurationMode('single_day')">
+                                <label class="btn btn-outline-primary w-100 py-2 fw-semibold text-center" for="dur_single_day">
+                                    <i class="fa-solid fa-calendar-day me-1"></i> Single Day (አንድ ቀን ብቻ)
+                                </label>
+                            </div>
+                            <div class="col-6">
+                                <input type="radio" class="btn-check" name="duration_type" id="dur_date_range" value="date_range" onchange="toggleDurationMode('date_range')">
+                                <label class="btn btn-outline-primary w-100 py-2 fw-semibold text-center" for="dur_date_range">
+                                    <i class="fa-solid fa-calendar-week me-1"></i> Date Range (የቀናት ክልል)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Single Day Container --}}
+                    <div id="singleDateContainer" class="mb-3">
+                        <label class="form-label fw-bold small text-muted text-uppercase">
+                            Deployment Date (የሚላኩበት ቀን) <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="fa-solid fa-calendar-day text-primary"></i></span>
+                            <input type="date" name="single_date" id="modal_single_date" class="form-control" value="{{ today()->toDateString() }}" onchange="syncSingleDateToRange(this.value)">
+                            <span class="input-group-text bg-white small font-monospace">
+                                🇪🇹 {{ \App\Helpers\EthiopianCalendar::format(today(), 'am') }}
+                            </span>
+                        </div>
+                    </div>
+
+                    {{-- Date Range Container (Starts Hidden) --}}
+                    <div id="dateRangeContainer" class="row g-3 mb-3" style="display: none;">
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-muted text-uppercase">
                                 Start Date (የመነሻ ቀን) <span class="text-danger">*</span>
                             </label>
                             <div class="input-group">
-                                <input type="date" name="start_date" id="modal_deploy_start" class="form-control" value="{{ today()->toDateString() }}" required onchange="syncEndDate(this.value)">
+                                <input type="date" name="start_date" id="modal_deploy_start" class="form-control" value="{{ today()->toDateString() }}" onchange="syncEndDate(this.value)">
                                 <span class="input-group-text bg-white small font-monospace">
                                     🇪🇹 {{ \App\Helpers\EthiopianCalendar::format(today(), 'am') }}
                                 </span>
@@ -398,8 +469,114 @@
                             <label class="form-label fw-bold small text-muted text-uppercase">
                                 End Date (የመጨረሻ ቀን) <span class="text-danger">*</span>
                             </label>
-                            <input type="date" name="end_date" id="modal_deploy_end" class="form-control" value="{{ today()->toDateString() }}" required>
+                            <input type="date" name="end_date" id="modal_deploy_end" class="form-control" value="{{ today()->toDateString() }}">
                             <small class="text-muted">Same as start date for a single day deployment.</small>
+                        </div>
+                    </div>
+
+                    {{-- Work Session & Clock Punches Selection --}}
+                    <div class="card border border-primary-subtle rounded-3 shadow-xs mb-3 overflow-hidden">
+                        <div class="card-header bg-light py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
+                            <span class="fw-bold small text-dark">
+                                <i class="fa-solid fa-clock me-1 text-primary"></i> Work Session &amp; Clock Punches (ክፍለ ጊዜ እና ሰዓት) <span class="text-danger">*</span>
+                            </span>
+                            <span class="badge bg-primary text-white" id="sessionSummaryBadge">
+                                Full Day &bull; 8.0h
+                            </span>
+                        </div>
+                        <div class="card-body p-3 bg-white">
+                            {{-- Session Radio Options --}}
+                            <div class="row g-2 mb-3">
+                                <div class="col-6 col-md-3">
+                                    <input type="radio" class="btn-check" name="session_type" id="sess_full_day" value="full_day" checked onchange="handleSessionChange('full_day')">
+                                    <label class="btn btn-outline-secondary w-100 py-2 text-start small d-flex flex-column h-100" for="sess_full_day">
+                                        <span class="fw-bold text-dark"><i class="fa-solid fa-sun text-warning me-1"></i> Full Day</span>
+                                        <span class="text-muted text-xs">Morning + Afternoon (8h)</span>
+                                    </label>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <input type="radio" class="btn-check" name="session_type" id="sess_morning" value="morning" onchange="handleSessionChange('morning')">
+                                    <label class="btn btn-outline-secondary w-100 py-2 text-start small d-flex flex-column h-100" for="sess_morning">
+                                        <span class="fw-bold text-dark"><i class="fa-solid fa-cloud-sun text-warning me-1"></i> Morning Only</span>
+                                        <span class="text-muted text-xs">In: 08:30 &bull; Out: 12:30 (4h)</span>
+                                    </label>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <input type="radio" class="btn-check" name="session_type" id="sess_afternoon" value="afternoon" onchange="handleSessionChange('afternoon')">
+                                    <label class="btn btn-outline-secondary w-100 py-2 text-start small d-flex flex-column h-100" for="sess_afternoon">
+                                        <span class="fw-bold text-dark"><i class="fa-solid fa-cloud-moon text-info me-1"></i> Afternoon Only</span>
+                                        <span class="text-muted text-xs">In: 13:30 &bull; Out: 17:30 (4h)</span>
+                                    </label>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <input type="radio" class="btn-check" name="session_type" id="sess_custom" value="custom" onchange="handleSessionChange('custom')">
+                                    <label class="btn btn-outline-secondary w-100 py-2 text-start small d-flex flex-column h-100" for="sess_custom">
+                                        <span class="fw-bold text-dark"><i class="fa-solid fa-sliders text-primary me-1"></i> Custom Punches</span>
+                                        <span class="text-muted text-xs">Pick specific punch times</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {{-- 4-Punch Visual Grid --}}
+                            <div class="border rounded-2 p-2 bg-light-subtle">
+                                <div class="row g-2">
+                                    {{-- Morning In --}}
+                                    <div class="col-6 col-md-3">
+                                        <div class="p-2 border rounded-2 bg-white h-100 transition-all" id="card_morning_in">
+                                            <div class="form-check form-switch mb-1">
+                                                <input class="form-check-input punch-toggle" type="checkbox" name="include_morning_in" id="chk_morning_in" value="1" checked onchange="onPunchToggleChanged()">
+                                                <label class="form-check-label small fw-bold text-dark" for="chk_morning_in">
+                                                    🌅 Morning In
+                                                </label>
+                                            </div>
+                                            <input type="time" name="morning_in" id="time_morning_in" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['morning_in'] ?? '08:30' }}">
+                                            <small class="text-muted text-xs d-block mt-1">ጧት መግቢያ (08:30)</small>
+                                        </div>
+                                    </div>
+
+                                    {{-- Morning Out --}}
+                                    <div class="col-6 col-md-3">
+                                        <div class="p-2 border rounded-2 bg-white h-100 transition-all" id="card_morning_out">
+                                            <div class="form-check form-switch mb-1">
+                                                <input class="form-check-input punch-toggle" type="checkbox" name="include_morning_out" id="chk_morning_out" value="1" checked onchange="onPunchToggleChanged()">
+                                                <label class="form-check-label small fw-bold text-dark" for="chk_morning_out">
+                                                    🥪 Morning Out
+                                                </label>
+                                            </div>
+                                            <input type="time" name="morning_out" id="time_morning_out" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['morning_out'] ?? '12:30' }}">
+                                            <small class="text-muted text-xs d-block mt-1">ለምሳ መውጫ (12:30)</small>
+                                        </div>
+                                    </div>
+
+                                    {{-- Afternoon In --}}
+                                    <div class="col-6 col-md-3">
+                                        <div class="p-2 border rounded-2 bg-white h-100 transition-all" id="card_afternoon_in">
+                                            <div class="form-check form-switch mb-1">
+                                                <input class="form-check-input punch-toggle" type="checkbox" name="include_afternoon_in" id="chk_afternoon_in" value="1" checked onchange="onPunchToggleChanged()">
+                                                <label class="form-check-label small fw-bold text-dark" for="chk_afternoon_in">
+                                                    🍱 Afternoon In
+                                                </label>
+                                            </div>
+                                            <input type="time" name="afternoon_in" id="time_afternoon_in" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['afternoon_in'] ?? '13:30' }}">
+                                            <small class="text-muted text-xs d-block mt-1">ከምሳ መግቢያ (13:30)</small>
+                                        </div>
+                                    </div>
+
+                                    {{-- Afternoon Out --}}
+                                    <div class="col-6 col-md-3">
+                                        <div class="p-2 border rounded-2 bg-white h-100 transition-all" id="card_afternoon_out">
+                                            <div class="form-check form-switch mb-1">
+                                                <input class="form-check-input punch-toggle" type="checkbox" name="include_afternoon_out" id="chk_afternoon_out" value="1" checked onchange="onPunchToggleChanged()">
+                                                <label class="form-check-label small fw-bold text-dark" for="chk_afternoon_out">
+                                                    🌇 Afternoon Out
+                                                </label>
+                                            </div>
+                                            <input type="time" name="afternoon_out" id="time_afternoon_out" class="form-control form-control-sm font-monospace" value="{{ $workSchedule['afternoon_out'] ?? '17:30' }}">
+                                            <small class="text-muted text-xs d-block mt-1">ከሰዓት መውጫ (17:30)</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -408,10 +585,10 @@
                         <div class="col-md-4">
                             <label class="form-label fw-bold small text-muted text-uppercase">Credited Hours / Day</label>
                             <div class="input-group">
-                                <input type="number" step="0.5" min="1" max="24" name="hours_worked" class="form-control" value="8.0" required>
+                                <input type="number" step="0.5" min="0.5" max="24" name="hours_worked" id="modal_hours_worked" class="form-control" value="8.0" required>
                                 <span class="input-group-text">Hrs</span>
                             </div>
-                            <small class="text-muted">Standard 8h (Sat 4h morning)</small>
+                            <small class="text-muted">Full day: 8.0h &bull; Half day: 4.0h</small>
                         </div>
                         <div class="col-md-8">
                             <label class="form-label fw-bold small text-muted text-uppercase">Assignment / Purpose (የሥራው ዝርዝር / ዓላማ)</label>
@@ -435,11 +612,136 @@
 
 @push('scripts')
 <script>
+function toggleDurationMode(mode) {
+    const singleContainer = document.getElementById('singleDateContainer');
+    const rangeContainer  = document.getElementById('dateRangeContainer');
+    const modeBadge       = document.getElementById('durationModeBadge');
+    const singleInput     = document.getElementById('modal_single_date');
+    const startInput      = document.getElementById('modal_deploy_start');
+    const endInput        = document.getElementById('modal_deploy_end');
+
+    if (mode === 'single_day') {
+        if (singleContainer) singleContainer.style.display = 'block';
+        if (rangeContainer)  rangeContainer.style.display  = 'none';
+        if (modeBadge) {
+            modeBadge.textContent = 'Single Day';
+            modeBadge.className = 'badge bg-primary-subtle text-primary border border-primary px-2';
+        }
+        if (singleInput && startInput && endInput) {
+            startInput.value = singleInput.value;
+            endInput.value   = singleInput.value;
+        }
+    } else {
+        if (singleContainer) singleContainer.style.display = 'none';
+        if (rangeContainer)  rangeContainer.style.display  = 'flex';
+        if (modeBadge) {
+            modeBadge.textContent = 'Date Range';
+            modeBadge.className = 'badge bg-info-subtle text-info border border-info px-2';
+        }
+    }
+}
+
+function syncSingleDateToRange(val) {
+    const startInput = document.getElementById('modal_deploy_start');
+    const endInput   = document.getElementById('modal_deploy_end');
+    if (startInput) startInput.value = val;
+    if (endInput) endInput.value = val;
+}
+
 function syncEndDate(startVal) {
     const endInput = document.getElementById('modal_deploy_end');
     if (endInput && !endInput.value) {
         endInput.value = startVal;
     }
 }
+
+function handleSessionChange(type) {
+    const chkMIn  = document.getElementById('chk_morning_in');
+    const chkMOut = document.getElementById('chk_morning_out');
+    const chkAIn  = document.getElementById('chk_afternoon_in');
+    const chkAOut = document.getElementById('chk_afternoon_out');
+
+    const hoursInput = document.getElementById('modal_hours_worked');
+    const badge      = document.getElementById('sessionSummaryBadge');
+
+    if (type === 'full_day') {
+        if (chkMIn)  chkMIn.checked  = true;
+        if (chkMOut) chkMOut.checked = true;
+        if (chkAIn)  chkAIn.checked  = true;
+        if (chkAOut) chkAOut.checked = true;
+        if (hoursInput) hoursInput.value = '8.0';
+        if (badge) badge.innerHTML = '<i class="fa-solid fa-sun text-warning me-1"></i> Full Day &bull; 8.0h';
+    } else if (type === 'morning') {
+        if (chkMIn)  chkMIn.checked  = true;
+        if (chkMOut) chkMOut.checked = true;
+        if (chkAIn)  chkAIn.checked  = false;
+        if (chkAOut) chkAOut.checked = false;
+        if (hoursInput) hoursInput.value = '4.0';
+        if (badge) badge.innerHTML = '<i class="fa-solid fa-cloud-sun text-warning me-1"></i> Morning Session &bull; 4.0h';
+    } else if (type === 'afternoon') {
+        if (chkMIn)  chkMIn.checked  = false;
+        if (chkMOut) chkMOut.checked = false;
+        if (chkAIn)  chkAIn.checked  = true;
+        if (chkAOut) chkAOut.checked = true;
+        if (hoursInput) hoursInput.value = '4.0';
+        if (badge) badge.innerHTML = '<i class="fa-solid fa-cloud-moon text-info me-1"></i> Afternoon Session &bull; 4.0h';
+    } else if (type === 'custom') {
+        if (badge) badge.innerHTML = '<i class="fa-solid fa-sliders text-white me-1"></i> Custom Punches';
+    }
+    updatePunchInputsVisual();
+}
+
+function updatePunchInputsVisual() {
+    ['morning_in', 'morning_out', 'afternoon_in', 'afternoon_out'].forEach(function(id) {
+        const chk  = document.getElementById('chk_' + id);
+        const time = document.getElementById('time_' + id);
+        const card = document.getElementById('card_' + id);
+        if (chk && time) {
+            time.disabled = !chk.checked;
+            if (card) {
+                if (chk.checked) {
+                    card.classList.remove('opacity-50', 'bg-light');
+                    card.classList.add('bg-white');
+                } else {
+                    card.classList.add('opacity-50', 'bg-light');
+                    card.classList.remove('bg-white');
+                }
+            }
+        }
+    });
+}
+
+function onPunchToggleChanged() {
+    const customRadio = document.getElementById('sess_custom');
+    if (customRadio) customRadio.checked = true;
+
+    updatePunchInputsVisual();
+
+    const chkMIn  = document.getElementById('chk_morning_in')?.checked;
+    const chkMOut = document.getElementById('chk_morning_out')?.checked;
+    const chkAIn  = document.getElementById('chk_afternoon_in')?.checked;
+    const chkAOut = document.getElementById('chk_afternoon_out')?.checked;
+
+    let computed = 0;
+    if (chkMIn && chkMOut) computed += 4.0;
+    else if (chkMIn || chkMOut) computed += 2.0;
+
+    if (chkAIn && chkAOut) computed += 4.0;
+    else if (chkAIn || chkAOut) computed += 2.0;
+
+    const hoursInput = document.getElementById('modal_hours_worked');
+    if (hoursInput && computed > 0) {
+        hoursInput.value = computed.toFixed(1);
+    }
+
+    const badge = document.getElementById('sessionSummaryBadge');
+    if (badge) {
+        badge.innerHTML = `<i class="fa-solid fa-sliders text-white me-1"></i> Custom &bull; ${computed.toFixed(1)}h`;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    updatePunchInputsVisual();
+});
 </script>
 @endpush
