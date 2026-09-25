@@ -89,6 +89,12 @@
 .hidden-row { display: none; }
 </style>
 
+@php
+    $backRoute = auth()->user() && auth()->user()->hasAnyRole(['store_manager', 'store_keeper']) && Route::has('store-manager.inventory.all')
+        ? route('store-manager.inventory.all')
+        : route('inventory.index');
+@endphp
+
 {{-- ── Header ──────────────────────────────────────────────── --}}
 <div class="adj-header">
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-3">
@@ -96,7 +102,7 @@
             <h1><i class="fa-solid fa-warehouse me-2"></i>Manual Stock Adjustment</h1>
             <p>Enter the actual quantity for any product and click <strong>Save</strong> on that row — changes are applied immediately, one product at a time.</p>
         </div>
-        <a href="{{ route('inventory.index') }}" class="btn btn-light btn-sm px-3 align-self-start">
+        <a href="{{ $backRoute }}" class="btn btn-light btn-sm px-3 align-self-start">
             <i class="fa-solid fa-arrow-left me-1"></i> Back
         </a>
     </div>
@@ -253,7 +259,7 @@
             <span class="saved-pill" id="savedPill">0 saved</span>
             <span class="text-muted" style="font-size:.8rem;">Click the green Save button on each row to apply</span>
         </div>
-        <a href="{{ route('inventory.index') }}" class="btn btn-outline-secondary btn-sm px-4">
+        <a href="{{ $backRoute }}" class="btn btn-outline-secondary btn-sm px-4">
             Done
         </a>
     </div>

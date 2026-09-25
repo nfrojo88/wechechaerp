@@ -81,11 +81,11 @@
                 <p>Real-time inventory values, stock movements, and financial summary</p>
             </div>
             <div class="d-flex gap-2 flex-wrap">
-                @can('inventory.edit')
+                @if(auth()->user()->can('inventory.edit') || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager', 'store_keeper']))
                 <a href="{{ route('inventory.bulk-adjust') }}" class="btn btn-warning btn-sm fw-semibold px-3" style="border-radius:8px;">
                     <i class="fa-solid fa-sliders me-1"></i> Manual Adjustment
                 </a>
-                @endcan
+                @endif
                 <a href="{{ route('inventory.index') }}" class="btn btn-light btn-sm px-3" style="border-radius:8px;">
                     <i class="fas fa-boxes me-1"></i> All Inventory
                 </a>
@@ -293,11 +293,11 @@
                         <a href="{{ route('inventory.index') }}" class="qa-btn btn btn-info text-white">
                             <i class="fas fa-clipboard-list me-1"></i> View Stock
                         </a>
-                        @can('inventory.edit')
+                        @if(auth()->user()->can('inventory.edit') || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager', 'store_keeper']))
                         <a href="{{ route('inventory.bulk-adjust') }}" class="qa-btn btn btn-success">
                             <i class="fa-solid fa-sliders me-1"></i> Manual Stock Adjustment
                         </a>
-                        @endcan
+                        @endif
                         <a href="{{ route('material-requests.index') }}" class="qa-btn btn btn-secondary">
                             <i class="fas fa-cart-flatbed me-1"></i> Material Requests
                         </a>

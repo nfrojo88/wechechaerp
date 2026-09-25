@@ -4,6 +4,24 @@
 
 @section('content')
 <div class="container-fluid">
+    @if(session('success'))
+        <div class="alert alert-success alert-dismissible fade show shadow-sm mb-3" role="alert">
+            <i class="fas fa-check-circle me-2"></i>{{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+    @if(session('error') || $errors->any())
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm mb-3" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            {{ session('error') ?? $errors->first() }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    @endif
+    <div id="pageDynamicAlert" class="alert d-none alert-dismissible fade show shadow-sm mb-3" role="alert">
+        <i class="fas fa-info-circle me-2"></i><span id="pageDynamicAlertMsg"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h4 class="mb-0"><i class="fas fa-boxes-stacked me-2 text-primary"></i>All Inventory
@@ -249,49 +267,148 @@
     </div>
 </div>
 
-{{-- Add Stock Modal --}}
-<div class="modal fade" id="addStockModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content shadow-lg border-0">
-            <form action="{{ route('inventory.save-single') }}" method="POST">
+{{-- Add / Adjust Stock Modal --}}
+<div class="modal fade" id="addStockModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content shadow-lg border-0" style="border-radius:14px; overflow:hidden;">
+            <form id="addStockForm" action="{{ route('inventory.save-single') }}" method="POST">
                 @csrf
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-plus-circle me-2"></i>Add / Adjust Stock</h5>
+                <div class="modal-header py-3 px-4 text-white" style="background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);">
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0 text-white"><i class="fas fa-sliders-h me-2 text-warning"></i>Manual Stock Adjustment</h5>
+                        <small class="opacity-75">Adjust, add, or correct on-hand store inventory</small>
+                    </div>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body p-4">
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label class="form-label fw-bold">Store <span class="text-danger">*</span></label>
-                            <select name="store_id" id="addStockStoreSelect" class="form-select" required>
-                                <option value="">— Select Store —</option>
-                                @foreach($stores as $s)
-                                    <option value="{{ $s->id }}">{{ $s->name }} ({{ strtoupper($s->type ?? 'site') }})</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label fw-bold">Product <span class="text-danger">*</span></label>
-                            <select name="product_id" id="addStockProductSelect" class="form-select" required>
-                                <option value="">— Select Product —</option>
-                                @foreach($products as $p)
-                                    <option value="{{ $p->id }}">{{ $p->name }} ({{ $p->code }}) [{{ $p->unit ?? 'pcs' }}]</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">New Qty <span class="text-danger">*</span></label>
-                            <input type="number" step="0.001" min="0" name="quantity" class="form-control" placeholder="0.000" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold">Unit Cost (ETB)</label>
-                            <input type="number" step="0.01" min="0" name="unit_cost" class="form-control" placeholder="Optional">
+                <div class="modal-body p-4 bg-light">
+                    {{-- Alert feedback inside modal --}}
+                    <div id="addStockAlert" class="alert d-none py-2 px-3 mb-3 small" role="alert"></div>
+
+                    <div class="card border-0 shadow-sm mb-3">
+                        <div class="card-body p-3">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold text-dark small text-uppercase mb-1">Store <span class="text-danger">*</span></label>
+                                    <select name="store_id" id="addStockStoreSelect" class="form-select" required>
+                                        <option value="">— Select Store —</option>
+                                        @foreach($stores as $s)
+                                            <option value="{{ $s->id }}" {{ (isset($assignedStore) && $assignedStore && $assignedStore->id == $s->id) || request('store_id') == $s->id ? 'selected' : '' }}>
+                                                {{ $s->name }} ({{ strtoupper($s->type ?? 'site') }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @if(isset($isStoreKeeper) && $isStoreKeeper && $assignedStore)
+                                        <small class="text-muted d-block mt-1"><i class="fas fa-shield-alt text-primary me-1"></i>Assigned Store: <strong>{{ $assignedStore->name }}</strong></small>
+                                    @endif
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold text-dark small text-uppercase mb-1">Product <span class="text-danger">*</span></label>
+                                    <select name="product_id" id="addStockProductSelect" class="form-select" required>
+                                        <option value="">— Select Product —</option>
+                                        @foreach($products as $p)
+                                            <option value="{{ $p->id }}" data-unit="{{ $p->unit ?? 'pcs' }}" data-price="{{ $p->unit_price ?? 0 }}">
+                                                {{ $p->name }} ({{ $p->code }}) [{{ $p->unit ?? 'pcs' }}]
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    {{-- Live Current Stock Banner --}}
+                    <div id="currentStockCard" class="card border-primary border-opacity-25 bg-white shadow-sm mb-3 d-none">
+                        <div class="card-body py-2 px-3">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                        <i class="fas fa-boxes me-1"></i>Current Status
+                                    </span>
+                                    <span id="csStoreName" class="fw-semibold text-secondary small"></span>
+                                </div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <span class="small text-muted">On Hand: <strong id="csOnHand" class="text-dark fs-6">0.000</strong> <span id="csUnit1" class="small">pcs</span></span>
+                                    <span class="small text-muted">Available: <strong id="csAvailable" class="text-success">0.000</strong></span>
+                                    <span class="small text-muted">Cost: <strong id="csCost" class="text-primary">ETB 0.00</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Mode & Quantity Settings --}}
+                    <div class="card border-0 shadow-sm mb-3">
+                        <div class="card-body p-3">
+                            <label class="form-label fw-bold text-dark small text-uppercase mb-2">Adjustment Action <span class="text-danger">*</span></label>
+                            <div class="row g-2 mb-3">
+                                <div class="col-4">
+                                    <input type="radio" class="btn-check" name="mode" id="modeSet" value="set" checked>
+                                    <label class="btn btn-outline-primary w-100 py-2 text-start d-flex flex-column" for="modeSet">
+                                        <span class="fw-bold"><i class="fas fa-equals me-1"></i> Set Total</span>
+                                        <small class="opacity-75" style="font-size:0.75rem;">Exact physical count</small>
+                                    </label>
+                                </div>
+                                <div class="col-4">
+                                    <input type="radio" class="btn-check" name="mode" id="modeAdd" value="add">
+                                    <label class="btn btn-outline-success w-100 py-2 text-start d-flex flex-column" for="modeAdd">
+                                        <span class="fw-bold"><i class="fas fa-plus me-1"></i> Add Stock</span>
+                                        <small class="opacity-75" style="font-size:0.75rem;">Found or extra stock</small>
+                                    </label>
+                                </div>
+                                <div class="col-4">
+                                    <input type="radio" class="btn-check" name="mode" id="modeDeduct" value="deduct">
+                                    <label class="btn btn-outline-danger w-100 py-2 text-start d-flex flex-column" for="modeDeduct">
+                                        <span class="fw-bold"><i class="fas fa-minus me-1"></i> Deduct Stock</span>
+                                        <small class="opacity-75" style="font-size:0.75rem;">Damage, lost, shrinkage</small>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold text-dark small text-uppercase" id="lblQuantityInput">Counted Total Quantity <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                        <input type="number" step="0.001" min="0" name="quantity" id="addStockQtyInput" class="form-control form-control-lg fw-bold text-primary" placeholder="0.000" required>
+                                        <span class="input-group-text fw-semibold bg-light text-muted" id="addStockUnitAddon">pcs</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label fw-bold text-dark small text-uppercase">Unit Cost (ETB) <small class="text-muted fw-normal">(Optional)</small></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light text-muted">ETB</span>
+                                        <input type="number" step="0.01" min="0" name="unit_cost" id="addStockCostInput" class="form-control form-control-lg" placeholder="e.g. 250.00">
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Live calculation preview --}}
+                            <div id="liveCalcBox" class="mt-3 p-2 rounded bg-light border d-flex justify-content-between align-items-center small">
+                                <span class="text-muted"><i class="fas fa-calculator me-1"></i>Calculated Outcome:</span>
+                                <span id="liveCalcText" class="fw-bold text-dark">Enter quantity to see preview</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Reason / Remarks --}}
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-3">
+                            <label class="form-label fw-bold text-dark small text-uppercase mb-1">Reason / Remarks <span class="text-danger">*</span></label>
+                            <div class="mb-2 d-flex flex-wrap gap-1">
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill quick-reason-chip" data-reason="Physical Inventory Audit Discrepancy">Audit Discrepancy</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill quick-reason-chip" data-reason="Damaged / Broken Material in Storage">Damaged in Storage</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill quick-reason-chip" data-reason="Found Unrecorded Material Stock">Found Unrecorded</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill quick-reason-chip" data-reason="Water Damage / Rain Exposure">Water Damage</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill quick-reason-chip" data-reason="Expired / Obsolete Material">Expired / Obsolete</button>
+                            </div>
+                            <textarea name="remarks" id="addStockRemarks" rows="2" class="form-control" placeholder="Provide explanation or justification for this manual adjustment..." required></textarea>
+                        </div>
+                    </div>
+
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success fw-bold"><i class="fas fa-check me-1"></i>Save</button>
+                <div class="modal-footer bg-white border-top py-3 px-4 d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" id="btnSubmitAdjustment" class="btn btn-primary fw-bold px-4 shadow-sm">
+                        <i class="fas fa-check me-1.5"></i>Apply Adjustment
+                    </button>
                 </div>
             </form>
         </div>
@@ -703,6 +820,9 @@
 var currentSingleProductId = null;
 var currentSingleStoreId   = null;
 var currentGroupedProductId = null;
+var currentGroupedStores   = [];
+var currentStockOnHand     = 0;
+var currentProductUnit     = 'pcs';
 
 function openManualAdjustmentFromSingle() {
     var pSelect = document.getElementById('addStockProductSelect');
@@ -717,13 +837,22 @@ function openManualAdjustmentFromSingle() {
     }
     var addEl = document.getElementById('addStockModal');
     if (addEl) {
-        new bootstrap.Modal(addEl).show();
+        var addModal = bootstrap.Modal.getOrCreateInstance(addEl);
+        addModal.show();
+        triggerStockLookup();
     }
 }
 
 function openManualAdjustmentFromGrouped() {
     var pSelect = document.getElementById('addStockProductSelect');
+    var sSelect = document.getElementById('addStockStoreSelect');
     if (pSelect && currentGroupedProductId) pSelect.value = currentGroupedProductId;
+
+    if (sSelect && currentGroupedStores && currentGroupedStores.length > 0) {
+        if (!sSelect.value || sSelect.value === '') {
+            sSelect.value = currentGroupedStores[0].store_id;
+        }
+    }
     
     var gdEl = document.getElementById('groupedDetailModal');
     if (gdEl) {
@@ -732,7 +861,155 @@ function openManualAdjustmentFromGrouped() {
     }
     var addEl = document.getElementById('addStockModal');
     if (addEl) {
-        new bootstrap.Modal(addEl).show();
+        var addModal = bootstrap.Modal.getOrCreateInstance(addEl);
+        addModal.show();
+        triggerStockLookup();
+    }
+}
+
+function triggerStockLookup() {
+    var sSelect = document.getElementById('addStockStoreSelect');
+    var pSelect = document.getElementById('addStockProductSelect');
+    var stockCard = document.getElementById('currentStockCard');
+    var alertBox  = document.getElementById('addStockAlert');
+    if (alertBox) {
+        alertBox.className = 'alert d-none py-2 px-3 mb-3 small';
+        alertBox.textContent = '';
+    }
+
+    if (!sSelect || !pSelect) return;
+    var storeId   = sSelect.value;
+    var productId = pSelect.value;
+
+    var selectedOpt = pSelect.options[pSelect.selectedIndex];
+    var unit = (selectedOpt && selectedOpt.dataset.unit) ? selectedOpt.dataset.unit : 'pcs';
+    currentProductUnit = unit;
+    var unitAddon = document.getElementById('addStockUnitAddon');
+    if (unitAddon) unitAddon.textContent = unit;
+
+    if (!storeId || !productId) {
+        if (stockCard) stockCard.classList.add('d-none');
+        currentStockOnHand = 0;
+        updateLiveCalc();
+        return;
+    }
+
+    var storeName = (sSelect.options[sSelect.selectedIndex] ? sSelect.options[sSelect.selectedIndex].text : 'Store');
+    var csStoreName = document.getElementById('csStoreName');
+    if (csStoreName) csStoreName.textContent = storeName;
+
+    var url = '{{ route("inventory.get-stock") }}?store_id=' + encodeURIComponent(storeId) + '&product_id=' + encodeURIComponent(productId);
+    fetch(url, {
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(function(res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+    })
+    .then(function(data) {
+        if (data.success) {
+            currentStockOnHand = parseFloat(data.on_hand) || 0;
+            currentProductUnit = data.unit || unit;
+
+            var csOnHand = document.getElementById('csOnHand');
+            var csAvail  = document.getElementById('csAvailable');
+            var csCost   = document.getElementById('csCost');
+            var csUnit   = document.getElementById('csUnit1');
+            var costInput = document.getElementById('addStockCostInput');
+
+            if (csOnHand) csOnHand.textContent = (currentStockOnHand).toFixed(3);
+            if (csAvail)  csAvail.textContent  = ((parseFloat(data.available) || 0)).toFixed(3) + ' ' + currentProductUnit;
+            if (csCost)   csCost.textContent   = 'ETB ' + ((parseFloat(data.unit_cost) || 0)).toFixed(2);
+            if (csUnit)   csUnit.textContent   = currentProductUnit;
+            if (unitAddon) unitAddon.textContent = currentProductUnit;
+
+            if (costInput && (!costInput.value || costInput.value == '0') && data.unit_cost > 0) {
+                costInput.value = (parseFloat(data.unit_cost)).toFixed(2);
+            }
+
+            if (stockCard) stockCard.classList.remove('d-none');
+            updateLiveCalc();
+        }
+    })
+    .catch(function(err) {
+        console.warn('Could not load live stock:', err);
+    });
+}
+
+function getSelectedAdjustmentMode() {
+    var radios = document.getElementsByName('mode');
+    for (var i = 0; i < radios.length; i++) {
+        if (radios[i].checked) return radios[i].value;
+    }
+    return 'set';
+}
+
+function updateLiveCalc() {
+    var mode = getSelectedAdjustmentMode();
+    var qtyInput = document.getElementById('addStockQtyInput');
+    var calcText = document.getElementById('liveCalcText');
+    var btnSubmit = document.getElementById('btnSubmitAdjustment');
+    var lblQty = document.getElementById('lblQuantityInput');
+
+    if (lblQty) {
+        if (mode === 'add') {
+            lblQty.innerHTML = 'Quantity to Add (+) <span class="text-danger">*</span>';
+        } else if (mode === 'deduct') {
+            lblQty.innerHTML = 'Quantity to Deduct (−) <span class="text-danger">*</span>';
+        } else {
+            lblQty.innerHTML = 'Counted Total Quantity (=) <span class="text-danger">*</span>';
+        }
+    }
+
+    if (!qtyInput || !calcText) return;
+    var rawVal = qtyInput.value.trim();
+    if (rawVal === '' || isNaN(parseFloat(rawVal))) {
+        calcText.innerHTML = '<span class="text-muted">Enter quantity to see adjustment</span>';
+        if (btnSubmit) btnSubmit.disabled = false;
+        return;
+    }
+
+    var val = parseFloat(rawVal);
+    var newTotal = 0;
+    var diff = 0;
+    var unit = currentProductUnit || 'pcs';
+
+    if (mode === 'add') {
+        diff = val;
+        newTotal = currentStockOnHand + val;
+        calcText.innerHTML = 'New On-Hand: <strong class="text-success">' + newTotal.toFixed(3) + ' ' + unit + '</strong> ' +
+            '(<span class="text-success fw-bold">+' + diff.toFixed(3) + '</span>)';
+        if (btnSubmit) btnSubmit.disabled = false;
+    } else if (mode === 'deduct') {
+        diff = -val;
+        newTotal = currentStockOnHand - val;
+        if (val > currentStockOnHand) {
+            calcText.innerHTML = '<span class="text-danger fw-bold"><i class="fas fa-exclamation-triangle me-1"></i>Warning: Requested deduction (' + val.toFixed(3) + ') exceeds available on-hand (' + currentStockOnHand.toFixed(3) + ' ' + unit + ')</span>';
+            if (btnSubmit) btnSubmit.disabled = true;
+        } else {
+            calcText.innerHTML = 'New On-Hand: <strong class="text-danger">' + newTotal.toFixed(3) + ' ' + unit + '</strong> ' +
+                '(<span class="text-danger fw-bold">' + diff.toFixed(3) + '</span>)';
+            if (btnSubmit) btnSubmit.disabled = false;
+        }
+    } else { // 'set'
+        newTotal = val;
+        diff = val - currentStockOnHand;
+        var diffClass = diff > 0 ? 'text-success' : (diff < 0 ? 'text-danger' : 'text-muted');
+        var diffSign  = diff > 0 ? '+' : '';
+        calcText.innerHTML = 'New On-Hand: <strong class="text-primary">' + newTotal.toFixed(3) + ' ' + unit + '</strong> ' +
+            '(<span class="' + diffClass + ' fw-bold">' + diffSign + diff.toFixed(3) + ' ' + unit + '</span>)';
+        if (btnSubmit) btnSubmit.disabled = false;
+    }
+}
+
+function showPageAlert(msg, type) {
+    var pAlert = document.getElementById('pageDynamicAlert');
+    var pMsg   = document.getElementById('pageDynamicAlertMsg');
+    if (pAlert && pMsg) {
+        pAlert.className = 'alert alert-' + (type || 'success') + ' alert-dismissible fade show shadow-sm mb-3';
+        pMsg.textContent = msg;
+        pAlert.classList.remove('d-none');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 }
 
@@ -795,6 +1072,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 try { stores = JSON.parse(rawStores); } catch(e){
                     console.error('Store JSON parse error:', e, rawStores);
                 }
+                currentGroupedStores = stores;
                 var unit = d.productUnit || 'units';
 
                 setText('gdName',       d.productName  || 'N/A');
@@ -1053,6 +1331,152 @@ document.addEventListener('DOMContentLoaded', function () {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    /* ── Manual Adjustment Modal Listeners & Submission ──── */
+    var sSelect = document.getElementById('addStockStoreSelect');
+    var pSelect = document.getElementById('addStockProductSelect');
+    if (sSelect) sSelect.addEventListener('change', triggerStockLookup);
+    if (pSelect) pSelect.addEventListener('change', triggerStockLookup);
+
+    var modeRadios = document.getElementsByName('mode');
+    for (var mIdx = 0; mIdx < modeRadios.length; mIdx++) {
+        modeRadios[mIdx].addEventListener('change', updateLiveCalc);
+    }
+
+    var qtyInput = document.getElementById('addStockQtyInput');
+    if (qtyInput) qtyInput.addEventListener('input', updateLiveCalc);
+
+    document.querySelectorAll('.quick-reason-chip').forEach(function(chip) {
+        chip.addEventListener('click', function() {
+            var rInput = document.getElementById('addStockRemarks');
+            if (rInput) {
+                rInput.value = this.dataset.reason;
+                rInput.focus();
+            }
+        });
+    });
+
+    var addForm = document.getElementById('addStockForm');
+    if (addForm) {
+        addForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var alertBox  = document.getElementById('addStockAlert');
+            var btnSubmit = document.getElementById('btnSubmitAdjustment');
+
+            var storeSelect = document.getElementById('addStockStoreSelect');
+            var productSelect = document.getElementById('addStockProductSelect');
+            var qtyInput = document.getElementById('addStockQtyInput');
+            var costInput = document.getElementById('addStockCostInput');
+            var remarksInput = document.getElementById('addStockRemarks');
+
+            var storeId = storeSelect ? storeSelect.value : null;
+            var productId = productSelect ? productSelect.value : null;
+            var qty = qtyInput ? parseFloat(qtyInput.value) : NaN;
+            var cost = (costInput && costInput.value.trim() !== '') ? parseFloat(costInput.value) : null;
+            var remarks = remarksInput ? remarksInput.value.trim() : '';
+            var mode = getSelectedAdjustmentMode();
+
+            if (!storeId) {
+                showModalAlert('Please select a store.', 'danger');
+                return;
+            }
+            if (!productId) {
+                showModalAlert('Please select a product.', 'danger');
+                return;
+            }
+            if (isNaN(qty) || qty < 0) {
+                showModalAlert('Please enter a valid non-negative quantity.', 'danger');
+                return;
+            }
+            if (!remarks) {
+                showModalAlert('Please provide a reason or remarks for this manual adjustment.', 'danger');
+                if (remarksInput) remarksInput.focus();
+                return;
+            }
+            if (mode === 'deduct' && qty > currentStockOnHand) {
+                showModalAlert('Cannot deduct ' + qty.toFixed(3) + '. Only ' + currentStockOnHand.toFixed(3) + ' currently on hand.', 'danger');
+                return;
+            }
+
+            var origBtnHtml = btnSubmit ? btnSubmit.innerHTML : 'Save';
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin me-1.5"></i>Applying Adjustment...';
+            }
+
+            var payload = {
+                store_id: storeId,
+                product_id: productId,
+                quantity: qty,
+                mode: mode,
+                remarks: remarks,
+                unit_cost: cost
+            };
+
+            var csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ||
+                document.querySelector('#addStockForm input[name="_token"]')?.value || '';
+
+            fetch(addForm.action, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(async function (res) {
+                var data = await res.json().catch(function () { return { success: false, message: 'Invalid server response' }; });
+                if (!res.ok || !data.success) {
+                    var errorMsg = data.message || ('Server error: HTTP ' + res.status);
+                    if (data.errors) {
+                        errorMsg = Object.values(data.errors).flat().join('<br>');
+                    }
+                    throw new Error(errorMsg);
+                }
+                return data;
+            })
+            .then(function (data) {
+                // Close modal
+                var addEl = document.getElementById('addStockModal');
+                if (addEl) {
+                    var modal = bootstrap.Modal.getInstance(addEl);
+                    if (modal) modal.hide();
+                }
+
+                // Show top page alert
+                showPageAlert(data.message || 'Manual stock adjustment saved successfully!', 'success');
+
+                // Refresh history if detail modal is open
+                if (currentSingleProductId) {
+                    loadProductHistory(currentSingleProductId, currentSingleStoreId, 'sd');
+                }
+                if (currentGroupedProductId) {
+                    loadProductHistory(currentGroupedProductId, null, 'gd');
+                }
+
+                // Reload page after a brief delay so table and counts update cleanly
+                setTimeout(function () {
+                    window.location.reload();
+                }, 1200);
+            })
+            .catch(function (err) {
+                showModalAlert(err.message, 'danger');
+                if (btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.innerHTML = origBtnHtml;
+                }
+            });
+
+            function showModalAlert(msg, type) {
+                if (!alertBox) return;
+                alertBox.className = 'alert alert-' + type + ' py-2 px-3 mb-3 small';
+                alertBox.innerHTML = '<i class="fas fa-exclamation-circle me-1.5"></i>' + msg;
+                alertBox.classList.remove('d-none');
+            }
+        });
     }
 });
 </script>

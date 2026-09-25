@@ -1633,6 +1633,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('bulk-adjust', [InventoryController::class, 'showBulkAdjust'])->name('bulk-adjust');
         Route::post('bulk-adjust', [InventoryController::class, 'bulkAdjust'])->name('bulk-adjust.store');
         Route::post('save-single', [InventoryController::class, 'saveSingle'])->name('save-single');
+        Route::get('get-stock', [InventoryController::class, 'getStock'])->name('get-stock');
         Route::get('{inventory}', [InventoryController::class, 'show'])->name('show');
         Route::post('{inventory}/adjust', [InventoryController::class, 'adjust'])->name('adjust');
         Route::get('{inventory}/movements', [InventoryController::class, 'movements'])->name('movements');

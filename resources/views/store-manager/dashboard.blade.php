@@ -88,11 +88,11 @@
             <a href="{{ route('store-manager.store-keepers.index') }}" class="btn btn-info text-white btn-sm fw-semibold px-3" style="border-radius:8px;">
                 <i class="fa-solid fa-users-gear me-1"></i> Assign Store Keepers
             </a>
-            @can('inventory.edit')
+            @if(auth()->user()->can('inventory.edit') || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager', 'store_keeper']))
             <a href="{{ route('inventory.bulk-adjust') }}" class="btn btn-warning btn-sm fw-semibold px-3" style="border-radius:8px;">
                 <i class="fa-solid fa-sliders me-1"></i> Manual Adjustment
             </a>
-            @endcan
+            @endif
             <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-light btn-sm px-3" style="border-radius:8px;">
                 <i class="fas fa-boxes me-1"></i> All Inventory
             </a>
@@ -321,11 +321,11 @@
             <a href="{{ route('store-manager.inventory.all') }}" class="qa-btn btn btn-secondary">
                 <i class="fas fa-boxes me-1"></i> All Inventory
             </a>
-            @can('inventory.edit')
+            @if(auth()->user()->can('inventory.edit') || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager', 'store_keeper']))
             <a href="{{ route('inventory.bulk-adjust') }}" class="qa-btn btn btn-warning">
                 <i class="fa-solid fa-sliders me-1"></i> Manual Adjustment
             </a>
-            @endcan
+            @endif
         </div>
     </div>
 </div>
