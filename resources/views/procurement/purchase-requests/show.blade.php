@@ -1,15 +1,44 @@
 @extends('layouts.app')
 @section('title', 'PR: ' . $purchaseRequest->pr_no)
 
+@php
+    $authUser = auth()->user();
+    $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+    $isGlobalAdmin = ($authUser && $authUser->isGlobalAdmin()) || in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles);
+    $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
+    
+    $isStoreReviewStage = ($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && !($isFinalIntake ?? false));
+    $isStoreManagerOnly = in_array('store_manager', $rawUserRoles) && !in_array('purchase_manager', $rawUserRoles) && !in_array('finance_head', $rawUserRoles) && !$isGlobalAdmin;
+    $hideMoneyColumns = $isStoreReviewStage || $isStoreManagerOnly;
+
+    // Check whether the logged-in user can execute action controls for the current stage
+    $canActOnCurrentStage = false;
+@endphp
+
 @section('content')
 <div class="container-fluid px-4 py-3">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div>
-            <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-file-invoice text-primary me-2"></i>{{ $purchaseRequest->pr_no }}</h1>
-            <p class="text-muted small mb-0">Project: <strong>{{ $purchaseRequest->project?->name ?? 'N/A' }}</strong> | Channel: <strong>{{ $purchaseRequest->materialRequest?->source ?? 'Direct PR' }}</strong></p>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-file-invoice text-primary me-2"></i>{{ $purchaseRequest->pr_no }}</h1>
+                <span class="badge bg-light text-muted border px-2 py-1 small" title="Strict Policy: Records and materials are locked after creation. Only Global Admin can delete or add/modify materials.">
+                    <i class="fas fa-lock me-1 text-secondary"></i> Locked After Creation
+                </span>
+                @if($isGlobalAdmin)
+                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-1 small">
+                    <i class="fas fa-shield-halved me-1"></i> Admin Override Enabled
+                </span>
+                @endif
+            </div>
+            <p class="text-muted small mb-0 mt-1">Project: <strong>{{ $purchaseRequest->project?->name ?? 'N/A' }}</strong> | Channel: <strong>{{ $purchaseRequest->materialRequest?->source ?? 'Direct PR' }}</strong></p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if($isGlobalAdmin)
+            <button type="button" class="btn btn-outline-danger shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#deletePrModal">
+                <i class="fas fa-trash-can me-1"></i> Delete PR (Admin Only)
+            </button>
+            @endif
             <a href="{{ route('procurement.my-queue') }}" class="btn btn-outline-primary"><i class="fas fa-tasks me-1"></i>Procurement — My Queue</a>
         </div>
     </div>
@@ -22,17 +51,6 @@
     @endif
 
 @php
-    $authUser = auth()->user();
-    $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
-    $isGlobalAdmin = in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles);
-    $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
-    
-    $isStoreReviewStage = ($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && !($isFinalIntake ?? false));
-    $isStoreManagerOnly = in_array('store_manager', $rawUserRoles) && !in_array('purchase_manager', $rawUserRoles) && !in_array('finance_head', $rawUserRoles) && !$isGlobalAdmin;
-    $hideMoneyColumns = $isStoreReviewStage || $isStoreManagerOnly;
-
-    // Check whether the logged-in user can execute action controls for the current stage
-    $canActOnCurrentStage = false;
     $currentRoleName = $purchaseRequest->current_owner_role;
 
     if (!$isAuditorUser) {
@@ -1207,10 +1225,14 @@
                     </div>
 
                     <div class="d-flex align-items-center gap-2 flex-wrap">
-                        @if(!in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_CANCELLED, \App\Models\PurchaseRequest::STATUS_REJECTED]))
+                        @if($isGlobalAdmin && !in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_CANCELLED, \App\Models\PurchaseRequest::STATUS_REJECTED]))
                         <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addPrItemModal">
-                            <i class="fas fa-plus-circle me-1"></i> Add More Items
+                            <i class="fas fa-plus-circle me-1"></i> Add More Items (Admin Only)
                         </button>
+                        @elseif(!$isGlobalAdmin)
+                        <span class="badge bg-light text-muted border py-2 px-3 fw-normal" title="Records are locked after creation. No new materials can be added. Only Global Admin can add or edit materials.">
+                            <i class="fas fa-lock me-1 text-secondary"></i> Materials Locked
+                        </span>
                         @endif
 
                         @if($isSelectableStage)
@@ -1428,14 +1450,14 @@
                                                 @endif
                                             @endif
 
-                                            @if(!$isStoreReviewStage && !$isStoreManagerOnly)
-                                            <!-- Edit / Update Item / Purchased Qty -->
-                                            <button type="button" class="btn btn-outline-secondary btn-sm" title="Edit Item Details"
+                                            @if($isGlobalAdmin && !$isStoreReviewStage && !$isStoreManagerOnly)
+                                            <!-- Global Admin Only: Edit / Update Item / Purchased Qty -->
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" title="Edit Item Details (Global Admin Only)"
                                                     onclick="openEditPrItemModal({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}', {{ $reqQty }}, {{ $purchQty }}, '{{ addslashes($item->unit) }}', {{ (float)($item->estimated_unit_cost ?? 0) }}, '{{ addslashes($item->specifications ?? '') }}')">
                                                 <i class="fas fa-pen-to-square"></i>
                                             </button>
                                             @if($purchaseRequest->items->count() > 1 && !in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_COMPLETED, \App\Models\PurchaseRequest::STATUS_CANCELLED]))
-                                            <button type="button" class="btn btn-outline-danger btn-sm" title="Remove Item"
+                                            <button type="button" class="btn btn-outline-danger btn-sm" title="Remove Item (Global Admin Only)"
                                                     onclick="confirmDeletePrItem({{ $item->id }}, '{{ addslashes($item->product?->name ?? 'Item #' . $item->product_id) }}')">
                                                 <i class="fas fa-trash-can"></i>
                                             </button>
@@ -3278,7 +3300,8 @@ function submitQuickSupplier() {
 }
 </script>
 
-<!-- Modal: Add Item to Purchase Request -->
+@if($isGlobalAdmin)
+<!-- Modal: Add Item to Purchase Request (Global Admin Only) -->
 <div class="modal fade" id="addPrItemModal" tabindex="-1" aria-labelledby="addPrItemModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -3421,10 +3444,39 @@ function submitQuickSupplier() {
     </div>
 </div>
 
+<!-- Modal: Delete Purchase Request (Global Admin Only) -->
+<div class="modal fade" id="deletePrModal" tabindex="-1" aria-labelledby="deletePrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.destroy', $purchaseRequest) }}" method="POST">
+                @csrf
+                @method('DELETE')
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fs-6 fw-bold" id="deletePrModalLabel">
+                        <i class="fas fa-triangle-exclamation me-2"></i>Permanently Delete Purchase Request
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-start">
+                    <p class="mb-2">Are you sure you want to permanently delete <strong>PR #{{ $purchaseRequest->pr_no }}</strong>?</p>
+                    <div class="alert alert-warning small mb-0">
+                        <i class="fas fa-shield-halved me-1"></i> <strong>Strict Lock Policy:</strong> Non-admin users cannot delete records or add materials after creation. As Global Admin, this action will remove this PR and all associated line items permanently.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="fas fa-trash-can me-1"></i> Confirm Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <form id="deletePrItemForm" method="POST" style="display:none;">
     @csrf
     @method('DELETE')
 </form>
+@endif
 
 <script>
 function onModalProductChange(select) {

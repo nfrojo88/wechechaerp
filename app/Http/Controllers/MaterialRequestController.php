@@ -339,5 +339,52 @@ class MaterialRequestController extends Controller
             'destination_store_id' => $materialRequest->destination_store_id,
         ])->with('success', 'Material Request routed to Store Transfer creation.');
     }
+
+    /**
+     * Delete an existing Material Request.
+     * STRICT RULE: Locked after creation. Only Global Admin is permitted to delete.
+     */
+    public function destroy(Request $request, MaterialRequest $materialRequest)
+    {
+        $user = auth()->user();
+        $refNo = $materialRequest->reference_number ?? ('MR #' . $materialRequest->id);
+
+        if (!$user || !$user->isGlobalAdmin()) {
+            $actorRole = $user?->roles?->first()?->name ?? 'user';
+            $userName = $user?->name ?? 'Unknown User';
+
+            try {
+                \App\Models\ActivityLog::log(
+                    'unauthorized_delete_mr_blocked',
+                    "Security violation: User '{$userName}' ({$actorRole}) attempted to delete locked Material Request {$refNo} without Global Admin authorization.",
+                    'Procurement',
+                    $materialRequest,
+                    ['user_id' => $user?->id, 'mr_id' => $materialRequest->id]
+                );
+            } catch (\Throwable $e) {}
+
+            return back()->with('error', 'Access Denied: Records are locked after creation and cannot be deleted. Only the Global Admin role is permitted to delete existing entries.');
+        }
+
+        try {
+            \Illuminate\Support\Facades\DB::transaction(function() use ($materialRequest, $user, $refNo) {
+                \App\Models\ActivityLog::log(
+                    'admin_deleted_material_request',
+                    "Global Admin '{$user->name}' deleted Material Request {$refNo} and all associated items.",
+                    'Procurement',
+                    null,
+                    ['deleted_mr_id' => $materialRequest->id, 'ref_no' => $refNo]
+                );
+
+                $materialRequest->items()->delete();
+                $materialRequest->delete();
+            });
+
+            return redirect()->route('procurement.my-queue')
+                ->with('success', "Material Request {$refNo} has been deleted by Global Admin.");
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Failed to delete Material Request: ' . $e->getMessage());
+        }
+    }
 }
 

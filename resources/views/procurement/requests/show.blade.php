@@ -10,6 +10,10 @@
     <h1 class="h3 mb-0 me-3">MR: {{ $materialRequest->reference_number }}</h1>
     
     @php
+        $authUser = auth()->user();
+        $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
+        $isGlobalAdmin = ($authUser && $authUser->isGlobalAdmin()) || in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles);
+
         $badge = match($materialRequest->status) {
             'draft' => 'secondary',
             'pending_planning', 'submitted' => 'warning',
@@ -33,8 +37,17 @@
         };
     @endphp
     <span class="badge bg-{{ $badge }} me-3">{{ $statusLabel }}</span>
+    <span class="badge bg-light text-muted border px-2 py-1 small me-3" title="Records are locked after creation. Only Global Admin can delete or add materials.">
+        <i class="fa-solid fa-lock me-1 text-secondary"></i> Locked After Creation
+    </span>
     
-    <div class="ms-auto d-flex gap-2">
+    <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+        @if($isGlobalAdmin)
+        <button type="button" class="btn btn-outline-danger shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#deleteMrModal">
+            <i class="fa-solid fa-trash-can me-1"></i> Delete MR (Admin Only)
+        </button>
+        @endif
+
         {{-- Site Engineer Action --}}
         @if($materialRequest->status === 'draft')
             <form method="POST" action="{{ route('material-requests.updateStatus', $materialRequest) }}">
@@ -168,12 +181,16 @@
 </div>
 
 <div class="card border-0 shadow-sm">
-    <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center">
+    <div class="card-header bg-transparent py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h5 class="mb-0">Requested Materials</h5>
-        @if($materialRequest->status === 'draft')
+        @if($isGlobalAdmin && $materialRequest->status === 'draft')
         <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addMrItemModal">
-            <i class="fa-solid fa-plus me-1"></i> Add Item
+            <i class="fa-solid fa-plus me-1"></i> Add Item (Admin Only)
         </button>
+        @elseif(!$isGlobalAdmin)
+        <span class="badge bg-light text-muted border py-2 px-3 fw-normal" title="Records are locked after creation. Only Global Admin can add or modify materials.">
+            <i class="fa-solid fa-lock me-1 text-secondary"></i> Materials Locked
+        </span>
         @endif
     </div>
     <div class="card-body p-0">
@@ -196,13 +213,13 @@
                         <td class="text-end fw-bold">{{ number_format($item->quantity_requested, 3) }} <small class="text-muted">{{ $item->product->unit }}</small></td>
                         <td class="text-end text-success">{{ number_format($item->quantity_fulfilled, 3) }}</td>
                         <td class="small text-muted">{{ $item->notes }}</td>
-                        @if($materialRequest->status === 'draft')
+                        @if($isGlobalAdmin && $materialRequest->status === 'draft')
                         <td class="text-end">
                             <form method="POST" action="{{ route('mr-items.destroy', $item) }}"
                                   class="d-inline" onsubmit="return confirm('Remove this item?');">
                                 @csrf
                                 @method('DELETE')
-                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove Item (Admin Only)">
                                     <i class="fa-solid fa-trash"></i>
                                 </button>
                             </form>
@@ -292,14 +309,14 @@
 </div>
 @endif
 
-@if($materialRequest->status === 'draft')
+@if($isGlobalAdmin && $materialRequest->status === 'draft')
 <div class="modal fade" id="addMrItemModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="{{ route('mr-items.store', $materialRequest) }}">
                 @csrf
                 <div class="modal-header">
-                    <h5 class="modal-title">Add Requested Item</h5>
+                    <h5 class="modal-title">Add Requested Item (Global Admin)</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -327,6 +344,36 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-primary">Add Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+
+@if($isGlobalAdmin)
+<!-- Modal: Delete Material Request (Global Admin Only) -->
+<div class="modal fade" id="deleteMrModal" tabindex="-1" aria-labelledby="deleteMrModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('material-requests.destroy', $materialRequest) }}" method="POST">
+                @csrf
+                @method('DELETE')
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fs-6 fw-bold" id="deleteMrModalLabel">
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i>Permanently Delete Material Request
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 text-start">
+                    <p class="mb-2">Are you sure you want to permanently delete <strong>MR: {{ $materialRequest->reference_number }}</strong>?</p>
+                    <div class="alert alert-warning small mb-0">
+                        <i class="fa-solid fa-shield-halved me-1"></i> <strong>Strict Lock Policy:</strong> Non-admin users cannot delete records or add materials after creation. As Global Admin, this action will remove this Material Request and all associated line items.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold"><i class="fa-solid fa-trash-can me-1"></i> Confirm Delete</button>
                 </div>
             </form>
         </div>

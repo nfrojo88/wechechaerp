@@ -126,4 +126,16 @@ class User extends Authenticatable
     {
         return $this->roles->count() > 1 || $this->hasAnyRole(['admin', 'global_admin']);
     }
+
+    /**
+     * Check if user has Global Admin or Super Admin privileges.
+     */
+    public function isGlobalAdmin(): bool
+    {
+        $roleNames = $this->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray();
+        return in_array('global_admin', $roleNames) 
+            || in_array('admin', $roleNames) 
+            || in_array('super_admin', $roleNames)
+            || (bool)($this->is_admin ?? false);
+    }
 }

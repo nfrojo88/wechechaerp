@@ -1677,9 +1677,43 @@ class PurchaseRequestController extends Controller
         return back()->with('success', 'Purchase Request rejected.');
     }
 
-    // ─── Items Management: Add / Update / Remove ───────────────────────────
+    // ─── Items Management: Add / Update / Remove (STRICT LOCK RULE) ───────
     public function addItem(Request $request, PurchaseRequest $purchaseRequest)
     {
+        $user = auth()->user();
+        $prIdentifier = $purchaseRequest->pr_no ?? ('PR #' . $purchaseRequest->id);
+
+        // Strict Lock Rule: Only Global Admin can add new materials to an existing record
+        if (!$user || !$user->isGlobalAdmin()) {
+            $actorRole = $user?->roles?->first()?->name ?? 'user';
+            $userName = $user?->name ?? 'Unknown User';
+            $userEmail = $user?->email ?? 'N/A';
+
+            try {
+                \App\Models\PrWorkflowLog::create([
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'from_stage'          => $purchaseRequest->status,
+                    'to_stage'            => $purchaseRequest->status,
+                    'action'              => 'unauthorized_add_material_blocked',
+                    'actor_role'          => $actorRole,
+                    'actor_id'            => $user?->id,
+                    'notes'               => "SECURITY VIOLATION BLOCKED: User '{$userName}' ({$userEmail}, Role: {$actorRole}) attempted to add new material to locked {$prIdentifier}. Rule: Only Global Admin is authorized to add materials after creation.",
+                ]);
+            } catch (\Throwable $e) {}
+
+            try {
+                \App\Models\ActivityLog::log(
+                    'unauthorized_add_material_blocked',
+                    "User '{$userName}' ({$actorRole}) attempted to add new material to locked {$prIdentifier} without Global Admin authorization.",
+                    'Procurement',
+                    $purchaseRequest,
+                    ['user_id' => $user?->id, 'product_id' => $request->product_id]
+                );
+            } catch (\Throwable $e) {}
+
+            return back()->with('error', 'Access Denied: Records are locked after creation. No new materials can be added to an existing entry. Only Global Admin is authorized to add materials.');
+        }
+
         $request->validate([
             'product_id'          => 'required|exists:products,id',
             'quantity'            => 'required|numeric|min:0.001',
@@ -1718,20 +1752,63 @@ class PurchaseRequestController extends Controller
                 'purchase_request_id' => $purchaseRequest->id,
                 'from_status'         => $purchaseRequest->status,
                 'to_status'           => $purchaseRequest->status,
-                'action'              => 'add_item',
-                'actor_role'          => auth()->user()?->roles?->first()?->name ?? 'user',
-                'actor_id'            => auth()->id(),
-                'notes'               => "Added item: " . ($product?->name ?? "Product #{$request->product_id}") . " (Requested: {$request->quantity} {$unit}, Purchased: {$purchasedQty})",
+                'action'              => 'add_item_by_admin',
+                'actor_role'          => $user?->roles?->first()?->name ?? 'global_admin',
+                'actor_id'            => $user?->id,
+                'notes'               => "Global Admin added item: " . ($product?->name ?? "Product #{$request->product_id}") . " (Requested: {$request->quantity} {$unit}, Purchased: {$purchasedQty})",
             ]);
         } catch (\Throwable $e) {}
 
-        return back()->with('success', "Item added to purchase request successfully.");
+        try {
+            \App\Models\ActivityLog::log(
+                'admin_added_material',
+                "Global Admin added item " . ($product?->name ?? "Product #{$request->product_id}") . " to {$prIdentifier}.",
+                'Procurement',
+                $purchaseRequest,
+                ['user_id' => $user?->id, 'product_id' => $request->product_id]
+            );
+        } catch (\Throwable $e) {}
+
+        return back()->with('success', "Item added to purchase request successfully by Global Admin.");
     }
 
     public function updateItem(Request $request, PurchaseRequest $purchaseRequest, PurchaseRequestItem $item)
     {
         if ($item->purchase_request_id !== $purchaseRequest->id) {
             abort(404);
+        }
+
+        $user = auth()->user();
+        $prIdentifier = $purchaseRequest->pr_no ?? ('PR #' . $purchaseRequest->id);
+
+        // Strict Lock Rule: Only Global Admin can modify existing materials
+        if (!$user || !$user->isGlobalAdmin()) {
+            $actorRole = $user?->roles?->first()?->name ?? 'user';
+            $userName = $user?->name ?? 'Unknown User';
+
+            try {
+                \App\Models\PrWorkflowLog::create([
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'from_stage'          => $purchaseRequest->status,
+                    'to_stage'            => $purchaseRequest->status,
+                    'action'              => 'unauthorized_edit_material_blocked',
+                    'actor_role'          => $actorRole,
+                    'actor_id'            => $user?->id,
+                    'notes'               => "SECURITY VIOLATION BLOCKED: User '{$userName}' (Role: {$actorRole}) attempted to edit material #{$item->id} on locked {$prIdentifier}.",
+                ]);
+            } catch (\Throwable $e) {}
+
+            try {
+                \App\Models\ActivityLog::log(
+                    'unauthorized_edit_material_blocked',
+                    "User '{$userName}' ({$actorRole}) attempted to edit material #{$item->id} on locked {$prIdentifier} without Global Admin authorization.",
+                    'Procurement',
+                    $purchaseRequest,
+                    ['user_id' => $user?->id, 'item_id' => $item->id]
+                );
+            } catch (\Throwable $e) {}
+
+            return back()->with('error', 'Access Denied: Records are locked after creation. Existing materials cannot be modified. Only Global Admin is authorized to edit materials.');
         }
 
         $request->validate([
@@ -1767,7 +1844,7 @@ class PurchaseRequestController extends Controller
 
         $item->update($updateData);
 
-        return back()->with('success', "Item updated successfully.");
+        return back()->with('success', "Item updated successfully by Global Admin.");
     }
 
     public function removeItem(PurchaseRequest $purchaseRequest, PurchaseRequestItem $item)
@@ -1776,8 +1853,41 @@ class PurchaseRequestController extends Controller
             abort(404);
         }
 
+        $user = auth()->user();
+        $prIdentifier = $purchaseRequest->pr_no ?? ('PR #' . $purchaseRequest->id);
+
+        // Strict Lock Rule: Only Global Admin can remove materials from existing records
+        if (!$user || !$user->isGlobalAdmin()) {
+            $actorRole = $user?->roles?->first()?->name ?? 'user';
+            $userName = $user?->name ?? 'Unknown User';
+
+            try {
+                \App\Models\PrWorkflowLog::create([
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'from_stage'          => $purchaseRequest->status,
+                    'to_stage'            => $purchaseRequest->status,
+                    'action'              => 'unauthorized_remove_material_blocked',
+                    'actor_role'          => $actorRole,
+                    'actor_id'            => $user?->id,
+                    'notes'               => "SECURITY VIOLATION BLOCKED: User '{$userName}' (Role: {$actorRole}) attempted to delete material #{$item->id} from locked {$prIdentifier}.",
+                ]);
+            } catch (\Throwable $e) {}
+
+            try {
+                \App\Models\ActivityLog::log(
+                    'unauthorized_remove_material_blocked',
+                    "User '{$userName}' ({$actorRole}) attempted to delete material #{$item->id} from locked {$prIdentifier} without Global Admin authorization.",
+                    'Procurement',
+                    $purchaseRequest,
+                    ['user_id' => $user?->id, 'item_id' => $item->id]
+                );
+            } catch (\Throwable $e) {}
+
+            return back()->with('error', 'Access Denied: Records are locked after creation. Existing materials cannot be deleted. Only Global Admin is authorized to remove materials.');
+        }
+
         if ($purchaseRequest->items()->count() <= 1) {
-            return back()->withErrors(['item' => 'Cannot remove the only item from this purchase request.']);
+            return back()->withErrors(['item' => 'Cannot remove the only item from this purchase request. Delete the entire request if no longer needed.']);
         }
 
         $productName = $item->product?->name ?? "Item #{$item->id}";
@@ -1788,14 +1898,76 @@ class PurchaseRequestController extends Controller
                 'purchase_request_id' => $purchaseRequest->id,
                 'from_status'         => $purchaseRequest->status,
                 'to_status'           => $purchaseRequest->status,
-                'action'              => 'remove_item',
-                'actor_role'          => auth()->user()?->roles?->first()?->name ?? 'user',
-                'actor_id'            => auth()->id(),
-                'notes'               => "Removed item: {$productName}",
+                'action'              => 'remove_item_by_admin',
+                'actor_role'          => $user?->roles?->first()?->name ?? 'global_admin',
+                'actor_id'            => $user?->id,
+                'notes'               => "Global Admin removed item: {$productName}",
             ]);
         } catch (\Throwable $e) {}
 
-        return back()->with('success', "Item '{$productName}' removed from purchase request.");
+        return back()->with('success', "Item '{$productName}' removed from purchase request by Global Admin.");
+    }
+
+    /**
+     * Delete an existing Purchase Request.
+     * STRICT RULE: Locked after creation. Only Global Admin role is permitted to delete.
+     */
+    public function destroy(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $user = auth()->user();
+        $prIdentifier = $purchaseRequest->pr_no ?? ('PR #' . $purchaseRequest->id);
+
+        if (!$user || !$user->isGlobalAdmin()) {
+            $actorRole = $user?->roles?->first()?->name ?? 'user';
+            $userName = $user?->name ?? 'Unknown User';
+
+            try {
+                \App\Models\PrWorkflowLog::create([
+                    'purchase_request_id' => $purchaseRequest->id,
+                    'from_stage'          => $purchaseRequest->status,
+                    'to_stage'            => $purchaseRequest->status,
+                    'action'              => 'unauthorized_delete_pr_blocked',
+                    'actor_role'          => $actorRole,
+                    'actor_id'            => $user?->id,
+                    'notes'               => "SECURITY VIOLATION BLOCKED: Non-admin user '{$userName}' (Role: {$actorRole}) attempted to delete locked {$prIdentifier}.",
+                ]);
+            } catch (\Throwable $e) {}
+
+            try {
+                \App\Models\ActivityLog::log(
+                    'unauthorized_delete_pr_blocked',
+                    "Security violation: User '{$userName}' ({$actorRole}) attempted to delete locked {$prIdentifier} without Global Admin authorization.",
+                    'Procurement',
+                    $purchaseRequest,
+                    ['user_id' => $user?->id, 'pr_id' => $purchaseRequest->id]
+                );
+            } catch (\Throwable $e) {}
+
+            return back()->with('error', 'Access Denied: Records are locked after creation and cannot be deleted. Only the Global Admin role is permitted to delete existing entries.');
+        }
+
+        // Global Admin permitted deletion
+        try {
+            DB::transaction(function() use ($purchaseRequest, $user, $prIdentifier) {
+                \App\Models\ActivityLog::log(
+                    'admin_deleted_purchase_request',
+                    "Global Admin '{$user->name}' deleted Purchase Request {$prIdentifier} and all associated items.",
+                    'Procurement',
+                    null,
+                    ['deleted_pr_id' => $purchaseRequest->id, 'pr_no' => $prIdentifier]
+                );
+
+                $purchaseRequest->items()->delete();
+                $purchaseRequest->workflowLogs()->delete();
+                $purchaseRequest->proformas()->delete();
+                $purchaseRequest->delete();
+            });
+
+            return redirect()->route('procurement.my-queue')
+                ->with('success', "Purchase Request {$prIdentifier} has been permanently deleted by Global Admin.");
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Failed to delete Purchase Request: ' . $e->getMessage());
+        }
     }
 
     public function financeSendBackToGm(Request $request, PurchaseRequest $purchaseRequest)

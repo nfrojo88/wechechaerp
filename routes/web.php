@@ -1749,6 +1749,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Procurement & Purchasing
     Route::resource('purchase-requests', App\Http\Controllers\PurchaseRequestController::class)->except(['edit', 'update', 'destroy']);
+    Route::delete('purchase-requests/{purchaseRequest}', [App\Http\Controllers\PurchaseRequestController::class, 'destroy'])->name('purchase-requests.destroy');
     Route::post('purchase-requests/{purchaseRequest}/submit', [App\Http\Controllers\PurchaseRequestController::class, 'submit'])->name('purchase-requests.submit');
     Route::post('purchase-requests/{purchaseRequest}/approve', [App\Http\Controllers\PurchaseRequestController::class, 'approve'])->name('purchase-requests.approve');
     Route::post('purchase-requests/{purchaseRequest}/reject', [App\Http\Controllers\PurchaseRequestController::class, 'reject'])->name('purchase-requests.reject');
@@ -1838,6 +1839,7 @@ Route::middleware(['auth'])->group(function () {
     // Material Requests
     Route::resource('material-requests', App\Http\Controllers\MaterialRequestController::class)
          ->except(['edit', 'update', 'destroy']);
+    Route::delete('material-requests/{materialRequest}', [App\Http\Controllers\MaterialRequestController::class, 'destroy'])->name('material-requests.destroy');
     Route::post('material-requests/{materialRequest}/status',
         [App\Http\Controllers\MaterialRequestController::class, 'updateStatus'])
         ->name('material-requests.updateStatus');
