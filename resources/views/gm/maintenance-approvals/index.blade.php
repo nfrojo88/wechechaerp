@@ -3,7 +3,7 @@
 
 @section('content')
 <style>
-/* Fix Bootstrap modal stacking and backdrop darkening bug */
+/* Fix Bootstrap modal stacking, backdrop, and unlock scroll function */
 .modal {
     z-index: 1065 !important;
 }
@@ -17,6 +17,25 @@
     border-radius: 1rem !important;
     overflow: hidden;
     box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.3) !important;
+}
+/* Unlock smooth scrolling on modal bodies */
+.modal-dialog-scrollable .modal-body,
+.modal-body[style*="overflow-y"] {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+}
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+.modal-body::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+.modal-body::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 </style>
 
@@ -751,362 +770,364 @@
 {{-- ── 1. Maintenance Ticket Approval Modals ───────────────────────────────── --}}
 @foreach($maintenanceTickets as $mReq)
 <div class="modal fade" id="grantGmApprovalModal{{ $mReq->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="true">
-    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
-        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <div class="modal-header py-3 px-4 text-white" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;">
-                <div class="d-flex align-items-center gap-2">
-                    <div class="rounded-circle p-2 bg-warning bg-opacity-20 d-flex align-items-center justify-content-center" style="width:38px;height:38px;">
-                        <i class="fa-solid fa-gavel text-warning fs-5"></i>
+    <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 1140px; margin: 1.5rem auto;">
+        <form action="{{ route('gm.maintenance-approvals.approve-ticket', $mReq) }}" method="POST" id="gm_ticket_form_{{ $mReq->id }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" style="max-height: 90vh; display: flex; flex-direction: column;">
+            @csrf
+            
+            {{-- Header (Pinned at top) --}}
+            <div class="modal-header py-3 px-4 text-white flex-shrink-0" style="background: linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%) !important;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center text-warning" style="width:40px;height:40px;background:rgba(245,158,11,0.18);border:1px solid rgba(245,158,11,0.35);flex-shrink:0;">
+                        <i class="fa-solid fa-gavel fs-5"></i>
                     </div>
                     <div>
-                        <div class="d-flex align-items-center gap-2">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
                             <h5 class="modal-title fw-bold text-white mb-0">Executive Decision: Ticket #{{ $mReq->request_no }}</h5>
-                            <span class="badge {{ $mReq->status_badge['class'] }} rounded-pill px-2.5 py-0.5 small">{{ $mReq->status_badge['label'] }}</span>
+                            <span class="badge {{ $mReq->status_badge['class'] }} rounded-pill px-2.5 py-0.5" style="font-size:0.75rem;">{{ $mReq->status_badge['label'] }}</span>
                         </div>
-                        <small class="text-warning-emphasis">Comprehensive Material Repair Specifications, Historical Logs &amp; Authorization</small>
+                        <small class="text-white-50">Review equipment specifications, historical maintenance records, and authorize status</small>
                     </div>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="{{ route('gm.maintenance-approvals.approve-ticket', $mReq) }}" method="POST" id="gm_ticket_form_{{ $mReq->id }}">
-                @csrf
-                <div class="modal-body p-4 bg-light">
-                    
-                    {{-- ── 1. MATERIAL / ASSET SPECIFICATIONS & FAILURE PROFILE ── --}}
-                    <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
-                        <div class="d-flex justify-content-between align-items-center pb-2 mb-2 border-bottom flex-wrap gap-2">
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="rounded-3 p-2 bg-warning bg-opacity-10 text-warning d-flex align-items-center justify-content-center" style="width:34px;height:34px;">
-                                    <i class="fa-solid fa-toolbox fs-5"></i>
-                                </div>
-                                <div>
-                                    <h6 class="fw-bold text-dark mb-0 fs-6">
-                                        {{ $mReq->asset_name }}
-                                        @if($mReq->asset_code)
-                                            <span class="badge bg-dark font-monospace ms-1">{{ $mReq->asset_code }}</span>
-                                        @endif
-                                    </h6>
-                                    <small class="text-muted">Material &amp; Asset Specification Details</small>
-                                </div>
-                            </div>
-                            <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <span class="badge bg-light text-dark border text-capitalize px-2.5 py-1">
-                                    <i class="fa-solid fa-tag me-1 text-warning"></i>{{ $mReq->issue_type_label }}
-                                </span>
-                                <span class="badge {{ $mReq->urgency_badge['class'] }} px-2.5 py-1">
-                                    <i class="fa-solid {{ $mReq->urgency_badge['icon'] }} me-1"></i>{{ $mReq->urgency_badge['label'] }}
-                                </span>
-                            </div>
-                        </div>
 
-                        {{-- Detailed Asset Specifications Grid --}}
-                        <div class="row g-2 mb-3" style="font-size: 0.85rem;">
-                            <div class="col-sm-6 col-md-3">
-                                <div class="p-2 rounded bg-light border h-100">
-                                    <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Catalog Asset</span>
-                                    <strong class="text-dark">{{ $mReq->fixedAssetUnit?->parentAsset?->name ?? 'Direct Item' }}</strong>
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">Category: {{ $mReq->fixedAssetUnit?->parentAsset?->category ?? 'General Asset' }}</small>
-                                </div>
+            {{-- Body (Smooth Scrollable Content) --}}
+            <div class="modal-body p-3 p-md-4 bg-light" style="overflow-y: auto !important; flex: 1 1 auto; max-height: calc(90vh - 135px); -webkit-overflow-scrolling: touch;">
+                
+                {{-- ── 1. MATERIAL / ASSET SPECIFICATIONS & FAILURE PROFILE ── --}}
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center pb-2 mb-2 border-bottom flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="rounded-3 p-2 text-warning d-flex align-items-center justify-content-center" style="width:36px;height:36px;background:rgba(245,158,11,0.12);">
+                                <i class="fa-solid fa-toolbox fs-5"></i>
                             </div>
-                            <div class="col-sm-6 col-md-3">
-                                <div class="p-2 rounded bg-light border h-100">
-                                    <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Brand &amp; Model</span>
-                                    <strong class="text-dark">{{ $mReq->fixedAssetUnit?->brand ?? 'N/A' }} {{ $mReq->fixedAssetUnit?->model ?? '' }}</strong>
-                                    <small class="text-muted d-block font-monospace" style="font-size:0.75rem;">Serial: {{ $mReq->fixedAssetUnit?->serial_number ?? ($mReq->fixedAssetUnit?->unit_code ?? 'N/A') }}</small>
-                                </div>
-                            </div>
-                            <div class="col-sm-6 col-md-3">
-                                <div class="p-2 rounded bg-light border h-100">
-                                    <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Location &amp; Station</span>
-                                    <strong class="text-dark">{{ $mReq->fixedAssetUnit?->current_location ?? ($mReq->employee?->department ?? 'General Service') }}</strong>
-                                    @if($mReq->fixedAssetUnit?->plate_number)
-                                        <small class="text-muted d-block" style="font-size:0.75rem;">Plate: {{ $mReq->fixedAssetUnit->plate_number }}</small>
-                                    @else
-                                        <small class="text-muted d-block" style="font-size:0.75rem;">User: {{ $mReq->fixedAssetUnit?->assignedEmployee?->full_name ?? ($mReq->employee?->full_name ?? 'Staff') }}</small>
+                            <div>
+                                <h6 class="fw-bold text-dark mb-0 fs-6">
+                                    {{ $mReq->asset_name }}
+                                    @if($mReq->asset_code)
+                                        <span class="badge bg-dark font-monospace ms-1">{{ $mReq->asset_code }}</span>
                                     @endif
-                                </div>
-                            </div>
-                            <div class="col-sm-6 col-md-3">
-                                <div class="p-2 rounded bg-light border h-100">
-                                    <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Purchase / Warranty</span>
-                                    <strong class="text-dark">{{ $mReq->fixedAssetUnit?->purchase_price ? number_format($mReq->fixedAssetUnit->purchase_price, 2) . ' ETB' : 'N/A' }}</strong>
-                                    <small class="text-muted d-block" style="font-size:0.75rem;">Warranty: {{ $mReq->fixedAssetUnit?->warranty_expiry ? $mReq->fixedAssetUnit->warranty_expiry->format('d M Y') : 'N/A' }}</small>
-                                </div>
+                                </h6>
+                                <small class="text-muted">Material &amp; Asset Specification Details</small>
                             </div>
                         </div>
-
-                        {{-- Full Problem Description and Findings --}}
-                        <div class="p-3 rounded-3 bg-light border mb-2" style="border-left: 4px solid #f59e0b !important;">
-                            <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
-                                <span class="fw-bold small text-dark text-uppercase" style="font-size:0.75rem;">
-                                    <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Reported Issue &amp; Repair Details
-                                </span>
-                                <small class="text-muted" style="font-size:0.75rem;">
-                                    Reported by <strong>{{ $mReq->employee?->full_name ?? ($mReq->reportedBy?->name ?? 'Staff') }}</strong> ({{ $mReq->employee?->role_title ?? $mReq->employee?->department ?? 'Employee' }}) on {{ $mReq->created_at->format('M d, Y h:i A') }}
-                                </small>
-                            </div>
-                            <div class="text-dark" style="white-space: pre-wrap; font-size: 0.92rem; line-height: 1.5;">{{ $mReq->description }}</div>
-                        </div>
-
-                        @if($mReq->admin_notes)
-                            <div class="p-2.5 rounded-3 bg-light border small text-muted mb-0" style="white-space: pre-wrap; font-size: 0.8rem;">
-                                <strong class="text-secondary"><i class="fa-solid fa-clipboard-list me-1"></i>Diagnostic &amp; Lifecycle Notes:</strong>
-                                {{ $mReq->admin_notes }}
-                            </div>
-                        @endif
-                    </div>
-
-                    {{-- ── 2. MATERIAL MAINTENANCE & REPAIR HISTORY ── --}}
-                    @php
-                        $historyTickets = $mReq->maintenance_history;
-                    @endphp
-                    <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
-                        <div class="d-flex justify-content-between align-items-center pb-2 mb-2 border-bottom flex-wrap gap-2">
-                            <div class="d-flex align-items-center gap-2">
-                                <div class="rounded-3 p-2 bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width:34px;height:34px;">
-                                    <i class="fa-solid fa-clock-rotate-left fs-5"></i>
-                                </div>
-                                <div>
-                                    <h6 class="fw-bold text-dark mb-0 fs-6">Material Maintenance History</h6>
-                                    <small class="text-muted">Previous service logs, breakdown records &amp; repair expenses for <strong>{{ $mReq->asset_name }}</strong></small>
-                                </div>
-                            </div>
-                            <span class="badge bg-primary bg-opacity-15 text-primary border border-primary border-opacity-25 rounded-pill px-3 py-1 fw-bold">
-                                {{ $historyTickets->count() }} Past Record{{ $historyTickets->count() === 1 ? '' : 's' }}
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="badge bg-light text-dark border text-capitalize px-2.5 py-1">
+                                <i class="fa-solid fa-tag me-1 text-warning"></i>{{ $mReq->issue_type_label }}
+                            </span>
+                            <span class="badge {{ $mReq->urgency_badge['class'] }} px-2.5 py-1">
+                                <i class="fa-solid {{ $mReq->urgency_badge['icon'] }} me-1"></i>{{ $mReq->urgency_badge['label'] }}
                             </span>
                         </div>
+                    </div>
 
-                        @if($historyTickets->isNotEmpty())
-                            <div class="table-responsive rounded-3 border">
-                                <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.82rem;">
-                                    <thead class="table-light text-secondary text-uppercase" style="font-size: 0.72rem;">
-                                        <tr>
-                                            <th class="ps-3 py-2">Ticket #</th>
-                                            <th class="py-2">Date</th>
-                                            <th class="py-2">Issue / Problem</th>
-                                            <th class="py-2">Repair Expense</th>
-                                            <th class="py-2">Parts / Materials</th>
-                                            <th class="py-2">Assigned Tech</th>
-                                            <th class="py-2">Outcome</th>
-                                            <th class="py-2 pe-3 text-end">Details</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach($historyTickets as $hTick)
-                                        @php
-                                            $hExpSum = (float)$hTick->expenseRequests->sum('amount');
-                                            $hMatCount = $hTick->materialRequests->sum(fn($mr) => $mr->items->count());
-                                        @endphp
-                                        <tr>
-                                            <td class="ps-3 font-monospace fw-bold text-primary">{{ $hTick->request_no }}</td>
-                                            <td class="text-muted text-nowrap">{{ $hTick->created_at->format('M d, Y') }}</td>
-                                            <td>
-                                                <div class="fw-semibold text-dark">{{ $hTick->issue_type_label }}</div>
-                                                <small class="text-muted text-truncate d-block" style="max-width: 220px;" title="{{ $hTick->description }}">
-                                                    {{ $hTick->description }}
-                                                </small>
-                                            </td>
-                                            <td class="font-monospace">
-                                                @if($hExpSum > 0)
-                                                    <span class="badge bg-success bg-opacity-10 text-success fw-bold">
-                                                        {{ number_format($hExpSum, 2) }} ETB
-                                                    </span>
-                                                @else
-                                                    <span class="text-muted">—</span>
-                                                @endif
-                                            </td>
-                                            <td>
-                                                @if($hMatCount > 0)
-                                                    <span class="badge bg-info bg-opacity-10 text-dark border">
-                                                        <i class="fa-solid fa-boxes-stacked me-1 text-primary"></i>{{ $hMatCount }} Part(s)
-                                                    </span>
-                                                @else
-                                                    <span class="text-muted">—</span>
-                                                @endif
-                                            </td>
-                                            <td class="text-muted">{{ $hTick->assignedTo?->name ?? 'Unassigned' }}</td>
-                                            <td>
-                                                <span class="badge {{ $hTick->status_badge['class'] }} px-2 py-0.5">
-                                                    {{ $hTick->status_badge['label'] }}
+                    {{-- Detailed Asset Specifications Grid --}}
+                    <div class="row g-2 mb-3" style="font-size: 0.85rem;">
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2 rounded bg-light border h-100">
+                                <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Catalog Asset</span>
+                                <strong class="text-dark">{{ $mReq->fixedAssetUnit?->parentAsset?->name ?? 'Direct Item' }}</strong>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Category: {{ $mReq->fixedAssetUnit?->parentAsset?->category ?? 'General Asset' }}</small>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2 rounded bg-light border h-100">
+                                <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Brand &amp; Model</span>
+                                <strong class="text-dark">{{ $mReq->fixedAssetUnit?->brand ?? 'N/A' }} {{ $mReq->fixedAssetUnit?->model ?? '' }}</strong>
+                                <small class="text-muted d-block font-monospace" style="font-size:0.75rem;">Serial: {{ $mReq->fixedAssetUnit?->serial_number ?? ($mReq->fixedAssetUnit?->unit_code ?? 'N/A') }}</small>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2 rounded bg-light border h-100">
+                                <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Location &amp; Station</span>
+                                <strong class="text-dark">{{ $mReq->fixedAssetUnit?->current_location ?? ($mReq->employee?->department ?? 'General Service') }}</strong>
+                                @if($mReq->fixedAssetUnit?->plate_number)
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">Plate: {{ $mReq->fixedAssetUnit->plate_number }}</small>
+                                @else
+                                    <small class="text-muted d-block" style="font-size:0.75rem;">User: {{ $mReq->fixedAssetUnit?->assignedEmployee?->full_name ?? ($mReq->employee?->full_name ?? 'Staff') }}</small>
+                                @endif
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2 rounded bg-light border h-100">
+                                <span class="text-muted small d-block text-uppercase fw-semibold" style="font-size: 0.7rem;">Purchase / Warranty</span>
+                                <strong class="text-dark">{{ $mReq->fixedAssetUnit?->purchase_price ? number_format($mReq->fixedAssetUnit->purchase_price, 2) . ' ETB' : 'N/A' }}</strong>
+                                <small class="text-muted d-block" style="font-size:0.75rem;">Warranty: {{ $mReq->fixedAssetUnit?->warranty_expiry ? $mReq->fixedAssetUnit->warranty_expiry->format('d M Y') : 'N/A' }}</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Full Problem Description and Findings --}}
+                    <div class="p-3 rounded-3 bg-white border mb-2" style="border-left: 4px solid #f59e0b !important;">
+                        <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
+                            <span class="fw-bold small text-dark text-uppercase" style="font-size:0.75rem;">
+                                <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Reported Issue &amp; Repair Details
+                            </span>
+                            <small class="text-muted" style="font-size:0.75rem;">
+                                Reported by <strong>{{ $mReq->employee?->full_name ?? ($mReq->reportedBy?->name ?? 'Staff') }}</strong> ({{ $mReq->employee?->role_title ?? $mReq->employee?->department ?? 'Employee' }}) on {{ $mReq->created_at->format('M d, Y h:i A') }}
+                            </small>
+                        </div>
+                        <div class="text-dark" style="white-space: pre-wrap; font-size: 0.92rem; line-height: 1.5;">{{ $mReq->description }}</div>
+                    </div>
+
+                    @if($mReq->admin_notes)
+                        <div class="p-2.5 rounded-3 bg-light border small text-muted mb-0" style="white-space: pre-wrap; font-size: 0.8rem;">
+                            <strong class="text-secondary"><i class="fa-solid fa-clipboard-list me-1"></i>Diagnostic &amp; Lifecycle Notes:</strong>
+                            {{ $mReq->admin_notes }}
+                        </div>
+                    @endif
+                </div>
+
+                {{-- ── 2. MATERIAL MAINTENANCE & REPAIR HISTORY ── --}}
+                @php
+                    $historyTickets = $mReq->maintenance_history;
+                @endphp
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center pb-2 mb-2 border-bottom flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="rounded-3 p-2 text-primary d-flex align-items-center justify-content-center" style="width:36px;height:36px;background:rgba(13,110,253,0.12);">
+                                <i class="fa-solid fa-clock-rotate-left fs-5"></i>
+                            </div>
+                            <div>
+                                <h6 class="fw-bold text-dark mb-0 fs-6">Material Maintenance History</h6>
+                                <small class="text-muted">Previous service logs, breakdown records &amp; repair expenses for <strong>{{ $mReq->asset_name }}</strong></small>
+                            </div>
+                        </div>
+                        <span class="badge bg-primary bg-opacity-15 text-primary border border-primary border-opacity-25 rounded-pill px-3 py-1 fw-bold">
+                            {{ $historyTickets->count() }} Past Record{{ $historyTickets->count() === 1 ? '' : 's' }}
+                        </span>
+                    </div>
+
+                    @if($historyTickets->isNotEmpty())
+                        <div class="table-responsive rounded-3 border">
+                            <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.82rem;">
+                                <thead class="table-light text-secondary text-uppercase" style="font-size: 0.72rem;">
+                                    <tr>
+                                        <th class="ps-3 py-2">Ticket #</th>
+                                        <th class="py-2">Date</th>
+                                        <th class="py-2">Issue / Problem</th>
+                                        <th class="py-2">Repair Expense</th>
+                                        <th class="py-2">Parts / Materials</th>
+                                        <th class="py-2">Assigned Tech</th>
+                                        <th class="py-2">Outcome</th>
+                                        <th class="py-2 pe-3 text-end">Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($historyTickets as $hTick)
+                                    @php
+                                        $hExpSum = (float)$hTick->expenseRequests->sum('amount');
+                                        $hMatCount = $hTick->materialRequests->sum(fn($mr) => $mr->items->count());
+                                    @endphp
+                                    <tr>
+                                        <td class="ps-3 font-monospace fw-bold text-primary">{{ $hTick->request_no }}</td>
+                                        <td class="text-muted text-nowrap">{{ $hTick->created_at->format('M d, Y') }}</td>
+                                        <td>
+                                            <div class="fw-semibold text-dark">{{ $hTick->issue_type_label }}</div>
+                                            <small class="text-muted text-truncate d-block" style="max-width: 220px;" title="{{ $hTick->description }}">
+                                                {{ $hTick->description }}
+                                            </small>
+                                        </td>
+                                        <td class="font-monospace">
+                                            @if($hExpSum > 0)
+                                                <span class="badge bg-success bg-opacity-10 text-success fw-bold">
+                                                    {{ number_format($hExpSum, 2) }} ETB
                                                 </span>
-                                            </td>
-                                            <td class="pe-3 text-end">
-                                                <a href="{{ route('general-service.maintenance.show', $hTick->id) }}" target="_blank" class="btn btn-outline-secondary btn-sm py-0 px-2" title="Inspect full record">
-                                                    <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.75rem;"></i>
-                                                </a>
-                                            </td>
-                                        </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        @else
-                            <div class="p-3 bg-light rounded-3 text-center border">
-                                <i class="fa-solid fa-circle-check text-success me-1"></i>
-                                <span class="small text-muted">No prior maintenance tickets recorded for <strong>{{ $mReq->asset_name }}</strong> (Code: {{ $mReq->asset_code ?? 'N/A' }}). This is the initial reported maintenance record.</span>
-                            </div>
-                        @endif
-                    </div>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if($hMatCount > 0)
+                                                <span class="badge bg-info bg-opacity-10 text-dark border">
+                                                    <i class="fa-solid fa-boxes-stacked me-1 text-primary"></i>{{ $hMatCount }} Part(s)
+                                                </span>
+                                            @else
+                                                <span class="text-muted">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="text-muted">{{ $hTick->assignedTo?->name ?? 'Unassigned' }}</td>
+                                        <td>
+                                            <span class="badge {{ $hTick->status_badge['class'] }} px-2 py-0.5">
+                                                {{ $hTick->status_badge['label'] }}
+                                            </span>
+                                        </td>
+                                        <td class="pe-3 text-end">
+                                            <a href="{{ route('general-service.maintenance.show', $hTick->id) }}" target="_blank" class="btn btn-outline-secondary btn-sm py-0 px-2" title="Inspect full record">
+                                                <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.75rem;"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="p-3 bg-white rounded-3 text-center border">
+                            <i class="fa-solid fa-circle-check text-success me-1"></i>
+                            <span class="small text-muted">No prior maintenance tickets recorded for <strong>{{ $mReq->asset_name }}</strong> (Code: {{ $mReq->asset_code ?? 'N/A' }}). This is the initial reported maintenance record.</span>
+                        </div>
+                    @endif
+                </div>
 
-                    {{-- ── 3. EXECUTIVE STATUS DECISION & UNLOCKED REJECT OPTION ── --}}
-                    <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
-                        <label class="form-label fw-bold text-dark small text-uppercase d-flex justify-content-between align-items-center">
-                            <span>Executive Status Decision <span class="text-danger">*</span></span>
-                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" id="gm_rej_badge_{{ $mReq->id }}" style="display: {{ $mReq->status === 'rejected' ? 'inline-block' : 'none' }};">
-                                <i class="fa-solid fa-ban me-1"></i>Rejection Mode Active
-                            </span>
+                {{-- ── 3. EXECUTIVE STATUS DECISION & UNLOCKED REJECT OPTION ── --}}
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
+                    <label class="form-label fw-bold text-dark small text-uppercase d-flex justify-content-between align-items-center">
+                        <span>Executive Status Decision <span class="text-danger">*</span></span>
+                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" id="gm_rej_badge_{{ $mReq->id }}" style="display: {{ $mReq->status === 'rejected' ? 'inline-block' : 'none' }};">
+                            <i class="fa-solid fa-ban me-1"></i>Rejection Mode Active
+                        </span>
+                    </label>
+                    <select name="status" id="gm_status_select_{{ $mReq->id }}" class="form-select form-select-lg rounded-3 fw-bold" required onchange="handleGmDecisionChange_{{ $mReq->id }}(this.value);">
+                        <option value="in_progress" {{ $mReq->status === 'in_progress' ? 'selected' : '' }}>🔧 Approved → In Progress / Under Repair</option>
+                        <option value="sent_to_store_manager" {{ $mReq->status === 'sent_to_store_manager' ? 'selected' : '' }}>📦 Approved → Send to Store Manager (Replacement Unit / PR Cycle)</option>
+                        <option value="resolved" {{ $mReq->status === 'resolved' ? 'selected' : '' }}>✅ Approved → Resolved / Fixed</option>
+                        <option value="closed" {{ $mReq->status === 'closed' ? 'selected' : '' }}>🔒 Closed</option>
+                        <option value="pending" {{ $mReq->status === 'pending' ? 'selected' : '' }}>⏳ Keep Pending Review</option>
+                        <option value="rejected" class="text-danger fw-bold" {{ $mReq->status === 'rejected' ? 'selected' : '' }}>❌ Reject Maintenance Request</option>
+                    </select>
+
+                    {{-- UNLOCKED: Mandatory Rejection Reason Block --}}
+                    <div class="mt-3 p-3 rounded-3 border border-danger bg-danger bg-opacity-10 shadow-xs" id="gm_rejection_box_{{ $mReq->id }}" style="display: {{ $mReq->status === 'rejected' ? 'block' : 'none' }};">
+                        <label class="form-label fw-bold text-danger small text-uppercase mb-1">
+                            <i class="fa-solid fa-ban me-1"></i>Executive Rejection Reason <span class="text-danger">*</span>
                         </label>
-                        <select name="status" id="gm_status_select_{{ $mReq->id }}" class="form-select form-select-lg rounded-3 fw-bold" required onchange="handleGmDecisionChange_{{ $mReq->id }}(this.value);">
-                            <option value="in_progress" {{ $mReq->status === 'in_progress' ? 'selected' : '' }}>🔧 Approved → In Progress / Under Repair</option>
-                            <option value="sent_to_store_manager" {{ $mReq->status === 'sent_to_store_manager' ? 'selected' : '' }}>📦 Approved → Send to Store Manager (Replacement Unit / PR Cycle)</option>
-                            <option value="resolved" {{ $mReq->status === 'resolved' ? 'selected' : '' }}>✅ Approved → Resolved / Fixed</option>
-                            <option value="closed" {{ $mReq->status === 'closed' ? 'selected' : '' }}>🔒 Closed</option>
-                            <option value="pending" {{ $mReq->status === 'pending' ? 'selected' : '' }}>⏳ Keep Pending Review</option>
-                            <option value="rejected" class="text-danger fw-bold" {{ $mReq->status === 'rejected' ? 'selected' : '' }}>❌ Reject Maintenance Request</option>
-                        </select>
+                        <p class="text-danger small mb-2" style="font-size:0.8rem;">
+                            Please state the reason for rejecting this maintenance ticket. Linked pending expense requests and material requisitions will be cancelled automatically.
+                        </p>
+                        <textarea name="rejection_reason" id="gm_rejection_reason_{{ $mReq->id }}" class="form-control border-danger" rows="3" placeholder="Specify why this repair/maintenance request is rejected (e.g., equipment beyond economical repair, unapproved vendor, duplicate ticket, unauthorized service)...">{{ $mReq->rejection_reason }}</textarea>
+                    </div>
 
-                        {{-- UNLOCKED: Mandatory Rejection Reason Block --}}
-                        <div class="mt-3 p-3 rounded-3 border border-danger bg-danger bg-opacity-10 shadow-xs" id="gm_rejection_box_{{ $mReq->id }}" style="display: {{ $mReq->status === 'rejected' ? 'block' : 'none' }};">
-                            <label class="form-label fw-bold text-danger small text-uppercase mb-1">
-                                <i class="fa-solid fa-ban me-1"></i>Executive Rejection Reason <span class="text-danger">*</span>
-                            </label>
-                            <p class="text-danger small mb-2" style="font-size:0.8rem;">
-                                Please state the reason for rejecting this maintenance ticket. Linked pending expense requests and material requisitions will be cancelled automatically.
-                            </p>
-                            <textarea name="rejection_reason" id="gm_rejection_reason_{{ $mReq->id }}" class="form-control border-danger" rows="3" placeholder="Specify why this repair/maintenance request is rejected (e.g., equipment beyond economical repair, unapproved vendor, duplicate ticket, unauthorized service)...">{{ $mReq->rejection_reason }}</textarea>
-                        </div>
-
-                        {{-- Replacement Condition (If Sent to Store Manager) --}}
-                        <div class="mt-3" id="gm_rep_opts_{{ $mReq->id }}" style="{{ $mReq->status === 'sent_to_store_manager' ? '' : 'display:none;' }}">
-                            <label class="form-label fw-bold text-dark small text-uppercase">Replacement Unit Category</label>
-                            <div class="d-flex gap-3">
-                                <div class="form-check border p-2 rounded-3 bg-light flex-fill ps-4">
-                                    <input class="form-check-input" type="radio" name="replacement_condition" id="rep_cond_maint_{{ $mReq->id }}" value="in_maintenance" checked>
-                                    <label class="form-check-label small fw-bold text-dark" for="rep_cond_maint_{{ $mReq->id }}">
-                                        Temporary Replacement Unit <small class="text-muted d-block fw-normal">Equipment under repair; temporary swap while fixed</small>
-                                    </label>
-                                </div>
-                                <div class="form-check border p-2 rounded-3 bg-light flex-fill ps-4">
-                                    <input class="form-check-input" type="radio" name="replacement_condition" id="rep_cond_dmg_{{ $mReq->id }}" value="unrepairable_damage">
-                                    <label class="form-check-label small fw-bold text-danger" for="rep_cond_dmg_{{ $mReq->id }}">
-                                        Permanent Replacement <small class="text-muted d-block fw-normal">Equipment unrepairable; write-off &amp; buy new</small>
-                                    </label>
-                                </div>
+                    {{-- Replacement Condition (If Sent to Store Manager) --}}
+                    <div class="mt-3" id="gm_rep_opts_{{ $mReq->id }}" style="{{ $mReq->status === 'sent_to_store_manager' ? '' : 'display:none;' }}">
+                        <label class="form-label fw-bold text-dark small text-uppercase">Replacement Unit Category</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check border p-2 rounded-3 bg-light flex-fill ps-4">
+                                <input class="form-check-input" type="radio" name="replacement_condition" id="rep_cond_maint_{{ $mReq->id }}" value="in_maintenance" checked>
+                                <label class="form-check-label small fw-bold text-dark" for="rep_cond_maint_{{ $mReq->id }}">
+                                    Temporary Replacement Unit <small class="text-muted d-block fw-normal">Equipment under repair; temporary swap while fixed</small>
+                                </label>
+                            </div>
+                            <div class="form-check border p-2 rounded-3 bg-light flex-fill ps-4">
+                                <input class="form-check-input" type="radio" name="replacement_condition" id="rep_cond_dmg_{{ $mReq->id }}" value="unrepairable_damage">
+                                <label class="form-check-label small fw-bold text-danger" for="rep_cond_dmg_{{ $mReq->id }}">
+                                    Permanent Replacement <small class="text-muted d-block fw-normal">Equipment unrepairable; write-off &amp; buy new</small>
+                                </label>
                             </div>
                         </div>
-                    </div>
-
-                    {{-- ── 4. WORKFLOW ROUTINGS: MONEY & MATERIALS ── --}}
-                    <div id="gm_routing_bypassed_note_{{ $mReq->id }}" class="alert alert-warning border-0 small py-2 mb-3" style="display: {{ $mReq->status === 'rejected' ? 'block' : 'none' }};">
-                        <i class="fa-solid fa-circle-exclamation me-1"></i>Expense approval routing and Store Manager requisition generation are automatically bypassed when request is rejected.
-                    </div>
-
-                    <div class="row g-3 mb-3" id="gm_routing_container_{{ $mReq->id }}" style="display: {{ $mReq->status === 'rejected' ? 'none' : 'flex' }};">
-                        {{-- 💰 Ask Money -> Coordinator Routing --}}
-                        <div class="col-md-6">
-                            <div class="card border-0 shadow-xs rounded-3 bg-white p-3 h-100">
-                                <div class="d-flex align-items-center gap-2 mb-2">
-                                    <i class="fa-solid fa-hand-holding-dollar text-success fs-5"></i>
-                                    <h6 class="fw-bold text-dark mb-0 small text-uppercase">Coordinator Expenses Approval</h6>
-                                </div>
-                                @if($mReq->expenseRequests->isNotEmpty())
-                                    <p class="text-muted small mb-2">Linked expense requests will be sent to the Coordinator &amp; HR approval queue.</p>
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" name="route_money_to_coordinator" value="1" id="route_money_{{ $mReq->id }}" checked>
-                                        <label class="form-check-label small fw-bold text-success" for="route_money_{{ $mReq->id }}">
-                                            Send {{ $mReq->expenseRequests->count() }} linked Expense Request(s) to Coordinator
-                                        </label>
-                                    </div>
-                                    @foreach($mReq->expenseRequests as $exp)
-                                        <div class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1 mb-1">
-                                            #{{ $exp->request_number }}: {{ number_format($exp->amount, 2) }} ETB ({{ ucfirst($exp->status) }})
-                                        </div>
-                                    @endforeach
-                                @else
-                                    <p class="text-muted small mb-2">No money request is linked to this ticket yet.</p>
-                                    <a class="small text-primary text-decoration-none fw-semibold" data-bs-toggle="collapse" href="#collapseNewExpense{{ $mReq->id }}" role="button">
-                                        <i class="fa-solid fa-plus-circle me-1"></i>Authorize New Repair Budget for Coordinator
-                                    </a>
-                                    <div class="collapse mt-2" id="collapseNewExpense{{ $mReq->id }}">
-                                        <div class="input-group input-group-sm mb-1">
-                                            <span class="input-group-text">ETB</span>
-                                            <input type="number" step="0.01" name="create_expense_amount" class="form-control" placeholder="Amount (e.g. 5000)">
-                                        </div>
-                                        <input type="text" name="create_expense_notes" class="form-control form-control-sm" placeholder="Repair funding purpose...">
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
-
-                        {{-- 📦 Ask Material -> Store Manager Routing & PR Cycle --}}
-                        <div class="col-md-6">
-                            <div class="card border-0 shadow-xs rounded-3 bg-white p-3 h-100">
-                                <div class="d-flex align-items-center gap-2 mb-2">
-                                    <i class="fa-solid fa-boxes-packing text-primary fs-5"></i>
-                                    <h6 class="fw-bold text-dark mb-0 small text-uppercase">Store Manager &amp; PR Cycle</h6>
-                                </div>
-                                @if($mReq->materialRequests->isNotEmpty())
-                                    <p class="text-muted small mb-2">Linked material requests will be sent to Store Manager for inventory fulfillment or PR cycle.</p>
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" name="route_material_to_store" value="1" id="route_mat_{{ $mReq->id }}" checked>
-                                        <label class="form-check-label small fw-bold text-primary" for="route_mat_{{ $mReq->id }}">
-                                            Send {{ $mReq->materialRequests->count() }} Material Request(s) to Store Manager (PR Cycle)
-                                        </label>
-                                    </div>
-                                    @foreach($mReq->materialRequests as $mr)
-                                        <div class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-1 mb-1">
-                                            #{{ $mr->reference_number }}: {{ $mr->items->count() }} item(s) ({{ ucfirst($mr->status) }})
-                                        </div>
-                                    @endforeach
-                                @else
-                                    <p class="text-muted small mb-2">No material request is linked yet.</p>
-                                    <div class="form-text small">
-                                        If you choose <strong>Send to Store Manager</strong> above, a requisition is automatically created for the Store Manager to fulfill or add into the Purchase Request (PR) cycle.
-                                    </div>
-                                @endif
-                            </div>
-                        </div>
-                    </div>
-
-                    {{-- ── 5. ASSIGN TECHNICIAN & REMARKS ── --}}
-                    <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
-                        <label class="form-label fw-bold small text-uppercase text-secondary">Assign Technician / Lead</label>
-                        <select name="assigned_to_user_id" class="form-select rounded-3">
-                            <option value="">— Unassigned —</option>
-                            @foreach($staff as $stf)
-                                <option value="{{ $stf->id }}" {{ $mReq->assigned_to_user_id == $stf->id ? 'selected' : '' }}>
-                                    {{ $stf->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="card border-0 shadow-xs rounded-3 bg-white p-3">
-                        <label class="form-label fw-bold small text-uppercase text-secondary">GM Directives / Remarks</label>
-                        <textarea name="gm_notes" class="form-control rounded-3" rows="3" placeholder="Enter executive feedback, expected completion timeline, or maintenance instructions..."></textarea>
                     </div>
                 </div>
 
-                {{-- Modal Footer --}}
-                <div class="modal-footer bg-white border-0 py-3 px-4 rounded-bottom-4 d-flex justify-content-between align-items-center">
-                    <div>
-                        <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold" onclick="quickRejectTicket_{{ $mReq->id }}();">
-                            <i class="fa-solid fa-ban me-1"></i>Quick Reject
-                        </button>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" id="gm_submit_btn_{{ $mReq->id }}" class="btn {{ $mReq->status === 'rejected' ? 'btn-danger text-white' : 'btn-warning text-dark' }} fw-bold rounded-pill px-4 shadow-sm">
-                            @if($mReq->status === 'rejected')
-                                <i class="fa-solid fa-ban me-2"></i>Confirm Rejection
+                {{-- ── 4. WORKFLOW ROUTINGS: MONEY & MATERIALS ── --}}
+                <div id="gm_routing_bypassed_note_{{ $mReq->id }}" class="alert alert-warning border-0 small py-2 mb-3" style="display: {{ $mReq->status === 'rejected' ? 'block' : 'none' }};">
+                    <i class="fa-solid fa-circle-exclamation me-1"></i>Expense approval routing and Store Manager requisition generation are automatically bypassed when request is rejected.
+                </div>
+
+                <div class="row g-3 mb-3" id="gm_routing_container_{{ $mReq->id }}" style="display: {{ $mReq->status === 'rejected' ? 'none' : 'flex' }};">
+                    {{-- 💰 Ask Money -> Coordinator Routing --}}
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-xs rounded-3 bg-white p-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="fa-solid fa-hand-holding-dollar text-success fs-5"></i>
+                                <h6 class="fw-bold text-dark mb-0 small text-uppercase">Coordinator Expenses Approval</h6>
+                            </div>
+                            @if($mReq->expenseRequests->isNotEmpty())
+                                <p class="text-muted small mb-2">Linked expense requests will be sent to the Coordinator &amp; HR approval queue.</p>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="route_money_to_coordinator" value="1" id="route_money_{{ $mReq->id }}" checked>
+                                    <label class="form-check-label small fw-bold text-success" for="route_money_{{ $mReq->id }}">
+                                        Send {{ $mReq->expenseRequests->count() }} linked Expense Request(s) to Coordinator
+                                    </label>
+                                </div>
+                                @foreach($mReq->expenseRequests as $exp)
+                                    <div class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1 mb-1">
+                                        #{{ $exp->request_number }}: {{ number_format($exp->amount, 2) }} ETB ({{ ucfirst($exp->status) }})
+                                    </div>
+                                @endforeach
                             @else
-                                <i class="fa-solid fa-floppy-disk me-2"></i>Apply GM Approval
+                                <p class="text-muted small mb-2">No money request is linked to this ticket yet.</p>
+                                <a class="small text-primary text-decoration-none fw-semibold" data-bs-toggle="collapse" href="#collapseNewExpense{{ $mReq->id }}" role="button">
+                                    <i class="fa-solid fa-plus-circle me-1"></i>Authorize New Repair Budget for Coordinator
+                                </a>
+                                <div class="collapse mt-2" id="collapseNewExpense{{ $mReq->id }}">
+                                    <div class="input-group input-group-sm mb-1">
+                                        <span class="input-group-text">ETB</span>
+                                        <input type="number" step="0.01" name="create_expense_amount" class="form-control" placeholder="Amount (e.g. 5000)">
+                                    </div>
+                                    <input type="text" name="create_expense_notes" class="form-control form-control-sm" placeholder="Repair funding purpose...">
+                                </div>
                             @endif
-                        </button>
+                        </div>
+                    </div>
+
+                    {{-- 📦 Ask Material -> Store Manager Routing & PR Cycle --}}
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-xs rounded-3 bg-white p-3 h-100">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="fa-solid fa-boxes-packing text-primary fs-5"></i>
+                                <h6 class="fw-bold text-dark mb-0 small text-uppercase">Store Manager &amp; PR Cycle</h6>
+                            </div>
+                            @if($mReq->materialRequests->isNotEmpty())
+                                <p class="text-muted small mb-2">Linked material requests will be sent to Store Manager for inventory fulfillment or PR cycle.</p>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="route_material_to_store" value="1" id="route_mat_{{ $mReq->id }}" checked>
+                                    <label class="form-check-label small fw-bold text-primary" for="route_mat_{{ $mReq->id }}">
+                                        Send {{ $mReq->materialRequests->count() }} Material Request(s) to Store Manager (PR Cycle)
+                                    </label>
+                                </div>
+                                @foreach($mReq->materialRequests as $mr)
+                                    <div class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-1 mb-1">
+                                        #{{ $mr->reference_number }}: {{ $mr->items->count() }} item(s) ({{ ucfirst($mr->status) }})
+                                    </div>
+                                @endforeach
+                            @else
+                                <p class="text-muted small mb-2">No material request is linked yet.</p>
+                                <div class="form-text small">
+                                    If you choose <strong>Send to Store Manager</strong> above, a requisition is automatically created for the Store Manager to fulfill or add into the Purchase Request (PR) cycle.
+                                </div>
+                            @endif
+                        </div>
                     </div>
                 </div>
-            </form>
-        </div>
+
+                {{-- ── 5. ASSIGN TECHNICIAN & REMARKS ── --}}
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
+                    <label class="form-label fw-bold small text-uppercase text-secondary">Assign Technician / Lead</label>
+                    <select name="assigned_to_user_id" class="form-select rounded-3">
+                        <option value="">— Unassigned —</option>
+                        @foreach($staff as $stf)
+                            <option value="{{ $stf->id }}" {{ $mReq->assigned_to_user_id == $stf->id ? 'selected' : '' }}>
+                                {{ $stf->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3">
+                    <label class="form-label fw-bold small text-uppercase text-secondary">GM Directives / Remarks</label>
+                    <textarea name="gm_notes" class="form-control rounded-3" rows="3" placeholder="Enter executive feedback, expected completion timeline, or maintenance instructions..."></textarea>
+                </div>
+            </div>
+
+            {{-- Footer (Pinned at bottom) --}}
+            <div class="modal-footer bg-white border-top py-3 px-4 rounded-bottom-4 flex-shrink-0 d-flex justify-content-between align-items-center">
+                <div>
+                    <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold" onclick="quickRejectTicket_{{ $mReq->id }}();">
+                        <i class="fa-solid fa-ban me-1"></i>Quick Reject
+                    </button>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" id="gm_submit_btn_{{ $mReq->id }}" class="btn {{ $mReq->status === 'rejected' ? 'btn-danger text-white' : 'btn-warning text-dark' }} fw-bold rounded-pill px-4 shadow-sm">
+                        @if($mReq->status === 'rejected')
+                            <i class="fa-solid fa-ban me-2"></i>Confirm Rejection
+                        @else
+                            <i class="fa-solid fa-floppy-disk me-2"></i>Apply GM Approval
+                        @endif
+                    </button>
+                </div>
+            </div>
+        </form>
     </div>
 </div>
 
