@@ -94,10 +94,10 @@ class InventoryController extends Controller
     public function showBulkAdjust(Request $request)
     {
         $user = auth()->user();
-        $isStoreKeeper = $user && $user->hasRole('store_keeper');
+        $isStoreKeeperOnly = $user && $user->hasAnyRole(['store_keeper', 'Store Keeper']) && !$user->isGlobalAdmin() && !$user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'store_manager', 'Store Manager']);
         $assignedStore = null;
 
-        if ($isStoreKeeper) {
+        if ($isStoreKeeperOnly) {
             $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
             $stores = $assignedStore ? collect([$assignedStore]) : Store::where('is_active', true)->orderBy('name')->get();
             $storeId = $assignedStore ? $assignedStore->id : ($request->store_id ?? ($stores->first()->id ?? null));
@@ -125,7 +125,12 @@ class InventoryController extends Controller
     public function bulkAdjust(Request $request)
     {
         $user = auth()->user();
-        if (!$user->can('inventory.edit') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'store_keeper'])) {
+        $isAuthorized = $user && (
+            $user->isGlobalAdmin()
+            || $user->can('inventory.edit')
+            || $user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'store_manager', 'store_keeper', 'Store Manager', 'Store Keeper'])
+        );
+        if (!$isAuthorized) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'message' => 'Unauthorized to adjust inventory.'], 403);
             }
@@ -142,7 +147,7 @@ class InventoryController extends Controller
 
         $storeId = (int) $request->store_id;
 
-        if ($user->hasRole('store_keeper') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager'])) {
+        if (!$user->isGlobalAdmin() && !$user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'store_manager', 'Store Manager']) && $user->hasAnyRole(['store_keeper', 'Store Keeper'])) {
             $assignedStoreId = $user->store_id ?? $user->store?->id ?? Store::where('manager_id', $user->id)->value('id');
             if ($assignedStoreId && (int)$assignedStoreId !== $storeId) {
                 $msg = 'You are only authorized to adjust stock for your assigned store.';
@@ -261,7 +266,12 @@ class InventoryController extends Controller
     public function saveSingle(Request $request)
     {
         $user = auth()->user();
-        if (!$user->can('inventory.edit') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'store_keeper'])) {
+        $isAuthorized = $user && (
+            $user->isGlobalAdmin()
+            || $user->can('inventory.edit')
+            || $user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'store_manager', 'store_keeper', 'Store Manager', 'Store Keeper'])
+        );
+        if (!$isAuthorized) {
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json(['success' => false, 'message' => 'Unauthorized to adjust inventory.'], 403);
             }
@@ -285,7 +295,7 @@ class InventoryController extends Controller
         $remarks   = trim($validated['remarks'] ?? '');
 
         // Store keeper constraint check
-        if ($user->hasRole('store_keeper') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager'])) {
+        if (!$user->isGlobalAdmin() && !$user->hasAnyRole(['admin', 'global_admin', 'super_admin', 'store_manager', 'Store Manager']) && $user->hasAnyRole(['store_keeper', 'Store Keeper'])) {
             $assignedStoreId = $user->store_id ?? $user->store?->id ?? Store::where('manager_id', $user->id)->value('id');
             if ($assignedStoreId && (int)$assignedStoreId !== $storeId) {
                 $msg = 'You are only authorized to adjust stock for your assigned store.';
@@ -324,16 +334,18 @@ class InventoryController extends Controller
 
                 $finalRemarks = $remarks !== '' ? "{$autoNote}: {$remarks}" : $autoNote;
 
-                // Record movement in ledger
-                \App\Models\InventoryMovement::create([
-                    'inventory_id'   => $inv->id,
-                    'type'           => 'adjustment',
-                    'quantity'       => $diff,
-                    'reference_type' => 'manual_adjustment',
-                    'reference_id'   => null,
-                    'performed_by'   => auth()->id(),
-                    'remarks'        => $finalRemarks,
-                ]);
+                // Record movement in ledger if stock quantity changed
+                if (abs($diff) >= 0.0005) {
+                    \App\Models\InventoryMovement::create([
+                        'inventory_id'   => $inv->id,
+                        'type'           => 'adjustment',
+                        'quantity'       => $diff,
+                        'reference_type' => 'manual_adjustment',
+                        'reference_id'   => null,
+                        'performed_by'   => auth()->id(),
+                        'remarks'        => $finalRemarks,
+                    ]);
+                }
 
                 $inv->quantity_on_hand = $newQty;
                 $inv->last_movement_at = now();
