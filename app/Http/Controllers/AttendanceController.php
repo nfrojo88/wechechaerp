@@ -232,11 +232,11 @@ class AttendanceController extends Controller
         if (!$user) return false;
 
         $allowedRoles = [
-            'planning_manager', 'planning', 'technical_manager',
-            'coordinator', 'project_coordinator',
-            'finance_head', 'finance_manager', 'finance',
-            'hr', 'hr_manager', 'hr_officer',
-            'gm', 'general_manager',
+            'planning_manager', 'planning', 'technical_manager', 'Planning Manager', 'Planning', 'Technical Manager',
+            'coordinator', 'project_coordinator', 'Coordinator', 'Project Coordinator',
+            'finance_head', 'finance_manager', 'finance', 'Finance head', 'Finance Head', 'Finance Manager', 'Finance',
+            'hr', 'hr_manager', 'hr_officer', 'HR', 'HR Manager', 'HR Officer',
+            'gm', 'general_manager', 'GM', 'General Manager',
             'global_admin', 'admin', 'project_manager'
         ];
 
