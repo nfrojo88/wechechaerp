@@ -30,11 +30,17 @@ class MaintenanceRequest extends Model
         'resolved_at',
         'reported_by_user_id',
         'assigned_to_user_id',
+        'gm_approved_at',
+        'gm_approver_id',
+        'gm_decision_locked',
+        'gm_decision_summary',
     ];
 
     protected $casts = [
         'resolved_at' => 'datetime',
         'sent_to_store_manager_at' => 'datetime',
+        'gm_approved_at' => 'datetime',
+        'gm_decision_locked' => 'boolean',
     ];
 
     // ─── Boot ─────────────────────────────────────────────────────────────────
@@ -77,6 +83,11 @@ class MaintenanceRequest extends Model
     public function assignedTo(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to_user_id');
+    }
+
+    public function gmApprover(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'gm_approver_id');
     }
 
     public function expenseRequests()

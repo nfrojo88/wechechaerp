@@ -229,7 +229,7 @@
                         </div>
                     </div>
                     <span class="badge bg-warning bg-opacity-15 text-dark rounded-pill px-3 py-1 fw-bold">
-                        {{ $maintenanceTickets->count() }} Total Tickets
+                        {{ $maintenanceTickets->count() }} Awaiting GM Action
                     </span>
                 </div>
 
@@ -365,8 +365,8 @@
                     @else
                         <div class="p-4 bg-light rounded-bottom-4 text-center">
                             <i class="fa-solid fa-circle-check text-success fs-3 mb-2"></i>
-                            <h6 class="fw-bold text-dark mb-1">No Maintenance Reports Found</h6>
-                            <p class="text-muted small mb-0">No active maintenance issues or repair tickets submitted.</p>
+                            <h6 class="fw-bold text-dark mb-1">No Pending Maintenance Reports Awaiting Action</h6>
+                            <p class="text-muted small mb-0">All submitted reports have been reviewed, routed, and locked into <a href="{{ route('gm.maintenance-approvals.index', ['tab' => 'history']) }}" class="fw-semibold text-decoration-none">Decision History</a>.</p>
                         </div>
                     @endif
                 </div>
@@ -637,6 +637,181 @@
          TAB CONTENT: 2. DECIDED HISTORY
     ═══════════════════════════════════════════════════════════════════════════════ --}}
     @if($tab === 'history')
+        {{-- Decided Maintenance Tickets (Locked Decision History) --}}
+        <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden">
+            <div class="card-header bg-white border-0 py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center bg-secondary bg-opacity-10 text-secondary" style="width:38px;height:38px;">
+                        <i class="fa-solid fa-lock text-dark"></i>
+                    </div>
+                    <div>
+                        <h5 class="mb-0 fw-bold text-dark">Decided Maintenance &amp; Repair Reports (Decision History)</h5>
+                        <small class="text-muted">Tickets reviewed, authorized and locked by the General Manager with financial &amp; store routing records.</small>
+                    </div>
+                </div>
+                <span class="badge bg-secondary text-white rounded-pill px-3 py-1 fw-bold">
+                    {{ $decidedTickets->count() }} Decided Tickets
+                </span>
+            </div>
+
+            <div class="card-body p-0">
+                @if($decidedTickets->isNotEmpty())
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+                            <thead class="table-light text-secondary small text-uppercase" style="font-size: 0.75rem;">
+                                <tr>
+                                    <th class="ps-4 py-3">Request #</th>
+                                    <th class="py-3">Reported By / Asset</th>
+                                    <th class="py-3">Executive Decision</th>
+                                    <th class="py-3">Money Routing (Finance)</th>
+                                    <th class="py-3">Material Routing (Store PR)</th>
+                                    <th class="py-3">Decided At / Approver</th>
+                                    <th class="py-3">Lock Status</th>
+                                    <th class="py-3 pe-4 text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($decidedTickets as $mReq)
+                                <tr>
+                                    {{-- Request # --}}
+                                    <td class="ps-4 py-3">
+                                        <a href="{{ route('general-service.maintenance.show', $mReq->id) }}" class="fw-bold text-dark font-monospace text-decoration-none">
+                                            {{ $mReq->request_no }}
+                                        </a>
+                                        <div class="text-muted" style="font-size:0.75rem;">{{ $mReq->created_at->format('d M Y') }}</div>
+                                    </td>
+
+                                    {{-- Asset & Reporter --}}
+                                    <td class="py-3">
+                                        <div class="fw-bold text-dark">{{ $mReq->asset_name }}</div>
+                                        @if($mReq->asset_code)
+                                            <span class="badge bg-dark font-monospace px-2 py-0 me-1" style="font-size:0.7rem;">{{ $mReq->asset_code }}</span>
+                                        @endif
+                                        <small class="text-muted d-block">
+                                            {{ $mReq->employee->full_name ?? ($mReq->reportedBy->name ?? 'Staff') }}
+                                        </small>
+                                    </td>
+
+                                    {{-- Executive Decision --}}
+                                    <td class="py-3">
+                                        @if($mReq->status === 'rejected')
+                                            <span class="badge bg-danger text-white rounded-pill px-2.5 py-1">
+                                                <i class="fa-solid fa-ban me-1"></i>Rejected
+                                            </span>
+                                            @if($mReq->rejection_reason)
+                                                <small class="text-danger d-block mt-0.5" style="font-size:0.73rem; max-width: 220px;">{{ Str::limit($mReq->rejection_reason, 45) }}</small>
+                                            @endif
+                                        @elseif($mReq->status === 'sent_to_store_manager')
+                                            <span class="badge bg-info text-white rounded-pill px-2.5 py-1">
+                                                <i class="fa-solid fa-warehouse me-1"></i>Sent to Store Manager (PR)
+                                            </span>
+                                        @elseif($mReq->status === 'resolved')
+                                            <span class="badge bg-success text-white rounded-pill px-2.5 py-1">
+                                                <i class="fa-solid fa-circle-check me-1"></i>Approved &amp; Resolved
+                                            </span>
+                                        @elseif($mReq->status === 'closed')
+                                            <span class="badge bg-secondary text-white rounded-pill px-2.5 py-1">
+                                                <i class="fa-solid fa-lock me-1"></i>Closed
+                                            </span>
+                                        @else
+                                            <span class="badge bg-primary text-white rounded-pill px-2.5 py-1">
+                                                <i class="fa-solid fa-wrench me-1"></i>Approved (Under Repair)
+                                            </span>
+                                        @endif
+                                        @if($mReq->assignedTo)
+                                            <small class="text-muted d-block mt-0.5" style="font-size:0.73rem;">
+                                                <i class="fa-solid fa-user-gear text-secondary me-1"></i>Tech: {{ $mReq->assignedTo->name }}
+                                            </small>
+                                        @endif
+                                    </td>
+
+                                    {{-- Money Routing (Finance) --}}
+                                    <td class="py-3">
+                                        @if($mReq->expenseRequests->isNotEmpty())
+                                            @foreach($mReq->expenseRequests as $lkExp)
+                                                <div class="mb-1">
+                                                    <span class="badge bg-success bg-opacity-10 text-success fw-bold font-monospace">
+                                                        {{ number_format($lkExp->amount, 2) }} ETB
+                                                    </span>
+                                                    <span class="badge bg-light text-success border border-success border-opacity-25 small">
+                                                        <i class="fa-solid fa-check-double me-1"></i>Sent to Finance to Pay
+                                                    </span>
+                                                </div>
+                                            @endforeach
+                                        @else
+                                            <span class="text-muted small">No Money Asked</span>
+                                        @endif
+                                    </td>
+
+                                    {{-- Material Routing (Store PR) --}}
+                                    <td class="py-3">
+                                        @if($mReq->materialRequests->isNotEmpty())
+                                            @foreach($mReq->materialRequests as $lkMat)
+                                                <div class="mb-1">
+                                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fw-semibold">
+                                                        <i class="fa-solid fa-boxes-stacked me-1"></i>{{ $lkMat->items->count() }} Part(s)
+                                                    </span>
+                                                    <span class="badge bg-light text-primary border border-primary border-opacity-25 small">
+                                                        <i class="fa-solid fa-cart-shopping me-1"></i>Store PR Cycle
+                                                    </span>
+                                                </div>
+                                            @endforeach
+                                        @elseif($mReq->status === 'sent_to_store_manager')
+                                            <span class="badge bg-info bg-opacity-10 text-info-emphasis border border-info border-opacity-25 small">
+                                                <i class="fa-solid fa-warehouse me-1"></i>Routed to Store
+                                            </span>
+                                        @else
+                                            <span class="text-muted small">No Parts Needed</span>
+                                        @endif
+                                    </td>
+
+                                    {{-- Decided At / Approver --}}
+                                    <td class="py-3 small text-muted">
+                                        <div><i class="fa-regular fa-calendar-check me-1 text-secondary"></i>{{ $mReq->gm_approved_at ? $mReq->gm_approved_at->format('d M Y, h:i A') : $mReq->updated_at->format('d M Y') }}</div>
+                                        <div class="text-dark fw-semibold" style="font-size:0.75rem;">
+                                            By {{ $mReq->gmApprover->name ?? 'Executive GM' }}
+                                        </div>
+                                    </td>
+
+                                    {{-- Lock Status --}}
+                                    <td class="py-3">
+                                        <span class="badge bg-secondary text-white rounded-pill px-2.5 py-1" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-lock me-1 text-warning"></i>Decision Locked
+                                        </span>
+                                    </td>
+
+                                    {{-- Action --}}
+                                    <td class="py-3 pe-4 text-end">
+                                        <div class="d-flex justify-content-end align-items-center gap-1">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2.5 py-1" data-bs-toggle="modal" data-bs-target="#grantGmApprovalModal{{ $mReq->id }}" title="Inspect Locked Decision Record">
+                                                <i class="fa-solid fa-eye me-1"></i>Inspect
+                                            </button>
+                                            <form action="{{ route('gm.maintenance-approvals.unlock-ticket', $mReq) }}" method="POST" onsubmit="return confirm('Unlock decision for ticket #{{ $mReq->request_no }} and return to incoming queue?');" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-outline-warning btn-sm rounded-pill px-2 py-1" title="Unlock Decision &amp; Return to Incoming Queue">
+                                                    <i class="fa-solid fa-lock-open"></i>
+                                                </button>
+                                            </form>
+                                            <a href="{{ route('general-service.maintenance.show', $mReq->id) }}" class="btn btn-light border btn-sm rounded-pill px-2 py-1" title="Open Ticket Details" target="_blank">
+                                                <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.75rem;"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @else
+                    <div class="p-4 bg-light rounded-bottom-4 text-center">
+                        <i class="fa-solid fa-folder-open text-muted fs-3 mb-2"></i>
+                        <h6 class="fw-bold text-dark mb-1">No Decided Maintenance Tickets Yet</h6>
+                        <p class="text-muted small mb-0">Decisions finalized by GM will appear here locked with complete routing breakdown.</p>
+                    </div>
+                @endif
+            </div>
+        </div>
+
         <div class="row g-4 mb-4">
             {{-- Decided Expenses History --}}
             <div class="col-lg-6">
@@ -768,7 +943,10 @@
 ═══════════════════════════════════════════════════════════════════════════════ --}}
 
 {{-- ── 1. Maintenance Ticket Approval Modals ───────────────────────────────── --}}
-@foreach($maintenanceTickets as $mReq)
+@php
+    $allTicketModals = ($maintenanceTickets ?? collect())->concat($decidedTickets ?? collect())->unique('id');
+@endphp
+@foreach($allTicketModals as $mReq)
 <div class="modal fade" id="grantGmApprovalModal{{ $mReq->id }}" tabindex="-1" aria-hidden="true" data-bs-backdrop="true">
     <div class="modal-dialog modal-dialog-centered modal-xl" style="max-width: 1140px; margin: 1.5rem auto;">
         <form action="{{ route('gm.maintenance-approvals.approve-ticket', $mReq) }}" method="POST" id="gm_ticket_form_{{ $mReq->id }}" class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" style="max-height: 90vh; display: flex; flex-direction: column;">
@@ -784,6 +962,11 @@
                         <div class="d-flex align-items-center gap-2 flex-wrap">
                             <h5 class="modal-title fw-bold text-white mb-0">Executive Decision: Ticket #{{ $mReq->request_no }}</h5>
                             <span class="badge {{ $mReq->status_badge['class'] }} rounded-pill px-2.5 py-0.5" style="font-size:0.75rem;">{{ $mReq->status_badge['label'] }}</span>
+                            @if($mReq->gm_decision_locked || $mReq->gm_approved_at)
+                                <span class="badge bg-secondary text-white rounded-pill px-2 py-0.5" style="font-size:0.72rem;">
+                                    <i class="fa-solid fa-lock me-1 text-warning"></i>Locked in History
+                                </span>
+                            @endif
                         </div>
                         <small class="text-white-50">Review equipment specifications, historical maintenance records, and authorize status</small>
                     </div>
@@ -793,6 +976,26 @@
 
             {{-- Body (Smooth Scrollable Content) --}}
             <div class="modal-body p-3 p-md-4 bg-light" style="overflow-y: auto !important; flex: 1 1 auto; max-height: calc(90vh - 135px); -webkit-overflow-scrolling: touch;">
+                
+                {{-- Decision History Banner if Already Locked --}}
+                @if($mReq->gm_decision_locked || $mReq->gm_approved_at)
+                    <div class="alert alert-secondary border-0 shadow-xs rounded-3 p-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-lock text-secondary fs-4"></i>
+                            <div>
+                                <strong class="text-dark">Decision Finalized &amp; Locked in Decision History</strong>
+                                <div class="small text-muted">
+                                    Authorized on {{ $mReq->gm_approved_at ? $mReq->gm_approved_at->format('M d, Y h:i A') : $mReq->updated_at->format('M d, Y') }}
+                                    @if($mReq->gmApprover) by {{ $mReq->gmApprover->name }} @endif
+                                </div>
+                                @if($mReq->gm_decision_summary)
+                                    <div class="small text-dark fw-semibold mt-1"><i class="fa-solid fa-check-double text-success me-1"></i>{{ $mReq->gm_decision_summary }}</div>
+                                @endif
+                            </div>
+                        </div>
+                        <span class="badge bg-secondary text-white rounded-pill px-3 py-1.5"><i class="fa-solid fa-shield me-1"></i>Locked</span>
+                    </div>
+                @endif
                 
                 {{-- ── 1. MATERIAL / ASSET SPECIFICATIONS & FAILURE PROFILE ── --}}
                 <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
@@ -1024,19 +1227,19 @@
                 </div>
 
                 <div class="row g-3 mb-3" id="gm_routing_container_{{ $mReq->id }}" style="display: {{ $mReq->status === 'rejected' ? 'none' : 'flex' }};">
-                    {{-- 💰 Ask Money -> Coordinator Routing --}}
+                    {{-- 💰 Ask Money -> Finance Payment Routing --}}
                     <div class="col-md-6">
                         <div class="card border-0 shadow-xs rounded-3 bg-white p-3 h-100">
                             <div class="d-flex align-items-center gap-2 mb-2">
                                 <i class="fa-solid fa-hand-holding-dollar text-success fs-5"></i>
-                                <h6 class="fw-bold text-dark mb-0 small text-uppercase">Coordinator Expenses Approval</h6>
+                                <h6 class="fw-bold text-dark mb-0 small text-uppercase">Finance Payment &amp; Disbursement (Ask Money)</h6>
                             </div>
                             @if($mReq->expenseRequests->isNotEmpty())
-                                <p class="text-muted small mb-2">Linked expense requests will be sent to the Coordinator &amp; HR approval queue.</p>
+                                <p class="text-muted small mb-2">Linked expense requests will be approved and routed directly to Finance to pay / disburse.</p>
                                 <div class="form-check mb-2">
-                                    <input class="form-check-input" type="checkbox" name="route_money_to_coordinator" value="1" id="route_money_{{ $mReq->id }}" checked>
+                                    <input class="form-check-input" type="checkbox" name="route_money_to_finance" value="1" id="route_money_{{ $mReq->id }}" checked>
                                     <label class="form-check-label small fw-bold text-success" for="route_money_{{ $mReq->id }}">
-                                        Send {{ $mReq->expenseRequests->count() }} linked Expense Request(s) to Coordinator
+                                        <i class="fa-solid fa-money-bill-wave me-1"></i>Send {{ $mReq->expenseRequests->count() }} linked Expense Request(s) to Finance to Pay
                                     </label>
                                 </div>
                                 @foreach($mReq->expenseRequests as $exp)
@@ -1044,17 +1247,33 @@
                                         #{{ $exp->request_number }}: {{ number_format($exp->amount, 2) }} ETB ({{ ucfirst($exp->status) }})
                                     </div>
                                 @endforeach
+
+                                <div class="mt-2 pt-2 border-top">
+                                    <label class="form-label text-muted small mb-1" style="font-size:0.75rem;">Assign to Finance Officer / Cashier (Optional):</label>
+                                    <select name="assigned_finance_staff_id" class="form-select form-select-sm rounded-3">
+                                        <option value="">— Finance Disbursement Queue —</option>
+                                        @foreach($financeStaff as $fStf)
+                                            <option value="{{ $fStf->id }}">{{ $fStf->name }} ({{ $fStf->roles->pluck('name')->implode(', ') ?: 'Finance' }})</option>
+                                        @endforeach
+                                    </select>
+                                </div>
                             @else
                                 <p class="text-muted small mb-2">No money request is linked to this ticket yet.</p>
-                                <a class="small text-primary text-decoration-none fw-semibold" data-bs-toggle="collapse" href="#collapseNewExpense{{ $mReq->id }}" role="button">
-                                    <i class="fa-solid fa-plus-circle me-1"></i>Authorize New Repair Budget for Coordinator
+                                <a class="small text-success text-decoration-none fw-semibold" data-bs-toggle="collapse" href="#collapseNewExpense{{ $mReq->id }}" role="button">
+                                    <i class="fa-solid fa-plus-circle me-1"></i>Authorize New Repair Budget for Finance to Pay
                                 </a>
                                 <div class="collapse mt-2" id="collapseNewExpense{{ $mReq->id }}">
                                     <div class="input-group input-group-sm mb-1">
                                         <span class="input-group-text">ETB</span>
                                         <input type="number" step="0.01" name="create_expense_amount" class="form-control" placeholder="Amount (e.g. 5000)">
                                     </div>
-                                    <input type="text" name="create_expense_notes" class="form-control form-control-sm" placeholder="Repair funding purpose...">
+                                    <input type="text" name="create_expense_notes" class="form-control form-control-sm mb-1" placeholder="Repair funding purpose...">
+                                    <select name="assigned_finance_staff_id" class="form-select form-select-sm rounded-3">
+                                        <option value="">— Finance Disbursement Queue —</option>
+                                        @foreach($financeStaff as $fStf)
+                                            <option value="{{ $fStf->id }}">{{ $fStf->name }}</option>
+                                        @endforeach
+                                    </select>
                                 </div>
                             @endif
                         </div>
@@ -1065,14 +1284,14 @@
                         <div class="card border-0 shadow-xs rounded-3 bg-white p-3 h-100">
                             <div class="d-flex align-items-center gap-2 mb-2">
                                 <i class="fa-solid fa-boxes-packing text-primary fs-5"></i>
-                                <h6 class="fw-bold text-dark mb-0 small text-uppercase">Store Manager &amp; PR Cycle</h6>
+                                <h6 class="fw-bold text-dark mb-0 small text-uppercase">Store Manager &amp; PR Cycle (Ask Material)</h6>
                             </div>
                             @if($mReq->materialRequests->isNotEmpty())
-                                <p class="text-muted small mb-2">Linked material requests will be sent to Store Manager for inventory fulfillment or PR cycle.</p>
+                                <p class="text-muted small mb-2">Linked material requests will be sent to Store Manager for stock fulfillment or the Purchase Request (PR) cycle.</p>
                                 <div class="form-check mb-2">
                                     <input class="form-check-input" type="checkbox" name="route_material_to_store" value="1" id="route_mat_{{ $mReq->id }}" checked>
                                     <label class="form-check-label small fw-bold text-primary" for="route_mat_{{ $mReq->id }}">
-                                        Send {{ $mReq->materialRequests->count() }} Material Request(s) to Store Manager (PR Cycle)
+                                        <i class="fa-solid fa-cart-shopping me-1"></i>Send {{ $mReq->materialRequests->count() }} Material Request(s) to Store in PR Cycle
                                     </label>
                                 </div>
                                 @foreach($mReq->materialRequests as $mr)
@@ -1120,9 +1339,11 @@
                     <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" id="gm_submit_btn_{{ $mReq->id }}" class="btn {{ $mReq->status === 'rejected' ? 'btn-danger text-white' : 'btn-warning text-dark' }} fw-bold rounded-pill px-4 shadow-sm">
                         @if($mReq->status === 'rejected')
-                            <i class="fa-solid fa-ban me-2"></i>Confirm Rejection
+                            <i class="fa-solid fa-ban me-2"></i>Confirm Rejection &amp; Lock
+                        @elseif($mReq->gm_decision_locked || $mReq->gm_approved_at)
+                            <i class="fa-solid fa-floppy-disk me-2"></i>Update Decision &amp; Keep Locked
                         @else
-                            <i class="fa-solid fa-floppy-disk me-2"></i>Apply GM Approval
+                            <i class="fa-solid fa-gavel me-2"></i>Apply GM Approval &amp; Lock Decision
                         @endif
                     </button>
                 </div>

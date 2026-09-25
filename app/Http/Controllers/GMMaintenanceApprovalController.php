@@ -47,10 +47,33 @@ class GMMaintenanceApprovalController extends Controller
         $tab = $request->get('tab', 'pending'); // pending, expenses, materials, history
 
         // 0. Maintenance & Repair Tickets (Incoming & Active Reports)
+        // Ensure schema columns dynamically if migration hasn't been run
+        if (Schema::hasTable('maintenance_requests')) {
+            Schema::table('maintenance_requests', function ($table) {
+                if (!Schema::hasColumn('maintenance_requests', 'rejection_reason')) {
+                    $table->text('rejection_reason')->nullable()->after('admin_notes');
+                }
+                if (!Schema::hasColumn('maintenance_requests', 'gm_approved_at')) {
+                    $table->timestamp('gm_approved_at')->nullable()->after('admin_notes');
+                }
+                if (!Schema::hasColumn('maintenance_requests', 'gm_approver_id')) {
+                    $table->unsignedBigInteger('gm_approver_id')->nullable()->after('gm_approved_at');
+                }
+                if (!Schema::hasColumn('maintenance_requests', 'gm_decision_locked')) {
+                    $table->boolean('gm_decision_locked')->default(false)->after('gm_approver_id');
+                }
+                if (!Schema::hasColumn('maintenance_requests', 'gm_decision_summary')) {
+                    $table->text('gm_decision_summary')->nullable()->after('gm_decision_locked');
+                }
+            });
+        }
+
+        // 0. Maintenance & Repair Tickets (Incoming & Active Reports)
         $ticketQuery = MaintenanceRequest::with([
                 'employee',
                 'reportedBy',
                 'assignedTo',
+                'gmApprover',
                 'fixedAssetUnit.parentAsset',
                 'fixedAssetUnit.assignedEmployee',
                 'expenseRequests',
@@ -70,8 +93,31 @@ class GMMaintenanceApprovalController extends Controller
                 });
             });
 
-        $maintenanceTickets = $ticketQuery->latest()->get();
-        $pendingTicketsCount = $maintenanceTickets->whereIn('status', ['pending', 'in_progress'])->count();
+        // Pending / Incoming tickets awaiting GM approval:
+        $maintenanceTickets = (clone $ticketQuery)
+            ->where(function ($q) {
+                $q->whereNull('gm_approved_at')
+                  ->where(function ($sq) {
+                      $sq->whereNull('gm_decision_locked')
+                         ->orWhere('gm_decision_locked', false);
+                  });
+            })
+            ->whereNotIn('status', ['resolved', 'closed', 'rejected'])
+            ->latest()
+            ->get();
+
+        $pendingTicketsCount = $maintenanceTickets->count();
+
+        // Decided / Locked Maintenance Tickets for Decision History:
+        $decidedTickets = (clone $ticketQuery)
+            ->where(function ($q) {
+                $q->whereNotNull('gm_approved_at')
+                  ->orWhere('gm_decision_locked', true)
+                  ->orWhereIn('status', ['resolved', 'closed', 'rejected']);
+            })
+            ->latest()
+            ->take(50)
+            ->get();
 
         // 1. Pending Expense Requests (Ask Money)
         $expenseQuery = ExpenseRequest::with([
@@ -165,14 +211,15 @@ class GMMaintenanceApprovalController extends Controller
         })->get();
 
         // 5. Aggregate KPIs
-        $totalPendingCount = $pendingExpenses->count() + $pendingMaterials->count() + $maintenanceTickets->where('status', 'pending')->count();
+        $totalPendingCount = $pendingExpenses->count() + $pendingMaterials->count() + $pendingTicketsCount;
         $totalPendingExpenseAmount = (float) $pendingExpenses->sum('amount');
         $totalPendingMaterialItems = $pendingMaterials->sum(fn($mr) => $mr->items->count());
-        $totalDecidedCount = $decidedExpenses->count() + $decidedMaterials->count();
+        $totalDecidedCount = $decidedTickets->count() + $decidedExpenses->count() + $decidedMaterials->count();
 
         return view('gm.maintenance-approvals.index', compact(
             'maintenanceTickets',
             'pendingTicketsCount',
+            'decidedTickets',
             'pendingExpenses',
             'pendingMaterials',
             'decidedExpenses',
@@ -202,7 +249,9 @@ class GMMaintenanceApprovalController extends Controller
             'assigned_to_user_id'          => 'nullable|exists:users,id',
             'replacement_condition'        => 'nullable|in:in_maintenance,unrepairable_damage',
             'gm_notes'                     => 'nullable|string|max:2000',
+            'route_money_to_finance'       => 'nullable|boolean',
             'route_money_to_coordinator'   => 'nullable|boolean',
+            'assigned_finance_staff_id'    => 'nullable|exists:users,id',
             'route_material_to_store'      => 'nullable|boolean',
             'create_expense_amount'        => 'nullable|numeric|min:0.01',
             'create_expense_notes'         => 'nullable|string|max:1000',
@@ -216,16 +265,14 @@ class GMMaintenanceApprovalController extends Controller
         if ($validated['status'] === 'rejected') {
             $reason = trim($request->input('rejection_reason') ?? $validated['gm_notes'] ?? 'Rejected by Executive GM');
 
-            if (Schema::hasTable('maintenance_requests') && !Schema::hasColumn('maintenance_requests', 'rejection_reason')) {
-                Schema::table('maintenance_requests', function ($table) {
-                    $table->text('rejection_reason')->nullable()->after('admin_notes');
-                });
-            }
-
             $updateData = [
-                'status'           => 'rejected',
-                'admin_notes'      => ($maintenanceRequest->admin_notes ? ($maintenanceRequest->admin_notes . "\n") : '') . "[GM Rejection " . now()->format('d M Y') . "]: " . $reason,
-                'rejection_reason' => $reason,
+                'status'              => 'rejected',
+                'admin_notes'         => ($maintenanceRequest->admin_notes ? ($maintenanceRequest->admin_notes . "\n") : '') . "[GM Rejection " . now()->format('d M Y') . "]: " . $reason,
+                'rejection_reason'    => $reason,
+                'gm_approved_at'      => now(),
+                'gm_approver_id'      => $user->id,
+                'gm_decision_locked'  => true,
+                'gm_decision_summary' => "Rejected by GM: " . $reason,
             ];
             $maintenanceRequest->update($updateData);
 
@@ -235,7 +282,9 @@ class GMMaintenanceApprovalController extends Controller
                     $exp->update([
                         'status'           => ExpenseRequest::STATUS_REJECTED,
                         'gm_reviewer_id'   => $user->id,
+                        'gm_approver_id'   => $user->id,
                         'gm_reviewed_at'   => now(),
+                        'gm_approved_at'   => now(),
                         'rejection_reason' => $reason,
                         'description'      => $exp->description . "\n[GM Rejection: Linked maintenance ticket rejected - {$reason}]",
                     ]);
@@ -254,18 +303,23 @@ class GMMaintenanceApprovalController extends Controller
 
             ActivityLog::log(
                 'rejected',
-                "GM rejected Maintenance Ticket #{$maintenanceRequest->request_no}. Reason: {$reason}",
+                "GM rejected Maintenance Ticket #{$maintenanceRequest->request_no} and locked decision in history. Reason: {$reason}",
                 'Maintenance',
                 $maintenanceRequest
             );
 
-            return redirect()->route('gm.maintenance-approvals.index')
-                ->with('warning', "Maintenance Ticket #{$maintenanceRequest->request_no} has been rejected. Reason: {$reason}");
+            return redirect()->route('gm.maintenance-approvals.index', ['tab' => 'history'])
+                ->with('warning', "Maintenance Ticket #{$maintenanceRequest->request_no} has been rejected and locked into Decision History. Reason: {$reason}");
         }
 
+        // ── Handle Approval ────────────────────────────────────────────────
+        $finalStatus = ($validated['status'] === 'pending') ? 'in_progress' : $validated['status'];
         $data = [
-            'status'              => $validated['status'],
+            'status'              => $finalStatus,
             'assigned_to_user_id' => $validated['assigned_to_user_id'] ?? $maintenanceRequest->assigned_to_user_id,
+            'gm_approved_at'      => now(),
+            'gm_approver_id'      => $user->id,
+            'gm_decision_locked'  => true,
         ];
 
         if ($validated['status'] === 'sent_to_store_manager') {
@@ -284,64 +338,72 @@ class GMMaintenanceApprovalController extends Controller
 
         $maintenanceRequest->update($data);
 
-        $activityDetails = ["GM approved Ticket #{$maintenanceRequest->request_no} (Status: " . ucfirst(str_replace('_', ' ', $validated['status'])) . ")"];
+        $activityDetails = ["GM approved Ticket #{$maintenanceRequest->request_no} (Status: " . ucfirst(str_replace('_', ' ', $finalStatus)) . ")"];
 
-        // ── 1. Route Money to Coordinator Expenses Approval Section ─────────────
-        $shouldRouteMoney = $request->boolean('route_money_to_coordinator', true);
+        // ── 1. Route Money to Finance for Payment / Disbursement ─────────────
+        $shouldRouteMoney = $request->boolean('route_money_to_finance', true) || $request->boolean('route_money_to_coordinator', false);
+        $financeStaffId = $validated['assigned_finance_staff_id'] ?? null;
+
         if ($shouldRouteMoney) {
             $linkedExpenses = $maintenanceRequest->expenseRequests;
             if ($linkedExpenses->isNotEmpty()) {
                 foreach ($linkedExpenses as $lkExp) {
                     if ($lkExp->status !== ExpenseRequest::STATUS_PAID) {
                         $lkExp->update([
-                            'status'           => ExpenseRequest::STATUS_PENDING_HR,
-                            'gm_reviewer_id'   => $user->id,
-                            'gm_approver_id'   => $user->id,
-                            'gm_reviewed_at'   => now(),
-                            'gm_approved_at'   => now(),
-                            'description'      => $lkExp->description . "\n[GM Approval: Forwarded to Coordinator Expenses Approval section]",
+                            'status'                    => ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+                            'gm_reviewer_id'            => $user->id,
+                            'gm_approver_id'            => $user->id,
+                            'gm_reviewed_at'            => now(),
+                            'gm_approved_at'            => now(),
+                            'assigned_finance_staff_id' => $financeStaffId ?? $lkExp->assigned_finance_staff_id,
+                            'finance_staff_id'          => $financeStaffId ?? $lkExp->finance_staff_id,
+                            'finance_assigned_at'       => now(),
+                            'description'               => $lkExp->description . "\n[GM Approval: Approved & routed directly to Finance for Payment / Payout]",
                         ]);
 
                         ActivityLog::log(
                             'approved',
-                            "GM approved Maintenance #{$maintenanceRequest->request_no} and routed Expense Request #{$lkExp->request_number} to Coordinator Expenses Approval section",
+                            "GM approved Maintenance #{$maintenanceRequest->request_no} and routed Expense Request #{$lkExp->request_number} directly to Finance for Payment",
                             'Expense Requests',
                             $lkExp
                         );
                     }
                 }
-                $activityDetails[] = "routed " . $linkedExpenses->count() . " expense request(s) to Coordinator";
+                $activityDetails[] = "routed " . $linkedExpenses->count() . " expense request(s) to Finance for Payment";
             } elseif (!empty($validated['create_expense_amount'])) {
-                // Auto-create new Expense Request sent directly to Coordinator
+                // Auto-create new Expense Request sent directly to Finance for Payment
                 $reqNo = 'EXP-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(Str::random(3));
                 while (ExpenseRequest::where('request_number', $reqNo)->exists()) {
                     $reqNo = 'EXP-MNT-' . str_replace('MNT-', '', $maintenanceRequest->request_no) . '-' . strtoupper(Str::random(4));
                 }
 
                 $newExp = ExpenseRequest::create([
-                    'request_number'         => $reqNo,
-                    'user_id'                => $user->id,
-                    'employee_id'            => $maintenanceRequest->employee_id,
-                    'maintenance_request_id' => $maintenanceRequest->id,
-                    'category'               => ExpenseRequest::CATEGORY_MAINTENANCE,
-                    'amount'                 => $validated['create_expense_amount'],
-                    'gross_amount'           => $validated['create_expense_amount'],
-                    'net_amount'             => $validated['create_expense_amount'],
-                    'description'            => "Maintenance repair budget for {$maintenanceRequest->asset_name} (#{$maintenanceRequest->request_no}). GM Directive: " . ($validated['create_expense_notes'] ?? 'Approved by GM for Coordinator review & disbursement.'),
-                    'status'                 => ExpenseRequest::STATUS_PENDING_HR,
-                    'gm_reviewer_id'         => $user->id,
-                    'gm_approver_id'         => $user->id,
-                    'gm_reviewed_at'         => now(),
-                    'gm_approved_at'         => now(),
+                    'request_number'            => $reqNo,
+                    'user_id'                   => $user->id,
+                    'employee_id'               => $maintenanceRequest->employee_id,
+                    'maintenance_request_id'    => $maintenanceRequest->id,
+                    'category'                  => ExpenseRequest::CATEGORY_MAINTENANCE,
+                    'amount'                    => $validated['create_expense_amount'],
+                    'gross_amount'              => $validated['create_expense_amount'],
+                    'net_amount'                => $validated['create_expense_amount'],
+                    'description'               => "Maintenance repair budget for {$maintenanceRequest->asset_name} (#{$maintenanceRequest->request_no}). GM Directive: " . ($validated['create_expense_notes'] ?? 'Approved by GM for Finance payment & disbursement.'),
+                    'status'                    => ExpenseRequest::STATUS_APPROVED_ASSIGNED,
+                    'gm_reviewer_id'            => $user->id,
+                    'gm_approver_id'            => $user->id,
+                    'gm_reviewed_at'            => now(),
+                    'gm_approved_at'            => now(),
+                    'assigned_finance_staff_id' => $financeStaffId,
+                    'finance_staff_id'          => $financeStaffId,
+                    'finance_assigned_at'       => now(),
                 ]);
 
                 ActivityLog::log(
                     'created',
-                    "GM created Expense Request #{$newExp->request_number} (ETB {$newExp->amount}) and forwarded to Coordinator Expenses Approval section",
+                    "GM created Expense Request #{$newExp->request_number} (ETB {$newExp->amount}) and forwarded directly to Finance for Payment",
                     'Expense Requests',
                     $newExp
                 );
-                $activityDetails[] = "created Expense Request #{$newExp->request_number} sent to Coordinator";
+                $activityDetails[] = "created Expense Request #{$newExp->request_number} sent to Finance for payment";
             }
         }
 
@@ -371,7 +433,6 @@ class GMMaintenanceApprovalController extends Controller
                 $targetStoreId = $validated['create_material_store_id'] ?? Store::where('is_active', true)->first()?->id;
                 $project = \App\Models\Project::whereIn('status', ['active', 'in_progress'])->first() ?? \App\Models\Project::first();
 
-                // Ensure maintenance_request_id column exists
                 if (Schema::hasTable('material_requests') && !Schema::hasColumn('material_requests', 'maintenance_request_id')) {
                     Schema::table('material_requests', function ($table) {
                         $table->unsignedBigInteger('maintenance_request_id')->nullable()->index();
@@ -427,15 +488,45 @@ class GMMaintenanceApprovalController extends Controller
             }
         }
 
+        // Summary on ticket
+        $summary = "GM Approved (" . ucfirst(str_replace('_', ' ', $finalStatus)) . ")";
+        if (count($activityDetails) > 1) {
+            $summary .= " — " . implode(', ', array_slice($activityDetails, 1));
+        }
+        $maintenanceRequest->update(['gm_decision_summary' => $summary]);
+
         ActivityLog::log(
             'updated',
-            implode('; ', $activityDetails),
+            implode('; ', $activityDetails) . " — Decision Locked in History",
             'Maintenance Requests',
             $maintenanceRequest
         );
 
-        $msg = "Maintenance Ticket #{$maintenanceRequest->request_no} approved! " . implode(', ', array_slice($activityDetails, 1));
-        return back()->with('success', rtrim($msg, ', '));
+        return redirect()->route('gm.maintenance-approvals.index', ['tab' => 'history'])
+            ->with('success', "Ticket #{$maintenanceRequest->request_no} approved, routed (Money → Finance to Pay, Materials → Store PR), and locked into Decision History!");
+    }
+
+    /**
+     * Unlock a locked ticket decision if needed.
+     */
+    public function unlockTicket(MaintenanceRequest $maintenanceRequest)
+    {
+        $this->checkGmAuthorization();
+        $maintenanceRequest->update([
+            'gm_decision_locked' => false,
+            'status'             => 'in_progress',
+        ]);
+
+        ActivityLog::log(
+            'updated',
+            "GM unlocked Maintenance Ticket #{$maintenanceRequest->request_no} from Decision History",
+            'Maintenance Requests',
+            $maintenanceRequest
+        );
+
+        return redirect()->route('gm.maintenance-approvals.index', ['tab' => 'tickets'])
+            ->with('info', "Decision for Ticket #{$maintenanceRequest->request_no} unlocked and returned to incoming queue.");
+    }
     }
 
     /**
