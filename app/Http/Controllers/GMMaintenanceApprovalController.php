@@ -527,7 +527,6 @@ class GMMaintenanceApprovalController extends Controller
         return redirect()->route('gm.maintenance-approvals.index', ['tab' => 'tickets'])
             ->with('info', "Decision for Ticket #{$maintenanceRequest->request_no} unlocked and returned to incoming queue.");
     }
-    }
 
     /**
      * Process GM Decision for an Expense Request ("Ask Money").
