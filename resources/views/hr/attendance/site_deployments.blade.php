@@ -16,7 +16,7 @@
                 </span>
             </div>
             <p class="text-muted mb-0 small">
-                Direct site dispatch decisions by <strong>Planning Manager, Coordinator, Finance Head, HR, and GM</strong>. Marked as <strong>S</strong> in attendance and protected from payroll deductions.
+                Site dispatches by <strong>Planning Manager, Coordinator, Finance Head, HR, and GM</strong> are sent to <strong>HR to approve</strong>. When HR approves, official attendance records are saved with <strong>Status S</strong>. If rejected, HR does not accept this info and no record is saved in attendance.
             </p>
         </div>
         <div class="d-flex flex-wrap gap-2">
@@ -35,7 +35,7 @@
     </div>
 
     @if(session('success'))
-    <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 border-start border-4 border-success">
+    <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 border-start border-4 border-success mb-3">
         <div class="d-flex align-items-center">
             <i class="fa-solid fa-circle-check text-success fs-5 me-2"></i>
             <div>{{ session('success') }}</div>
@@ -45,10 +45,20 @@
     @endif
 
     @if(session('error'))
-    <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0 border-start border-4 border-danger">
+    <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0 border-start border-4 border-danger mb-3">
         <div class="d-flex align-items-center">
             <i class="fa-solid fa-triangle-exclamation text-danger fs-5 me-2"></i>
             <div>{{ session('error') }}</div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    @endif
+
+    @if(session('info'))
+    <div class="alert alert-info alert-dismissible fade show shadow-sm border-0 border-start border-4 border-info mb-3">
+        <div class="d-flex align-items-center">
+            <i class="fa-solid fa-circle-info text-info fs-5 me-2"></i>
+            <div>{{ session('info') }}</div>
         </div>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
@@ -59,7 +69,7 @@
         <div class="d-flex align-items-center gap-2">
             <i class="fa-solid fa-shield-halved text-primary fs-5"></i>
             <div class="small text-dark">
-                <strong>Non-Deductible Policy:</strong> Employees sent to site do not clock in at the head office fingerprint machine. Their attendance is officially flagged with code <strong>S (On Site)</strong>. System rules treat status <strong>S</strong> as full working presence and <strong>strictly prohibit unexcused absence deductions from monthly payroll</strong>.
+                <strong>HR Approval &amp; Non-Deductible Policy:</strong> Dispatches submitted by authorized managers require HR review. When approved, attendance is officially saved with status <strong>S (On Site)</strong> and payroll absence deductions are strictly prohibited. If HR rejects, the information is not accepted and attendance remains untouched.
             </div>
         </div>
     </div>
@@ -67,47 +77,80 @@
     {{-- KPI Cards Row --}}
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm border-start border-4 border-primary h-100">
+            <div class="card border-0 shadow-sm border-start border-4 border-warning h-100">
                 <div class="card-body p-3">
-                    <span class="text-xs fw-bold text-muted text-uppercase d-block mb-1">Today On Site</span>
-                    <div class="h3 fw-bold text-primary mb-0">{{ number_format($stats['today_count'] ?? 0) }}</div>
-                    <small class="text-muted">{{ today()->format('M d, Y') }}</small>
+                    <span class="text-xs fw-bold text-muted text-uppercase d-block mb-1">Pending HR Review (በመጠባበቅ ላይ)</span>
+                    <div class="h3 fw-bold text-warning mb-0">{{ number_format($stats['pending_count'] ?? 0) }}</div>
+                    <small class="text-muted">Awaiting HR review</small>
                 </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="card border-0 shadow-sm border-start border-4 border-success h-100">
                 <div class="card-body p-3">
-                    <span class="text-xs fw-bold text-muted text-uppercase d-block mb-1">This Month On Site</span>
-                    <div class="h3 fw-bold text-success mb-0">{{ number_format($stats['month_count'] ?? 0) }}</div>
-                    <small class="text-muted">{{ today()->format('F Y') }}</small>
+                    <span class="text-xs fw-bold text-muted text-uppercase d-block mb-1">Approved &amp; Saved (የጸደቁ)</span>
+                    <div class="h3 fw-bold text-success mb-0">{{ number_format($stats['approved_count'] ?? 0) }}</div>
+                    <small class="text-muted">Active in Attendance</small>
                 </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm border-start border-4 border-indigo h-100" style="border-left-color: #6366f1 !important;">
+            <div class="card border-0 shadow-sm border-start border-4 border-danger h-100">
                 <div class="card-body p-3">
-                    <span class="text-xs fw-bold text-muted text-uppercase d-block mb-1">Unique Staff Dispatched</span>
-                    <div class="h3 fw-bold text-indigo mb-0" style="color: #6366f1;">{{ number_format($stats['distinct_employees'] ?? 0) }}</div>
-                    <small class="text-muted">Distinct employees</small>
+                    <span class="text-xs fw-bold text-muted text-uppercase d-block mb-1">Rejected by HR (ውድቅ የተደረጉ)</span>
+                    <div class="h3 fw-bold text-danger mb-0">{{ number_format($stats['rejected_count'] ?? 0) }}</div>
+                    <small class="text-muted">Not accepted into attendance</small>
                 </div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card border-0 shadow-sm border-start border-4 border-secondary h-100">
+            <div class="card border-0 shadow-sm border-start border-4 border-primary h-100">
                 <div class="card-body p-3">
-                    <span class="text-xs fw-bold text-muted text-uppercase d-block mb-1">Total Record Count</span>
-                    <div class="h3 fw-bold text-dark mb-0">{{ number_format($stats['total_count'] ?? 0) }}</div>
-                    <small class="text-muted">All-time site attendance</small>
+                    <span class="text-xs fw-bold text-muted text-uppercase d-block mb-1">Today On Site (ዛሬ በሳይት ላይ)</span>
+                    <div class="h3 fw-bold text-primary mb-0">{{ number_format($stats['today_count'] ?? 0) }}</div>
+                    <small class="text-muted">{{ today()->format('M d, Y') }}</small>
                 </div>
             </div>
         </div>
     </div>
 
+    {{-- Status Navigation Tabs --}}
+    <ul class="nav nav-pills mb-3 gap-2" id="statusTabs">
+        <li class="nav-item">
+            <a class="nav-link {{ ($statusFilter ?? 'all') === 'all' ? 'active fw-bold' : 'bg-white text-dark border' }} shadow-xs" href="{{ route('attendance.site-deployments', array_merge(request()->except('status', 'page'), ['status' => 'all'])) }}">
+                <i class="fa-solid fa-layer-group me-1"></i>All Deployments (ሁሉም)
+                <span class="badge {{ ($statusFilter ?? 'all') === 'all' ? 'bg-white text-primary' : 'bg-secondary' }} ms-1">{{ $stats['total_count'] ?? 0 }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {{ ($statusFilter ?? '') === 'pending' ? 'active bg-warning text-dark fw-bold' : 'bg-white text-dark border' }} shadow-xs position-relative" href="{{ route('attendance.site-deployments', array_merge(request()->except('status', 'page'), ['status' => 'pending'])) }}">
+                <i class="fa-solid fa-clock-rotate-left text-warning me-1"></i>Pending HR Approval (ማጽደቅ የሚጠብቁ)
+                @if(($stats['pending_count'] ?? 0) > 0)
+                    <span class="badge bg-warning text-dark ms-1 fw-bold">{{ $stats['pending_count'] }}</span>
+                @else
+                    <span class="badge bg-light text-muted ms-1">0</span>
+                @endif
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {{ ($statusFilter ?? '') === 'approved' ? 'active bg-success text-white fw-bold' : 'bg-white text-dark border' }} shadow-xs" href="{{ route('attendance.site-deployments', array_merge(request()->except('status', 'page'), ['status' => 'approved'])) }}">
+                <i class="fa-solid fa-circle-check text-success me-1"></i>Approved &amp; Saved (የጸደቁ)
+                <span class="badge {{ ($statusFilter ?? '') === 'approved' ? 'bg-white text-success' : 'bg-success-subtle text-success' }} ms-1">{{ $stats['approved_count'] ?? 0 }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {{ ($statusFilter ?? '') === 'rejected' ? 'active bg-danger text-white fw-bold' : 'bg-white text-dark border' }} shadow-xs" href="{{ route('attendance.site-deployments', array_merge(request()->except('status', 'page'), ['status' => 'rejected'])) }}">
+                <i class="fa-solid fa-circle-xmark text-danger me-1"></i>Rejected by HR (ውድቅ የተደረጉ)
+                <span class="badge {{ ($statusFilter ?? '') === 'rejected' ? 'bg-white text-danger' : 'bg-danger-subtle text-danger' }} ms-1">{{ $stats['rejected_count'] ?? 0 }}</span>
+            </a>
+        </li>
+    </ul>
+
     {{-- Filter Form --}}
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3">
             <form method="GET" action="{{ route('attendance.site-deployments') }}" class="row g-2 align-items-end">
+                <input type="hidden" name="status" value="{{ request('status', $statusFilter ?? 'all') }}">
                 <div class="col-md-3">
                     <label class="form-label small fw-semibold text-muted mb-1">Employee</label>
                     <select name="employee_id" class="form-select form-select-sm">
@@ -131,11 +174,11 @@
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <label class="form-label small fw-semibold text-muted mb-1">Decided By</label>
-                    <select name="decided_by" class="form-select form-select-sm">
+                    <label class="form-label small fw-semibold text-muted mb-1">Requested By</label>
+                    <select name="requested_by" class="form-select form-select-sm">
                         <option value="">All Decision Makers</option>
                         @foreach($decidedUsers as $u)
-                            <option value="{{ $u->id }}" {{ request('decided_by') == $u->id ? 'selected' : '' }}>
+                            <option value="{{ $u->id }}" {{ request('requested_by') == $u->id ? 'selected' : '' }}>
                                 {{ $u->name }} ({{ $u->roles->first()?->name ? ucwords(str_replace('_', ' ', $u->roles->first()->name)) : 'Manager' }})
                             </option>
                         @endforeach
@@ -149,7 +192,7 @@
                     <button type="submit" class="btn btn-primary btn-sm flex-fill shadow-xs">
                         <i class="fa-solid fa-filter me-1"></i>Filter
                     </button>
-                    <a href="{{ route('attendance.site-deployments') }}" class="btn btn-outline-secondary btn-sm shadow-xs" title="Reset Filters">
+                    <a href="{{ route('attendance.site-deployments', ['status' => request('status', 'all')]) }}" class="btn btn-outline-secondary btn-sm shadow-xs" title="Reset Filters">
                         <i class="fa-solid fa-rotate-right"></i>
                     </a>
                 </div>
@@ -161,7 +204,7 @@
     <div class="card border-0 shadow-sm">
         <div class="card-header bg-white d-flex flex-wrap align-items-center justify-content-between py-3 border-bottom gap-2">
             <h6 class="mb-0 fw-bold text-dark">
-                <i class="fa-solid fa-list-check me-2 text-primary"></i>Site Deployment Log &amp; Direct Report to HR
+                <i class="fa-solid fa-list-check me-2 text-primary"></i>Site Deployment Log &amp; HR Approval Desk
             </h6>
             <span class="badge bg-primary-subtle text-primary border border-primary px-2 py-1">
                 {{ $deployments->total() }} records found
@@ -173,30 +216,39 @@
                     <thead class="table-light">
                         <tr>
                             <th class="ps-3" style="width:50px;">#</th>
-                            <th>Date (ቀን)</th>
+                            <th>Date / Duration (ቀን)</th>
                             <th>Employee (ሠራተኛ)</th>
-                            <th>Destination Project / Site (ሳይት)</th>
-                            <th>Decided By (ማን እንደወሰነ)</th>
+                            <th>Destination Site (የሥራ ቦታ)</th>
+                            <th>Requested By (ማን እንደላከው)</th>
                             <th>Assignment / Notes (የሥራ ዝርዝር)</th>
-                            <th class="text-center">Session &amp; Clocking (ክፍለ ጊዜ)</th>
-                            <th class="text-center">Status (ሁኔታ)</th>
+                            <th class="text-center">Session &amp; Punches (ክፍለ ጊዜ)</th>
                             <th class="text-center">Hours</th>
-                            <th class="pe-3 text-end">Action</th>
+                            <th class="text-center">HR Decision (የሰው ኃይል ውሳኔ)</th>
+                            <th class="pe-3 text-end">Action (እርምጃ)</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse($deployments as $d)
                         @php
-                            $etDate = \App\Helpers\EthiopianCalendar::toEthiopian($d->attendance_date);
-                            $etMonthName = $etDate['month_am'] ?? '';
-                            $etDay = $etDate['day'] ?? '';
-                            $etYear = $etDate['year'] ?? '';
+                            $isSingle = ($d->start_date == $d->end_date);
+                            $etStart = \App\Helpers\EthiopianCalendar::toEthiopian($d->start_date);
+                            $etStartMonth = $etStart['month_am'] ?? '';
+                            $etStartDay = $etStart['day'] ?? '';
+                            $etStartYear = $etStart['year'] ?? '';
                         @endphp
                         <tr>
                             <td class="ps-3 text-muted small">{{ $d->id }}</td>
                             <td>
-                                <strong class="text-dark">{{ $d->attendance_date?->format('d M Y (D)') }}</strong>
-                                <br><small class="text-primary font-monospace">🇪🇹 {{ $etMonthName }} {{ $etDay }}, {{ $etYear }} ዓ.ም.</small>
+                                @if($isSingle)
+                                    <strong class="text-dark">{{ $d->start_date?->format('d M Y (D)') }}</strong>
+                                    <br><small class="text-primary font-monospace">🇪🇹 {{ $etStartMonth }} {{ $etStartDay }}, {{ $etStartYear }} ዓ.ም.</small>
+                                @else
+                                    <strong class="text-dark">{{ $d->start_date?->format('d M') }} &ndash; {{ $d->end_date?->format('d M Y') }}</strong>
+                                    <span class="badge bg-info-subtle text-info border border-info ms-1" style="font-size:0.7rem;">
+                                        {{ $d->start_date?->diffInDays($d->end_date) + 1 }} Days
+                                    </span>
+                                    <br><small class="text-primary font-monospace">🇪🇹 {{ $etStartMonth }} {{ $etStartDay }} &ndash; {{ $d->end_date?->format('M d') }}</small>
+                                @endif
                             </td>
                             <td>
                                 @if($d->employee)
@@ -209,7 +261,7 @@
                                                 {{ $d->employee->full_name }}
                                             </a>
                                             <div class="small text-muted font-monospace" style="font-size:0.75rem;">
-                                                {{ $d->employee->employee_code ?: 'EMP-'.$d->employee->id }} &bull; {{ $d->employee->department ?: 'Site Operations' }}
+                                                {{ $d->employee->employee_code ?: 'EMP-'.$d->employee->id }} &bull; {{ $d->employee->department ?: 'Site Staff' }}
                                             </div>
                                         </div>
                                     </div>
@@ -227,62 +279,39 @@
                                         <i class="fa-solid fa-location-dot me-1 text-danger"></i>{{ $d->site_name }}
                                     </span>
                                 @else
-                                    @php
-                                        // Extract site name from note if possible
-                                        $siteDisplay = 'Job Site';
-                                        if (preg_match('/On-Site\s*\[?S?\]?:\s*([^\|]+)/i', $d->notes ?? '', $matches)) {
-                                            $siteDisplay = trim($matches[1]);
-                                        }
-                                    @endphp
                                     <span class="badge bg-light text-dark border px-2 py-1">
-                                        <i class="fa-solid fa-helmet-safety me-1 text-warning"></i>{{ $siteDisplay }}
+                                        <i class="fa-solid fa-helmet-safety me-1 text-warning"></i>Job Site
                                     </span>
                                 @endif
                             </td>
                             <td>
-                                @php
-                                    $decidedName = $d->decidedBy?->name;
-                                    $decidedRole = $d->decided_by_role;
-
-                                    // Extract from note if decidedBy relationship is null
-                                    if (!$decidedName && preg_match('/Decided by:\s*([^\(]+)\s*\(([^\)]+)\)/i', $d->notes ?? '', $m)) {
-                                        $decidedName = trim($m[1]);
-                                        $decidedRole = trim($m[2]);
-                                    } elseif (!$decidedName && $d->approvedBy) {
-                                        $decidedName = $d->approvedBy->name;
-                                        $decidedRole = $d->approvedBy->roles->first()?->name ? ucwords(str_replace('_', ' ', $d->approvedBy->roles->first()->name)) : 'Manager';
-                                    }
-                                @endphp
-                                @if($decidedName)
-                                    <div class="fw-semibold text-dark">{{ $decidedName }}</div>
-                                    <span class="badge bg-secondary-subtle text-dark border" style="font-size:0.7rem;">
-                                        <i class="fa-solid fa-user-check me-1 text-success"></i>{{ $decidedRole ?: 'Authorized Head' }}
-                                    </span>
-                                @else
-                                    <span class="badge bg-light text-muted border">Authorized Manager</span>
-                                @endif
+                                <div class="fw-semibold text-dark">{{ $d->requestedBy?->name ?: 'Authorized Manager' }}</div>
+                                <span class="badge bg-secondary-subtle text-dark border" style="font-size:0.7rem;">
+                                    <i class="fa-solid fa-user-tie me-1 text-primary"></i>{{ $d->requested_by_role ?: 'Manager' }}
+                                </span>
                             </td>
-                            <td style="max-width: 230px;">
-                                <div class="text-truncate text-muted small" title="{{ $d->notes }}">
-                                    {{ $d->site_task ?: ($d->notes ?: 'General On-Site Duties') }}
+                            <td style="max-width: 200px;">
+                                <div class="text-truncate text-muted small" title="{{ $d->task_notes }}">
+                                    {{ $d->task_notes ?: 'On-Site Assignment' }}
                                 </div>
                             </td>
                             <td class="text-center">
                                 @php
+                                    $sessionType = $d->session_type;
                                     $hasMIn  = !empty($d->morning_in);
                                     $hasMOut = !empty($d->morning_out);
                                     $hasAIn  = !empty($d->afternoon_in);
                                     $hasAOut = !empty($d->afternoon_out);
                                 @endphp
-                                @if($hasMIn && $hasAOut)
+                                @if($sessionType === 'full_day' || ($hasMIn && $hasAOut))
                                     <span class="badge bg-primary-subtle text-primary border border-primary px-2 py-0.5 small mb-1 d-inline-block">
                                         <i class="fa-solid fa-sun text-warning me-1"></i>Full Day
                                     </span>
-                                @elseif($hasMIn && !$hasAIn)
+                                @elseif($sessionType === 'morning' || ($hasMIn && !$hasAIn))
                                     <span class="badge bg-warning-subtle text-dark border border-warning px-2 py-0.5 small mb-1 d-inline-block">
                                         <i class="fa-solid fa-cloud-sun text-warning me-1"></i>Morning Only
                                     </span>
-                                @elseif($hasAIn && !$hasMIn)
+                                @elseif($sessionType === 'afternoon' || ($hasAIn && !$hasMIn))
                                     <span class="badge bg-info-subtle text-dark border border-info px-2 py-0.5 small mb-1 d-inline-block">
                                         <i class="fa-solid fa-cloud-moon text-info me-1"></i>Afternoon Only
                                     </span>
@@ -296,34 +325,152 @@
                                     @if($hasMOut)<span class="badge bg-light text-dark border" title="Morning Clock Out">M-Out: {{ substr($d->morning_out, 0, 5) }}</span>@endif
                                     @if($hasAIn)<span class="badge bg-light text-dark border" title="Afternoon Clock In">A-In: {{ substr($d->afternoon_in, 0, 5) }}</span>@endif
                                     @if($hasAOut)<span class="badge bg-light text-dark border" title="Afternoon Clock Out">A-Out: {{ substr($d->afternoon_out, 0, 5) }}</span>@endif
-                                    @if(!$hasMIn && !$hasMOut && !$hasAIn && !$hasAOut)
-                                        <span class="text-muted">Standard 8h</span>
-                                    @endif
                                 </div>
-                            </td>
-                            <td class="text-center">
-                                <span class="badge text-white px-2 py-1 shadow-xs fw-bold" style="background-color: #6366f1;">
-                                    <span class="badge bg-white text-dark me-1" style="font-size:0.75rem;">S</span> On Site (ሳይት)
-                                </span>
                             </td>
                             <td class="text-center">
                                 <strong class="text-dark">{{ number_format($d->hours_worked, 1) }}h</strong>
                                 <br><small class="text-success fw-semibold">Non-deductible</small>
                             </td>
+                            <td class="text-center">
+                                @if($d->isPending())
+                                    <span class="badge bg-warning text-dark border border-warning px-2 py-1 shadow-xs fw-bold">
+                                        <i class="fa-solid fa-clock-rotate-left me-1"></i>Pending HR Approval
+                                    </span>
+                                @elseif($d->isApproved())
+                                    <span class="badge bg-success text-white px-2 py-1 shadow-xs fw-bold">
+                                        <span class="badge bg-white text-success me-1">S</span> Approved &bull; Saved
+                                    </span>
+                                    @if($d->hrReviewedBy)
+                                        <div class="text-muted mt-1" style="font-size:0.7rem;">
+                                            By: {{ $d->hrReviewedBy->name }}
+                                        </div>
+                                    @endif
+                                @elseif($d->isRejected())
+                                    <span class="badge bg-danger text-white px-2 py-1 shadow-xs fw-bold" title="{{ $d->hr_notes }}">
+                                        <i class="fa-solid fa-circle-xmark me-1"></i>Rejected by HR
+                                    </span>
+                                    @if(!empty($d->hr_notes))
+                                        <div class="text-danger text-truncate mt-1" style="font-size:0.7rem; max-width: 140px; margin: 0 auto;" title="{{ $d->hr_notes }}">
+                                            {{ $d->hr_notes }}
+                                        </div>
+                                    @endif
+                                @endif
+                            </td>
                             <td class="pe-3 text-end">
-                                @if($d->employee)
-                                <a href="{{ route('employees.show', $d->employee) }}" class="btn btn-outline-secondary btn-sm" title="View Employee Profile">
-                                    <i class="fa-solid fa-user"></i>
-                                </a>
+                                @if($d->isPending())
+                                    @if($isHr)
+                                        <div class="d-flex align-items-center justify-content-end gap-1">
+                                            {{-- Approve Form --}}
+                                            <form action="{{ route('attendance.site-deployments.approve', $d) }}" method="POST" onsubmit="return confirm('Are you sure you want to APPROVE this site deployment for {{ $d->employee?->full_name }}? Official attendance will be recorded with Status S.');">
+                                                @csrf
+                                                <button type="submit" class="btn btn-success btn-sm fw-bold px-2 py-1 shadow-xs" title="Approve & Save in Attendance (ፍቀድ)">
+                                                    <i class="fa-solid fa-check me-1"></i>Approve
+                                                </button>
+                                            </form>
+                                            {{-- Reject Button triggering modal --}}
+                                            <button type="button" class="btn btn-outline-danger btn-sm px-2 py-1 shadow-xs" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $d->id }}" title="Reject & Do Not Accept (አትቀበል)">
+                                                <i class="fa-solid fa-xmark me-1"></i>Reject
+                                            </button>
+                                        </div>
+                                    @else
+                                        <span class="badge bg-light text-muted border px-2 py-1">
+                                            <i class="fa-solid fa-hourglass-half text-warning me-1"></i>Awaiting HR
+                                        </span>
+                                    @endif
+                                @elseif($d->isApproved())
+                                    <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
+                                        <i class="fa-solid fa-calendar-check me-1"></i>In Attendance
+                                    </span>
+                                @elseif($d->isRejected())
+                                    <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1" data-bs-toggle="modal" data-bs-target="#rejectionDetailModal{{ $d->id }}" title="View Rejection Details">
+                                        <i class="fa-solid fa-eye me-1"></i>Reason
+                                    </button>
                                 @endif
                             </td>
                         </tr>
+
+                        {{-- MODAL: REJECT DEPLOYMENT (HR Action) --}}
+                        @if($d->isPending() && $isHr)
+                        <div class="modal fade" id="rejectModal{{ $d->id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0 shadow-lg rounded-3">
+                                    <div class="modal-header bg-danger text-white py-2 px-3">
+                                        <h6 class="modal-title fw-bold mb-0">
+                                            <i class="fa-solid fa-triangle-exclamation me-1"></i>Reject Site Deployment (አትቀበል)
+                                        </h6>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <form action="{{ route('attendance.site-deployments.reject', $d) }}" method="POST">
+                                        @csrf
+                                        <div class="modal-body p-3 text-start">
+                                            <div class="alert alert-danger-subtle border border-danger small py-2 px-3 mb-3">
+                                                <strong>Employee:</strong> {{ $d->employee?->full_name }}<br>
+                                                <strong>Requested by:</strong> {{ $d->requestedBy?->name ?? 'Manager' }} ({{ $d->requested_by_role }})<br>
+                                                <strong>Site / Project:</strong> {{ $d->siteProject?->name ?: ($d->site_name ?: 'Job Site') }}<br>
+                                                <strong>Date:</strong> {{ $d->start_date?->format('d M Y') }} @if(!$isSingle) to {{ $d->end_date?->format('d M Y') }} @endif
+                                            </div>
+                                            <p class="small text-muted mb-2">
+                                                If you reject this site deployment, HR <strong>does not accept this information</strong> and <strong>no record will be saved in the attendance table</strong>.
+                                            </p>
+                                            <label class="form-label small fw-bold text-dark mb-1">Reason for Rejection (የውድቅ ማድረጊያ ምክንያት) <span class="text-danger">*</span></label>
+                                            <textarea name="rejection_reason" class="form-control form-control-sm" rows="3" required placeholder="State why HR does not accept this deployment (e.g., employee required at office, assignment unverified, duplicate request)..."></textarea>
+                                        </div>
+                                        <div class="modal-footer bg-light py-2 px-3">
+                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-danger btn-sm px-3 fw-bold">
+                                                <i class="fa-solid fa-ban me-1"></i>Reject &amp; Do Not Accept
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
+
+                        {{-- MODAL: VIEW REJECTION DETAILS --}}
+                        @if($d->isRejected())
+                        <div class="modal fade" id="rejectionDetailModal{{ $d->id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0 shadow-lg rounded-3">
+                                    <div class="modal-header bg-dark text-white py-2 px-3">
+                                        <h6 class="modal-title fw-bold mb-0">
+                                            <i class="fa-solid fa-circle-xmark text-danger me-1"></i>HR Rejection Details
+                                        </h6>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body p-3 text-start">
+                                        <div class="mb-3">
+                                            <span class="text-muted small d-block">Employee:</span>
+                                            <strong>{{ $d->employee?->full_name }}</strong>
+                                        </div>
+                                        <div class="mb-3">
+                                            <span class="text-muted small d-block">Originally Requested By:</span>
+                                            <strong>{{ $d->requestedBy?->name ?? 'Manager' }}</strong> ({{ $d->requested_by_role }})
+                                        </div>
+                                        <div class="mb-3">
+                                            <span class="text-muted small d-block">Rejected By HR:</span>
+                                            <strong>{{ $d->hrReviewedBy?->name ?? 'HR Officer' }}</strong>
+                                            <span class="text-muted small">on {{ $d->hr_reviewed_at?->format('d M Y, h:i A') }}</span>
+                                        </div>
+                                        <div class="alert alert-danger border-0 p-3 mb-0">
+                                            <span class="small fw-bold text-uppercase d-block mb-1">Rejection Reason:</span>
+                                            <p class="mb-0">{{ $d->hr_notes ?: 'No specific reason provided.' }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer bg-light py-2 px-3">
+                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
+
                         @empty
                         <tr>
-                            <td colspan="9" class="text-center py-5 text-muted">
+                            <td colspan="10" class="text-center py-5 text-muted">
                                 <i class="fa-solid fa-person-digging fa-3x mb-3 d-block opacity-25"></i>
-                                <strong class="fs-6">No on-site deployments found for the selected filter.</strong>
-                                <br><small class="text-muted">Use the "Send Employee to Site" button above to register an employee working on site.</small>
+                                <strong class="fs-6">No site deployments found for the selected filter.</strong>
+                                <br><small class="text-muted">Use the "Send Employee to Site" button above to submit a new site dispatch.</small>
                             </td>
                         </tr>
                         @endforelse
@@ -354,7 +501,13 @@
                     </div>
                     <div>
                         <h5 class="modal-title fw-bold mb-0" id="newDeploymentModalLabel">Send Employee to Site (ወደ ሳይት መላክ)</h5>
-                        <small class="text-white text-opacity-75">Dispatch staff to construction sites &bull; Status marked S &bull; Full payroll credit</small>
+                        <small class="text-white text-opacity-75">
+                            @if($isHr)
+                                Direct HR Site Dispatch &bull; Status S &bull; Non-deductible in payroll
+                            @else
+                                Submit Site Dispatch Request &bull; Sent directly to HR for approval
+                            @endif
+                        </small>
                     </div>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -365,7 +518,7 @@
                 <div class="modal-body p-4">
 
                     {{-- Decision Maker Banner --}}
-                    <div class="alert alert-light border border-primary-subtle d-flex align-items-center justify-content-between mb-4 py-2 px-3 rounded-3 shadow-xs">
+                    <div class="alert alert-light border border-primary-subtle d-flex align-items-center justify-content-between mb-3 py-2 px-3 rounded-3 shadow-xs">
                         <div class="d-flex align-items-center gap-2">
                             <i class="fa-solid fa-user-shield text-primary fs-5"></i>
                             <div>
@@ -377,6 +530,15 @@
                             {{ auth()->user()->roles->first()?->name ? ucwords(str_replace('_', ' ', auth()->user()->roles->first()->name)) : 'Manager' }}
                         </span>
                     </div>
+
+                    @if(!$isHr)
+                    <div class="alert alert-warning border-0 shadow-xs small py-2 px-3 mb-3 d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-paper-plane text-warning fs-5"></i>
+                        <div>
+                            <strong>HR Approval Workflow:</strong> Your submission will be sent directly to HR to approve. Once HR approves, it will be saved in attendance under <strong>Status S (Full Pay)</strong>. If rejected, HR will not accept the deployment into attendance records.
+                        </div>
+                    </div>
+                    @endif
 
                     {{-- Employee Selection --}}
                     <div class="mb-3">
@@ -452,73 +614,74 @@
                         </div>
                     </div>
 
-                    {{-- Date Range Container (Starts Hidden) --}}
+                    {{-- Date Range Container --}}
                     <div id="dateRangeContainer" class="row g-3 mb-3" style="display: none;">
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-muted text-uppercase">
                                 Start Date (የመነሻ ቀን) <span class="text-danger">*</span>
                             </label>
                             <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="fa-solid fa-calendar-plus text-primary"></i></span>
                                 <input type="date" name="start_date" id="modal_deploy_start" class="form-control" value="{{ today()->toDateString() }}" onchange="syncEndDate(this.value)">
-                                <span class="input-group-text bg-white small font-monospace">
-                                    🇪🇹 {{ \App\Helpers\EthiopianCalendar::format(today(), 'am') }}
-                                </span>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-muted text-uppercase">
                                 End Date (የመጨረሻ ቀን) <span class="text-danger">*</span>
                             </label>
-                            <input type="date" name="end_date" id="modal_deploy_end" class="form-control" value="{{ today()->toDateString() }}">
-                            <small class="text-muted">Same as start date for a single day deployment.</small>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="fa-solid fa-calendar-check text-primary"></i></span>
+                                <input type="date" name="end_date" id="modal_deploy_end" class="form-control" value="{{ today()->toDateString() }}">
+                            </div>
                         </div>
                     </div>
 
-                    {{-- Work Session & Clock Punches Selection --}}
-                    <div class="card border border-primary-subtle rounded-3 shadow-xs mb-3 overflow-hidden">
-                        <div class="card-header bg-light py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
-                            <span class="fw-bold small text-dark">
-                                <i class="fa-solid fa-clock me-1 text-primary"></i> Work Session &amp; Clock Punches (ክፍለ ጊዜ እና ሰዓት) <span class="text-danger">*</span>
-                            </span>
-                            <span class="badge bg-primary text-white" id="sessionSummaryBadge">
-                                Full Day &bull; 8.0h
-                            </span>
-                        </div>
-                        <div class="card-body p-3 bg-white">
-                            {{-- Session Radio Options --}}
+                    {{-- Work Session & 4 Clock Punches --}}
+                    <div class="card border border-primary-subtle bg-light-subtle rounded-3 mb-3">
+                        <div class="card-body p-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold small text-dark mb-0">
+                                    <i class="fa-solid fa-clock text-primary me-1"></i> Work Session &amp; Clock Punches (ክፍለ ጊዜ እና ሰዓት) <span class="text-danger">*</span>
+                                </label>
+                                <span class="badge bg-primary text-white" id="sessionSummaryBadge">
+                                    <i class="fa-solid fa-sun text-warning me-1"></i> Full Day &bull; 8.0h
+                                </span>
+                            </div>
+
+                            {{-- Session Quick Buttons --}}
                             <div class="row g-2 mb-3">
                                 <div class="col-6 col-md-3">
                                     <input type="radio" class="btn-check" name="session_type" id="sess_full_day" value="full_day" checked onchange="handleSessionChange('full_day')">
-                                    <label class="btn btn-outline-secondary w-100 py-2 text-start small d-flex flex-column h-100" for="sess_full_day">
-                                        <span class="fw-bold text-dark"><i class="fa-solid fa-sun text-warning me-1"></i> Full Day</span>
-                                        <span class="text-muted text-xs">Morning + Afternoon (8h)</span>
+                                    <label class="btn btn-outline-dark btn-sm w-100 py-2 text-start h-100" for="sess_full_day">
+                                        <div class="fw-bold small"><i class="fa-solid fa-sun text-warning me-1"></i>Full Day</div>
+                                        <div class="text-xs text-muted">Morning + Afternoon (8h)</div>
                                     </label>
                                 </div>
                                 <div class="col-6 col-md-3">
                                     <input type="radio" class="btn-check" name="session_type" id="sess_morning" value="morning" onchange="handleSessionChange('morning')">
-                                    <label class="btn btn-outline-secondary w-100 py-2 text-start small d-flex flex-column h-100" for="sess_morning">
-                                        <span class="fw-bold text-dark"><i class="fa-solid fa-cloud-sun text-warning me-1"></i> Morning Only</span>
-                                        <span class="text-muted text-xs">In: 08:30 &bull; Out: 12:30 (4h)</span>
+                                    <label class="btn btn-outline-dark btn-sm w-100 py-2 text-start h-100" for="sess_morning">
+                                        <div class="fw-bold small"><i class="fa-solid fa-cloud-sun text-warning me-1"></i>Morning Only</div>
+                                        <div class="text-xs text-muted">In: 08:30 &bull; Out: 12:30 (4h)</div>
                                     </label>
                                 </div>
                                 <div class="col-6 col-md-3">
                                     <input type="radio" class="btn-check" name="session_type" id="sess_afternoon" value="afternoon" onchange="handleSessionChange('afternoon')">
-                                    <label class="btn btn-outline-secondary w-100 py-2 text-start small d-flex flex-column h-100" for="sess_afternoon">
-                                        <span class="fw-bold text-dark"><i class="fa-solid fa-cloud-moon text-info me-1"></i> Afternoon Only</span>
-                                        <span class="text-muted text-xs">In: 13:30 &bull; Out: 17:30 (4h)</span>
+                                    <label class="btn btn-outline-dark btn-sm w-100 py-2 text-start h-100" for="sess_afternoon">
+                                        <div class="fw-bold small"><i class="fa-solid fa-cloud-moon text-info me-1"></i>Afternoon Only</div>
+                                        <div class="text-xs text-muted">In: 13:30 &bull; Out: 17:30 (4h)</div>
                                     </label>
                                 </div>
                                 <div class="col-6 col-md-3">
                                     <input type="radio" class="btn-check" name="session_type" id="sess_custom" value="custom" onchange="handleSessionChange('custom')">
-                                    <label class="btn btn-outline-secondary w-100 py-2 text-start small d-flex flex-column h-100" for="sess_custom">
-                                        <span class="fw-bold text-dark"><i class="fa-solid fa-sliders text-primary me-1"></i> Custom Punches</span>
-                                        <span class="text-muted text-xs">Pick specific punch times</span>
+                                    <label class="btn btn-outline-dark btn-sm w-100 py-2 text-start h-100" for="sess_custom">
+                                        <div class="fw-bold small"><i class="fa-solid fa-sliders text-secondary me-1"></i>Custom Punches</div>
+                                        <div class="text-xs text-muted">Pick specific punch times</div>
                                     </label>
                                 </div>
                             </div>
 
-                            {{-- 4-Punch Visual Grid --}}
-                            <div class="border rounded-2 p-2 bg-light-subtle">
+                            {{-- 4 Punch Input Controls --}}
+                            <div class="bg-white p-3 rounded-2 border">
                                 <div class="row g-2">
                                     {{-- Morning In --}}
                                     <div class="col-6 col-md-3">
@@ -599,9 +762,15 @@
                 </div>
                 <div class="modal-footer bg-light py-3 px-4">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-xs">
-                        <i class="fa-solid fa-check me-1"></i>Dispatch to Site (ይመዝገቡ)
-                    </button>
+                    @if($isHr)
+                        <button type="submit" class="btn btn-success btn-sm px-4 fw-bold shadow-xs">
+                            <i class="fa-solid fa-check me-1"></i>Dispatch &amp; Save in Attendance (ይመዝገቡ)
+                        </button>
+                    @else
+                        <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold shadow-xs">
+                            <i class="fa-solid fa-paper-plane me-1"></i>Send to HR to Approve (ለ HR ይላኩ)
+                        </button>
+                    @endif
                 </div>
             </form>
         </div>

@@ -1883,6 +1883,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('attendance/clear-test-logs', [App\Http\Controllers\AttendanceController::class, 'clearTestLogs'])->name('attendance.clear-test-logs');
     Route::get('attendance/site-deployments', [App\Http\Controllers\AttendanceController::class, 'siteDeployments'])->name('attendance.site-deployments');
     Route::post('attendance/record-site', [App\Http\Controllers\AttendanceController::class, 'recordSiteAttendance'])->name('attendance.record-site');
+    Route::post('attendance/site-deployments/{deployment}/approve', [App\Http\Controllers\AttendanceController::class, 'approveSiteDeployment'])->name('attendance.site-deployments.approve');
+    Route::post('attendance/site-deployments/{deployment}/reject', [App\Http\Controllers\AttendanceController::class, 'rejectSiteDeployment'])->name('attendance.site-deployments.reject');
 
     Route::get('employees/pending-approval', [App\Http\Controllers\EmployeeController::class, 'pendingApproval'])->name('employees.pending-approval');
     Route::get('employees/dead-file', [App\Http\Controllers\EmployeeController::class, 'deadFile'])->name('employees.dead-file');

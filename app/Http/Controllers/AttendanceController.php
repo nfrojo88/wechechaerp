@@ -244,6 +244,22 @@ class AttendanceController extends Controller
     }
 
     /**
+     * Check if user is HR Officer, HR Manager, or Admin who can approve/reject site deployments.
+     */
+    public static function isHrOrAdmin($user = null): bool
+    {
+        $user = $user ?: auth()->user();
+        if (!$user) return false;
+
+        $hrRoles = [
+            'hr', 'hr_manager', 'hr_officer', 'HR', 'HR Manager', 'HR Officer',
+            'admin', 'global_admin'
+        ];
+
+        return $user->hasAnyRole($hrRoles) || (method_exists($user, 'can') && $user->can('hr.manage'));
+    }
+
+    /**
      * Dedicated Report & Dispatch Management Page for Site Deployments.
      * Visible to HR, HR Officer, Planning Manager, Coordinator, Finance Head, and GM.
      */
@@ -253,60 +269,49 @@ class AttendanceController extends Controller
             abort(403, 'Unauthorized access. Only Planning Manager, Coordinator, Finance Head, HR, and GM can view or manage site deployments.');
         }
 
-        $query = Attendance::with(['employee', 'decidedBy', 'siteProject'])
-            ->where(function ($q) {
-                $q->whereIn('status', ['S', 'site', 's', 'on_site'])
-                  ->orWhere('source', 'site_dispatch')
-                  ->orWhere('notes', 'like', '%On-Site%');
-            })
-            ->latest('attendance_date');
+        \App\Models\SiteDeploymentRequest::ensureTableExists();
+        self::syncExistingAttendanceRecords();
+
+        $statusFilter = $request->input('status', 'all');
+
+        $query = \App\Models\SiteDeploymentRequest::with(['employee', 'requestedBy', 'hrReviewedBy', 'siteProject'])
+            ->latest('id');
+
+        if ($statusFilter !== 'all' && in_array($statusFilter, ['pending', 'approved', 'rejected'])) {
+            $query->where('status', $statusFilter);
+        }
 
         if ($request->filled('employee_id')) {
             $query->where('employee_id', $request->employee_id);
         }
         if ($request->filled('project_id')) {
-            $query->where(function($q) use ($request) {
-                $q->where('site_project_id', $request->project_id)
-                  ->orWhere('notes', 'like', "%Project ID #{$request->project_id}%");
-            });
+            $query->where('project_id', $request->project_id);
         }
-        if ($request->filled('decided_by')) {
-            $query->where('decided_by', $request->decided_by);
+        if ($request->filled('requested_by')) {
+            $query->where('requested_by', $request->requested_by);
         }
         if ($request->filled('date_from')) {
-            $query->whereDate('attendance_date', '>=', $request->date_from);
+            $query->where('start_date', '>=', $request->date_from);
         }
         if ($request->filled('date_to')) {
-            $query->whereDate('attendance_date', '<=', $request->date_to);
+            $query->where('end_date', '<=', $request->date_to);
         }
 
-        $deployments = $query->paginate(30)->withQueryString();
+        $deployments = $query->paginate(25)->withQueryString();
 
-        // Summary statistics for HR & management
         $todayStr = today()->toDateString();
-        $thisMonth = today()->month;
-        $thisYear  = today()->year;
-
         $stats = [
-            'today_count' => Attendance::whereDate('attendance_date', $todayStr)
-                ->where(function($q) {
-                    $q->whereIn('status', ['S', 'site', 's', 'on_site'])
-                      ->orWhere('notes', 'like', '%On-Site%');
-                })->count(),
-            'month_count' => Attendance::whereYear('attendance_date', $thisYear)
-                ->whereMonth('attendance_date', $thisMonth)
-                ->where(function($q) {
-                    $q->whereIn('status', ['S', 'site', 's', 'on_site'])
-                      ->orWhere('notes', 'like', '%On-Site%');
-                })->count(),
-            'total_count' => Attendance::where(function($q) {
-                    $q->whereIn('status', ['S', 'site', 's', 'on_site'])
-                      ->orWhere('notes', 'like', '%On-Site%');
-                })->count(),
-            'distinct_employees' => Attendance::where(function($q) {
-                    $q->whereIn('status', ['S', 'site', 's', 'on_site'])
-                      ->orWhere('notes', 'like', '%On-Site%');
-                })->distinct('employee_id')->count('employee_id'),
+            'pending_count'  => \App\Models\SiteDeploymentRequest::where('status', 'pending')->count(),
+            'approved_count' => \App\Models\SiteDeploymentRequest::where('status', 'approved')->count(),
+            'rejected_count' => \App\Models\SiteDeploymentRequest::where('status', 'rejected')->count(),
+            'total_count'    => \App\Models\SiteDeploymentRequest::count(),
+            'today_count'    => \App\Models\SiteDeploymentRequest::where('status', 'approved')
+                                    ->where('start_date', '<=', $todayStr)
+                                    ->where('end_date', '>=', $todayStr)
+                                    ->count(),
+            'distinct_employees' => \App\Models\SiteDeploymentRequest::where('status', 'approved')
+                                    ->distinct('employee_id')
+                                    ->count('employee_id'),
         ];
 
         $employees = Employee::where('status', 'active')->orderBy('full_name')->get();
@@ -320,27 +325,26 @@ class AttendanceController extends Controller
         })->orderBy('name')->get();
 
         $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+        $isHr = self::isHrOrAdmin();
 
         return view('hr.attendance.site_deployments', compact(
-            'deployments', 'stats', 'employees', 'projects', 'decidedUsers', 'workSchedule'
+            'deployments', 'stats', 'employees', 'projects', 'decidedUsers', 'workSchedule', 'isHr', 'statusFilter'
         ));
     }
-
     /**
      * Record Site Attendance when Planning Manager, Coordinator, Finance Head, HR, or GM
      * sends an employee to a construction site.
-     * Supports Single Day or Date Range duration, and specific session/clock punches:
-     * - Full Day (Morning In/Out + Afternoon In/Out)
-     * - Morning Session Only (Morning In + Morning Out)
-     * - Afternoon Session Only (Afternoon In + Afternoon Out)
-     * - Custom Punches
-     * Sets status to 'S', non-deductible in payroll, and records who decided it.
+     * All requests from managers are sent to HR to approve.
+     * When HR approves -> saved in attendance with status 'S'.
+     * If rejected -> HR does not accept this info and nothing is saved in attendance.
      */
     public function recordSiteAttendance(Request $request)
     {
         if (!self::canDeployToSite()) {
             abort(403, 'Unauthorized access. Only Planning Manager, Coordinator, Finance Head, HR, and GM can dispatch employees to site.');
         }
+
+        \App\Models\SiteDeploymentRequest::ensureTableExists();
 
         $validated = $request->validate([
             'employee_id'           => 'nullable|exists:employees,id',
@@ -473,15 +477,171 @@ class AttendanceController extends Controller
             $sessionDefaultHours = $calc > 0 ? $calc : 8.0;
         }
 
-        $totalCreated = 0;
-        $currentDate = $start->copy();
+        $hours = (float)($validated['hours_worked'] ?? $sessionDefaultHours);
+        $isHr = self::isHrOrAdmin($user);
+        // All non-HR manager requests start as pending for HR approval!
+        $status = $isHr ? 'approved' : 'pending';
 
+        foreach ($employeeIds as $empId) {
+            $deploymentReq = \App\Models\SiteDeploymentRequest::create([
+                'requested_by'      => $user?->id,
+                'requested_by_role' => $decidedByRoleLabel,
+                'employee_id'       => $empId,
+                'project_id'        => $siteProjectId,
+                'site_name'         => $projectName,
+                'duration_type'     => $durationType,
+                'start_date'        => $start->toDateString(),
+                'end_date'          => $end->toDateString(),
+                'session_type'      => $sessionType,
+                'morning_in'        => $configuredMIn,
+                'morning_out'       => $configuredMOut,
+                'afternoon_in'      => $configuredAIn,
+                'afternoon_out'     => $configuredAOut,
+                'hours_worked'      => $hours,
+                'task_notes'        => $validated['task_notes'] ?? null,
+                'status'            => $status,
+                'hr_reviewed_by'    => $status === 'approved' ? $user?->id : null,
+                'hr_reviewed_at'    => $status === 'approved' ? now() : null,
+                'hr_notes'          => $status === 'approved' ? 'Directly recorded by HR / Admin' : null,
+            ]);
+
+            // When HR approves, save in attendance!
+            if ($status === 'approved') {
+                self::applyDeploymentToAttendance($deploymentReq, $user);
+            }
+        }
+
+        $empCount = count($employeeIds);
+        $periodLabel = ($start->toDateString() === $end->toDateString())
+            ? $start->format('M d, Y')
+            : ($start->format('M d') . ' to ' . $end->format('M d, Y'));
+
+        ActivityLog::log(
+            'created',
+            "{$decidedByName} ({$decidedByRoleLabel}) submitted site deployment for {$empCount} employee(s) to {$projectName} ({$periodLabel}). Status: {$status}.",
+            'Site Deployment / HR'
+        );
+
+        if ($status === 'approved') {
+            return redirect()->route('attendance.site-deployments')->with(
+                'success',
+                "Successfully dispatched {$empCount} employee(s) to {$projectName} ({$periodLabel}). Attendance status officially marked 'S' with {$hours}h credited (non-deductible in payroll)."
+            );
+        }
+
+        return redirect()->route('attendance.site-deployments', ['status' => 'pending'])->with(
+            'success',
+            "Site deployment request for {$empCount} employee(s) to {$projectName} ({$periodLabel}) has been sent to HR to approve! When HR approves, attendance records will be saved with Status 'S'."
+        );
+    }
+
+    /**
+     * HR Approves the site deployment. Saves record into attendance with Status 'S'.
+     */
+    public function approveSiteDeployment(Request $request, $id)
+    {
+        if (!self::isHrOrAdmin()) {
+            abort(403, 'Unauthorized. Only HR Officers, HR Managers, or Administrators can approve site deployments.');
+        }
+
+        $deployment = \App\Models\SiteDeploymentRequest::with('employee')->findOrFail($id);
+
+        if ($deployment->status === 'approved') {
+            return redirect()->back()->with('info', 'This site deployment is already approved.');
+        }
+
+        $hrUser = auth()->user();
+        $hrNotes = $request->input('hr_notes', 'Approved by HR');
+
+        $deployment->update([
+            'status'         => 'approved',
+            'hr_reviewed_by' => $hrUser->id,
+            'hr_reviewed_at' => now(),
+            'hr_notes'       => $hrNotes,
+        ]);
+
+        // When HR approves, save in attendance!
+        self::applyDeploymentToAttendance($deployment, $hrUser);
+
+        ActivityLog::log(
+            'updated',
+            "HR {$hrUser->name} approved site deployment for {$deployment->employee?->full_name} at {$deployment->site_name}. Attendance recorded with status 'S'.",
+            'Site Deployment / HR'
+        );
+
+        return redirect()->back()->with(
+            'success',
+            "Site deployment for {$deployment->employee?->full_name} has been APPROVED by HR! Attendance record has been officially saved with Status 'S' (non-deductible in payroll)."
+        );
+    }
+
+    /**
+     * HR Rejects the site deployment. HR does not accept this info, no attendance record is saved.
+     */
+    public function rejectSiteDeployment(Request $request, $id)
+    {
+        if (!self::isHrOrAdmin()) {
+            abort(403, 'Unauthorized. Only HR Officers, HR Managers, or Administrators can reject site deployments.');
+        }
+
+        $deployment = \App\Models\SiteDeploymentRequest::with('employee')->findOrFail($id);
+
+        $hrUser = auth()->user();
+        $reason = trim($request->input('rejection_reason', ''));
+        if (empty($reason)) {
+            $reason = 'Site deployment rejected by HR. Info not accepted into attendance.';
+        }
+
+        $deployment->update([
+            'status'         => 'rejected',
+            'hr_reviewed_by' => $hrUser->id,
+            'hr_reviewed_at' => now(),
+            'hr_notes'       => $reason,
+        ]);
+
+        // When rejected, HR does not accept this info: ensure no attendance record is saved
+        self::removeDeploymentFromAttendance($deployment);
+
+        ActivityLog::log(
+            'updated',
+            "HR {$hrUser->name} rejected site deployment for {$deployment->employee?->full_name} at {$deployment->site_name}. Reason: {$reason}. Not accepted into attendance.",
+            'Site Deployment / HR'
+        );
+
+        return redirect()->back()->with(
+            'error',
+            "Site deployment request for {$deployment->employee?->full_name} was REJECTED by HR: {$reason}. This info was not accepted into attendance."
+        );
+    }
+
+    /**
+     * Apply an approved site deployment to the attendance table with status 'S'.
+     */
+    protected static function applyDeploymentToAttendance(\App\Models\SiteDeploymentRequest $deployment, $hrUser = null): void
+    {
+        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+        $start = Carbon::parse($deployment->start_date);
+        $end   = Carbon::parse($deployment->end_date);
+        $sessionType = $deployment->session_type;
+
+        $user = $hrUser ?: auth()->user();
+        $requester = $deployment->requestedBy;
+        $requesterName = $requester ? $requester->name : 'Authorized Manager';
+        $requesterRole = $deployment->requested_by_role ?: 'Manager';
+
+        $sessionLabel = match($sessionType) {
+            'full_day'  => "Full Day ({$deployment->morning_in}-{$deployment->afternoon_out})",
+            'morning'   => "Morning Session ({$deployment->morning_in}-{$deployment->morning_out})",
+            'afternoon' => "Afternoon Session ({$deployment->afternoon_in}-{$deployment->afternoon_out})",
+            default     => "Custom Session",
+        };
+
+        $currentDate = $start->copy();
         while ($currentDate->lte($end)) {
             $dateStr = $currentDate->toDateString();
             $isSunday = $currentDate->isSunday();
             $isSaturday = $currentDate->isSaturday();
 
-            // Skip Sundays (standard company rest day) unless single-day explicit submission
             if ($isSunday && $start->ne($end)) {
                 $currentDate->addDay();
                 continue;
@@ -492,87 +652,132 @@ class AttendanceController extends Controller
                 $dayMOut  = $workSchedule['sat_morning_out'] ?? '12:30';
                 $dayAIn   = null;
                 $dayAOut  = null;
-                $hours    = (float)($validated['hours_worked'] ?? ($workSchedule['sat_total_hours'] ?? 4.0));
+                $hours    = (float)($workSchedule['sat_total_hours'] ?? 4.0);
             } else {
-                $dayMIn   = $configuredMIn;
-                $dayMOut  = $configuredMOut;
-                $dayAIn   = $configuredAIn;
-                $dayAOut  = $configuredAOut;
-                $hours    = (float)($validated['hours_worked'] ?? $sessionDefaultHours);
+                $dayMIn   = $deployment->morning_in;
+                $dayMOut  = $deployment->morning_out;
+                $dayAIn   = $deployment->afternoon_in;
+                $dayAOut  = $deployment->afternoon_out;
+                $hours    = (float)$deployment->hours_worked;
             }
 
             $dayCIn  = $dayMIn ?: $dayAIn;
             $dayCOut = $dayAOut ?: $dayMOut;
 
-            $taskDesc = !empty($validated['task_notes']) ? $validated['task_notes'] : 'On-Site Duty';
-            $formattedNote = "On-Site [S]: {$projectName} | Session: {$sessionLabel} | Task: {$taskDesc} | Decided by: {$decidedByName} ({$decidedByRoleLabel})";
+            $taskDesc = !empty($deployment->task_notes) ? $deployment->task_notes : 'On-Site Duty';
+            $hrName = $user ? $user->name : 'HR Officer';
+            $formattedNote = "On-Site [S]: {$deployment->site_name} | Session: {$sessionLabel} | Task: {$taskDesc} | Decided by: {$requesterName} ({$requesterRole}) | Approved by HR: {$hrName}";
 
-            foreach ($employeeIds as $empId) {
-                // If record exists (e.g., employee already clocked at office in morning), safely merge
-                $existing = Attendance::where('employee_id', $empId)->where('attendance_date', $dateStr)->first();
+            $existing = Attendance::where('employee_id', $deployment->employee_id)
+                ->where('attendance_date', $dateStr)
+                ->first();
 
-                $finalMIn  = $dayMIn  !== null ? $dayMIn  : ($existing?->morning_in);
-                $finalMOut = $dayMOut !== null ? $dayMOut : ($existing?->morning_out);
-                $finalAIn  = $dayAIn  !== null ? $dayAIn  : ($existing?->afternoon_in);
-                $finalAOut = $dayAOut !== null ? $dayAOut : ($existing?->afternoon_out);
+            $finalMIn  = $dayMIn  !== null ? $dayMIn  : ($existing?->morning_in);
+            $finalMOut = $dayMOut !== null ? $dayMOut : ($existing?->morning_out);
+            $finalAIn  = $dayAIn  !== null ? $dayAIn  : ($existing?->afternoon_in);
+            $finalAOut = $dayAOut !== null ? $dayAOut : ($existing?->afternoon_out);
 
-                $finalCIn  = $finalMIn ?: ($finalAIn ?: ($existing?->check_in));
-                $finalCOut = $finalAOut ?: ($finalMOut ?: ($existing?->check_out));
+            $finalCIn  = $finalMIn ?: ($finalAIn ?: ($existing?->check_in));
+            $finalCOut = $finalAOut ?: ($finalMOut ?: ($existing?->check_out));
 
-                $data = [
-                    'status'         => 'S', // 'S' for site attendance, non-deductible in payroll
-                    'source'         => 'site_dispatch',
-                    'morning_in'     => $finalMIn,
-                    'morning_out'    => $finalMOut,
-                    'afternoon_in'   => $finalAIn,
-                    'afternoon_out'  => $finalAOut,
-                    'check_in'       => $finalCIn,
-                    'check_out'      => $finalCOut,
-                    'hours_worked'   => $hours,
-                    'notes'          => $formattedNote,
-                    'is_approved'    => true,
-                    'approved_by'    => $user?->id,
-                ];
+            $data = [
+                'status'         => 'S', // 'S' for site attendance, non-deductible in payroll
+                'source'         => 'site_dispatch',
+                'morning_in'     => $finalMIn,
+                'morning_out'    => $finalMOut,
+                'afternoon_in'   => $finalAIn,
+                'afternoon_out'  => $finalAOut,
+                'check_in'       => $finalCIn,
+                'check_out'      => $finalCOut,
+                'hours_worked'   => $hours,
+                'notes'          => $formattedNote,
+                'is_approved'    => true,
+                'approved_by'    => $user?->id,
+            ];
 
-                // If schema supports extended site deployment columns, add them safely
-                if (\Illuminate\Support\Facades\Schema::hasColumn('attendance', 'decided_by')) {
-                    $data['decided_by']       = $user?->id;
-                    $data['decided_by_role']  = $decidedByRoleLabel;
-                    $data['site_project_id']  = $siteProjectId;
-                    $data['site_name']        = $projectName;
-                    $data['site_task']        = $taskDesc;
-                    $data['site_start_date']  = $start->toDateString();
-                    $data['site_end_date']    = $end->toDateString();
-                }
-
-                Attendance::updateOrCreate(
-                    [
-                        'employee_id'     => $empId,
-                        'attendance_date' => $dateStr,
-                    ],
-                    $data
-                );
-                $totalCreated++;
+            if (\Illuminate\Support\Facades\Schema::hasColumn('attendance', 'decided_by')) {
+                $data['decided_by']       = $deployment->requested_by;
+                $data['decided_by_role']  = $requesterRole;
+                $data['site_project_id']  = $deployment->project_id;
+                $data['site_name']        = $deployment->site_name;
+                $data['site_task']        = $taskDesc;
+                $data['site_start_date']  = $start->toDateString();
+                $data['site_end_date']    = $end->toDateString();
             }
+
+            Attendance::updateOrCreate(
+                [
+                    'employee_id'     => $deployment->employee_id,
+                    'attendance_date' => $dateStr,
+                ],
+                $data
+            );
 
             $currentDate->addDay();
         }
+    }
 
-        $empCount = count($employeeIds);
-        $periodLabel = ($start->toDateString() === $end->toDateString())
-            ? $start->format('M d, Y')
-            : ($start->format('M d') . ' to ' . $end->format('M d, Y'));
+    /**
+     * If HR rejects a deployment, ensure no attendance record remains.
+     */
+    protected static function removeDeploymentFromAttendance(\App\Models\SiteDeploymentRequest $deployment): void
+    {
+        $start = Carbon::parse($deployment->start_date)->toDateString();
+        $end   = Carbon::parse($deployment->end_date)->toDateString();
 
-        ActivityLog::log(
-            'created',
-            "{$decidedByName} ({$decidedByRoleLabel}) deployed {$empCount} employee(s) to {$projectName} ({$periodLabel}, {$sessionLabel}). Status marked 'S' (Full pay / non-deductible).",
-            'Site Deployment / HR'
-        );
+        Attendance::where('employee_id', $deployment->employee_id)
+            ->whereBetween('attendance_date', [$start, $end])
+            ->where('source', 'site_dispatch')
+            ->delete();
+    }
 
-        return redirect()->route('attendance.site-deployments')->with(
-            'success',
-            "Successfully sent {$empCount} employee(s) to {$projectName} for {$sessionLabel} ({$periodLabel}). Attendance status officially marked 'S' with {$hours}h credited (non-deductible in payroll)."
-        );
+    /**
+     * Safely sync legacy site attendance records into site_deployment_requests.
+     */
+    protected static function syncExistingAttendanceRecords(): void
+    {
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('attendance')) {
+                $existing = Attendance::where(function($q) {
+                    $q->whereIn('status', ['S', 'site', 's', 'on_site'])
+                      ->orWhere('source', 'site_dispatch')
+                      ->orWhere('notes', 'like', '%On-Site%');
+                })->get();
+
+                foreach ($existing as $att) {
+                    $exists = \App\Models\SiteDeploymentRequest::where('employee_id', $att->employee_id)
+                        ->where('start_date', '<=', $att->attendance_date)
+                        ->where('end_date', '>=', $att->attendance_date)
+                        ->exists();
+
+                    if (!$exists) {
+                        \App\Models\SiteDeploymentRequest::create([
+                            'requested_by'      => $att->decided_by ?? $att->approved_by,
+                            'requested_by_role' => $att->decided_by_role ?? 'Authorized Manager',
+                            'employee_id'       => $att->employee_id,
+                            'project_id'        => $att->site_project_id,
+                            'site_name'         => $att->site_name ?? 'Construction Site',
+                            'duration_type'     => 'single_day',
+                            'start_date'        => $att->attendance_date,
+                            'end_date'          => $att->attendance_date,
+                            'session_type'      => ($att->morning_in && $att->afternoon_out) ? 'full_day' : (($att->morning_in) ? 'morning' : 'custom'),
+                            'morning_in'        => $att->morning_in,
+                            'morning_out'       => $att->morning_out,
+                            'afternoon_in'      => $att->afternoon_in,
+                            'afternoon_out'     => $att->afternoon_out,
+                            'hours_worked'      => $att->hours_worked ?? 8.0,
+                            'task_notes'        => $att->site_task ?? $att->notes,
+                            'status'            => 'approved',
+                            'hr_reviewed_by'    => $att->approved_by,
+                            'hr_reviewed_at'    => $att->updated_at ?? now(),
+                            'hr_notes'          => 'Synchronized legacy attendance record',
+                        ]);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore any sync hiccups
+        }
     }
 
     /**
