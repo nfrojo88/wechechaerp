@@ -43,6 +43,9 @@
                                     </a>
                                     @unless($a->is_system)
                                     <a href="{{ route('coa.edit', $a) }}" class="btn btn-xs btn-outline-warning py-1 px-2" title="Edit Account"><i class="fas fa-edit"></i></a>
+                                    <button type="button" class="btn btn-xs btn-outline-danger py-1 px-2" title="Delete Account and History" data-bs-toggle="modal" data-bs-target="#deleteCoaModal{{ $a->id }}">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
                                     @endunless
                                 </div>
                             </td>
@@ -56,5 +59,40 @@
         </div>
         <div class="card-footer bg-white border-top py-3">{{ $accounts->links() }}</div>
     </div>
+
+    @foreach($accounts as $a)
+        @unless($a->is_system)
+        <div class="modal fade" id="deleteCoaModal{{ $a->id }}" tabindex="-1" aria-labelledby="deleteCoaModalLabel{{ $a->id }}" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title fw-bold" id="deleteCoaModalLabel{{ $a->id }}">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Delete Account {{ $a->code }}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <form action="{{ route('coa.destroy', $a) }}" method="POST">
+                        @csrf
+                        @method('DELETE')
+                        <div class="modal-body p-4">
+                            <p class="text-danger fw-bold mb-2">Warning: This action is permanent and cannot be undone.</p>
+                            <p class="mb-3">Are you sure you want to delete account <strong>{{ $a->code }} - {{ $a->name }}</strong>?</p>
+                            <div class="alert alert-warning small mb-0">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Deleting this account will permanently remove all transfer history, journal entries, and transactions linked to it, and reverse counter-party account balances to keep the ledger balanced.
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light">
+                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-danger btn-sm fw-bold">
+                                <i class="fas fa-trash-alt me-1"></i>Delete Everything
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        @endunless
+    @endforeach
 </div>
 @endsection

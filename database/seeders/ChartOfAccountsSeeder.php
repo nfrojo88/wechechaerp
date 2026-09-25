@@ -33,7 +33,6 @@ class ChartOfAccountsSeeder extends Seeder
         $rows = [
             ['code' => '1011', 'name' => 'CBE (Commercial Bank of Ethiopia)',    'category' => 'Cash and Bank',             'balance' => 1354000.00,   'nature' => 'DEBIT'],
             ['code' => '1012', 'name' => 'Bank of Abyssinia-27',                 'category' => 'Cash and Bank',             'balance' => -2678645.00,  'nature' => 'DEBIT'],
-            ['code' => '1003', 'name' => 'Awash Bank',                           'category' => 'Receivables',               'balance' => 10000000.00,  'nature' => 'DEBIT'],
             ['code' => '1013', 'name' => 'Bank of Abyssinia-59',                 'category' => 'Cash and Bank',             'balance' => 0.00,         'nature' => 'DEBIT'],
             ['code' => '2001', 'name' => 'Accounts Payable',                     'category' => 'Liabilities',               'balance' => -1087039.34,  'nature' => 'CREDIT'],
             ['code' => '2002', 'name' => 'Short-term Loans',                     'category' => 'Liabilities',               'balance' => 0.00,         'nature' => 'CREDIT'],

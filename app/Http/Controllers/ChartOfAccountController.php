@@ -9,6 +9,11 @@ class ChartOfAccountController extends Controller
 {
     public function index()
     {
+        // Auto-purge account 1003 and any associated data if still present
+        if (ChartOfAccount::where('code', '1003')->exists()) {
+            ChartOfAccount::deleteAccountAndRelated('1003', true);
+        }
+
         $accounts = ChartOfAccount::with(['parent', 'manager'])->orderBy('code')->paginate(50);
         return view('finance.coa.index', compact('accounts'));
     }
@@ -61,5 +66,14 @@ class ChartOfAccountController extends Controller
 
         $coa->update($data);
         return redirect()->route('coa.index')->with('success', 'Account updated.');
+    }
+
+    public function destroy(ChartOfAccount $coa)
+    {
+        $code = $coa->code;
+        $name = $coa->name;
+        ChartOfAccount::deleteAccountAndRelated($coa, true);
+
+        return redirect()->route('coa.index')->with('success', "Account {$code} ({$name}) and all associated history have been permanently deleted.");
     }
 }

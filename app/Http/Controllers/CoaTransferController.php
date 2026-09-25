@@ -18,6 +18,11 @@ class CoaTransferController extends Controller
      */
     public function index(Request $request)
     {
+        // Auto-purge account 1003 and any associated data if still present
+        if (ChartOfAccount::where('code', '1003')->exists()) {
+            ChartOfAccount::deleteAccountAndRelated('1003', true);
+        }
+
         $query = CoaTransfer::with(['fromCoa', 'toCoa', 'creator', 'journalEntry'])->latest('transfer_date');
 
         // Filter: Search keyword
