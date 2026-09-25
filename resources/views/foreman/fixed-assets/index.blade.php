@@ -25,9 +25,14 @@
                 </p>
             @endif
         </div>
-        <a href="{{ route('foreman.my-maintenance-requests') }}" class="btn btn-outline-warning fw-semibold">
-            <i class="fa-solid fa-wrench me-1"></i> My Maintenance Requests
-        </a>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-warning fw-semibold text-dark shadow-sm" data-bs-toggle="modal" data-bs-target="#reportModal" onclick="openNewReportModal()">
+                <i class="fa-solid fa-plus me-1"></i> Report Maintenance
+            </button>
+            <a href="{{ route('foreman.my-maintenance-requests') }}" class="btn btn-outline-warning fw-semibold">
+                <i class="fa-solid fa-wrench me-1"></i> My Maintenance Requests
+            </a>
+        </div>
     </div>
 
     {{-- ── Flash Messages ── --}}
@@ -118,12 +123,17 @@
             @if($units->isEmpty())
                 <div class="text-center py-5 text-muted">
                     <i class="fa-solid fa-box-open fa-3x mb-3 opacity-25"></i>
-                    <p class="mb-0">No fixed assets found for your site.</p>
-                    @if($search || $status || $category)
-                        <a href="{{ route('foreman.fixed-assets') }}" class="btn btn-sm btn-outline-secondary mt-3">
-                            Clear Filters
-                        </a>
-                    @endif
+                    <p class="mb-2 fw-semibold">No fixed assets found for your site.</p>
+                    <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
+                        <button type="button" class="btn btn-warning text-dark fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#reportModal" onclick="openNewReportModal()">
+                            <i class="fa-solid fa-wrench me-1"></i> Report Maintenance Issue
+                        </button>
+                        @if($search || $status || $category)
+                            <a href="{{ route('foreman.fixed-assets') }}" class="btn btn-sm btn-outline-secondary d-flex align-items-center">
+                                Clear Filters
+                            </a>
+                        @endif
+                    </div>
                 </div>
             @else
                 <div class="table-responsive">
@@ -228,7 +238,7 @@
 
 {{-- ── Report Maintenance Modal ── --}}
 <div class="modal fade" id="reportModal" tabindex="-1" aria-labelledby="reportModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-danger text-white">
                 <h5 class="modal-title fw-bold" id="reportModalLabel">
@@ -237,13 +247,13 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <form method="POST" action="{{ route('foreman.maintenance.store') }}">
+            <form method="POST" action="{{ route('foreman.maintenance.store') }}" id="fixedAssetReportForm">
                 @csrf
                 <input type="hidden" name="fixed_asset_unit_id" id="reportUnitId">
                 <div class="modal-body p-4">
 
-                    {{-- Asset Summary --}}
-                    <div class="alert alert-light border rounded-3 mb-4 d-flex align-items-center gap-3">
+                    {{-- Pre-selected Asset Summary --}}
+                    <div id="reportAssetSummaryBox" class="alert alert-light border rounded-3 mb-4 d-flex align-items-center gap-3">
                         <div class="rounded-circle bg-warning d-flex align-items-center justify-content-center text-dark fw-bold flex-shrink-0" style="width:48px;height:48px;">
                             <i class="fa-solid fa-truck-monster"></i>
                         </div>
@@ -254,17 +264,33 @@
                         </div>
                     </div>
 
+                    {{-- Custom Asset Inputs (shown when reporting without pre-selected unit) --}}
+                    <div id="reportCustomAssetBox" class="mb-4" style="display:none;">
+                        <label class="form-label fw-semibold">Asset / Equipment Details <span class="text-danger">*</span></label>
+                        <div class="row g-2">
+                            <div class="col-md-7">
+                                <input type="text" name="asset_name" id="reportCustomAssetName" class="form-control"
+                                       placeholder="e.g. Caterpillar Excavator 320, Generator 50kVA, Sino Truck">
+                            </div>
+                            <div class="col-md-5">
+                                <input type="text" name="asset_code" id="reportCustomAssetCode" class="form-control font-monospace"
+                                       placeholder="Code or Plate # (optional)">
+                            </div>
+                        </div>
+                        <div class="form-text">Specify the machine, vehicle, or equipment name needing repair.</div>
+                    </div>
+
                     <div class="row g-3">
                         {{-- Issue Type --}}
                         <div class="col-md-6">
                             <label class="form-label fw-semibold required">Issue Type <span class="text-danger">*</span></label>
                             <select name="issue_type" class="form-select" required id="report_issue_type">
                                 <option value="">— Select Issue —</option>
-                                <option value="breakdown">⚡ Breakdown</option>
-                                <option value="damage">💥 Physical Damage</option>
-                                <option value="service_due">🔧 Service Due</option>
-                                <option value="malfunction">⚠️ Malfunction</option>
-                                <option value="needs_repair">🛠️ Needs Repair</option>
+                                <option value="breakdown">⚡ Breakdown (Won't start / completely stopped)</option>
+                                <option value="damage">💥 Physical Damage (Body, structural, glass, hit)</option>
+                                <option value="service_due">🔧 Service Due (Routine maintenance / oil & filters)</option>
+                                <option value="malfunction">⚠️ Malfunction (Overheating, abnormal noise, slow)</option>
+                                <option value="needs_repair">🛠️ Needs Repair (Hydraulic leak, worn parts, tires)</option>
                                 <option value="other">📋 Other</option>
                             </select>
                         </div>
@@ -273,17 +299,17 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Urgency <span class="text-danger">*</span></label>
                             <select name="urgency" class="form-select" required id="report_urgency">
-                                <option value="normal" selected>🔵 Normal</option>
-                                <option value="low">🟢 Low</option>
-                                <option value="urgent">🟠 Urgent</option>
-                                <option value="critical">🔴 Critical</option>
+                                <option value="normal" selected>🔵 Normal Priority</option>
+                                <option value="low">🟢 Low Priority</option>
+                                <option value="urgent">🟠 Urgent Priority</option>
+                                <option value="critical">🔴 Critical (Work Halted)</option>
                             </select>
                         </div>
 
                         {{-- Description --}}
                         <div class="col-12">
                             <label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
-                            <textarea name="description" class="form-control" rows="4" required
+                            <textarea name="description" class="form-control" rows="4" required id="reportDescription"
                                       placeholder="Describe the problem in detail. What happened? When did it start? Any visible damage?"></textarea>
                             <div class="form-text">Be as specific as possible to help the General Service team diagnose quickly.</div>
                         </div>
@@ -304,13 +330,33 @@
 @push('scripts')
 <script>
 function fillReportModal(btn) {
-    document.getElementById('reportUnitId').value      = btn.dataset.unitId;
+    document.getElementById('reportUnitId').value          = btn.dataset.unitId;
     document.getElementById('reportAssetName').textContent = btn.dataset.assetName;
     document.getElementById('reportUnitCode').textContent  = btn.dataset.unitCode;
     document.getElementById('reportAssetDetails').textContent = btn.dataset.assetDetails || '';
-    // Reset selects
+
+    document.getElementById('reportAssetSummaryBox').style.display = 'flex';
+    document.getElementById('reportCustomAssetBox').style.display  = 'none';
+    document.getElementById('reportCustomAssetName').required = false;
+
+    // Reset fields
     document.getElementById('report_issue_type').value = '';
     document.getElementById('report_urgency').value    = 'normal';
+    document.getElementById('reportDescription').value = '';
+}
+
+function openNewReportModal() {
+    document.getElementById('reportUnitId').value = '';
+    document.getElementById('reportAssetSummaryBox').style.display = 'none';
+    document.getElementById('reportCustomAssetBox').style.display  = 'block';
+    document.getElementById('reportCustomAssetName').required = true;
+    document.getElementById('reportCustomAssetName').value = '';
+    document.getElementById('reportCustomAssetCode').value = '';
+
+    // Reset fields
+    document.getElementById('report_issue_type').value = '';
+    document.getElementById('report_urgency').value    = 'normal';
+    document.getElementById('reportDescription').value = '';
 }
 </script>
 @endpush

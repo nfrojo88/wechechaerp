@@ -120,47 +120,69 @@ class ForemanController extends Controller
     // ─── Foreman: Submit a Maintenance Request ────────────────────────────────
 
     /**
-     * Store a new maintenance request from Foreman.
+     * Store a new maintenance request from Foreman or staff.
      */
     public function storeMaintenanceRequest(Request $request)
     {
         $validated = $request->validate([
-            'fixed_asset_unit_id' => 'required|exists:fixed_asset_units,id',
-            'issue_type'          => 'required|in:breakdown,damage,service_due,malfunction,needs_repair,other',
+            'fixed_asset_unit_id' => 'nullable|exists:fixed_asset_units,id',
+            'asset_name'          => 'required_without:fixed_asset_unit_id|nullable|string|max:255',
+            'asset_code'          => 'nullable|string|max:100',
+            'issue_type'          => 'required|string|max:100',
             'urgency'             => 'required|in:low,normal,urgent,critical',
             'description'         => 'required|string|max:3000',
         ]);
 
-        $user  = Auth::user();
-        $store = $this->getMyStore();
+        $user = Auth::user();
 
-        $unit = FixedAssetUnit::with('parentAsset')->findOrFail($validated['fixed_asset_unit_id']);
-
-        // Ensure no open request already exists for this unit
-        $existingOpen = MaintenanceRequest::where('fixed_asset_unit_id', $unit->id)
-            ->whereNotIn('status', ['resolved', 'closed'])
-            ->exists();
-
-        if ($existingOpen) {
-            return back()->with('error', '⚠️ This asset already has an open maintenance request. It cannot be reported again until the current request is closed.');
+        // 1. Resolve asset details
+        $unit = null;
+        if (!empty($validated['fixed_asset_unit_id'])) {
+            $unit = FixedAssetUnit::with('parentAsset')->find($validated['fixed_asset_unit_id']);
         }
 
-        // Resolve employee
+        $assetName = $unit ? ($unit->parentAsset?->name ?? $unit->unit_code) : ($validated['asset_name'] ?? 'Asset');
+        $assetCode = $unit ? $unit->unit_code : ($validated['asset_code'] ?? null);
+
+        // Ensure no open request already exists for this unit
+        if ($unit) {
+            $existingOpen = MaintenanceRequest::where('fixed_asset_unit_id', $unit->id)
+                ->whereNotIn('status', ['resolved', 'closed'])
+                ->exists();
+
+            if ($existingOpen) {
+                return back()->with('error', "⚠️ Asset [{$unit->unit_code}] already has an active maintenance request. It cannot be reported again until the current request is closed.");
+            }
+        }
+
+        // 2. Resolve employee profile
         $employee = Employee::where('user_id', $user->id)->first();
+        if (!$employee && !empty($user->email)) {
+            $employee = Employee::where('email', $user->email)->first();
+            if ($employee && empty($employee->user_id)) {
+                $employee->update(['user_id' => $user->id]);
+            }
+        }
         if (!$employee) {
-            // Fallback to first active employee
             $employee = Employee::where('status', 'active')->first();
         }
         if (!$employee) {
-            return back()->with('error', 'No employee profile found for your account. Please contact HR.');
+            $nameParts = explode(' ', trim($user->name));
+            $employee = Employee::create([
+                'user_id'    => $user->id,
+                'first_name' => $nameParts[0] ?? $user->name,
+                'last_name'  => $nameParts[1] ?? 'Staff',
+                'email'      => $user->email ?? ($user->username . '@wechecha.com'),
+                'status'     => 'active',
+            ]);
         }
 
-        // Create the request — starts as "pending" (awaiting GS pickup)
+        // 3. Create the request — starts as "pending" (awaiting GS pickup)
         $mr = MaintenanceRequest::create([
             'employee_id'         => $employee->id,
-            'fixed_asset_unit_id' => $unit->id,
-            'asset_name'          => $unit->parentAsset?->name ?? $unit->unit_code,
-            'asset_code'          => $unit->unit_code,
+            'fixed_asset_unit_id' => $unit?->id,
+            'asset_name'          => $assetName,
+            'asset_code'          => $assetCode,
             'issue_type'          => $validated['issue_type'],
             'urgency'             => $validated['urgency'],
             'description'         => $validated['description'],
@@ -168,31 +190,44 @@ class ForemanController extends Controller
             'reported_by_user_id' => $user->id,
         ]);
 
-        // Mark the unit as under maintenance
-        $unit->update(['status' => FixedAssetUnit::STATUS_MAINTENANCE]);
+        // 4. Mark the unit as under maintenance if unit linked
+        if ($unit) {
+            try {
+                $unit->update(['status' => FixedAssetUnit::STATUS_MAINTENANCE]);
+            } catch (\Throwable $e) {}
+        }
 
-        \App\Models\ActivityLog::log(
-            'created',
-            "Foreman {$user->name} reported maintenance request {$mr->request_no} for asset: {$unit->parentAsset?->name} ({$unit->unit_code})",
-            'Maintenance Requests',
-            $mr
-        );
+        // 5. Activity log
+        try {
+            \App\Models\ActivityLog::log(
+                'created',
+                "Maintenance request {$mr->request_no} reported by {$user->name} for asset: {$assetName}" . ($assetCode ? " ({$assetCode})" : ''),
+                'Maintenance Requests',
+                $mr
+            );
+        } catch (\Throwable $e) {}
 
         return redirect()->route('foreman.my-maintenance-requests')
-            ->with('success', "✅ Maintenance request {$mr->request_no} submitted successfully. General Service will be notified.");
+            ->with('success', "✅ Maintenance request {$mr->request_no} submitted successfully! General Service will be notified.");
     }
 
     // ─── Foreman: My Submitted Maintenance Requests ───────────────────────────
 
     /**
-     * Show all maintenance requests submitted by this Foreman.
+     * Show all maintenance requests submitted by this Foreman/User.
      */
     public function myMaintenanceRequests(Request $request)
     {
         $user = Auth::user();
+        $employee = Employee::where('user_id', $user->id)->first();
 
         $query = MaintenanceRequest::with(['fixedAssetUnit.parentAsset', 'assignedTo'])
-            ->where('reported_by_user_id', $user->id);
+            ->where(function ($q) use ($user, $employee) {
+                $q->where('reported_by_user_id', $user->id);
+                if ($employee) {
+                    $q->orWhere('employee_id', $employee->id);
+                }
+            });
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -200,14 +235,43 @@ class ForemanController extends Controller
 
         $requests = $query->latest()->paginate(15)->withQueryString();
 
+        $baseCountQuery = function ($status = null) use ($user, $employee) {
+            $q = MaintenanceRequest::where(function ($sq) use ($user, $employee) {
+                $sq->where('reported_by_user_id', $user->id);
+                if ($employee) {
+                    $sq->orWhere('employee_id', $employee->id);
+                }
+            });
+            if ($status) {
+                $q->where('status', $status);
+            }
+            return $q->count();
+        };
+
         $stats = [
-            'pending'             => MaintenanceRequest::where('reported_by_user_id', $user->id)->where('status', 'pending')->count(),
-            'in_progress'         => MaintenanceRequest::where('reported_by_user_id', $user->id)->where('status', 'in_progress')->count(),
-            'resolved'            => MaintenanceRequest::where('reported_by_user_id', $user->id)->where('status', 'resolved')->count(),
-            'sent_to_store_manager' => MaintenanceRequest::where('reported_by_user_id', $user->id)->where('status', 'sent_to_store_manager')->count(),
+            'pending'               => $baseCountQuery('pending'),
+            'in_progress'           => $baseCountQuery('in_progress'),
+            'resolved'              => $baseCountQuery('resolved'),
+            'sent_to_store_manager' => $baseCountQuery('sent_to_store_manager'),
         ];
 
-        return view('foreman.maintenance.my-requests', compact('requests', 'stats'));
+        // Fetch available units for the report modal
+        $store = $this->getMyStore();
+        $isAdmin = $user->hasAnyRole(['admin', 'global_admin']);
+
+        $unitsQuery = FixedAssetUnit::with(['parentAsset.store'])
+            ->whereNull('deleted_at')
+            ->where('status', '!=', FixedAssetUnit::STATUS_DISPOSED);
+
+        if (!$isAdmin && $store) {
+            $unitsQuery->whereHas('parentAsset', function ($q) use ($store) {
+                $q->where('store_id', $store->id);
+            });
+        }
+
+        $availableUnits = $unitsQuery->orderBy('unit_code')->get();
+
+        return view('foreman.maintenance.my-requests', compact('requests', 'stats', 'availableUnits', 'store'));
     }
 
     // ─── Store Manager: Damaged Assets Panel ──────────────────────────────────

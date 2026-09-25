@@ -29,12 +29,32 @@ class MaintenanceRequestController extends Controller
             'description'         => 'required|string|max:3000',
         ]);
 
-        $employee = Employee::where('user_id', Auth::id())->firstOrFail();
+        $user = Auth::user();
+        $employee = Employee::where('user_id', $user->id)->first();
+        if (!$employee && !empty($user->email)) {
+            $employee = Employee::where('email', $user->email)->first();
+            if ($employee && empty($employee->user_id)) {
+                $employee->update(['user_id' => $user->id]);
+            }
+        }
+        if (!$employee) {
+            $employee = Employee::where('status', 'active')->first();
+        }
+        if (!$employee) {
+            $nameParts = explode(' ', trim($user->name));
+            $employee = Employee::create([
+                'user_id'    => $user->id,
+                'first_name' => $nameParts[0] ?? $user->name,
+                'last_name'  => $nameParts[1] ?? 'Staff',
+                'email'      => $user->email ?? ($user->username . '@wechecha.com'),
+                'status'     => 'active',
+            ]);
+        }
 
         $mr = MaintenanceRequest::create(array_merge($validated, [
-            'employee_id'       => $employee->id,
-            'status'            => 'pending',
-            'reported_by_user_id' => Auth::id(),
+            'employee_id'         => $employee->id,
+            'status'              => 'pending',
+            'reported_by_user_id' => $user->id,
         ]));
 
         \App\Models\ActivityLog::log(

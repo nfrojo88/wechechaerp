@@ -43,9 +43,16 @@ class MaintenanceRequest extends Model
         parent::boot();
 
         static::creating(function ($model) {
-            $last = static::withTrashed()->orderBy('id', 'desc')->first();
-            $next = $last ? ($last->id + 1) : 1;
-            $model->request_no = 'MNT-' . str_pad($next, 4, '0', STR_PAD_LEFT);
+            if (empty($model->request_no)) {
+                $last = static::withTrashed()->orderBy('id', 'desc')->first();
+                $next = $last ? ($last->id + 1) : 1;
+                $candidate = 'MNT-' . str_pad($next, 4, '0', STR_PAD_LEFT);
+                while (static::withTrashed()->where('request_no', $candidate)->exists()) {
+                    $next++;
+                    $candidate = 'MNT-' . str_pad($next, 4, '0', STR_PAD_LEFT);
+                }
+                $model->request_no = $candidate;
+            }
         });
     }
 
