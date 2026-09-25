@@ -59,6 +59,23 @@
     </div>
     @endif
 
+    @if($isStoreKeeperUser && !empty($assignedStore))
+    <div class="alert alert-success border-start border-4 border-success shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <div class="p-2 rounded-circle bg-success bg-opacity-25 text-success">
+                <i class="fa-solid fa-warehouse fa-lg"></i>
+            </div>
+            <div>
+                <strong class="d-block text-dark">Strict Store Isolation Active: {{ $assignedStore->name }} (Store ID: {{ $assignedStore->id }})</strong>
+                <span class="text-muted small">You are viewing purchase requisitions and material intake queues strictly destined for your assigned store location. Requisitions for other stores are restricted.</span>
+            </div>
+        </div>
+        <span class="badge bg-white text-success border border-success px-3 py-2 fw-semibold">
+            <i class="fa-solid fa-store me-1"></i>Destination Scoped: {{ $assignedStore->name }}
+        </span>
+    </div>
+    @endif
+
     <!-- KPI Summary Cards (Clickable Shortcuts) -->
     <div class="row g-3 mb-4">
         <!-- Card 1: Awaiting Your Action -->
@@ -392,6 +409,12 @@
                                 </td>
                                 <td>
                                     <span class="fw-medium text-dark">{{ $pr->project?->name ?? 'N/A' }}</span>
+                                    @php
+                                        $destStore = $pr->store ?? $pr->materialRequest?->destinationStore ?? $pr->materialRequest?->store;
+                                    @endphp
+                                    @if($destStore)
+                                        <small class="text-muted d-block"><i class="fas fa-warehouse me-1"></i>Store: {{ $destStore->name }}</small>
+                                    @endif
                                     <small class="text-muted d-block">{{ $pr->items->count() }} item(s)</small>
                                 </td>
                                 <td>

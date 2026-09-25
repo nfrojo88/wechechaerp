@@ -42,6 +42,104 @@ class ProcurementLifecycleController extends Controller
         $isPurchaseManager = $user->hasAnyRole(['purchase_manager', 'procurement_manager', 'Purchase Manager', 'Procurement Manager']) || in_array('purchase_manager', $roles) || in_array('procurement_manager', $roles);
         $isFinanceHead = $user->hasRole('finance_head') || $user->hasRole('finance_manager') || $user->hasRole('finance') || $user->hasRole('accountant');
 
+        // Resolve Store Keeper destination store(s)
+        $assignedStore = null;
+        $assignedStoreIds = collect();
+        $assignedProjectIds = collect();
+
+        if ($isStoreKeeper && !$isAdmin) {
+            if (!empty($user->store_id)) {
+                $assignedStoreIds->push((int) $user->store_id);
+            }
+            $assignedStoreIds = $assignedStoreIds
+                ->concat(\App\Models\Store::where('manager_id', $user->id)->pluck('id'))
+                ->concat(\App\Models\Store::whereHas('users', fn($q) => $q->where('users.id', $user->id))->pluck('id'))
+                ->filter()
+                ->unique()
+                ->values();
+
+            if ($assignedStoreIds->isNotEmpty()) {
+                $assignedStore = \App\Models\Store::whereIn('id', $assignedStoreIds)->first();
+                $assignedProjectIds = \App\Models\Store::whereIn('id', $assignedStoreIds)
+                    ->whereNotNull('project_id')
+                    ->pluck('project_id')
+                    ->unique()
+                    ->values();
+            } else {
+                $employee = \App\Models\Employee::where('user_id', $user->id)->first();
+                if ($employee && $employee->project_id) {
+                    $assignedProjectIds->push($employee->project_id);
+                    $storeIds = \App\Models\Store::where('project_id', $employee->project_id)->pluck('id');
+                    $assignedStoreIds = $assignedStoreIds->concat($storeIds)->unique()->values();
+                    $assignedStore = \App\Models\Store::whereIn('id', $assignedStoreIds)->first();
+                }
+            }
+        }
+
+        // Strict destination store scope for Store Keeper
+        $applyPrStoreScope = function ($query) use ($isStoreKeeper, $isAdmin, $assignedStoreIds, $assignedProjectIds) {
+            if (!$isStoreKeeper || $isAdmin) {
+                return;
+            }
+
+            if ($assignedStoreIds->isEmpty() && $assignedProjectIds->isEmpty()) {
+                $query->whereRaw('1 = 0');
+                return;
+            }
+
+            $query->where(function ($sq) use ($assignedStoreIds, $assignedProjectIds) {
+                if ($assignedStoreIds->isNotEmpty()) {
+                    // 1. Direct PR store_id
+                    $sq->whereIn('store_id', $assignedStoreIds);
+
+                    // 2. Linked Material Request destination store
+                    $sq->orWhereHas('materialRequest', function ($mq) use ($assignedStoreIds) {
+                        $mq->whereIn('destination_store_id', $assignedStoreIds);
+                    });
+
+                    // 3. Linked Delivery Receipts store
+                    $sq->orWhereHas('deliveryReceipts', function ($dq) use ($assignedStoreIds) {
+                        $dq->whereIn('store_id', $assignedStoreIds);
+                    });
+                }
+
+                // 4. Fallback: match by project of the store only if neither PR store_id nor MR destination_store_id is set
+                if ($assignedProjectIds->isNotEmpty()) {
+                    $sq->orWhere(function ($pq) use ($assignedProjectIds) {
+                        $pq->whereNull('store_id')
+                           ->where(function ($noMrStore) {
+                               $noMrStore->whereNull('material_request_id')
+                                         ->orWhereHas('materialRequest', fn($mr) => $mr->whereNull('destination_store_id'));
+                           })
+                           ->whereIn('project_id', $assignedProjectIds);
+                    });
+                }
+            });
+        };
+
+        $applyMrStoreScope = function ($query) use ($isStoreKeeper, $isAdmin, $assignedStoreIds, $assignedProjectIds) {
+            if (!$isStoreKeeper || $isAdmin) {
+                return;
+            }
+
+            if ($assignedStoreIds->isEmpty() && $assignedProjectIds->isEmpty()) {
+                $query->whereRaw('1 = 0');
+                return;
+            }
+
+            $query->where(function ($sq) use ($assignedStoreIds, $assignedProjectIds) {
+                if ($assignedStoreIds->isNotEmpty()) {
+                    $sq->whereIn('destination_store_id', $assignedStoreIds);
+                }
+                if ($assignedProjectIds->isNotEmpty()) {
+                    $sq->orWhere(function ($pq) use ($assignedProjectIds) {
+                        $pq->whereNull('destination_store_id')
+                           ->whereIn('project_id', $assignedProjectIds);
+                    });
+                }
+            });
+        };
+
         // 1. Identify owner roles to query
         $targetRoles = [];
         if ($isAdmin || $isAuditor) {
@@ -148,6 +246,9 @@ class ProcurementLifecycleController extends Controller
             });
         }
 
+        // Apply strict destination store filter for Store Keeper
+        $applyPrStoreScope($prQuery);
+
         if ($request->filled('project_id')) {
             $prQuery->where('project_id', $request->project_id);
         }
@@ -176,6 +277,9 @@ class ProcurementLifecycleController extends Controller
         $mrQuery = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
             ->whereNotIn('id', $prMrIds)
             ->latest();
+
+        // Apply strict destination store filter for Store Keeper
+        $applyMrStoreScope($mrQuery);
 
         if ($request->filled('project_id')) {
             $mrQuery->where('project_id', $request->project_id);
@@ -231,6 +335,8 @@ class ProcurementLifecycleController extends Controller
             ->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)
             ->latest();
 
+        $applyPrStoreScope($completedPrQuery);
+
         if ($request->filled('project_id')) {
             $completedPrQuery->where('project_id', $request->project_id);
         }
@@ -239,6 +345,9 @@ class ProcurementLifecycleController extends Controller
         // 7. All Company PR History (Oversight)
         $allPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'items.product'])
             ->latest();
+
+        $applyPrStoreScope($allPrQuery);
+
         if ($request->filled('project_id')) {
             $allPrQuery->where('project_id', $request->project_id);
         }
@@ -248,7 +357,15 @@ class ProcurementLifecycleController extends Controller
         $allPrs = $allPrQuery->paginate(15, ['*'], 'all_pr_page')->withQueryString();
 
         // 8. Summary Counters
-        $pendingCount = $isAuditor ? PurchaseRequest::where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count() : ($myPrs->total() + $materialRequestsQueue->count());
+        $pendingCount = $isAuditor
+            ? PurchaseRequest::where('status', '!=', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count()
+            : ($myPrs->total() + $materialRequestsQueue->count());
+
+        $completedCountQuery = PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE);
+        $applyPrStoreScope($completedCountQuery);
+
+        $allPrCountQuery = PurchaseRequest::query();
+        $applyPrStoreScope($allPrCountQuery);
 
         $kpi = [
             'my_pending'                     => $pendingCount,
@@ -258,8 +375,8 @@ class ProcurementLifecycleController extends Controller
             'pending_office_requests'        => $pendingOfficeCount,
             'pending_store_office_requests'  => $pendingStoreOfficeCount,
             'pending_finance_office_requests'=> $pendingFinanceOfficeCount,
-            'completed'                      => PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)->count(),
-            'all_prs'                        => PurchaseRequest::count(),
+            'completed'                      => $completedCountQuery->count(),
+            'all_prs'                        => $allPrCountQuery->count(),
         ];
 
         // Determine active tab: if no pending actions and user has created requests, show their created history tab
@@ -272,15 +389,21 @@ class ProcurementLifecycleController extends Controller
             }
         }
 
-        $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
-        if ($projects->isEmpty()) {
-            $projects = Project::orderBy('name')->get();
+        // Projects for filter
+        if ($isStoreKeeper && !$isAdmin && $assignedProjectIds->isNotEmpty()) {
+            $projects = Project::whereIn('id', $assignedProjectIds)->orderBy('name')->get();
+        } else {
+            $projects = Project::whereIn('status', ['active', 'planning', 'in_progress', 'on_hold'])->orderBy('name')->get();
+            if ($projects->isEmpty()) {
+                $projects = Project::orderBy('name')->get();
+            }
         }
 
         return view('procurement.lifecycle.my-queue', compact(
             'myPrs', 'emergencyMrs', 'materialRequestsQueue', 'kpi', 'projects',
             'myCreatedPrs', 'myCreatedMrs', 'completedPrs', 'allPrs', 'activeTab',
-            'isHr', 'isCoordinator', 'isStoreManager', 'isStoreKeeper', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm'
+            'isHr', 'isCoordinator', 'isStoreManager', 'isStoreKeeper', 'isPurchaseManager', 'isFinanceHead', 'isAuditor', 'isAdmin', 'isGm',
+            'assignedStore'
         ));
     }
 }

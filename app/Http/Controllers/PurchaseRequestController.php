@@ -254,6 +254,39 @@ class PurchaseRequestController extends Controller
     // ─── Show ────────────────────────────────────────────────────────────────
     public function show(PurchaseRequest $purchaseRequest)
     {
+        $user = Auth::user();
+        $roles = $user ? $user->getRoleNames()->toArray() : [];
+        $isStoreKeeper = $user && ($user->hasAnyRole(['store_keeper', 'Store Keeper', 'storekeeper', 'Storekeeper']) || in_array('store_keeper', $roles) || in_array('storekeeper', $roles));
+        $isAdmin = $user && $user->hasAnyRole(['admin', 'global_admin', 'auditor', 'audit']);
+
+        if ($isStoreKeeper && !$isAdmin) {
+            $allowedStoreIds = collect([$user->store_id])
+                ->concat(\App\Models\Store::where('manager_id', $user->id)->pluck('id'))
+                ->concat(\App\Models\Store::whereHas('users', fn($q) => $q->where('users.id', $user->id))->pluck('id'))
+                ->filter()
+                ->unique()
+                ->values();
+
+            $allowedProjectIds = \App\Models\Store::whereIn('id', $allowedStoreIds)->whereNotNull('project_id')->pluck('project_id')->unique()->values();
+
+            $isDestined = false;
+            if ($purchaseRequest->store_id && $allowedStoreIds->contains((int)$purchaseRequest->store_id)) {
+                $isDestined = true;
+            } elseif ($purchaseRequest->materialRequest && $purchaseRequest->materialRequest->destination_store_id && $allowedStoreIds->contains((int)$purchaseRequest->materialRequest->destination_store_id)) {
+                $isDestined = true;
+            } elseif ($purchaseRequest->deliveryReceipts()->whereIn('store_id', $allowedStoreIds)->exists()) {
+                $isDestined = true;
+            } elseif (!$purchaseRequest->store_id && (!$purchaseRequest->materialRequest || !$purchaseRequest->materialRequest->destination_store_id) && $allowedProjectIds->contains($purchaseRequest->project_id)) {
+                $isDestined = true;
+            } elseif ($purchaseRequest->requested_by == $user->id) {
+                $isDestined = true;
+            }
+
+            if (!$isDestined) {
+                abort(403, 'Unauthorized. This purchase request is destined for another store.');
+            }
+        }
+
         $purchaseRequest->load([
             'project', 'store', 'requestedBy', 'items.product',
             'marketResearch.supplier', 'proformaInvoices.supplier',
