@@ -81,13 +81,41 @@ class ManpowerDailyReportController extends Controller
             ->whereNotIn('status', ['rejected', 'cancelled', 'terminated'])
             ->get()
             ->map(function ($sa) {
+                // Resolve the most complete subcontractor full name
+                $fullName = '';
+                if ($sa->supplier) {
+                    $supplierName = trim($sa->supplier->name ?? '');
+                    $contactPerson = trim($sa->supplier->contact_person ?? '');
+                    if (!empty($supplierName) && !empty($contactPerson) && strcasecmp($supplierName, $contactPerson) !== 0) {
+                        $fullName = $supplierName . ' - ' . $contactPerson;
+                    } elseif (!empty($supplierName)) {
+                        $fullName = $supplierName;
+                    } elseif (!empty($contactPerson)) {
+                        $fullName = $contactPerson;
+                    }
+                }
+
+                if (empty($fullName)) {
+                    $subName = trim($sa->subcontractor_name ?? '');
+                    $contact = trim($sa->subcontractor_contact ?? '');
+                    if (!empty($subName) && !empty($contact) && preg_match('/[a-zA-Z\x{1200}-\x{137F}]/u', $contact) && strcasecmp($subName, $contact) !== 0) {
+                        $fullName = $subName . ' (' . $contact . ')';
+                    } elseif (!empty($subName)) {
+                        $fullName = $subName;
+                    }
+                }
+
+                if (empty($fullName)) {
+                    $fullName = $sa->subcontractor_display_name;
+                }
+
                 return [
                     'id'                  => $sa->id,
                     'project_id'          => $sa->project_id,
                     'agreement_no'        => $sa->agreement_no ?? ('SUB-' . $sa->id),
-                    'subcontractor_name'  => $sa->subcontractor_display_name,
+                    'subcontractor_name'  => $fullName,
                     'trade'               => $sa->description_display ?: ($sa->service_type ?? 'Subcontract Work'),
-                    'supplier_phone'      => $sa->supplier?->phone ?? '',
+                    'supplier_phone'      => $sa->supplier?->phone ?? $sa->subcontractor_contact ?? '',
                 ];
             });
 

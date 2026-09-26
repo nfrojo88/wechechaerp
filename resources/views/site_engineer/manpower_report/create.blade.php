@@ -553,12 +553,12 @@ function getSubconsForCurrentProject() {
 
 function buildSubconOptions(selectedAgreementId = '', selectedName = '') {
     const list = getSubconsForCurrentProject();
-    let html = '<option value="">— Select Site Subcontractor —</option>';
+    let html = '<option value="">— Select Subcontractor —</option>';
 
     list.forEach(s => {
         const isSel = (selectedAgreementId && String(s.id) === String(selectedAgreementId)) ||
                       (!selectedAgreementId && selectedName && s.subcontractor_name.toLowerCase() === selectedName.toLowerCase()) ? 'selected' : '';
-        html += `<option value="${s.id}" data-name="${escapeHtml(s.subcontractor_name)}" data-agreement-no="${escapeHtml(s.agreement_no)}" data-trade="${escapeHtml(s.trade)}" ${isSel}>${escapeHtml(s.subcontractor_name)} (${escapeHtml(s.agreement_no)})</option>`;
+        html += `<option value="${s.id}" data-name="${escapeHtml(s.subcontractor_name)}" data-agreement-no="${escapeHtml(s.agreement_no)}" data-trade="${escapeHtml(s.trade)}" ${isSel}>${escapeHtml(s.subcontractor_name)}</option>`;
     });
 
     const isCustom = selectedAgreementId === 'custom' || (!selectedAgreementId && selectedName && !list.some(s => s.subcontractor_name.toLowerCase() === selectedName.toLowerCase()));
@@ -610,19 +610,14 @@ function addSubcontractorCard(data = null, forceCustom = false) {
                     Subcon #<span class="subcon-display-num">1</span>
                 </span>
                 <div class="flex-grow-1">
-                    <select class="form-select form-select-sm subcon-agreement-select fw-bold" onchange="onSubconSelected(this, ${sIdx})">
+                    <select class="form-select form-select-sm subcon-agreement-select fw-bold text-dark" onchange="onSubconSelected(this, ${sIdx})">
                         ${buildSubconOptions(initialAgreementId, initialName)}
                     </select>
                     <input type="text" name="subcontractors[${sIdx}][subcontractor_name]"
                            class="form-control form-control-sm subcon-name-input mt-1.5 ${isCustom ? '' : 'd-none'}"
-                           placeholder="Enter subcontractor name..."
+                           placeholder="Enter subcontractor full name..."
                            value="${escapeHtml(initialName)}"
                            oninput="updateTotal()">
-                </div>
-                <div class="subcon-agreement-badge ${initialAgreementNo ? '' : 'd-none'}">
-                    <span class="badge bg-white text-muted border shadow-xs" style="font-size:0.72rem;">
-                        <i class="fa-solid fa-file-contract me-1 text-primary"></i><span class="subcon-agreement-no-text">${escapeHtml(initialAgreementNo)}</span>
-                    </span>
                 </div>
                 <input type="hidden" name="subcontractors[${sIdx}][agreement_id]" class="subcon-agreement-id-input" value="${escapeHtml(initialAgreementId === 'custom' ? '' : initialAgreementId)}">
                 <input type="hidden" name="subcontractors[${sIdx}][agreement_no]" class="subcon-agreement-no-input" value="${escapeHtml(initialAgreementNo)}">
@@ -811,14 +806,11 @@ function onSubconSelected(selectEl, sIdx, refreshRoles = true) {
     const nameInput = card.querySelector('.subcon-name-input');
     const idInput = card.querySelector('.subcon-agreement-id-input');
     const agreementInput = card.querySelector('.subcon-agreement-no-input');
-    const agreementBadge = card.querySelector('.subcon-agreement-badge');
-    const agreementText = card.querySelector('.subcon-agreement-no-text');
     const tradeInput = card.querySelector('.subcon-trade-input');
     const scopeHint = card.querySelector('.subcon-scope-hint');
 
     if (val === 'custom') {
         nameInput.classList.remove('d-none');
-        if (agreementBadge) agreementBadge.classList.add('d-none');
         idInput.value = '';
         agreementInput.value = '';
         tradeInput.value = '';
@@ -835,11 +827,6 @@ function onSubconSelected(selectEl, sIdx, refreshRoles = true) {
         agreementInput.value = agreementNo;
         tradeInput.value = trade;
 
-        if (agreementBadge) {
-            agreementBadge.classList.remove('d-none');
-            if (agreementText) agreementText.textContent = agreementNo;
-        }
-
         if (scopeHint) {
             scopeHint.innerHTML = trade ? `<i class="fa-solid fa-briefcase text-info me-1"></i>Scope: <strong>${escapeHtml(trade)}</strong>` : '';
         }
@@ -853,7 +840,6 @@ function onSubconSelected(selectEl, sIdx, refreshRoles = true) {
         idInput.value = '';
         agreementInput.value = '';
         tradeInput.value = '';
-        if (agreementBadge) agreementBadge.classList.add('d-none');
         if (scopeHint) scopeHint.innerHTML = '';
         if (refreshRoles) {
             refreshSubconCardRoleOptions(sIdx, '');
