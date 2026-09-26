@@ -109,34 +109,42 @@
 
             <div class="card-body p-4 bg-light bg-opacity-50">
                 {{-- Quick Templates Palette --}}
+                {{-- Quick Templates Palette --}}
                 <div class="mb-4 p-3 bg-white rounded-3 border shadow-xs">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="small fw-bold text-uppercase text-secondary">
-                            <i class="fa-solid fa-wand-magic-sparkles text-primary me-1"></i>One-Click Holiday &amp; Wish Templates (የበዓል እና የምኞት ፈጣን መልእክቶች)
-                        </span>
-                        <small class="text-muted">Click any preset to auto-fill title &amp; message</small>
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                        <div>
+                            <span class="small fw-bold text-uppercase text-secondary">
+                                <i class="fa-solid fa-wand-magic-sparkles text-primary me-1"></i>One-Click Holiday &amp; Wish Templates (የበዓል እና የምኞት ፈጣን መልእክቶች)
+                            </span>
+                            <small class="text-muted d-block" style="font-size:0.75rem;">Click any preset to auto-fill title &amp; message, or add and edit your templates</small>
+                        </div>
+                        <div class="d-flex gap-2 align-items-center">
+                            <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 shadow-xs fw-semibold" onclick="openCreateTemplateModal()">
+                                <i class="fa-solid fa-plus me-1"></i>Add Template
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 shadow-xs" onclick="openManageTemplatesModal()">
+                                <i class="fa-solid fa-sliders me-1"></i>Edit / Manage
+                            </button>
+                        </div>
                     </div>
-                    <div class="d-flex flex-wrap gap-2">
-                        <button type="button" class="btn btn-sm btn-outline-warning text-dark rounded-pill template-btn"
-                                onclick="applyTemplate('new_year')">
-                            🌼 Ethiopian New Year / እንቁጣጣሽ (2017)
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-success text-dark rounded-pill template-btn"
-                                onclick="applyTemplate('genna')">
-                            🎄 Genna / Christmas (ገና)
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-danger text-dark rounded-pill template-btn"
-                                onclick="applyTemplate('meskel')">
-                            🕊️ Meskel / Demera (መስቀል)
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary text-dark rounded-pill template-btn"
-                                onclick="applyTemplate('eid')">
-                            🌙 Eid Mubarak (ዒድ ሙባረክ)
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-dark rounded-pill template-btn"
-                                onclick="applyTemplate('notice')">
-                            📢 General Company Notice (ማስታወቂያ)
-                        </button>
+                    <div class="d-flex flex-wrap gap-2 align-items-center" id="templatesPaletteContainer">
+                        @forelse($templates as $tpl)
+                            <div class="btn-group template-btn-group shadow-xs" role="group" id="tplPill_{{ $tpl->id }}">
+                                <button type="button" class="btn btn-sm {{ $tpl->color ?? 'btn-outline-primary' }} text-dark rounded-pill template-btn px-3"
+                                        onclick="applyTemplateById({{ $tpl->id }})" title="Click to auto-fill title &amp; message">
+                                    <span>{{ $tpl->icon ?? '📝' }}</span> {{ $tpl->name }}
+                                </button>
+                                <button type="button" class="btn btn-sm btn-light border text-muted px-2 py-0" 
+                                        onclick="openEditTemplateModal({{ json_encode($tpl) }})" title="Edit '{{ $tpl->name }}'" 
+                                        style="border-radius: 50px; margin-left: -14px; z-index: 2; padding-right: 8px !important;">
+                                    <i class="fa-solid fa-pencil" style="font-size: 0.68rem;"></i>
+                                </button>
+                            </div>
+                        @empty
+                            <div class="text-muted small py-1">
+                                <i class="fa-solid fa-info-circle me-1"></i>No templates found. Click <strong>+ Add Template</strong> to create one.
+                            </div>
+                        @endforelse
                     </div>
                 </div>
 
@@ -160,12 +168,17 @@
 
                         {{-- Message Body --}}
                         <div class="col-12">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
+                            <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-2">
                                 <label class="form-label fw-bold mb-0">Message Content (የመልእክቱ ዝርዝር) <span class="text-danger">*</span></label>
-                                <span class="small text-muted" id="charCounter">
-                                    <span id="charCount" class="fw-bold text-primary">0</span> chars | 
-                                    <span id="smsPartCount" class="badge bg-secondary">1 SMS</span>
-                                </span>
+                                <div class="d-flex align-items-center gap-2">
+                                    <button type="button" class="btn btn-xs btn-outline-info rounded-pill py-0 px-2" style="font-size:0.75rem;" onclick="saveCurrentAsTemplate()" title="Save currently written Title &amp; Message as a reusable template">
+                                        <i class="fa-solid fa-bookmark me-1 text-primary"></i>Save as Template
+                                    </button>
+                                    <span class="small text-muted" id="charCounter">
+                                        <span id="charCount" class="fw-bold text-primary">0</span> chars | 
+                                        <span id="smsPartCount" class="badge bg-secondary">1 SMS</span>
+                                    </span>
+                                </div>
                             </div>
                             <textarea name="message" id="announcementMessage" class="form-control rounded-3" rows="4" 
                                       placeholder="Write announcement or holiday greeting here (supports Amharic and English)..." 
@@ -587,36 +600,352 @@
     </div>
 </div>
 
-<script>
-const templates = {
-    new_year: {
-        title: "መልካም አዲስ ዓመት! / Happy Ethiopian New Year 2017",
-        message: "እንኳን ለ፳፻፲፯ አዲሱ ዓመት በሰላም አደረሳችሁ! አዲሱ ዓመት የሰላም፣ የጤና፣ የስኬት እና የበረከት እንዲሆንላችሁ ከልብ እንመኛለን! — ከወጨጫ ኮንስትራክሽን ኃ/የተ/የግ/ማ"
-    },
-    genna: {
-        title: "መልካም የገና በዓል! / Merry Christmas",
-        message: "ለመላው የድርጅታችን ሰራተኞች በሙሉ እንኳን ለብርሃነ ልደቱ በሰላም አደረሳችሁ! መልካም እና የተባረከ የገና በዓል ይሁንላችሁ! — ከወጨጫ ኮንስትራክሽን"
-    },
-    meskel: {
-        title: "እንኳን ለመስቀል ደመራ በዓል በሰላም አደረሳችሁ!",
-        message: "ለመላው የእምነቱ ተከታይ ሰራተኞቻችን በሙሉ እንኳን ለመስቀል ደመራ በዓል በሰላም አደረሳችሁ! መልካም የበዓል ጊዜ ይሁንላችሁ! — ከወጨጫ ኮንስትራክሽን"
-    },
-    eid: {
-        title: "መልካም የዒድ በዓል! / Eid Mubarak",
-        message: "ለመላው የእስልምና እምነት ተከታይ ሰራተኞቻችን በሙሉ እንኳን ለተከበረው የዒድ በዓል በሰላም አደረሳችሁ! ተቀበለላሁ ሚና ወሚንኩም! — ከወጨጫ ኮንስትራክሽን"
-    },
-    notice: {
-        title: "አጠቃላይ የኩባንያው ማስታወቂያ / Official Company Notice",
-        message: "ለኩባንያችን ሰራተኞች በሙሉ፡ ጠቃሚ የኩባንያችን የስራ መመሪያ እና ማስታወቂያ ተላልፏል። እባክዎ በERP ስርዓት ገብተው ዝርዝሩን ይመልከቱ። — ወጨጫ ኮንስትራክሽን"
-    }
-};
+{{-- CREATE / EDIT TEMPLATE MODAL --}}
+<div class="modal fade" id="templateFormModal" tabindex="-1" aria-labelledby="templateModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-bottom px-4 py-3">
+                <h5 class="modal-title fw-bold text-dark" id="templateModalTitle">
+                    <i class="fa-solid fa-wand-magic-sparkles text-primary me-2"></i>Create New Template
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="modalTemplateId" value="">
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-secondary">Template Name (የአብነት ስም) <span class="text-danger">*</span></label>
+                    <input type="text" id="modalTemplateName" class="form-control rounded-3" placeholder="e.g. Easter Holiday / ፋሲካ ወይም Meeting Notice" required>
+                </div>
 
-function applyTemplate(key) {
-    if (templates[key]) {
-        document.getElementById('announcementTitle').value = templates[key].title;
-        document.getElementById('announcementMessage').value = templates[key].message;
+                <div class="row g-2 mb-3">
+                    <div class="col-sm-5">
+                        <label class="form-label fw-bold small text-secondary">Icon / Emoji</label>
+                        <input type="text" id="modalTemplateIcon" class="form-control rounded-3 text-center fs-5" value="🌼" maxlength="10">
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                            @foreach(['🌼', '🎄', '🕊️', '🌙', '📢', '🏗️', '⚠️', '🎉', '🤝', '🎂'] as $emoji)
+                                <button type="button" class="btn btn-sm btn-light border p-1" style="font-size:0.8rem; width:28px; height:28px;" onclick="selectTemplateIcon('{{ $emoji }}')">{{ $emoji }}</button>
+                            @endforeach
+                        </div>
+                    </div>
+                    <div class="col-sm-7">
+                        <label class="form-label fw-bold small text-secondary">Badge Color Style</label>
+                        <select id="modalTemplateColor" class="form-select rounded-3">
+                            <option value="btn-outline-warning">🟡 Yellow / Festive (በዓላት)</option>
+                            <option value="btn-outline-success">🟢 Green / Holiday (አረንጓዴ)</option>
+                            <option value="btn-outline-primary" selected>🔵 Blue / Corporate (ሰማያዊ)</option>
+                            <option value="btn-outline-danger">🔴 Red / Urgent (ቀይ)</option>
+                            <option value="btn-outline-info">🔷 Cyan / Info (የመረጃ)</option>
+                            <option value="btn-outline-dark">⚫ Dark / Official (ይፋዊ)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-secondary">Headline / Subject (ርዕስ) <span class="text-danger">*</span></label>
+                    <input type="text" id="modalTemplateTitle" class="form-control rounded-3" placeholder="Headline / Subject to auto-fill" required>
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label fw-bold small text-secondary">Message Content (የመልእክቱ ዝርዝር) <span class="text-danger">*</span></label>
+                    <textarea id="modalTemplateMessage" class="form-control rounded-3" rows="4" placeholder="Announcement / greeting message text..." required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer border-top px-4 py-3 bg-light rounded-bottom-4 d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-danger btn-sm rounded-pill" id="btnDeleteTemplateModal" onclick="deleteCurrentModalTemplate()" style="display:none;">
+                    <i class="fa-solid fa-trash me-1"></i>Delete
+                </button>
+                <div class="d-flex gap-2 ms-auto">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" id="btnSaveTemplateModal" onclick="saveTemplateFromModal()">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>Save Template
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- MANAGE TEMPLATES MODAL --}}
+<div class="modal fade" id="manageTemplatesModal" tabindex="-1" aria-labelledby="manageTemplatesModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-bottom px-4 py-3">
+                <div>
+                    <h5 class="modal-title fw-bold text-dark" id="manageTemplatesModalTitle">
+                        <i class="fa-solid fa-sliders text-secondary me-2"></i>Manage Announcement Templates
+                    </h5>
+                    <small class="text-muted">Create, edit, or remove pre-configured message templates</small>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <button type="button" class="btn btn-sm btn-primary rounded-pill px-3" onclick="openCreateTemplateModal()">
+                        <i class="fa-solid fa-plus me-1"></i>New Template
+                    </button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small text-uppercase">
+                            <tr>
+                                <th class="ps-4">Template Name</th>
+                                <th>Headline / Title</th>
+                                <th>Message Snippet</th>
+                                <th class="text-end pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="manageTemplatesTableBody">
+                            {{-- Dynamically populated rows --}}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer border-top px-4 py-2 bg-light rounded-bottom-4">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let templatesList = @json($templates);
+
+function applyTemplateById(id) {
+    const tpl = templatesList.find(t => t.id == id);
+    if (tpl) {
+        const titleInput = document.getElementById('announcementTitle');
+        const msgInput = document.getElementById('announcementMessage');
+        titleInput.value = tpl.title;
+        msgInput.value = tpl.message;
         updateCharCount();
+
+        // Subtle animation to draw user attention
+        titleInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        titleInput.focus();
     }
+}
+
+function selectTemplateIcon(emoji) {
+    document.getElementById('modalTemplateIcon').value = emoji;
+}
+
+function openCreateTemplateModal(initialTitle = '', initialMessage = '') {
+    const manageModalEl = document.getElementById('manageTemplatesModal');
+    const manageModal = bootstrap.Modal.getInstance(manageModalEl);
+    if (manageModal) manageModal.hide();
+
+    document.getElementById('modalTemplateId').value = '';
+    document.getElementById('templateModalTitle').innerHTML = '<i class="fa-solid fa-plus text-primary me-2"></i>Create New Template';
+    document.getElementById('modalTemplateName').value = '';
+    document.getElementById('modalTemplateIcon').value = '🌼';
+    document.getElementById('modalTemplateColor').value = 'btn-outline-primary';
+    document.getElementById('modalTemplateTitle').value = initialTitle;
+    document.getElementById('modalTemplateMessage').value = initialMessage;
+    document.getElementById('btnDeleteTemplateModal').style.display = 'none';
+
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('templateFormModal'));
+    modal.show();
+}
+
+function openEditTemplateModal(tpl) {
+    const manageModalEl = document.getElementById('manageTemplatesModal');
+    const manageModal = bootstrap.Modal.getInstance(manageModalEl);
+    if (manageModal) manageModal.hide();
+
+    document.getElementById('modalTemplateId').value = tpl.id;
+    document.getElementById('templateModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square text-primary me-2"></i>Edit Template: ' + escapeHtml(tpl.name);
+    document.getElementById('modalTemplateName').value = tpl.name || '';
+    document.getElementById('modalTemplateIcon').value = tpl.icon || '📝';
+    document.getElementById('modalTemplateColor').value = tpl.color || 'btn-outline-primary';
+    document.getElementById('modalTemplateTitle').value = tpl.title || '';
+    document.getElementById('modalTemplateMessage').value = tpl.message || '';
+    document.getElementById('btnDeleteTemplateModal').style.display = 'inline-block';
+
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('templateFormModal'));
+    modal.show();
+}
+
+function saveCurrentAsTemplate() {
+    const currentTitle = (document.getElementById('announcementTitle').value || '').trim();
+    const currentMsg = (document.getElementById('announcementMessage').value || '').trim();
+    if (!currentTitle && !currentMsg) {
+        alert('Please write a Title or Message first before saving it as a template.');
+        document.getElementById('announcementTitle').focus();
+        return;
+    }
+    openCreateTemplateModal(currentTitle, currentMsg);
+}
+
+function saveTemplateFromModal() {
+    const id = document.getElementById('modalTemplateId').value;
+    const name = (document.getElementById('modalTemplateName').value || '').trim();
+    const icon = (document.getElementById('modalTemplateIcon').value || '').trim() || '📝';
+    const color = document.getElementById('modalTemplateColor').value;
+    const title = (document.getElementById('modalTemplateTitle').value || '').trim();
+    const message = (document.getElementById('modalTemplateMessage').value || '').trim();
+    const btn = document.getElementById('btnSaveTemplateModal');
+
+    if (!name) {
+        alert('Please enter a Template Name.');
+        document.getElementById('modalTemplateName').focus();
+        return;
+    }
+    if (!title) {
+        alert('Please enter a Headline / Title.');
+        document.getElementById('modalTemplateTitle').focus();
+        return;
+    }
+    if (!message) {
+        alert('Please enter Message Content.');
+        document.getElementById('modalTemplateMessage').focus();
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Saving...';
+
+    const url = id 
+        ? '{{ url("/admin/announcements/templates") }}/' + id
+        : '{{ route("admin.announcements.templates.store") }}';
+    const method = id ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ name, icon, color, title, message })
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i>Save Template';
+        if (data.success && data.template) {
+            if (id) {
+                const idx = templatesList.findIndex(t => t.id == id);
+                if (idx !== -1) templatesList[idx] = data.template;
+            } else {
+                templatesList.push(data.template);
+            }
+            renderTemplatesPalette();
+            renderManageTemplatesTable();
+            bootstrap.Modal.getInstance(document.getElementById('templateFormModal')).hide();
+        } else {
+            alert(data.message || 'Error saving template.');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-floppy-disk me-1"></i>Save Template';
+        alert('Failed to save template: ' + err.message);
+    });
+}
+
+function deleteCurrentModalTemplate() {
+    const id = document.getElementById('modalTemplateId').value;
+    if (!id) return;
+    deleteTemplate(id, true);
+}
+
+function deleteTemplate(id, fromModal = false) {
+    const tpl = templatesList.find(t => t.id == id);
+    const name = tpl ? tpl.name : 'this template';
+    if (!confirm(`Are you sure you want to delete template "${name}"?`)) return;
+
+    fetch('{{ url("/admin/announcements/templates") }}/' + id, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            templatesList = templatesList.filter(t => t.id != id);
+            renderTemplatesPalette();
+            renderManageTemplatesTable();
+            if (fromModal) {
+                const formModal = bootstrap.Modal.getInstance(document.getElementById('templateFormModal'));
+                if (formModal) formModal.hide();
+            }
+        } else {
+            alert(data.message || 'Error deleting template.');
+        }
+    })
+    .catch(err => {
+        alert('Failed to delete template: ' + err.message);
+    });
+}
+
+function openManageTemplatesModal() {
+    renderManageTemplatesTable();
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('manageTemplatesModal'));
+    modal.show();
+}
+
+function renderTemplatesPalette() {
+    const container = document.getElementById('templatesPaletteContainer');
+    if (!container) return;
+    if (templatesList.length === 0) {
+        container.innerHTML = '<div class="text-muted small py-1"><i class="fa-solid fa-info-circle me-1"></i>No templates found. Click <strong>+ Add Template</strong> to create one.</div>';
+        return;
+    }
+    container.innerHTML = templatesList.map(tpl => `
+        <div class="btn-group template-btn-group shadow-xs" role="group" id="tplPill_${tpl.id}">
+            <button type="button" class="btn btn-sm ${tpl.color || 'btn-outline-primary'} text-dark rounded-pill template-btn px-3"
+                    onclick="applyTemplateById(${tpl.id})" title="Click to auto-fill title &amp; message">
+                <span>${escapeHtml(tpl.icon || '📝')}</span> ${escapeHtml(tpl.name)}
+            </button>
+            <button type="button" class="btn btn-sm btn-light border text-muted px-2 py-0" 
+                    onclick="openEditTemplateModal(${JSON.stringify(tpl).replace(/"/g, '&quot;')})" title="Edit '${escapeHtml(tpl.name)}'" 
+                    style="border-radius: 50px; margin-left: -14px; z-index: 2; padding-right: 8px !important;">
+                <i class="fa-solid fa-pencil" style="font-size: 0.68rem;"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+function renderManageTemplatesTable() {
+    const tbody = document.getElementById('manageTemplatesTableBody');
+    if (!tbody) return;
+    if (templatesList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">No templates available. Click "+ New Template" to add one.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = templatesList.map(tpl => `
+        <tr>
+            <td class="ps-4 align-middle">
+                <span class="fs-5 me-2">${escapeHtml(tpl.icon || '📝')}</span>
+                <strong>${escapeHtml(tpl.name)}</strong>
+            </td>
+            <td class="align-middle">
+                <span class="text-dark small fw-semibold">${escapeHtml(tpl.title)}</span>
+            </td>
+            <td class="align-middle">
+                <div class="text-muted small text-truncate" style="max-width: 260px;" title="${escapeHtml(tpl.message)}">
+                    ${escapeHtml(tpl.message)}
+                </div>
+            </td>
+            <td class="align-middle text-end pe-4">
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-outline-success" onclick="applyTemplateById(${tpl.id}); bootstrap.Modal.getInstance(document.getElementById('manageTemplatesModal')).hide();" title="Apply to broadcast">
+                        <i class="fa-solid fa-check me-1"></i>Use
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" onclick="openEditTemplateModal(${JSON.stringify(tpl).replace(/"/g, '&quot;')})" title="Edit">
+                        <i class="fa-solid fa-pen"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" onclick="deleteTemplate(${tpl.id})" title="Delete">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
 }
 
 function updateCharCount() {

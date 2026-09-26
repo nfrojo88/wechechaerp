@@ -2439,6 +2439,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/',                                    [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'index'])->name('index');
         Route::post('/',                                   [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'store'])->name('store');
         Route::post('/test-sms',                           [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'sendTestSms'])->name('test-sms');
+        Route::post('/templates',                          [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'storeTemplate'])->name('templates.store');
+        Route::put('/templates/{template}',                [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'updateTemplate'])->name('templates.update');
+        Route::delete('/templates/{template}',             [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'destroyTemplate'])->name('templates.destroy');
         Route::get('/{announcement}',                      [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'show'])->name('show');
         Route::post('/{announcement}/toggle-publish',      [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'togglePublish'])->name('toggle-publish');
         Route::delete('/{announcement}',                   [App\Http\Controllers\Admin\GlobalAdminAnnouncementController::class, 'destroy'])->name('destroy');

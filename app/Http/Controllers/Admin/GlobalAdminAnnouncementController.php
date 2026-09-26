@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
 use App\Models\AnnouncementSmsLog;
+use App\Models\AnnouncementTemplate;
 use App\Models\Employee;
 use App\Models\Project;
 use App\Models\SubconAgreement;
@@ -66,6 +67,81 @@ class GlobalAdminAnnouncementController extends Controller
                     $table->timestamps();
                 });
             }
+
+            if (!\Illuminate\Support\Facades\Schema::hasTable('announcement_templates')) {
+                \Illuminate\Support\Facades\Schema::create('announcement_templates', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->id();
+                    $table->string('name', 255);
+                    $table->string('title', 255);
+                    $table->text('message');
+                    $table->string('icon', 50)->default('🌼');
+                    $table->string('color', 50)->default('btn-outline-primary');
+                    $table->boolean('is_default')->default(false);
+                    $table->unsignedBigInteger('created_by')->nullable();
+                    $table->timestamps();
+                });
+            }
+
+            // Seed default templates if empty
+            if (\Illuminate\Support\Facades\Schema::hasTable('announcement_templates') && AnnouncementTemplate::count() === 0) {
+                AnnouncementTemplate::insert([
+                    [
+                        'name'       => 'Ethiopian New Year / እንቁጣጣሽ (2017)',
+                        'title'      => 'መልካም አዲስ ዓመት! / Happy Ethiopian New Year 2017',
+                        'message'    => 'እንኳን ለ፳፻፲፯ አዲሱ ዓመት በሰላም አደረሳችሁ! አዲሱ ዓመት የሰላም፣ የጤና፣ የስኬት እና የበረከት እንዲሆንላችሁ ከልብ እንመኛለን! — ከወጨጫ ኮንስትራክሽን ኃ/የተ/የግ/ማ',
+                        'icon'       => '🌼',
+                        'color'      => 'btn-outline-warning',
+                        'is_default' => true,
+                        'created_by' => null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ],
+                    [
+                        'name'       => 'Genna / Christmas (ገና)',
+                        'title'      => 'መልካም የገና በዓል! / Merry Christmas',
+                        'message'    => 'ለመላው የድርጅታችን ሰራተኞች በሙሉ እንኳን ለብርሃነ ልደቱ በሰላም አደረሳችሁ! መልካም እና የተባረከ የገና በዓል ይሁንላችሁ! — ከወጨጫ ኮንስትራክሽን',
+                        'icon'       => '🎄',
+                        'color'      => 'btn-outline-success',
+                        'is_default' => true,
+                        'created_by' => null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ],
+                    [
+                        'name'       => 'Meskel / Demera (መስቀል)',
+                        'title'      => 'እንኳን ለመስቀል ደመራ በዓል በሰላም አደረሳችሁ!',
+                        'message'    => 'ለመላው የእምነቱ ተከታይ ሰራተኞቻችን በሙሉ እንኳን ለመስቀል ደመራ በዓል በሰላም አደረሳችሁ! መልካም የበዓል ጊዜ ይሁንላችሁ! — ከወጨጫ ኮንስትራክሽን',
+                        'icon'       => '🕊️',
+                        'color'      => 'btn-outline-danger',
+                        'is_default' => true,
+                        'created_by' => null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ],
+                    [
+                        'name'       => 'Eid Mubarak (ዒድ ሙባረክ)',
+                        'title'      => 'መልካም የዒድ በዓል! / Eid Mubarak',
+                        'message'    => 'ለመላው የእስልምና እምነት ተከታይ ሰራተኞቻችን በሙሉ እንኳን ለተከበረው የዒድ በዓል በሰላም አደረሳችሁ! ተቀበለላሁ ሚና ወሚንኩም! — ከወጨጫ ኮንስትራክሽን',
+                        'icon'       => '🌙',
+                        'color'      => 'btn-outline-primary',
+                        'is_default' => true,
+                        'created_by' => null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ],
+                    [
+                        'name'       => 'General Company Notice (ማስታወቂያ)',
+                        'title'      => 'አጠቃላይ የኩባንያው ማስታወቂያ / Official Company Notice',
+                        'message'    => 'ለኩባንያችን ሰራተኞች በሙሉ፡ ጠቃሚ የኩባንያችን የስራ መመሪያ እና ማስታወቂያ ተላልፏል። እባክዎ በERP ስርዓት ገብተው ዝርዝሩን ይመልከቱ። — ወጨጫ ኮንስትራክሽን',
+                        'icon'       => '📢',
+                        'color'      => 'btn-outline-dark',
+                        'is_default' => true,
+                        'created_by' => null,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ],
+                ]);
+            }
         } catch (\Throwable $e) {
             Log::error('Announcement table auto-heal error: ' . $e->getMessage());
         }
@@ -112,6 +188,12 @@ class GlobalAdminAnnouncementController extends Controller
             return !empty($phone);
         })->count();
 
+        // Fetch templates
+        $templates = collect();
+        if (\Illuminate\Support\Facades\Schema::hasTable('announcement_templates')) {
+            $templates = AnnouncementTemplate::orderBy('id')->get();
+        }
+
         // Stats
         $totalBroadcasts = Announcement::count();
         $totalSmsSent = Announcement::sum('sms_sent_count');
@@ -126,6 +208,7 @@ class GlobalAdminAnnouncementController extends Controller
             'employees',
             'subconAgreements',
             'totalSubconWithPhone',
+            'templates',
             'totalBroadcasts',
             'totalSmsSent',
             'totalSmsFailed',
@@ -442,5 +525,91 @@ class GlobalAdminAnnouncementController extends Controller
     {
         $announcement->delete();
         return redirect()->route('admin.announcements.index')->with('success', 'Announcement removed successfully.');
+    }
+
+    /**
+     * Store a new custom announcement template.
+     */
+    public function storeTemplate(Request $request)
+    {
+        $this->ensureTablesExist();
+
+        $validated = $request->validate([
+            'name'    => 'required|string|max:255',
+            'title'   => 'required|string|max:255',
+            'message' => 'required|string|max:1200',
+            'icon'    => 'nullable|string|max:50',
+            'color'   => 'nullable|string|max:50',
+        ]);
+
+        $template = AnnouncementTemplate::create([
+            'name'       => $validated['name'],
+            'title'      => $validated['title'],
+            'message'    => $validated['message'],
+            'icon'       => $validated['icon'] ?: '✨',
+            'color'      => $validated['color'] ?: 'btn-outline-primary',
+            'is_default' => false,
+            'created_by' => auth()->id(),
+        ]);
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success'  => true,
+                'message'  => "Template '{$template->name}' created successfully!",
+                'template' => $template,
+            ]);
+        }
+
+        return back()->with('success', "Template '{$template->name}' created successfully!");
+    }
+
+    /**
+     * Update an existing announcement template.
+     */
+    public function updateTemplate(Request $request, AnnouncementTemplate $template)
+    {
+        $validated = $request->validate([
+            'name'    => 'required|string|max:255',
+            'title'   => 'required|string|max:255',
+            'message' => 'required|string|max:1200',
+            'icon'    => 'nullable|string|max:50',
+            'color'   => 'nullable|string|max:50',
+        ]);
+
+        $template->update([
+            'name'    => $validated['name'],
+            'title'   => $validated['title'],
+            'message' => $validated['message'],
+            'icon'    => $validated['icon'] ?: $template->icon,
+            'color'   => $validated['color'] ?: $template->color,
+        ]);
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success'  => true,
+                'message'  => "Template '{$template->name}' updated successfully!",
+                'template' => $template,
+            ]);
+        }
+
+        return back()->with('success', "Template '{$template->name}' updated successfully!");
+    }
+
+    /**
+     * Remove an announcement template.
+     */
+    public function destroyTemplate(Request $request, AnnouncementTemplate $template)
+    {
+        $name = $template->name;
+        $template->delete();
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Template '{$name}' deleted successfully!",
+            ]);
+        }
+
+        return back()->with('success', "Template '{$name}' deleted successfully!");
     }
 }
