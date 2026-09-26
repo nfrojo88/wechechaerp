@@ -203,35 +203,51 @@
                                 </div>
 
                                 <div class="row g-2 mb-3">
-                                    <div class="col-md-3 col-6">
-                                        <div class="form-check p-2 border rounded-3 bg-light">
+                                    <div class="col-lg-2 col-md-4 col-6">
+                                        <div class="form-check p-2 border rounded-3 bg-light h-100">
                                             <input class="form-check-input ms-1 me-2" type="radio" name="target_type" id="targetAll" value="all" checked onchange="onTargetTypeChange()">
-                                            <label class="form-check-label fw-semibold" for="targetAll">
-                                                👥 All Active Staff
+                                            <label class="form-check-label fw-semibold small text-nowrap" for="targetAll">
+                                                👥 All Staff
                                             </label>
                                         </div>
                                     </div>
-                                    <div class="col-md-3 col-6">
-                                        <div class="form-check p-2 border rounded-3 bg-light">
+                                    <div class="col-lg-2 col-md-4 col-6">
+                                        <div class="form-check p-2 border rounded-3 bg-light h-100">
                                             <input class="form-check-input ms-1 me-2" type="radio" name="target_type" id="targetDept" value="department" onchange="onTargetTypeChange()">
-                                            <label class="form-check-label fw-semibold" for="targetDept">
-                                                🏢 By Department
+                                            <label class="form-check-label fw-semibold small text-nowrap" for="targetDept">
+                                                🏢 By Dept
                                             </label>
                                         </div>
                                     </div>
-                                    <div class="col-md-3 col-6">
-                                        <div class="form-check p-2 border rounded-3 bg-light">
+                                    <div class="col-lg-2 col-md-4 col-6">
+                                        <div class="form-check p-2 border rounded-3 bg-light h-100">
                                             <input class="form-check-input ms-1 me-2" type="radio" name="target_type" id="targetProject" value="project" onchange="onTargetTypeChange()">
-                                            <label class="form-check-label fw-semibold" for="targetProject">
+                                            <label class="form-check-label fw-semibold small text-nowrap" for="targetProject">
                                                 🏗️ By Project
                                             </label>
                                         </div>
                                     </div>
-                                    <div class="col-md-3 col-6">
-                                        <div class="form-check p-2 border rounded-3 bg-light">
+                                    <div class="col-lg-2 col-md-4 col-6">
+                                        <div class="form-check p-2 border rounded-3 bg-light h-100">
                                             <input class="form-check-input ms-1 me-2" type="radio" name="target_type" id="targetSelected" value="selected" onchange="onTargetTypeChange()">
-                                            <label class="form-check-label fw-semibold" for="targetSelected">
-                                                🎯 Custom Selection
+                                            <label class="form-check-label fw-semibold small text-nowrap" for="targetSelected">
+                                                🎯 Custom Staff
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-2 col-md-4 col-6">
+                                        <div class="form-check p-2 border rounded-3 bg-light h-100">
+                                            <input class="form-check-input ms-1 me-2" type="radio" name="target_type" id="targetSubcon" value="subcon" onchange="onTargetTypeChange()">
+                                            <label class="form-check-label fw-semibold small text-nowrap text-warning-emphasis" for="targetSubcon">
+                                                🤝 Subcon
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-2 col-md-4 col-6">
+                                        <div class="form-check p-2 border rounded-3 bg-light h-100">
+                                            <input class="form-check-input ms-1 me-2" type="radio" name="target_type" id="targetClient" value="client" onchange="onTargetTypeChange()">
+                                            <label class="form-check-label fw-semibold small text-nowrap text-primary" for="targetClient">
+                                                👤 Client (Manual)
                                             </label>
                                         </div>
                                     </div>
@@ -284,6 +300,128 @@
                                                     </div>
                                                 </div>
                                             @endforeach
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- Subcontractor Selection (hidden by default) --}}
+                                <div id="subconSelectionSection" style="display:none;" class="p-3 bg-light rounded-3 border mb-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                        <div>
+                                            <label class="form-label small fw-bold text-dark mb-0">
+                                                <i class="fa-solid fa-handshake me-1 text-warning"></i>Select Subcontractors from Subcon Agreements (ከንዑስ ተቋራጭ ስምምነቶች):
+                                            </label>
+                                            <div class="text-muted" style="font-size: 0.75rem;">Phone numbers are fetched directly from subcontractor agreements and registered suppliers.</div>
+                                        </div>
+                                        <div class="d-flex gap-2 align-items-center">
+                                            <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size: 0.75rem;" onclick="toggleAllSubcon(true)">Select All</button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size: 0.75rem;" onclick="toggleAllSubcon(false)">Clear All</button>
+                                            <input type="text" id="subconFilterInput" class="form-control form-control-sm py-0 px-2" placeholder="Search subcon..." style="max-width: 140px; font-size: 0.75rem;" onkeyup="filterSubconList()">
+                                        </div>
+                                    </div>
+                                    <div style="max-height: 220px; overflow-y: auto;" class="border rounded-3 p-2 bg-white">
+                                        <div class="row g-2" id="subconListContainer">
+                                            @forelse($subconAgreements as $sub)
+                                                @php
+                                                    $subPhone = trim($sub->subcontractor_contact ?: ($sub->supplier?->phone ?? ''));
+                                                    $subName = $sub->subcontractor_display_name;
+                                                @endphp
+                                                <div class="col-md-6 subcon-item-col" data-subcon-search="{{ strtolower($subName . ' ' . $sub->agreement_no . ' ' . ($sub->project?->name ?? '')) }}">
+                                                    <div class="form-check border rounded-2 p-2 h-100 d-flex align-items-start gap-2 bg-light-subtle">
+                                                        <input class="form-check-input mt-1 ms-1 subcon-checkbox" type="checkbox" name="subcon_ids[]" value="{{ $sub->id }}" id="subcon_{{ $sub->id }}" data-has-phone="{{ !empty($subPhone) ? '1' : '0' }}" onchange="updateSubconCount()" {{ !empty($subPhone) ? 'checked' : '' }}>
+                                                        <label class="form-check-label small flex-grow-1" for="subcon_{{ $sub->id }}">
+                                                            <div class="d-flex justify-content-between align-items-center">
+                                                                <strong class="text-dark text-truncate" style="max-width: 190px;" title="{{ $subName }}">{{ $subName }}</strong>
+                                                                <span class="badge bg-secondary-subtle text-secondary font-monospace" style="font-size:0.7rem;">{{ $sub->agreement_no ?? 'AGR' }}</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between align-items-center mt-1">
+                                                                <span class="text-muted text-truncate" style="font-size:0.75rem; max-width: 160px;" title="{{ $sub->project?->name ?? 'General Project' }}">
+                                                                    <i class="fa-solid fa-folder-open me-1"></i>{{ $sub->project?->name ?? 'General Project' }}
+                                                                </span>
+                                                                @if(!empty($subPhone))
+                                                                    <span class="badge bg-success-subtle text-success font-monospace" style="font-size:0.7rem;">
+                                                                        <i class="fa-solid fa-phone me-1"></i>{{ $subPhone }}
+                                                                    </span>
+                                                                @else
+                                                                    <span class="badge bg-danger-subtle text-danger" style="font-size:0.7rem;">
+                                                                        <i class="fa-solid fa-phone-slash me-1"></i>No Phone
+                                                                    </span>
+                                                                @endif
+                                                            </div>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            @empty
+                                                <div class="col-12 py-3 text-center text-muted small">
+                                                    <i class="fa-solid fa-circle-info me-1"></i>No subcontractor agreements found. You can register agreements in Procurement &gt; Subcon Agreements.
+                                                </div>
+                                            @endforelse
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- Client Manual Addition (hidden by default) --}}
+                                <div id="clientSelectionSection" style="display:none;" class="p-3 bg-light rounded-3 border mb-2">
+                                    <div class="mb-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <label class="form-label small fw-bold text-dark mb-0">
+                                                <i class="fa-solid fa-user-plus me-1 text-primary"></i>Add Client(s) Manually (ደንበኞችን በቀጥታ እዚህ ያስገቡ):
+                                            </label>
+                                            <span class="badge bg-primary-subtle text-primary" id="clientTotalBadge">0 Clients Ready</span>
+                                        </div>
+                                        <div class="text-muted mb-2" style="font-size: 0.75rem;">
+                                            Enter client name and mobile phone number to add them to the recipient list, or paste bulk phone numbers below.
+                                        </div>
+
+                                        {{-- Single Client Entry Row --}}
+                                        <div class="card p-2 bg-white border rounded-3 mb-2 shadow-xs">
+                                            <div class="row g-2 align-items-center">
+                                                <div class="col-md-5 col-sm-6">
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-light text-muted"><i class="fa-solid fa-user"></i></span>
+                                                        <input type="text" id="manualClientName" class="form-control" placeholder="Client Name (e.g. Mr. Abebe / Sunshine)" onkeypress="if(event.key==='Enter'){event.preventDefault(); addManualClientRow();}">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4 col-sm-6">
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-light text-muted"><i class="fa-solid fa-phone"></i></span>
+                                                        <input type="text" id="manualClientPhone" class="form-control font-monospace" placeholder="Phone (e.g. 0911234567)" onkeypress="if(event.key==='Enter'){event.preventDefault(); addManualClientRow();}">
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3 col-12 text-end">
+                                                    <button type="button" class="btn btn-sm btn-primary w-100 fw-bold" onclick="addManualClientRow()">
+                                                        <i class="fa-solid fa-plus me-1"></i>Add Client
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {{-- Table/List of Added Clients --}}
+                                        <div id="manualClientsContainer" class="border rounded-3 p-2 bg-white mb-2" style="max-height: 170px; overflow-y: auto; display: none;">
+                                            <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.8rem;">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th style="width: 40px;">#</th>
+                                                        <th>Client / Company Name</th>
+                                                        <th>Phone Number</th>
+                                                        <th class="text-end" style="width: 60px;">Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="manualClientsTableBody">
+                                                    {{-- Dynamically populated rows --}}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {{-- Bulk Paste Numbers Accordion / Box --}}
+                                        <div class="border rounded-3 p-2 bg-white">
+                                            <label class="form-label small fw-semibold text-secondary mb-1" for="clientBulkPhones">
+                                                <i class="fa-solid fa-paste me-1"></i>Or Quick Paste Multiple Client Phone Numbers (አንድ ላይ ብዙ ስልክ ቁጥሮች ለመለጠፍ):
+                                            </label>
+                                            <textarea name="client_bulk_phones" id="clientBulkPhones" class="form-control form-control-sm font-monospace" rows="2" placeholder="e.g. 0911234567, 0922345678, +251911334455 (comma, space, or newline separated)" oninput="updateClientCount()"></textarea>
+                                            <small class="text-muted d-block mt-1" style="font-size: 0.72rem;">
+                                                Supports standard Ethiopian formats (09..., 07..., or +251...). Any numbers entered here will be added to the broadcast.
+                                            </small>
                                         </div>
                                     </div>
                                 </div>
@@ -363,12 +501,16 @@
                                             'department' => 'bg-info-subtle text-info border-info-subtle',
                                             'project'    => 'bg-primary-subtle text-primary border-primary-subtle',
                                             'selected'   => 'bg-secondary-subtle text-secondary border-secondary-subtle',
+                                            'subcon'     => 'bg-warning-subtle text-warning-emphasis border-warning-subtle',
+                                            'client'     => 'bg-primary-subtle text-primary border-primary-subtle',
                                             default      => 'bg-success-subtle text-success border-success-subtle',
                                         };
                                         $typeLabel = match($ann->target_type) {
                                             'department' => 'By Department',
                                             'project'    => 'By Project',
-                                            'selected'   => 'Custom Selected',
+                                            'selected'   => 'Custom Staff',
+                                            'subcon'     => 'Subcontractors',
+                                            'client'     => 'Clients (Manual)',
                                             default      => 'All Employees',
                                         };
                                     @endphp
@@ -497,11 +639,15 @@ function onTargetTypeChange() {
     const deptSec = document.getElementById('deptSelectionSection');
     const projSec = document.getElementById('projectSelectionSection');
     const empSec = document.getElementById('employeeSelectionSection');
+    const subconSec = document.getElementById('subconSelectionSection');
+    const clientSec = document.getElementById('clientSelectionSection');
     const badge = document.getElementById('audienceSummaryBadge');
 
-    deptSec.style.display = targetType === 'department' ? 'block' : 'none';
-    projSec.style.display = targetType === 'project' ? 'block' : 'none';
-    empSec.style.display = targetType === 'selected' ? 'block' : 'none';
+    if (deptSec) deptSec.style.display = targetType === 'department' ? 'block' : 'none';
+    if (projSec) projSec.style.display = targetType === 'project' ? 'block' : 'none';
+    if (empSec) empSec.style.display = targetType === 'selected' ? 'block' : 'none';
+    if (subconSec) subconSec.style.display = targetType === 'subcon' ? 'block' : 'none';
+    if (clientSec) clientSec.style.display = targetType === 'client' ? 'block' : 'none';
 
     if (targetType === 'all') {
         badge.innerText = 'All Active Staff ({{ $totalEmployeesWithPhone }} phone numbers)';
@@ -509,9 +655,131 @@ function onTargetTypeChange() {
         badge.innerText = 'Targeted Departments';
     } else if (targetType === 'project') {
         badge.innerText = 'Targeted Projects';
-    } else {
+    } else if (targetType === 'selected') {
         badge.innerText = 'Custom Selected Staff';
+    } else if (targetType === 'subcon') {
+        updateSubconCount();
+    } else if (targetType === 'client') {
+        updateClientCount();
     }
+}
+
+function toggleAllSubcon(checked) {
+    document.querySelectorAll('.subcon-checkbox').forEach(cb => {
+        cb.checked = checked;
+    });
+    updateSubconCount();
+}
+
+function filterSubconList() {
+    const filter = (document.getElementById('subconFilterInput').value || '').toLowerCase().trim();
+    document.querySelectorAll('.subcon-item-col').forEach(col => {
+        const text = col.getAttribute('data-subcon-search') || '';
+        col.style.display = text.includes(filter) ? 'block' : 'none';
+    });
+}
+
+function updateSubconCount() {
+    const checked = document.querySelectorAll('.subcon-checkbox:checked');
+    let phoneCount = 0;
+    checked.forEach(cb => {
+        if (cb.getAttribute('data-has-phone') === '1') {
+            phoneCount++;
+        }
+    });
+    const badge = document.getElementById('audienceSummaryBadge');
+    if (badge) {
+        badge.innerText = `${checked.length} Subcontractor(s) (${phoneCount} phone numbers)`;
+    }
+}
+
+let clientRowIndex = 1;
+function addManualClientRow() {
+    const nameInput = document.getElementById('manualClientName');
+    const phoneInput = document.getElementById('manualClientPhone');
+    const name = (nameInput.value || '').trim();
+    const phone = (phoneInput.value || '').trim();
+
+    if (!phone) {
+        alert('Please enter a phone number for the client.');
+        phoneInput.focus();
+        return;
+    }
+
+    const container = document.getElementById('manualClientsContainer');
+    const tbody = document.getElementById('manualClientsTableBody');
+    container.style.display = 'block';
+
+    const tr = document.createElement('tr');
+    tr.className = 'manual-client-row';
+    tr.innerHTML = `
+        <td class="text-muted fw-bold">${clientRowIndex++}</td>
+        <td>
+            <span class="fw-semibold text-dark">${name ? escapeHtml(name) : '<em class="text-muted">Client</em>'}</span>
+            <input type="hidden" name="client_names[]" value="${escapeHtml(name)}">
+        </td>
+        <td class="font-monospace text-primary fw-bold">
+            <i class="fa-solid fa-phone me-1 small"></i>${escapeHtml(phone)}
+            <input type="hidden" name="client_phones[]" value="${escapeHtml(phone)}">
+        </td>
+        <td class="text-end">
+            <button type="button" class="btn btn-xs btn-outline-danger py-0 px-1" onclick="removeManualClientRow(this)" title="Remove client">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+
+    nameInput.value = '';
+    phoneInput.value = '';
+    nameInput.focus();
+
+    updateClientCount();
+}
+
+function removeManualClientRow(btn) {
+    const tr = btn.closest('tr');
+    if (tr) {
+        tr.remove();
+    }
+    const remaining = document.querySelectorAll('.manual-client-row').length;
+    if (remaining === 0) {
+        const container = document.getElementById('manualClientsContainer');
+        if (container) container.style.display = 'none';
+    }
+    updateClientCount();
+}
+
+function extractPhonesFromText(text) {
+    if (!text) return [];
+    return text.split(/[\r\n,;]+/).map(p => p.trim()).filter(p => p.length >= 6);
+}
+
+function updateClientCount() {
+    const rowCount = document.querySelectorAll('.manual-client-row').length;
+    const bulkInput = document.getElementById('clientBulkPhones');
+    const bulkText = (bulkInput ? bulkInput.value : '').trim();
+    const bulkPhones = extractPhonesFromText(bulkText);
+    const totalCount = rowCount + bulkPhones.length;
+
+    const totalBadge = document.getElementById('clientTotalBadge');
+    if (totalBadge) {
+        totalBadge.innerText = `${totalCount} Client(s) Ready`;
+    }
+
+    const currentTarget = document.querySelector('input[name="target_type"]:checked');
+    if (currentTarget && currentTarget.value === 'client') {
+        const badge = document.getElementById('audienceSummaryBadge');
+        if (badge) {
+            badge.innerText = `${totalCount} Manual Client(s)`;
+        }
+    }
+}
+
+function escapeHtml(string) {
+    const div = document.createElement('div');
+    div.innerText = string;
+    return div.innerHTML;
 }
 
 function toggleSmsSection() {

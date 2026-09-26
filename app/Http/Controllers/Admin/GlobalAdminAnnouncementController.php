@@ -7,6 +7,7 @@ use App\Models\Announcement;
 use App\Models\AnnouncementSmsLog;
 use App\Models\Employee;
 use App\Models\Project;
+use App\Models\SubconAgreement;
 use App\Services\SmsEthiopiaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -99,6 +100,18 @@ class GlobalAdminAnnouncementController extends Controller
             ->orderBy('full_name')
             ->get(['id', 'full_name', 'employee_code', 'phone', 'department', 'role_title', 'project_id']);
 
+        // Fetch subcon agreements (with phone or supplier phone)
+        $subconAgreements = collect();
+        if (\Illuminate\Support\Facades\Schema::hasTable('subcon_agreements')) {
+            $subconAgreements = SubconAgreement::with(['project', 'supplier'])->latest()->get();
+        }
+
+        // Count subcon with phone numbers
+        $totalSubconWithPhone = $subconAgreements->filter(function ($sub) {
+            $phone = trim($sub->subcontractor_contact ?: ($sub->supplier?->phone ?? ''));
+            return !empty($phone);
+        })->count();
+
         // Stats
         $totalBroadcasts = Announcement::count();
         $totalSmsSent = Announcement::sum('sms_sent_count');
@@ -111,6 +124,8 @@ class GlobalAdminAnnouncementController extends Controller
             'departments',
             'projects',
             'employees',
+            'subconAgreements',
+            'totalSubconWithPhone',
             'totalBroadcasts',
             'totalSmsSent',
             'totalSmsFailed',
@@ -164,18 +179,25 @@ class GlobalAdminAnnouncementController extends Controller
         $this->ensureTablesExist();
 
         $validated = $request->validate([
-            'title'        => 'required|string|max:255',
-            'message'      => 'required|string|max:1200',
-            'target_type'  => 'required|string|in:all,department,project,selected',
-            'departments'  => 'nullable|array',
-            'departments.*'=> 'string',
-            'project_ids'  => 'nullable|array',
-            'project_ids.*'=> 'exists:projects,id',
-            'employee_ids' => 'nullable|array',
-            'employee_ids.*'=> 'exists:employees,id',
-            'send_sms'     => 'nullable|boolean',
-            'is_published' => 'nullable|boolean',
-            'expires_at'   => 'nullable|date',
+            'title'              => 'required|string|max:255',
+            'message'            => 'required|string|max:1200',
+            'target_type'        => 'required|string|in:all,department,project,selected,subcon,client',
+            'departments'        => 'nullable|array',
+            'departments.*'      => 'string',
+            'project_ids'        => 'nullable|array',
+            'project_ids.*'      => 'exists:projects,id',
+            'employee_ids'       => 'nullable|array',
+            'employee_ids.*'     => 'exists:employees,id',
+            'subcon_ids'         => 'nullable|array',
+            'subcon_ids.*'       => 'exists:subcon_agreements,id',
+            'client_names'       => 'nullable|array',
+            'client_names.*'     => 'nullable|string|max:255',
+            'client_phones'      => 'nullable|array',
+            'client_phones.*'    => 'nullable|string|max:50',
+            'client_bulk_phones' => 'nullable|string',
+            'send_sms'           => 'nullable|boolean',
+            'is_published'       => 'nullable|boolean',
+            'expires_at'         => 'nullable|date',
         ]);
 
         $targetType = $validated['target_type'];
@@ -183,33 +205,109 @@ class GlobalAdminAnnouncementController extends Controller
         $isPublished = $request->boolean('is_published');
         $messageText = trim($validated['message']);
 
-        // Resolve recipients
-        $query = Employee::where('status', 'active');
+        // Build recipient list
+        $recipients = [];
 
-        if ($targetType === 'department') {
-            $depts = $request->input('departments', []);
-            if (empty($depts)) {
-                return back()->with('error', 'Please select at least one department for department-targeted broadcast.')->withInput();
+        if ($targetType === 'subcon') {
+            $subconIds = $request->input('subcon_ids', []);
+            $query = SubconAgreement::with(['project', 'supplier']);
+            if (!empty($subconIds)) {
+                $query->whereIn('id', $subconIds);
             }
-            $query->whereIn('department', $depts);
-        } elseif ($targetType === 'project') {
-            $projIds = $request->input('project_ids', []);
-            if (empty($projIds)) {
-                return back()->with('error', 'Please select at least one project for project-targeted broadcast.')->withInput();
+            $agreements = $query->get();
+
+            foreach ($agreements as $ag) {
+                $phone = trim($ag->subcontractor_contact ?: ($ag->supplier?->phone ?? ''));
+                $name = $ag->subcontractor_display_name;
+                if (!empty($ag->agreement_no)) {
+                    $name .= ' (' . $ag->agreement_no . ')';
+                }
+                $recipients[] = [
+                    'employee_id' => null,
+                    'name'        => $name . ' [Subcon]',
+                    'phone'       => $phone,
+                    'type'        => 'subcon',
+                ];
             }
-            $query->whereIn('project_id', $projIds);
-        } elseif ($targetType === 'selected') {
-            $empIds = $request->input('employee_ids', []);
-            if (empty($empIds)) {
-                return back()->with('error', 'Please select at least one employee from the list.')->withInput();
+        } elseif ($targetType === 'client') {
+            $clientNames = $request->input('client_names', []);
+            $clientPhones = $request->input('client_phones', []);
+            $bulkText = $request->input('client_bulk_phones', '');
+
+            // Process dynamic client rows
+            if (is_array($clientPhones)) {
+                foreach ($clientPhones as $i => $phone) {
+                    $phone = trim($phone ?? '');
+                    if (!empty($phone)) {
+                        $name = trim($clientNames[$i] ?? '') ?: 'Client';
+                        $recipients[] = [
+                            'employee_id' => null,
+                            'name'        => $name . ' [Client]',
+                            'phone'       => $phone,
+                            'type'        => 'client',
+                        ];
+                    }
+                }
             }
-            $query->whereIn('id', $empIds);
+
+            // Process bulk phone numbers
+            if (!empty($bulkText)) {
+                $rawPhones = preg_split('/[\r\n,;]+/', $bulkText);
+                foreach ($rawPhones as $rawPhone) {
+                    $cleaned = trim($rawPhone);
+                    if (!empty($cleaned)) {
+                        $recipients[] = [
+                            'employee_id' => null,
+                            'name'        => 'Client (' . $cleaned . ')',
+                            'phone'       => $cleaned,
+                            'type'        => 'client',
+                        ];
+                    }
+                }
+            }
+        } else {
+            // Employee target audience
+            $query = Employee::where('status', 'active');
+
+            if ($targetType === 'department') {
+                $depts = $request->input('departments', []);
+                if (empty($depts)) {
+                    return back()->with('error', 'Please select at least one department for department-targeted broadcast.')->withInput();
+                }
+                $query->whereIn('department', $depts);
+            } elseif ($targetType === 'project') {
+                $projIds = $request->input('project_ids', []);
+                if (empty($projIds)) {
+                    return back()->with('error', 'Please select at least one project for project-targeted broadcast.')->withInput();
+                }
+                $query->whereIn('project_id', $projIds);
+            } elseif ($targetType === 'selected') {
+                $empIds = $request->input('employee_ids', []);
+                if (empty($empIds)) {
+                    return back()->with('error', 'Please select at least one employee from the list.')->withInput();
+                }
+                $query->whereIn('id', $empIds);
+            }
+
+            $employees = $query->get();
+            foreach ($employees as $emp) {
+                $recipients[] = [
+                    'employee_id' => $emp->id,
+                    'name'        => $emp->full_name,
+                    'phone'       => trim($emp->phone ?? ''),
+                    'type'        => 'employee',
+                ];
+            }
         }
 
-        $recipients = $query->get();
-        $totalRecipients = $recipients->count();
+        $totalRecipients = count($recipients);
 
         if ($totalRecipients === 0) {
+            if ($targetType === 'subcon') {
+                return back()->with('error', 'No subcontractors selected or found with valid phone numbers in agreements.')->withInput();
+            } elseif ($targetType === 'client') {
+                return back()->with('error', 'Please add at least one client with a phone number.')->withInput();
+            }
             return back()->with('error', 'No active employees matched the selected target audience.')->withInput();
         }
 
@@ -222,6 +320,8 @@ class GlobalAdminAnnouncementController extends Controller
                 'departments'  => $request->input('departments', []),
                 'project_ids'  => $request->input('project_ids', []),
                 'employee_ids' => $request->input('employee_ids', []),
+                'subcon_ids'   => $request->input('subcon_ids', []),
+                'client_count' => $targetType === 'client' ? $totalRecipients : 0,
             ],
             'send_sms'         => $sendSms,
             'is_published'     => $isPublished,
@@ -240,16 +340,18 @@ class GlobalAdminAnnouncementController extends Controller
             $smsService = app(SmsEthiopiaService::class);
 
             foreach ($recipients as $recipient) {
-                $phone = trim($recipient->phone ?? '');
+                $phone = $recipient['phone'];
+                $recipientName = $recipient['name'];
+                $empId = $recipient['employee_id'];
 
                 if (empty($phone)) {
                     AnnouncementSmsLog::create([
                         'announcement_id' => $announcement->id,
-                        'employee_id'     => $recipient->id,
-                        'recipient_name'  => $recipient->full_name,
+                        'employee_id'     => $empId,
+                        'recipient_name'  => $recipientName,
                         'phone_number'    => 'N/A',
                         'status'          => 'skipped',
-                        'error_message'   => 'Employee record has no phone number on file',
+                        'error_message'   => 'Recipient has no phone number on file',
                     ]);
                     $failedCount++;
                     continue;
@@ -261,8 +363,8 @@ class GlobalAdminAnnouncementController extends Controller
 
                     AnnouncementSmsLog::create([
                         'announcement_id'  => $announcement->id,
-                        'employee_id'      => $recipient->id,
-                        'recipient_name'   => $recipient->full_name,
+                        'employee_id'      => $empId,
+                        'recipient_name'   => $recipientName,
                         'phone_number'     => $phone,
                         'status'           => $success ? 'sent' : 'failed',
                         'error_message'    => $success ? null : ($res['message'] ?? 'Gateway delivery failure'),
@@ -276,12 +378,12 @@ class GlobalAdminAnnouncementController extends Controller
                     }
 
                 } catch (\Throwable $ex) {
-                    Log::error("Bulk SMS error for {$recipient->full_name} ({$phone}): " . $ex->getMessage());
+                    Log::error("Bulk SMS error for {$recipientName} ({$phone}): " . $ex->getMessage());
 
                     AnnouncementSmsLog::create([
                         'announcement_id' => $announcement->id,
-                        'employee_id'     => $recipient->id,
-                        'recipient_name'  => $recipient->full_name,
+                        'employee_id'     => $empId,
+                        'recipient_name'  => $recipientName,
                         'phone_number'    => $phone,
                         'status'          => 'failed',
                         'error_message'   => $ex->getMessage(),

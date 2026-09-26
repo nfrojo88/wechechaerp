@@ -42,7 +42,16 @@
                 <div class="row g-2 text-muted small">
                     <div class="col-sm-6">
                         <strong>Target Audience:</strong> 
-                        <span class="text-dark">{{ ucfirst($announcement->target_type) }}</span>
+                        <span class="text-dark">
+                            {{ match($announcement->target_type) {
+                                'department' => 'By Department',
+                                'project'    => 'By Project',
+                                'selected'   => 'Custom Staff Selection',
+                                'subcon'     => 'Subcontractors (Subcon Agreements)',
+                                'client'     => 'Clients (Manual Entry)',
+                                default      => 'All Active Staff'
+                            } }}
+                        </span>
                     </div>
                     <div class="col-sm-6">
                         <strong>Dispatched At:</strong> 
@@ -118,7 +127,7 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="bg-light table-light small text-uppercase fw-semibold">
                         <tr>
-                            <th class="ps-4">Recipient Staff</th>
+                            <th class="ps-4">Recipient</th>
                             <th>Phone Number</th>
                             <th>Status</th>
                             <th>Status Note / Gateway Details</th>
@@ -129,7 +138,7 @@
                         @forelse($logs as $log)
                             <tr>
                                 <td class="ps-4">
-                                    <div class="fw-bold text-dark">{{ $log->recipient_name ?? $log->employee?->full_name ?? 'Staff' }}</div>
+                                    <div class="fw-bold text-dark">{{ $log->recipient_name ?? $log->employee?->full_name ?? 'Recipient' }}</div>
                                     @if($log->employee)
                                         <small class="text-muted">{{ $log->employee->department ?? '' }} ({{ $log->employee->employee_code ?? '' }})</small>
                                     @endif
