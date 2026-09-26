@@ -209,9 +209,6 @@
                             <small class="text-muted">List deployed manpower roles under each subcontractor assigned to this site</small>
                         </div>
                         <div class="d-flex align-items-center gap-2">
-                            <button type="button" class="btn btn-outline-info btn-sm shadow-sm fw-semibold" onclick="addSubcontractorCard(null, true)">
-                                <i class="fa-solid fa-plus me-1"></i>Add Custom Subcon
-                            </button>
                             <button type="button" class="btn btn-primary btn-sm shadow-sm fw-semibold" onclick="addSubcontractorCard()">
                                 <i class="fa-solid fa-user-plus me-1"></i>Add Subcontractor
                             </button>
@@ -223,7 +220,7 @@
                     <div class="card-body p-4">
                         <div id="subconEmptyNotice" class="alert alert-light border small text-muted d-none align-items-center mb-3">
                             <i class="fa-solid fa-circle-info text-info me-2 fs-5"></i>
-                            <span>No registered subcontractor agreements assigned to this site yet. You can click <strong>"+ Add Custom Subcon"</strong> or <strong>"+ Add Subcontractor"</strong> to report on-site subcontractors.</span>
+                            <span>No registered subcontractor agreements assigned to this project site.</span>
                         </div>
 
                         {{-- Dynamic Subcontractor Cards Container --}}
@@ -561,8 +558,6 @@ function buildSubconOptions(selectedAgreementId = '', selectedName = '') {
         html += `<option value="${s.id}" data-name="${escapeHtml(s.subcontractor_name)}" data-agreement-no="${escapeHtml(s.agreement_no)}" data-trade="${escapeHtml(s.trade)}" ${isSel}>${escapeHtml(s.subcontractor_name)}</option>`;
     });
 
-    const isCustom = selectedAgreementId === 'custom' || (!selectedAgreementId && selectedName && !list.some(s => s.subcontractor_name.toLowerCase() === selectedName.toLowerCase()));
-    html += `<option value="custom" ${isCustom ? 'selected' : ''}>+ Custom / Other Subcontractor</option>`;
     return html;
 }
 
@@ -584,19 +579,18 @@ function buildSubconRoleOptions(selectedRole = '', agreementTrade = '') {
     return html;
 }
 
-function addSubcontractorCard(data = null, forceCustom = false) {
+function addSubcontractorCard(data = null) {
     const container = document.getElementById('subcontractorsContainer');
     if (!container) return;
 
     const sIdx = subconCardIndex++;
     subconRoleCounters[sIdx] = 0;
 
-    const initialAgreementId = forceCustom ? 'custom' : (data?.agreement_id || '');
+    const initialAgreementId = data?.agreement_id || '';
     const initialName = data?.subcontractor_name || '';
     const initialAgreementNo = data?.agreement_no || '';
     const initialTrade = data?.trade || '';
     const initialNotes = data?.notes || '';
-    const isCustom = initialAgreementId === 'custom' || forceCustom;
 
     const card = document.createElement('div');
     card.className = 'card border rounded-3 subcon-card shadow-xs';
@@ -610,16 +604,12 @@ function addSubcontractorCard(data = null, forceCustom = false) {
                     Subcon #<span class="subcon-display-num">1</span>
                 </span>
                 <div class="flex-grow-1">
-                    <select class="form-select form-select-sm subcon-agreement-select fw-bold text-dark" onchange="onSubconSelected(this, ${sIdx})">
+                    <select class="form-select form-select-sm subcon-agreement-select fw-bold text-dark" onchange="onSubconSelected(this, ${sIdx})" required>
                         ${buildSubconOptions(initialAgreementId, initialName)}
                     </select>
-                    <input type="text" name="subcontractors[${sIdx}][subcontractor_name]"
-                           class="form-control form-control-sm subcon-name-input mt-1.5 ${isCustom ? '' : 'd-none'}"
-                           placeholder="Enter subcontractor full name..."
-                           value="${escapeHtml(initialName)}"
-                           oninput="updateTotal()">
+                    <input type="hidden" name="subcontractors[${sIdx}][subcontractor_name]" class="subcon-name-input" value="${escapeHtml(initialName)}">
                 </div>
-                <input type="hidden" name="subcontractors[${sIdx}][agreement_id]" class="subcon-agreement-id-input" value="${escapeHtml(initialAgreementId === 'custom' ? '' : initialAgreementId)}">
+                <input type="hidden" name="subcontractors[${sIdx}][agreement_id]" class="subcon-agreement-id-input" value="${escapeHtml(initialAgreementId)}">
                 <input type="hidden" name="subcontractors[${sIdx}][agreement_no]" class="subcon-agreement-no-input" value="${escapeHtml(initialAgreementNo)}">
                 <input type="hidden" name="subcontractors[${sIdx}][trade]" class="subcon-trade-input" value="${escapeHtml(initialTrade)}">
             </div>
@@ -685,11 +675,8 @@ function addSubcontractorCard(data = null, forceCustom = false) {
     }
 
     const sel = card.querySelector('.subcon-agreement-select');
-    if (sel && sel.value && !isCustom) {
+    if (sel && sel.value) {
         onSubconSelected(sel, sIdx, false);
-    } else if (isCustom && initialName) {
-        const nameInput = card.querySelector('.subcon-name-input');
-        if (nameInput) nameInput.value = initialName;
     }
 
     updateSubconCardNumbers();
@@ -913,8 +900,7 @@ function updateTotal() {
     let overallSubconTotal = 0;
     document.querySelectorAll('.subcon-card').forEach(card => {
         const sel = card.querySelector('.subcon-agreement-select');
-        const nameInp = card.querySelector('.subcon-name-input');
-        const hasSelection = sel && ((sel.value && sel.value !== 'custom') || (sel.value === 'custom' && nameInp && nameInp.value.trim()));
+        const hasSelection = sel && sel.value;
 
         let thisCardTotal = 0;
         card.querySelectorAll('.subcon-role-count-input').forEach(inp => {
@@ -1085,7 +1071,6 @@ document.addEventListener('DOMContentLoaded', function() {
             // No subcons assigned to this site
             const notice = document.getElementById('subconEmptyNotice');
             if (notice) notice.classList.remove('d-none');
-            addSubcontractorCard(null, true);
         }
     }
 
