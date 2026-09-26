@@ -207,26 +207,60 @@ class ManpowerDailyReportController extends Controller
         if (!empty($subconsInput) && is_array($subconsInput)) {
             foreach ($subconsInput as $item) {
                 $subName = trim($item['subcontractor_name'] ?? '');
-                $count = (int)($item['workers_count'] ?? 0);
-                $roleName = trim($item['role_name'] ?? '');
-                $category = trim($item['category'] ?? 'Subcontractor');
-                $trade = trim($item['trade'] ?? ($roleName ?: 'Subcontract Work'));
                 $agreementNo = trim($item['agreement_no'] ?? '');
                 $agreementId = !empty($item['agreement_id']) ? (int)$item['agreement_id'] : null;
+                $trade = trim($item['trade'] ?? '');
                 $notes = trim($item['notes'] ?? '');
 
-                if ($count > 0 && !empty($subName)) {
+                // Check nested roles under this subcontractor
+                $rolesInput = $item['roles'] ?? [];
+                $filteredRolesForSubcon = [];
+                $subTotalWorkers = 0;
+
+                if (!empty($rolesInput) && is_array($rolesInput)) {
+                    foreach ($rolesInput as $r) {
+                        $roleName = trim($r['role_name'] ?? '');
+                        $count = (int)($r['count'] ?? 0);
+                        $category = trim($r['category'] ?? 'Skilled Labor');
+
+                        if ($count > 0 && !empty($roleName)) {
+                            $filteredRolesForSubcon[] = [
+                                'role_name' => $roleName,
+                                'category'  => $category,
+                                'count'     => $count,
+                            ];
+                            $subTotalWorkers += $count;
+                        }
+                    }
+                }
+
+                // Fallback for flat structure if roles array was empty or flat count provided
+                $flatCount = (int)($item['workers_count'] ?? 0);
+                if ($subTotalWorkers === 0 && $flatCount > 0) {
+                    $roleName = trim($item['role_name'] ?? ($trade ?: 'Subcontract Work'));
+                    $category = trim($item['category'] ?? 'Skilled Labor');
+                    $filteredRolesForSubcon[] = [
+                        'role_name' => $roleName,
+                        'category'  => $category,
+                        'count'     => $flatCount,
+                    ];
+                    $subTotalWorkers = $flatCount;
+                }
+
+                if ($subTotalWorkers > 0 && !empty($subName)) {
+                    $firstRole = $filteredRolesForSubcon[0] ?? null;
                     $filteredSubcons[] = [
                         'agreement_id'       => $agreementId,
                         'subcontractor_name' => $subName,
                         'agreement_no'       => $agreementNo,
-                        'role_name'          => $roleName ?: $trade,
-                        'category'           => $category,
-                        'trade'              => $trade,
-                        'workers_count'      => $count,
+                        'trade'              => $trade ?: ($firstRole['role_name'] ?? 'Subcontract Work'),
+                        'role_name'          => $firstRole['role_name'] ?? ($trade ?: 'Subcontract Work'),
+                        'category'           => $firstRole['category'] ?? 'Subcontractor',
+                        'workers_count'      => $subTotalWorkers,
+                        'roles'              => $filteredRolesForSubcon,
                         'notes'              => $notes,
                     ];
-                    $totalFromSubcon += $count;
+                    $totalFromSubcon += $subTotalWorkers;
                 }
             }
         }

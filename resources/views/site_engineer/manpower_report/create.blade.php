@@ -206,47 +206,37 @@
                             <h6 class="fw-bold mb-0 text-dark">
                                 <i class="fa-solid fa-handshake text-info me-2"></i>Subcontractor Manpower (Subcon on Site)
                             </h6>
-                            <small class="text-muted">Select registered project subcontractors from agreements and record deployed headcount</small>
+                            <small class="text-muted">List deployed manpower roles under each subcontractor assigned to this site</small>
                         </div>
                         <div class="d-flex align-items-center gap-2">
-                            <button type="button" class="btn btn-outline-info btn-sm shadow-sm fw-semibold" onclick="addSubconRow(null, true)">
+                            <button type="button" class="btn btn-outline-info btn-sm shadow-sm fw-semibold" onclick="addSubcontractorCard(null, true)">
                                 <i class="fa-solid fa-plus me-1"></i>Add Custom Subcon
                             </button>
+                            <button type="button" class="btn btn-primary btn-sm shadow-sm fw-semibold" onclick="addSubcontractorCard()">
+                                <i class="fa-solid fa-user-plus me-1"></i>Add Subcontractor
+                            </button>
                             <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 fw-bold px-3 py-2 fs-6">
-                                Subcon Total: <span id="subconPresent">0</span>
+                                Subcon Workforce: <span id="subconPresent">0</span>
                             </span>
                         </div>
                     </div>
                     <div class="card-body p-4">
                         <div id="subconEmptyNotice" class="alert alert-light border small text-muted d-none align-items-center mb-3">
                             <i class="fa-solid fa-circle-info text-info me-2 fs-5"></i>
-                            <span>No registered subcontractor agreements assigned to this site yet. You can click <strong>"+ Add Custom Subcon"</strong> to report any on-site subcontractor.</span>
+                            <span>No registered subcontractor agreements assigned to this site yet. You can click <strong>"+ Add Custom Subcon"</strong> or <strong>"+ Add Subcontractor"</strong> to report on-site subcontractors.</span>
                         </div>
 
-                        <div class="table-responsive mb-3">
-                            <table class="table table-sm align-middle table-hover mb-0" id="subconTable">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="min-width: 220px;">Subcontractor (Assigned to Site) <span class="text-danger">*</span></th>
-                                        <th style="min-width: 220px;">Role / Trade Designation <span class="text-danger">*</span></th>
-                                        <th style="width: 140px;">Category</th>
-                                        <th style="width: 160px;" class="text-center">Workers Present <span class="text-danger">*</span></th>
-                                        <th style="min-width: 170px;">Location / Notes</th>
-                                        <th style="width: 50px;" class="text-center"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="subconTableBody">
-                                    {{-- Dynamically populated subcon rows --}}
-                                </tbody>
-                            </table>
+                        {{-- Dynamic Subcontractor Cards Container --}}
+                        <div id="subcontractorsContainer" class="d-flex flex-column gap-3 mb-3">
+                            {{-- Dynamically populated subcontractor cards with nested roles --}}
                         </div>
 
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
-                            <button type="button" class="btn btn-outline-info btn-sm fw-semibold shadow-sm" id="btnAddSubconRow" onclick="addSubconRow()">
-                                <i class="fa-solid fa-plus me-1"></i>Add Subcontractor Trade / Role
+                            <button type="button" class="btn btn-outline-info btn-sm fw-semibold shadow-sm" onclick="addSubcontractorCard()">
+                                <i class="fa-solid fa-plus me-1"></i>Add Another Subcontractor
                             </button>
                             <small class="text-muted">
-                                <i class="fa-solid fa-link me-1 text-primary"></i>Only subcontractors assigned to this site are listed.
+                                <i class="fa-solid fa-link me-1 text-primary"></i>Only subcontractors assigned to this site are listed by default.
                             </small>
                         </div>
                     </div>
@@ -551,7 +541,10 @@ function removeRoleRow(btn) {
     updateTotal();
 }
 
-// ─── SUBCONTRACTOR MANPOWER LOGIC ─────────────────────────────────────────────
+// ─── SUBCONTRACTOR MANPOWER LOGIC (Grouped per Subcontractor) ────────────────
+let subconCardIndex = 0;
+const subconRoleCounters = {};
+
 function getSubconsForCurrentProject() {
     if (!CURRENT_PROJECT_ID) return [];
     // Strictly filter to ONLY subcontractors assigned to this specific project/site
@@ -591,99 +584,237 @@ function buildSubconRoleOptions(selectedRole = '', agreementTrade = '') {
     return html;
 }
 
-function addSubconRow(data = null, forceCustom = false) {
-    const tbody = document.getElementById('subconTableBody');
-    if (!tbody) return;
+function addSubcontractorCard(data = null, forceCustom = false) {
+    const container = document.getElementById('subcontractorsContainer');
+    if (!container) return;
 
-    const idx = subconRowIndex++;
+    const sIdx = subconCardIndex++;
+    subconRoleCounters[sIdx] = 0;
+
     const initialAgreementId = forceCustom ? 'custom' : (data?.agreement_id || '');
     const initialName = data?.subcontractor_name || '';
     const initialAgreementNo = data?.agreement_no || '';
     const initialTrade = data?.trade || '';
-    const initialRoleName = data?.role_name || data?.trade || '';
-    const initialCategory = data?.category || 'Skilled Labor';
-    const initialCount = data?.workers_count !== undefined ? data.workers_count : 0;
     const initialNotes = data?.notes || '';
     const isCustom = initialAgreementId === 'custom' || forceCustom;
 
-    const tr = document.createElement('tr');
-    tr.id = `subconRow_${idx}`;
-    tr.innerHTML = `
-        <td style="min-width: 220px;">
-            <select class="form-select form-select-sm subcon-agreement-select fw-semibold" onchange="onSubconSelected(this, ${idx})">
-                ${buildSubconOptions(initialAgreementId, initialName)}
-            </select>
-            <input type="text" name="subcontractors[${idx}][subcontractor_name]"
-                   class="form-control form-control-sm subcon-name-input mt-1.5 ${isCustom ? '' : 'd-none'}"
-                   placeholder="Enter subcontractor name..."
-                   value="${escapeHtml(initialName)}"
-                   oninput="updateTotal()">
-            <div class="subcon-agreement-badge mt-1 ${initialAgreementNo ? '' : 'd-none'}">
-                <span class="badge bg-light text-muted border" style="font-size:0.72rem;">
-                    <i class="fa-solid fa-file-contract me-1 text-primary"></i><span class="subcon-agreement-no-text">${escapeHtml(initialAgreementNo)}</span>
+    const card = document.createElement('div');
+    card.className = 'card border rounded-3 subcon-card shadow-xs';
+    card.id = `subconCard_${sIdx}`;
+    card.dataset.subconIndex = sIdx;
+
+    card.innerHTML = `
+        <div class="card-header bg-light bg-opacity-75 py-2.5 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-grow-1" style="min-width: 280px; max-width: 520px;">
+                <span class="badge bg-secondary text-white rounded-pill px-2.5 py-1" style="font-size: 0.75rem;">
+                    Subcon #<span class="subcon-display-num">1</span>
                 </span>
+                <div class="flex-grow-1">
+                    <select class="form-select form-select-sm subcon-agreement-select fw-bold" onchange="onSubconSelected(this, ${sIdx})">
+                        ${buildSubconOptions(initialAgreementId, initialName)}
+                    </select>
+                    <input type="text" name="subcontractors[${sIdx}][subcontractor_name]"
+                           class="form-control form-control-sm subcon-name-input mt-1.5 ${isCustom ? '' : 'd-none'}"
+                           placeholder="Enter subcontractor name..."
+                           value="${escapeHtml(initialName)}"
+                           oninput="updateTotal()">
+                </div>
+                <div class="subcon-agreement-badge ${initialAgreementNo ? '' : 'd-none'}">
+                    <span class="badge bg-white text-muted border shadow-xs" style="font-size:0.72rem;">
+                        <i class="fa-solid fa-file-contract me-1 text-primary"></i><span class="subcon-agreement-no-text">${escapeHtml(initialAgreementNo)}</span>
+                    </span>
+                </div>
+                <input type="hidden" name="subcontractors[${sIdx}][agreement_id]" class="subcon-agreement-id-input" value="${escapeHtml(initialAgreementId === 'custom' ? '' : initialAgreementId)}">
+                <input type="hidden" name="subcontractors[${sIdx}][agreement_no]" class="subcon-agreement-no-input" value="${escapeHtml(initialAgreementNo)}">
+                <input type="hidden" name="subcontractors[${sIdx}][trade]" class="subcon-trade-input" value="${escapeHtml(initialTrade)}">
             </div>
-            <input type="hidden" name="subcontractors[${idx}][agreement_id]" class="subcon-agreement-id-input" value="${escapeHtml(initialAgreementId === 'custom' ? '' : initialAgreementId)}">
-            <input type="hidden" name="subcontractors[${idx}][agreement_no]" class="subcon-agreement-no-input" value="${escapeHtml(initialAgreementNo)}">
-            <input type="hidden" name="subcontractors[${idx}][trade]" class="subcon-trade-input" value="${escapeHtml(initialTrade)}">
-        </td>
-        <td style="min-width: 220px;">
-            <select name="subcontractors[${idx}][role_name]" class="form-select form-select-sm subcon-role-select fw-semibold" onchange="onSubconRoleChanged(this, ${idx})" required>
-                ${buildSubconRoleOptions(initialRoleName, initialTrade)}
+
+            <div class="d-flex align-items-center gap-2 flex-wrap ms-auto">
+                <div style="min-width: 200px;">
+                    <input type="text" name="subcontractors[${sIdx}][notes]" class="form-control form-control-sm bg-white" placeholder="Location / Activity notes (optional)..." value="${escapeHtml(initialNotes)}">
+                </div>
+                <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-2.5 py-1.5 fw-bold" style="font-size: 0.82rem;">
+                    Subcon Total: <span class="subcon-card-total">0</span>
+                </span>
+                <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2 shadow-xs" onclick="removeSubcontractorCard(${sIdx})" title="Remove subcontractor">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="card-body p-3">
+            <div class="table-responsive">
+                <table class="table table-sm align-middle table-hover mb-0" id="subconRolesTable_${sIdx}">
+                    <thead class="table-light">
+                        <tr style="font-size: 0.78rem;">
+                            <th style="min-width: 240px;">Role / Trade Designation <span class="text-danger">*</span></th>
+                            <th style="width: 150px;">Category</th>
+                            <th style="width: 180px;" class="text-center">Workers Present <span class="text-danger">*</span></th>
+                            <th style="width: 50px;" class="text-center"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="subconRolesBody_${sIdx}">
+                        {{-- Nested roles under this subcon --}}
+                    </tbody>
+                </table>
+            </div>
+            <div class="pt-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2.5 fw-semibold" onclick="addSubconRoleRow(${sIdx})">
+                    <i class="fa-solid fa-plus me-1 text-primary"></i>Add Role for this Subcontractor
+                </button>
+                <small class="text-muted subcon-scope-hint" style="font-size: 0.74rem;">
+                    ${initialTrade ? `<i class="fa-solid fa-briefcase text-info me-1"></i>Scope: <strong>${escapeHtml(initialTrade)}</strong>` : ''}
+                </small>
+            </div>
+        </div>
+    `;
+
+    container.appendChild(card);
+
+    // Populate initial roles for this subcon card
+    if (data?.roles && Array.isArray(data.roles) && data.roles.length > 0) {
+        data.roles.forEach(r => addSubconRoleRow(sIdx, r));
+    } else if (data?.workers_count !== undefined && data.workers_count > 0) {
+        addSubconRoleRow(sIdx, {
+            role_name: data.role_name || data.trade || '',
+            category: data.category || 'Skilled Labor',
+            count: data.workers_count
+        });
+    } else {
+        // Default 1 role row prefilled with contract trade / scope
+        addSubconRoleRow(sIdx, {
+            role_name: initialTrade || '',
+            category: 'Skilled Labor',
+            count: 0
+        });
+    }
+
+    const sel = card.querySelector('.subcon-agreement-select');
+    if (sel && sel.value && !isCustom) {
+        onSubconSelected(sel, sIdx, false);
+    } else if (isCustom && initialName) {
+        const nameInput = card.querySelector('.subcon-name-input');
+        if (nameInput) nameInput.value = initialName;
+    }
+
+    updateSubconCardNumbers();
+    updateTotal();
+}
+
+function addSubconRoleRow(sIdx, roleData = null) {
+    const tbody = document.getElementById(`subconRolesBody_${sIdx}`);
+    if (!tbody) return;
+
+    if (subconRoleCounters[sIdx] === undefined) subconRoleCounters[sIdx] = 0;
+    const rIdx = subconRoleCounters[sIdx]++;
+
+    const initialRoleName = roleData?.role_name || '';
+    const initialCategory = roleData?.category || 'Skilled Labor';
+    const initialCount = roleData?.count !== undefined ? roleData.count : 0;
+
+    const card = document.getElementById(`subconCard_${sIdx}`);
+    const tradeInput = card ? card.querySelector('.subcon-trade-input') : null;
+    const trade = tradeInput ? tradeInput.value : '';
+
+    const tr = document.createElement('tr');
+    tr.id = `subconRoleRow_${sIdx}_${rIdx}`;
+    tr.innerHTML = `
+        <td>
+            <select name="subcontractors[${sIdx}][roles][${rIdx}][role_name]"
+                    class="form-select form-select-sm subcon-role-select fw-semibold"
+                    onchange="onSubconRoleChanged(this, ${sIdx}, ${rIdx})" required>
+                ${buildSubconRoleOptions(initialRoleName, trade)}
             </select>
         </td>
-        <td style="width: 140px;">
-            <span class="badge subcon-category-badge" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 600;">
+        <td>
+            <span class="badge subcon-role-category-badge" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 600;">
                 ${escapeHtml(initialCategory)}
             </span>
-            <input type="hidden" name="subcontractors[${idx}][category]" class="subcon-category-input" value="${escapeHtml(initialCategory)}">
+            <input type="hidden" name="subcontractors[${sIdx}][roles][${rIdx}][category]"
+                   class="subcon-role-category-input" value="${escapeHtml(initialCategory)}">
         </td>
-        <td class="text-center" style="width: 150px;">
-            <div class="input-group input-group-sm mx-auto" style="max-width: 130px;">
-                <button type="button" class="btn btn-outline-secondary" onclick="stepSubconRow(this, -1)">
+        <td class="text-center">
+            <div class="input-group input-group-sm mx-auto" style="max-width: 140px;">
+                <button type="button" class="btn btn-outline-secondary" onclick="stepSubconRoleRow(this, -1)">
                     <i class="fa-solid fa-minus"></i>
                 </button>
-                <input type="number" name="subcontractors[${idx}][workers_count]" class="form-control text-center fw-bold fs-6 subcon-count-input"
+                <input type="number" name="subcontractors[${sIdx}][roles][${rIdx}][count]"
+                       class="form-control text-center fw-bold fs-6 subcon-role-count-input"
                        value="${initialCount}" min="0" max="999" oninput="updateTotal()">
-                <button type="button" class="btn btn-outline-secondary" onclick="stepSubconRow(this, 1)">
+                <button type="button" class="btn btn-outline-secondary" onclick="stepSubconRoleRow(this, 1)">
                     <i class="fa-solid fa-plus"></i>
                 </button>
             </div>
         </td>
-        <td style="min-width: 170px;">
-            <input type="text" name="subcontractors[${idx}][notes]" class="form-control form-control-sm" placeholder="e.g. 3rd floor plastering..." value="${escapeHtml(initialNotes)}">
-        </td>
-        <td class="text-center" style="width: 50px;">
-            <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2 shadow-sm" onclick="removeSubconRow(this)" title="Remove subcontractor">
+        <td class="text-center">
+            <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2 shadow-xs" onclick="removeSubconRoleRow(this, ${sIdx})" title="Remove role">
                 <i class="fa-solid fa-trash-can"></i>
             </button>
         </td>
     `;
+
     tbody.appendChild(tr);
 
-    const sel = tr.querySelector('.subcon-agreement-select');
-    if (sel && sel.value && !isCustom) {
-        onSubconSelected(sel, idx, initialRoleName);
-    } else if (isCustom && initialName) {
-        const nameInput = tr.querySelector('.subcon-name-input');
-        if (nameInput) nameInput.value = initialName;
+    const sel = tr.querySelector('.subcon-role-select');
+    if (sel && sel.value) {
+        onSubconRoleChanged(sel, sIdx, rIdx);
+    }
+
+    updateTotal();
+}
+
+function removeSubconRoleRow(btn, sIdx) {
+    const tr = btn.closest('tr');
+    const tbody = document.getElementById(`subconRolesBody_${sIdx}`);
+    if (!tbody || !tr) return;
+
+    if (tbody.querySelectorAll('tr').length > 1) {
+        tr.remove();
+    } else {
+        const sel = tr.querySelector('.subcon-role-select');
+        const cnt = tr.querySelector('.subcon-role-count-input');
+        if (sel) sel.selectedIndex = 0;
+        if (cnt) cnt.value = 0;
+        onSubconRoleChanged(sel, sIdx, 0);
     }
     updateTotal();
 }
 
-function onSubconSelected(selectEl, idx, preserveRole = '') {
-    const tr = selectEl.closest('tr');
-    if (!tr) return;
+function removeSubcontractorCard(sIdx) {
+    const card = document.getElementById(`subconCard_${sIdx}`);
+    if (card) {
+        card.remove();
+    }
+    updateSubconCardNumbers();
+    updateTotal();
+
+    const container = document.getElementById('subcontractorsContainer');
+    const notice = document.getElementById('subconEmptyNotice');
+    if (container && container.children.length === 0 && notice) {
+        notice.classList.remove('d-none');
+    }
+}
+
+function updateSubconCardNumbers() {
+    document.querySelectorAll('.subcon-card').forEach((card, idx) => {
+        const numSpan = card.querySelector('.subcon-display-num');
+        if (numSpan) numSpan.textContent = idx + 1;
+    });
+}
+
+function onSubconSelected(selectEl, sIdx, refreshRoles = true) {
+    const card = document.getElementById(`subconCard_${sIdx}`);
+    if (!card) return;
 
     const opt = selectEl.selectedOptions[0];
     const val = selectEl.value;
-    const nameInput = tr.querySelector('.subcon-name-input');
-    const idInput = tr.querySelector('.subcon-agreement-id-input');
-    const agreementInput = tr.querySelector('.subcon-agreement-no-input');
-    const agreementBadge = tr.querySelector('.subcon-agreement-badge');
-    const agreementText = tr.querySelector('.subcon-agreement-no-text');
-    const tradeInput = tr.querySelector('.subcon-trade-input');
-    const roleSelect = tr.querySelector('.subcon-role-select');
+    const nameInput = card.querySelector('.subcon-name-input');
+    const idInput = card.querySelector('.subcon-agreement-id-input');
+    const agreementInput = card.querySelector('.subcon-agreement-no-input');
+    const agreementBadge = card.querySelector('.subcon-agreement-badge');
+    const agreementText = card.querySelector('.subcon-agreement-no-text');
+    const tradeInput = card.querySelector('.subcon-trade-input');
+    const scopeHint = card.querySelector('.subcon-scope-hint');
 
     if (val === 'custom') {
         nameInput.classList.remove('d-none');
@@ -691,10 +822,9 @@ function onSubconSelected(selectEl, idx, preserveRole = '') {
         idInput.value = '';
         agreementInput.value = '';
         tradeInput.value = '';
-        if (roleSelect) {
-            const currentRole = preserveRole || roleSelect.value;
-            roleSelect.innerHTML = buildSubconRoleOptions(currentRole, '');
-            onSubconRoleChanged(roleSelect, idx);
+        if (scopeHint) scopeHint.innerHTML = '';
+        if (refreshRoles) {
+            refreshSubconCardRoleOptions(sIdx, '');
         }
     } else if (opt && val) {
         nameInput.classList.add('d-none');
@@ -710,10 +840,12 @@ function onSubconSelected(selectEl, idx, preserveRole = '') {
             if (agreementText) agreementText.textContent = agreementNo;
         }
 
-        if (roleSelect) {
-            const currentRole = preserveRole || roleSelect.value || trade;
-            roleSelect.innerHTML = buildSubconRoleOptions(currentRole, trade);
-            onSubconRoleChanged(roleSelect, idx);
+        if (scopeHint) {
+            scopeHint.innerHTML = trade ? `<i class="fa-solid fa-briefcase text-info me-1"></i>Scope: <strong>${escapeHtml(trade)}</strong>` : '';
+        }
+
+        if (refreshRoles) {
+            refreshSubconCardRoleOptions(sIdx, trade);
         }
     } else {
         nameInput.classList.add('d-none');
@@ -722,23 +854,44 @@ function onSubconSelected(selectEl, idx, preserveRole = '') {
         agreementInput.value = '';
         tradeInput.value = '';
         if (agreementBadge) agreementBadge.classList.add('d-none');
-        if (roleSelect) {
-            roleSelect.innerHTML = buildSubconRoleOptions('', '');
-            onSubconRoleChanged(roleSelect, idx);
+        if (scopeHint) scopeHint.innerHTML = '';
+        if (refreshRoles) {
+            refreshSubconCardRoleOptions(sIdx, '');
         }
     }
     updateTotal();
 }
 
-function onSubconRoleChanged(selectEl, idx) {
+function refreshSubconCardRoleOptions(sIdx, trade) {
+    const card = document.getElementById(`subconCard_${sIdx}`);
+    if (!card) return;
+    card.querySelectorAll('.subcon-role-select').forEach(sel => {
+        const curVal = sel.value;
+        sel.innerHTML = buildSubconRoleOptions(curVal || trade, trade);
+        if (!curVal && trade) {
+            sel.value = trade;
+        }
+        const tr = sel.closest('tr');
+        if (tr) {
+            const opt = sel.selectedOptions[0];
+            const cat = opt?.dataset.category || 'Skilled Labor';
+            const badge = tr.querySelector('.subcon-role-category-badge');
+            const catInp = tr.querySelector('.subcon-role-category-input');
+            if (badge) badge.textContent = cat;
+            if (catInp) catInp.value = cat;
+        }
+    });
+}
+
+function onSubconRoleChanged(selectEl, sIdx, rIdx) {
     const tr = selectEl.closest('tr');
     if (!tr) return;
 
     const opt = selectEl.selectedOptions[0];
     const category = opt ? opt.dataset.category || 'Skilled Labor' : 'Skilled Labor';
 
-    const badge = tr.querySelector('.subcon-category-badge');
-    const catInput = tr.querySelector('.subcon-category-input');
+    const badge = tr.querySelector('.subcon-role-category-badge');
+    const catInput = tr.querySelector('.subcon-role-category-input');
 
     if (badge) badge.textContent = category;
     if (catInput) catInput.value = category;
@@ -746,30 +899,11 @@ function onSubconRoleChanged(selectEl, idx) {
     updateTotal();
 }
 
-function stepSubconRow(btn, delta) {
-    const input = btn.closest('.input-group')?.querySelector('.subcon-count-input');
+function stepSubconRoleRow(btn, delta) {
+    const input = btn.closest('.input-group')?.querySelector('.subcon-role-count-input');
     if (!input) return;
     const current = parseInt(input.value) || 0;
     input.value = Math.max(0, Math.min(999, current + delta));
-    updateTotal();
-}
-
-function removeSubconRow(btn) {
-    const tbody = document.getElementById('subconTableBody');
-    const tr = btn.closest('tr');
-    if (!tbody || !tr) return;
-
-    if (tbody.querySelectorAll('tr').length > 1) {
-        tr.remove();
-    } else {
-        const sel = tr.querySelector('.subcon-agreement-select');
-        const cnt = tr.querySelector('.subcon-count-input');
-        const name = tr.querySelector('.subcon-name-input');
-        if (sel) sel.selectedIndex = 0;
-        if (cnt) cnt.value = 0;
-        if (name) name.value = '';
-        onSubconSelected(sel, 0);
-    }
     updateTotal();
 }
 
@@ -790,21 +924,31 @@ function updateTotal() {
         }
     });
 
-    let subconTotal = 0;
-    document.querySelectorAll('.subcon-count-input').forEach(inp => {
-        const row = inp.closest('tr');
-        const sel = row ? row.querySelector('.subcon-agreement-select') : null;
-        const nameInp = row ? row.querySelector('.subcon-name-input') : null;
-        const roleSel = row ? row.querySelector('.subcon-role-select') : null;
+    let overallSubconTotal = 0;
+    document.querySelectorAll('.subcon-card').forEach(card => {
+        const sel = card.querySelector('.subcon-agreement-select');
+        const nameInp = card.querySelector('.subcon-name-input');
         const hasSelection = sel && ((sel.value && sel.value !== 'custom') || (sel.value === 'custom' && nameInp && nameInp.value.trim()));
-        if (hasSelection && roleSel && roleSel.value) {
-            subconTotal += (parseInt(inp.value) || 0);
-        } else if (hasSelection && (!roleSel || !roleSel.value)) {
-            subconTotal += (parseInt(inp.value) || 0);
+
+        let thisCardTotal = 0;
+        card.querySelectorAll('.subcon-role-count-input').forEach(inp => {
+            const row = inp.closest('tr');
+            const roleSel = row ? row.querySelector('.subcon-role-select') : null;
+            if (roleSel && roleSel.value) {
+                thisCardTotal += (parseInt(inp.value) || 0);
+            }
+        });
+
+        // Update this subcon's card total
+        const cardTotalBadge = card.querySelector('.subcon-card-total');
+        if (cardTotalBadge) cardTotalBadge.textContent = thisCardTotal;
+
+        if (hasSelection) {
+            overallSubconTotal += thisCardTotal;
         }
     });
 
-    const grandTotal = companyTotal + subconTotal;
+    const grandTotal = companyTotal + overallSubconTotal;
 
     // Update Company Present badges
     const companyPresentBadge = document.getElementById('companyPresentBadge');
@@ -812,7 +956,7 @@ function updateTotal() {
 
     // Update Subcon Present badge
     const subconPresent = document.getElementById('subconPresent');
-    if (subconPresent) subconPresent.textContent = subconTotal;
+    if (subconPresent) subconPresent.textContent = overallSubconTotal;
 
     // Update Top Summary Banner
     const summaryGrand = document.getElementById('summaryGrandTotal');
@@ -822,7 +966,7 @@ function updateTotal() {
     if (summaryCompany) summaryCompany.textContent = companyTotal;
 
     const summarySubcon = document.getElementById('summarySubconTotal');
-    if (summarySubcon) summarySubcon.textContent = subconTotal;
+    if (summarySubcon) summarySubcon.textContent = overallSubconTotal;
 }
 
 function submitNewRole(e) {
@@ -876,12 +1020,13 @@ function submitNewRole(e) {
             });
 
             // Refresh all dropdown options in Subcontractor roles
-            document.querySelectorAll('.subcon-role-select').forEach(sel => {
-                const currentVal = sel.value;
-                const row = sel.closest('tr');
-                const tradeInp = row ? row.querySelector('.subcon-trade-input') : null;
+            document.querySelectorAll('.subcon-card').forEach(card => {
+                const tradeInp = card.querySelector('.subcon-trade-input');
                 const trade = tradeInp ? tradeInp.value : '';
-                sel.innerHTML = buildSubconRoleOptions(currentVal, trade);
+                card.querySelectorAll('.subcon-role-select').forEach(sel => {
+                    const currentVal = sel.value;
+                    sel.innerHTML = buildSubconRoleOptions(currentVal, trade);
+                });
             });
 
             // Find an empty row or add a new one with this new role selected
@@ -937,26 +1082,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // 2. Initialize Subcontractor Workforce (Only for this Site)
     const oldSubcons = @json(old('subcontractors', []));
     if (oldSubcons && oldSubcons.length > 0) {
-        oldSubcons.forEach(s => addSubconRow(s));
+        oldSubcons.forEach(s => addSubcontractorCard(s));
     } else {
         const projectSubcons = getSubconsForCurrentProject();
         if (projectSubcons && projectSubcons.length > 0) {
-            // Automatically list the assigned subcontractors for this site with 0 count
+            // Automatically list each assigned subcontractor for this site
             projectSubcons.forEach(s => {
-                addSubconRow({
+                addSubcontractorCard({
                     agreement_id: s.id,
                     subcontractor_name: s.subcontractor_name,
                     agreement_no: s.agreement_no,
-                    trade: s.trade,
-                    role_name: s.trade,
-                    category: 'Skilled Labor',
-                    workers_count: 0
+                    trade: s.trade
                 });
             });
         } else {
             // No subcons assigned to this site
             const notice = document.getElementById('subconEmptyNotice');
             if (notice) notice.classList.remove('d-none');
+            addSubcontractorCard(null, true);
         }
     }
 

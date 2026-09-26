@@ -162,11 +162,10 @@
                             <thead class="table-light">
                                 <tr>
                                     <th class="ps-3" style="width: 50px;">#</th>
-                                    <th>Subcontractor Name</th>
-                                    <th>Role / Trade Designation</th>
-                                    <th>Category</th>
+                                    <th style="min-width: 200px;">Subcontractor Name</th>
+                                    <th style="min-width: 260px;">Deployed Roles & Breakdown</th>
                                     <th>Agreement No</th>
-                                    <th class="text-center" style="width: 140px;">Workers</th>
+                                    <th class="text-center" style="width: 140px;">Total Workers</th>
                                     <th>Location / Notes</th>
                                 </tr>
                             </thead>
@@ -174,32 +173,62 @@
                                 @foreach($manpowerDailyReport->subcontractors_breakdown as $sub)
                                 <tr>
                                     <td class="ps-3 text-muted small">{{ $loop->iteration }}</td>
-                                    <td class="fw-bold text-dark">
-                                        <i class="fa-solid fa-building text-info me-2"></i>{{ $sub['subcontractor_name'] ?? 'Subcontractor' }}
+                                    <td class="fw-bold text-dark align-top pt-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="fa-solid fa-building text-info me-2 fs-5"></i>
+                                            <div>
+                                                <div>{{ $sub['subcontractor_name'] ?? 'Subcontractor' }}</div>
+                                                @if(!empty($sub['trade']))
+                                                    <small class="text-muted fw-normal d-block" style="font-size:0.75rem;">
+                                                        <i class="fa-solid fa-briefcase text-secondary me-1"></i>Scope: {{ $sub['trade'] }}
+                                                    </small>
+                                                @endif
+                                            </div>
+                                        </div>
                                     </td>
-                                    <td class="fw-semibold text-dark">
-                                        <i class="fa-solid fa-user-gear text-primary me-1.5 small"></i>{{ $sub['role_name'] ?? $sub['trade'] ?? 'Trade' }}
+                                    <td class="align-top pt-2.5">
+                                        @if(!empty($sub['roles']) && is_array($sub['roles']))
+                                            <div class="d-flex flex-column gap-1.5">
+                                                @foreach($sub['roles'] as $r)
+                                                    <div class="d-flex align-items-center justify-content-between p-1.5 px-2 rounded bg-light border shadow-2xs" style="font-size:0.83rem;">
+                                                        <span class="fw-semibold text-dark">
+                                                            <i class="fa-solid fa-user-gear text-primary me-1.5 small"></i>{{ $r['role_name'] ?? 'Role' }}
+                                                        </span>
+                                                        <div class="d-flex align-items-center gap-1.5">
+                                                            <span class="badge" style="background:#e2e8f0; color:#334155; font-size:0.72rem;">
+                                                                {{ $r['category'] ?? 'General' }}
+                                                            </span>
+                                                            <span class="badge bg-primary text-white px-2 py-0.5 fw-bold" style="font-size:0.8rem;">
+                                                                {{ $r['count'] ?? 0 }}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                        @else
+                                            <div class="fw-semibold text-dark">
+                                                <i class="fa-solid fa-user-gear text-primary me-1.5 small"></i>{{ $sub['role_name'] ?? $sub['trade'] ?? 'Trade' }}
+                                                <span class="badge ms-1" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 600;">
+                                                    {{ $sub['category'] ?? 'Skilled Labor' }}
+                                                </span>
+                                            </div>
+                                        @endif
                                     </td>
-                                    <td>
-                                        <span class="badge" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 600;">
-                                            {{ $sub['category'] ?? 'Skilled Labor' }}
-                                        </span>
-                                    </td>
-                                    <td>
+                                    <td class="align-top pt-3">
                                         <span class="badge bg-light text-dark border">
                                             {{ $sub['agreement_no'] ?? '—' }}
                                         </span>
                                     </td>
-                                    <td class="text-center">
-                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-3 py-1 fw-bold fs-6">
+                                    <td class="text-center align-top pt-3">
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-3 py-1.5 fw-bold fs-6">
                                             {{ $sub['workers_count'] ?? $sub['count'] ?? 0 }}
                                         </span>
                                     </td>
-                                    <td class="small text-muted">{{ $sub['notes'] ?? '—' }}</td>
+                                    <td class="small text-muted align-top pt-3">{{ $sub['notes'] ?? '—' }}</td>
                                 </tr>
                                 @endforeach
                                 <tr class="table-light fw-bold">
-                                    <td colspan="5" class="ps-3 text-end"><i class="fa-solid fa-sigma me-1.5 text-info"></i>Total Subcon Present:</td>
+                                    <td colspan="4" class="ps-3 text-end"><i class="fa-solid fa-sigma me-1.5 text-info"></i>Total Subcon Present:</td>
                                     <td class="text-center"><span class="badge bg-info px-3 py-1.5 fs-6">{{ $manpowerDailyReport->subcontractor_workers_count }}</span></td>
                                     <td></td>
                                 </tr>

@@ -73,7 +73,13 @@ class ManpowerDailyReport extends Model
             $totalSubcon = 0;
             if (!empty($model->subcontractors_breakdown) && is_array($model->subcontractors_breakdown)) {
                 foreach ($model->subcontractors_breakdown as $sub) {
-                    $totalSubcon += (int)($sub['workers_count'] ?? $sub['count'] ?? 0);
+                    if (!empty($sub['roles']) && is_array($sub['roles'])) {
+                        foreach ($sub['roles'] as $r) {
+                            $totalSubcon += (int)($r['count'] ?? 0);
+                        }
+                    } else {
+                        $totalSubcon += (int)($sub['workers_count'] ?? $sub['count'] ?? 0);
+                    }
                 }
                 $model->subcontractor_workers = $totalSubcon;
             } else {
@@ -111,8 +117,14 @@ class ManpowerDailyReport extends Model
     {
         if (!empty($this->subcontractors_breakdown) && is_array($this->subcontractors_breakdown)) {
             $sum = 0;
-            foreach ($this->subcontractors_breakdown as $item) {
-                $sum += (int)($item['workers_count'] ?? $item['count'] ?? 0);
+            foreach ($this->subcontractors_breakdown as $sub) {
+                if (!empty($sub['roles']) && is_array($sub['roles'])) {
+                    foreach ($sub['roles'] as $r) {
+                        $sum += (int)($r['count'] ?? 0);
+                    }
+                } else {
+                    $sum += (int)($sub['workers_count'] ?? $sub['count'] ?? 0);
+                }
             }
             return $sum;
         }
