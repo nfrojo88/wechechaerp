@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Store Manager Dashboard')
 
 @section('content')
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
 <style>
 /* ── Premium dashboard shell ─────────────────────────────────── */
 .dash-header {
@@ -154,7 +158,7 @@
     <div class="col-6 col-md-2">
         <a href="{{ route('products.index') }}" class="text-decoration-none">
             <div class="kpi-card card h-100 p-3" style="border-left: 4px solid #2563eb;">
-                <div class="d-flex align-items-center gap-3">
+                <div class="d-flex align-items-center gap-2">
                     <div class="kpi-icon" style="background:#eff6ff;color:#2563eb;"><i class="fas fa-boxes"></i></div>
                     <div>
                         <div class="kpi-label text-muted">Items in Stock</div>
@@ -164,7 +168,7 @@
             </div>
         </a>
     </div>
-    <div class="col-6 col-md-2">
+    <div class="col-6 col-md-4 col-lg-2">
         <div class="kpi-card card h-100 p-3" style="border-left: 4px solid #f59e0b;">
             <div class="d-flex align-items-center gap-3">
                 <div class="kpi-icon" style="background:#fffbeb;color:#f59e0b;"><i class="fas fa-exclamation-triangle"></i></div>
@@ -175,7 +179,7 @@
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-2">
+    <div class="col-6 col-md-4 col-lg-2">
         <div class="kpi-card card h-100 p-3" style="border-left: 4px solid #06b6d4;">
             <div class="d-flex align-items-center gap-3">
                 <div class="kpi-icon" style="background:#ecfeff;color:#06b6d4;"><i class="fas fa-exchange-alt"></i></div>
@@ -186,7 +190,7 @@
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-2">
+    <div class="col-6 col-md-4 col-lg-2">
         <div class="kpi-card card h-100 p-3" style="border-left: 4px solid #8b5cf6;">
             <div class="d-flex align-items-center gap-3">
                 <div class="kpi-icon" style="background:#f5f3ff;color:#8b5cf6;"><i class="fas fa-clipboard-list"></i></div>
@@ -197,7 +201,7 @@
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-2">
+    <div class="col-6 col-md-4 col-lg-2">
         <div class="kpi-card card h-100 p-3" style="border-left: 4px solid #10b981;">
             <div class="d-flex align-items-center gap-3">
                 <div class="kpi-icon" style="background:#ecfdf5;color:#10b981;"><i class="fas fa-truck"></i></div>
@@ -208,7 +212,7 @@
             </div>
         </div>
     </div>
-    <div class="col-6 col-md-2">
+    <div class="col-6 col-md-4 col-lg-2">
         <div class="kpi-card card h-100 p-3" style="border-left: 4px solid #ef4444;">
             <div class="d-flex align-items-center gap-3">
                 <div class="kpi-icon" style="background:#fef2f2;color:#ef4444;"><i class="fas fa-dollar-sign"></i></div>
@@ -226,9 +230,9 @@
 <div class="row g-3 mb-4">
 
     {{-- Value by Store bars --}}
-    <div class="col-xl-4">
+    <div class="col-12 col-xl-4">
         <div class="section-card card h-100">
-            <div class="card-header d-flex align-items-center justify-content-between">
+            <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <span><i class="fas fa-store me-2 text-primary"></i>Inventory Value by Store</span>
             </div>
             <div class="card-body p-3">
@@ -252,7 +256,7 @@
     </div>
 
     {{-- Top 10 Products by Value --}}
-    <div class="col-xl-8">
+    <div class="col-12 col-xl-8">
         <div class="section-card card h-100">
             <div class="card-header d-flex align-items-center justify-content-between">
                 <span><i class="fas fa-trophy me-2 text-warning"></i>Top Products by Inventory Value</span>
@@ -332,9 +336,9 @@
 
 {{-- ── Inventory Overview + Low Stock ───────────────────────── --}}
 <div class="row g-3 mb-4">
-    <div class="col-xl-8">
+    <div class="col-12 col-xl-8">
         <div class="section-card card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span><i class="fas fa-boxes me-2 text-primary"></i>Inventory Overview — All Stores</span>
                 <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-sm btn-outline-primary" style="border-radius:7px;font-size:.78rem;">View All</a>
             </div>
@@ -382,7 +386,7 @@
     </div>
 
     {{-- Low Stock Alerts --}}
-    <div class="col-xl-4">
+    <div class="col-12 col-xl-4">
         <div class="section-card card h-100" style="border-top: 3px solid #f59e0b;">
             <div class="card-header" style="background:#fffbeb;">
                 <i class="fas fa-exclamation-triangle me-2 text-warning"></i>Low Stock Alerts
@@ -414,10 +418,10 @@
 </div>
 
 {{-- ── Transfers + Material Requests ────────────────────────── --}}
-<div class="row g-3">
-    <div class="col-xl-6">
+<div class="row g-2 g-md-3 filter-form">
+    <div class="col-12 col-xl-6">
         <div class="section-card card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span><i class="fas fa-truck-moving me-2 text-info"></i>Transfers to General Service</span>
                 <a href="{{ route('store-manager.transfers.index') }}" class="btn btn-sm btn-outline-primary" style="border-radius:7px;font-size:.78rem;">View All</a>
             </div>
@@ -446,9 +450,9 @@
         </div>
     </div>
 
-    <div class="col-xl-6">
+    <div class="col-12 col-xl-6">
         <div class="section-card card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span><i class="fas fa-clipboard-list me-2 text-purple"></i>Material Requests from Coordinator</span>
                 <a href="{{ route('store-manager.material-requests.index') }}" class="btn btn-sm btn-outline-primary" style="border-radius:7px;font-size:.78rem;">View All</a>
             </div>
@@ -492,3 +496,5 @@
 </div>
 
 @endsection
+
+

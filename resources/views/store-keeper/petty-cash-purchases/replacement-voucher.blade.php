@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 @section('title', 'Voucher #' . $replenishment->request_no . ' - Petty Cash Replacement')
 
 @section('content')
-<div class="container-fluid px-4 py-3">
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
+<div class="container-fluid">
 
     {{-- Top Action Bar --}}
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 d-print-none">
@@ -249,3 +253,4 @@
 
 </div>
 @endsection
+

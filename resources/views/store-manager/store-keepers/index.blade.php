@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Assign Store Keepers — Store Manager Hub')
 
 @section('content')
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
 <style>
 /* ── Page Header Gradient ── */
 .hub-header {
@@ -678,3 +682,4 @@
 </div>
 
 @endsection
+

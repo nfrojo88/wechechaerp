@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Add Product - Store Manager')
 
 @section('content')
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
 <script>window.location.replace("{{ route('products.create') }}");</script>
 <div class="container-fluid">
     <div class="row mb-4">
@@ -132,3 +136,4 @@ function generateProductCode(name) {
 }
 </script>
 @endsection
+

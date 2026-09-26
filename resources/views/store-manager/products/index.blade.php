@@ -1,12 +1,16 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Material Catalog - Store Manager')
 
 @section('content')
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
 <script>window.location.replace("{{ route('products.index') }}");</script>
 <div class="container-fluid">
     {{-- ── Page Header ──────────────────────────────────────────── --}}
-    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+    <div class="d-flex align-items-start justify-content-between mb-3 mb-md-4 flex-wrap gap-2 page-header-row">
         <div>
             <h1 class="h4 mb-0 fw-bold">
                 <i class="fa-solid fa-boxes-stacked text-primary me-2"></i>Material Catalog
@@ -36,7 +40,7 @@
     {{-- ── Filters ──────────────────────────────────────────────── --}}
     <div class="card shadow-sm mb-4 border-0">
         <div class="card-body bg-light rounded">
-            <form method="GET" class="row gx-2 gy-2 align-items-end">
+            <form method="GET" class="row gx-2 gy-2 align-items-end filter-form">
                 <div class="col-md-5">
                     <label class="form-label small text-muted fw-bold mb-1">Search Products</label>
                     <div class="input-group input-group-sm shadow-sm">
@@ -146,3 +150,4 @@
     </div>
 </div>
 @endsection
+

@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Damaged Assets — Store Manager')
 
 @section('content')
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
 <div class="container-fluid py-4">
 
     {{-- ── Header ── --}}
@@ -244,3 +248,4 @@ function fillActionModal(btn) {
 }
 </script>
 @endpush
+

@@ -1,4 +1,4 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @php
     $authUser = auth()->user();
@@ -10,10 +10,14 @@
 @section('title', $isAuditorUser ? 'Material Transfers Status (Read-Only)' : ('Material Transfers - ' . ($isStoreKeeper ? 'Site Store' : 'Store Hub')))
 
 @section('content')
-<div class="container-fluid px-4 py-3">
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
+<div class="container-fluid">
 
     {{-- Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div class="d-flex align-items-start justify-content-between mb-3 mb-md-4 flex-wrap gap-2 page-header-row">
         <div>
             <h4 class="fw-bold mb-1" style="color:var(--brand-800)">
                 <i class="fas {{ $isAuditorUser ? 'fa-shield-halved text-info' : 'fa-truck-moving text-primary' }} me-2"></i>{{ $isAuditorUser ? 'Inter-Store Material Transfers (Read-Only)' : ($isStoreKeeper ? 'Store Keeper - Material Transfers' : 'Inter-Store Material Transfers') }}
@@ -307,7 +311,7 @@
                 </ul>
             </div>
 
-            <form method="GET" class="row g-2 align-items-center">
+            <form method="GET" class="row g-2 align-items-center filter-form">
                 <input type="hidden" name="tab" value="{{ $tab ?? 'all' }}">
                 
                 <div class="col-md-4">
@@ -664,7 +668,7 @@
                         </h6>
                         <p class="text-muted small mb-3">You can directly assign a driver now, or leave it blank to assign later.</p>
 
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-md-6">
                                 <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Driver</label>
                                 <select name="driver_employee_id" class="form-select form-select-sm">
@@ -987,3 +991,4 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 @endif
 @endsection
+

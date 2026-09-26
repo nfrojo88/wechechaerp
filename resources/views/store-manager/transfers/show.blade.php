@@ -1,9 +1,13 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Transfer Details - ' . ($transfer->transfer_no ?? 'Transfer'))
 
 @section('content')
-<div class="container-fluid px-4 py-3">
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
+<div class="container-fluid">
 
     {{-- User Permissions & Roles Check --}}
     @php
@@ -52,7 +56,7 @@
     @endif
 
     {{-- Top Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div class="d-flex align-items-start justify-content-between mb-3 mb-md-4 flex-wrap gap-2 page-header-row">
         <div>
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <h4 class="fw-bold mb-0" style="color:var(--brand-800)">
@@ -947,7 +951,7 @@
                             <span class="p-1 rounded-2 text-white d-inline-flex align-items-center justify-content-center" style="width: 26px; height: 26px; background: #2563eb; font-size: 0.8rem;"><i class="fas fa-id-badge"></i></span>
                             Assign Driver &amp; Logistics (Optional)
                         </h6>
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-md-6">
                                 <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Driver</label>
                                 <select name="driver_employee_id" class="form-select form-select-sm">
@@ -1135,7 +1139,7 @@
                             <span class="p-1 rounded-2 text-white d-inline-flex align-items-center justify-content-center" style="width: 26px; height: 26px; background: #2563eb; font-size: 0.8rem;"><i class="fas fa-id-badge"></i></span>
                             Assign Driver &amp; Vehicle (Optional)
                         </h6>
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-md-6">
                                 <label class="form-label fw-bold small text-uppercase" style="color: #334155;">Driver</label>
                                 <select name="driver_employee_id" class="form-select form-select-sm">
@@ -1410,3 +1414,4 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 @endsection
+

@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 @section('title', 'Petty Cash Material Purchases - Store Keeper')
 
 @section('content')
-<div class="container-fluid px-4 py-3">
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
+<div class="container-fluid">
 
     {{-- ── Top Navigation & Page Title ────────────────────────────────────────── --}}
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
@@ -112,7 +116,7 @@
     {{-- ── Filters & Search ─────────────────────────────────────────────────── --}}
     <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white">
         <div class="card-body p-3">
-            <form method="GET" action="{{ route('store-keeper.petty-cash-purchases.index') }}" class="row g-2 align-items-center">
+            <form method="GET" action="{{ route('store-keeper.petty-cash-purchases.index') }}" class="row g-2 align-items-center filter-form">
                 <div class="col-md-4">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
@@ -390,7 +394,7 @@
                 </div>
                 <div class="modal-body p-4">
 
-                    <div class="row g-3">
+                    <div class="row g-2 g-md-3 filter-form">
                         {{-- Target Store --}}
                         <div class="col-md-6">
                             <label class="form-label fw-semibold small text-dark">
@@ -540,3 +544,4 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 @endpush
 @endsection
+

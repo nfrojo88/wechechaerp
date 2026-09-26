@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 @section('title', 'Buy Material with Petty Cash - Store Keeper')
 
 @section('content')
-<div class="container-fluid px-4 py-3">
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
+<div class="container-fluid">
 
     {{-- ── Header ────────────────────────────────────────────────────────────── --}}
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
@@ -394,7 +398,7 @@
 
                     <input type="hidden" name="store_id" id="modalRepStoreId" value="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}">
 
-                    <div class="row g-3">
+                    <div class="row g-2 g-md-3 filter-form">
                         {{-- Recipient Store Keeper --}}
                         <div class="col-md-6">
                             <label class="form-label fw-semibold small text-dark">
@@ -609,7 +613,7 @@
 
                     <input type="hidden" name="store_id" id="modalReqStoreId" value="{{ $assignedStore->id ?? ($stores->first()->id ?? '') }}">
 
-                    <div class="row g-3">
+                    <div class="row g-2 g-md-3 filter-form">
                         {{-- Requested Amount --}}
                         <div class="col-md-6">
                             <label class="form-label fw-semibold small text-dark">
@@ -1074,3 +1078,4 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 @endpush
 @endsection
+

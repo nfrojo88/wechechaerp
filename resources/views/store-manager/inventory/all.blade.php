@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'All Inventory - Store Manager')
 
 @section('content')
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
 <div class="container-fluid">
     @if(session('success'))
         <div class="alert alert-success alert-dismissible fade show shadow-sm mb-3" role="alert">
@@ -286,7 +290,7 @@
 
                     <div class="card border-0 shadow-sm mb-3">
                         <div class="card-body p-3">
-                            <div class="row g-3">
+                            <div class="row g-2 g-md-3 filter-form">
                                 <div class="col-md-6">
                                     <label class="form-label fw-bold text-dark small text-uppercase mb-1">Store <span class="text-danger">*</span></label>
                                     <select name="store_id" id="addStockStoreSelect" class="form-select" required>
@@ -1482,3 +1486,4 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 @endpush
 @endsection
+

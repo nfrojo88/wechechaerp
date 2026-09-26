@@ -1,11 +1,15 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 @section('title', 'Weekly Material Demand - Store Keeper')
 
 @section('content')
-<div class="container-fluid px-4 py-3">
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
+<div class="container-fluid">
 
     {{-- Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div class="d-flex align-items-start justify-content-between mb-3 mb-md-4 flex-wrap gap-2 page-header-row">
         <div>
             <h1 class="h3 mb-0 fw-bold" style="color:var(--brand-800)">
                 <i class="fa-solid fa-calendar-check me-2 text-primary"></i>Weekly Material Demand
@@ -26,7 +30,7 @@
 
     {{-- ── Store & Site Context Banner ──────────────────────────────────────── --}}
     @if($assignedStore)
-    <div class="card border-0 shadow-sm rounded-3 mb-4 bg-white" style="border-left: 5px solid #0284c7 !important;">
+    <div class="card border-0 shadow-sm rounded-3 mb-3 bg-white context-banner" style="border-left: 5px solid #0284c7 !important;">
         <div class="card-body p-3">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
                 <div class="d-flex align-items-center gap-3">
@@ -218,3 +222,4 @@
 
 </div>
 @endsection
+

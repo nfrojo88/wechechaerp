@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Fixed Assets Management - Store Manager')
 
 @section('content')
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
 <div class="container-fluid py-3">
 
     {{-- Page Header --}}
@@ -436,7 +440,7 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
-                    <div class="row g-3">
+                    <div class="row g-2 g-md-3 filter-form">
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">Asset Name <span class="text-danger">*</span></label>
                             <input type="text" name="name" id="new_asset_name" class="form-control form-control-sm" placeholder="e.g. Dell Latitude Laptop, Sinotruck 4x4" required>
@@ -473,7 +477,7 @@
                         </div>
                     </div>
 
-                    <div class="row g-3">
+                    <div class="row g-2 g-md-3 filter-form">
                         <div class="col-md-6">
                             <label class="form-label small fw-bold">Brand / Manufacturer</label>
                             <input type="text" name="brand" class="form-control form-control-sm" placeholder="e.g. Dell, Toyota, Caterpillar">
@@ -575,7 +579,7 @@
 
                     {{-- TAB: Identity --}}
                     <div class="ieu-tab-pane" data-ieu-pane="identity">
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-12">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Unit Code <span class="text-danger">*</span></label>
                                 <input type="text" name="unit_code" id="dyn_unit_code" class="form-control font-monospace fw-bold fs-5" required style="letter-spacing:2px;">
@@ -629,7 +633,7 @@
                         <div class="alert alert-info border-0 py-2 small mb-3">
                             <i class="fa-solid fa-circle-info me-1"></i> Fields specific to <strong>vehicles & heavy machinery</strong>.
                         </div>
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-6">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Plate Number</label>
                                 <input type="text" name="plate_number" id="dyn_unit_plate" class="form-control" placeholder="e.g. AA-99999">
@@ -654,7 +658,7 @@
                         <div class="alert alert-primary border-0 py-2 small mb-3">
                             <i class="fa-solid fa-circle-info me-1"></i> Fields specific to <strong>computers & IT equipment</strong>.
                         </div>
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-6">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">CPU</label>
                                 <input type="text" id="dyn_cpu" class="form-control dyn-spec-part" data-spec-key="CPU" placeholder="e.g. Intel i7-12700">
@@ -676,7 +680,7 @@
 
                     {{-- TAB: Status & Condition --}}
                     <div class="ieu-tab-pane d-none" data-ieu-pane="status">
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-6">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Condition <span class="text-danger">*</span></label>
                                 <select name="condition" id="dyn_unit_condition" class="form-select" required>
@@ -705,7 +709,7 @@
 
                     {{-- TAB: Finance --}}
                     <div class="ieu-tab-pane d-none" data-ieu-pane="finance">
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-6">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Purchase Price (Br)</label>
                                 <input type="number" step="0.01" name="purchase_price" id="dyn_unit_price" class="form-control" placeholder="0.00" min="0">
@@ -715,7 +719,7 @@
 
                     {{-- TAB: Notes --}}
                     <div class="ieu-tab-pane d-none" data-ieu-pane="notes">
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <input type="hidden" name="specifications" id="dyn_unit_specs">
                             <div class="col-12">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Full Specifications</label>
@@ -1002,3 +1006,4 @@ function openEditAssetModal(asset) {
 }
 </script>
 @endpush
+

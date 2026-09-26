@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Create Transfer - Store Manager')
 
 @section('content')
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col-12">
@@ -125,3 +129,4 @@ $(document).on('change', '.product-select', function() {
 </script>
 @endpush
 @endsection
+

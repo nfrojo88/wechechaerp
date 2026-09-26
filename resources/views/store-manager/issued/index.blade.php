@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', 'Issued Materials - Store Manager')
 
 @section('content')
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
 <div class="container-fluid">
     <div class="row mb-4">
         <div class="col-12">
@@ -14,7 +18,7 @@
     <!-- Filters -->
     <div class="card shadow-sm mb-4">
         <div class="card-body">
-            <form method="GET" class="row g-3">
+            <form method="GET" class="row g-2 g-md-3 filter-form">
                 <div class="col-md-4">
                     <label class="form-label">Store</label>
                     <select name="store_id" class="form-select">
@@ -82,3 +86,4 @@
     </div>
 </div>
 @endsection
+

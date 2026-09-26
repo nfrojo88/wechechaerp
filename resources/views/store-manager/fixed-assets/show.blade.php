@@ -1,8 +1,12 @@
-@extends('layouts.app')
+﻿@extends('layouts.app')
 
 @section('title', $fixedAsset->name . ' - Fixed Asset Details')
 
 @section('content')
+@push('styles')
+@include('layouts._store_mobile')
+@endpush
+
 <div class="container-fluid py-3">
 
     {{-- Breadcrumb & Header --}}
@@ -565,7 +569,7 @@
 
                     {{-- TAB: Identity (all categories) --}}
                     <div class="eu-tab-pane" data-eu-pane="identity">
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-12">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">
                                     Unit Code <span class="text-danger">*</span>
@@ -629,7 +633,7 @@
                             <i class="fa-solid fa-circle-info me-1"></i>
                             Fields specific to <strong>vehicles and heavy machinery</strong>.
                         </div>
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-6">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Plate Number</label>
                                 <input type="text" id="eu_plate" name="plate_number" class="form-control"
@@ -660,7 +664,7 @@
                             <i class="fa-solid fa-circle-info me-1"></i>
                             Fields specific to <strong>computers, IT equipment, and electronics</strong>.
                         </div>
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-6">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Processor / CPU</label>
                                 <input type="text" id="eu_cpu" class="form-control eu-spec-part"
@@ -702,7 +706,7 @@
 
                     {{-- TAB: Status & Condition (all categories) --}}
                     <div class="eu-tab-pane d-none" data-eu-pane="status">
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-6">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">
                                     Condition <span class="text-danger">*</span>
@@ -739,7 +743,7 @@
 
                     {{-- TAB: Finance (all categories) --}}
                     <div class="eu-tab-pane d-none" data-eu-pane="finance">
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             <div class="col-6">
                                 <label class="form-label fw-semibold small text-uppercase text-muted mb-1">Purchase Price (Br)</label>
                                 <div class="input-group">
@@ -758,7 +762,7 @@
 
                     {{-- TAB: Notes (all categories) --}}
                     <div class="eu-tab-pane d-none" data-eu-pane="notes">
-                        <div class="row g-3">
+                        <div class="row g-2 g-md-3 filter-form">
                             {{-- Hidden real specs field that gets submitted --}}
                             <input type="hidden" id="eu_specifications" name="specifications">
                             <div class="col-12">
@@ -993,4 +997,5 @@
 })();
 </script>
 @endpush
+
 
