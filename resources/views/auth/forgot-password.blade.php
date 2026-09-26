@@ -43,13 +43,15 @@ body {
 /* ── Auth Background ──────────────────────────────── */
 .auth-wrapper {
   min-height: 100vh;
+  min-height: 100dvh;
   background: linear-gradient(135deg, var(--brand-900) 0%, var(--brand-700) 50%, var(--brand-800) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  overflow: hidden;
-  padding: 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 24px 16px;
 }
 .auth-wrapper::before {
   content: '';
@@ -329,9 +331,54 @@ body {
   color: var(--gray-400);
 }
 
+/* ── Mobile Responsive ─────────────────────────────── */
+@media (max-width: 768px) {
+  .auth-wrapper { align-items: flex-start; padding: 20px 12px 32px; }
+  .auth-card {
+    padding: 32px 24px;
+    border-radius: 20px;
+    box-shadow: 0 16px 48px rgba(0,0,0,.30);
+    margin-top: 12px;
+    margin-bottom: 12px;
+  }
+  .auth-logo-icon { width: 56px; height: 56px; }
+  .auth-logo-icon img { width: 44px; height: 44px; }
+  .auth-logo-text .title { font-size: 18px; }
+  .auth-logo-text .sub { font-size: 10.5px; }
+  /* Step indicator: smaller on mobile */
+  .step-dot { width: 28px; height: 28px; font-size: 11px; }
+  .step-line { width: 28px; }
+  .step-indicator { margin: 14px 0; }
+  /* Info banner */
+  .info-banner { padding: 10px 12px; }
+  .info-banner p { font-size: 12px; }
+  /* Inputs - prevent iOS auto-zoom (min 16px) */
+  .form-control { font-size: 16px; }
+  .btn-submit { font-size: 15px; padding: 14px 20px; min-height: 50px; }
+  .auth-footer { font-size: 10.5px; padding-top: 14px; margin-top: 16px; }
+  .back-link { font-size: 12.5px; }
+}
+
 @media (max-width: 480px) {
-  .auth-card { padding: 36px 24px; }
-  .step-line { width: 24px; }
+  .auth-wrapper { padding: 12px 8px 24px; }
+  .auth-card { padding: 24px 18px; border-radius: 16px; }
+  .auth-logo-icon { width: 48px; height: 48px; }
+  .auth-logo-icon img { width: 36px; height: 36px; }
+  .auth-logo-text .title { font-size: 16px; }
+  .step-dot { width: 26px; height: 26px; font-size: 10.5px; }
+  .step-line { width: 22px; }
+  .form-label { font-size: 11px; }
+  .form-control { font-size: 16px; padding: 11px 12px 11px 38px; }
+  .btn-submit { font-size: 14px; padding: 12px 16px; }
+  .auth-footer { font-size: 10px; }
+}
+
+@media (max-width: 360px) {
+  .auth-card { padding: 20px 12px; }
+  .auth-logo-icon { width: 42px; height: 42px; }
+  .auth-logo-text .title { font-size: 15px; }
+  .step-line { width: 16px; }
+  .btn-submit { font-size: 13px; }
 }
     </style>
 </head>

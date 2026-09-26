@@ -1,4 +1,4 @@
-@extends('layouts.guest')
+﻿@extends('layouts.guest')
 
 @section('title', 'Verify OTP - Construct-Pro ERP')
 
@@ -34,13 +34,15 @@
 /* ── Auth Wrapper ─────────────────────────────────── */
 .auth-wrapper {
   min-height: 100vh;
+  min-height: 100dvh;
   background: linear-gradient(135deg, var(--brand-900) 0%, var(--brand-700) 50%, var(--brand-800) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
-  overflow: hidden;
-  padding: 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 24px 16px;
 }
 .auth-wrapper::before {
   content: '';
@@ -417,3 +419,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 @endsection
+
