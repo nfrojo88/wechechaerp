@@ -155,7 +155,11 @@
                                         @foreach($report->subcontractors_breakdown as $sub)
                                             <span class="badge" style="background:#f0f9ff; color:#0369a1; border:1px solid #bae6fd; font-weight:500;">
                                                 <strong style="color:#0369a1;">{{ $sub['subcontractor_name'] ?? 'Subcontractor' }}</strong>: <span class="badge bg-info text-white">{{ $sub['workers_count'] ?? $sub['count'] ?? 0 }}</span>
-                                                @if(!empty($sub['trade'])) <span class="text-muted" style="font-size:0.7rem;">({{ $sub['trade'] }})</span> @endif
+                                                @if(!empty($sub['role_name']))
+                                                    <span class="text-muted" style="font-size:0.7rem;">({{ $sub['role_name'] }})</span>
+                                                @elseif(!empty($sub['trade']))
+                                                    <span class="text-muted" style="font-size:0.7rem;">({{ $sub['trade'] }})</span>
+                                                @endif
                                             </span>
                                         @endforeach
                                     </div>

@@ -163,10 +163,11 @@
                                 <tr>
                                     <th class="ps-3" style="width: 50px;">#</th>
                                     <th>Subcontractor Name</th>
+                                    <th>Role / Trade Designation</th>
+                                    <th>Category</th>
                                     <th>Agreement No</th>
-                                    <th>Trade / Scope</th>
                                     <th class="text-center" style="width: 140px;">Workers</th>
-                                    <th>Notes / Remarks</th>
+                                    <th>Location / Notes</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -176,12 +177,19 @@
                                     <td class="fw-bold text-dark">
                                         <i class="fa-solid fa-building text-info me-2"></i>{{ $sub['subcontractor_name'] ?? 'Subcontractor' }}
                                     </td>
+                                    <td class="fw-semibold text-dark">
+                                        <i class="fa-solid fa-user-gear text-primary me-1.5 small"></i>{{ $sub['role_name'] ?? $sub['trade'] ?? 'Trade' }}
+                                    </td>
+                                    <td>
+                                        <span class="badge" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 600;">
+                                            {{ $sub['category'] ?? 'Skilled Labor' }}
+                                        </span>
+                                    </td>
                                     <td>
                                         <span class="badge bg-light text-dark border">
                                             {{ $sub['agreement_no'] ?? '—' }}
                                         </span>
                                     </td>
-                                    <td class="small text-muted">{{ $sub['trade'] ?? '—' }}</td>
                                     <td class="text-center">
                                         <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-3 py-1 fw-bold fs-6">
                                             {{ $sub['workers_count'] ?? $sub['count'] ?? 0 }}
@@ -191,7 +199,7 @@
                                 </tr>
                                 @endforeach
                                 <tr class="table-light fw-bold">
-                                    <td colspan="4" class="ps-3 text-end"><i class="fa-solid fa-sigma me-1.5 text-info"></i>Total Subcon Present:</td>
+                                    <td colspan="5" class="ps-3 text-end"><i class="fa-solid fa-sigma me-1.5 text-info"></i>Total Subcon Present:</td>
                                     <td class="text-center"><span class="badge bg-info px-3 py-1.5 fs-6">{{ $manpowerDailyReport->subcontractor_workers_count }}</span></td>
                                     <td></td>
                                 </tr>

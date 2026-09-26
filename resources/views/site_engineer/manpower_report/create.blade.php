@@ -218,14 +218,20 @@
                         </div>
                     </div>
                     <div class="card-body p-4">
+                        <div id="subconEmptyNotice" class="alert alert-light border small text-muted d-none align-items-center mb-3">
+                            <i class="fa-solid fa-circle-info text-info me-2 fs-5"></i>
+                            <span>No registered subcontractor agreements assigned to this site yet. You can click <strong>"+ Add Custom Subcon"</strong> to report any on-site subcontractor.</span>
+                        </div>
+
                         <div class="table-responsive mb-3">
                             <table class="table table-sm align-middle table-hover mb-0" id="subconTable">
                                 <thead class="table-light">
                                     <tr>
-                                        <th style="min-width: 240px;">Subcontractor Name <span class="text-danger">*</span></th>
-                                        <th style="width: 200px;">Agreement & Trade / Scope</th>
-                                        <th style="width: 170px;" class="text-center">Workers Present <span class="text-danger">*</span></th>
-                                        <th style="min-width: 180px;">Scope / Location Notes</th>
+                                        <th style="min-width: 220px;">Subcontractor (Assigned to Site) <span class="text-danger">*</span></th>
+                                        <th style="min-width: 220px;">Role / Trade Designation <span class="text-danger">*</span></th>
+                                        <th style="width: 140px;">Category</th>
+                                        <th style="width: 160px;" class="text-center">Workers Present <span class="text-danger">*</span></th>
+                                        <th style="min-width: 170px;">Location / Notes</th>
                                         <th style="width: 50px;" class="text-center"></th>
                                     </tr>
                                 </thead>
@@ -237,10 +243,10 @@
 
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 pt-2 border-top">
                             <button type="button" class="btn btn-outline-info btn-sm fw-semibold shadow-sm" id="btnAddSubconRow" onclick="addSubconRow()">
-                                <i class="fa-solid fa-plus me-1"></i>Add Subcontractor
+                                <i class="fa-solid fa-plus me-1"></i>Add Subcontractor Trade / Role
                             </button>
                             <small class="text-muted">
-                                <i class="fa-solid fa-link me-1 text-primary"></i>Subcons link to active project subcon agreements automatically.
+                                <i class="fa-solid fa-link me-1 text-primary"></i>Only subcontractors assigned to this site are listed.
                             </small>
                         </div>
                     </div>
@@ -547,23 +553,41 @@ function removeRoleRow(btn) {
 
 // ─── SUBCONTRACTOR MANPOWER LOGIC ─────────────────────────────────────────────
 function getSubconsForCurrentProject() {
-    if (!CURRENT_PROJECT_ID) return ALL_SUBCONS;
-    const filtered = ALL_SUBCONS.filter(s => parseInt(s.project_id) === CURRENT_PROJECT_ID);
-    return filtered.length > 0 ? filtered : ALL_SUBCONS;
+    if (!CURRENT_PROJECT_ID) return [];
+    // Strictly filter to ONLY subcontractors assigned to this specific project/site
+    return ALL_SUBCONS.filter(s => parseInt(s.project_id) === CURRENT_PROJECT_ID);
 }
 
 function buildSubconOptions(selectedAgreementId = '', selectedName = '') {
     const list = getSubconsForCurrentProject();
-    let html = '<option value="">— Select Subcontractor / Agreement —</option>';
+    let html = '<option value="">— Select Site Subcontractor —</option>';
 
     list.forEach(s => {
         const isSel = (selectedAgreementId && String(s.id) === String(selectedAgreementId)) ||
                       (!selectedAgreementId && selectedName && s.subcontractor_name.toLowerCase() === selectedName.toLowerCase()) ? 'selected' : '';
-        html += `<option value="${s.id}" data-name="${escapeHtml(s.subcontractor_name)}" data-agreement-no="${escapeHtml(s.agreement_no)}" data-trade="${escapeHtml(s.trade)}" ${isSel}>${escapeHtml(s.subcontractor_name)} (${escapeHtml(s.agreement_no)} - ${escapeHtml(s.trade)})</option>`;
+        html += `<option value="${s.id}" data-name="${escapeHtml(s.subcontractor_name)}" data-agreement-no="${escapeHtml(s.agreement_no)}" data-trade="${escapeHtml(s.trade)}" ${isSel}>${escapeHtml(s.subcontractor_name)} (${escapeHtml(s.agreement_no)})</option>`;
     });
 
     const isCustom = selectedAgreementId === 'custom' || (!selectedAgreementId && selectedName && !list.some(s => s.subcontractor_name.toLowerCase() === selectedName.toLowerCase()));
     html += `<option value="custom" ${isCustom ? 'selected' : ''}>+ Custom / Other Subcontractor</option>`;
+    return html;
+}
+
+function buildSubconRoleOptions(selectedRole = '', agreementTrade = '') {
+    let html = '<option value="">— Select Trade / Role —</option>';
+
+    // If subcontractor agreement has a specific trade, offer it at top
+    if (agreementTrade && agreementTrade.trim()) {
+        const isSel = (agreementTrade.toLowerCase() === (selectedRole || '').toLowerCase()) ? 'selected' : '';
+        html += `<option value="${escapeHtml(agreementTrade)}" data-category="Skilled Labor" ${isSel}>★ ${escapeHtml(agreementTrade)} (Agreement Scope)</option>`;
+    }
+
+    MANPOWER_ROLES.forEach(r => {
+        if (agreementTrade && r.name.toLowerCase() === agreementTrade.toLowerCase()) return;
+        const isSel = (r.name.toLowerCase() === (selectedRole || '').toLowerCase()) ? 'selected' : '';
+        html += `<option value="${escapeHtml(r.name)}" data-id="${r.id || ''}" data-category="${escapeHtml(r.category || 'Skilled Labor')}" ${isSel}>${escapeHtml(r.name)} (${escapeHtml(r.category || 'General')})</option>`;
+    });
+
     return html;
 }
 
@@ -576,6 +600,8 @@ function addSubconRow(data = null, forceCustom = false) {
     const initialName = data?.subcontractor_name || '';
     const initialAgreementNo = data?.agreement_no || '';
     const initialTrade = data?.trade || '';
+    const initialRoleName = data?.role_name || data?.trade || '';
+    const initialCategory = data?.category || 'Skilled Labor';
     const initialCount = data?.workers_count !== undefined ? data.workers_count : 0;
     const initialNotes = data?.notes || '';
     const isCustom = initialAgreementId === 'custom' || forceCustom;
@@ -583,7 +609,7 @@ function addSubconRow(data = null, forceCustom = false) {
     const tr = document.createElement('tr');
     tr.id = `subconRow_${idx}`;
     tr.innerHTML = `
-        <td style="min-width: 240px;">
+        <td style="min-width: 220px;">
             <select class="form-select form-select-sm subcon-agreement-select fw-semibold" onchange="onSubconSelected(this, ${idx})">
                 ${buildSubconOptions(initialAgreementId, initialName)}
             </select>
@@ -592,17 +618,25 @@ function addSubconRow(data = null, forceCustom = false) {
                    placeholder="Enter subcontractor name..."
                    value="${escapeHtml(initialName)}"
                    oninput="updateTotal()">
+            <div class="subcon-agreement-badge mt-1 ${initialAgreementNo ? '' : 'd-none'}">
+                <span class="badge bg-light text-muted border" style="font-size:0.72rem;">
+                    <i class="fa-solid fa-file-contract me-1 text-primary"></i><span class="subcon-agreement-no-text">${escapeHtml(initialAgreementNo)}</span>
+                </span>
+            </div>
             <input type="hidden" name="subcontractors[${idx}][agreement_id]" class="subcon-agreement-id-input" value="${escapeHtml(initialAgreementId === 'custom' ? '' : initialAgreementId)}">
-        </td>
-        <td style="min-width: 190px;">
-            <div class="subcon-trade-display small text-dark fw-semibold">
-                ${escapeHtml(initialTrade || '—')}
-            </div>
-            <div class="subcon-agreement-no small text-muted" style="font-size:0.75rem;">
-                ${initialAgreementNo ? escapeHtml(initialAgreementNo) : ''}
-            </div>
-            <input type="text" name="subcontractors[${idx}][trade]" class="form-control form-control-sm subcon-trade-input mt-1.5 ${isCustom ? '' : 'd-none'}" placeholder="Trade / Scope of work..." value="${escapeHtml(initialTrade)}">
             <input type="hidden" name="subcontractors[${idx}][agreement_no]" class="subcon-agreement-no-input" value="${escapeHtml(initialAgreementNo)}">
+            <input type="hidden" name="subcontractors[${idx}][trade]" class="subcon-trade-input" value="${escapeHtml(initialTrade)}">
+        </td>
+        <td style="min-width: 220px;">
+            <select name="subcontractors[${idx}][role_name]" class="form-select form-select-sm subcon-role-select fw-semibold" onchange="onSubconRoleChanged(this, ${idx})" required>
+                ${buildSubconRoleOptions(initialRoleName, initialTrade)}
+            </select>
+        </td>
+        <td style="width: 140px;">
+            <span class="badge subcon-category-badge" style="background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 600;">
+                ${escapeHtml(initialCategory)}
+            </span>
+            <input type="hidden" name="subcontractors[${idx}][category]" class="subcon-category-input" value="${escapeHtml(initialCategory)}">
         </td>
         <td class="text-center" style="width: 150px;">
             <div class="input-group input-group-sm mx-auto" style="max-width: 130px;">
@@ -616,8 +650,8 @@ function addSubconRow(data = null, forceCustom = false) {
                 </button>
             </div>
         </td>
-        <td style="min-width: 180px;">
-            <input type="text" name="subcontractors[${idx}][notes]" class="form-control form-control-sm" placeholder="e.g. 3rd floor block work..." value="${escapeHtml(initialNotes)}">
+        <td style="min-width: 170px;">
+            <input type="text" name="subcontractors[${idx}][notes]" class="form-control form-control-sm" placeholder="e.g. 3rd floor plastering..." value="${escapeHtml(initialNotes)}">
         </td>
         <td class="text-center" style="width: 50px;">
             <button type="button" class="btn btn-outline-danger btn-sm py-1 px-2 shadow-sm" onclick="removeSubconRow(this)" title="Remove subcontractor">
@@ -629,7 +663,7 @@ function addSubconRow(data = null, forceCustom = false) {
 
     const sel = tr.querySelector('.subcon-agreement-select');
     if (sel && sel.value && !isCustom) {
-        onSubconSelected(sel, idx);
+        onSubconSelected(sel, idx, initialRoleName);
     } else if (isCustom && initialName) {
         const nameInput = tr.querySelector('.subcon-name-input');
         if (nameInput) nameInput.value = initialName;
@@ -637,7 +671,7 @@ function addSubconRow(data = null, forceCustom = false) {
     updateTotal();
 }
 
-function onSubconSelected(selectEl, idx) {
+function onSubconSelected(selectEl, idx, preserveRole = '') {
     const tr = selectEl.closest('tr');
     if (!tr) return;
 
@@ -645,37 +679,70 @@ function onSubconSelected(selectEl, idx) {
     const val = selectEl.value;
     const nameInput = tr.querySelector('.subcon-name-input');
     const idInput = tr.querySelector('.subcon-agreement-id-input');
-    const tradeDisplay = tr.querySelector('.subcon-trade-display');
-    const tradeInput = tr.querySelector('.subcon-trade-input');
-    const agreementDisplay = tr.querySelector('.subcon-agreement-no');
     const agreementInput = tr.querySelector('.subcon-agreement-no-input');
+    const agreementBadge = tr.querySelector('.subcon-agreement-badge');
+    const agreementText = tr.querySelector('.subcon-agreement-no-text');
+    const tradeInput = tr.querySelector('.subcon-trade-input');
+    const roleSelect = tr.querySelector('.subcon-role-select');
 
     if (val === 'custom') {
         nameInput.classList.remove('d-none');
-        tradeInput.classList.remove('d-none');
-        tradeDisplay.textContent = '';
-        agreementDisplay.textContent = 'Custom Subcontractor';
+        if (agreementBadge) agreementBadge.classList.add('d-none');
         idInput.value = '';
         agreementInput.value = '';
+        tradeInput.value = '';
+        if (roleSelect) {
+            const currentRole = preserveRole || roleSelect.value;
+            roleSelect.innerHTML = buildSubconRoleOptions(currentRole, '');
+            onSubconRoleChanged(roleSelect, idx);
+        }
     } else if (opt && val) {
         nameInput.classList.add('d-none');
-        tradeInput.classList.add('d-none');
         nameInput.value = opt.dataset.name || '';
         idInput.value = val;
-        tradeDisplay.textContent = opt.dataset.trade || '—';
-        tradeInput.value = opt.dataset.trade || '';
-        agreementDisplay.textContent = opt.dataset.agreementNo || '';
-        agreementInput.value = opt.dataset.agreementNo || '';
+        const agreementNo = opt.dataset.agreementNo || '';
+        const trade = opt.dataset.trade || '';
+        agreementInput.value = agreementNo;
+        tradeInput.value = trade;
+
+        if (agreementBadge) {
+            agreementBadge.classList.remove('d-none');
+            if (agreementText) agreementText.textContent = agreementNo;
+        }
+
+        if (roleSelect) {
+            const currentRole = preserveRole || roleSelect.value || trade;
+            roleSelect.innerHTML = buildSubconRoleOptions(currentRole, trade);
+            onSubconRoleChanged(roleSelect, idx);
+        }
     } else {
         nameInput.classList.add('d-none');
-        tradeInput.classList.add('d-none');
         nameInput.value = '';
         idInput.value = '';
-        tradeDisplay.textContent = '—';
-        tradeInput.value = '';
-        agreementDisplay.textContent = '';
         agreementInput.value = '';
+        tradeInput.value = '';
+        if (agreementBadge) agreementBadge.classList.add('d-none');
+        if (roleSelect) {
+            roleSelect.innerHTML = buildSubconRoleOptions('', '');
+            onSubconRoleChanged(roleSelect, idx);
+        }
     }
+    updateTotal();
+}
+
+function onSubconRoleChanged(selectEl, idx) {
+    const tr = selectEl.closest('tr');
+    if (!tr) return;
+
+    const opt = selectEl.selectedOptions[0];
+    const category = opt ? opt.dataset.category || 'Skilled Labor' : 'Skilled Labor';
+
+    const badge = tr.querySelector('.subcon-category-badge');
+    const catInput = tr.querySelector('.subcon-category-input');
+
+    if (badge) badge.textContent = category;
+    if (catInput) catInput.value = category;
+
     updateTotal();
 }
 
@@ -728,8 +795,11 @@ function updateTotal() {
         const row = inp.closest('tr');
         const sel = row ? row.querySelector('.subcon-agreement-select') : null;
         const nameInp = row ? row.querySelector('.subcon-name-input') : null;
+        const roleSel = row ? row.querySelector('.subcon-role-select') : null;
         const hasSelection = sel && ((sel.value && sel.value !== 'custom') || (sel.value === 'custom' && nameInp && nameInp.value.trim()));
-        if (hasSelection) {
+        if (hasSelection && roleSel && roleSel.value) {
+            subconTotal += (parseInt(inp.value) || 0);
+        } else if (hasSelection && (!roleSel || !roleSel.value)) {
             subconTotal += (parseInt(inp.value) || 0);
         }
     });
@@ -799,10 +869,19 @@ function submitNewRole(e) {
             MANPOWER_ROLES.push(newRole);
             MANPOWER_ROLES.sort((a, b) => a.name.localeCompare(b.name));
 
-            // Refresh all dropdown options
+            // Refresh all dropdown options in Company Labour
             document.querySelectorAll('.role-select').forEach(sel => {
                 const currentVal = sel.value;
                 sel.innerHTML = buildRoleOptions(currentVal);
+            });
+
+            // Refresh all dropdown options in Subcontractor roles
+            document.querySelectorAll('.subcon-role-select').forEach(sel => {
+                const currentVal = sel.value;
+                const row = sel.closest('tr');
+                const tradeInp = row ? row.querySelector('.subcon-trade-input') : null;
+                const trade = tradeInp ? tradeInp.value : '';
+                sel.innerHTML = buildSubconRoleOptions(currentVal, trade);
             });
 
             // Find an empty row or add a new one with this new role selected
@@ -855,25 +934,29 @@ document.addEventListener('DOMContentLoaded', function() {
         addRoleRow({ role_name: 'Helper / Assistant', category: 'Unskilled Labor', count: 0 });
     }
 
-    // 2. Initialize Subcontractor Workforce
+    // 2. Initialize Subcontractor Workforce (Only for this Site)
     const oldSubcons = @json(old('subcontractors', []));
     if (oldSubcons && oldSubcons.length > 0) {
         oldSubcons.forEach(s => addSubconRow(s));
     } else {
         const projectSubcons = getSubconsForCurrentProject();
-        if (projectSubcons && projectSubcons.length > 0 && CURRENT_PROJECT_ID) {
-            // Prepopulate up to 3 active agreements for quick input
-            projectSubcons.slice(0, 3).forEach(s => {
+        if (projectSubcons && projectSubcons.length > 0) {
+            // Automatically list the assigned subcontractors for this site with 0 count
+            projectSubcons.forEach(s => {
                 addSubconRow({
                     agreement_id: s.id,
                     subcontractor_name: s.subcontractor_name,
                     agreement_no: s.agreement_no,
                     trade: s.trade,
+                    role_name: s.trade,
+                    category: 'Skilled Labor',
                     workers_count: 0
                 });
             });
         } else {
-            addSubconRow();
+            // No subcons assigned to this site
+            const notice = document.getElementById('subconEmptyNotice');
+            if (notice) notice.classList.remove('d-none');
         }
     }
 

@@ -75,8 +75,9 @@ class ManpowerDailyReportController extends Controller
         // Available Manpower Roles / Designations for dynamic selection
         $manpowerRoles = ManpowerRole::orderBy('name')->get();
 
-        // Active Subcontractor Agreements to link with projects
+        // Active Subcontractor Agreements assigned ONLY to THIS selected site/project
         $subconAgreements = SubconAgreement::with(['supplier'])
+            ->where('project_id', $selectedProjectId)
             ->whereNotIn('status', ['rejected', 'cancelled', 'terminated'])
             ->get()
             ->map(function ($sa) {
@@ -120,6 +121,8 @@ class ManpowerDailyReportController extends Controller
             'subcontractors.*.agreement_id'       => 'nullable|integer',
             'subcontractors.*.subcontractor_name' => 'nullable|string|max:150',
             'subcontractors.*.agreement_no'       => 'nullable|string|max:100',
+            'subcontractors.*.role_name'          => 'nullable|string|max:150',
+            'subcontractors.*.category'           => 'nullable|string|max:100',
             'subcontractors.*.trade'              => 'nullable|string|max:150',
             'subcontractors.*.workers_count'      => 'nullable|integer|min:0',
             'subcontractors.*.notes'              => 'nullable|string|max:255',
@@ -205,7 +208,9 @@ class ManpowerDailyReportController extends Controller
             foreach ($subconsInput as $item) {
                 $subName = trim($item['subcontractor_name'] ?? '');
                 $count = (int)($item['workers_count'] ?? 0);
-                $trade = trim($item['trade'] ?? '');
+                $roleName = trim($item['role_name'] ?? '');
+                $category = trim($item['category'] ?? 'Subcontractor');
+                $trade = trim($item['trade'] ?? ($roleName ?: 'Subcontract Work'));
                 $agreementNo = trim($item['agreement_no'] ?? '');
                 $agreementId = !empty($item['agreement_id']) ? (int)$item['agreement_id'] : null;
                 $notes = trim($item['notes'] ?? '');
@@ -215,6 +220,8 @@ class ManpowerDailyReportController extends Controller
                         'agreement_id'       => $agreementId,
                         'subcontractor_name' => $subName,
                         'agreement_no'       => $agreementNo,
+                        'role_name'          => $roleName ?: $trade,
+                        'category'           => $category,
                         'trade'              => $trade,
                         'workers_count'      => $count,
                         'notes'              => $notes,
