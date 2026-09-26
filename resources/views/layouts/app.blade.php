@@ -399,15 +399,230 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .empty-state i { font-size: 42px; margin-bottom: 16px; opacity: .4; display: block; }
 .empty-state h6 { font-size: 15px; font-weight: 600; color: var(--gray-500); margin-bottom: 6px; }
 .empty-state p { font-size: 13px; margin: 0; }
-/* Mobile */
-@media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); width: var(--sidebar-width) !important; }
-  .sidebar.mobile-open { transform: translateX(0); }
-  .main-content { margin-left: 0 !important; }
-  .content-wrapper { padding: 20px 16px 32px; }
-  .top-header { padding: 0 16px; }
-  .auth-card { padding: 32px 24px; margin: 16px; }
+/* ======================================================
+   MOBILE RESPONSIVE SYSTEM — Full Breakpoint Cascade
+   ====================================================== */
+
+/* Sidebar Backdrop (mobile drawer overlay) */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 999;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition: opacity .25s ease;
 }
+.sidebar-backdrop.active { display: block; }
+
+/* Scrollable table wrapper auto-applied on mobile */
+.table-responsive-mobile { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Touch-friendly tap target minimum */
+.btn-touch {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── XL (≤1200px) ── */
+@media (max-width: 1200px) {
+  .stat-card .stat-value { font-size: 22px; }
+  .content-wrapper { padding: 24px 20px 36px; }
+}
+
+/* ── LG (≤992px) ── */
+@media (max-width: 992px) {
+  :root { --sidebar-width: 240px; }
+  .content-wrapper { padding: 20px 18px 32px; }
+  .stat-card { padding: 18px 20px; }
+  .stat-card .stat-value { font-size: 20px; }
+  .page-title { font-size: 19px; }
+  .app-footer { padding: 14px 20px; }
+}
+
+/* ── MD / Tablet (≤768px) ── */
+@media (max-width: 768px) {
+  /* Sidebar becomes off-canvas drawer */
+  .sidebar {
+    transform: translateX(-100%);
+    width: var(--sidebar-width) !important;
+    z-index: 1050;
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    box-shadow: none;
+  }
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0,0,0,.35);
+  }
+  .sidebar.collapsed { width: var(--sidebar-width) !important; }
+  /* Desktop collapse toggle hidden on mobile */
+  .sidebar-toggle-btn { display: none !important; }
+
+  /* Main content fills full width */
+  .main-content { margin-left: 0 !important; }
+
+  /* Top header */
+  .top-header {
+    padding: 0 12px;
+    height: 56px;
+    gap: 6px;
+  }
+  .header-actions { gap: 4px; }
+  .header-icon-btn { width: 34px; height: 34px; }
+  .header-user-btn { padding: 4px 6px; }
+
+  /* Content wrapper */
+  .content-wrapper { padding: 16px 12px 80px; }
+
+  /* Page titles */
+  .page-title { font-size: 17px; }
+  h1.h3 { font-size: 1.1rem !important; }
+  h5 { font-size: 0.95rem; }
+
+  /* Cards */
+  .card-body { padding: 14px !important; }
+  .card-header { padding: 12px 14px !important; }
+  .card-footer { padding: 10px 14px !important; }
+  .stat-card { padding: 16px 14px; }
+  .stat-card .stat-value { font-size: 18px; }
+  .stat-card .stat-label { font-size: 11.5px; }
+  .stat-card .stat-icon { width: 40px; height: 40px; font-size: 16px; }
+
+  /* Tables: make all scrollable horizontally */
+  .table-responsive,
+  div:not(.table-responsive) > .table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table thead th { font-size: 10.5px; padding: 10px 12px; white-space: nowrap; }
+  .table td { padding: 10px 12px; font-size: 12.5px; }
+
+  /* Buttons: comfortable touch targets */
+  .btn { padding: 8px 14px; font-size: 12.5px; min-height: 38px; }
+  .btn-sm { padding: 6px 10px; font-size: 12px; min-height: 34px; }
+
+  /* Modals */
+  .modal-dialog { margin: 8px; max-width: calc(100vw - 16px); }
+  .modal-dialog.modal-lg { max-width: calc(100vw - 16px); }
+  .modal-dialog.modal-xl { max-width: calc(100vw - 16px); }
+  .modal-body { padding: 16px !important; }
+  .modal-header { padding: 14px 16px !important; }
+  .modal-footer { padding: 12px 16px !important; flex-wrap: wrap; }
+  .modal-content { border-radius: 16px !important; }
+
+  /* Badges: readable on small screens */
+  .badge { font-size: 10.5px; }
+
+  /* Tabs & pills */
+  .nav-pills { gap: 4px; flex-wrap: wrap; }
+  .nav-pills .nav-link { padding: 7px 14px; font-size: 12.5px; }
+  .nav-tabs .nav-link { padding: 8px 12px; font-size: 12.5px; }
+
+  /* Forms */
+  .form-control, .form-select { font-size: 14px; padding: 10px 12px; }
+  .form-label { font-size: 12px; }
+
+  /* Flex card action rows: wrap on mobile */
+  .d-flex.gap-2 { flex-wrap: wrap; }
+
+  /* Probation alert & announcements */
+  .alert.d-flex { flex-direction: column; gap: 10px !important; align-items: flex-start !important; }
+  .alert.d-flex .flex-shrink-0 { align-self: flex-start; }
+  .alert .d-flex.align-items-center.gap-2.flex-shrink-0 { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+
+  /* Footer */
+  .app-footer { padding: 12px 16px; font-size: 12px; flex-direction: column; gap: 4px; align-items: flex-start; }
+
+  /* Dropdown menus: full width on small */
+  .dropdown-menu { min-width: 200px !important; max-width: calc(100vw - 32px); }
+  .dropdown-menu-end { right: 0 !important; left: auto !important; }
+
+  /* Auth card */
+  .auth-card { padding: 28px 20px; margin: 12px; }
+
+  /* Empty state compact */
+  .empty-state { padding: 40px 16px; }
+  .empty-state i { font-size: 32px; }
+
+  /* Pagination: compact */
+  .pagination { flex-wrap: wrap; }
+  .page-link { padding: 5px 10px; font-size: 12px; }
+}
+
+/* ── SM / Small Phone (≤576px) ── */
+@media (max-width: 576px) {
+  /* Header: slim on tiny screens */
+  .top-header { height: 52px; padding: 0 10px; }
+  .header-user-name { display: none !important; }
+  /* Role badge in header: shorten */
+  .btn[id="headerRoleButton"] .badge { max-width: 80px !important; }
+
+  /* Content wrapper: tighter */
+  .content-wrapper { padding: 12px 10px 80px; }
+
+  /* Row gutters: tighten on tiny screens */
+  .row { --bs-gutter-x: 0.5rem; }
+
+  /* Stat cards: side by side 2-col */
+  .stat-card { padding: 12px 12px; }
+  .stat-card .stat-value { font-size: 16px; }
+  .stat-card .stat-icon { width: 34px; height: 34px; font-size: 14px; margin-bottom: 10px; }
+
+  /* Cards */
+  .card-body { padding: 12px !important; }
+
+  /* Modals full screen feel */
+  .modal-dialog { margin: 4px; border-radius: 20px; }
+  .modal-body { padding: 14px !important; }
+
+  /* h1/h2/h3 scales */
+  h1, .h1 { font-size: 1.3rem; }
+  h2, .h2 { font-size: 1.15rem; }
+  h3, .h3, h1.h3 { font-size: 1rem !important; }
+  h4, .h4 { font-size: 0.95rem; }
+
+  /* Buttons: full width option */
+  .btn-block-xs { width: 100% !important; justify-content: center; }
+
+  /* Tables: extra compact */
+  .table thead th { font-size: 10px; padding: 8px 10px; }
+  .table td { padding: 8px 10px; font-size: 12px; }
+
+  /* Tabs: scroll horizontally if needed */
+  .nav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .nav-item { flex-shrink: 0; }
+
+  /* Footer: single line */
+  .app-footer { flex-direction: row; flex-wrap: wrap; justify-content: space-between; }
+
+  /* Alert stacks */
+  .flash-container .alert { padding: 10px 12px; font-size: 12.5px; }
+
+  /* Dropdown menus */
+  .dropdown-menu { min-width: 180px !important; }
+}
+
+/* ── XS / Tiny Phone (≤400px) ── */
+@media (max-width: 400px) {
+  :root { --sidebar-width: 100vw; }
+  .top-header { height: 50px; padding: 0 8px; }
+  .content-wrapper { padding: 10px 8px 80px; }
+  .card-body { padding: 10px !important; }
+  .btn { font-size: 12px; padding: 7px 10px; }
+  .btn-sm { font-size: 11px; padding: 5px 8px; }
+  .modal-dialog { margin: 0 !important; border-radius: 0 !important; }
+  .modal-content { border-radius: 0 !important; min-height: 100dvh; }
+}
+
+/* ── Print ── */
+@media print {
+  .sidebar, .top-header, .app-footer, .sidebar-backdrop, .btn-print-hide { display: none !important; }
+  .main-content { margin-left: 0 !important; }
+  .content-wrapper { padding: 10px 0 !important; }
+  .card { box-shadow: none !important; border: 1px solid #ddd !important; }
+}
+
 /* Animations */
 .content-wrapper > * { animation: fadeInUp .3s ease both; }
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -416,8 +631,17 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     @stack('styles')
 </head>
 <body>
+    {{-- Mobile sidebar backdrop / overlay --}}
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
     <div class="app-shell">
         <div class="sidebar" id="sidebar">
+            {{-- Mobile close button inside sidebar --}}
+            <button type="button" class="d-md-none position-absolute btn text-white opacity-75" id="mobileSidebarClose"
+                style="top: 10px; right: 10px; z-index: 1060; background: rgba(255,255,255,.1); border-radius: 8px; width: 32px; height: 32px; padding: 0; display: flex !important; align-items: center; justify-content: center;">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
             <a href="{{ url('/') }}" class="sidebar-brand">
                 <div class="sidebar-brand-icon">
                     <img src="https://res.cloudinary.com/dg1ijsqx6/image/upload/v1785238806/Gemini_Generated_Image_4aap624aap624aap_1_djaxwl.png" alt="Company Logo">
@@ -427,11 +651,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                     <span class="brand-sub">ERP System</span>
                 </div>
             </a>
-            
+
             <button type="button" class="sidebar-toggle-btn d-none d-md-flex" id="sidebarToggle">
                 <i class="fa-solid fa-bars"></i>
             </button>
-            
+
             @include('layouts.sidebar')
         </div>
 
@@ -839,22 +1063,80 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        $(document).ready(function() {
-            $('#sidebarToggle').on('click', function() {
-                $('#sidebar').toggleClass('collapsed');
-            });
-            $('#mobileSidebarToggle').on('click', function() {
-                $('#sidebar').toggleClass('mobile-open');
-            });
+    $(document).ready(function () {
+
+        /* ── Desktop sidebar collapse ── */
+        $('#sidebarToggle').on('click', function () {
+            $('#sidebar').toggleClass('collapsed');
         });
 
-        function dynamicGoBack() {
-            if (document.referrer && document.referrer.indexOf(window.location.host) !== -1 && document.referrer !== window.location.href) {
-                window.history.back();
-            } else {
-                window.location.href = "{{ url('/dashboard') }}";
-            }
+        /* ── Mobile sidebar open ── */
+        function openMobileSidebar() {
+            $('#sidebar').addClass('mobile-open');
+            $('#sidebarBackdrop').addClass('active');
+            $('body').css('overflow', 'hidden'); // prevent scroll-behind
         }
+
+        /* ── Mobile sidebar close ── */
+        function closeMobileSidebar() {
+            $('#sidebar').removeClass('mobile-open');
+            $('#sidebarBackdrop').removeClass('active');
+            $('body').css('overflow', '');
+        }
+
+        $('#mobileSidebarToggle').on('click', openMobileSidebar);
+        $('#mobileSidebarClose').on('click', closeMobileSidebar);
+
+        /* Close on backdrop click */
+        $('#sidebarBackdrop').on('click', closeMobileSidebar);
+
+        /* Close sidebar on navigation (mobile link click) */
+        $('#sidebar .sidebar-nav-link').on('click', function () {
+            if (window.innerWidth <= 768) {
+                closeMobileSidebar();
+            }
+        });
+
+        /* Close sidebar on Escape key */
+        $(document).on('keydown', function (e) {
+            if (e.key === 'Escape') closeMobileSidebar();
+        });
+
+        /* ── Responsive table wrappers ──
+           Wrap any bare <table> inside a card on mobile for horizontal scroll */
+        if (window.innerWidth <= 768) {
+            $('.card-body table:not(.table-no-wrap)').each(function () {
+                if (!$(this).parent().hasClass('table-responsive')) {
+                    $(this).wrap('<div class="table-responsive"></div>');
+                }
+            });
+        }
+
+        /* ── Fix dropdown overflow on mobile ── */
+        $(document).on('shown.bs.dropdown', function (e) {
+            if (window.innerWidth <= 768) {
+                var menu = $(e.target).find('.dropdown-menu');
+                var rect = menu[0] ? menu[0].getBoundingClientRect() : null;
+                if (rect && rect.right > window.innerWidth) {
+                    menu.css('right', '0').css('left', 'auto');
+                }
+            }
+        });
+
+        /* ── Auto-dismiss flash alerts after 6 seconds ── */
+        setTimeout(function () {
+            $('.flash-container .alert').fadeOut(600, function () { $(this).remove(); });
+        }, 6000);
+
+    });
+
+    function dynamicGoBack() {
+        if (document.referrer && document.referrer.indexOf(window.location.host) !== -1 && document.referrer !== window.location.href) {
+            window.history.back();
+        } else {
+            window.location.href = "{{ url('/dashboard') }}";
+        }
+    }
     </script>
     @stack('scripts')
 </body>

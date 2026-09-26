@@ -1,18 +1,57 @@
 @extends('layouts.app')
 @section('title', 'Emergency Requests')
 
+@push('styles')
+<style>
+/* Emergency Requests - Mobile Styles */
+@media (max-width: 768px) {
+  /* Page header: stack on mobile */
+  .er-page-header { flex-direction: column; align-items: flex-start !important; gap: 8px; }
+  .er-page-header .pending-badge { align-self: flex-start; }
+
+  /* Tab pills: scroll horizontally */
+  #requestTabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  #requestTabs .nav-link { white-space: nowrap; padding: 7px 16px; font-size: 12.5px; }
+
+  /* Card action buttons: full row on mobile */
+  .er-actions-col {
+    text-align: left !important;
+    justify-content: flex-start !important;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #f1f5f9;
+    width: 100%;
+  }
+  .er-actions-col form,
+  .er-actions-col button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .er-actions-col .btn { width: 100%; justify-content: center; }
+
+  /* Meta badges wrap neatly */
+  .er-meta-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+}
+
+@media (max-width: 400px) {
+  .er-actions-col .d-flex { flex-direction: column; }
+}
+</style>
+@endpush
+
 @section('content')
 <div class="container-fluid">
     {{-- Page Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 mb-md-4 er-page-header">
         <div>
             <h1 class="h3 mb-1 fw-bold">
                 <i class="fa-solid fa-bell-exclamation text-danger me-2"></i>Emergency Requests
             </h1>
-            <p class="text-muted mb-0 small">Approve or reject urgent site material &amp; manpower requests</p>
+            <p class="text-muted mb-0 small d-none d-sm-block">Approve or reject urgent site material &amp; manpower requests</p>
         </div>
-        <div class="d-flex gap-2">
-            <span class="badge bg-danger fs-6 px-3 py-2">
+        <div class="pending-badge">
+            <span class="badge bg-danger px-3 py-2" style="font-size: 13px;">
+                <i class="fa-solid fa-triangle-exclamation me-1"></i>
                 {{ $materialRequests->count() + $manpowerRequests->count() }} Pending
             </span>
         </div>
@@ -26,16 +65,16 @@
     @endif
 
     {{-- Tab Navigation --}}
-    <ul class="nav nav-pills mb-4 gap-2" id="requestTabs">
+    <ul class="nav nav-pills mb-3 mb-md-4 gap-1" id="requestTabs" style="min-width: 0;">
         <li class="nav-item">
-            <a class="nav-link active px-4" data-bs-toggle="pill" href="#materialTab">
-                <i class="fa-solid fa-cart-flatbed me-2"></i>Material Requests
+            <a class="nav-link active px-3 px-md-4" data-bs-toggle="pill" href="#materialTab">
+                <i class="fa-solid fa-cart-flatbed me-1 me-md-2"></i><span>Material</span>
                 <span class="badge bg-white text-danger ms-1">{{ $materialRequests->count() }}</span>
             </a>
         </li>
         <li class="nav-item">
-            <a class="nav-link px-4" data-bs-toggle="pill" href="#manpowerTab">
-                <i class="fa-solid fa-users me-2"></i>Manpower Requests
+            <a class="nav-link px-3 px-md-4" data-bs-toggle="pill" href="#manpowerTab">
+                <i class="fa-solid fa-users me-1 me-md-2"></i><span>Manpower</span>
                 <span class="badge bg-white text-primary ms-1">{{ $manpowerRequests->count() }}</span>
             </a>
         </li>
@@ -46,64 +85,68 @@
         <div class="tab-pane fade show active" id="materialTab">
             @forelse($materialRequests as $mr)
             <div class="card shadow-sm mb-3 border-0 border-start border-danger border-3">
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-lg-6 col-md-12">
-                            <div class="d-flex align-items-center gap-3 mb-2">
+                <div class="card-body p-3 p-md-4">
+                    <div class="d-flex flex-column flex-md-row align-items-md-start gap-3">
+                        {{-- Left: info --}}
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center gap-2 mb-2">
                                 <div class="rounded-circle bg-danger bg-opacity-10 p-2 flex-shrink-0">
-                                    <i class="fa-solid fa-cart-flatbed text-danger fa-lg"></i>
+                                    <i class="fa-solid fa-cart-flatbed text-danger"></i>
                                 </div>
                                 <div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <h6 class="mb-0 fw-bold text-dark">{{ $mr->reference_number }}</h6>
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <h6 class="mb-0 fw-bold text-dark" style="font-size: 0.95rem;">{{ $mr->reference_number }}</h6>
                                         <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0 small fw-semibold">
                                             <i class="fa-solid fa-triangle-exclamation me-1"></i>Urgent
                                         </span>
                                     </div>
-                                    <small class="text-muted d-block mt-1">
-                                        <i class="fa-solid fa-building me-1 text-secondary"></i>{{ $mr->project->name ?? 'N/A' }}
-                                        &bull;
-                                        <i class="fa-solid fa-user me-1 text-secondary"></i>{{ $mr->creator->name ?? 'N/A' }}
-                                        &bull;
-                                        <i class="fa-solid fa-calendar me-1 text-danger"></i>Required by <strong>{{ optional($mr->required_date)->format('d M Y') ?? 'N/A' }}</strong>
-                                    </small>
+                                    <div class="text-muted mt-1 er-meta-badges" style="font-size: 11.5px;">
+                                        <span><i class="fa-solid fa-building me-1 text-secondary"></i>{{ $mr->project->name ?? 'N/A' }}</span>
+                                        <span class="d-none d-sm-inline text-muted mx-1">&bull;</span>
+                                        <span><i class="fa-solid fa-user me-1 text-secondary"></i>{{ $mr->creator->name ?? 'N/A' }}</span>
+                                        <span class="d-none d-sm-inline text-muted mx-1">&bull;</span>
+                                        <span><i class="fa-solid fa-calendar me-1 text-danger"></i>Due: <strong>{{ optional($mr->required_date)->format('d M Y') ?? 'N/A' }}</strong></span>
+                                    </div>
                                 </div>
                             </div>
+
                             @if($mr->items->isNotEmpty())
-                            <div class="ms-md-5 ps-md-2 mb-2">
+                            <div class="ms-0 ms-md-5 ps-0 ps-md-1 mb-1">
                                 @foreach($mr->items as $item)
-                                    <span class="badge bg-light text-dark border me-1 mb-1">
+                                    <span class="badge bg-light text-dark border me-1 mb-1" style="font-size: 11px;">
                                         <i class="fa-solid fa-cube text-secondary me-1"></i>{{ $item->product->name ?? 'Item' }}: <strong>{{ (float)$item->quantity_requested }} {{ $item->product->unit ?? '' }}</strong>
                                     </span>
                                 @endforeach
                             </div>
                             @endif
+
                             @if($mr->notes)
-                            <p class="text-muted small mb-0 ms-md-5 ps-md-2 fst-italic">
-                                <i class="fa-solid fa-quote-left text-muted me-1"></i>{{ $mr->notes }}
+                            <p class="text-muted small mb-0 ms-0 ms-md-5 fst-italic">
+                                <i class="fa-solid fa-quote-left text-muted me-1"></i>{{ Str::limit($mr->notes, 100) }}
                             </p>
                             @endif
                         </div>
-                        <div class="col-lg-6 col-md-12 text-lg-end mt-3 mt-lg-0 d-flex flex-wrap align-items-center justify-content-lg-end gap-2">
-                            <span class="badge bg-warning text-dark px-3 py-2">
-                                <i class="fa-solid fa-clock me-1"></i>Pending Planning
+
+                        {{-- Right: actions (stacks below on mobile) --}}
+                        <div class="d-flex flex-wrap align-items-center gap-2 er-actions-col">
+                            <span class="badge bg-warning text-dark px-2 py-1">
+                                <i class="fa-solid fa-clock me-1"></i>Pending
                             </span>
-                            
-                            {{-- View Detail Button --}}
-                            <button type="button" class="btn btn-outline-primary btn-sm px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#viewMrModal{{ $mr->id }}">
-                                <i class="fa-solid fa-eye me-1"></i>View Detail
+
+                            <button type="button" class="btn btn-outline-primary btn-sm px-2 px-md-3 fw-semibold" data-bs-toggle="modal" data-bs-target="#viewMrModal{{ $mr->id }}">
+                                <i class="fa-solid fa-eye me-1"></i>View
                             </button>
 
                             <form method="POST" action="{{ route('planning-manager.emergency-requests.material.approve', $mr) }}" class="d-inline m-0">
                                 @csrf
                                 <input type="hidden" name="action" value="approve">
-                                <button type="submit" class="btn btn-success btn-sm px-3 shadow-sm fw-semibold"
-                                    onclick="return confirm('Approve Emergency Material Request {{ $mr->reference_number }} and send directly to Coordinator in Procurement Queue?')">
-                                    <i class="fa-solid fa-check me-1"></i>Approve &amp; Send to Coordinator
+                                <button type="submit" class="btn btn-success btn-sm px-2 px-md-3 fw-semibold"
+                                    onclick="return confirm('Approve {{ $mr->reference_number }} and send to Coordinator?')">
+                                    <i class="fa-solid fa-check me-1"></i><span class="d-none d-sm-inline">Approve &amp; Send</span><span class="d-sm-none">Approve</span>
                                 </button>
                             </form>
-                            
-                            <button type="button" class="btn btn-outline-danger btn-sm px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#rejectMrModal{{ $mr->id }}">
+
+                            <button type="button" class="btn btn-outline-danger btn-sm px-2 px-md-3 fw-semibold" data-bs-toggle="modal" data-bs-target="#rejectMrModal{{ $mr->id }}">
                                 <i class="fa-solid fa-xmark me-1"></i>Reject
                             </button>
                         </div>
@@ -125,59 +168,61 @@
         <div class="tab-pane fade" id="manpowerTab">
             @forelse($manpowerRequests as $mp)
             <div class="card shadow-sm mb-3 border-0 border-start border-primary border-3">
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-lg-6 col-md-12">
-                            <div class="d-flex align-items-center gap-3 mb-2">
+                <div class="card-body p-3 p-md-4">
+                    <div class="d-flex flex-column flex-md-row align-items-md-start gap-3">
+                        {{-- Left: info --}}
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center gap-2 mb-2">
                                 <div class="rounded-circle bg-primary bg-opacity-10 p-2 flex-shrink-0">
-                                    <i class="fa-solid fa-users text-primary fa-lg"></i>
+                                    <i class="fa-solid fa-users text-primary"></i>
                                 </div>
                                 <div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <h6 class="mb-0 fw-bold text-dark">{{ ucwords(str_replace('_', ' ', $mp->type)) }} Request</h6>
-                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0 small fw-semibold">
-                                            #{{ $mp->id }}
-                                        </span>
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <h6 class="mb-0 fw-bold text-dark" style="font-size: 0.95rem;">{{ ucwords(str_replace('_', ' ', $mp->type)) }} Request</h6>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0 small fw-semibold">#{{ $mp->id }}</span>
                                     </div>
-                                    <small class="text-muted d-block mt-1">
-                                        <i class="fa-solid fa-building me-1 text-secondary"></i>{{ $mp->project->name ?? 'N/A' }}
-                                        &bull;
-                                        <i class="fa-solid fa-user me-1 text-secondary"></i>{{ $mp->requestedBy->name ?? 'N/A' }}
-                                        &bull;
-                                        <i class="fa-solid fa-calendar me-1 text-primary"></i>Required by <strong>{{ optional($mp->required_date)->format('d M Y') ?? 'N/A' }}</strong>
-                                    </small>
+                                    <div class="text-muted mt-1 er-meta-badges" style="font-size: 11.5px;">
+                                        <span><i class="fa-solid fa-building me-1 text-secondary"></i>{{ $mp->project->name ?? 'N/A' }}</span>
+                                        <span class="d-none d-sm-inline text-muted mx-1">&bull;</span>
+                                        <span><i class="fa-solid fa-user me-1 text-secondary"></i>{{ $mp->requestedBy->name ?? 'N/A' }}</span>
+                                        <span class="d-none d-sm-inline text-muted mx-1">&bull;</span>
+                                        <span><i class="fa-solid fa-calendar me-1 text-primary"></i>Due: <strong>{{ optional($mp->required_date)->format('d M Y') ?? 'N/A' }}</strong></span>
+                                    </div>
                                 </div>
                             </div>
+
                             @if($mp->items->count() > 0)
-                            <div class="ms-md-5 ps-md-2 mb-2">
+                            <div class="ms-0 ms-md-5 mb-1">
                                 @foreach($mp->items as $item)
-                                <span class="badge bg-light text-dark border me-1 mb-1">
+                                <span class="badge bg-light text-dark border me-1 mb-1" style="font-size: 11px;">
                                     {{ $item->role_title }} &times; <strong>{{ $item->quantity }}</strong>
-                                    <span class="text-muted">({{ ucfirst($item->skill_level) }})</span>
+                                    <span class="text-muted d-none d-sm-inline">({{ ucfirst($item->skill_level) }})</span>
                                 </span>
                                 @endforeach
                             </div>
                             @endif
+
                             @if($mp->notes)
-                            <p class="text-muted small mb-0 ms-md-5 ps-md-2 fst-italic">
-                                <i class="fa-solid fa-quote-left text-muted me-1"></i>{{ $mp->notes }}
+                            <p class="text-muted small mb-0 ms-0 ms-md-5 fst-italic">
+                                <i class="fa-solid fa-quote-left text-muted me-1"></i>{{ Str::limit($mp->notes, 100) }}
                             </p>
                             @endif
                         </div>
-                        <div class="col-lg-6 col-md-12 text-lg-end mt-3 mt-lg-0 d-flex flex-wrap align-items-center justify-content-lg-end gap-2">
-                            <span class="badge bg-warning text-dark px-3 py-2">
+
+                        {{-- Right: actions (stacks below on mobile) --}}
+                        <div class="d-flex flex-wrap align-items-center gap-2 er-actions-col">
+                            <span class="badge bg-warning text-dark px-2 py-1">
                                 <i class="fa-solid fa-clock me-1"></i>Pending
                             </span>
 
-                            {{-- View Detail Button --}}
-                            <button type="button" class="btn btn-outline-primary btn-sm px-3 shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#viewMpModal{{ $mp->id }}">
-                                <i class="fa-solid fa-eye me-1"></i>View Detail
+                            <button type="button" class="btn btn-outline-primary btn-sm px-2 px-md-3 fw-semibold" data-bs-toggle="modal" data-bs-target="#viewMpModal{{ $mp->id }}">
+                                <i class="fa-solid fa-eye me-1"></i>View
                             </button>
 
                             <form method="POST" action="{{ route('planning-manager.emergency-requests.manpower.approve', $mp) }}" class="d-inline m-0">
                                 @csrf
                                 <input type="hidden" name="action" value="approve">
-                                <button type="submit" class="btn btn-success btn-sm px-3 shadow-sm fw-semibold"
+                                <button type="submit" class="btn btn-success btn-sm px-2 px-md-3 fw-semibold"
                                     onclick="return confirm('Approve this manpower request?')">
                                     <i class="fa-solid fa-check me-1"></i>Approve
                                 </button>
@@ -185,7 +230,7 @@
                             <form method="POST" action="{{ route('planning-manager.emergency-requests.manpower.approve', $mp) }}" class="d-inline m-0">
                                 @csrf
                                 <input type="hidden" name="action" value="reject">
-                                <button type="submit" class="btn btn-outline-danger btn-sm px-3 shadow-sm fw-semibold"
+                                <button type="submit" class="btn btn-outline-danger btn-sm px-2 px-md-3 fw-semibold"
                                     onclick="return confirm('Reject this manpower request?')">
                                     <i class="fa-solid fa-xmark me-1"></i>Reject
                                 </button>
