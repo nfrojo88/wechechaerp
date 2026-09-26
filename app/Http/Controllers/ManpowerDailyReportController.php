@@ -6,6 +6,7 @@ use App\Models\ManpowerDailyReport;
 use App\Models\ManpowerRole;
 use App\Models\Project;
 use App\Models\Store;
+use App\Models\SubconAgreement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -18,9 +19,21 @@ class ManpowerDailyReportController extends Controller
         $this->middleware('auth');
     }
 
+    private function ensureSchema(): void
+    {
+        try {
+            if (Schema::hasTable('manpower_daily_reports') && !Schema::hasColumn('manpower_daily_reports', 'subcontractors_breakdown')) {
+                Schema::table('manpower_daily_reports', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->json('subcontractors_breakdown')->nullable()->after('roles_breakdown');
+                });
+            }
+        } catch (\Throwable $e) {}
+    }
+
     // ─── Site Engineer: Show today's report form ─────────────────────────────
     public function create(Request $request)
     {
+        $this->ensureSchema();
         $user = Auth::user();
 
         // Get assigned projects
@@ -62,6 +75,21 @@ class ManpowerDailyReportController extends Controller
         // Available Manpower Roles / Designations for dynamic selection
         $manpowerRoles = ManpowerRole::orderBy('name')->get();
 
+        // Active Subcontractor Agreements to link with projects
+        $subconAgreements = SubconAgreement::with(['supplier'])
+            ->whereNotIn('status', ['rejected', 'cancelled', 'terminated'])
+            ->get()
+            ->map(function ($sa) {
+                return [
+                    'id'                  => $sa->id,
+                    'project_id'          => $sa->project_id,
+                    'agreement_no'        => $sa->agreement_no ?? ('SUB-' . $sa->id),
+                    'subcontractor_name'  => $sa->subcontractor_display_name,
+                    'trade'               => $sa->description_display ?: ($sa->service_type ?? 'Subcontract Work'),
+                    'supplier_phone'      => $sa->supplier?->phone ?? '',
+                ];
+            });
+
         // Recent reports for this engineer
         $recentReports = ManpowerDailyReport::where('submitted_by', $user->id)
             ->with('project')
@@ -70,39 +98,47 @@ class ManpowerDailyReportController extends Controller
             ->get();
 
         return view('site_engineer.manpower_report.create', compact(
-            'projects', 'selectedProjectId', 'todayReport', 'recentReports', 'manpowerRoles'
+            'projects', 'selectedProjectId', 'todayReport', 'recentReports', 'manpowerRoles', 'subconAgreements'
         ));
     }
 
     // ─── Site Engineer: Submit morning report ─────────────────────────────────
     public function store(Request $request)
     {
+        $this->ensureSchema();
         $user = Auth::user();
 
         $validated = $request->validate([
-            'project_id'             => 'required|exists:projects,id',
-            'report_date'            => 'required|date|before_or_equal:today',
-            'roles'                  => 'nullable|array',
-            'roles.*.role_id'        => 'nullable|integer',
-            'roles.*.role_name'      => 'nullable|string|max:150',
-            'roles.*.category'       => 'nullable|string|max:100',
-            'roles.*.count'          => 'nullable|integer|min:0',
-            'skilled_workers'        => 'nullable|integer|min:0',
-            'unskilled_workers'      => 'nullable|integer|min:0',
-            'supervisors'            => 'nullable|integer|min:0',
-            'engineers'              => 'nullable|integer|min:0',
-            'operators'              => 'nullable|integer|min:0',
-            'daily_laborers'         => 'nullable|integer|min:0',
-            'subcontractor_workers'  => 'nullable|integer|min:0',
-            'total_absent'           => 'nullable|integer|min:0',
-            'work_area'              => 'nullable|string|max:255',
-            'planned_activities'     => 'nullable|string',
-            'completed_activities'   => 'nullable|string',
-            'challenges'             => 'nullable|string',
-            'notes'                  => 'nullable|string',
+            'project_id'                          => 'required|exists:projects,id',
+            'report_date'                         => 'required|date|before_or_equal:today',
+            'roles'                               => 'nullable|array',
+            'roles.*.role_id'                     => 'nullable|integer',
+            'roles.*.role_name'                   => 'nullable|string|max:150',
+            'roles.*.category'                    => 'nullable|string|max:100',
+            'roles.*.count'                       => 'nullable|integer|min:0',
+            'subcontractors'                      => 'nullable|array',
+            'subcontractors.*.agreement_id'       => 'nullable|integer',
+            'subcontractors.*.subcontractor_name' => 'nullable|string|max:150',
+            'subcontractors.*.agreement_no'       => 'nullable|string|max:100',
+            'subcontractors.*.trade'              => 'nullable|string|max:150',
+            'subcontractors.*.workers_count'      => 'nullable|integer|min:0',
+            'subcontractors.*.notes'              => 'nullable|string|max:255',
+            'skilled_workers'                     => 'nullable|integer|min:0',
+            'unskilled_workers'                   => 'nullable|integer|min:0',
+            'supervisors'                         => 'nullable|integer|min:0',
+            'engineers'                           => 'nullable|integer|min:0',
+            'operators'                           => 'nullable|integer|min:0',
+            'daily_laborers'                      => 'nullable|integer|min:0',
+            'subcontractor_workers'               => 'nullable|integer|min:0',
+            'total_absent'                        => 'nullable|integer|min:0',
+            'work_area'                           => 'nullable|string|max:255',
+            'planned_activities'                  => 'nullable|string',
+            'completed_activities'                => 'nullable|string',
+            'challenges'                          => 'nullable|string',
+            'notes'                               => 'nullable|string',
         ]);
 
-        // Process dynamic roles breakdown if submitted
+        // Process dynamic roles breakdown (Our Company Labour)
         $rolesInput = $request->input('roles', []);
         $filteredRoles = [];
         $totalFromRoles = 0;
@@ -160,6 +196,34 @@ class ManpowerDailyReportController extends Controller
             }
         }
 
+        // Process Subcontractors Breakdown
+        $subconsInput = $request->input('subcontractors', []);
+        $filteredSubcons = [];
+        $totalFromSubcon = 0;
+
+        if (!empty($subconsInput) && is_array($subconsInput)) {
+            foreach ($subconsInput as $item) {
+                $subName = trim($item['subcontractor_name'] ?? '');
+                $count = (int)($item['workers_count'] ?? 0);
+                $trade = trim($item['trade'] ?? '');
+                $agreementNo = trim($item['agreement_no'] ?? '');
+                $agreementId = !empty($item['agreement_id']) ? (int)$item['agreement_id'] : null;
+                $notes = trim($item['notes'] ?? '');
+
+                if ($count > 0 && !empty($subName)) {
+                    $filteredSubcons[] = [
+                        'agreement_id'       => $agreementId,
+                        'subcontractor_name' => $subName,
+                        'agreement_no'       => $agreementNo,
+                        'trade'              => $trade,
+                        'workers_count'      => $count,
+                        'notes'              => $notes,
+                    ];
+                    $totalFromSubcon += $count;
+                }
+            }
+        }
+
         // Check duplicate
         $existing = ManpowerDailyReport::where('submitted_by', $user->id)
             ->where('report_date', $validated['report_date'])
@@ -170,18 +234,22 @@ class ManpowerDailyReportController extends Controller
             return back()->with('error', "You already submitted a manpower report for {$validated['report_date']}. You can only submit once per day per project.");
         }
 
-        $validated['submitted_by']          = $user->id;
-        $validated['status']                = 'pending';
-        $validated['total_absent']          = $validated['total_absent'] ?? 0;
-        $validated['roles_breakdown']       = !empty($filteredRoles) ? $filteredRoles : null;
-        $validated['skilled_workers']       = $skilled;
-        $validated['unskilled_workers']     = $unskilled;
-        $validated['supervisors']           = $supervisors;
-        $validated['operators']             = $operators;
-        $validated['daily_laborers']        = $dailyLaborers;
-        $validated['subcontractor_workers'] = $subcontractors;
-        $validated['engineers']             = $engineers;
-        $validated['total_present']         = !empty($filteredRoles) ? $totalFromRoles : ($skilled + $unskilled + $supervisors + $operators + $dailyLaborers + $subcontractors + $engineers);
+        $finalSubconWorkers = !empty($filteredSubcons) ? $totalFromSubcon : $subcontractors;
+        $totalCompany = !empty($filteredRoles) ? $totalFromRoles : ($skilled + $unskilled + $supervisors + $operators + $dailyLaborers + $engineers);
+
+        $validated['submitted_by']            = $user->id;
+        $validated['status']                  = 'pending';
+        $validated['total_absent']            = $validated['total_absent'] ?? 0;
+        $validated['roles_breakdown']         = !empty($filteredRoles) ? $filteredRoles : null;
+        $validated['subcontractors_breakdown']= !empty($filteredSubcons) ? $filteredSubcons : null;
+        $validated['skilled_workers']         = $skilled;
+        $validated['unskilled_workers']       = $unskilled;
+        $validated['supervisors']             = $supervisors;
+        $validated['operators']               = $operators;
+        $validated['daily_laborers']          = $dailyLaborers;
+        $validated['subcontractor_workers']   = $finalSubconWorkers;
+        $validated['engineers']               = $engineers;
+        $validated['total_present']           = $totalCompany + $finalSubconWorkers;
 
         ManpowerDailyReport::create($validated);
 

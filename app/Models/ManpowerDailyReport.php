@@ -22,6 +22,7 @@ class ManpowerDailyReport extends Model
         'daily_laborers',
         'subcontractor_workers',
         'roles_breakdown',
+        'subcontractors_breakdown',
         'total_present',
         'total_absent',
         'work_area',
@@ -36,9 +37,10 @@ class ManpowerDailyReport extends Model
     ];
 
     protected $casts = [
-        'report_date'      => 'date',
-        'reviewed_at'      => 'datetime',
-        'roles_breakdown'  => 'array',
+        'report_date'               => 'date',
+        'reviewed_at'               => 'datetime',
+        'roles_breakdown'           => 'array',
+        'subcontractors_breakdown'  => 'array',
     ];
 
     public function project()
@@ -61,12 +63,25 @@ class ManpowerDailyReport extends Model
     {
         parent::boot();
         static::saving(function ($model) {
+            $totalCompany = 0;
             if (!empty($model->roles_breakdown) && is_array($model->roles_breakdown)) {
-                $totalFromRoles = 0;
                 foreach ($model->roles_breakdown as $item) {
-                    $totalFromRoles += (int)($item['count'] ?? 0);
+                    $totalCompany += (int)($item['count'] ?? 0);
                 }
-                $model->total_present = $totalFromRoles;
+            }
+
+            $totalSubcon = 0;
+            if (!empty($model->subcontractors_breakdown) && is_array($model->subcontractors_breakdown)) {
+                foreach ($model->subcontractors_breakdown as $sub) {
+                    $totalSubcon += (int)($sub['workers_count'] ?? $sub['count'] ?? 0);
+                }
+                $model->subcontractor_workers = $totalSubcon;
+            } else {
+                $totalSubcon = (int)($model->subcontractor_workers ?? 0);
+            }
+
+            if (!empty($model->roles_breakdown) || !empty($model->subcontractors_breakdown)) {
+                $model->total_present = $totalCompany + $totalSubcon;
             } else {
                 $model->total_present = (int)$model->skilled_workers
                     + (int)$model->unskilled_workers
@@ -82,6 +97,26 @@ class ManpowerDailyReport extends Model
     public function getTotalWorkforceAttribute(): int
     {
         return $this->total_present ?? 0;
+    }
+
+    public function getCompanyWorkersCountAttribute(): int
+    {
+        if (!empty($this->roles_breakdown) && is_array($this->roles_breakdown)) {
+            return array_sum(array_column($this->roles_breakdown, 'count'));
+        }
+        return (int)$this->skilled_workers + (int)$this->unskilled_workers + (int)$this->supervisors + (int)$this->engineers + (int)$this->operators + (int)$this->daily_laborers;
+    }
+
+    public function getSubcontractorWorkersCountAttribute(): int
+    {
+        if (!empty($this->subcontractors_breakdown) && is_array($this->subcontractors_breakdown)) {
+            $sum = 0;
+            foreach ($this->subcontractors_breakdown as $item) {
+                $sum += (int)($item['workers_count'] ?? $item['count'] ?? 0);
+            }
+            return $sum;
+        }
+        return (int)($this->subcontractor_workers ?? 0);
     }
 
     public function getStatusBadgeClassAttribute(): string

@@ -23,11 +23,50 @@
 
     <div class="row g-4">
         <div class="col-lg-8">
-            {{-- Workforce Summary --}}
+            {{-- High-level Summary Metrics --}}
+            <div class="row g-3 mb-4">
+                <div class="col-sm-4">
+                    <div class="p-3 bg-white rounded-3 border shadow-sm d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-semibold text-uppercase d-block" style="font-size:0.7rem; letter-spacing:0.5px;">Total on Site</span>
+                            <h4 class="fw-bold mb-0 text-primary">{{ $manpowerDailyReport->total_present }}</h4>
+                        </div>
+                        <div class="rounded-circle p-2 d-flex align-items-center justify-content-center" style="background: rgba(37, 99, 235, 0.1); width: 42px; height: 42px;">
+                            <i class="fa-solid fa-users text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    <div class="p-3 bg-white rounded-3 border shadow-sm d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-semibold text-uppercase d-block" style="font-size:0.7rem; letter-spacing:0.5px;">Company Labour</span>
+                            <h4 class="fw-bold mb-0 text-warning">{{ $manpowerDailyReport->company_workers_count }}</h4>
+                        </div>
+                        <div class="rounded-circle p-2 d-flex align-items-center justify-content-center" style="background: rgba(245, 158, 11, 0.1); width: 42px; height: 42px;">
+                            <i class="fa-solid fa-hard-hat text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-4">
+                    <div class="p-3 bg-white rounded-3 border shadow-sm d-flex align-items-center justify-content-between">
+                        <div>
+                            <span class="text-muted small fw-semibold text-uppercase d-block" style="font-size:0.7rem; letter-spacing:0.5px;">Subcontractors</span>
+                            <h4 class="fw-bold mb-0 text-info">{{ $manpowerDailyReport->subcontractor_workers_count }}</h4>
+                        </div>
+                        <div class="rounded-circle p-2 d-flex align-items-center justify-content-center" style="background: rgba(6, 182, 212, 0.1); width: 42px; height: 42px;">
+                            <i class="fa-solid fa-handshake text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- 1. Our Company Labour Breakdown --}}
             <div class="card shadow-sm border-0 rounded-3 mb-4">
-                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between">
-                    <h6 class="fw-bold mb-0 text-dark"><i class="fa-solid fa-users text-primary me-2"></i>Workforce Breakdown</h6>
-                    <span class="badge bg-primary px-3 py-2">Total: {{ $manpowerDailyReport->total_present }} Present</span>
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0 text-dark"><i class="fa-solid fa-users-gear text-warning me-2"></i>Our Company Labour (Direct Workforce)</h6>
+                    <span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-25 px-3 py-1.5 fw-bold">
+                        {{ $manpowerDailyReport->company_workers_count }} Workers
+                    </span>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -61,11 +100,11 @@
                                 </tr>
                                 @endforeach
                                 <tr class="table-light fw-bold">
-                                    <td colspan="3" class="ps-3 text-end"><i class="fa-solid fa-sigma me-1.5 text-primary"></i>Total Present:</td>
-                                    <td class="text-center"><span class="badge bg-primary px-3 py-1.5 fs-6">{{ $manpowerDailyReport->total_present }}</span></td>
+                                    <td colspan="3" class="ps-3 text-end"><i class="fa-solid fa-sigma me-1.5 text-primary"></i>Company Present:</td>
+                                    <td class="text-center"><span class="badge bg-primary px-3 py-1.5 fs-6">{{ $manpowerDailyReport->company_workers_count }}</span></td>
                                 </tr>
                                 <tr class="table-danger">
-                                    <td colspan="3" class="ps-3 text-end fw-semibold"><i class="fa-solid fa-user-xmark text-danger me-1.5"></i>Total Absent:</td>
+                                    <td colspan="3" class="ps-3 text-end fw-semibold"><i class="fa-solid fa-user-xmark text-danger me-1.5"></i>Company Total Absent:</td>
                                     <td class="text-center"><span class="badge bg-danger px-3 py-1.5 fs-6">{{ $manpowerDailyReport->total_absent }}</span></td>
                                 </tr>
                             </tbody>
@@ -81,7 +120,6 @@
                                         ['label' => 'Engineers',             'icon' => 'fa-screwdriver-wrench', 'color' => 'text-info',      'value' => $manpowerDailyReport->engineers],
                                         ['label' => 'Equipment Operators',   'icon' => 'fa-truck-monster',      'color' => 'text-danger',    'value' => $manpowerDailyReport->operators],
                                         ['label' => 'Daily Laborers',        'icon' => 'fa-hammer',             'color' => 'text-secondary', 'value' => $manpowerDailyReport->daily_laborers],
-                                        ['label' => 'Subcontractor Workers', 'icon' => 'fa-handshake',          'color' => 'text-purple',    'value' => $manpowerDailyReport->subcontractor_workers],
                                     ];
                                 @endphp
                                 @foreach($rows as $row)
@@ -95,8 +133,8 @@
                                 </tr>
                                 @endforeach
                                 <tr class="table-light fw-bold">
-                                    <td class="ps-4"><i class="fa-solid fa-sigma me-2 text-primary"></i>Total Present</td>
-                                    <td class="text-center"><span class="badge bg-primary px-3">{{ $manpowerDailyReport->total_present }}</span></td>
+                                    <td class="ps-4"><i class="fa-solid fa-sigma me-2 text-primary"></i>Company Present</td>
+                                    <td class="text-center"><span class="badge bg-primary px-3">{{ $manpowerDailyReport->company_workers_count }}</span></td>
                                 </tr>
                                 <tr class="table-danger">
                                     <td class="ps-4 fw-semibold"><i class="fa-solid fa-user-xmark text-danger me-2"></i>Total Absent</td>
@@ -104,6 +142,72 @@
                                 </tr>
                             </tbody>
                         </table>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            {{-- 2. Subcontractor Manpower Breakdown --}}
+            <div class="card shadow-sm border-0 rounded-3 mb-4">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0 text-dark"><i class="fa-solid fa-handshake text-info me-2"></i>Subcontractor Manpower (Subcon on Site)</h6>
+                    <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-3 py-1.5 fw-bold">
+                        {{ $manpowerDailyReport->subcontractor_workers_count }} Subcon Workers
+                    </span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        @if(!empty($manpowerDailyReport->subcontractors_breakdown) && is_array($manpowerDailyReport->subcontractors_breakdown) && count($manpowerDailyReport->subcontractors_breakdown) > 0)
+                        <table class="table table-hover table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3" style="width: 50px;">#</th>
+                                    <th>Subcontractor Name</th>
+                                    <th>Agreement No</th>
+                                    <th>Trade / Scope</th>
+                                    <th class="text-center" style="width: 140px;">Workers</th>
+                                    <th>Notes / Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($manpowerDailyReport->subcontractors_breakdown as $sub)
+                                <tr>
+                                    <td class="ps-3 text-muted small">{{ $loop->iteration }}</td>
+                                    <td class="fw-bold text-dark">
+                                        <i class="fa-solid fa-building text-info me-2"></i>{{ $sub['subcontractor_name'] ?? 'Subcontractor' }}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">
+                                            {{ $sub['agreement_no'] ?? '—' }}
+                                        </span>
+                                    </td>
+                                    <td class="small text-muted">{{ $sub['trade'] ?? '—' }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-3 py-1 fw-bold fs-6">
+                                            {{ $sub['workers_count'] ?? $sub['count'] ?? 0 }}
+                                        </span>
+                                    </td>
+                                    <td class="small text-muted">{{ $sub['notes'] ?? '—' }}</td>
+                                </tr>
+                                @endforeach
+                                <tr class="table-light fw-bold">
+                                    <td colspan="4" class="ps-3 text-end"><i class="fa-solid fa-sigma me-1.5 text-info"></i>Total Subcon Present:</td>
+                                    <td class="text-center"><span class="badge bg-info px-3 py-1.5 fs-6">{{ $manpowerDailyReport->subcontractor_workers_count }}</span></td>
+                                    <td></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        @elseif($manpowerDailyReport->subcontractor_workers > 0)
+                        <div class="p-3 text-center">
+                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-4 py-2 fs-6 fw-bold">
+                                <i class="fa-solid fa-handshake me-1.5"></i>{{ $manpowerDailyReport->subcontractor_workers }} Subcontractor Workers reported
+                            </span>
+                        </div>
+                        @else
+                        <div class="p-4 text-center text-muted small">
+                            <i class="fa-solid fa-handshake-slash fa-2x mb-2 d-block text-secondary opacity-50"></i>
+                            No subcontractor manpower reported on site for this date.
+                        </div>
                         @endif
                     </div>
                 </div>
