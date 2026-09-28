@@ -65,6 +65,7 @@
                 </a>
                 <div class="me-3">
                     <img src="{{ $employee->profile_picture_url }}" alt="{{ $employee->full_name }}"
+                         onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name={{ urlencode($employee->full_name) }}&background=0D8ABC&color=fff';"
                          style="width:58px;height:58px;border-radius:50%;object-fit:cover;border:2px solid #0d6efd;"
                          class="shadow-sm">
                 </div>
@@ -509,7 +510,7 @@
                 {{-- Assigned Fixed Assets & Equipment Card --}}
                 @php
                     $activeFixedUnits = $employee->assignedFixedAssets ?? collect();
-                    $legacyActiveAssets = $employee->activeAssets() ?? collect();
+                    $legacyActiveAssets = ($employee->assets ?? collect())->whereIn('status', ['assigned', 'in_use']);
                     $totalActiveAssetsCount = $activeFixedUnits->count() + $legacyActiveAssets->count();
                 @endphp
                 <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -562,7 +563,8 @@
                                         </td>
                                         <td class="py-3 text-muted small">
                                             {{ $fUnit->assigned_date ? $fUnit->assigned_date->format('d M Y') : 'N/A' }}
-                                                                         <td class="py-3 pe-4 text-center">
+                                        </td>
+                                        <td class="py-3 pe-4 text-center">
                                             <button type="button"
                                                 class="btn btn-sm btn-outline-warning rounded-pill px-2 py-1 btn-report-issue"
                                                 style="font-size:0.75rem;"

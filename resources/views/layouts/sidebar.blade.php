@@ -2835,14 +2835,15 @@
     </ul>
 </div>
 
-<div class="sidebar-footer">
+<a href="{{ route('profile.edit') }}" class="sidebar-footer text-decoration-none" title="My Profile (Click to view)">
     <div class="sidebar-footer-avatar">
         {{ substr(auth()->user()->name ?? 'U', 0, 1) }}
     </div>
     <div class="sidebar-footer-info">
-        <div class="user-name">{{ auth()->user()->name ?? 'User' }}</div>
+        <div class="user-name text-white">{{ auth()->user()->name ?? 'User' }}</div>
         <div class="user-role text-truncate" title="Active Role: {{ auth()->user()->getActiveRoleLabel() }}">
             <i class="fa-solid fa-user-tag me-1 text-primary"></i>{{ auth()->user()->getActiveRoleLabel() }}
         </div>
     </div>
-</div>
+    <i class="fa-solid fa-chevron-right text-white-50 ms-auto me-1" style="font-size: 0.75rem;"></i>
+</a>

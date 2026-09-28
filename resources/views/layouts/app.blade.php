@@ -493,11 +493,10 @@ body.sidebar-open { overflow-y: hidden !important; }
     width: 100% !important;
     max-width: 100vw !important;
     min-width: 0 !important;
-    overflow-x: hidden !important;
   }
   .sidebar.collapsed ~ .main-content { margin-left: 0 !important; }
 
-  /* Top header */
+  /* Top header: visible overflow for dropdown menus */
   .top-header {
     padding: 0 10px !important;
     height: 54px;
@@ -505,11 +504,30 @@ body.sidebar-open { overflow-y: hidden !important; }
     width: 100% !important;
     max-width: 100vw !important;
     box-sizing: border-box !important;
-    overflow: hidden;
+    overflow: visible !important;
+    position: sticky;
+    top: 0;
+    z-index: 1020 !important;
   }
   .header-actions { gap: 4px; flex-shrink: 0; }
+  .header-actions .dropdown { position: relative !important; }
+  .header-icon-btn, .header-user-btn, #headerRoleButton {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
   .header-icon-btn { width: 34px; height: 34px; flex-shrink: 0; }
-  .header-user-btn { padding: 4px 6px; flex-shrink: 0; }
+  .header-user-btn {
+    padding: 3px 6px;
+    flex-shrink: 0;
+    border: none;
+    background: var(--gray-100);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+  .header-actions .dropdown-menu {
+    top: calc(100% + 6px) !important;
+    margin-top: 0 !important;
+  }
   #headerRoleButton {
     padding: 4px 8px !important;
     font-size: 11.5px !important;
@@ -585,8 +603,13 @@ body.sidebar-open { overflow-y: hidden !important; }
   /* Footer */
   .app-footer { padding: 12px 16px; font-size: 12px; flex-direction: column; gap: 4px; align-items: flex-start; }
 
-  /* Dropdown menus: full width on small */
-  .dropdown-menu { min-width: 200px !important; max-width: calc(100vw - 32px); }
+  /* Dropdown menus: floating cleanly on small screens */
+  .dropdown-menu {
+    min-width: 200px !important;
+    max-width: calc(100vw - 20px) !important;
+    z-index: 1060 !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,.18) !important;
+  }
   .dropdown-menu-end { right: 0 !important; left: auto !important; }
 
   /* Auth card */
@@ -789,13 +812,13 @@ body.sidebar-open { overflow-y: hidden !important; }
                     @endif
                     
                     <div class="dropdown">
-                        <a href="#" class="header-icon-btn position-relative" data-bs-toggle="dropdown">
+                        <button type="button" class="header-icon-btn position-relative" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false" id="headerNotificationsDropdown" aria-label="Notifications">
                             <i class="fa-regular fa-bell"></i>
                             @if($totalAlertCount > 0)
                                 <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle"></span>
                             @endif
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 300px; max-width: 360px;">
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 300px; max-width: 360px;" aria-labelledby="headerNotificationsDropdown">
                             <li><h6 class="dropdown-header d-flex justify-content-between align-items-center">
                                 Notifications
                                 @if($totalAlertCount > 0)
@@ -893,6 +916,8 @@ body.sidebar-open { overflow-y: hidden !important; }
                         <div class="dropdown me-2">
                             <button class="btn btn-sm btn-outline-primary rounded-pill px-3 d-inline-flex align-items-center gap-1 shadow-xs fw-semibold" 
                                     data-bs-toggle="dropdown" 
+                                    data-bs-display="static"
+                                    aria-expanded="false"
                                     type="button" 
                                     id="headerRoleButton" 
                                     title="Active Role: {{ $activeRoleLabel }} (Click to switch)">
@@ -956,14 +981,14 @@ body.sidebar-open { overflow-y: hidden !important; }
                     @endauth
 
                     <div class="dropdown">
-                        <a href="#" class="header-user-btn" data-bs-toggle="dropdown">
+                        <button type="button" class="header-user-btn" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false" id="headerUserDropdown" aria-label="User Profile and Account Menu">
                             <div class="header-user-avatar">
                                 {{ substr(auth()->user()->name ?? 'U', 0, 1) }}
                             </div>
                             <span class="header-user-name d-none d-md-block">{{ auth()->user()->name ?? 'User' }}</span>
                             <i class="fa-solid fa-chevron-down ms-1 small text-muted d-none d-md-block"></i>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 rounded-3">
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 rounded-3" aria-labelledby="headerUserDropdown">
                             @if(isset($authPettyCash) && $authPettyCash->isNotEmpty())
                                 <li class="px-3 py-2 bg-success bg-opacity-10 border-bottom mb-1">
                                     <div class="small text-muted fw-bold text-uppercase" style="font-size: 0.68rem;">
