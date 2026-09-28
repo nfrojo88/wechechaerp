@@ -549,6 +549,11 @@ class StoreManagerController extends Controller
         // Product Catalog for material adjustment
         $products = Product::where('is_active', true)->orderBy('name')->get();
 
+        // Auto-reconcile transfer stock movements if in-transit or completed
+        if (in_array($transfer->status, ['in_transit', 'dispatched', 'completed'])) {
+            self::syncTransferInventory($transfer);
+        }
+
         return view('store-manager.transfers.show', compact('transfer', 'isStoreKeeper', 'assignedStore', 'drivers', 'compatibleTransfers', 'products'));
     }
 
@@ -629,26 +634,6 @@ class StoreManagerController extends Controller
             foreach ($transfer->items as $item) {
                 $sentQty = (float)($request->input("items.{$item->id}.sent_qty", $item->requested_quantity));
                 $item->update(['sent_quantity' => $sentQty]);
-
-                // Deduct from Origin Store Inventory
-                $inv = Inventory::where('store_id', $transfer->from_store_id)
-                    ->where('product_id', $item->product_id)
-                    ->first();
-
-                if ($inv) {
-                    $inv->decrement('quantity_on_hand', $sentQty);
-
-                    $remarks1 = 'Transfer #' . $transfer->transfer_no . ' dispatched to driver (Slip: ' . $request->outgoing_slip_no . ')';
-                    InventoryMovement::create([
-                        'inventory_id'   => $inv->id,
-                        'type'           => 'transfer_out',
-                        'quantity'       => -$sentQty,
-                        'reference_type' => Transfer::class,
-                        'reference_id'   => $transfer->id,
-                        'performed_by'   => Auth::id() ?? 1,
-                        'remarks'        => $remarks1,
-                    ]);
-                }
             }
 
             $transfer->update([
@@ -660,6 +645,8 @@ class StoreManagerController extends Controller
                 'dispatched_at'      => now(),
                 'status'             => 'in_transit',
             ]);
+
+            self::syncTransferInventory($transfer);
         });
 
         return back()->with('success', 'Transfer dispatched successfully! Outgoing slip recorded and inventory deducted from origin store.');
@@ -702,26 +689,6 @@ class StoreManagerController extends Controller
             foreach ($transfer->items as $item) {
                 $receivedQty = (float)($request->input("items.{$item->id}.received_qty", $item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity));
                 $item->update(['received_quantity' => $receivedQty]);
-
-                if ($receivedQty > 0) {
-                    // Add or update inventory in destination store
-                    $inv = Inventory::firstOrCreate(
-                        ['store_id' => $transfer->to_store_id, 'product_id' => $item->product_id],
-                        ['quantity_on_hand' => 0, 'min_stock' => 5, 'unit_cost' => 0]
-                    );
-                    $inv->increment('quantity_on_hand', $receivedQty);
-
-                    $remarks2 = 'Transfer #' . $transfer->transfer_no . ' received from ' . ($transfer->fromStore->name ?? 'Source Store') . ' (Slip: ' . ($request->receiving_slip_no ?? $transfer->outgoing_slip_no ?? 'N/A') . ')';
-                    InventoryMovement::create([
-                        'inventory_id'   => $inv->id,
-                        'type'           => 'transfer_in',
-                        'quantity'       => $receivedQty,
-                        'reference_type' => Transfer::class,
-                        'reference_id'   => $transfer->id,
-                        'performed_by'   => Auth::id() ?? 1,
-                        'remarks'        => $remarks2,
-                    ]);
-                }
             }
 
             $transfer->update([
@@ -732,13 +699,16 @@ class StoreManagerController extends Controller
                 'received_at'         => now(),
                 'status'              => 'completed',
             ]);
+
+            self::syncTransferInventory($transfer);
         });
 
         return back()->with('success', 'Transfer confirmed and received! Materials have been added to destination store inventory.');
     }
 
     /**
-     * Reject or Cancel Transfer
+     * Reject or Cancel Transfer:
+     * - Restores inventory back to Origin Store if previously dispatched/in-transit
      */
     public function rejectTransfer(Request $request, Transfer $transfer)
     {
@@ -746,12 +716,186 @@ class StoreManagerController extends Controller
             'rejection_reason' => 'required|string|max:500',
         ]);
 
-        $transfer->update([
-            'status'           => 'rejected',
-            'rejection_reason' => $request->rejection_reason,
-        ]);
+        $wasDeducted = $transfer->isDeductedFromOrigin();
 
-        return back()->with('success', 'Transfer has been marked as rejected.');
+        DB::transaction(function () use ($request, $transfer, $wasDeducted) {
+            if ($wasDeducted) {
+                foreach ($transfer->items as $item) {
+                    $sentQty = (float)($item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity);
+                    if ($sentQty > 0) {
+                        $originInv = Inventory::withoutGlobalScopes()
+                            ->where('store_id', $transfer->from_store_id)
+                            ->where('product_id', $item->product_id)
+                            ->first();
+
+                        if ($originInv) {
+                            $originInv->increment('quantity_on_hand', $sentQty);
+                            $originInv->update(['last_movement_at' => now()]);
+
+                            InventoryMovement::create([
+                                'inventory_id'   => $originInv->id,
+                                'type'           => 'transfer_return',
+                                'quantity'       => $sentQty,
+                                'reference_type' => Transfer::class,
+                                'reference_id'   => $transfer->id,
+                                'performed_by'   => Auth::id() ?? 1,
+                                'remarks'        => 'Transfer #' . $transfer->transfer_no . ' rejected - items restored to origin store: ' . $request->rejection_reason,
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            $transfer->update([
+                'status'           => 'rejected',
+                'rejection_reason' => $request->rejection_reason,
+            ]);
+        });
+
+        return back()->with('success', 'Transfer has been marked as rejected' . ($wasDeducted ? ' and materials were returned to origin store inventory.' : '.'));
+    }
+
+    /**
+     * Unified, scope-safe, idempotent stock synchronizer for Transfers.
+     * Ensures:
+     * - Sent materials are deducted from Origin Store (type: transfer_out) when dispatched or completed.
+     * - Received materials are added to Destination Store (type: transfer_in) when completed.
+     * - Uses withoutGlobalScopes() to prevent ScopesByStore from blocking inter-store inventory updates.
+     * - Idempotent: checks existing InventoryMovements to prevent double-deduction or double-addition.
+     */
+    public static function syncTransferInventory(Transfer $transfer): array
+    {
+        $transfer->loadMissing(['items.product', 'fromStore', 'toStore']);
+        $deductedCount = 0;
+        $addedCount = 0;
+
+        $isDispatchedOrCompleted = in_array($transfer->status, ['in_transit', 'dispatched', 'completed']);
+        $isCompleted = ($transfer->status === 'completed');
+
+        if (!$isDispatchedOrCompleted && !$isCompleted) {
+            return ['deducted' => 0, 'added' => 0];
+        }
+
+        DB::transaction(function () use ($transfer, $isDispatchedOrCompleted, $isCompleted, &$deductedCount, &$addedCount) {
+            foreach ($transfer->items as $item) {
+                $sentQty = (float)($item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity);
+                $receivedQty = (float)($item->received_quantity > 0 ? $item->received_quantity : ($item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity));
+
+                // 1. DEDUCT FROM ORIGIN STORE (when dispatched or completed)
+                if ($isDispatchedOrCompleted && $sentQty > 0) {
+                    $alreadyDeducted = InventoryMovement::where('reference_type', Transfer::class)
+                        ->where('reference_id', $transfer->id)
+                        ->where('type', 'transfer_out')
+                        ->whereHas('inventory', function ($q) use ($transfer, $item) {
+                            $q->withoutGlobalScopes()
+                              ->where('store_id', $transfer->from_store_id)
+                              ->where('product_id', $item->product_id);
+                        })
+                        ->exists();
+
+                    if (!$alreadyDeducted) {
+                        $originInv = Inventory::withoutGlobalScopes()->firstOrCreate(
+                            ['store_id' => $transfer->from_store_id, 'product_id' => $item->product_id],
+                            [
+                                'quantity_on_hand'   => 0,
+                                'quantity_reserved'  => 0,
+                                'min_stock'          => 0,
+                                'unit_cost'          => (float)($item->product->unit_price ?? $item->product->purchase_price ?? 0),
+                                'last_movement_at'   => now(),
+                            ]
+                        );
+
+                        $originInv->decrement('quantity_on_hand', $sentQty);
+                        $originInv->update(['last_movement_at' => now()]);
+
+                        $slipNo = $transfer->outgoing_slip_no ?: $transfer->physical_slip_no ?: 'N/A';
+                        $remarksOut = 'Transfer #' . $transfer->transfer_no . ' dispatched to ' . ($transfer->toStore->name ?? 'Destination Store') . ' (Slip: ' . $slipNo . ')';
+
+                        InventoryMovement::create([
+                            'inventory_id'   => $originInv->id,
+                            'type'           => 'transfer_out',
+                            'quantity'       => -$sentQty,
+                            'reference_type' => Transfer::class,
+                            'reference_id'   => $transfer->id,
+                            'performed_by'   => Auth::id() ?? $transfer->dispatched_by ?? $transfer->requested_by ?? 1,
+                            'remarks'        => $remarksOut,
+                        ]);
+
+                        $deductedCount++;
+                    }
+                }
+
+                // 2. ADD TO DESTINATION STORE (when completed / received)
+                if ($isCompleted && $receivedQty > 0) {
+                    $alreadyAdded = InventoryMovement::where('reference_type', Transfer::class)
+                        ->where('reference_id', $transfer->id)
+                        ->where('type', 'transfer_in')
+                        ->whereHas('inventory', function ($q) use ($transfer, $item) {
+                            $q->withoutGlobalScopes()
+                              ->where('store_id', $transfer->to_store_id)
+                              ->where('product_id', $item->product_id);
+                        })
+                        ->exists();
+
+                    if (!$alreadyAdded) {
+                        $originInv = Inventory::withoutGlobalScopes()
+                            ->where('store_id', $transfer->from_store_id)
+                            ->where('product_id', $item->product_id)
+                            ->first();
+
+                        $unitCost = (float)($originInv?->unit_cost ?? $item->product->unit_price ?? $item->product->purchase_price ?? 0);
+
+                        $destInv = Inventory::withoutGlobalScopes()->firstOrCreate(
+                            ['store_id' => $transfer->to_store_id, 'product_id' => $item->product_id],
+                            [
+                                'quantity_on_hand'   => 0,
+                                'quantity_reserved'  => 0,
+                                'min_stock'          => 5,
+                                'unit_cost'          => $unitCost,
+                                'last_movement_at'   => now(),
+                            ]
+                        );
+
+                        $oldQty = (float)$destInv->quantity_on_hand;
+                        $oldCost = (float)($destInv->unit_cost ?? 0);
+                        $newQty = $oldQty + $receivedQty;
+                        $newCost = $newQty > 0 ? (($oldQty * $oldCost) + ($receivedQty * $unitCost)) / $newQty : $unitCost;
+
+                        $destInv->quantity_on_hand = $newQty;
+                        $destInv->unit_cost = $newCost;
+                        $destInv->last_movement_at = now();
+                        $destInv->save();
+
+                        $recSlipNo = $transfer->receiving_slip_no ?: $transfer->outgoing_slip_no ?: $transfer->physical_slip_no ?: 'N/A';
+                        $remarksIn = 'Transfer #' . $transfer->transfer_no . ' received into ' . ($transfer->toStore->name ?? 'Destination Store') . ' from ' . ($transfer->fromStore->name ?? 'Origin Store') . ' (Slip: ' . $recSlipNo . ')';
+
+                        InventoryMovement::create([
+                            'inventory_id'   => $destInv->id,
+                            'type'           => 'transfer_in',
+                            'quantity'       => $receivedQty,
+                            'reference_type' => Transfer::class,
+                            'reference_id'   => $transfer->id,
+                            'performed_by'   => Auth::id() ?? $transfer->received_by ?? $transfer->requested_by ?? 1,
+                            'remarks'        => $remarksIn,
+                        ]);
+
+                        $addedCount++;
+                    }
+                }
+            }
+        });
+
+        return ['deducted' => $deductedCount, 'added' => $addedCount];
+    }
+
+    /**
+     * Manual 1-click Inventory Re-sync for a Transfer
+     */
+    public function syncInventoryManually(Request $request, Transfer $transfer)
+    {
+        $res = self::syncTransferInventory($transfer);
+        $transfer->load(['fromStore', 'toStore']);
+        return back()->with('success', "Stock movements verified! Deducted {$res['deducted']} item(s) from " . ($transfer->fromStore->name ?? 'Origin Store') . ", added {$res['added']} item(s) to " . ($transfer->toStore->name ?? 'Destination Store') . ".");
     }
 
     /**

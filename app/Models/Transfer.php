@@ -85,6 +85,21 @@ class Transfer extends Model
         return $this->hasMany(Transfer::class, 'merged_into_transfer_id');
     }
 
+    public function inventoryMovements()
+    {
+        return $this->morphMany(InventoryMovement::class, 'reference');
+    }
+
+    public function isDeductedFromOrigin(): bool
+    {
+        return $this->inventoryMovements()->where('type', 'transfer_out')->exists();
+    }
+
+    public function isAddedToDestination(): bool
+    {
+        return $this->inventoryMovements()->where('type', 'transfer_in')->exists();
+    }
+
     public function getOutgoingSlipUrlAttribute(): ?string
     {
         if (empty($this->outgoing_slip_file)) {

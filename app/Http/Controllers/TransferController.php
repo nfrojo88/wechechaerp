@@ -143,7 +143,10 @@ class TransferController extends Controller
             }
         }
 
-        return back()->with('success', 'Transfer dispatched and SMS notification sent to driver successfully!');
+        // Deduct from origin store
+        \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+
+        return back()->with('success', 'Transfer dispatched and materials deducted from origin store successfully!');
     }
 
     public function complete(Transfer $transfer)
@@ -153,7 +156,11 @@ class TransferController extends Controller
             'received_by' => Auth::id(),
             'received_at' => now(),
         ]);
-        return back()->with('success', 'Transfer completed.');
+
+        // Reconcile: deduct from origin and add to destination store
+        \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+
+        return back()->with('success', 'Transfer marked completed! Materials deducted from origin store and added to destination store.');
     }
 
     public function reject(Request $request, Transfer $transfer)

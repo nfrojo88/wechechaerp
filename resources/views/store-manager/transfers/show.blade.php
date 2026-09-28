@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'Transfer Details - ' . ($transfer->transfer_no ?? 'Transfer'))
 
@@ -438,6 +438,15 @@
                         <i class="fas fa-box-open me-1"></i>Receive Materials into Stock
                     </button>
                 @endif
+
+                @if(in_array($transfer->status, ['in_transit', 'completed']))
+                    <form action="{{ route('store-manager.transfers.sync-inventory', $transfer) }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-secondary btn-sm shadow-sm" title="Reconcile and ensure inventory is deducted from origin store and added to destination store">
+                            <i class="fas fa-rotate me-1 text-primary"></i>Re-sync Stock Movements
+                        </button>
+                    </form>
+                @endif
             </div>
         </div>
 
@@ -452,6 +461,38 @@
             <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#mergeIntoModal">
                 <i class="fas fa-code-merge me-1"></i>Merge Them Into #{{ $transfer->transfer_no }}
             </button>
+        </div>
+        @endif
+
+        @php
+            $isDeducted = $transfer->isDeductedFromOrigin();
+            $isAdded = $transfer->isAddedToDestination();
+        @endphp
+        @if(in_array($transfer->status, ['in_transit', 'completed']))
+        <div class="px-3 pt-3">
+            <div class="d-flex flex-wrap gap-3 align-items-center p-2.5 rounded-3 border {{ $isDeducted && ($transfer->status !== 'completed' || $isAdded) ? 'bg-success bg-opacity-10 border-success border-opacity-25' : 'bg-warning bg-opacity-10 border-warning border-opacity-25' }}">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fas fa-arrow-up-from-bracket text-primary"></i>
+                    <span class="small fw-bold text-dark">Origin Store ({{ $transfer->fromStore->name ?? 'Origin Store' }}):</span>
+                    @if($isDeducted)
+                        <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Stock Deducted</span>
+                    @else
+                        <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending Deduction</span>
+                    @endif
+                </div>
+                <div class="vr d-none d-md-block opacity-25"></div>
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fas fa-arrow-down-to-bracket text-success"></i>
+                    <span class="small fw-bold text-dark">Destination Store ({{ $transfer->toStore->name ?? 'Destination Store' }}):</span>
+                    @if($isAdded)
+                        <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Stock Added</span>
+                    @elseif($transfer->status === 'completed')
+                        <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending Addition</span>
+                    @else
+                        <span class="badge bg-secondary"><i class="fas fa-hourglass-half me-1"></i>Awaiting Receipt</span>
+                    @endif
+                </div>
+            </div>
         </div>
         @endif
 
@@ -495,14 +536,20 @@
                             </td>
                             <td class="text-end fw-bold text-primary">
                                 @if($item->sent_quantity > 0 || in_array($transfer->status, ['in_transit', 'completed']))
-                                    {{ number_format($item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity, 2) }}
+                                    <div>{{ number_format($item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity, 2) }}</div>
+                                    @if($isDeducted)
+                                        <small class="text-success d-block" style="font-size: 0.68rem; font-weight: 600;"><i class="fas fa-circle-check me-0.5"></i>Deducted</small>
+                                    @endif
                                 @else
                                     <span class="text-muted small">Pending</span>
                                 @endif
                             </td>
                             <td class="text-end fw-bold text-success">
                                 @if($transfer->status === 'completed')
-                                    {{ number_format($item->received_quantity > 0 ? $item->received_quantity : ($item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity), 2) }}
+                                    <div>{{ number_format($item->received_quantity > 0 ? $item->received_quantity : ($item->sent_quantity > 0 ? $item->sent_quantity : $item->requested_quantity), 2) }}</div>
+                                    @if($isAdded)
+                                        <small class="text-success d-block" style="font-size: 0.68rem; font-weight: 600;"><i class="fas fa-circle-check me-0.5"></i>Added to Stock</small>
+                                    @endif
                                 @else
                                     <span class="text-muted small">In Transit</span>
                                 @endif
