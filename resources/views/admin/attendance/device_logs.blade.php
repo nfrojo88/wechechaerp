@@ -9,14 +9,14 @@
         <div>
             <div class="d-flex align-items-center gap-2 mb-1">
                 <h1 class="h3 mb-0 fw-bold text-dark">
-                    <i class="fa-solid fa-fingerprint text-primary me-2"></i>Device Logs &amp; Attendance Reset
+                    <i class="fa-solid fa-fingerprint text-primary me-2"></i>Biometric Devices &amp; Punch Logs
                 </h1>
-                <span class="badge bg-danger-subtle text-danger border border-danger fw-semibold px-2 py-1">
+                <span class="badge bg-primary-subtle text-primary border border-primary fw-semibold px-2 py-1">
                     <i class="fa-solid fa-shield-halved me-1"></i>Admin &amp; Global Admin
                 </span>
             </div>
             <p class="text-muted mb-0 small">
-                Raw biometric punch records, ZKTeco ADMS integration, attendance sync, and administrative database wipe tools.
+                Classify physical ZKTeco devices (Head Office vs Construction Sites), monitor real-time punches, and sync employee attendance.
             </p>
         </div>
         <div class="d-flex flex-wrap gap-2">
@@ -52,110 +52,7 @@
     </div>
     @endif
 
-    {{-- ══════════════════════════════════════════════════════════════ --}}
-    {{-- ADMINISTRATIVE CLEAR & RESET SECTION (DANGER ZONE)         --}}
-    {{-- ══════════════════════════════════════════════════════════════ --}}
-    <div class="card border-0 shadow-sm mb-4 border-top border-4 border-danger">
-        <div class="card-header bg-danger-subtle bg-opacity-10 py-3 border-bottom border-danger-subtle">
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <div>
-                    <h5 class="mb-1 text-danger fw-bold">
-                        <i class="fa-solid fa-triangle-exclamation me-2"></i>Attendance &amp; Biometric Records Reset (Administrative Wipe)
-                    </h5>
-                    <p class="text-muted small mb-0">
-                        Purge attendance records and raw biometric logs. This operation was relocated from the HR module to prevent unauthorized resets. All actions are logged.
-                    </p>
-                </div>
-                <div class="d-flex gap-2">
-                    <span class="badge bg-white text-dark border shadow-xs px-2 py-1">
-                        <i class="fa-solid fa-table me-1 text-primary"></i>
-                        Attendance: <strong>{{ number_format($totalAttendanceCount ?? 0) }}</strong>
-                    </span>
-                    <span class="badge bg-white text-dark border shadow-xs px-2 py-1">
-                        <i class="fa-solid fa-fingerprint me-1 text-info"></i>
-                        Device Punches: <strong>{{ number_format($totalLogsCount ?? 0) }}</strong>
-                    </span>
-                </div>
-            </div>
-        </div>
-        <div class="card-body p-3 p-md-4">
-            <div class="row g-3">
 
-                {{-- Option 1: Clear Attendance Table Only --}}
-                <div class="col-md-4">
-                    <div class="card h-100 border border-light-subtle shadow-xs bg-light bg-opacity-50">
-                        <div class="card-body d-flex flex-column p-3">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <span class="badge bg-warning-subtle text-dark border border-warning">
-                                    <i class="fa-solid fa-table me-1 text-warning"></i>Attendance Table
-                                </span>
-                                <span class="badge bg-secondary-subtle text-secondary small">
-                                    {{ number_format($totalAttendanceCount ?? 0) }} records
-                                </span>
-                            </div>
-                            <h6 class="fw-bold text-dark mb-2">Clear Attendance Records Only</h6>
-                            <p class="small text-muted mb-3 flex-grow-1">
-                                Wipes processed employee attendance records (<code>attendances</code>). Keeps raw biometric device punches intact so you can re-sync anytime.
-                            </p>
-                            <button type="button" class="btn btn-outline-warning btn-sm w-100 fw-semibold"
-                                    data-bs-toggle="modal" data-bs-target="#clearAttendanceModal">
-                                <i class="fa-solid fa-eraser me-1"></i>Clear Attendance Table
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Option 2: Clear Device Punches Only --}}
-                <div class="col-md-4">
-                    <div class="card h-100 border border-light-subtle shadow-xs bg-light bg-opacity-50">
-                        <div class="card-body d-flex flex-column p-3">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <span class="badge bg-info-subtle text-dark border border-info">
-                                    <i class="fa-solid fa-fingerprint me-1 text-info"></i>Device Punches
-                                </span>
-                                <span class="badge bg-secondary-subtle text-secondary small">
-                                    {{ number_format($totalLogsCount ?? 0) }} punches
-                                </span>
-                            </div>
-                            <h6 class="fw-bold text-dark mb-2">Clear Device Punch Logs Only</h6>
-                            <p class="small text-muted mb-3 flex-grow-1">
-                                Wipes raw biometric punch logs (<code>device_attendance_logs</code>) received from ZKTeco. Keeps existing employee attendance sheets untouched.
-                            </p>
-                            <button type="button" class="btn btn-outline-info btn-sm w-100 fw-semibold"
-                                    data-bs-toggle="modal" data-bs-target="#clearDeviceLogsModal">
-                                <i class="fa-solid fa-fingerprint me-1"></i>Clear Device Logs
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Option 3: Complete Master Wipe (Both) --}}
-                <div class="col-md-4">
-                    <div class="card h-100 border border-danger-subtle shadow-xs bg-danger-subtle bg-opacity-25">
-                        <div class="card-body d-flex flex-column p-3">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <span class="badge bg-danger text-white">
-                                    <i class="fa-solid fa-radiation me-1"></i>Master Wipe
-                                </span>
-                                <span class="badge bg-danger-subtle text-danger border border-danger small">
-                                    {{ number_format(($totalAttendanceCount ?? 0) + ($totalLogsCount ?? 0)) }} total
-                                </span>
-                            </div>
-                            <h6 class="fw-bold text-danger mb-2">Complete Master Wipe (All Data)</h6>
-                            <p class="small text-muted mb-3 flex-grow-1">
-                                Completely wipes <strong>BOTH</strong> processed attendance and raw biometric device punch logs. Clean slate to start uploads and sync from scratch.
-                            </p>
-                            <button type="button" class="btn btn-danger btn-sm w-100 fw-bold shadow-xs"
-                                    data-bs-toggle="modal" data-bs-target="#clearMasterModal">
-                                <i class="fa-solid fa-trash-can me-1"></i>Master Wipe (Start Fresh)
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    </div>
 
 
     {{-- ══════════════════════════════════════════════════════════════ --}}
@@ -471,9 +368,18 @@
             <h6 class="mb-0 fw-bold text-dark">
                 <i class="fa-solid fa-list me-2 text-primary"></i>Raw Punch Records (ZKTeco Biometrics)
             </h6>
-            <span class="badge bg-primary-subtle text-primary border border-primary px-2 py-1">
-                {{ $logs->total() }} records found
-            </span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary-subtle text-primary border border-primary px-2 py-1">
+                    {{ $logs->total() }} records found
+                </span>
+                @if(isset($totalLogsCount) && $totalLogsCount > 0)
+                <button type="button" class="btn btn-outline-danger btn-sm shadow-xs py-1"
+                        data-bs-toggle="modal" data-bs-target="#clearDeviceLogsModal"
+                        title="Purge raw biometric device punch logs only (employee attendance records remain safe)">
+                    <i class="fa-solid fa-eraser me-1"></i>Clear Device Punches
+                </button>
+                @endif
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -600,57 +506,13 @@
 
 </div>
 
-{{-- ══════════════════════════════════════════════════════════════ --}}
-{{-- MODALS FOR ATTENDANCE & BIOMETRIC DATA RESET               --}}
-{{-- ══════════════════════════════════════════════════════════════ --}}
-
-{{-- Modal 1: Clear Attendance Records Only --}}
-<div class="modal fade" id="clearAttendanceModal" tabindex="-1" aria-labelledby="clearAttendanceModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-warning-subtle text-dark border-bottom">
-                <h5 class="modal-title fw-bold" id="clearAttendanceModalLabel">
-                    <i class="fa-solid fa-eraser text-warning me-2"></i>Clear Attendance Records Table
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form action="{{ route('admin.attendance.clear-history') }}" method="POST">
-                @csrf
-                <input type="hidden" name="clear_type" value="attendance">
-                <div class="modal-body p-4">
-                    <div class="alert alert-warning d-flex align-items-center mb-3">
-                        <i class="fa-solid fa-triangle-exclamation fs-4 me-3"></i>
-                        <div class="small">
-                            This will delete all <strong>{{ number_format($totalAttendanceCount ?? 0) }}</strong> employee attendance records currently stored in the <code>attendances</code> table.
-                        </div>
-                    </div>
-                    <p class="text-muted small mb-3">
-                        <strong>What happens:</strong>
-                        <ul class="small text-muted mb-0">
-                            <li>All daily attendance cards, hours, late arrivals, and statuses will be cleared.</li>
-                            <li><strong>Raw biometric punch logs are preserved</strong>, allowing you to re-sync attendance later if needed.</li>
-                            <li>This action is logged in the system audit trail.</li>
-                        </ul>
-                    </p>
-                </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-warning btn-sm fw-semibold">
-                        <i class="fa-solid fa-eraser me-1"></i>Yes, Clear Attendance Records
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-{{-- Modal 2: Clear Device Punch Logs Only --}}
+{{-- Modal: Clear Device Punch Logs Only (Raw punches, attendance records are untouched) --}}
 <div class="modal fade" id="clearDeviceLogsModal" tabindex="-1" aria-labelledby="clearDeviceLogsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-info-subtle text-dark border-bottom">
+            <div class="modal-header bg-danger-subtle text-danger border-bottom">
                 <h5 class="modal-title fw-bold" id="clearDeviceLogsModalLabel">
-                    <i class="fa-solid fa-fingerprint text-info me-2"></i>Clear Device Punch Logs
+                    <i class="fa-solid fa-eraser text-danger me-2"></i>Clear Raw Device Punch Logs
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -658,69 +520,21 @@
                 @csrf
                 <input type="hidden" name="clear_type" value="device_logs">
                 <div class="modal-body p-4">
-                    <div class="alert alert-info d-flex align-items-center mb-3">
-                        <i class="fa-solid fa-circle-info fs-4 me-3"></i>
+                    <div class="alert alert-warning d-flex align-items-center mb-3">
+                        <i class="fa-solid fa-triangle-exclamation fs-4 me-3"></i>
                         <div class="small">
-                            This will delete all <strong>{{ number_format($totalLogsCount ?? 0) }}</strong> raw biometric punch records in <code>device_attendance_logs</code>.
+                            This will clear all <strong>{{ number_format($totalLogsCount ?? 0) }}</strong> raw biometric punch logs in <code>device_attendance_logs</code>.
                         </div>
                     </div>
-                    <p class="text-muted small mb-3">
-                        <strong>What happens:</strong>
-                        <ul class="small text-muted mb-0">
-                            <li>Raw punch records pushed by ZKTeco hardware devices will be removed.</li>
-                            <li><strong>Existing employee attendance sheets remain untouched.</strong></li>
-                            <li>This action is logged in the system audit trail.</li>
-                        </ul>
-                    </p>
-                </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-info btn-sm fw-semibold text-white">
-                        <i class="fa-solid fa-fingerprint me-1"></i>Yes, Clear Device Punches
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-{{-- Modal 3: Complete Master Wipe (Both) --}}
-<div class="modal fade" id="clearMasterModal" tabindex="-1" aria-labelledby="clearMasterModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title fw-bold" id="clearMasterModalLabel">
-                    <i class="fa-solid fa-triangle-exclamation me-2"></i>Master Wipe: Clear All Attendance &amp; Biometrics
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form action="{{ route('admin.attendance.clear-history') }}" method="POST">
-                @csrf
-                <input type="hidden" name="clear_type" value="all">
-                <div class="modal-body p-4">
-                    <div class="alert alert-danger d-flex align-items-center mb-3">
-                        <i class="fa-solid fa-radiation fs-3 me-3"></i>
-                        <div>
-                            <strong>DANGER: IRREVERSIBLE OPERATION</strong>
-                            <div class="small">
-                                This will permanently purge both <strong>{{ number_format($totalAttendanceCount ?? 0) }}</strong> attendance records and <strong>{{ number_format($totalLogsCount ?? 0) }}</strong> raw device punches.
-                            </div>
-                        </div>
-                    </div>
-                    <p class="text-dark small mb-3">
-                        Use this option only when resetting the entire attendance module to start completely from scratch.
-                    </p>
-                    <div class="form-check p-2 bg-light rounded border mb-2">
-                        <input class="form-check-input ms-0 me-2" type="checkbox" id="confirmWipeCheck" required>
-                        <label class="form-check-label small fw-semibold text-danger" for="confirmWipeCheck">
-                            I understand this will permanently delete all attendance data.
-                        </label>
+                    <div class="p-3 bg-success-subtle text-success-emphasis rounded-3 border border-success-subtle small mb-3">
+                        <i class="fa-solid fa-shield-check me-1 text-success"></i>
+                        <strong>Protected:</strong> Processed employee attendance records (<code>attendances</code> table) will <strong>NOT</strong> be deleted.
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger btn-sm fw-bold">
-                        <i class="fa-solid fa-trash-can me-1"></i>Yes, Perform Master Wipe
+                    <button type="submit" class="btn btn-danger btn-sm fw-semibold">
+                        <i class="fa-solid fa-eraser me-1"></i>Yes, Clear Device Punches
                     </button>
                 </div>
             </form>

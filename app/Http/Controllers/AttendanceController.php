@@ -1475,40 +1475,35 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Clear attendance records & raw device logs (Restricted strictly to Admin & Global Admin).
+     * Clear raw biometric device logs (Restricted strictly to Admin & Global Admin).
+     * Note: Employee attendance records (attendances table) are permanently protected and cannot be deleted.
      */
     public function clearHistory(Request $request)
     {
         if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'global_admin'])) {
-            abort(403, 'Unauthorized access. Only Global Admin and Admin roles can clear attendance and device records.');
+            abort(403, 'Unauthorized access. Only Global Admin and Admin roles can perform maintenance.');
         }
 
-        $clearType = $request->input('clear_type', 'all');
-        $desc = '';
-        $msg = '';
+        $clearType = $request->input('clear_type');
 
-        if ($clearType === 'attendance') {
-            Attendance::truncate();
-            $desc = 'Employee Attendance records table';
-            $msg = 'All employee attendance records have been cleared successfully. Raw device punch logs were preserved.';
-        } elseif ($clearType === 'device_logs') {
-            DeviceAttendanceLog::truncate();
-            $desc = 'Raw Biometric Device punch logs table';
-            $msg = 'All raw biometric device punch logs have been cleared successfully. Employee attendance records were preserved.';
-        } else {
-            Attendance::truncate();
-            DeviceAttendanceLog::truncate();
-            $desc = 'Complete Master Wipe: All Attendance records and Biometric Device punch logs';
-            $msg = 'All attendance records and raw biometric logs have been completely wiped. You can start fresh.';
+        // Attendance records are strictly protected from deletion
+        if ($clearType === 'attendance' || $clearType === 'all') {
+            return redirect()->route('admin.attendance.device-logs')
+                ->with('error', 'Deleting employee attendance records has been permanently disabled to protect business records.');
         }
 
-        ActivityLog::log(
-            'deleted',
-            "Biometric/Attendance Reset: {$desc} wiped by " . (auth()->user()->name ?? 'Admin'),
-            'Attendance & Biometrics'
-        );
+        if ($clearType === 'device_logs') {
+            DeviceAttendanceLog::truncate();
+            ActivityLog::log(
+                'deleted',
+                'Raw Biometric Device punch logs table wiped by ' . (auth()->user()->name ?? 'Admin'),
+                'Attendance & Biometrics'
+            );
+            return redirect()->route('admin.attendance.device-logs')
+                ->with('success', 'Raw biometric punch logs cleared successfully. All employee attendance records remain safe.');
+        }
 
-        return redirect()->route('admin.attendance.device-logs')->with('success', $msg);
+        return redirect()->route('admin.attendance.device-logs');
     }
 
     /**
