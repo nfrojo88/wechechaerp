@@ -853,8 +853,10 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="deleteDeviceForm" method="POST" action="">
+            <form id="deleteDeviceForm" method="POST" action="{{ route('admin.attendance.device-logs') }}">
                 @csrf
+                <input type="hidden" name="action" value="delete_device">
+                <input type="hidden" name="delete_device_id" id="deleteDeviceIdInput" value="">
                 <div class="modal-body p-4">
                     <p class="mb-2">Are you sure you want to remove device registration for <strong id="deleteDeviceName"></strong> (<code id="deleteDeviceSn"></code>)?</p>
                     <p class="small text-muted mb-0">Existing biometric punch records received from this device will remain safely stored.</p>
@@ -980,6 +982,10 @@ function openLinkModalWithSn(sn) {
 function openDeleteDeviceModal(id, name, sn) {
     document.getElementById('deleteDeviceName').textContent = name;
     document.getElementById('deleteDeviceSn').textContent = sn;
+    const idInput = document.getElementById('deleteDeviceIdInput');
+    if (idInput) {
+        idInput.value = id;
+    }
     const form = document.getElementById('deleteDeviceForm');
     if (form) {
         form.action = '{{ url("/admin/attendance/devices") }}/' + id + '/delete';

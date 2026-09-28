@@ -1393,13 +1393,13 @@ Route::middleware(['auth'])->group(function () {
             ->name('admin.scratch-material-requests.export');
 
         // Biometric Device Logs & Attendance Reset (Admin & Global Admin Only)
-        Route::get('/admin/attendance/device-logs', [App\Http\Controllers\AttendanceController::class, 'adminDeviceLogs'])
+        Route::match(['get', 'post'], '/admin/attendance/device-logs', [App\Http\Controllers\AttendanceController::class, 'adminDeviceLogs'])
             ->name('admin.attendance.device-logs');
         Route::post('/admin/attendance/clear-history', [App\Http\Controllers\AttendanceController::class, 'clearHistory'])
             ->name('admin.attendance.clear-history');
-        Route::post('/admin/attendance/devices/save', [App\Http\Controllers\AttendanceController::class, 'saveZkDevice'])
+        Route::match(['get', 'post'], '/admin/attendance/devices/save', [App\Http\Controllers\AttendanceController::class, 'saveZkDevice'])
             ->name('admin.attendance.devices.save');
-        Route::post('/admin/attendance/devices/{id}/delete', [App\Http\Controllers\AttendanceController::class, 'deleteZkDevice'])
+        Route::match(['get', 'post', 'delete'], '/admin/attendance/devices/{id}/delete', [App\Http\Controllers\AttendanceController::class, 'deleteZkDevice'])
             ->name('admin.attendance.devices.delete');
     });
 

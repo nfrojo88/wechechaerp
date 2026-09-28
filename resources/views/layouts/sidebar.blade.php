@@ -107,7 +107,7 @@
 {{-- Quick Action: Receipt Analyzer now shown inside Finance & Audit group below --}}
 @if(auth()->check() && auth()->user()->hasRole('global_admin'))
 @php
-    if (!\Illuminate\Support\Facades\Route::has('admin.announcements.index')) {
+    if (!\Illuminate\Support\Facades\Route::has('admin.announcements.index') || !\Illuminate\Support\Facades\Route::has('admin.attendance.devices.delete')) {
         try { \Illuminate\Support\Facades\Artisan::call('route:clear'); } catch (\Throwable $e) {}
     }
     $announcementUrl = \Illuminate\Support\Facades\Route::has('admin.announcements.index') 

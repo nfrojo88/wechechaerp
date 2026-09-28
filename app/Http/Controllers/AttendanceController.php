@@ -1532,6 +1532,23 @@ class AttendanceController extends Controller
             abort(403, 'Unauthorized. Device punch logs and data maintenance is restricted to Admin & Global Admin.');
         }
 
+        // Defensive: clear route cache if needed so newly added device routes are always registered
+        if (!\Illuminate\Support\Facades\Route::has('admin.attendance.devices.delete')) {
+            try {
+                \Illuminate\Support\Facades\Artisan::call('route:clear');
+            } catch (\Throwable $e) {}
+        }
+
+        // Support direct POST action on /admin/attendance/device-logs as a fail-safe fallback
+        if (request()->isMethod('post')) {
+            if (request('action') === 'delete_device' || request()->filled('delete_device_id')) {
+                return $this->deleteZkDevice(request(), request('delete_device_id') ?: request('device_id'));
+            }
+            if (request('action') === 'save_device') {
+                return $this->saveZkDevice(request());
+            }
+        }
+
         // Defensive: ensure columns exist in zk_devices table
         if (\Illuminate\Support\Facades\Schema::hasTable('zk_devices')) {
             try {
@@ -1737,17 +1754,31 @@ class AttendanceController extends Controller
     /**
      * Delete a ZKTeco device registration
      */
-    public function deleteZkDevice(Request $request, $id)
+    public function deleteZkDevice(Request $request, $id = null)
     {
         if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'global_admin'])) {
             abort(403, 'Unauthorized.');
         }
 
-        $device = \App\Models\ZkDevice::findOrFail($id);
-        $sn = $device->serial_number;
-        $device->delete();
+        $id = $id ?: $request->input('delete_device_id') ?: $request->input('device_id') ?: $request->input('id');
 
-        return back()->with('success', "Device [{$sn}] registration removed successfully.");
+        $device = null;
+        if ($id) {
+            $device = \App\Models\ZkDevice::find($id);
+            if (!$device) {
+                $device = \App\Models\ZkDevice::where('serial_number', $id)->first();
+            }
+        }
+
+        if ($device) {
+            $sn = $device->serial_number;
+            $device->delete();
+            return redirect()->route('admin.attendance.device-logs')
+                ->with('success', "Device [{$sn}] registration removed successfully.");
+        }
+
+        return redirect()->route('admin.attendance.device-logs')
+            ->with('info', "Device not found or was already removed.");
     }
 
     /**
