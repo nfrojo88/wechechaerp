@@ -31,19 +31,20 @@
   .page-header-row p.text-muted { font-size: 11.5px !important; }
 
   /* ── Dashboard Header (dash-header) ── */
-  .dash-header { padding: 16px 16px 14px !important; border-radius: 12px !important; margin-bottom: 16px !important; }
+  .dash-header { padding: 14px 14px 12px !important; border-radius: 12px !important; margin-bottom: 14px !important; width: 100% !important; box-sizing: border-box !important; }
   .dash-header h4 { font-size: 1rem !important; }
   .dash-header p  { font-size: 0.78rem !important; }
-  .dash-header .d-flex.gap-2 { gap: 6px !important; flex-wrap: wrap; }
-  .dash-header .btn-sm { font-size: 11.5px !important; padding: 5px 10px !important; }
+  .dash-header .d-flex.gap-2 { gap: 6px !important; flex-wrap: wrap !important; width: 100% !important; }
+  .dash-header .btn-sm { font-size: 11.5px !important; padding: 6px 10px !important; flex-grow: 1; text-align: center; }
 
   /* ── Financial strip: 2 column grid on mobile ── */
-  .fin-strip { padding: 14px 14px !important; border-radius: 12px !important; margin-bottom: 16px !important; }
-  .fin-strip .row.g-0 > [class*="col-6"] { padding: 8px 10px !important; }
-  .fin-strip .fin-item { border-right: none !important; border-bottom: 1px solid rgba(255,255,255,.14) !important; padding: 6px 0 !important; }
+  .fin-strip { padding: 12px 10px !important; border-radius: 12px !important; margin-bottom: 14px !important; width: 100% !important; box-sizing: border-box !important; }
+  .fin-strip .row.g-0 { width: 100% !important; margin: 0 !important; }
+  .fin-strip .row.g-0 > [class*="col-6"] { padding: 6px 8px !important; box-sizing: border-box !important; }
+  .fin-strip .fin-item { border-right: none !important; border-bottom: 1px solid rgba(255,255,255,.14) !important; padding: 6px 4px !important; }
   .fin-strip .fin-item:nth-child(odd) { border-right: 1px solid rgba(255,255,255,.14) !important; }
   .fin-strip .fin-item:last-child { border-bottom: none !important; }
-  .fin-value { font-size: 1.1rem !important; }
+  .fin-value { font-size: 1.05rem !important; word-break: break-all; }
   .fin-label { font-size: 0.62rem !important; }
   .fin-sub   { font-size: 0.68rem !important; }
 

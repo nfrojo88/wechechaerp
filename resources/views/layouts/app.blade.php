@@ -67,9 +67,12 @@ html, body {
   background: var(--gray-100);
   color: var(--gray-800);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  max-width: 100%;
+  width: 100%;
 }
 /* App Shell */
-.app-shell { display: flex; min-height: 100vh; }
+.app-shell { display: flex; min-height: 100vh; width: 100%; max-width: 100%; }
 /* Sidebar */
 .sidebar {
   width: var(--sidebar-width);
@@ -415,6 +418,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   transition: opacity .25s ease;
 }
 .sidebar-backdrop.active { display: block; }
+body.sidebar-open { overflow-y: hidden !important; }
 
 /* Scrollable table wrapper auto-applied on mobile */
 .table-responsive-mobile { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -446,37 +450,84 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 /* ── MD / Tablet (≤768px) ── */
 @media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+    width: 100% !important;
+    position: relative;
+  }
+  .app-shell {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
   /* Sidebar becomes off-canvas drawer */
   .sidebar {
-    transform: translateX(-100%);
-    width: var(--sidebar-width) !important;
-    z-index: 1050;
-    transition: transform .28s cubic-bezier(.4,0,.2,1);
-    box-shadow: none;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 280px !important;
+    max-width: 82vw !important;
+    transform: translateX(-100%) !important;
+    visibility: hidden !important;
+    z-index: 1050 !important;
+    transition: transform .28s cubic-bezier(.4,0,.2,1), visibility .28s !important;
+    box-shadow: none !important;
   }
   .sidebar.mobile-open {
-    transform: translateX(0);
-    box-shadow: 8px 0 32px rgba(0,0,0,.35);
+    transform: translateX(0) !important;
+    visibility: visible !important;
+    box-shadow: 8px 0 32px rgba(0,0,0,.35) !important;
   }
-  .sidebar.collapsed { width: var(--sidebar-width) !important; }
+  .sidebar.collapsed { width: 280px !important; }
   /* Desktop collapse toggle hidden on mobile */
   .sidebar-toggle-btn { display: none !important; }
 
   /* Main content fills full width */
-  .main-content { margin-left: 0 !important; }
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+  .sidebar.collapsed ~ .main-content { margin-left: 0 !important; }
 
   /* Top header */
   .top-header {
-    padding: 0 12px;
-    height: 56px;
+    padding: 0 10px !important;
+    height: 54px;
     gap: 6px;
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+    overflow: hidden;
   }
-  .header-actions { gap: 4px; }
-  .header-icon-btn { width: 34px; height: 34px; }
-  .header-user-btn { padding: 4px 6px; }
+  .header-actions { gap: 4px; flex-shrink: 0; }
+  .header-icon-btn { width: 34px; height: 34px; flex-shrink: 0; }
+  .header-user-btn { padding: 4px 6px; flex-shrink: 0; }
+  #headerRoleButton {
+    padding: 4px 8px !important;
+    font-size: 11.5px !important;
+  }
+  #headerRoleButton .badge.bg-primary {
+    max-width: 75px !important;
+  }
 
   /* Content wrapper */
-  .content-wrapper { padding: 16px 12px 80px; }
+  .content-wrapper {
+    padding: 16px 12px 80px;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .container-fluid.px-4 { padding-left: 12px !important; padding-right: 12px !important; }
+  .container-fluid.py-4 { padding-top: 14px !important; padding-bottom: 20px !important; }
 
   /* Page titles */
   .page-title { font-size: 17px; }
@@ -553,13 +604,23 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 /* ── SM / Small Phone (≤576px) ── */
 @media (max-width: 576px) {
   /* Header: slim on tiny screens */
-  .top-header { height: 52px; padding: 0 10px; }
+  .top-header { height: 50px; padding: 0 8px !important; }
   .header-user-name { display: none !important; }
   /* Role badge in header: shorten */
-  .btn[id="headerRoleButton"] .badge { max-width: 80px !important; }
+  #headerRoleButton {
+    padding: 3px 6px !important;
+    font-size: 11px !important;
+  }
+  #headerRoleButton .badge.bg-primary {
+    max-width: 62px !important;
+    font-size: 9.5px !important;
+  }
+  #headerRoleButton .badge.bg-light {
+    display: none !important;
+  }
 
   /* Content wrapper: tighter */
-  .content-wrapper { padding: 12px 10px 80px; }
+  .content-wrapper { padding: 12px 8px 80px; }
 
   /* Row gutters: tighten on tiny screens */
   .row { --bs-gutter-x: 0.5rem; }
@@ -605,9 +666,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 /* ── XS / Tiny Phone (≤400px) ── */
 @media (max-width: 400px) {
-  :root { --sidebar-width: 100vw; }
-  .top-header { height: 50px; padding: 0 8px; }
-  .content-wrapper { padding: 10px 8px 80px; }
+  .top-header { height: 48px; padding: 0 6px !important; }
+  #headerRoleButton .badge.bg-primary { max-width: 45px !important; }
+  .content-wrapper { padding: 10px 6px 80px; }
   .card-body { padding: 10px !important; }
   .btn { font-size: 12px; padding: 7px 10px; }
   .btn-sm { font-size: 11px; padding: 5px 8px; }
@@ -661,13 +722,13 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
         <div class="main-content">
             <header class="top-header">
-                <div class="d-flex align-items-center gap-3">
-                    <button class="header-icon-btn d-md-none" id="mobileSidebarToggle">
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                    <button class="header-icon-btn d-md-none" id="mobileSidebarToggle" aria-label="Toggle navigation">
                         <i class="fa-solid fa-bars"></i>
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 shadow-sm px-2.5 py-1 rounded-3" id="dynamicGlobalBackBtn" onclick="dynamicGoBack()" title="Go Back">
+                    <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1 shadow-sm px-2 py-1 rounded-3" id="dynamicGlobalBackBtn" onclick="dynamicGoBack()" title="Go Back">
                         <i class="fa-solid fa-arrow-left"></i>
-                        <span class="d-none d-sm-inline fs-7 fw-medium">Back</span>
+                        <span class="d-none d-md-inline fs-7 fw-medium">Back</span>
                     </button>
                     <nav aria-label="breadcrumb" class="d-none d-sm-block">
                         <ol class="breadcrumb mb-0">
@@ -723,7 +784,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                     @endif
 
                     @if(auth()->user() && auth()->user()->hasRole(['store_keeper', 'site_engineer']))
-                        <span class="badge bg-secondary me-2">Store: {{ auth()->user()->store_id ?? 'None' }}</span>
+                        <span class="badge bg-secondary me-1 d-none d-sm-inline">Store: {{ auth()->user()->store_id ?? 'None' }}</span>
+                        <span class="badge bg-secondary me-1 d-inline d-sm-none" title="Store {{ auth()->user()->store_id }}">S{{ auth()->user()->store_id ?? '-' }}</span>
                     @endif
                     
                     <div class="dropdown">
@@ -978,19 +1040,19 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                 @endphp
 
                 @if($activeAnnouncement)
-                    <div class="alert alert-warning border-0 shadow-sm rounded-3 mb-3 mx-4 d-flex align-items-center justify-content-between gap-3 bg-gradient" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 5px solid #f59e0b !important;" role="alert">
-                        <div class="d-flex align-items-center gap-3">
-                            <div class="bg-warning text-dark p-2.5 rounded-circle shadow-xs flex-shrink-0">
-                                <i class="fa-solid fa-bullhorn fs-5"></i>
+                    <div class="alert alert-warning border-0 shadow-sm rounded-3 mb-3 mx-1 mx-sm-3 d-flex align-items-start justify-content-between gap-2 gap-sm-3 bg-gradient" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 5px solid #f59e0b !important;" role="alert">
+                        <div class="d-flex align-items-start gap-2 gap-sm-3 flex-grow-1" style="min-width: 0;">
+                            <div class="bg-warning text-dark p-2 rounded-circle shadow-xs flex-shrink-0 mt-1" style="width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
+                                <i class="fa-solid fa-bullhorn fs-6"></i>
                             </div>
-                            <div>
-                                <strong class="d-block text-dark fw-bold" style="font-size: 0.95rem;">
+                            <div class="flex-grow-1 text-break" style="min-width: 0; overflow-wrap: anywhere; word-break: break-word;">
+                                <strong class="d-block text-dark fw-bold" style="font-size: 0.9rem; line-height: 1.35;">
                                     {{ $activeAnnouncement->title }}
                                 </strong>
-                                <div class="text-dark small" style="line-height: 1.45; white-space: pre-wrap;">{{ $activeAnnouncement->message }}</div>
+                                <div class="text-dark small mt-1" style="line-height: 1.45; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere;">{{ $activeAnnouncement->message }}</div>
                             </div>
                         </div>
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close" title="Dismiss announcement"></button>
+                        <button type="button" class="btn-close flex-shrink-0 ms-1" data-bs-dismiss="alert" aria-label="Close" title="Dismiss announcement"></button>
                     </div>
                 @endif
 
@@ -1074,14 +1136,14 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         function openMobileSidebar() {
             $('#sidebar').addClass('mobile-open');
             $('#sidebarBackdrop').addClass('active');
-            $('body').css('overflow', 'hidden'); // prevent scroll-behind
+            $('body').addClass('sidebar-open');
         }
 
         /* ── Mobile sidebar close ── */
         function closeMobileSidebar() {
             $('#sidebar').removeClass('mobile-open');
             $('#sidebarBackdrop').removeClass('active');
-            $('body').css('overflow', '');
+            $('body').removeClass('sidebar-open');
         }
 
         $('#mobileSidebarToggle').on('click', openMobileSidebar);

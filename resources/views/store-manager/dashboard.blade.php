@@ -1,12 +1,9 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'Store Manager Dashboard')
 
 @section('content')
 @push('styles')
-@include('layouts._store_mobile')
-@endpush
-
 <style>
 /* ── Premium dashboard shell ─────────────────────────────────── */
 .dash-header {
@@ -77,11 +74,13 @@
 }
 .qa-btn:hover { transform: translateY(-1px); }
 </style>
+@include('layouts._store_mobile')
+@endpush
 
 {{-- ── Header ────────────────────────────────────────────────── --}}
 <div class="dash-header">
     <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
-        <div>
+        <div class="mb-2 mb-md-0">
             <h4><i class="fas fa-warehouse me-2"></i>Store Manager Dashboard</h4>
             <p>Real-time inventory values, stock movements, and financial summary</p>
         </div>
@@ -90,11 +89,11 @@
                 <i class="fa-solid fa-boxes-stacked me-1"></i> Material Catalog
             </a>
             <a href="{{ route('store-manager.store-keepers.index') }}" class="btn btn-info text-white btn-sm fw-semibold px-3" style="border-radius:8px;">
-                <i class="fa-solid fa-users-gear me-1"></i> Assign Store Keepers
+                <i class="fa-solid fa-users-gear me-1"></i> Store Keepers
             </a>
             @if(auth()->user()->can('inventory.edit') || auth()->user()->hasAnyRole(['admin', 'global_admin', 'store_manager', 'store_keeper']))
             <a href="{{ route('inventory.bulk-adjust') }}" class="btn btn-warning btn-sm fw-semibold px-3" style="border-radius:8px;">
-                <i class="fa-solid fa-sliders me-1"></i> Manual Adjustment
+                <i class="fa-solid fa-sliders me-1"></i> Adjustment
             </a>
             @endif
             <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-light btn-sm px-3" style="border-radius:8px;">
@@ -155,7 +154,7 @@
 
 {{-- ── KPI Count Cards ───────────────────────────────────────── --}}
 <div class="row g-3 mb-4">
-    <div class="col-6 col-md-2">
+    <div class="col-6 col-md-4 col-lg-2">
         <a href="{{ route('products.index') }}" class="text-decoration-none">
             <div class="kpi-card card h-100 p-3" style="border-left: 4px solid #2563eb;">
                 <div class="d-flex align-items-center gap-2">
