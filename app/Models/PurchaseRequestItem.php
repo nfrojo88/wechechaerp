@@ -8,7 +8,7 @@ class PurchaseRequestItem extends Model
 {
     protected $fillable = [
         'purchase_request_id', 'product_id', 'quantity', 'purchased_quantity', 'received_quantity', 'unit',
-        'specifications', 'estimated_unit_cost',
+        'specifications', 'estimated_unit_cost', 'payment_method',
     ];
 
     protected $casts = [

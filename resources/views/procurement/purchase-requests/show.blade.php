@@ -602,28 +602,178 @@
                     <!-- STAGE 6: GM Decision -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
                         <div class="mb-3">
-                            <h6 class="fw-bold text-dark mb-1">
-                                <i class="fas fa-gavel text-danger me-1"></i> General Manager Decision
-                            </h6>
-                            <p class="small text-muted mb-2">Select approval type (Pay & Buy or Buy with Credit), send back for revision, or reject this Purchase Request.</p>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <h6 class="fw-bold text-dark mb-0">
+                                    <i class="fas fa-gavel text-danger me-1"></i> General Manager Decision
+                                </h6>
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 small">
+                                    <i class="fas fa-bolt me-1"></i>Action Required
+                                </span>
+                            </div>
+                            <p class="small text-muted mb-0">
+                                Select approval type (<strong>Pay to Finance</strong> or <strong>Buy with Credit</strong>), customize per-item payment methods, or send back for revision.
+                            </p>
                         </div>
 
-                        <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.gm-decide') ? route('purchase-requests.gm-decide', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/gm-decide') }}" method="POST">
+                        <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.gm-decide') ? route('purchase-requests.gm-decide', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/gm-decide') }}" method="POST" id="gmDecisionForm">
                             @csrf
+                            <input type="hidden" name="decision" id="gmDecisionHidden" value="pay_and_buy">
                             <input type="hidden" name="payment_method" id="gmPaymentMethodHidden" value="pay_and_buy">
 
+                            <!-- Prominent Approval Selection Cards -->
                             <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-dark">
-                                    Select Decision / Approval Type <span class="text-danger">*</span>
+                                <label class="form-label small fw-bold text-uppercase text-dark d-block mb-2">
+                                    Select Approval Type <span class="text-danger">*</span>
                                 </label>
-                                <select name="decision" class="form-select form-select-sm fw-semibold" id="gmDecisionSelect" required onchange="handleGmDecisionChange(this)">
-                                    <option value="">-- Choose Decision --</option>
-                                    <option value="pay_and_buy" class="text-success fw-bold">✓ Approve: Pay & Buy (Cash / Bank Disbursement)</option>
-                                    <option value="buy_by_credit" class="text-primary fw-bold">💳 Approve: Buy with Credit (Supplier Credit Line)</option>
-                                    <option value="send_back" class="text-warning">↩ Send Back to PM (Need Revision)</option>
-                                    <option value="reject" class="text-danger">✗ Reject Purchase Request</option>
-                                </select>
+                                <div class="row g-2">
+                                    <!-- Option 1: Send to Pay to Finance -->
+                                    <div class="col-12 col-sm-6">
+                                        <div class="card h-100 cursor-pointer gm-decision-card border-2 shadow-xs transition-all position-relative" 
+                                             id="gmCardPayFinance" onclick="selectGmMainDecision('pay_and_buy')"
+                                             style="cursor: pointer; border-color: #198754; background-color: rgba(25, 135, 84, 0.05); transition: all 0.2s ease;">
+                                            <div class="card-body p-2 p-md-3">
+                                                <div class="d-flex align-items-start gap-2">
+                                                    <div class="p-2 rounded-3 bg-success text-white flex-shrink-0" style="width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;">
+                                                        <i class="fas fa-money-bill-wave fa-lg"></i>
+                                                    </div>
+                                                    <div class="flex-grow-1 min-w-0">
+                                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                                            <strong class="text-dark d-block text-truncate" style="font-size: 13px;">Pay to Finance</strong>
+                                                            <input class="form-check-input gm-decision-radio m-0" type="radio" name="gm_mode_selector" id="gmRadioPayFinance" value="pay_and_buy" checked>
+                                                        </div>
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 9px;">
+                                                            Finance Disbursement
+                                                        </span>
+                                                        <p class="text-muted small mb-0 mt-1" style="font-size: 11px; line-height: 1.25;">
+                                                            Routes to Finance Head to disburse cash/bank payment.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Option 2: Buy with Credit -->
+                                    <div class="col-12 col-sm-6">
+                                        <div class="card h-100 cursor-pointer gm-decision-card border shadow-xs transition-all position-relative" 
+                                             id="gmCardBuyCredit" onclick="selectGmMainDecision('buy_by_credit')"
+                                             style="cursor: pointer; border-color: #dee2e6; background-color: #ffffff; transition: all 0.2s ease;">
+                                            <div class="card-body p-2 p-md-3">
+                                                <div class="d-flex align-items-start gap-2">
+                                                    <div class="p-2 rounded-3 bg-primary text-white flex-shrink-0" style="width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;">
+                                                        <i class="fas fa-credit-card fa-lg"></i>
+                                                    </div>
+                                                    <div class="flex-grow-1 min-w-0">
+                                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                                            <strong class="text-dark d-block text-truncate" style="font-size: 13px;">Buy with Credit</strong>
+                                                            <input class="form-check-input gm-decision-radio m-0" type="radio" name="gm_mode_selector" id="gmRadioBuyCredit" value="buy_by_credit">
+                                                        </div>
+                                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 9px;">
+                                                            COA 5110 Credit
+                                                        </span>
+                                                        <p class="text-muted small mb-0 mt-1" style="font-size: 11px; line-height: 1.25;">
+                                                            Auto-books to Credit Ledger &amp; routes to Store Keeper.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+
+                            <!-- Granular Per-Item Payment Method Allocation -->
+                            @if($purchaseRequest->items && $purchaseRequest->items->count() > 0)
+                            <div class="card border rounded mb-3 bg-white shadow-xs overflow-hidden" id="gmItemAllocationCard">
+                                <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center border-bottom">
+                                    <div>
+                                        <span class="small fw-bold text-uppercase text-dark">
+                                            <i class="fas fa-layer-group text-primary me-1"></i> Item Payment Allocation
+                                        </span>
+                                        <span class="badge bg-secondary rounded-pill ms-1" style="font-size: 10px;">{{ $purchaseRequest->items->count() }} Items</span>
+                                    </div>
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-success btn-xs py-0 px-2 fw-semibold" style="font-size: 10px;" onclick="setAllItemPaymentMethods('pay_and_buy')" title="Set all items to Pay to Finance">
+                                            <i class="fas fa-money-bill-wave me-1"></i> All Finance
+                                        </button>
+                                        <button type="button" class="btn btn-outline-primary btn-xs py-0 px-2 fw-semibold" style="font-size: 10px;" onclick="setAllItemPaymentMethods('buy_by_credit')" title="Set all items to Buy with Credit">
+                                            <i class="fas fa-credit-card me-1"></i> All Credit
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="card-body p-0">
+                                    <div class="table-responsive" style="max-height: 240px; overflow-y: auto;">
+                                        <table class="table table-sm table-hover align-middle mb-0" style="font-size: 11.5px;">
+                                            <thead class="table-light text-muted sticky-top">
+                                                <tr>
+                                                    <th class="ps-3 py-1">Item & Quantity</th>
+                                                    <th class="text-end pe-3 py-1">Payment Method</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($purchaseRequest->items as $iIdx => $itm)
+                                                @php
+                                                    $lineTotal = (float)$itm->quantity * (float)($itm->estimated_unit_price ?? $itm->unit_price ?? $itm->estimated_unit_cost ?? 0);
+                                                    $currentMethod = $itm->payment_method ?? 'pay_and_buy';
+                                                @endphp
+                                                <tr class="gm-item-allocation-row" data-item-id="{{ $itm->id }}" data-amount="{{ $lineTotal }}">
+                                                    <td class="ps-3 py-2">
+                                                        <div class="fw-bold text-dark text-truncate" style="max-width: 170px;" title="{{ $itm->item_name ?? $itm->product?->name }}">
+                                                            {{ $itm->item_name ?? $itm->product?->name ?? 'Item #' . ($iIdx + 1) }}
+                                                        </div>
+                                                        <div class="text-muted" style="font-size: 10.5px;">
+                                                            {{ number_format($itm->quantity, 2) }} {{ $itm->unit ?? 'Unit' }}
+                                                            @if($lineTotal > 0)
+                                                                &bull; <span class="fw-semibold text-dark">{{ number_format($lineTotal, 2) }} ETB</span>
+                                                            @endif
+                                                        </div>
+                                                    </td>
+                                                    <td class="text-end pe-3 py-2">
+                                                        <div class="btn-group btn-group-sm" role="group">
+                                                            <input type="radio" class="btn-check gm-item-radio" 
+                                                                   name="item_payment_methods[{{ $itm->id }}]" 
+                                                                   id="item_pay_{{ $itm->id }}" 
+                                                                   value="pay_and_buy" 
+                                                                   autocomplete="off" 
+                                                                   {{ $currentMethod !== 'buy_by_credit' ? 'checked' : '' }}
+                                                                   onchange="onItemPaymentMethodChanged()">
+                                                            <label class="btn btn-outline-success btn-xs py-1 px-2" for="item_pay_{{ $itm->id }}" style="font-size: 10px;">
+                                                                <i class="fas fa-money-bill me-1"></i>Finance
+                                                            </label>
+
+                                                            <input type="radio" class="btn-check gm-item-radio" 
+                                                                   name="item_payment_methods[{{ $itm->id }}]" 
+                                                                   id="item_credit_{{ $itm->id }}" 
+                                                                   value="buy_by_credit" 
+                                                                   autocomplete="off"
+                                                                   {{ $currentMethod === 'buy_by_credit' ? 'checked' : '' }}
+                                                                   onchange="onItemPaymentMethodChanged()">
+                                                            <label class="btn btn-outline-primary btn-xs py-1 px-2" for="item_credit_{{ $itm->id }}" style="font-size: 10px;">
+                                                                <i class="fas fa-credit-card me-1"></i>Credit
+                                                            </label>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div class="p-2 bg-light border-top d-flex justify-content-between align-items-center small">
+                                        <div>
+                                            <span class="text-muted" style="font-size: 11px;">Finance:</span>
+                                            <strong class="text-success ms-1 font-monospace" id="gmFinancePortionBadge">0.00 ETB</strong>
+                                        </div>
+                                        <div>
+                                            <span class="text-muted" style="font-size: 11px;">Credit:</span>
+                                            <strong class="text-primary ms-1 font-monospace" id="gmCreditPortionBadge">0.00 ETB</strong>
+                                        </div>
+                                        <div>
+                                            <span class="badge bg-secondary-subtle text-secondary" id="gmAllocationTypeBadge" style="font-size: 9.5px;">All Finance</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            @endif
 
                             @if($purchaseRequest->proformaInvoices->count() > 0)
                             <div class="mb-3" id="gmProformaSelectionCard">
@@ -632,7 +782,7 @@
                                     <span class="badge bg-primary rounded-pill">{{ $purchaseRequest->proformaInvoices->count() }} Available</span>
                                 </label>
                                 <p class="text-muted small mb-2" style="font-size: 11px;">
-                                    Choose which supplier quotation to approve and pay for:
+                                    Choose which supplier quotation to approve:
                                 </p>
                                 <div class="list-group list-group-flush border rounded overflow-hidden shadow-xs">
                                     @php
@@ -669,12 +819,12 @@
                             @endif
 
                             {{-- Dynamic Explanatory Alerts --}}
-                            <div id="gmDecisionHelpPayBuy" class="alert alert-success py-2 px-3 small border-0 shadow-xs mb-3" style="display: none;">
+                            <div id="gmDecisionHelpPayBuy" class="alert alert-success py-2 px-3 small border-0 shadow-xs mb-3">
                                 <div class="d-flex">
                                     <i class="fas fa-money-bill-wave fa-lg me-2 mt-1 text-success"></i>
                                     <div>
-                                        <strong>Approve (Pay & Buy):</strong>
-                                        <div class="text-muted" style="font-size: 11px;">Routes to <strong>Finance</strong> for payment disbursement and assigning staff to execute payment.</div>
+                                        <strong>Approve (Send to Pay to Finance):</strong>
+                                        <div class="text-muted" style="font-size: 11px;">Routes to <strong>Finance Head</strong> for funding account selection and assigning staff to execute payment disbursement.</div>
                                     </div>
                                 </div>
                             </div>
@@ -684,7 +834,17 @@
                                     <i class="fas fa-credit-card fa-lg me-2 mt-1 text-info"></i>
                                     <div>
                                         <strong>Approve (Buy with Credit):</strong>
-                                        <div class="text-muted" style="font-size: 11px;">Routes to <strong>Finance Head</strong> to authorize the Supplier Credit Line and select the Chart of Account (COA).</div>
+                                        <div class="text-muted" style="font-size: 11px;">Auto-books to <strong>COA 5110 (Cost Of Material By Credit)</strong> &amp; <strong>Credit Store Ledger</strong>, then routes directly to <strong>Store Keeper</strong> for material intake.</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="gmDecisionHelpSplit" class="alert alert-dark py-2 px-3 small border-0 shadow-xs mb-3" style="display: none;">
+                                <div class="d-flex">
+                                    <i class="fas fa-layer-group fa-lg me-2 mt-1 text-warning"></i>
+                                    <div>
+                                        <strong>Approve (Split Allocation):</strong>
+                                        <div class="text-muted" style="font-size: 11px;">Credit portion will be booked to <strong>Credit Store Ledger</strong>, and Finance portion will be sent to <strong>Finance</strong> for payment disbursement.</div>
                                     </div>
                                 </div>
                             </div>
@@ -709,13 +869,23 @@
                                 </div>
                             </div>
 
+                            <!-- Secondary Decisions: Revision & Rejection -->
+                            <div class="d-flex justify-content-between align-items-center gap-2 mb-3 pt-1">
+                                <button type="button" class="btn btn-outline-warning text-dark btn-xs py-1 px-2 w-50 fw-semibold" id="btnGmSecondarySendBack" onclick="selectGmSecondaryDecision('send_back')">
+                                    <i class="fas fa-undo me-1"></i> Send Back to PM
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-xs py-1 px-2 w-50 fw-semibold" id="btnGmSecondaryReject" onclick="selectGmSecondaryDecision('reject')">
+                                    <i class="fas fa-ban me-1"></i> Reject PR
+                                </button>
+                            </div>
+
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-uppercase text-muted">GM Notes / Instructions / Reason</label>
                                 <textarea name="notes" id="gmNotes" class="form-control form-control-sm" rows="2" placeholder="Add specific approval conditions, credit terms, or remarks..."></textarea>
                             </div>
 
-                            <button type="submit" id="btnSubmitGmDecision" class="btn btn-secondary btn-sm w-100 fw-bold shadow-sm py-2">
-                                <i class="fas fa-paper-plane me-1"></i> Submit GM Decision
+                            <button type="submit" id="btnSubmitGmDecision" class="btn btn-success btn-sm w-100 fw-bold shadow-sm py-2">
+                                <i class="fas fa-paper-plane me-1"></i> Approve & Send to Finance (Pay & Buy)
                             </button>
                         </form>
 
@@ -2552,57 +2722,304 @@
 </div>
 
 <script>
-function handleGmDecisionChange(select) {
-    if (!select) return;
-    const val = select.value;
-    const hiddenPay = document.getElementById('gmPaymentMethodHidden');
+function selectGmMainDecision(mode) {
+    const cardPay = document.getElementById('gmCardPayFinance');
+    const cardCredit = document.getElementById('gmCardBuyCredit');
+    const radioPay = document.getElementById('gmRadioPayFinance');
+    const radioCredit = document.getElementById('gmRadioBuyCredit');
+    const hiddenDecision = document.getElementById('gmDecisionHidden');
+    const hiddenPayment = document.getElementById('gmPaymentMethodHidden');
+    const btnSendBack = document.getElementById('btnGmSecondarySendBack');
+    const btnReject = document.getElementById('btnGmSecondaryReject');
+
+    if (btnSendBack) {
+        btnSendBack.classList.remove('active', 'btn-warning');
+        btnSendBack.classList.add('btn-outline-warning');
+    }
+    if (btnReject) {
+        btnReject.classList.remove('active', 'btn-danger');
+        btnReject.classList.add('btn-outline-danger');
+    }
+
+    if (mode === 'buy_by_credit') {
+        if (hiddenDecision) hiddenDecision.value = 'buy_by_credit';
+        if (hiddenPayment) hiddenPayment.value = 'buy_by_credit';
+        if (radioCredit) radioCredit.checked = true;
+        if (radioPay) radioPay.checked = false;
+
+        if (cardCredit) {
+            cardCredit.style.borderColor = '#0d6efd';
+            cardCredit.style.backgroundColor = 'rgba(13, 110, 253, 0.08)';
+            cardCredit.classList.add('border-2');
+        }
+        if (cardPay) {
+            cardPay.style.borderColor = '#dee2e6';
+            cardPay.style.backgroundColor = '#ffffff';
+            cardPay.classList.remove('border-2');
+        }
+
+        // Set all item radios to credit
+        setAllItemPaymentMethods('buy_by_credit', false);
+    } else {
+        if (hiddenDecision) hiddenDecision.value = 'pay_and_buy';
+        if (hiddenPayment) hiddenPayment.value = 'pay_and_buy';
+        if (radioPay) radioPay.checked = true;
+        if (radioCredit) radioCredit.checked = false;
+
+        if (cardPay) {
+            cardPay.style.borderColor = '#198754';
+            cardPay.style.backgroundColor = 'rgba(25, 135, 84, 0.08)';
+            cardPay.classList.add('border-2');
+        }
+        if (cardCredit) {
+            cardCredit.style.borderColor = '#dee2e6';
+            cardCredit.style.backgroundColor = '#ffffff';
+            cardCredit.classList.remove('border-2');
+        }
+
+        // Set all item radios to pay_and_buy
+        setAllItemPaymentMethods('pay_and_buy', false);
+    }
+
+    updateGmDecisionAlertsAndSubmit();
+}
+
+function selectGmSecondaryDecision(type) {
+    const cardPay = document.getElementById('gmCardPayFinance');
+    const cardCredit = document.getElementById('gmCardBuyCredit');
+    const radioPay = document.getElementById('gmRadioPayFinance');
+    const radioCredit = document.getElementById('gmRadioBuyCredit');
+    const hiddenDecision = document.getElementById('gmDecisionHidden');
+    const hiddenPayment = document.getElementById('gmPaymentMethodHidden');
+    const btnSendBack = document.getElementById('btnGmSecondarySendBack');
+    const btnReject = document.getElementById('btnGmSecondaryReject');
+
+    if (radioPay) radioPay.checked = false;
+    if (radioCredit) radioCredit.checked = false;
+    if (cardPay) {
+        cardPay.style.borderColor = '#dee2e6';
+        cardPay.style.backgroundColor = '#ffffff';
+        cardPay.classList.remove('border-2');
+    }
+    if (cardCredit) {
+        cardCredit.style.borderColor = '#dee2e6';
+        cardCredit.style.backgroundColor = '#ffffff';
+        cardCredit.classList.remove('border-2');
+    }
+
+    if (type === 'send_back') {
+        if (hiddenDecision) hiddenDecision.value = 'send_back';
+        if (hiddenPayment) hiddenPayment.value = '';
+        if (btnSendBack) {
+            btnSendBack.classList.add('active', 'btn-warning');
+            btnSendBack.classList.remove('btn-outline-warning');
+        }
+        if (btnReject) {
+            btnReject.classList.remove('active', 'btn-danger');
+            btnReject.classList.add('btn-outline-danger');
+        }
+    } else if (type === 'reject') {
+        if (hiddenDecision) hiddenDecision.value = 'reject';
+        if (hiddenPayment) hiddenPayment.value = '';
+        if (btnReject) {
+            btnReject.classList.add('active', 'btn-danger');
+            btnReject.classList.remove('btn-outline-danger');
+        }
+        if (btnSendBack) {
+            btnSendBack.classList.remove('active', 'btn-warning');
+            btnSendBack.classList.add('btn-outline-warning');
+        }
+    }
+
+    updateGmDecisionAlertsAndSubmit();
+}
+
+function setAllItemPaymentMethods(method, shouldUpdateMain = true) {
+    const radios = document.querySelectorAll('.gm-item-radio[value="' + method + '"]');
+    radios.forEach(r => {
+        r.checked = true;
+    });
+    recalculateItemAllocations(false);
+    if (shouldUpdateMain) {
+        selectGmMainDecision(method);
+    }
+}
+
+function onItemPaymentMethodChanged() {
+    recalculateItemAllocations(true);
+}
+
+function recalculateItemAllocations(allowSplitDetect = true) {
+    const rows = document.querySelectorAll('.gm-item-allocation-row');
+    let financeSum = 0;
+    let creditSum = 0;
+    let financeCount = 0;
+    let creditCount = 0;
+
+    rows.forEach(row => {
+        const amount = parseFloat(row.getAttribute('data-amount') || 0);
+        const radio = row.querySelector('.gm-item-radio:checked');
+        const val = radio ? radio.value : 'pay_and_buy';
+
+        if (val === 'buy_by_credit') {
+            creditSum += amount;
+            creditCount++;
+        } else {
+            financeSum += amount;
+            financeCount++;
+        }
+    });
+
+    const badgeFinance = document.getElementById('gmFinancePortionBadge');
+    const badgeCredit = document.getElementById('gmCreditPortionBadge');
+    const badgeType = document.getElementById('gmAllocationTypeBadge');
+
+    if (badgeFinance) badgeFinance.textContent = financeSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
+    if (badgeCredit) badgeCredit.textContent = creditSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
+
+    const hiddenDecision = document.getElementById('gmDecisionHidden');
+    const hiddenPayment = document.getElementById('gmPaymentMethodHidden');
+    const cardPay = document.getElementById('gmCardPayFinance');
+    const cardCredit = document.getElementById('gmCardBuyCredit');
+    const radioPay = document.getElementById('gmRadioPayFinance');
+    const radioCredit = document.getElementById('gmRadioBuyCredit');
+
+    // Only auto-update decision if not in send_back or reject mode
+    if (hiddenDecision && hiddenDecision.value !== 'send_back' && hiddenDecision.value !== 'reject') {
+        if (financeCount > 0 && creditCount > 0) {
+            if (badgeType) {
+                badgeType.className = 'badge bg-warning-subtle text-dark border border-warning';
+                badgeType.textContent = 'Split (' + financeCount + ' Fin / ' + creditCount + ' Cred)';
+            }
+            if (hiddenDecision) hiddenDecision.value = 'split';
+            if (hiddenPayment) hiddenPayment.value = 'split';
+
+            if (radioPay) radioPay.checked = false;
+            if (radioCredit) radioCredit.checked = false;
+            if (cardPay) {
+                cardPay.style.borderColor = '#198754';
+                cardPay.style.backgroundColor = 'rgba(25, 135, 84, 0.04)';
+                cardPay.classList.add('border-2');
+            }
+            if (cardCredit) {
+                cardCredit.style.borderColor = '#0d6efd';
+                cardCredit.style.backgroundColor = 'rgba(13, 110, 253, 0.04)';
+                cardCredit.classList.add('border-2');
+            }
+        } else if (creditCount > 0 && financeCount === 0) {
+            if (badgeType) {
+                badgeType.className = 'badge bg-primary-subtle text-primary border border-primary';
+                badgeType.textContent = 'All Credit (' + creditCount + ' Items)';
+            }
+            if (hiddenDecision) hiddenDecision.value = 'buy_by_credit';
+            if (hiddenPayment) hiddenPayment.value = 'buy_by_credit';
+
+            if (radioCredit) radioCredit.checked = true;
+            if (radioPay) radioPay.checked = false;
+            if (cardCredit) {
+                cardCredit.style.borderColor = '#0d6efd';
+                cardCredit.style.backgroundColor = 'rgba(13, 110, 253, 0.08)';
+                cardCredit.classList.add('border-2');
+            }
+            if (cardPay) {
+                cardPay.style.borderColor = '#dee2e6';
+                cardPay.style.backgroundColor = '#ffffff';
+                cardPay.classList.remove('border-2');
+            }
+        } else {
+            if (badgeType) {
+                badgeType.className = 'badge bg-success-subtle text-success border border-success';
+                badgeType.textContent = 'All Finance (' + financeCount + ' Items)';
+            }
+            if (hiddenDecision) hiddenDecision.value = 'pay_and_buy';
+            if (hiddenPayment) hiddenPayment.value = 'pay_and_buy';
+
+            if (radioPay) radioPay.checked = true;
+            if (radioCredit) radioCredit.checked = false;
+            if (cardPay) {
+                cardPay.style.borderColor = '#198754';
+                cardPay.style.backgroundColor = 'rgba(25, 135, 84, 0.08)';
+                cardPay.classList.add('border-2');
+            }
+            if (cardCredit) {
+                cardCredit.style.borderColor = '#dee2e6';
+                cardCredit.style.backgroundColor = '#ffffff';
+                cardCredit.classList.remove('border-2');
+            }
+        }
+        updateGmDecisionAlertsAndSubmit();
+    }
+}
+
+function updateGmDecisionAlertsAndSubmit() {
+    const hiddenDecision = document.getElementById('gmDecisionHidden');
+    const val = hiddenDecision ? hiddenDecision.value : 'pay_and_buy';
+
     const helpPay = document.getElementById('gmDecisionHelpPayBuy');
     const helpCredit = document.getElementById('gmDecisionHelpCredit');
+    const helpSplit = document.getElementById('gmDecisionHelpSplit');
     const helpSendBack = document.getElementById('gmDecisionHelpSendBack');
     const helpReject = document.getElementById('gmDecisionHelpReject');
     const btn = document.getElementById('btnSubmitGmDecision');
 
-    // Hide all help alerts
     if (helpPay) helpPay.style.display = 'none';
     if (helpCredit) helpCredit.style.display = 'none';
+    if (helpSplit) helpSplit.style.display = 'none';
     if (helpSendBack) helpSendBack.style.display = 'none';
     if (helpReject) helpReject.style.display = 'none';
 
-    if (val === 'buy_by_credit' || val === 'approve_credit') {
-        if (hiddenPay) hiddenPay.value = 'buy_by_credit';
+    if (val === 'buy_by_credit') {
         if (helpCredit) helpCredit.style.display = 'block';
         if (btn) {
-            btn.className = 'btn btn-info text-white btn-sm w-100 fw-bold shadow-sm py-2';
-            btn.innerHTML = '<i class="fas fa-credit-card me-1"></i> Approve (Buy with Credit)';
+            btn.className = 'btn btn-primary btn-sm w-100 fw-bold shadow-sm py-2';
+            btn.innerHTML = '<i class="fas fa-credit-card me-1"></i> Approve & Buy with Credit (COA 5110)';
         }
-    } else if (val === 'pay_and_buy' || val === 'approve') {
-        if (hiddenPay) hiddenPay.value = 'pay_and_buy';
-        if (helpPay) helpPay.style.display = 'block';
+    } else if (val === 'split') {
+        if (helpSplit) helpSplit.style.display = 'block';
         if (btn) {
-            btn.className = 'btn btn-success btn-sm w-100 fw-bold shadow-sm py-2';
-            btn.innerHTML = '<i class="fas fa-check-circle me-1"></i> Approve (Pay & Buy)';
+            btn.className = 'btn btn-dark btn-sm w-100 fw-bold shadow-sm py-2';
+            btn.innerHTML = '<i class="fas fa-layer-group me-1"></i> Approve Split (Finance & Credit)';
         }
     } else if (val === 'send_back') {
-        if (hiddenPay) hiddenPay.value = '';
         if (helpSendBack) helpSendBack.style.display = 'block';
         if (btn) {
             btn.className = 'btn btn-warning text-dark btn-sm w-100 fw-bold shadow-sm py-2';
-            btn.innerHTML = '<i class="fas fa-undo me-1"></i> Send Back to PM';
+            btn.innerHTML = '<i class="fas fa-undo me-1"></i> Send Back to PM for Revision';
         }
     } else if (val === 'reject') {
-        if (hiddenPay) hiddenPay.value = '';
         if (helpReject) helpReject.style.display = 'block';
         if (btn) {
             btn.className = 'btn btn-danger btn-sm w-100 fw-bold shadow-sm py-2';
-            btn.innerHTML = '<i class="fas fa-ban me-1"></i> Reject Purchase Request';
+            btn.innerHTML = '<i class="fas fa-ban me-1"></i> Confirm Rejection of PR';
         }
     } else {
+        if (helpPay) helpPay.style.display = 'block';
         if (btn) {
-            btn.className = 'btn btn-secondary btn-sm w-100 fw-bold shadow-sm py-2';
-            btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Submit GM Decision';
+            btn.className = 'btn btn-success btn-sm w-100 fw-bold shadow-sm py-2';
+            btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Approve & Send to Finance (Pay & Buy)';
         }
     }
 }
+
+// Fallback for any legacy calls
+function handleGmDecisionChange(select) {
+    if (!select) return;
+    if (select.value === 'buy_by_credit') {
+        selectGmMainDecision('buy_by_credit');
+    } else if (select.value === 'pay_and_buy') {
+        selectGmMainDecision('pay_and_buy');
+    } else if (select.value === 'send_back') {
+        selectGmSecondaryDecision('send_back');
+    } else if (select.value === 'reject') {
+        selectGmSecondaryDecision('reject');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('gmDecisionForm')) {
+        recalculateItemAllocations(false);
+    }
+});
 
 function syncGmProformaSelect(profId) {
     if (!profId) return;

@@ -1296,26 +1296,64 @@ class PurchaseRequestController extends Controller
     {
         $this->authorizeStageRole($purchaseRequest, ['gm', 'general_manager']);
 
+        // Defensive column check in case migration hasn't run yet
+        if (\Illuminate\Support\Facades\Schema::hasTable('purchase_request_items') && 
+            !\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'payment_method')) {
+            try {
+                \Illuminate\Support\Facades\Schema::table('purchase_request_items', function ($table) {
+                    $table->string('payment_method', 30)->nullable()->after('status');
+                });
+            } catch (\Throwable $e) {
+                // Table column may have already been added concurrently
+            }
+        }
+
         $decisionInput = $request->input('decision');
         $paymentMethodInput = $request->input('payment_method');
+        $itemPaymentMethods = $request->input('item_payment_methods', []);
+
+        // Save item-level payment methods if provided
+        if (!empty($itemPaymentMethods) && is_array($itemPaymentMethods)) {
+            foreach ($itemPaymentMethods as $itemId => $method) {
+                if (in_array($method, ['pay_and_buy', 'buy_by_credit'])) {
+                    $purchaseRequest->items()->where('id', $itemId)->update(['payment_method' => $method]);
+                }
+            }
+        }
+
+        // Check current item allocations
+        $freshItems = $purchaseRequest->items()->get();
+        $hasCreditItems = $freshItems->contains(fn($i) => ($i->payment_method ?? '') === 'buy_by_credit');
+        $hasFinanceItems = $freshItems->contains(fn($i) => ($i->payment_method ?? 'pay_and_buy') === 'pay_and_buy');
 
         // Normalize composite decisions
         if (in_array($decisionInput, ['buy_by_credit', 'approve_credit', 'credit'])) {
             $decision = 'approve';
-            $paymentMethod = 'buy_by_credit';
+            $paymentMethod = ($hasFinanceItems && $hasCreditItems) ? 'split' : 'buy_by_credit';
         } elseif (in_array($decisionInput, ['pay_and_buy', 'approve_pay', 'cash', 'bank'])) {
             $decision = 'approve';
-            $paymentMethod = 'pay_and_buy';
+            $paymentMethod = ($hasFinanceItems && $hasCreditItems) ? 'split' : 'pay_and_buy';
+        } elseif ($decisionInput === 'split') {
+            $decision = 'approve';
+            $paymentMethod = 'split';
         } else {
             $decision = $decisionInput;
-            $paymentMethod = $paymentMethodInput ?: ($decision === 'approve' ? 'pay_and_buy' : null);
+            if ($decision === 'approve') {
+                if ($hasFinanceItems && $hasCreditItems) {
+                    $paymentMethod = 'split';
+                } else {
+                    $paymentMethod = $paymentMethodInput ?: ($hasCreditItems ? 'buy_by_credit' : 'pay_and_buy');
+                }
+            } else {
+                $paymentMethod = null;
+            }
         }
 
         if (!in_array($decision, ['approve', 'reject', 'send_back'])) {
             return back()->withErrors(['decision' => 'Invalid GM decision selected.']);
         }
 
-        if ($decision === 'approve' && !in_array($paymentMethod, ['pay_and_buy', 'buy_by_credit'])) {
+        if ($decision === 'approve' && !in_array($paymentMethod, ['pay_and_buy', 'buy_by_credit', 'split'])) {
             $paymentMethod = 'pay_and_buy';
         }
 
@@ -1332,7 +1370,7 @@ class PurchaseRequestController extends Controller
         );
 
         $decisionLabel = ($decision === 'approve') 
-            ? ('Approved with ' . ($paymentMethod === 'buy_by_credit' ? 'Buy with Credit' : 'Pay & Buy')) 
+            ? ('Approved with ' . ($paymentMethod === 'buy_by_credit' ? 'Buy with Credit' : ($paymentMethod === 'split' ? 'Split (Finance & Credit)' : 'Pay & Buy'))) 
             : ucfirst(str_replace('_', ' ', $decision));
 
         return back()->with('success', "GM decision recorded: {$decisionLabel}.");

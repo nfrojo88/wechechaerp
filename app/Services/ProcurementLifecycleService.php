@@ -366,54 +366,85 @@ class ProcurementLifecycleService
                 'supplier_id'       => $supplierId ?: $pr->supplier_id,
             ]);
 
+            // Calculate portion allocations from items if split or specific
+            $items = $pr->items()->get();
+            $creditAmount = 0.0;
+            $financeAmount = 0.0;
+
             if ($paymentMethod === 'buy_by_credit') {
-                // 1. Ensure COA 5110 "Cost Of Material By Credit 5110"
+                $creditAmount = $finalAmount;
+            } elseif ($paymentMethod === 'pay_and_buy') {
+                $financeAmount = $finalAmount;
+            } else { // split or mixed items
+                $creditSum = (float)$items->filter(fn($i) => ($i->payment_method ?? '') === 'buy_by_credit')
+                    ->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? $i->estimated_unit_cost ?? 0));
+                $financeSum = (float)$items->filter(fn($i) => ($i->payment_method ?? 'pay_and_buy') !== 'buy_by_credit')
+                    ->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? $i->estimated_unit_cost ?? 0));
+                $totalCalc = $creditSum + $financeSum;
+
+                if ($totalCalc > 0 && $finalAmount > 0) {
+                    $ratio = $finalAmount / $totalCalc;
+                    $creditAmount = round($creditSum * $ratio, 2);
+                    $financeAmount = round($finalAmount - $creditAmount, 2);
+                } else {
+                    $creditAmount = round($creditSum, 2);
+                    $financeAmount = round($financeSum, 2);
+                }
+
+                // Fallback if both 0
+                if ($creditAmount <= 0 && $financeAmount <= 0) {
+                    $financeAmount = $finalAmount;
+                }
+            }
+
+            // 1. Credit Handling
+            if ($creditAmount > 0) {
                 $coa5110 = $this->ensureCreditCoaAccount();
 
-                // 2. Auto-book ProcurementPayment
-                ProcurementPayment::updateOrCreate(
-                    ['purchase_request_id' => $pr->id],
-                    [
-                        'method'         => 'credit',
-                        'coa_account_id' => $coa5110->id,
-                        'amount'         => $finalAmount,
-                        'notes'          => $notes ?: 'GM Approved Buy with Credit (Auto-booked COA 5110)',
-                        'status'         => 'paid',
-                        'created_by'     => Auth::id(),
-                        'paid_by'        => Auth::id(),
-                        'paid_at'        => now(),
-                    ]
-                );
-
-                // 3. Create or update CreditStoreLedger
+                // Book CreditStoreLedger
                 \App\Models\CreditStoreLedger::updateOrCreate(
                     ['purchase_request_id' => $pr->id],
                     [
                         'pr_no'          => $pr->pr_no,
                         'project_id'     => $pr->project_id,
                         'supplier_name'  => $supplierName,
-                        'credit_amount'  => $finalAmount,
+                        'credit_amount'  => $creditAmount,
                         'coa_account_id' => $coa5110->id,
                         'status'         => 'outstanding',
                         'authorized_by'  => Auth::id(),
                         'authorized_at'  => now(),
-                        'notes'          => $notes,
+                        'notes'          => $notes ?: 'GM Approved Buy with Credit (Auto-booked COA 5110)',
                         'created_by'     => Auth::id(),
                     ]
                 );
 
-                // 5. Route directly to Store Keeper for material intake
-                $nextStatus   = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
-                $rawNextRole  = 'store_keeper';
-                $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Credit — COA 5110) — ready for Store Keeper material intake. Open: " . url("/purchase-requests/{$pr->id}");
-            } else { // pay_and_buy
-                // Pre-create/update ProcurementPayment with the chosen proforma amount
+                // If no finance portion, credit is the primary ProcurementPayment
+                if ($financeAmount <= 0) {
+                    ProcurementPayment::updateOrCreate(
+                        ['purchase_request_id' => $pr->id],
+                        [
+                            'method'         => 'credit',
+                            'coa_account_id' => $coa5110->id,
+                            'amount'         => $creditAmount,
+                            'notes'          => $notes ?: 'GM Approved Buy with Credit (Auto-booked COA 5110)',
+                            'status'         => 'paid',
+                            'created_by'     => Auth::id(),
+                            'paid_by'        => Auth::id(),
+                            'paid_at'        => now(),
+                        ]
+                    );
+                }
+            }
+
+            // 2. Finance Handling
+            if ($financeAmount > 0) {
+                // Pre-create/update ProcurementPayment with the finance portion
                 ProcurementPayment::updateOrCreate(
                     ['purchase_request_id' => $pr->id],
                     [
                         'method'         => 'cash',
-                        'amount'         => $finalAmount,
-                        'notes'          => $notes,
+                        'amount'         => $financeAmount,
+                        'notes'          => $notes . ($creditAmount > 0 ? " (Split: Finance {$financeAmount} ETB, Credit {$creditAmount} ETB)" : ''),
                         'status'         => 'pending_assignment',
                         'created_by'     => Auth::id(),
                     ]
@@ -429,9 +460,9 @@ class ProcurementLifecycleService
                             'user_id'               => Auth::id(),
                             'project_id'            => $pr->project_id,
                             'category'              => 'Material',
-                            'description'           => "GM Approved Purchase Request #{$pr->pr_no}" . ($supplierName ? " — Supplier: {$supplierName}" : '') . ($notes ? ". Notes: {$notes}" : ''),
-                            'amount'                => $finalAmount,
-                            'gross_amount'          => $finalAmount,
+                            'description'           => "GM Approved Purchase Request #{$pr->pr_no}" . ($supplierName ? " — Supplier: {$supplierName}" : '') . ($creditAmount > 0 ? " (Split: Finance {$financeAmount} ETB, Credit {$creditAmount} ETB)" : '') . ($notes ? ". Notes: {$notes}" : ''),
+                            'amount'                => $financeAmount,
+                            'gross_amount'          => $financeAmount,
                             'status'                => ExpenseRequest::STATUS_APPROVED_ASSIGNED,
                         ]
                     );
@@ -441,7 +472,14 @@ class ProcurementLifecycleService
 
                 $nextStatus   = PurchaseRequest::STATUS_PENDING_PAYMENT;
                 $rawNextRole  = 'finance_head';
-                $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Pay & Buy — " . number_format($finalAmount, 2) . " ETB from " . ($supplierName ?: 'Vendor') . ") — please select funding account and assign staff. Open: " . url("/purchase-requests/{$pr->id}");
+                $smsMessage   = ($paymentMethod === 'split')
+                    ? "ConstructPro: PR #{$pr->pr_no} approved (Split Allocation: Finance " . number_format($financeAmount, 2) . " ETB & Credit " . number_format($creditAmount, 2) . " ETB) — please select funding account for cash portion. Open: " . url("/purchase-requests/{$pr->id}")
+                    : "ConstructPro: PR #{$pr->pr_no} approved (Pay & Buy — " . number_format($finalAmount, 2) . " ETB from " . ($supplierName ?: 'Vendor') . ") — please select funding account and assign staff. Open: " . url("/purchase-requests/{$pr->id}");
+            } else {
+                // Entirely credit, route directly to Store Keeper for material intake
+                $nextStatus   = PurchaseRequest::STATUS_PENDING_STORE_REVIEW;
+                $rawNextRole  = 'store_keeper';
+                $smsMessage   = "ConstructPro: PR #{$pr->pr_no} approved (Credit — COA 5110: " . number_format($creditAmount, 2) . " ETB) — ready for Store Keeper material intake. Open: " . url("/purchase-requests/{$pr->id}");
             }
 
             $nextRole = $this->resolveOwnerRole($rawNextRole, $pr);
