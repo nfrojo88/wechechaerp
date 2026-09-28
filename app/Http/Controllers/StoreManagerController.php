@@ -607,6 +607,18 @@ class StoreManagerController extends Controller
      */
     public function dispatchTransfer(Request $request, Transfer $transfer)
     {
+        $user = Auth::user();
+        $isAdmin = $user && $user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'general_service', 'coordinator']);
+        $assignedStore = $user?->store ?? Store::where('manager_id', $user?->id)->first();
+        $userStoreId = $assignedStore?->id ?? $user?->store_id;
+
+        // Strict authorization rule: Only the origin storekeeper (or admin/store manager) can dispatch and attach outgoing slip
+        if (!$isAdmin) {
+            if (!$userStoreId || (int)$transfer->from_store_id !== (int)$userStoreId) {
+                abort(403, 'Strict Rule Violation: You are not authorized to dispatch this transfer or upload the outgoing slip. Only the storekeeper of the origin store (' . ($transfer->fromStore->name ?? 'Origin Store') . ') has access to issue outgoing waybills.');
+            }
+        }
+
         if ($request->isMethod('get')) {
             return redirect()->route('store-manager.transfers.show', ['transfer' => $transfer, 'dispatch' => 1]);
         }
@@ -662,6 +674,18 @@ class StoreManagerController extends Controller
      */
     public function receiveTransfer(Request $request, Transfer $transfer)
     {
+        $user = Auth::user();
+        $isAdmin = $user && $user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'general_service', 'coordinator']);
+        $assignedStore = $user?->store ?? Store::where('manager_id', $user?->id)->first();
+        $userStoreId = $assignedStore?->id ?? $user?->store_id;
+
+        // Strict authorization rule: Only the destination storekeeper (or admin/store manager) can receive and attach receiving slip/GRN
+        if (!$isAdmin) {
+            if (!$userStoreId || (int)$transfer->to_store_id !== (int)$userStoreId) {
+                abort(403, 'Strict Rule Violation: You are not authorized to receive this transfer or upload the receiving receipt. Only the storekeeper of the destination store (' . ($transfer->toStore->name ?? 'Destination Store') . ') has access to confirm receipts.');
+            }
+        }
+
         if ($request->isMethod('get')) {
             return redirect()->route('store-manager.transfers.show', ['transfer' => $transfer, 'receive' => 1]);
         }
@@ -903,6 +927,18 @@ class StoreManagerController extends Controller
      */
     public function updatePhysicalSlip(Request $request, Transfer $transfer)
     {
+        $user = Auth::user();
+        $isAdmin = $user && $user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'general_service', 'coordinator']);
+        $assignedStore = $user?->store ?? Store::where('manager_id', $user?->id)->first();
+        $userStoreId = $assignedStore?->id ?? $user?->store_id;
+
+        // Strict rule: Destination storekeeper cannot edit outgoing physical slip #
+        if (!$isAdmin) {
+            if (!$userStoreId || (int)$transfer->from_store_id !== (int)$userStoreId) {
+                abort(403, 'Strict Rule Violation: Only the origin storekeeper or store manager can update the outgoing physical slip / waybill number.');
+            }
+        }
+
         $request->validate([
             'physical_slip_no' => 'required|string|max:100',
         ]);

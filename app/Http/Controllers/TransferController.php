@@ -117,6 +117,15 @@ class TransferController extends Controller
 
     public function sendToDriver(Request $request, Transfer $transfer)
     {
+        $user = Auth::user();
+        $isAdmin = $user && $user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'general_service', 'coordinator']);
+        $assignedStore = $user?->store ?? \App\Models\Store::where('manager_id', $user?->id)->first();
+        $userStoreId = $assignedStore?->id ?? $user?->store_id;
+
+        if (!$isAdmin && (!$userStoreId || (int)$transfer->from_store_id !== (int)$userStoreId)) {
+            abort(403, 'Strict Rule Violation: Only the origin storekeeper can dispatch this transfer.');
+        }
+
         $transfer->update([
             'status'        => 'dispatched',
             'dispatched_at' => now(),
@@ -151,6 +160,15 @@ class TransferController extends Controller
 
     public function complete(Transfer $transfer)
     {
+        $user = Auth::user();
+        $isAdmin = $user && $user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'general_service', 'coordinator']);
+        $assignedStore = $user?->store ?? \App\Models\Store::where('manager_id', $user?->id)->first();
+        $userStoreId = $assignedStore?->id ?? $user?->store_id;
+
+        if (!$isAdmin && (!$userStoreId || (int)$transfer->to_store_id !== (int)$userStoreId)) {
+            abort(403, 'Strict Rule Violation: Only the destination storekeeper can receive and complete this transfer.');
+        }
+
         $transfer->update([
             'status'      => 'completed',
             'received_by' => Auth::id(),

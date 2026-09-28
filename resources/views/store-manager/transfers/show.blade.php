@@ -347,9 +347,11 @@
             <div class="card shadow-sm border-0 rounded-3 h-100">
                 <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-receipt me-2 text-primary"></i>Waybill &amp; Slips</h6>
+                    @if(($isSenderStore || $isAdmin) && !in_array($transfer->status, ['completed', 'rejected']))
                     <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-bs-toggle="modal" data-bs-target="#physicalSlipModal">
                         <i class="fas fa-pen me-1"></i>Quick Slip #
                     </button>
+                    @endif
                 </div>
                 <div class="card-body">
                     {{-- Outgoing Slip Box --}}
@@ -368,6 +370,18 @@
                         @if($transfer->dispatchedBy)
                             <div class="text-muted small" style="font-size:0.75rem;">
                                 Dispatched by {{ $transfer->dispatchedBy->name }} on {{ $transfer->dispatched_at ? $transfer->dispatched_at->format('M d, Y H:i') : '' }}
+                            </div>
+                        @endif
+
+                        @if(($isSenderStore || $isAdmin) && in_array($transfer->status, ['draft', 'approved']))
+                            <div class="mt-2 pt-2 border-top border-primary border-opacity-25">
+                                <button type="button" class="btn btn-sm btn-primary w-100 shadow-sm" data-bs-toggle="modal" data-bs-target="#dispatchModal">
+                                    <i class="fas fa-truck-fast me-1"></i>Dispatch &amp; Upload Outgoing Slip
+                                </button>
+                            </div>
+                        @elseif($isReceiverStore)
+                            <div class="text-muted small mt-1" style="font-size:0.75rem;">
+                                <i class="fas fa-shield-halved me-1 text-primary"></i>Issued by Origin Storekeeper ({{ $transfer->fromStore->name ?? 'Origin Store' }})
                             </div>
                         @endif
                     </div>
@@ -394,6 +408,32 @@
                             <div class="text-muted small mt-1" style="font-size:0.75rem;">
                                 Notes: {{ $transfer->receiving_notes }}
                             </div>
+                        @endif
+
+                        @if(($isReceiverStore || $isAdmin) && $transfer->status === 'in_transit')
+                            <div class="mt-2 pt-2 border-top border-success border-opacity-25">
+                                <button type="button" class="btn btn-sm btn-success w-100 shadow-sm" data-bs-toggle="modal" data-bs-target="#receiveModal">
+                                    <i class="fas fa-box-open me-1"></i>Inspect &amp; Receive / Upload GRN
+                                </button>
+                            </div>
+                        @elseif($isSenderStore)
+                            @if($transfer->status === 'in_transit')
+                                <div class="mt-2">
+                                    <span class="badge bg-warning bg-opacity-25 text-dark border border-warning border-opacity-50 small" style="font-size:0.72rem;">
+                                        <i class="fas fa-hourglass-half me-1 text-warning"></i>In Transit: Awaiting destination storekeeper ({{ $transfer->toStore->name ?? 'Destination Store' }}) to receive &amp; upload GRN
+                                    </span>
+                                </div>
+                            @elseif($transfer->status === 'completed')
+                                <div class="mt-1">
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small" style="font-size:0.72rem;">
+                                        <i class="fas fa-check-circle me-1"></i>Confirmed received by {{ $transfer->toStore->name ?? 'Destination Store' }}
+                                    </span>
+                                </div>
+                            @else
+                                <div class="text-muted small mt-1" style="font-size:0.75rem;">
+                                    <i class="fas fa-clock me-1"></i>Awaiting dispatch before destination can inspect &amp; receive.
+                                </div>
+                            @endif
                         @endif
                     </div>
                 </div>
@@ -679,6 +719,7 @@
 </div>
 
 {{-- MODAL 2: Outgoing Store Keeper Dispatch & Slip Upload --}}
+@if(($isSenderStore || $isAdmin) && !in_array($transfer->status, ['completed', 'rejected']))
 <div class="modal fade" id="dispatchModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
@@ -757,8 +798,10 @@
         </div>
     </div>
 </div>
+@endif
 
 {{-- MODAL 3: Incoming Store Keeper Inspect & Receive Materials --}}
+@if(($isReceiverStore || $isAdmin) && $transfer->status === 'in_transit')
 <div class="modal fade" id="receiveModal" tabindex="-1">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
@@ -853,8 +896,10 @@
         </div>
     </div>
 </div>
+@endif
 
 {{-- MODAL 4: Quick Edit Physical Slip # --}}
+@if(($isSenderStore || $isAdmin) && !in_array($transfer->status, ['completed', 'rejected']))
 <div class="modal fade" id="physicalSlipModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
@@ -889,6 +934,7 @@
         </div>
     </div>
 </div>
+@endif
 
 {{-- MODAL 5: Reject Transfer --}}
 <div class="modal fade" id="rejectModal" tabindex="-1">
@@ -1443,7 +1489,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    @if(request('dispatch') == 1 || session('open_dispatch'))
+    @if((request('dispatch') == 1 || session('open_dispatch')) && ($isSenderStore || $isAdmin) && !in_array($transfer->status, ['completed', 'rejected']))
         var dispatchModalEl = document.getElementById('dispatchModal');
         if (dispatchModalEl) {
             var dModal = new bootstrap.Modal(dispatchModalEl);
@@ -1451,7 +1497,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     @endif
 
-    @if(request('receive') == 1 || session('open_receive'))
+    @if((request('receive') == 1 || session('open_receive')) && ($isReceiverStore || $isAdmin) && $transfer->status === 'in_transit')
         var receiveModalEl = document.getElementById('receiveModal');
         if (receiveModalEl) {
             var rModal = new bootstrap.Modal(receiveModalEl);
