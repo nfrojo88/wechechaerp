@@ -411,7 +411,12 @@
                                 <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
                                     <small class="text-muted font-monospace">{{ $a->employee->employee_code ?? 'EMP' }}</small>
                                     @php
-                                        $devId = $a->employee->device_user_id ?: $a->biometric_device_id;
+                                        $empDevId = trim((string)($a->employee?->device_user_id ?? ''));
+                                        $bioDevId = trim((string)($a->biometric_device_id ?? ''));
+                                        $empCode  = trim((string)($a->employee?->employee_code ?? ''));
+                                        
+                                        // Only show Device ID if explicitly added to employee; never fallback to emp ID/code
+                                        $devId = $empDevId !== '' ? $empDevId : (($bioDevId !== '' && $bioDevId !== $empCode) ? $bioDevId : null);
                                     @endphp
                                     @if($devId)
                                         <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="ZKTeco Biometric Device User ID">

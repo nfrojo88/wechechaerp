@@ -117,6 +117,24 @@ class AttendanceController extends Controller
             }
         }
 
+        // ── Auto-heal & Clean: If device ID not added, do NOT use emp ID ──────
+        try {
+            $unconfiguredEmployees = Employee::whereNull('device_user_id')
+                ->orWhere('device_user_id', '')
+                ->pluck('id');
+            if ($unconfiguredEmployees->isNotEmpty()) {
+                // Delete bulk_upload records erroneously imported using emp ID for employees with no device_user_id
+                Attendance::where('source', 'bulk_upload')
+                    ->whereIn('employee_id', $unconfiguredEmployees)
+                    ->delete();
+
+                // Clear any biometric_device_id that was mistakenly populated with employee_code
+                Attendance::whereNotNull('biometric_device_id')
+                    ->whereIn('employee_id', $unconfiguredEmployees)
+                    ->update(['biometric_device_id' => null]);
+            }
+        } catch (\Throwable $e) {}
+
         $attendances = $query->paginate(30)->withQueryString();
 
         // Fetch distinct available dates from attendance records for navigation
@@ -1138,43 +1156,24 @@ class AttendanceController extends Controller
             return '';
         };
 
-        // ── Load all employees for multi-index matching ─────────────────────
-        $allEmployees = Employee::select('id', 'employee_code', 'device_user_id', 'full_name', 'basic_salary')->get();
+        // ── Load employees with registered biometric device IDs ──────────────
+        // If device ID is not added to an employee, do NOT use emp ID / code / name to match them.
+        $allEmployees = Employee::whereNotNull('device_user_id')
+            ->where('device_user_id', '!=', '')
+            ->select('id', 'employee_code', 'device_user_id', 'full_name', 'basic_salary')
+            ->get();
 
-        $empByDevice   = [];
-        $empByCode     = [];
-        $empById       = [];
-        $empByName     = [];
+        $empByDevice = [];
 
         foreach ($allEmployees as $e) {
-            $empById[$e->id] = $e;
+            $dev = trim((string)$e->device_user_id);
+            if ($dev === '') continue;
 
-            // Device user ID index
-            if (!empty($e->device_user_id)) {
-                $dev = trim((string)$e->device_user_id);
-                $empByDevice[strtoupper($dev)] = $e;
-                $empByDevice[ltrim($dev, '0')] = $e;
-                if (is_numeric($dev)) {
-                    $empByDevice[(int)$dev] = $e;
-                    $empByDevice[(string)(int)$dev] = $e;
-                }
-            }
-
-            // Employee code index
-            if (!empty($e->employee_code)) {
-                $code = trim((string)$e->employee_code);
-                $empByCode[strtoupper($code)] = $e;
-                $digits = preg_replace('/[^0-9]/', '', $code);
-                if ($digits !== '') {
-                    $empByCode[$digits] = $e;
-                    $empByCode[ltrim($digits, '0')] = $e;
-                }
-            }
-
-            // Name index
-            if (!empty($e->full_name)) {
-                $cleanName = strtolower(preg_replace('/\s+/', ' ', trim($e->full_name)));
-                $empByName[$cleanName] = $e;
+            $empByDevice[strtoupper($dev)] = $e;
+            $empByDevice[ltrim($dev, '0')] = $e;
+            if (is_numeric($dev)) {
+                $empByDevice[(int)$dev] = $e;
+                $empByDevice[(string)(int)$dev] = $e;
             }
         }
 
@@ -1338,7 +1337,8 @@ class AttendanceController extends Controller
 
             $employee = null;
 
-            // 1. Match by Device User ID
+            // Strict matching: ONLY by registered Device User ID.
+            // If device id is not added to an employee, do NOT use employee ID / code / name.
             $searchDev = $acNo !== '' ? $acNo : $empNo;
             if ($searchDev !== '') {
                 $devUpper = strtoupper(trim((string)$searchDev));
@@ -1352,34 +1352,10 @@ class AttendanceController extends Controller
                 }
             }
 
-            // 2. Match by Employee Code
-            if (!$employee && $empNo !== '') {
-                $codeUpper = strtoupper(trim($empNo));
-                if (isset($empByCode[$codeUpper])) {
-                    $employee = $empByCode[$codeUpper];
-                }
-            }
-
-            // 3. Match by ID number if numeric
-            if (!$employee && is_numeric($searchDev) && isset($empById[(int)$searchDev])) {
-                $employee = $empById[(int)$searchDev];
-            }
-
-            // 4. Fallback match by Name
-            if (!$employee && $rawName !== '') {
-                $cleanName = strtolower(preg_replace('/\s+/', ' ', trim($rawName)));
-                if (isset($empByName[$cleanName])) {
-                    $employee = $empByName[$cleanName];
-                }
-            }
-
             if (!$employee) {
                 $skippedUnmatched++;
-                $label = $acNo !== '' ? "Device ID #{$acNo}" : ($empNo !== '' ? "Emp No. '{$empNo}'" : "Unknown");
-                if ($rawName !== '') {
-                    $label .= " ({$rawName})";
-                }
-                $errors[] = "Skipped: {$label} - No registered employee matched this device ID or name.";
+                $label = $searchDev !== '' ? "Device ID #{$searchDev}" : ($rawName !== '' ? $rawName : "Unknown");
+                $errors[] = "Skipped: {$label} - No employee found with this registered Device ID. (If Device ID is not added to the employee's profile, attendance cannot be matched).";
                 continue;
             }
 
@@ -1506,7 +1482,7 @@ class AttendanceController extends Controller
                         'overtime_hours'      => $otHours,
                         'overtime_type'       => $otType,
                         'overtime_pay'        => $otPay,
-                        'biometric_device_id' => $employee->device_user_id ?: $employee->employee_code,
+                        'biometric_device_id' => $employee->device_user_id,
                         'notes'               => $info['late_mins'] > 0 ? "Late: {$info['late_mins']} min" : null,
                     ]
                 );
