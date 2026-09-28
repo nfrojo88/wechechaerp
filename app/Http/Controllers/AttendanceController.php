@@ -951,13 +951,18 @@ class AttendanceController extends Controller
             'notes'           => 'nullable|string',
         ]);
 
-        $morningIn = $request->morning_in ?: null;
-        $morningOut = $request->morning_out ?: null;
-        $afternoonIn = $request->afternoon_in ?: null;
-        $afternoonOut = $request->afternoon_out ?: null;
+        $existing = Attendance::where('employee_id', $request->employee_id)
+            ->whereDate('attendance_date', $request->attendance_date)
+            ->first();
 
-        $checkIn = $morningIn ?: ($afternoonIn ?: ($request->check_in ?: null));
-        $checkOut = $afternoonOut ?: ($morningOut ?: ($request->check_out ?: null));
+        // Merge punches: keep existing punches if not explicitly provided, completing any missing parts!
+        $morningIn    = $request->filled('morning_in') ? $request->morning_in : ($existing?->morning_in);
+        $morningOut   = $request->filled('morning_out') ? $request->morning_out : ($existing?->morning_out);
+        $afternoonIn  = $request->filled('afternoon_in') ? $request->afternoon_in : ($existing?->afternoon_in);
+        $afternoonOut = $request->filled('afternoon_out') ? $request->afternoon_out : ($existing?->afternoon_out);
+
+        $checkIn  = $morningIn ?: ($afternoonIn ?: ($request->check_in ?: ($existing?->check_in)));
+        $checkOut = $afternoonOut ?: ($morningOut ?: ($request->check_out ?: ($existing?->check_out)));
 
         $hours = 0;
         if ($morningIn && $morningOut) {
@@ -974,6 +979,19 @@ class AttendanceController extends Controller
             $in    = \Carbon\Carbon::createFromFormat('H:i', $checkIn);
             $out   = \Carbon\Carbon::createFromFormat('H:i', $checkOut);
             $hours = round($out->diffInMinutes($in) / 60, 2);
+        }
+        if ($hours == 0) {
+            if ($morningIn && ($afternoonIn || $afternoonOut)) {
+                $hours = 8.0;
+            } elseif ($morningIn || $afternoonIn || $afternoonOut) {
+                $hours = 3.0;
+            }
+        }
+
+        $status = $request->status;
+        // If status was half_day but user filled in both morning and afternoon sessions, upgrade to present:
+        if ($status === 'half_day' && !empty($morningIn) && (!empty($afternoonIn) || !empty($afternoonOut))) {
+            $status = 'present';
         }
 
         // ── Auto-detect OT type if not explicitly set ────────────────────────
@@ -1015,7 +1033,7 @@ class AttendanceController extends Controller
                 'check_in'       => $checkIn,
                 'check_out'      => $checkOut,
                 'hours_worked'   => $hours,
-                'status'         => $request->status,
+                'status'         => $status,
                 'source'         => 'manual',
                 'notes'          => $request->notes,
                 'is_approved'    => true,
@@ -1274,7 +1292,19 @@ class AttendanceController extends Controller
             $isMorning   = stripos($session, 'morning') !== false;
             $isAfternoon = stripos($session, 'afternoon') !== false || stripos($session, 'evening') !== false;
 
-            // Map clock times
+            // Helper to infer hour from string time
+            $timeToHour = function($t) {
+                if (empty($t)) return null;
+                $str = trim((string)$t);
+                if (preg_match('/(\d{1,2}):(\d{2})/', $str, $m)) {
+                    $h = (int)$m[1];
+                    if (preg_match('/pm/i', $str) && $h < 12) $h += 12;
+                    return $h + ((int)$m[2] / 60);
+                }
+                return null;
+            };
+
+            // Map clock times into morning vs afternoon sessions
             if ($isMorning) {
                 if (!empty($clockIn))  $grouped[$userKey][$date]['morning_in']  = $clockIn;
                 if (!empty($clockOut)) $grouped[$userKey][$date]['morning_out'] = $clockOut;
@@ -1282,8 +1312,29 @@ class AttendanceController extends Controller
                 if (!empty($clockIn))  $grouped[$userKey][$date]['afternoon_in']  = $clockIn;
                 if (!empty($clockOut)) $grouped[$userKey][$date]['afternoon_out'] = $clockOut;
             } else {
-                if (!empty($clockIn))  $grouped[$userKey][$date]['morning_in']  = $clockIn;
-                if (!empty($clockOut)) $grouped[$userKey][$date]['afternoon_out'] = $clockOut;
+                // If timetable header is missing, infer session based on time of day (12:30 threshold)
+                $inHour  = $timeToHour($clockIn);
+                $outHour = $timeToHour($clockOut);
+
+                if (!empty($clockIn)) {
+                    if ($inHour !== null && $inHour >= 12.5) {
+                        $grouped[$userKey][$date]['afternoon_in'] = $clockIn;
+                    } else {
+                        if (empty($grouped[$userKey][$date]['morning_in'])) {
+                            $grouped[$userKey][$date]['morning_in'] = $clockIn;
+                        } elseif ($inHour !== null && $inHour >= 11.5) {
+                            $grouped[$userKey][$date]['morning_out'] = $clockIn;
+                        }
+                    }
+                }
+
+                if (!empty($clockOut)) {
+                    if ($outHour !== null && $outHour < 13.5 && !empty($grouped[$userKey][$date]['morning_in'])) {
+                        $grouped[$userKey][$date]['morning_out'] = $clockOut;
+                    } else {
+                        $grouped[$userKey][$date]['afternoon_out'] = $clockOut;
+                    }
+                }
             }
 
             // Accumulate absent/late/OT
@@ -1360,11 +1411,30 @@ class AttendanceController extends Controller
             }
 
             foreach ($dates as $date => $info) {
-                // "use after last day" filter:
+                // ── "use after last day" Smart Filter & Missing Part Completion ──
+                // If onlyAfterLastDay is on:
+                // - ALWAYS process $date >= $lastRecordedDate (the last day itself is often incomplete and needs its missing parts filled).
+                // - For $date < $lastRecordedDate, only process if the existing record in database is missing punches.
                 if ($onlyAfterLastDay && $lastRecordedDate) {
-                    if ($date <= $lastRecordedDate) {
-                        $skippedOlderCount++;
-                        continue;
+                    if ($date < $lastRecordedDate) {
+                        $existingRecord = Attendance::where('employee_id', $employee->id)
+                            ->whereDate('attendance_date', $date)
+                            ->first();
+
+                        $isMissingParts = $existingRecord && (
+                            empty($existingRecord->morning_out) ||
+                            empty($existingRecord->afternoon_in) ||
+                            empty($existingRecord->afternoon_out) ||
+                            empty($existingRecord->check_out) ||
+                            $existingRecord->status === 'half_day' ||
+                            (float)$existingRecord->hours_worked < 4.0
+                        );
+
+                        // If not missing parts, this older record is already complete -> safely skip
+                        if (!$isMissingParts) {
+                            $skippedOlderCount++;
+                            continue;
+                        }
                     }
                 }
 
@@ -1399,28 +1469,58 @@ class AttendanceController extends Controller
                 $aInTime  = $toTime($info['afternoon_in']);
                 $aOutTime = $toTime($info['afternoon_out']);
 
-                // Calculate hours worked
-                $hours = (float) $info['work_hours'];
-                if ($hours == 0) {
-                    if ($mInTime && $mOutTime) {
-                        try {
-                            $mIn  = Carbon::createFromFormat('H:i', $mInTime);
-                            $mOut = Carbon::createFromFormat('H:i', $mOutTime);
-                            $hours += max(0, round($mOut->diffInMinutes($mIn) / 60, 2));
-                        } catch (\Exception $e) {}
-                    }
-                    if ($aInTime && $aOutTime) {
-                        try {
-                            $aIn  = Carbon::createFromFormat('H:i', $aInTime);
-                            $aOut = Carbon::createFromFormat('H:i', $aOutTime);
-                            $hours += max(0, round($aOut->diffInMinutes($aIn) / 60, 2));
-                        } catch (\Exception $e) {}
+                // Find existing record to merge and fill missing parts:
+                $existing = Attendance::where('employee_id', $employee->id)
+                    ->whereDate('attendance_date', $date)
+                    ->first();
+
+                // Seamlessly merge existing punches with new upload punches:
+                $mInTime   = $mInTime   ?: ($existing?->morning_in);
+                $mOutTime  = $mOutTime  ?: ($existing?->morning_out);
+                $aInTime   = $aInTime   ?: ($existing?->afternoon_in);
+                $aOutTime  = $aOutTime  ?: ($existing?->afternoon_out);
+
+                $checkIn  = $mInTime ?: ($aInTime ?: ($existing?->check_in));
+                $checkOut = $aOutTime ?: ($mOutTime ?: ($existing?->check_out));
+
+                // Calculate hours worked across both merged sessions
+                $hours = (float) ($info['work_hours'] ?? 0);
+                $calcHours = 0;
+                if ($mInTime && $mOutTime) {
+                    try {
+                        $mIn  = Carbon::createFromFormat('H:i', $mInTime);
+                        $mOut = Carbon::createFromFormat('H:i', $mOutTime);
+                        $calcHours += max(0, round($mOut->diffInMinutes($mIn) / 60, 2));
+                    } catch (\Exception $e) {}
+                }
+                if ($aInTime && $aOutTime) {
+                    try {
+                        $aIn  = Carbon::createFromFormat('H:i', $aInTime);
+                        $aOut = Carbon::createFromFormat('H:i', $aOutTime);
+                        $calcHours += max(0, round($aOut->diffInMinutes($aIn) / 60, 2));
+                    } catch (\Exception $e) {}
+                }
+                if ($calcHours == 0 && $checkIn && $checkOut) {
+                    try {
+                        $cIn  = Carbon::createFromFormat('H:i', $checkIn);
+                        $cOut = Carbon::createFromFormat('H:i', $checkOut);
+                        $calcHours = max(0, round($cOut->diffInMinutes($cIn) / 60, 2));
+                    } catch (\Exception $e) {}
+                }
+
+                if ($calcHours > 0) {
+                    $hours = $calcHours;
+                } elseif ($hours == 0) {
+                    if ($mInTime && ($aInTime || $aOutTime)) {
+                        $hours = 8.0;
+                    } elseif ($mInTime || $aInTime || $aOutTime) {
+                        $hours = 3.0;
                     }
                 }
 
                 // Determine status (Saturday policy vs weekday)
                 $hasMorningIn   = !empty($mInTime);
-                $hasAfternoonIn = !empty($aInTime);
+                $hasAfternoonIn = !empty($aInTime) || !empty($aOutTime);
                 $dateCarbon     = Carbon::parse($date);
                 $isSaturday     = $dateCarbon->isSaturday();
 
@@ -1430,24 +1530,19 @@ class AttendanceController extends Controller
                     } elseif (!empty($info['absent_morning'])) {
                         $status = 'absent';
                     } else {
-                        $status = 'present';
+                        $status = $hours > 0 ? 'present' : 'absent';
                     }
                 } else {
-                    if ($hasMorningIn && $hasAfternoonIn) {
+                    if (($hasMorningIn && $hasAfternoonIn) || $hours >= 6.0) {
                         $status = 'present';
-                    } elseif ($hasMorningIn || $hasAfternoonIn) {
+                    } elseif ($hasMorningIn || $hasAfternoonIn || $hours > 0) {
                         $status = 'half_day';
                     } elseif (!empty($info['absent_morning']) && !empty($info['absent_afternoon'])) {
                         $status = 'absent';
-                    } elseif (!empty($info['absent_morning']) || !empty($info['absent_afternoon'])) {
-                        $status = 'half_day';
                     } else {
                         $status = 'absent';
                     }
                 }
-
-                $checkIn  = $mInTime ?: ($aInTime ?: null);
-                $checkOut = $aOutTime ?: ($mOutTime ?: null);
 
                 // Overtime calculation
                 $otHours = (float) ($info['ot_hours'] ?? 0);

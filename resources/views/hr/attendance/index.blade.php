@@ -728,12 +728,12 @@
                         <div class="form-check form-switch mb-1">
                             <input class="form-check-input ms-0 me-2" type="checkbox" name="after_last_day" value="1" id="afterLastDayToggle" {{ $latestAttDate ? 'checked' : '' }}>
                             <label class="form-check-label fw-semibold text-dark small" for="afterLastDayToggle">
-                                <i class="fas fa-forward-step text-primary me-1"></i>Only import records after last recorded day @if($formattedLastDate) (after {{ \Carbon\Carbon::parse($latestAttDate)->format('M d, Y') }}) @endif
+                                <i class="fas fa-forward-step text-primary me-1"></i>Import &amp; complete missing parts from last recorded day @if($formattedLastDate) ({{ \Carbon\Carbon::parse($latestAttDate)->format('M d, Y') }} onwards) @endif
                             </label>
                         </div>
                         <div class="text-muted small ps-4" style="font-size: 0.8rem;">
                             <i class="fas fa-shield-halved text-success me-1"></i>
-                            <strong>Safe &amp; Non-Destructive:</strong> Previous attendance history is never wiped. When enabled, older dates are automatically skipped so finalized payroll attendance is never overwritten. Uncheck to update all dates in the file.
+                            <strong>Incremental &amp; Smart Merging:</strong> Automatically fills in missing punches (morning clock out, afternoon session) for the last recorded day and records all subsequent days. Older completed history is safely preserved.
                         </div>
                     </div>
 
