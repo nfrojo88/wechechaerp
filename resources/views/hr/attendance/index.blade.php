@@ -697,13 +697,39 @@
                         <span class="text-muted small">Don't have a file? Download a sample template to see the expected format.</span>
                     </div>
 
-                    {{-- Start from Scratch Option --}}
-                    <div class="form-check form-switch mt-3 p-3 bg-light rounded-3 border border-warning">
-                        <input class="form-check-input ms-0 me-2" type="checkbox" name="clear_before_import" value="1" id="clearBeforeImport">
-                        <label class="form-check-label fw-semibold text-danger" for="clearBeforeImport">
-                            <i class="fas fa-trash-alt me-1"></i>Wipe / Clear previous attendance history before uploading
-                        </label>
-                        <div class="text-muted small ps-4">Enable this to delete all prior attendance records and start completely fresh from scratch with this file.</div>
+                    @php
+                        $latestAttDate = $lastAttendanceDate ?? ($availableDates->first() ?? null);
+                        $formattedLastDate = $latestAttDate ? \Carbon\Carbon::parse($latestAttDate)->format('M d, Y (l)') : null;
+                    @endphp
+
+                    {{-- Incremental Import & History Protection Option --}}
+                    <div class="mt-3 p-3 bg-light rounded-3 border border-primary-subtle shadow-xs">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-primary rounded-circle p-1.5"><i class="fas fa-calendar-check text-white"></i></span>
+                                <span class="fw-bold small text-dark">Incremental Attendance Sync</span>
+                            </div>
+                            @if($formattedLastDate)
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 small">
+                                    <i class="fas fa-clock-rotate-left me-1"></i>Last Recorded Day: <strong>{{ $formattedLastDate }}</strong>
+                                </span>
+                            @else
+                                <span class="badge bg-secondary-subtle text-secondary px-2 py-1 small">
+                                    No prior records recorded yet
+                                </span>
+                            @endif
+                        </div>
+
+                        <div class="form-check form-switch mb-1">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" name="after_last_day" value="1" id="afterLastDayToggle" {{ $latestAttDate ? 'checked' : '' }}>
+                            <label class="form-check-label fw-semibold text-dark small" for="afterLastDayToggle">
+                                <i class="fas fa-forward-step text-primary me-1"></i>Only import records after last recorded day @if($formattedLastDate) (after {{ \Carbon\Carbon::parse($latestAttDate)->format('M d, Y') }}) @endif
+                            </label>
+                        </div>
+                        <div class="text-muted small ps-4" style="font-size: 0.8rem;">
+                            <i class="fas fa-shield-halved text-success me-1"></i>
+                            <strong>Safe &amp; Non-Destructive:</strong> Previous attendance history is never wiped. When enabled, older dates are automatically skipped so finalized payroll attendance is never overwritten. Uncheck to update all dates in the file.
+                        </div>
                     </div>
 
                 </div>
