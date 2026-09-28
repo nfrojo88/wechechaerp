@@ -117,22 +117,15 @@ class AttendanceController extends Controller
             }
         }
 
-        // ── Auto-heal & Clean: If device ID not added, do NOT use emp ID ──────
+        // ── Clean biometric_device_id if employee has no device_user_id ──────
         try {
-            $unconfiguredEmployees = Employee::whereNull('device_user_id')
-                ->orWhere('device_user_id', '')
-                ->pluck('id');
-            if ($unconfiguredEmployees->isNotEmpty()) {
-                // Delete bulk_upload records erroneously imported using emp ID for employees with no device_user_id
-                Attendance::where('source', 'bulk_upload')
-                    ->whereIn('employee_id', $unconfiguredEmployees)
-                    ->delete();
-
-                // Clear any biometric_device_id that was mistakenly populated with employee_code
-                Attendance::whereNotNull('biometric_device_id')
-                    ->whereIn('employee_id', $unconfiguredEmployees)
-                    ->update(['biometric_device_id' => null]);
-            }
+            Attendance::whereNotNull('biometric_device_id')
+                ->where(function ($q) {
+                    $q->whereHas('employee', function ($eq) {
+                        $eq->whereNull('device_user_id')->orWhere('device_user_id', '');
+                    });
+                })
+                ->update(['biometric_device_id' => null]);
         } catch (\Throwable $e) {}
 
         $attendances = $query->paginate(30)->withQueryString();
@@ -1414,14 +1407,14 @@ class AttendanceController extends Controller
                 // ── "use after last day" Smart Filter & Missing Part Completion ──
                 // If onlyAfterLastDay is on:
                 // - ALWAYS process $date >= $lastRecordedDate (the last day itself is often incomplete and needs its missing parts filled).
-                // - For $date < $lastRecordedDate, only process if the existing record in database is missing punches.
+                // - For $date < $lastRecordedDate, only skip if the existing record in database is already 100% complete with full hours.
                 if ($onlyAfterLastDay && $lastRecordedDate) {
                     if ($date < $lastRecordedDate) {
                         $existingRecord = Attendance::where('employee_id', $employee->id)
                             ->whereDate('attendance_date', $date)
                             ->first();
 
-                        $isMissingParts = $existingRecord && (
+                        $isMissingParts = empty($existingRecord) || (
                             empty($existingRecord->morning_out) ||
                             empty($existingRecord->afternoon_in) ||
                             empty($existingRecord->afternoon_out) ||
@@ -1582,17 +1575,27 @@ class AttendanceController extends Controller
                     ]
                 );
                 $saved++;
+                $savedDates[$date] = true;
             }
+        }
+
+        // ── Determine target date to show after import ─────────────────────
+        $targetDate = null;
+        if (!empty($savedDates)) {
+            krsort($savedDates);
+            $targetDate = array_key_first($savedDates);
+        } elseif ($lastRecordedDate) {
+            $targetDate = $lastRecordedDate;
         }
 
         // ── Response Message ───────────────────────────────────────────────
         if ($saved === 0 && $skippedOlderCount > 0) {
-            $message = "ℹ️ No new records imported: all {$skippedOlderCount} record(s) in this file are on or before the last recorded date (" . Carbon::parse($lastRecordedDate)->format('M d, Y') . "). To re-import them, uncheck 'Only import records after last recorded day'.";
+            $message = "ℹ️ No new records imported: all {$skippedOlderCount} record(s) in this file are already recorded. To re-import them, uncheck 'Only import records after last recorded day'.";
             $status = 'info';
         } else {
             $message = "✅ Import complete: {$saved} attendance record(s) saved.";
             if ($skippedOlderCount > 0) {
-                $message .= " ({$skippedOlderCount} older record(s) on or before " . Carbon::parse($lastRecordedDate)->format('M d, Y') . " skipped).";
+                $message .= " ({$skippedOlderCount} older record(s) skipped).";
             }
             if ($skippedUnmatched > 0) {
                 $message .= " ⚠️ {$skippedUnmatched} device ID(s) could not be matched with registered employees.";
@@ -1602,16 +1605,17 @@ class AttendanceController extends Controller
 
         if ($request->wantsJson()) {
             return response()->json([
-                'success' => $saved > 0,
-                'saved'   => $saved,
-                'skipped' => $skippedUnmatched,
-                'older'   => $skippedOlderCount,
-                'errors'  => $errors,
-                'message' => $message,
+                'success'     => $saved > 0,
+                'saved'       => $saved,
+                'skipped'     => $skippedUnmatched,
+                'older'       => $skippedOlderCount,
+                'errors'      => $errors,
+                'message'     => $message,
+                'target_date' => $targetDate,
             ]);
         }
 
-        return redirect()->route('attendance.index')->with($status, $message);
+        return redirect()->route('attendance.index', $targetDate ? ['date' => $targetDate] : [])->with($status, $message);
     }
 
     /**
