@@ -355,6 +355,16 @@
                                 <button class="btn btn-success btn-sm w-100 fw-bold">
                                     <i class="fas fa-check-circle me-1"></i> Submit Material Prices
                                 </button>
+                                <div class="mt-2 text-center pt-2 border-top">
+                                    <button type="button" class="btn btn-outline-success btn-xs fw-bold w-100 py-1" onclick="openProcTeamSelectiveDirectBuyModal()">
+                                        <i class="fas fa-tasks me-1"></i> Price &amp; Submit Selected Items Only (<span class="selected-items-count">0</span>)
+                                    </button>
+                                </div>
+                                <div class="mt-1 text-center">
+                                    <button type="button" class="btn btn-link btn-xs text-muted text-decoration-none" onclick="openProcTeamSendBackPmModal()">
+                                        <i class="fas fa-undo me-1 text-warning"></i> Return Selected Items to PM
+                                    </button>
+                                </div>
                             </form>
                         @else
                             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -405,6 +415,16 @@
                                     <button class="btn btn-primary btn-sm w-100 fw-bold">
                                         <i class="fas fa-paper-plane me-1"></i> Submit {{ $purchaseRequest->proformaInvoices->count() }} Proforma(s) to PM
                                     </button>
+                                    <div class="mt-2 text-center pt-2 border-top">
+                                        <button type="button" class="btn btn-outline-primary btn-xs fw-bold w-100 py-1" onclick="openProcTeamSelectiveProformaModal()">
+                                            <i class="fas fa-tasks me-1"></i> Submit Selected Items Only (<span class="selected-items-count">0</span>)
+                                        </button>
+                                    </div>
+                                    <div class="mt-1 text-center">
+                                        <button type="button" class="btn btn-link btn-xs text-muted text-decoration-none" onclick="openProcTeamSendBackPmModal()">
+                                            <i class="fas fa-undo me-1 text-warning"></i> Return Selected Items to PM
+                                        </button>
+                                    </div>
                                 </form>
                             @else
                                 <div class="alert alert-warning py-2 px-3 small mb-3">
@@ -413,6 +433,11 @@
                                 <button type="button" class="btn btn-primary btn-sm w-100 fw-bold py-2 mb-2 shadow-sm" data-bs-toggle="modal" data-bs-target="#attachProformaModal">
                                     <i class="fas fa-plus-circle me-1"></i> Attach First Proforma Quote
                                 </button>
+                                <div class="mt-2 text-center">
+                                    <button type="button" class="btn btn-link btn-xs text-muted text-decoration-none" onclick="openProcTeamSendBackPmModal()">
+                                        <i class="fas fa-undo me-1 text-warning"></i> Return Selected Items to PM
+                                    </button>
+                                </div>
                             @endif
                         @endif
 
@@ -1351,7 +1376,8 @@
             @php
                 $isSelectableStage = $canActOnCurrentStage && in_array($purchaseRequest->status, [
                     \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
-                    \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER
+                    \App\Models\PurchaseRequest::STATUS_PENDING_PROC_MANAGER,
+                    \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM
                 ]);
             @endphp
             <div class="card border-0 shadow-sm mb-4">
@@ -1397,6 +1423,22 @@
                                 </button>
                                 <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" onclick="openPmProformaModal()">
                                     <i class="fas fa-file-invoice-dollar me-1"></i> Proforma Selected
+                                </button>
+                            </div>
+                            @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM)
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <span class="small text-muted me-1"><span class="selected-items-count fw-bold text-primary">0</span> selected</span>
+                                @if($purchaseRequest->sourcing_method === 'direct_buy')
+                                <button type="button" class="btn btn-sm btn-success shadow-sm fw-bold" onclick="openProcTeamSelectiveDirectBuyModal()">
+                                    <i class="fas fa-bolt me-1"></i> Submit Selected Prices (<span class="selected-items-count fw-bold">0</span>)
+                                </button>
+                                @else
+                                <button type="button" class="btn btn-sm btn-primary shadow-sm fw-bold" onclick="openProcTeamSelectiveProformaModal()">
+                                    <i class="fas fa-paper-plane me-1"></i> Submit Selected Quotes (<span class="selected-items-count fw-bold">0</span>)
+                                </button>
+                                @endif
+                                <button type="button" class="btn btn-sm btn-outline-warning text-dark shadow-sm fw-bold" onclick="openProcTeamSendBackPmModal()">
+                                    <i class="fas fa-undo me-1"></i> Return Selected to PM (<span class="selected-items-count fw-bold">0</span>)
                                 </button>
                             </div>
                             @endif
@@ -1458,6 +1500,7 @@
                                                data-product-name="{{ $item->product?->name ?? 'Item #' . $item->product_id }}"
                                                data-quantity="{{ (float)$item->quantity }}"
                                                data-unit="{{ $item->unit }}"
+                                               data-estimated-cost="{{ (float)($item->estimated_unit_cost ?? 0) }}"
                                                data-has-stock="{{ ($totalNetStock > 0) ? '1' : '0' }}"
                                                data-stock-qty="{{ $totalNetStock }}"
                                                onchange="updateSelectionToolbar()">
@@ -1583,6 +1626,19 @@
                                                     </button>
                                                     <button type="button" class="btn btn-outline-primary" title="Proforma quote for this item" onclick="quickPmProformaSingleItem({{ $item->id }})">
                                                         <i class="fas fa-file-invoice-dollar"></i>
+                                                    </button>
+                                                @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM)
+                                                    @if($purchaseRequest->sourcing_method === 'direct_buy')
+                                                    <button type="button" class="btn btn-outline-success btn-sm fw-semibold" title="Submit price for this item separately" onclick="quickProcTeamDirectBuySingleItem({{ $item->id }})">
+                                                        <i class="fas fa-bolt me-1"></i> Price Item
+                                                    </button>
+                                                    @else
+                                                    <button type="button" class="btn btn-outline-primary btn-sm fw-semibold" title="Submit this item separately with quotes" onclick="quickProcTeamProformaSingleItem({{ $item->id }})">
+                                                        <i class="fas fa-paper-plane me-1"></i> Submit Item
+                                                    </button>
+                                                    @endif
+                                                    <button type="button" class="btn btn-outline-warning text-dark btn-sm" title="Return this item back to Procurement Manager" onclick="quickProcTeamSendBackSingleItem({{ $item->id }})">
+                                                        <i class="fas fa-undo me-1"></i> Return
                                                     </button>
                                                 @endif
                                             @endif
@@ -2475,6 +2531,147 @@
 </div>
 
 {{-- ═════════════════════════════════════════════════════════════════════════ --}}
+{{-- MODAL 3E: PROCUREMENT TEAM SELECTIVE DIRECT BUY PRICING                   --}}
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="procTeamSelectiveDirectBuyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.proc-team-selective-submit', $purchaseRequest) }}" method="POST">
+                @csrf
+                <input type="hidden" name="sourcing_method" value="direct_buy">
+                <div class="modal-header bg-success text-white py-3">
+                    <h5 class="modal-title fw-bold">
+                        <i class="fas fa-bolt me-2"></i>Direct Buy: Submit Selected Material Prices
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-info py-2 px-3 small mb-3 border-start border-4 border-info">
+                        <i class="fas fa-info-circle me-1"></i>
+                        The selected materials will be submitted for price review. If only some items are selected, they will be split into a new PR and advanced forward, while remaining items stay with the Procurement Team.
+                    </div>
+
+                    <h6 class="fw-bold border-bottom pb-2 mb-2">Selected Items &amp; Prices:</h6>
+                    <div class="table-responsive bg-light p-2 rounded border mb-3" style="max-height: 260px; overflow-y: auto;">
+                        <table class="table table-sm align-middle mb-0" style="font-size: 0.88rem;">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th class="ps-2">Material / Product</th>
+                                    <th width="20%">Quantity</th>
+                                    <th width="30%">Unit Price (ETB)</th>
+                                    <th width="25%" class="pe-2 text-end">Line Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="procTeamDirectBuyItemsContainer">
+                                {{-- Populated via JS --}}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-uppercase">Total Amount for Selected Items (ETB)</label>
+                        <input type="number" step="0.01" name="amount" id="procTeamDirectBuyTotalAmount" class="form-control fw-bold bg-white" required placeholder="0.00">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-uppercase">Procurement Notes / Remarks</label>
+                        <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Add remarks or vendor pricing notes..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success btn-sm fw-bold px-4 shadow-sm">
+                        <i class="fas fa-check-circle me-1"></i> Submit Selected Prices
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+{{-- MODAL 3F: PROCUREMENT TEAM SELECTIVE PROFORMA SUBMIT                      --}}
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="procTeamSelectiveProformaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.proc-team-selective-submit', $purchaseRequest) }}" method="POST">
+                @csrf
+                <input type="hidden" name="sourcing_method" value="proforma">
+                <div class="modal-header bg-primary text-white py-3">
+                    <h5 class="modal-title fw-bold">
+                        <i class="fas fa-paper-plane me-2"></i>Submit Selected Proforma Quotes to PM
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-info py-2 px-3 small mb-3 border-start border-4 border-info">
+                        <i class="fas fa-info-circle me-1"></i>
+                        The selected materials and attached proformas will be submitted to the Procurement Manager for review. Any unselected items will remain with the Procurement Team.
+                    </div>
+
+                    <h6 class="fw-bold border-bottom pb-2 mb-2">Selected Items (<span class="selected-items-count">0</span>):</h6>
+                    <div id="procTeamProformaItemsContainer" class="bg-light p-2 rounded border mb-3 small" style="max-height: 180px; overflow-y: auto;">
+                        {{-- Populated via JS --}}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-uppercase">Procurement Team Notes</label>
+                        <textarea name="notes" class="form-control form-control-sm" rows="3" placeholder="Optional notes regarding attached proformas for selected items..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm">
+                        <i class="fas fa-paper-plane me-1"></i> Submit Selected to PM
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+{{-- MODAL 3G: PROCUREMENT TEAM SEND SELECTED BACK TO PM                       --}}
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
+<div class="modal fade" id="procTeamSendBackPmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('purchase-requests.proc-team-selective-send-back-pm', $purchaseRequest) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-warning text-dark py-3">
+                    <h5 class="modal-title fw-bold">
+                        <i class="fas fa-undo me-2"></i>Return Selected Items to Procurement Manager
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-warning py-2 px-3 small mb-3 border-start border-4 border-warning">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        The selected item(s) will be returned to the Procurement Manager (e.g. for method re-evaluation, missing specs, or un-sourceable materials).
+                    </div>
+
+                    <h6 class="fw-bold border-bottom pb-2 mb-2">Items to Return (<span class="selected-items-count">0</span>):</h6>
+                    <div id="procTeamSendBackItemsContainer" class="bg-light p-2 rounded border mb-3 small" style="max-height: 180px; overflow-y: auto;">
+                        {{-- Populated via JS --}}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-uppercase">Reason for Returning to PM <span class="text-danger">*</span></label>
+                        <textarea name="reason" class="form-control form-control-sm" rows="3" placeholder="Explain why these items are being returned (e.g. out of market stock, supplier unavailable, method change needed)..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning text-dark btn-sm fw-bold px-4 shadow-sm">
+                        <i class="fas fa-undo me-1"></i> Return Selected to PM
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- ═════════════════════════════════════════════════════════════════════════ --}}
 {{-- MODAL 4: ATTACH PROFORMA INVOICE QUOTE                                    --}}
 {{-- ═════════════════════════════════════════════════════════════════════════ --}}
 <div class="modal fade" id="attachProformaModal" tabindex="-1" aria-labelledby="attachProformaModalLabel" aria-hidden="true">
@@ -3162,6 +3359,7 @@ function getSelectedPrItems() {
             name: cb.dataset.productName,
             quantity: parseFloat(cb.dataset.quantity),
             unit: cb.dataset.unit,
+            estimatedCost: parseFloat(cb.dataset.estimatedCost || '0'),
             hasStock: cb.dataset.hasStock === '1',
             stockQty: parseFloat(cb.dataset.stockQty || '0'),
         });
@@ -3363,6 +3561,162 @@ function quickPmProformaSingleItem(itemId) {
     }
     updateSelectionToolbar();
     openPmProformaModal();
+}
+
+// ── Procurement Team Selective Actions ──
+function openProcTeamSelectiveDirectBuyModal() {
+    let items = getSelectedPrItems();
+    if (items.length === 0) {
+        document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = true);
+        updateSelectionToolbar();
+        items = getSelectedPrItems();
+    }
+
+    const tbody = document.getElementById('procTeamDirectBuyItemsContainer');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    items.forEach((item, idx) => {
+        const tr = document.createElement('tr');
+        const unitCost = item.estimatedCost > 0 ? item.estimatedCost : 0;
+        const lineTotal = (unitCost * item.quantity).toFixed(2);
+
+        tr.innerHTML = `
+            <td class="ps-2">
+                <input type="hidden" name="item_ids[]" value="${item.id}">
+                <strong class="text-dark">${item.name}</strong>
+            </td>
+            <td>
+                <span class="badge bg-secondary">${item.quantity} ${item.unit}</span>
+            </td>
+            <td>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text py-0 px-1" style="font-size: 11px;">ETB</span>
+                    <input type="number" step="0.01" min="0" 
+                           name="item_prices[${item.id}]" 
+                           value="${unitCost > 0 ? unitCost : ''}" 
+                           class="form-control form-control-sm proc-team-direct-item-cost fw-semibold" 
+                           data-qty="${item.quantity}"
+                           data-item-id="${item.id}"
+                           oninput="recalculateProcTeamDirectBuyTotal()"
+                           placeholder="0.00" required>
+                </div>
+            </td>
+            <td class="pe-2 text-end fw-bold text-success" id="procTeamLineTotal_${item.id}">
+                ${Number(lineTotal).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} ETB
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    recalculateProcTeamDirectBuyTotal();
+
+    const modal = new bootstrap.Modal(document.getElementById('procTeamSelectiveDirectBuyModal'));
+    modal.show();
+}
+
+function recalculateProcTeamDirectBuyTotal() {
+    let total = 0;
+    document.querySelectorAll('.proc-team-direct-item-cost').forEach(input => {
+        const val = parseFloat(input.value) || 0;
+        const qty = parseFloat(input.dataset.qty) || 0;
+        const lineTot = val * qty;
+        total += lineTot;
+
+        const lineSpan = document.getElementById('procTeamLineTotal_' + input.dataset.itemId);
+        if (lineSpan) {
+            lineSpan.textContent = Number(lineTot.toFixed(2)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
+        }
+    });
+
+    const totalInput = document.getElementById('procTeamDirectBuyTotalAmount');
+    if (totalInput) {
+        totalInput.value = total.toFixed(2);
+    }
+}
+
+function openProcTeamSelectiveProformaModal() {
+    let items = getSelectedPrItems();
+    if (items.length === 0) {
+        document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = true);
+        updateSelectionToolbar();
+        items = getSelectedPrItems();
+    }
+
+    const container = document.getElementById('procTeamProformaItemsContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'd-flex justify-content-between align-items-center py-2 border-bottom';
+        div.innerHTML = `
+            <input type="hidden" name="item_ids[]" value="${item.id}">
+            <span><strong>${item.name}</strong></span>
+            <span class="badge bg-primary">${item.quantity} ${item.unit}</span>
+        `;
+        container.appendChild(div);
+    });
+
+    const modal = new bootstrap.Modal(document.getElementById('procTeamSelectiveProformaModal'));
+    modal.show();
+}
+
+function openProcTeamSendBackPmModal() {
+    let items = getSelectedPrItems();
+    if (items.length === 0) {
+        document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = true);
+        updateSelectionToolbar();
+        items = getSelectedPrItems();
+    }
+
+    const container = document.getElementById('procTeamSendBackItemsContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'd-flex justify-content-between align-items-center py-2 border-bottom';
+        div.innerHTML = `
+            <input type="hidden" name="item_ids[]" value="${item.id}">
+            <span><strong>${item.name}</strong></span>
+            <span class="badge bg-secondary">${item.quantity} ${item.unit}</span>
+        `;
+        container.appendChild(div);
+    });
+
+    const modal = new bootstrap.Modal(document.getElementById('procTeamSendBackPmModal'));
+    modal.show();
+}
+
+function quickProcTeamDirectBuySingleItem(itemId) {
+    document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = false);
+    const targetCb = document.querySelector(`.pr-item-checkbox[data-item-id="${itemId}"]`);
+    if (targetCb) {
+        targetCb.checked = true;
+    }
+    updateSelectionToolbar();
+    openProcTeamSelectiveDirectBuyModal();
+}
+
+function quickProcTeamProformaSingleItem(itemId) {
+    document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = false);
+    const targetCb = document.querySelector(`.pr-item-checkbox[data-item-id="${itemId}"]`);
+    if (targetCb) {
+        targetCb.checked = true;
+    }
+    updateSelectionToolbar();
+    openProcTeamSelectiveProformaModal();
+}
+
+function quickProcTeamSendBackSingleItem(itemId) {
+    document.querySelectorAll('.pr-item-checkbox').forEach(cb => cb.checked = false);
+    const targetCb = document.querySelector(`.pr-item-checkbox[data-item-id="${itemId}"]`);
+    if (targetCb) {
+        targetCb.checked = true;
+    }
+    updateSelectionToolbar();
+    openProcTeamSendBackPmModal();
 }
 
 function toggleSplitRowFields(selectEl, index) {
