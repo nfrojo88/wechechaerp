@@ -23,9 +23,6 @@
             <button type="button" class="btn btn-primary btn-sm shadow-xs fw-bold px-3" data-bs-toggle="modal" data-bs-target="#newDeploymentModal">
                 <i class="fa-solid fa-plus me-1"></i>Send Employee to Site (ወደ ሳይት ላክ)
             </button>
-            <a href="{{ route('attendance.index') }}" class="btn btn-outline-secondary btn-sm shadow-xs">
-                <i class="fa-solid fa-calendar-check me-1"></i>Attendance Table
-            </a>
             @role('global_admin|admin')
             <a href="{{ route('admin.attendance.device-logs') }}" class="btn btn-outline-info btn-sm shadow-xs">
                 <i class="fa-solid fa-fingerprint me-1"></i>Device Logs &amp; Reset
