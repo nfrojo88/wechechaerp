@@ -267,6 +267,22 @@ function _autoSyncPunch(string $sn, string $userId, string $punchTime, string $s
             ->where('attendance_date', $dateStr)
             ->first();
 
+        // Check if device is linked to a site/project
+        $siteProjectId = null;
+        $siteName = null;
+        try {
+            $deviceRow = DB::table('zk_devices')->where('serial_number', $sn)->first();
+            if ($deviceRow && ($deviceRow->device_type ?? 'head_office') === 'site') {
+                $siteProjectId = $deviceRow->project_id ?? null;
+                if ($siteProjectId) {
+                    $proj = DB::table('projects')->where('id', $siteProjectId)->first();
+                    $siteName = $proj->name ?? $deviceRow->location;
+                } else {
+                    $siteName = $deviceRow->location ?? 'Site';
+                }
+            }
+        } catch (\Throwable $e) {}
+
         if (!$existing) {
             // First punch of the day → check-in
             DB::table('attendance')->insert([
@@ -278,6 +294,8 @@ function _autoSyncPunch(string $sn, string $userId, string $punchTime, string $s
                 'status'              => 'present',
                 'source'              => 'device',
                 'biometric_device_id' => $sn ?: null,
+                'site_project_id'     => $siteProjectId,
+                'site_name'           => $siteName,
                 'is_approved'         => false,
                 'overtime_hours'      => 0,
                 'overtime_type'       => $otType,

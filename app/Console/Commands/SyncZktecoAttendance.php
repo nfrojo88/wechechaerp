@@ -25,6 +25,9 @@ class SyncZktecoAttendance extends Command
                             {--date= : Date to sync in Y-m-d format (default: today)}
                             {--from= : Start date to sync in Y-m-d format}
                             {--to= : End date to sync in Y-m-d format}
+                            {--location= : Filter by location type (head_office or site)}
+                            {--project= : Filter by Project ID for site devices}
+                            {--device-sn= : Filter by specific Device Serial Number}
                             {--force : Re-sync records that were already synced}
                             {--all : Sync ALL dates (use carefully)}';
 
@@ -32,10 +35,13 @@ class SyncZktecoAttendance extends Command
 
     public function handle(): int
     {
-        $forceResync = $this->option('force');
-        $syncAll     = $this->option('all');
-        $from        = $this->option('from');
-        $to          = $this->option('to');
+        $forceResync  = $this->option('force');
+        $syncAll      = $this->option('all');
+        $from         = $this->option('from');
+        $to           = $this->option('to');
+        $locationType = $this->option('location');
+        $projectId    = $this->option('project');
+        $deviceSn     = $this->option('device-sn');
 
         if ($syncAll) {
             $dates = DB::table('device_attendance_logs')
@@ -53,7 +59,7 @@ class SyncZktecoAttendance extends Command
 
             $this->info("Syncing all " . count($dates) . " available date(s) with punches...");
             foreach ($dates as $date) {
-                $this->syncDate($date, $forceResync);
+                $this->syncDate($date, $forceResync, $locationType, $projectId ? (int)$projectId : null, $deviceSn);
             }
         } elseif ($from || $to) {
             try {
@@ -98,7 +104,7 @@ class SyncZktecoAttendance extends Command
 
             $this->info("Found " . count($dates) . " date(s) with punches in selected range ({$startDate->format('Y-m-d')} to {$endDate->format('Y-m-d')}). Syncing...");
             foreach ($dates as $date) {
-                $this->syncDate($date, $forceResync);
+                $this->syncDate($date, $forceResync, $locationType, $projectId ? (int)$projectId : null, $deviceSn);
             }
         } else {
             $date = $this->option('date') ?? now()->format('Y-m-d');
@@ -109,7 +115,7 @@ class SyncZktecoAttendance extends Command
                 return self::FAILURE;
             }
 
-            $this->syncDate($date, $forceResync);
+            $this->syncDate($date, $forceResync, $locationType, $projectId ? (int)$projectId : null, $deviceSn);
         }
 
         return self::SUCCESS;
@@ -118,14 +124,38 @@ class SyncZktecoAttendance extends Command
     /**
      * Sync all punch records for a given date into the attendance table.
      */
-    private function syncDate(string $date, bool $force): void
+    private function syncDate(string $date, bool $force, ?string $locationType = null, ?int $projectId = null, ?string $deviceSn = null): void
     {
         $this->info("📅 Syncing attendance for: {$date}");
 
-        $rawPunches = DB::table('device_attendance_logs')
+        $query = DB::table('device_attendance_logs')
             ->whereDate('punch_time', $date)
-            ->whereNotNull('punch_time')
-            ->get();
+            ->whereNotNull('punch_time');
+
+        if ($deviceSn) {
+            $query->where('device_sn', $deviceSn);
+        }
+
+        $rawPunches = $query->get();
+
+        // Get devices & projects mapping
+        $devices = DB::table('zk_devices')->get()->keyBy('serial_number');
+        $projects = DB::table('projects')->get()->keyBy('id');
+
+        // Apply location / project filtering if requested
+        if ($locationType || $projectId) {
+            $rawPunches = $rawPunches->filter(function ($punch) use ($devices, $locationType, $projectId) {
+                $dev = $devices[$punch->device_sn] ?? null;
+                $devType = $dev ? ($dev->device_type ?? 'head_office') : 'head_office';
+                if ($locationType && $devType !== $locationType) {
+                    return false;
+                }
+                if ($projectId && ($dev->project_id ?? null) != $projectId) {
+                    return false;
+                }
+                return true;
+            });
+        }
 
         if ($rawPunches->isEmpty()) {
             $this->line("  → No raw punch records in database for {$date}.");
@@ -243,6 +273,23 @@ class SyncZktecoAttendance extends Command
                     }
                 }
 
+                $devSn = $first->device_sn ?? null;
+                $deviceInfo = $devSn && isset($devices[$devSn]) ? $devices[$devSn] : null;
+                $devType = $deviceInfo ? ($deviceInfo->device_type ?? 'head_office') : 'head_office';
+
+                $siteProjId = null;
+                $siteProjName = null;
+                if ($devType === 'site') {
+                    $siteProjId = $deviceInfo->project_id ?? null;
+                    if ($siteProjId && isset($projects[$siteProjId])) {
+                        $siteProjName = $projects[$siteProjId]->name;
+                    } else {
+                        $siteProjName = $deviceInfo->location ?? 'Site';
+                    }
+                } else {
+                    $siteProjName = 'Head Office';
+                }
+
                 $attendanceData = [
                     'check_in'            => $checkIn,
                     'check_out'           => $checkOut,
@@ -253,7 +300,9 @@ class SyncZktecoAttendance extends Command
                     'hours_worked'        => $hoursWorked,
                     'status'              => $status,
                     'source'              => 'device',
-                    'biometric_device_id' => $first->device_sn ?? 'AF6P230860018',
+                    'biometric_device_id' => $devSn ?: 'AF6P230860018',
+                    'site_project_id'     => $siteProjId,
+                    'site_name'           => $siteProjName,
                     'is_approved'         => true,
                     'updated_at'          => now(),
                 ];

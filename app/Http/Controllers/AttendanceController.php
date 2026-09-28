@@ -1532,7 +1532,69 @@ class AttendanceController extends Controller
             abort(403, 'Unauthorized. Device punch logs and data maintenance is restricted to Admin & Global Admin.');
         }
 
-        $query = DeviceAttendanceLog::with('employee')->latest('punch_time');
+        // Defensive: ensure columns exist in zk_devices table
+        if (\Illuminate\Support\Facades\Schema::hasTable('zk_devices')) {
+            try {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('zk_devices', 'device_type')) {
+                    \Illuminate\Support\Facades\Schema::table('zk_devices', function ($table) {
+                        $table->string('device_type', 30)->default('head_office')->after('name');
+                    });
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('zk_devices', 'project_id')) {
+                    \Illuminate\Support\Facades\Schema::table('zk_devices', function ($table) {
+                        $table->unsignedBigInteger('project_id')->nullable()->after('device_type');
+                    });
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('zk_devices', 'ip_address')) {
+                    \Illuminate\Support\Facades\Schema::table('zk_devices', function ($table) {
+                        $table->string('ip_address', 50)->nullable()->after('location');
+                        $table->integer('port')->nullable()->default(80)->after('ip_address');
+                    });
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('zk_devices', 'model_name')) {
+                    \Illuminate\Support\Facades\Schema::table('zk_devices', function ($table) {
+                        $table->string('model_name', 100)->nullable()->after('name');
+                    });
+                }
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('zk_devices', 'notes')) {
+                    \Illuminate\Support\Facades\Schema::table('zk_devices', function ($table) {
+                        $table->text('notes')->nullable()->after('is_active');
+                    });
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        // Fetch all registered ZKTeco devices with project relation
+        $allDevices = \App\Models\ZkDevice::with('project')->orderBy('last_seen_at', 'desc')->get();
+
+        // Also detect any device SNs found in logs but not yet registered in zk_devices
+        $distinctSnInLogs = DB::table('device_attendance_logs')
+            ->whereNotNull('device_sn')
+            ->distinct()
+            ->pluck('device_sn');
+
+        foreach ($distinctSnInLogs as $sn) {
+            if (!$allDevices->firstWhere('serial_number', $sn)) {
+                try {
+                    $newDev = \App\Models\ZkDevice::create([
+                        'serial_number' => $sn,
+                        'name'          => 'ZKTeco Device ' . substr($sn, -6),
+                        'device_type'   => 'head_office',
+                        'location'      => 'Unassigned',
+                        'last_seen_at'  => DB::table('device_attendance_logs')->where('device_sn', $sn)->max('punch_time'),
+                        'is_active'     => true,
+                    ]);
+                    $allDevices->push($newDev);
+                } catch (\Throwable $e) {}
+            }
+        }
+
+        $headOfficeDevices = $allDevices->filter(fn($d) => ($d->device_type ?? 'head_office') === 'head_office');
+        $siteDevices       = $allDevices->filter(fn($d) => ($d->device_type ?? 'head_office') === 'site');
+
+        $projects = \App\Models\Project::orderBy('name')->get();
+
+        $query = DeviceAttendanceLog::with(['employee', 'zkDevice.project'])->latest('punch_time');
 
         if (request('date_from')) {
             $query->whereDate('punch_time', '>=', request('date_from'));
@@ -1546,7 +1608,28 @@ class AttendanceController extends Controller
             $query->whereDoesntHave('employee');
         }
 
-        $logs = $query->paginate(50);
+        // Location / Site / Device Filtering
+        if (request('device_sn')) {
+            $query->where('device_sn', request('device_sn'));
+        } elseif (request('location_type') === 'head_office') {
+            $hoSns = $headOfficeDevices->pluck('serial_number')->filter()->toArray();
+            if (!empty($hoSns)) {
+                $query->whereIn('device_sn', $hoSns);
+            }
+        } elseif (request('location_type') === 'site') {
+            if (request('project_id')) {
+                $siteSns = $siteDevices->where('project_id', request('project_id'))->pluck('serial_number')->filter()->toArray();
+            } else {
+                $siteSns = $siteDevices->pluck('serial_number')->filter()->toArray();
+            }
+            if (!empty($siteSns)) {
+                $query->whereIn('device_sn', $siteSns);
+            } else {
+                $query->whereRaw('1 = 0'); // No devices for this site yet
+            }
+        }
+
+        $logs = $query->paginate(50)->withQueryString();
 
         // Compute diagnostics about raw biometric punches and attendances in database safely
         try {
@@ -1559,6 +1642,12 @@ class AttendanceController extends Controller
                 ->whereNotNull('punch_time')
                 ->selectRaw('COUNT(DISTINCT DATE(punch_time)) as cnt')
                 ->value('cnt') ?? 0;
+
+            // Head office vs Site punch counts
+            $hoSns = $headOfficeDevices->pluck('serial_number')->filter()->toArray();
+            $siteSns = $siteDevices->pluck('serial_number')->filter()->toArray();
+            $hoPunchesCount = !empty($hoSns) ? DB::table('device_attendance_logs')->whereIn('device_sn', $hoSns)->count() : 0;
+            $sitePunchesCount = !empty($siteSns) ? DB::table('device_attendance_logs')->whereIn('device_sn', $siteSns)->count() : 0;
         } catch (\Throwable $e) {
             $totalLogsCount       = 0;
             $totalAttendanceCount = 0;
@@ -1566,17 +1655,99 @@ class AttendanceController extends Controller
             $latestPunch          = null;
             $unlinkedCount        = 0;
             $distinctDatesCount   = 0;
+            $hoPunchesCount       = 0;
+            $sitePunchesCount     = 0;
         }
 
         return view('admin.attendance.device_logs', compact(
             'logs',
+            'allDevices',
+            'headOfficeDevices',
+            'siteDevices',
+            'projects',
             'totalLogsCount',
             'totalAttendanceCount',
             'earliestPunch',
             'latestPunch',
             'unlinkedCount',
-            'distinctDatesCount'
+            'distinctDatesCount',
+            'hoPunchesCount',
+            'sitePunchesCount'
         ));
+    }
+
+    /**
+     * Save or Link a ZKTeco Device to Head Office or a Construction Site
+     */
+    public function saveZkDevice(Request $request)
+    {
+        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'global_admin', 'hr_manager'])) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $request->validate([
+            'serial_number' => 'nullable|string|max:100',
+            'device_sn'     => 'nullable|string|max:100',
+            'name'          => 'nullable|string|max:150',
+            'device_name'   => 'nullable|string|max:150',
+            'device_type'   => 'required|in:head_office,site',
+            'project_id'    => 'nullable|required_if:device_type,site|exists:projects,id',
+            'location'      => 'nullable|string|max:150',
+            'location_name' => 'nullable|string|max:150',
+            'model_name'    => 'nullable|string|max:100',
+            'ip_address'    => 'nullable|string|max:50',
+            'port'          => 'nullable|integer',
+            'notes'         => 'nullable|string|max:500',
+        ]);
+
+        $sn = trim($request->input('serial_number') ?: $request->input('device_sn', ''));
+        if (empty($sn)) {
+            return back()->with('error', 'Device Serial Number (SN) is required.');
+        }
+
+        $name = trim($request->input('name') ?: $request->input('device_name', ''));
+        if (empty($name)) {
+            $name = 'ZKTeco ' . substr($sn, -6);
+        }
+
+        $location = trim($request->input('location') ?: $request->input('location_name', ''));
+
+        $device = \App\Models\ZkDevice::updateOrCreate(
+            ['serial_number' => $sn],
+            [
+                'name'        => $name,
+                'device_type' => $request->device_type,
+                'project_id'  => $request->device_type === 'site' ? $request->project_id : null,
+                'location'    => $location ?: null,
+                'model_name'  => $request->model_name,
+                'ip_address'  => $request->ip_address,
+                'port'        => $request->port ?: 80,
+                'notes'       => $request->notes,
+                'is_active'   => $request->boolean('is_active', true),
+            ]
+        );
+
+        $locationLabel = $device->device_type === 'site'
+            ? ('Construction Site: ' . ($device->project->name ?? 'Project Site'))
+            : 'Head Office';
+
+        return back()->with('success', "Device [{$device->serial_number}] successfully saved and linked to {$locationLabel}!");
+    }
+
+    /**
+     * Delete a ZKTeco device registration
+     */
+    public function deleteZkDevice(Request $request, $id)
+    {
+        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'global_admin'])) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $device = \App\Models\ZkDevice::findOrFail($id);
+        $sn = $device->serial_number;
+        $device->delete();
+
+        return back()->with('success', "Device [{$sn}] registration removed successfully.");
     }
 
     /**
@@ -1584,16 +1755,18 @@ class AttendanceController extends Controller
      */
     public function syncZkteco(Request $request)
     {
-        $syncAll = $request->boolean('sync_all', false);
-        $force   = $request->boolean('force', false);
+        $syncAll      = $request->boolean('sync_all', false);
+        $force        = $request->boolean('force', false);
+        $locationType = $request->input('location_type'); // 'head_office' or 'site'
+        $projectId    = $request->input('project_id');
+        $deviceSn     = $request->input('device_sn');
+
+        $args = [];
+        $redirectParams = [];
 
         if ($syncAll) {
-            $args = ['--all' => true];
-            if ($force) {
-                $args['--force'] = true;
-            }
+            $args['--all'] = true;
             $label = "all available dates in system";
-            $redirectParams = [];
         } else {
             $startDateInput = $request->input('start_date') ?: $request->input('date', now()->format('Y-m-d'));
             $endDateInput   = $request->input('end_date') ?: $startDateInput;
@@ -1612,16 +1785,27 @@ class AttendanceController extends Controller
                 $end = $temp;
             }
 
-            $args = [
-                '--from' => $start,
-                '--to'   => $end,
-            ];
-            if ($force) {
-                $args['--force'] = true;
-            }
+            $args['--from'] = $start;
+            $args['--to']   = $end;
 
             $label = ($start === $end) ? $start : "{$start} to {$end}";
             $redirectParams = ['date_from' => $start, 'date_to' => $end];
+        }
+
+        if ($force) {
+            $args['--force'] = true;
+        }
+        if (!empty($locationType)) {
+            $args['--location'] = $locationType;
+            $redirectParams['location_type'] = $locationType;
+        }
+        if (!empty($projectId)) {
+            $args['--project'] = (int)$projectId;
+            $redirectParams['project_id'] = (int)$projectId;
+        }
+        if (!empty($deviceSn)) {
+            $args['--device-sn'] = $deviceSn;
+            $redirectParams['device_sn'] = $deviceSn;
         }
 
         $targetRoute = (auth()->check() && auth()->user()->hasAnyRole(['admin', 'global_admin']))
@@ -1632,9 +1816,21 @@ class AttendanceController extends Controller
             Artisan::call('zkteco:sync', $args);
             $output = trim(Artisan::output());
 
+            $scopeLabel = '';
+            if ($deviceSn) {
+                $scopeLabel = " (Device {$deviceSn})";
+            } elseif ($locationType === 'site' && $projectId) {
+                $p = \App\Models\Project::find($projectId);
+                $scopeLabel = " (Site: " . ($p->name ?? 'Project') . ")";
+            } elseif ($locationType === 'site') {
+                $scopeLabel = " (All Construction Sites)";
+            } elseif ($locationType === 'head_office') {
+                $scopeLabel = " (Head Office Only)";
+            }
+
             return redirect()
                 ->route($targetRoute, $redirectParams)
-                ->with('success', "ZKTeco device punch sync completed for {$label}. " . ($output ? strip_tags($output) : ''));
+                ->with('success', "ZKTeco device punch sync completed for {$label}{$scopeLabel}. " . ($output ? strip_tags($output) : ''));
 
         } catch (\Exception $e) {
             return redirect()

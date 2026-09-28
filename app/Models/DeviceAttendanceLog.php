@@ -26,4 +26,9 @@ class DeviceAttendanceLog extends Model
     {
         return $this->belongsTo(Employee::class, 'device_user_id', 'device_user_id');
     }
+
+    public function zkDevice()
+    {
+        return $this->belongsTo(ZkDevice::class, 'device_sn', 'serial_number');
+    }
 }

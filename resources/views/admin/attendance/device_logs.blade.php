@@ -157,6 +157,107 @@
         </div>
     </div>
 
+
+    {{-- ══════════════════════════════════════════════════════════════ --}}
+    {{-- BIOMETRIC DEVICES BY LOCATION (HEAD OFFICE VS SITES)        --}}
+    {{-- ══════════════════════════════════════════════════════════════ --}}
+    <div class="card border-0 shadow-sm mb-4 border-top border-4 border-primary">
+        <div class="card-header bg-white py-3 border-bottom">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <h5 class="mb-1 text-dark fw-bold">
+                        <i class="fa-solid fa-network-wired text-primary me-2"></i>Biometric Devices &amp; Location Assignment
+                    </h5>
+                    <p class="text-muted small mb-0">
+                        Separate physical ZKTeco devices into <strong>Head Office</strong> vs <strong>Construction Project Sites</strong>. Punches from site devices automatically link employee attendance to project sites.
+                    </p>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-primary btn-sm shadow-xs fw-semibold" onclick="openCreateDeviceModal()">
+                        <i class="fa-solid fa-plus me-1"></i>+ Link / Register Device
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body p-3 p-md-4">
+            {{-- Quick Summary Stats --}}
+            <div class="row g-3 mb-3">
+                <div class="col-6 col-md-3">
+                    <div class="p-3 bg-light rounded-3 border">
+                        <div class="small text-muted fw-semibold mb-1">Total Devices</div>
+                        <div class="h4 mb-0 fw-bold text-dark">{{ $allDevices->count() }}</div>
+                        <div class="small text-muted mt-1">{{ number_format($totalLogsCount ?? 0) }} total punches</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 bg-primary-subtle bg-opacity-25 rounded-3 border border-primary-subtle">
+                        <div class="small text-primary fw-semibold mb-1">
+                            <i class="fa-solid fa-building me-1"></i>Head Office Devices
+                        </div>
+                        <div class="h4 mb-0 fw-bold text-primary">{{ $headOfficeDevices->count() }}</div>
+                        <div class="small text-muted mt-1">{{ number_format($hoPunchesCount ?? 0) }} punches</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 bg-success-subtle bg-opacity-25 rounded-3 border border-success-subtle">
+                        <div class="small text-success fw-semibold mb-1">
+                            <i class="fa-solid fa-helmet-safety me-1"></i>Construction Sites
+                        </div>
+                        <div class="h4 mb-0 fw-bold text-success">{{ $siteDevices->count() }}</div>
+                        <div class="small text-muted mt-1">{{ number_format($sitePunchesCount ?? 0) }} punches</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 bg-info-subtle bg-opacity-25 rounded-3 border border-info-subtle">
+                        <div class="small text-info fw-semibold mb-1">
+                            <i class="fa-solid fa-signal me-1"></i>Online Status
+                        </div>
+                        <div class="h4 mb-0 fw-bold text-info">
+                            {{ $allDevices->filter(fn($d) => $d->isOnline())->count() }} / {{ $allDevices->count() }}
+                        </div>
+                        <div class="small text-muted mt-1">Active in last 10m</div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Device List Tabs --}}
+            <ul class="nav nav-pills mb-3 gap-2" id="deviceTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active btn-sm" id="all-devices-tab" data-bs-toggle="pill" data-bs-target="#tab-all-devices" type="button" role="tab">
+                        All Devices <span class="badge bg-secondary ms-1">{{ $allDevices->count() }}</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link btn-sm" id="ho-devices-tab" data-bs-toggle="pill" data-bs-target="#tab-ho-devices" type="button" role="tab">
+                        <i class="fa-solid fa-building me-1 text-primary"></i>Head Office Devices <span class="badge bg-primary ms-1">{{ $headOfficeDevices->count() }}</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link btn-sm" id="site-devices-tab" data-bs-toggle="pill" data-bs-target="#tab-site-devices" type="button" role="tab">
+                        <i class="fa-solid fa-helmet-safety me-1 text-success"></i>Construction Site Devices <span class="badge bg-success ms-1">{{ $siteDevices->count() }}</span>
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="deviceTabsContent">
+                {{-- Tab 1: All Devices --}}
+                <div class="tab-pane fade show active" id="tab-all-devices" role="tabpanel">
+                    @include('admin.attendance.partials.devices_table', ['deviceList' => $allDevices])
+                </div>
+
+                {{-- Tab 2: Head Office Devices --}}
+                <div class="tab-pane fade" id="tab-ho-devices" role="tabpanel">
+                    @include('admin.attendance.partials.devices_table', ['deviceList' => $headOfficeDevices])
+                </div>
+
+                {{-- Tab 3: Construction Site Devices --}}
+                <div class="tab-pane fade" id="tab-site-devices" role="tabpanel">
+                    @include('admin.attendance.partials.devices_table', ['deviceList' => $siteDevices])
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- ═══ Two-column info row (Endpoints & Sync) ═══ --}}
     <div class="row g-3 mb-4">
 
@@ -169,7 +270,7 @@
                     </h6>
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-2">Configure your physical ZKTeco device <strong>ADMS → Cloud Server</strong> settings to point to:</p>
+                    <p class="small text-muted mb-2">Configure your physical ZKTeco device <strong>ADMS &rarr; Cloud Server</strong> settings to point to:</p>
                     <div class="bg-dark rounded p-3 mb-3 font-monospace small">
                         <div class="text-success mb-1">
                             <span class="text-warning">Server Address:</span> wechechaconstruction.com
@@ -263,6 +364,29 @@
                             </div>
                         </div>
 
+                        {{-- Location & Project Sync Filters --}}
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold mb-1 text-dark">
+                                <i class="fa-solid fa-location-dot text-primary me-1"></i>Sync Location Scope
+                            </label>
+                            <select name="location_type" id="syncLocationType" class="form-select form-select-sm" onchange="toggleSyncLocation(this.value)">
+                                <option value="all">🌐 All Locations (Head Office &amp; All Sites)</option>
+                                <option value="head_office">🏢 Head Office Devices Only</option>
+                                <option value="site">🏗️ Construction Site Devices Only</option>
+                            </select>
+                        </div>
+                        <div class="mb-2" id="syncProjectWrapper" style="display: none;">
+                            <label class="form-label small fw-semibold mb-1 text-dark">
+                                <i class="fa-solid fa-helmet-safety text-success me-1"></i>Select Construction Project / Site
+                            </label>
+                            <select name="project_id" id="syncProjectId" class="form-select form-select-sm">
+                                <option value="">-- All Construction Sites --</option>
+                                @foreach($projects as $p)
+                                    <option value="{{ $p->id }}">{{ $p->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
                         <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-1">
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" name="sync_all" value="1" id="syncAllCheck" onchange="toggleSyncAll(this.checked)">
@@ -294,17 +418,34 @@
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3">
             <form method="GET" action="{{ route('admin.attendance.device-logs') }}" class="row g-2 align-items-end">
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label fw-semibold small text-muted mb-1">Date From</label>
                     <input type="date" name="date_from" class="form-control form-control-sm"
                            value="{{ request('date_from', '') }}">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <label class="form-label fw-semibold small text-muted mb-1">Date To</label>
                     <input type="date" name="date_to" class="form-control form-control-sm"
                            value="{{ request('date_to', '') }}">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold small text-muted mb-1">Location Scope</label>
+                    <select name="location_type" id="filterLocationType" class="form-select form-select-sm" onchange="toggleFilterProject(this.value)">
+                        <option value="">All Locations</option>
+                        <option value="head_office" {{ request('location_type') === 'head_office' ? 'selected' : '' }}>🏢 Head Office</option>
+                        <option value="site" {{ request('location_type') === 'site' ? 'selected' : '' }}>🏗️ Construction Site</option>
+                    </select>
+                </div>
+                <div class="col-md-2" id="filterProjectCol" style="{{ request('location_type') === 'site' ? '' : 'display:none;' }}">
+                    <label class="form-label fw-semibold small text-muted mb-1">Site / Project</label>
+                    <select name="project_id" class="form-select form-select-sm">
+                        <option value="">All Sites</option>
+                        @foreach($projects as $p)
+                            <option value="{{ $p->id }}" {{ request('project_id') == $p->id ? 'selected' : '' }}>{{ $p->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-2">
                     <label class="form-label fw-semibold small text-muted mb-1">Link Status</label>
                     <select name="linked" class="form-select form-select-sm">
                         <option value="">All Records</option>
@@ -312,7 +453,7 @@
                         <option value="unlinked" {{ request('linked') === 'unlinked' ? 'selected' : '' }}>Not Linked</option>
                     </select>
                 </div>
-                <div class="col-md-3 d-flex gap-2">
+                <div class="col-md-2 d-flex gap-2">
                     <button type="submit" class="btn btn-primary btn-sm flex-fill shadow-xs">
                         <i class="fa-solid fa-filter me-1"></i>Filter
                     </button>
@@ -340,7 +481,7 @@
                     <thead class="table-light">
                         <tr>
                             <th class="ps-3" style="width:60px;">#</th>
-                            <th>Device SN</th>
+                            <th>Device &amp; Location</th>
                             <th>Device User ID</th>
                             <th>Punch Time</th>
                             <th>Type</th>
@@ -356,7 +497,22 @@
                             <td class="ps-3 text-muted small">{{ $log->id }}</td>
                             <td>
                                 @if($log->device_sn)
-                                    <span class="badge bg-secondary-subtle text-dark border">{{ $log->device_sn }}</span>
+                                    <div><code class="fw-bold text-dark bg-light px-2 py-1 rounded border">{{ $log->device_sn }}</code></div>
+                                    @if($log->zkDevice)
+                                        @if($log->zkDevice->device_type === 'site')
+                                            <span class="badge bg-success-subtle text-success border border-success d-inline-flex align-items-center gap-1 mt-1">
+                                                <i class="fa-solid fa-helmet-safety"></i>Site: {{ $log->zkDevice->project->name ?? $log->zkDevice->location_name ?? 'Construction Site' }}
+                                            </span>
+                                        @else
+                                            <span class="badge bg-primary-subtle text-primary border border-primary d-inline-flex align-items-center gap-1 mt-1">
+                                                <i class="fa-solid fa-building"></i>Head Office
+                                            </span>
+                                        @endif
+                                    @else
+                                        <a href="javascript:void(0)" onclick="openLinkModalWithSn('{{ $log->device_sn }}')" class="badge bg-warning-subtle text-warning-emphasis border border-warning text-decoration-none d-inline-flex align-items-center gap-1 mt-1" title="Click to classify device location">
+                                            <i class="fa-solid fa-link-slash"></i>Unlinked (Assign)
+                                        </a>
+                                    @endif
                                 @else
                                     <span class="text-muted">—</span>
                                 @endif
@@ -572,6 +728,148 @@
     </div>
 </div>
 
+{{-- ══════════════════════════════════════════════════════════════ --}}
+{{-- MODALS FOR BIOMETRIC DEVICE REGISTRATION & LOCATION LINKING --}}
+{{-- ══════════════════════════════════════════════════════════════ --}}
+
+{{-- Modal: Register / Edit Biometric Device --}}
+<div class="modal fade" id="deviceModal" tabindex="-1" aria-labelledby="deviceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold" id="deviceModalLabel">
+                    <i class="fa-solid fa-fingerprint me-2"></i><span id="deviceModalTitle">Link / Register Biometric Device</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ route('admin.attendance.devices.save') }}" method="POST" id="deviceForm">
+                @csrf
+                <input type="hidden" name="id" id="dev_id" value="">
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        {{-- Device SN --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">
+                                Device Serial Number (SN) <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" name="device_sn" id="dev_device_sn" class="form-control font-monospace" placeholder="e.g. BKT82309101" required>
+                            <div class="form-text small text-muted">Found on hardware label or device Cloud Server (ADMS) menu.</div>
+                        </div>
+
+                        {{-- Device Name --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">Device Friendly Name</label>
+                            <input type="text" name="device_name" id="dev_device_name" class="form-control" placeholder="e.g. HQ Reception Biometric or Site Main Gate">
+                        </div>
+
+                        {{-- Location Classification --}}
+                        <div class="col-12">
+                            <label class="form-label fw-semibold small text-dark d-block">
+                                Location Classification <span class="text-danger">*</span>
+                            </label>
+                            <div class="d-flex gap-3 p-3 bg-light rounded-3 border">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="device_type" id="type_head_office" value="head_office" checked onchange="handleModalTypeChange('head_office')">
+                                    <label class="form-check-label fw-semibold text-primary" for="type_head_office">
+                                        <i class="fa-solid fa-building me-1"></i>Head Office
+                                    </label>
+                                    <div class="small text-muted">Attendance synced as HQ office hours without project tagging.</div>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="device_type" id="type_site" value="site" onchange="handleModalTypeChange('site')">
+                                    <label class="form-check-label fw-semibold text-success" for="type_site">
+                                        <i class="fa-solid fa-helmet-safety me-1"></i>Construction Site
+                                    </label>
+                                    <div class="small text-muted">Attendance synced directly into project site records.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Project Site Selection (Visible when site is chosen) --}}
+                        <div class="col-md-12" id="modalProjectSection" style="display: none;">
+                            <label class="form-label fw-semibold small text-dark">
+                                Linked Construction Project / Site <span class="text-danger">*</span>
+                            </label>
+                            <select name="project_id" id="dev_project_id" class="form-select">
+                                <option value="">-- Select Project / Site --</option>
+                                @foreach($projects as $proj)
+                                    <option value="{{ $proj->id }}">{{ $proj->name }} @if($proj->location)({{ $proj->location }})@endif</option>
+                                @endforeach
+                            </select>
+                            <div class="form-text small text-muted">All punches from this device will tag employee attendance with this construction site.</div>
+                        </div>
+
+                        {{-- Specific Placement Location --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">Physical Placement / Location</label>
+                            <input type="text" name="location_name" id="dev_location_name" class="form-control" placeholder="e.g. Ground Floor Entrance, Gate 2, Site Office">
+                        </div>
+
+                        {{-- Device Model --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">Hardware Model Name</label>
+                            <input type="text" name="model_name" id="dev_model_name" class="form-control" placeholder="e.g. ZKTeco K40, MB2000, SilkBio-101TC">
+                        </div>
+
+                        {{-- IP Address & Port (Optional) --}}
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">Local IP Address (Optional)</label>
+                            <input type="text" name="ip_address" id="dev_ip_address" class="form-control font-monospace" placeholder="192.168.1.201">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold small text-dark">Port (Optional)</label>
+                            <input type="number" name="port" id="dev_port" class="form-control" placeholder="4370">
+                        </div>
+
+                        {{-- Active Status & Notes --}}
+                        <div class="col-12">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" name="is_active" id="dev_is_active" value="1" checked>
+                                <label class="form-check-label fw-semibold text-dark small" for="dev_is_active">Device is Active &amp; Receiving Logs</label>
+                            </div>
+                            <label class="form-label fw-semibold small text-dark">Notes / Description</label>
+                            <textarea name="notes" id="dev_notes" class="form-control form-control-sm" rows="2" placeholder="Optional notes, installation date, operator contacts..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold">
+                        <i class="fa-solid fa-save me-1"></i>Save Device
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- Modal: Delete Device Confirmation --}}
+<div class="modal fade" id="deleteDeviceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title fw-bold">
+                    <i class="fa-solid fa-trash-can me-2"></i>Delete Device Record
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="deleteDeviceForm" method="POST" action="">
+                @csrf
+                <div class="modal-body p-4">
+                    <p class="mb-2">Are you sure you want to remove device registration for <strong id="deleteDeviceName"></strong> (<code id="deleteDeviceSn"></code>)?</p>
+                    <p class="small text-muted mb-0">Existing biometric punch records received from this device will remain safely stored.</p>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold">
+                        <i class="fa-solid fa-trash-can me-1"></i>Yes, Delete Device
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -595,6 +893,101 @@ function toggleSyncAll(isAll) {
     if (e) {
         e.disabled = isAll;
         e.required = !isAll;
+    }
+}
+
+function toggleSyncLocation(val) {
+    const wrapper = document.getElementById('syncProjectWrapper');
+    if (wrapper) {
+        wrapper.style.display = (val === 'site') ? 'block' : 'none';
+    }
+}
+
+function toggleFilterProject(val) {
+    const col = document.getElementById('filterProjectCol');
+    if (col) {
+        col.style.display = (val === 'site') ? 'block' : 'none';
+    }
+}
+
+function handleModalTypeChange(type) {
+    const section = document.getElementById('modalProjectSection');
+    const projectSelect = document.getElementById('dev_project_id');
+    if (type === 'site') {
+        if (section) section.style.display = 'block';
+        if (projectSelect) projectSelect.required = true;
+    } else {
+        if (section) section.style.display = 'none';
+        if (projectSelect) {
+            projectSelect.required = false;
+            projectSelect.value = '';
+        }
+    }
+}
+
+function openCreateDeviceModal() {
+    const form = document.getElementById('deviceForm');
+    if (form) form.reset();
+    document.getElementById('dev_id').value = '';
+    document.getElementById('deviceModalTitle').textContent = 'Link / Register Biometric Device';
+    document.getElementById('type_head_office').checked = true;
+    document.getElementById('dev_is_active').checked = true;
+    handleModalTypeChange('head_office');
+    const modalEl = document.getElementById('deviceModal');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+}
+
+function openEditDeviceModal(dev) {
+    const sn = dev.serial_number || dev.device_sn || '';
+    document.getElementById('deviceModalTitle').textContent = 'Edit Biometric Device (' + sn + ')';
+    document.getElementById('dev_id').value = dev.id || '';
+    document.getElementById('dev_device_sn').value = sn;
+    document.getElementById('dev_device_name').value = dev.name || dev.device_name || '';
+    document.getElementById('dev_model_name').value = dev.model_name || '';
+    document.getElementById('dev_location_name').value = dev.location || dev.location_name || '';
+    document.getElementById('dev_ip_address').value = dev.ip_address || '';
+    document.getElementById('dev_port').value = dev.port || '';
+    document.getElementById('dev_notes').value = dev.notes || '';
+    document.getElementById('dev_is_active').checked = (dev.is_active == 1);
+
+    if (dev.device_type === 'site') {
+        document.getElementById('type_site').checked = true;
+        handleModalTypeChange('site');
+        document.getElementById('dev_project_id').value = dev.project_id || '';
+    } else {
+        document.getElementById('type_head_office').checked = true;
+        handleModalTypeChange('head_office');
+    }
+
+    const modalEl = document.getElementById('deviceModal');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+    }
+}
+
+function openLinkModalWithSn(sn) {
+    openCreateDeviceModal();
+    const snInput = document.getElementById('dev_device_sn');
+    if (snInput) {
+        snInput.value = sn;
+    }
+}
+
+function openDeleteDeviceModal(id, name, sn) {
+    document.getElementById('deleteDeviceName').textContent = name;
+    document.getElementById('deleteDeviceSn').textContent = sn;
+    const form = document.getElementById('deleteDeviceForm');
+    if (form) {
+        form.action = '{{ url("/admin/attendance/devices") }}/' + id + '/delete';
+    }
+    const modalEl = document.getElementById('deleteDeviceModal');
+    if (modalEl) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
     }
 }
 

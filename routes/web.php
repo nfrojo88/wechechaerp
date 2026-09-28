@@ -1397,6 +1397,10 @@ Route::middleware(['auth'])->group(function () {
             ->name('admin.attendance.device-logs');
         Route::post('/admin/attendance/clear-history', [App\Http\Controllers\AttendanceController::class, 'clearHistory'])
             ->name('admin.attendance.clear-history');
+        Route::post('/admin/attendance/devices/save', [App\Http\Controllers\AttendanceController::class, 'saveZkDevice'])
+            ->name('admin.attendance.devices.save');
+        Route::post('/admin/attendance/devices/{id}/delete', [App\Http\Controllers\AttendanceController::class, 'deleteZkDevice'])
+            ->name('admin.attendance.devices.delete');
     });
 
     // Support Tickets (All Employees)
