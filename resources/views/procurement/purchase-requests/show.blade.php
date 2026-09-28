@@ -620,155 +620,122 @@
                             <input type="hidden" name="decision" id="gmDecisionHidden" value="pay_and_buy">
                             <input type="hidden" name="payment_method" id="gmPaymentMethodHidden" value="pay_and_buy">
 
-                            <!-- Prominent Approval Selection Cards -->
+                            <!-- Stacked Full-Width Approval Options (Fits sidebar perfectly) -->
                             <div class="mb-3">
-                                <label class="form-label small fw-bold text-uppercase text-dark d-block mb-2">
-                                    Select Approval Type <span class="text-danger">*</span>
+                                <label class="form-label small fw-bold text-uppercase text-muted d-block mb-2">
+                                    Select Approval Decision <span class="text-danger">*</span>
                                 </label>
-                                <div class="row g-2">
-                                    <!-- Option 1: Send to Pay to Finance -->
-                                    <div class="col-12 col-sm-6">
-                                        <div class="card h-100 cursor-pointer gm-decision-card border-2 shadow-xs transition-all position-relative" 
-                                             id="gmCardPayFinance" onclick="selectGmMainDecision('pay_and_buy')"
-                                             style="cursor: pointer; border-color: #198754; background-color: rgba(25, 135, 84, 0.05); transition: all 0.2s ease;">
-                                            <div class="card-body p-2 p-md-3">
-                                                <div class="d-flex align-items-start gap-2">
-                                                    <div class="p-2 rounded-3 bg-success text-white flex-shrink-0" style="width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;">
-                                                        <i class="fas fa-money-bill-wave fa-lg"></i>
+                                <div class="d-flex flex-column gap-2" id="gmApprovalTypeOptions">
+                                    <!-- Option 1: Pay to Finance -->
+                                    <div class="card border rounded p-2.5 cursor-pointer shadow-xs mb-0 transition-all gm-select-card" 
+                                         id="gmCardPayFinance" onclick="selectGmMainDecision('pay_and_buy')"
+                                         style="cursor: pointer; border-color: #198754 !important; background-color: rgba(25, 135, 84, 0.06); border-width: 2px;">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div class="d-flex align-items-center gap-2 min-w-0">
+                                                <input class="form-check-input mt-0 gm-decision-radio flex-shrink-0" type="radio" name="gm_mode_selector" id="gmRadioPayFinance" value="pay_and_buy" checked>
+                                                <div class="min-w-0">
+                                                    <div class="fw-bold text-dark small text-truncate">
+                                                        <i class="fas fa-money-bill-wave text-success me-1"></i> Pay to Finance
                                                     </div>
-                                                    <div class="flex-grow-1 min-w-0">
-                                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                                            <strong class="text-dark d-block text-truncate" style="font-size: 13px;">Pay to Finance</strong>
-                                                            <input class="form-check-input gm-decision-radio m-0" type="radio" name="gm_mode_selector" id="gmRadioPayFinance" value="pay_and_buy" checked>
-                                                        </div>
-                                                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 9px;">
-                                                            Finance Disbursement
-                                                        </span>
-                                                        <p class="text-muted small mb-0 mt-1" style="font-size: 11px; line-height: 1.25;">
-                                                            Routes to Finance Head to disburse cash/bank payment.
-                                                        </p>
-                                                    </div>
+                                                    <div class="text-muted text-truncate" style="font-size: 11px;">Cash / Bank Disbursement</div>
                                                 </div>
                                             </div>
+                                            <span class="badge bg-success text-white flex-shrink-0 ms-2" style="font-size: 10px;">Finance</span>
                                         </div>
                                     </div>
 
                                     <!-- Option 2: Buy with Credit -->
-                                    <div class="col-12 col-sm-6">
-                                        <div class="card h-100 cursor-pointer gm-decision-card border shadow-xs transition-all position-relative" 
-                                             id="gmCardBuyCredit" onclick="selectGmMainDecision('buy_by_credit')"
-                                             style="cursor: pointer; border-color: #dee2e6; background-color: #ffffff; transition: all 0.2s ease;">
-                                            <div class="card-body p-2 p-md-3">
-                                                <div class="d-flex align-items-start gap-2">
-                                                    <div class="p-2 rounded-3 bg-primary text-white flex-shrink-0" style="width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;">
-                                                        <i class="fas fa-credit-card fa-lg"></i>
+                                    <div class="card border rounded p-2.5 cursor-pointer shadow-xs mb-0 transition-all gm-select-card" 
+                                         id="gmCardBuyCredit" onclick="selectGmMainDecision('buy_by_credit')"
+                                         style="cursor: pointer; border-color: #dee2e6; background-color: #ffffff; border-width: 1px;">
+                                        <div class="d-flex align-items-center justify-content-between">
+                                            <div class="d-flex align-items-center gap-2 min-w-0">
+                                                <input class="form-check-input mt-0 gm-decision-radio flex-shrink-0" type="radio" name="gm_mode_selector" id="gmRadioBuyCredit" value="buy_by_credit">
+                                                <div class="min-w-0">
+                                                    <div class="fw-bold text-dark small text-truncate">
+                                                        <i class="fas fa-credit-card text-primary me-1"></i> Buy with Credit
                                                     </div>
-                                                    <div class="flex-grow-1 min-w-0">
-                                                        <div class="d-flex justify-content-between align-items-center mb-1">
-                                                            <strong class="text-dark d-block text-truncate" style="font-size: 13px;">Buy with Credit</strong>
-                                                            <input class="form-check-input gm-decision-radio m-0" type="radio" name="gm_mode_selector" id="gmRadioBuyCredit" value="buy_by_credit">
-                                                        </div>
-                                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 9px;">
-                                                            COA 5110 Credit
-                                                        </span>
-                                                        <p class="text-muted small mb-0 mt-1" style="font-size: 11px; line-height: 1.25;">
-                                                            Auto-books to Credit Ledger &amp; routes to Store Keeper.
-                                                        </p>
-                                                    </div>
+                                                    <div class="text-muted text-truncate" style="font-size: 11px;">Supplier Credit (COA 5110)</div>
                                                 </div>
                                             </div>
+                                            <span class="badge bg-primary text-white flex-shrink-0 ms-2" style="font-size: 10px;">COA 5110</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- Granular Per-Item Payment Method Allocation -->
+                            <!-- Granular Per-Item Payment Method Allocation (Accordion/Collapsible list) -->
                             @if($purchaseRequest->items && $purchaseRequest->items->count() > 0)
-                            <div class="card border rounded mb-3 bg-white shadow-xs overflow-hidden" id="gmItemAllocationCard">
-                                <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center border-bottom">
-                                    <div>
-                                        <span class="small fw-bold text-uppercase text-dark">
-                                            <i class="fas fa-layer-group text-primary me-1"></i> Item Payment Allocation
-                                        </span>
-                                        <span class="badge bg-secondary rounded-pill ms-1" style="font-size: 10px;">{{ $purchaseRequest->items->count() }} Items</span>
-                                    </div>
-                                    <div class="btn-group btn-group-sm">
-                                        <button type="button" class="btn btn-outline-success btn-xs py-0 px-2 fw-semibold" style="font-size: 10px;" onclick="setAllItemPaymentMethods('pay_and_buy')" title="Set all items to Pay to Finance">
-                                            <i class="fas fa-money-bill-wave me-1"></i> All Finance
-                                        </button>
-                                        <button type="button" class="btn btn-outline-primary btn-xs py-0 px-2 fw-semibold" style="font-size: 10px;" onclick="setAllItemPaymentMethods('buy_by_credit')" title="Set all items to Buy with Credit">
-                                            <i class="fas fa-credit-card me-1"></i> All Credit
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="card-body p-0">
-                                    <div class="table-responsive" style="max-height: 240px; overflow-y: auto;">
-                                        <table class="table table-sm table-hover align-middle mb-0" style="font-size: 11.5px;">
-                                            <thead class="table-light text-muted sticky-top">
-                                                <tr>
-                                                    <th class="ps-3 py-1">Item & Quantity</th>
-                                                    <th class="text-end pe-3 py-1">Payment Method</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach($purchaseRequest->items as $iIdx => $itm)
-                                                @php
-                                                    $lineTotal = (float)$itm->quantity * (float)($itm->estimated_unit_price ?? $itm->unit_price ?? $itm->estimated_unit_cost ?? 0);
-                                                    $currentMethod = $itm->payment_method ?? 'pay_and_buy';
-                                                @endphp
-                                                <tr class="gm-item-allocation-row" data-item-id="{{ $itm->id }}" data-amount="{{ $lineTotal }}">
-                                                    <td class="ps-3 py-2">
-                                                        <div class="fw-bold text-dark text-truncate" style="max-width: 170px;" title="{{ $itm->item_name ?? $itm->product?->name }}">
-                                                            {{ $itm->item_name ?? $itm->product?->name ?? 'Item #' . ($iIdx + 1) }}
-                                                        </div>
-                                                        <div class="text-muted" style="font-size: 10.5px;">
-                                                            {{ number_format($itm->quantity, 2) }} {{ $itm->unit ?? 'Unit' }}
-                                                            @if($lineTotal > 0)
-                                                                &bull; <span class="fw-semibold text-dark">{{ number_format($lineTotal, 2) }} ETB</span>
-                                                            @endif
-                                                        </div>
-                                                    </td>
-                                                    <td class="text-end pe-3 py-2">
-                                                        <div class="btn-group btn-group-sm" role="group">
-                                                            <input type="radio" class="btn-check gm-item-radio" 
-                                                                   name="item_payment_methods[{{ $itm->id }}]" 
-                                                                   id="item_pay_{{ $itm->id }}" 
-                                                                   value="pay_and_buy" 
-                                                                   autocomplete="off" 
-                                                                   {{ $currentMethod !== 'buy_by_credit' ? 'checked' : '' }}
-                                                                   onchange="onItemPaymentMethodChanged()">
-                                                            <label class="btn btn-outline-success btn-xs py-1 px-2" for="item_pay_{{ $itm->id }}" style="font-size: 10px;">
-                                                                <i class="fas fa-money-bill me-1"></i>Finance
-                                                            </label>
+                            <div class="mb-3">
+                                <button type="button" class="btn btn-outline-secondary btn-sm w-100 d-flex justify-content-between align-items-center py-2 px-2.5 shadow-2xs" 
+                                        data-bs-toggle="collapse" data-bs-target="#gmItemCustomizationCollapse" aria-expanded="false" id="btnToggleItemAlloc">
+                                    <span class="small fw-semibold text-dark text-truncate">
+                                        <i class="fas fa-sliders text-secondary me-1"></i> Customize Payment per Item
+                                    </span>
+                                    <span class="badge bg-light text-dark border ms-1 flex-shrink-0" id="gmSplitStatusBadge" style="font-size: 10px;">All Finance</span>
+                                </button>
 
-                                                            <input type="radio" class="btn-check gm-item-radio" 
-                                                                   name="item_payment_methods[{{ $itm->id }}]" 
-                                                                   id="item_credit_{{ $itm->id }}" 
-                                                                   value="buy_by_credit" 
-                                                                   autocomplete="off"
-                                                                   {{ $currentMethod === 'buy_by_credit' ? 'checked' : '' }}
-                                                                   onchange="onItemPaymentMethodChanged()">
-                                                            <label class="btn btn-outline-primary btn-xs py-1 px-2" for="item_credit_{{ $itm->id }}" style="font-size: 10px;">
-                                                                <i class="fas fa-credit-card me-1"></i>Credit
-                                                            </label>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                                @endforeach
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div class="p-2 bg-light border-top d-flex justify-content-between align-items-center small">
-                                        <div>
-                                            <span class="text-muted" style="font-size: 11px;">Finance:</span>
-                                            <strong class="text-success ms-1 font-monospace" id="gmFinancePortionBadge">0.00 ETB</strong>
+                                <div class="collapse mt-2" id="gmItemCustomizationCollapse">
+                                    <div class="border rounded p-2 bg-light shadow-xs">
+                                        <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                                            <span class="text-muted fw-bold text-uppercase" style="font-size: 10px;">Quick Bulk Set:</span>
+                                            <div class="btn-group btn-group-sm">
+                                                <button type="button" class="btn btn-outline-success btn-xs py-0 px-2 fw-semibold" style="font-size: 10px;" onclick="setAllItemPaymentMethods('pay_and_buy')">All Finance</button>
+                                                <button type="button" class="btn btn-outline-primary btn-xs py-0 px-2 fw-semibold" style="font-size: 10px;" onclick="setAllItemPaymentMethods('buy_by_credit')">All Credit</button>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <span class="text-muted" style="font-size: 11px;">Credit:</span>
-                                            <strong class="text-primary ms-1 font-monospace" id="gmCreditPortionBadge">0.00 ETB</strong>
+
+                                        <!-- Stacked Card List (Zero horizontal scrollbar!) -->
+                                        <div class="d-flex flex-column gap-2" style="max-height: 230px; overflow-y: auto;">
+                                            @foreach($purchaseRequest->items as $iIdx => $itm)
+                                            @php
+                                                $lineTotal = (float)$itm->quantity * (float)($itm->estimated_unit_price ?? $itm->unit_price ?? $itm->estimated_unit_cost ?? 0);
+                                                $currentMethod = $itm->payment_method ?? 'pay_and_buy';
+                                            @endphp
+                                            <div class="bg-white p-2 rounded border gm-item-allocation-row shadow-2xs" data-item-id="{{ $itm->id }}" data-amount="{{ $lineTotal }}">
+                                                <div class="d-flex justify-content-between align-items-start mb-1">
+                                                    <div class="fw-bold text-dark small text-truncate pe-1" style="max-width: 170px;" title="{{ $itm->item_name ?? $itm->product?->name }}">
+                                                        {{ $itm->item_name ?? $itm->product?->name ?? 'Item #' . ($iIdx + 1) }}
+                                                    </div>
+                                                    <div class="text-end flex-shrink-0 font-monospace small fw-bold text-dark" style="font-size: 11px;">
+                                                        {{ number_format($lineTotal, 2) }} ETB
+                                                    </div>
+                                                </div>
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="text-muted" style="font-size: 10.5px;">{{ number_format($itm->quantity, 2) }} {{ $itm->unit ?? 'Unit' }}</span>
+                                                    
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <input type="radio" class="btn-check gm-item-radio" 
+                                                               name="item_payment_methods[{{ $itm->id }}]" 
+                                                               id="item_pay_{{ $itm->id }}" 
+                                                               value="pay_and_buy" 
+                                                               autocomplete="off" 
+                                                               {{ $currentMethod !== 'buy_by_credit' ? 'checked' : '' }}
+                                                               onchange="onItemPaymentMethodChanged()">
+                                                        <label class="btn btn-outline-success btn-xs py-0 px-2 fw-semibold" for="item_pay_{{ $itm->id }}" style="font-size: 10px;">
+                                                            Finance
+                                                        </label>
+
+                                                        <input type="radio" class="btn-check gm-item-radio" 
+                                                               name="item_payment_methods[{{ $itm->id }}]" 
+                                                               id="item_credit_{{ $itm->id }}" 
+                                                               value="buy_by_credit" 
+                                                               autocomplete="off" 
+                                                               {{ $currentMethod === 'buy_by_credit' ? 'checked' : '' }}
+                                                               onchange="onItemPaymentMethodChanged()">
+                                                        <label class="btn btn-outline-primary btn-xs py-0 px-2 fw-semibold" for="item_credit_{{ $itm->id }}" style="font-size: 10px;">
+                                                            Credit
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            @endforeach
                                         </div>
-                                        <div>
-                                            <span class="badge bg-secondary-subtle text-secondary" id="gmAllocationTypeBadge" style="font-size: 9.5px;">All Finance</span>
+
+                                        <!-- Live Total Breakdown -->
+                                        <div class="d-flex justify-content-between align-items-center pt-2 mt-2 border-top small" style="font-size: 10.5px;">
+                                            <div>Finance: <strong class="text-success font-monospace" id="gmFinancePortionBadge">0.00 ETB</strong></div>
+                                            <div>Credit: <strong class="text-primary font-monospace" id="gmCreditPortionBadge">0.00 ETB</strong></div>
                                         </div>
                                     </div>
                                 </div>
@@ -2872,7 +2839,7 @@ function recalculateItemAllocations(allowSplitDetect = true) {
 
     const badgeFinance = document.getElementById('gmFinancePortionBadge');
     const badgeCredit = document.getElementById('gmCreditPortionBadge');
-    const badgeType = document.getElementById('gmAllocationTypeBadge');
+    const badgeType = document.getElementById('gmSplitStatusBadge') || document.getElementById('gmAllocationTypeBadge');
 
     if (badgeFinance) badgeFinance.textContent = financeSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
     if (badgeCredit) badgeCredit.textContent = creditSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
