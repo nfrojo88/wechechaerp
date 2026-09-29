@@ -233,7 +233,7 @@
                             <td>
                                 @if($log->punch_time)
                                     <span class="fw-semibold">{{ $log->punch_time->format('d M Y') }}</span>
-                                    <br><small class="text-muted">{{ $log->punch_time->format('H:i:s') }}</small>
+                                    <br><small class="text-muted">{{ $log->punch_time->format('h:i:s A') }}</small>
                                 @else
                                     <span class="text-muted">N/A</span>
                                 @endif

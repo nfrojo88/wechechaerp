@@ -1965,8 +1965,8 @@
                                     @endphp
                                     <span class="badge {{ $cls }}">{{ $lbl }}</span>
                                 </td>
-                                <td>{{ $att->check_in  ? \Carbon\Carbon::parse($att->check_in)->format('H:i') : '—' }}</td>
-                                <td>{{ $att->check_out ? \Carbon\Carbon::parse($att->check_out)->format('H:i') : '—' }}</td>
+                                <td>{{ $att->check_in  ? \Carbon\Carbon::parse($att->check_in)->format('h:i A') : '—' }}</td>
+                                <td>{{ $att->check_out ? \Carbon\Carbon::parse($att->check_out)->format('h:i A') : '—' }}</td>
                                 <td>
                                     @if($att->hours_worked)
                                         <span class="text-{{ $att->hours_worked >= 8 ? 'success' : 'warning' }}">

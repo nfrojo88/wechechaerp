@@ -513,22 +513,31 @@
                                         if (empty($aOut)) $aOut = $defAOut;
                                     }
                                 }
+
+                                $fmt12 = function($val) {
+                                    if (!$val) return null;
+                                    try {
+                                        return \Carbon\Carbon::parse($val)->format('h:i A');
+                                    } catch (\Throwable $e) {
+                                        return substr($val, 0, 5);
+                                    }
+                                };
                             @endphp
                             <td class="text-center">
                                 <div class="d-flex justify-content-center align-items-center gap-1">
                                     @if($mIn)
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" 
-                                              title="Morning Clock In: {{ $mIn }} • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mIn) }}">
-                                            <i class="fas fa-arrow-right me-1"></i>{{ substr($mIn, 0, 5) }}
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 font-monospace" 
+                                              title="Morning Clock In: {{ $fmt12($mIn) }} (24h: {{ substr($mIn, 0, 5) }}) • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mIn) }}">
+                                            <i class="fas fa-arrow-right me-1"></i>{{ $fmt12($mIn) }}
                                         </span>
                                     @else
                                         <span class="badge bg-light text-muted border px-2 py-1" title="No Morning Clock In">—</span>
                                     @endif
                                     <span class="text-muted small">&bull;</span>
                                     @if($mOut)
-                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1" 
-                                              title="Morning Clock Out: {{ $mOut }} • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mOut) }}">
-                                            <i class="fas fa-arrow-left me-1"></i>{{ substr($mOut, 0, 5) }}
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 font-monospace" 
+                                              title="Morning Clock Out: {{ $fmt12($mOut) }} (24h: {{ substr($mOut, 0, 5) }}) • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mOut) }}">
+                                            <i class="fas fa-arrow-left me-1"></i>{{ $fmt12($mOut) }}
                                         </span>
                                     @else
                                         <span class="badge bg-light text-muted border px-2 py-1" title="No Morning Clock Out">—</span>
@@ -543,18 +552,18 @@
                                 @else
                                     <div class="d-flex justify-content-center align-items-center gap-1">
                                         @if($aIn)
-                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" 
-                                                  title="Afternoon Clock In: {{ $aIn }} • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($aIn) }}">
-                                                <i class="fas fa-arrow-right me-1"></i>{{ substr($aIn, 0, 5) }}
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 font-monospace" 
+                                                  title="Afternoon Clock In: {{ $fmt12($aIn) }} (24h: {{ substr($aIn, 0, 5) }}) • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($aIn) }}">
+                                                <i class="fas fa-arrow-right me-1"></i>{{ $fmt12($aIn) }}
                                             </span>
                                         @else
                                             <span class="badge bg-light text-muted border px-2 py-1" title="No Afternoon Clock In">—</span>
                                         @endif
                                         <span class="text-muted small">&bull;</span>
                                         @if($aOut)
-                                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1" 
-                                                  title="Afternoon Clock Out: {{ $aOut }} • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($aOut) }}">
-                                                <i class="fas fa-arrow-left me-1"></i>{{ substr($aOut, 0, 5) }}
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 font-monospace" 
+                                                  title="Afternoon Clock Out: {{ $fmt12($aOut) }} (24h: {{ substr($aOut, 0, 5) }}) • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($aOut) }}">
+                                                <i class="fas fa-arrow-left me-1"></i>{{ $fmt12($aOut) }}
                                             </span>
                                         @else
                                             <span class="badge bg-light text-muted border px-2 py-1" title="No Afternoon Clock Out">—</span>
@@ -690,8 +699,13 @@
                             <input type="file" name="file" id="attendanceFile" accept=".xls,.xlsx,.csv"
                                    class="position-absolute top-0 start-0 w-100 h-100 opacity-0" style="cursor: pointer;" required>
                         </div>
-                        <div id="fileNameDisplay" class="mt-2 text-success d-none">
-                            <i class="fas fa-check-circle me-1"></i><span id="fileNameText"></span>
+                        <div id="fileNameDisplay" class="mt-2 d-none align-items-center justify-content-between p-2 rounded bg-light border border-success-subtle shadow-xs">
+                            <div class="text-success small fw-semibold text-truncate me-2">
+                                <i class="fas fa-check-circle me-1"></i><span id="fileNameText"></span>
+                            </div>
+                            <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 flex-shrink-0" id="clearFileBtn" style="font-size: 0.75rem;" title="Clear selected file">
+                                <i class="fas fa-times me-1"></i>Clear File
+                            </button>
                         </div>
                     </div>
 
@@ -1147,10 +1161,25 @@ if (fileInput && dropZone) {
             const file = this.files[0];
             fileNameText.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
             fileDisplay.classList.remove('d-none');
+            fileDisplay.classList.add('d-flex');
             dropZone.style.borderColor = '#28a745';
             dropZone.style.background = '#f0fff4';
         }
     });
+
+    const clearFileBtn = document.getElementById('clearFileBtn');
+    if (clearFileBtn) {
+        clearFileBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            fileInput.value = '';
+            fileDisplay.classList.add('d-none');
+            fileDisplay.classList.remove('d-flex');
+            fileNameText.textContent = '';
+            dropZone.style.borderColor = '#1a73e8';
+            dropZone.style.background = '#f0f6ff';
+        });
+    }
 
     ['dragover', 'dragenter'].forEach(e => {
         dropZone.addEventListener(e, function(ev) {

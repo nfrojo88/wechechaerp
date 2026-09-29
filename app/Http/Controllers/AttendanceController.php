@@ -140,6 +140,12 @@ class AttendanceController extends Controller
             }
         }
 
+        // ── Auto-purge any demo/test machine logs or simulated attendance records ──
+        try {
+            DB::table('device_attendance_logs')->where('device_sn', 'TEST-DEVICE-01')->delete();
+            DB::table('attendances')->where('device_sn', 'TEST-DEVICE-01')->delete();
+        } catch (\Throwable $e) {}
+
         // ── Auto-heal & Clean: All employees with punch records or worked hours are PRESENT ──
         try {
             Attendance::where('status', 'half_day')
@@ -1738,7 +1744,7 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Download a sample CSV template matching the biometric machine export format.
+     * Download a clean CSV template matching the biometric machine export format.
      */
     public function downloadTemplate()
     {
@@ -1749,15 +1755,7 @@ class AttendanceController extends Controller
             'Work Time', 'Exception', 'Must C/In', 'Must C/Out', 'Department',
         ];
 
-        $sample = [
-            ['EMP001', '1', '', 'John Doe', '', date('n/j/Y'), 'Morning', '08:30', '12:30', '08:25', '12:35', '0.5', '0.5', '', '', '', '', '4', '', 'True', 'True', 'Office'],
-            ['EMP001', '1', '', 'John Doe', '', date('n/j/Y'), 'Afternoon', '13:30', '17:30', '13:28', '17:35', '0.5', '0.5', '', '', '', '0.1', '4.1', '', 'True', 'True', 'Office'],
-        ];
-
         $csv = implode(',', $headers) . "\r\n";
-        foreach ($sample as $row) {
-            $csv .= implode(',', array_map(fn($v) => '"' . str_replace('"', '""', $v) . '"', $row)) . "\r\n";
-        }
 
         return response($csv, 200, [
             'Content-Type'        => 'text/csv',

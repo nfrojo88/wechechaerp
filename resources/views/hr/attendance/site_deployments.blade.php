@@ -318,10 +318,10 @@
                                     </span>
                                 @endif
                                 <div class="small font-monospace text-muted d-flex flex-wrap justify-content-center gap-1" style="font-size:0.7rem;">
-                                    @if($hasMIn)<span class="badge bg-light text-dark border" title="Morning Clock In">M-In: {{ substr($d->morning_in, 0, 5) }}</span>@endif
-                                    @if($hasMOut)<span class="badge bg-light text-dark border" title="Morning Clock Out">M-Out: {{ substr($d->morning_out, 0, 5) }}</span>@endif
-                                    @if($hasAIn)<span class="badge bg-light text-dark border" title="Afternoon Clock In">A-In: {{ substr($d->afternoon_in, 0, 5) }}</span>@endif
-                                    @if($hasAOut)<span class="badge bg-light text-dark border" title="Afternoon Clock Out">A-Out: {{ substr($d->afternoon_out, 0, 5) }}</span>@endif
+                                    @if($hasMIn)<span class="badge bg-light text-dark border" title="Morning Clock In">M-In: {{ \Carbon\Carbon::parse($d->morning_in)->format('h:i A') }}</span>@endif
+                                    @if($hasMOut)<span class="badge bg-light text-dark border" title="Morning Clock Out">M-Out: {{ \Carbon\Carbon::parse($d->morning_out)->format('h:i A') }}</span>@endif
+                                    @if($hasAIn)<span class="badge bg-light text-dark border" title="Afternoon Clock In">A-In: {{ \Carbon\Carbon::parse($d->afternoon_in)->format('h:i A') }}</span>@endif
+                                    @if($hasAOut)<span class="badge bg-light text-dark border" title="Afternoon Clock Out">A-Out: {{ \Carbon\Carbon::parse($d->afternoon_out)->format('h:i A') }}</span>@endif
                                 </div>
                             </td>
                             <td class="text-center">
