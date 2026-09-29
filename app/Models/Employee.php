@@ -668,7 +668,18 @@ class Employee extends Model
         $weekendCount  = $records->where('status', 'weekend')->count();
         $totalHours    = (float) $records->sum('hours_worked');
 
-        $workingRecords = $presentCount + $absentCount + $halfDayCount;
+        // RULE: 3 Late Days = 1 Absent Day Penalty
+        $lateDays = $records->filter(function($r) {
+            return ($r->late_minutes ?? 0) > 0
+                || $r->status === 'late'
+                || (!empty($r->morning_in) && substr(trim($r->morning_in), 0, 5) > '08:40');
+        })->count();
+
+        $penaltyData       = \App\Services\BiometricPunchService::calculateLatePenalty($lateDays);
+        $penaltyAbsentDays = $penaltyData['penalty_days'];
+        $effectiveAbsent   = $absentCount + $penaltyAbsentDays;
+
+        $workingRecords = $presentCount + $effectiveAbsent + $halfDayCount;
         $rate = $workingRecords > 0
             ? round((($presentCount + ($halfDayCount * 0.5)) / $workingRecords) * 100, 1)
             : ($records->count() > 0 ? 100.0 : 0.0);
@@ -678,7 +689,13 @@ class Employee extends Model
             'month'         => $month,
             'month_label'   => \Carbon\Carbon::createFromDate($year, $month, 1)->format('F Y'),
             'present'       => $presentCount,
-            'absent'        => $absentCount,
+            'absent'               => $absentCount,
+            'late_days'            => $lateDays,
+            'late_penalty_absents' => $penaltyAbsentDays,
+            'effective_absent'     => $effectiveAbsent,
+            'late_remainder'       => $penaltyData['remainder'],
+            'late_needed_for_next' => $penaltyData['needed_for_next'],
+            'late_display_text'    => $penaltyData['display_text'],
             'half_day'      => $halfDayCount,
             'leave'         => $leaveCount,
             'holiday'       => $holidayCount,

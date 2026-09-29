@@ -40,26 +40,30 @@ class HRReportsController extends Controller
 
         $attendanceData = [];
         foreach ($employees as $emp) {
-            $present = Attendance::where('employee_id', $emp->id)
+            $records = Attendance::where('employee_id', $emp->id)
                 ->whereBetween('attendance_date', [$fromDate, $toDate])
-                ->where('status', 'present')
-                ->count();
+                ->get();
 
-            $absent = Attendance::where('employee_id', $emp->id)
-                ->whereBetween('attendance_date', [$fromDate, $toDate])
-                ->where('status', 'absent')
-                ->count();
+            $present = $records->where('status', 'present')->count();
+            $absent  = $records->where('status', 'absent')->count();
+            $leave   = $records->where('status', 'leave')->count();
 
-            $leave = Attendance::where('employee_id', $emp->id)
-                ->whereBetween('attendance_date', [$fromDate, $toDate])
-                ->where('status', 'leave')
-                ->count();
+            // RULE: 3 Late Days = 1 Absent Day Penalty
+            $lateDays = $records->filter(function($r) {
+                return ($r->late_minutes ?? 0) > 0 || ($r->status ?? '') === 'late' || (!empty($r->morning_in) && substr(trim($r->morning_in), 0, 5) > '08:40');
+            })->count();
+
+            $latePenalty     = intdiv($lateDays, 3);
+            $effectiveAbsent = $absent + $latePenalty;
 
             $attendanceData[] = [
-                'employee' => $emp,
-                'present' => $present,
-                'absent' => $absent,
-                'leave' => $leave,
+                'employee'              => $emp,
+                'present'               => $present,
+                'absent'                => $absent,
+                'late_days'             => $lateDays,
+                'late_penalty_absents'  => $latePenalty,
+                'effective_absent'      => $effectiveAbsent,
+                'leave'                 => $leave,
                 'attendance_percentage' => $totalWorkingDays > 0 ? ($present / $totalWorkingDays) * 100 : 0,
             ];
         }
@@ -328,7 +332,17 @@ class HRReportsController extends Controller
 
         $callback = function () use ($fromDate, $toDate) {
             $file = fopen('php://output', 'w');
-            fputcsv($file, ['Employee', 'Present', 'Absent', 'Leave', 'Late Days', 'Late (Mins)', 'Attendance %']);
+            fputcsv($file, [
+                'Employee', 
+                'Present', 
+                'Base Absent', 
+                'Late Days', 
+                'Late Penalty (3 Late=1 Absent)', 
+                'Total Effective Absent', 
+                'Leave', 
+                'Late (Mins)', 
+                'Attendance %'
+            ]);
 
             $employees = Employee::where(function($q) {
                 $q->where('status', 'active')->orWhereNull('status');
@@ -348,20 +362,24 @@ class HRReportsController extends Controller
                 $lateMins = 0;
                 foreach ($records as $r) {
                     $lm = (int)$r->late_minutes;
-                    if ($lm > 0) {
+                    if ($lm > 0 || ($r->status ?? '') === 'late' || (!empty($r->morning_in) && substr(trim($r->morning_in), 0, 5) > '08:40')) {
                         $lateDays++;
-                        $lateMins += $lm;
+                        $lateMins += max($lm, 0);
                     }
                 }
 
-                $percentage = $totalWorkingDays > 0 ? ($present / $totalWorkingDays) * 100 : 0;
+                $latePenalty     = intdiv($lateDays, 3);
+                $effectiveAbsent = $absent + $latePenalty;
+                $percentage      = $totalWorkingDays > 0 ? ($present / $totalWorkingDays) * 100 : 0;
 
                 fputcsv($file, [
                     $emp->name,
                     $present,
                     $absent,
-                    $leave,
                     $lateDays,
+                    $latePenalty,
+                    $effectiveAbsent,
+                    $leave,
                     $lateMins,
                     number_format($percentage, 2) . '%'
                 ]);

@@ -312,9 +312,31 @@
         </div>
     </div>
 
+    {{-- Attendance Policy Rule Banner (3 Late Days = 1 Absent Day Penalty) --}}
+    <div class="alert bg-warning-subtle border border-warning d-flex align-items-center justify-content-between flex-wrap gap-2 p-2.5 px-3 rounded-3 mb-3 shadow-xs">
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-warning text-dark px-2.5 py-1.5 fw-bold font-monospace shadow-xs">
+                <i class="fa-solid fa-scale-balanced me-1"></i>POLICY RULE
+            </span>
+            <div>
+                <span class="fw-bold text-dark small">Attendance Penalty: 3 Late Days = 1 Absent Day Penalty</span>
+                <span class="text-muted small ms-1 d-none d-md-inline">&bull; Official check-in cutoff is 08:40 AM. Every 3 late arrivals incur 1 full day absence penalty.</span>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-white text-dark border font-monospace px-2.5 py-1 small shadow-xs">
+                <i class="fa-regular fa-clock text-warning me-1"></i>Cutoff: 08:40 AM
+            </span>
+            <span class="badge bg-danger text-white font-monospace px-2.5 py-1 small shadow-xs">
+                3 Late Days = 1 Day Absent
+            </span>
+        </div>
+    </div>
+
     <!-- Statistics Cards -->
     <div class="row mb-4 g-3">
-        <div class="col-6 col-md">
+        {{-- Present Card --}}
+        <div class="col-6 col-lg">
             <div class="card border-0 border-start border-4 border-success shadow-sm h-100 py-2 bg-white">
                 <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
@@ -331,7 +353,9 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md">
+
+        {{-- On Site (S) Card --}}
+        <div class="col-6 col-lg">
             <div class="card border-0 border-start border-4 shadow-sm h-100 py-2 bg-white" style="border-left-color: #6366f1 !important;">
                 <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #6366f1;">
@@ -348,7 +372,44 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md">
+
+        {{-- Late Days & 3 Late = 1 Absent Penalty Card --}}
+        <div class="col-6 col-lg">
+            <div class="card border-0 border-start border-4 shadow-sm h-100 py-2 bg-white" style="border-left-color: #d97706 !important;">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #d97706;">
+                            Late &amp; Penalty (3 Late = 1 Absent)
+                        </div>
+                    </div>
+                    @if(!empty($stats['et_title']))
+                    <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
+                        🇪🇹 {{ $stats['et_title'] }}
+                    </small>
+                    @endif
+                    <div class="d-flex align-items-baseline gap-2">
+                        <div class="h4 mb-0 font-weight-bold" style="color: #d97706;">
+                            {{ $stats['late_days'] ?? 0 }}
+                        </div>
+                        <small class="text-muted fw-semibold" style="font-size:0.75rem;">Late Days</small>
+                    </div>
+                    <div class="mt-1">
+                        @if(($stats['late_penalty_absents'] ?? 0) > 0)
+                            <span class="badge bg-danger text-white font-monospace px-1.5 py-0.5" style="font-size: 0.68rem;" title="3 Late Days = 1 Absent Day Penalty">
+                                <i class="fa-solid fa-scale-balanced me-0.5"></i>Penalty: {{ $stats['late_penalty_absents'] }} Day(s) Absent
+                            </span>
+                        @else
+                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-1.5 py-0.5" style="font-size: 0.68rem;">
+                                {{ ($stats['late_days'] ?? 0) % 3 }}/3 toward 1 absent
+                            </span>
+                        @endif
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Effective Absent Card (Base + Late Penalty) --}}
+        <div class="col-6 col-lg">
             <div class="card border-0 border-start border-4 border-danger shadow-sm h-100 py-2 bg-white">
                 <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
@@ -359,13 +420,29 @@
                         🇪🇹 {{ $stats['et_title'] }}
                     </small>
                     @endif
-                    <div class="h4 mb-0 font-weight-bold text-gray-800">
-                        {{ $stats['absent'] ?? 0 }}
+                    <div class="d-flex align-items-baseline gap-2">
+                        <div class="h4 mb-0 font-weight-bold text-danger">
+                            {{ $stats['effective_absent'] ?? $stats['absent'] }}
+                        </div>
+                        <small class="text-muted fw-semibold" style="font-size:0.75rem;">Effective</small>
+                    </div>
+                    <div class="mt-1">
+                        @if(($stats['late_penalty_absents'] ?? 0) > 0)
+                            <small class="text-danger fw-semibold font-monospace" style="font-size: 0.68rem;">
+                                {{ $stats['absent'] }} Base + {{ $stats['late_penalty_absents'] }} Late Pen.
+                            </small>
+                        @else
+                            <small class="text-muted" style="font-size: 0.68rem;">
+                                {{ $stats['absent'] ?? 0 }} unexcused
+                            </small>
+                        @endif
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md">
+
+        {{-- Half Day Card --}}
+        <div class="col-6 col-lg">
             <div class="card border-0 border-start border-4 border-warning shadow-sm h-100 py-2 bg-white">
                 <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
@@ -382,7 +459,9 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md">
+
+        {{-- Leave Card --}}
+        <div class="col-6 col-lg">
             <div class="card border-0 border-start border-4 border-info shadow-sm h-100 py-2 bg-white">
                 <div class="card-body py-2 px-3">
                     <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
@@ -522,10 +601,24 @@
                                 <div class="d-flex justify-content-center align-items-center gap-1">
                                     @if($mIn)
                                         @if($lateStatus['is_late'])
+                                            @php
+                                                $empMonthlyLates = $monthlyLateCounts[$a->employee_id] ?? 1;
+                                                $empPenaltyAbs   = intdiv($empMonthlyLates, 3);
+                                                $empLateRem      = $empMonthlyLates % 3;
+                                            @endphp
                                             <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-2 py-1 font-monospace" 
-                                                  title="Morning Clock In: {{ $fmt12($mIn) }} ({{ $lateStatus['label'] }} • Cutoff 08:40 AM) • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mIn) }}">
+                                                  title="Morning Clock In: {{ $fmt12($mIn) }} ({{ $lateStatus['label'] }} • Cutoff 08:40 AM) • Rule: 3 Late = 1 Absent (Total {{ $empMonthlyLates }} late days this month) • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mIn) }}">
                                                 <i class="fas fa-arrow-right me-1 text-warning"></i>{{ $fmt12($mIn) }}
                                                 <span class="badge bg-danger text-white ms-1 px-1 py-0" style="font-size: 0.65rem;">+{{ $lateStatus['late_minutes'] }}m</span>
+                                                @if($empPenaltyAbs > 0)
+                                                    <span class="badge bg-danger text-white ms-1 px-1 py-0" style="font-size: 0.62rem;" title="Rule: 3 Late = 1 Absent. Employee has {{ $empMonthlyLates }} late days this month = {{ $empPenaltyAbs }} day(s) absent penalty!">
+                                                        <i class="fa-solid fa-scale-balanced me-0.5"></i>{{ $empPenaltyAbs }}d Pen
+                                                    </span>
+                                                @else
+                                                    <span class="badge bg-warning text-dark border ms-1 px-1 py-0" style="font-size: 0.62rem;" title="Rule: 3 Late = 1 Absent. Late day {{ $empMonthlyLates }} of 3 ({{ 3 - $empMonthlyLates }} more = 1 absent penalty)">
+                                                        {{ $empMonthlyLates }}/3
+                                                    </span>
+                                                @endif
                                             </span>
                                         @else
                                             <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 font-monospace" 

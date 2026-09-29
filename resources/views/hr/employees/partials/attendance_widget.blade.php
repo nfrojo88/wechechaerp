@@ -16,7 +16,12 @@
         $halfDayCount  = $records->where('status', 'half_day')->count();
         $leaveCount    = $records->where('status', 'leave')->count();
         $totalHours    = (float) $records->sum('hours_worked');
-        $workingRecords = $presentCount + $absentCount + $halfDayCount;
+        $lateCount     = $records->filter(function($r) {
+            return ($r->late_minutes ?? 0) > 0 || ($r->status ?? '') === 'late' || (!empty($r->morning_in) && substr(trim($r->morning_in), 0, 5) > '08:40');
+        })->count();
+        $latePenalty   = intdiv($lateCount, 3);
+        $effectiveAbsent = $absentCount + $latePenalty;
+        $workingRecords = $presentCount + $effectiveAbsent + $halfDayCount;
         $rate = $workingRecords > 0
             ? round((($presentCount + ($halfDayCount * 0.5)) / $workingRecords) * 100, 1)
             : ($records->count() > 0 ? 100.0 : 0.0);
@@ -26,7 +31,10 @@
             'month'         => $currMonth,
             'month_label'   => \Carbon\Carbon::createFromDate($currYear, $currMonth, 1)->format('F Y'),
             'present'       => $presentCount,
-            'absent'        => $absentCount,
+            'absent'               => $absentCount,
+            'late_days'            => $lateCount,
+            'late_penalty_absents' => $latePenalty,
+            'effective_absent'     => $effectiveAbsent,
             'half_day'      => $halfDayCount,
             'leave'         => $leaveCount,
             'hours_worked'  => round($totalHours, 1),
@@ -190,6 +198,19 @@
             </div>
         </div>
 
+        {{-- 3 Late = 1 Absent Policy Notice (if penalties incurred) --}}
+        @if(!empty($attStats['late_penalty_absents']) && $attStats['late_penalty_absents'] > 0)
+            <div class="p-2 px-2.5 rounded-3 mb-2.5 d-flex align-items-center justify-content-between border" style="background:#fffbeb; border-color:#fde68a !important; font-size:0.75rem;">
+                <div class="d-flex align-items-center gap-1.5 text-dark">
+                    <i class="fa-solid fa-scale-balanced text-warning"></i>
+                    <span><strong>Rule Applied:</strong> 3 Late Days = 1 Absent Day Penalty</span>
+                </div>
+                <span class="badge bg-danger text-white font-monospace">
+                    {{ $attStats['late_penalty_absents'] }} Day(s) Absent Penalty
+                </span>
+            </div>
+        @endif
+
         {{-- 4 Mini Stat Tiles in 2x2 Grid --}}
         <div class="row g-2 mb-3">
             <div class="col-6">
@@ -202,18 +223,38 @@
             </div>
             <div class="col-6">
                 <div class="p-2.5 rounded-3 text-center border" style="background: #fef2f2; border-color: #fecaca !important;">
-                    <span class="d-block text-muted fw-semibold" style="font-size: 0.72rem;">Absent</span>
+                    <span class="d-block text-muted fw-semibold" style="font-size: 0.72rem;">Effective Absent</span>
                     <h5 class="fw-bold mb-0 text-danger font-monospace" style="font-size: 1.15rem;">
-                        {{ $attStats['absent'] }} <span class="fw-normal text-muted" style="font-size: 0.7rem;">days</span>
+                        {{ $attStats['effective_absent'] ?? $attStats['absent'] }} <span class="fw-normal text-muted" style="font-size: 0.7rem;">days</span>
                     </h5>
+                    @if(!empty($attStats['late_penalty_absents']) && $attStats['late_penalty_absents'] > 0)
+                        <small class="d-block text-danger fw-semibold mt-0.5 font-monospace" style="font-size: 0.65rem;">
+                            {{ $attStats['absent'] }} base + {{ $attStats['late_penalty_absents'] }} late pen.
+                        </small>
+                    @endif
                 </div>
             </div>
             <div class="col-6">
                 <div class="p-2.5 rounded-3 text-center border" style="background: #fffbeb; border-color: #fde68a !important;">
-                    <span class="d-block text-muted fw-semibold" style="font-size: 0.72rem;">Half Day / Late</span>
+                    <span class="d-block text-muted fw-semibold text-truncate" style="font-size: 0.72rem;" title="Official cutoff: 08:40 AM. 3 Late Days = 1 Absent Day Penalty">Late (3 Late = 1 Absent)</span>
                     <h5 class="fw-bold mb-0 font-monospace" style="color: #d97706 !important; font-size: 1.15rem;">
-                        {{ $attStats['half_day'] }} <span class="fw-normal text-muted" style="font-size: 0.7rem;">days</span>
+                        {{ $attStats['late_days'] ?? 0 }} <span class="fw-normal text-muted" style="font-size: 0.7rem;">days</span>
                     </h5>
+                    @php
+                        $wLateDays = $attStats['late_days'] ?? 0;
+                        $wPenalty  = $attStats['late_penalty_absents'] ?? intdiv($wLateDays, 3);
+                        $wRem      = $wLateDays % 3;
+                    @endphp
+                    <small class="d-block mt-0.5" style="font-size: 0.65rem; color: #b45309;">
+                        @if($wPenalty > 0)
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-1 py-0">{{ $wPenalty }}d penalty</span>
+                            @if($wRem > 0) <span class="text-muted">+{{ $wRem }}/3 next</span> @endif
+                        @elseif($wLateDays > 0)
+                            <span class="text-muted">{{ $wLateDays }}/3 late ({{ 3 - $wLateDays }} more = 1 absent)</span>
+                        @else
+                            <span class="text-success"><i class="fa-solid fa-check me-0.5"></i>All on time</span>
+                        @endif
+                    </small>
                 </div>
             </div>
             <div class="col-6">
@@ -222,6 +263,9 @@
                     <h5 class="fw-bold mb-0 text-primary font-monospace" style="font-size: 1.15rem;">
                         {{ number_format($attStats['hours_worked'], 1) }} <span class="fw-normal text-muted" style="font-size: 0.7rem;">hrs</span>
                     </h5>
+                    <small class="d-block text-muted mt-0.5" style="font-size: 0.65rem;">
+                        {{ $attStats['half_day'] ?? 0 }} half day(s)
+                    </small>
                 </div>
             </div>
         </div>

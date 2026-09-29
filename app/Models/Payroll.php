@@ -178,6 +178,7 @@ class Payroll extends Model
 
         $unexcusedDays = 0.0;
         $absentDates = [];
+        $lateDaysCount = 0;
 
         for ($day = $startDay; $day <= $cutoffDay; $day++) {
             $dateStr = sprintf('%04d-%02d-%02d', $year, $month, $day);
@@ -228,6 +229,17 @@ class Payroll extends Model
                     // Missing attendance / clock-in
                     $unexcusedDays += 1.0;
                     $absentDates[] = $dateStr;
+                } else {
+                    // Employee attended or worked on this date: check if late (RULE: 3 Late Days = 1 Absent Day Penalty)
+                    $isLate = false;
+                    if (($att->late_minutes ?? 0) > 0 || ($att->status ?? '') === 'late') {
+                        $isLate = true;
+                    } elseif (!empty($att->morning_in) && substr(trim($att->morning_in), 0, 5) > '08:40') {
+                        $isLate = true;
+                    }
+                    if ($isLate) {
+                        $lateDaysCount++;
+                    }
                 }
             } else {
                 // NO attendance record at all on this workday and no approved leave
@@ -236,9 +248,19 @@ class Payroll extends Model
             }
         }
 
+        // ── RULE: 3 Late Days = 1 Absent Day Penalty ─────────────────────────
+        $latePenaltyDays = intdiv($lateDaysCount, 3);
+        if ($latePenaltyDays > 0) {
+            $unexcusedDays += (float)$latePenaltyDays;
+            $absentDates[] = "Late Penalty: {$lateDaysCount} late days = {$latePenaltyDays} day(s) absent penalty (3 Late = 1 Absent rule)";
+        }
+
         return [
-            'days'  => round($unexcusedDays, 1),
-            'dates' => $absentDates,
+            'days'              => round($unexcusedDays, 1),
+            'base_days'         => round($unexcusedDays - $latePenaltyDays, 1),
+            'late_days'         => $lateDaysCount,
+            'late_penalty_days' => $latePenaltyDays,
+            'dates'             => $absentDates,
         ];
     }
 

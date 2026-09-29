@@ -241,24 +241,86 @@ class AttendanceController extends Controller
             $statsDate = $fallbackDate;
         }
 
+        // ── RULE: 3 Late Days = 1 Absent Day Penalty ──────────────────────────
+        // 1. Total late records in the current period/filters (check-in after 08:40 AM)
+        $lateRecordsCount = (clone $statsQuery)->where(function($q) {
+            $q->where('late_minutes', '>', 0)
+              ->orWhere('status', 'late')
+              ->orWhere(function($sq) {
+                  $sq->whereNotNull('morning_in')->where('morning_in', '>', '08:40:59');
+              });
+        })->count();
+
+        // 2. Exact late penalty absent days grouped by employee (fair per-person calculation)
+        $employeeLateCounts = (clone $statsQuery)->where(function($q) {
+            $q->where('late_minutes', '>', 0)
+              ->orWhere('status', 'late')
+              ->orWhere(function($sq) {
+                  $sq->whereNotNull('morning_in')->where('morning_in', '>', '08:40:59');
+              });
+        })->select('employee_id', DB::raw('count(*) as late_count'))
+          ->groupBy('employee_id')
+          ->get();
+
+        $totalPenaltyDays = 0;
+        $penalizedEmployeesCount = 0;
+        foreach ($employeeLateCounts as $row) {
+            $pen = intdiv((int)$row->late_count, 3);
+            if ($pen > 0) {
+                $totalPenaltyDays += $pen;
+                $penalizedEmployeesCount++;
+            }
+        }
+
+        $baseAbsent = (clone $statsQuery)->where('status', 'absent')
+            ->whereNotIn('status', ['site', 'S', 's', 'on_site'])
+            ->where(function($q) {
+                $q->whereNull('notes')->orWhere('notes', 'not like', '%On-Site%');
+            })->count();
+
+        $effectiveAbsent = $baseAbsent + $totalPenaltyDays;
+
         $stats = [
-            'date'      => $statsDate,
-            'title'     => $statsTitle,
-            'et_title'  => $statsEt,
-            'present'   => (clone $statsQuery)->where('status', 'present')->count(),
-            'site'      => (clone $statsQuery)->where(function($q) {
+            'date'                 => $statsDate,
+            'title'                => $statsTitle,
+            'et_title'             => $statsEt,
+            'present'              => (clone $statsQuery)->where('status', 'present')->count(),
+            'site'                 => (clone $statsQuery)->where(function($q) {
                 $q->whereIn('status', ['site', 'S', 's', 'on_site'])
                   ->orWhere('source', 'site_dispatch')
                   ->orWhere('notes', 'like', '%On-Site%');
             })->count(),
-            'half_day'  => (clone $statsQuery)->where('status', 'half_day')->count(),
-            'absent'    => (clone $statsQuery)->where('status', 'absent')
-                                              ->whereNotIn('status', ['site', 'S', 's', 'on_site'])
-                                              ->where(function($q) {
-                                                  $q->whereNull('notes')->orWhere('notes', 'not like', '%On-Site%');
-                                              })->count(),
-            'leave'     => (clone $statsQuery)->where('status', 'leave')->count(),
+            'half_day'             => (clone $statsQuery)->where('status', 'half_day')->count(),
+            'absent'               => $baseAbsent,
+            'effective_absent'     => $effectiveAbsent,
+            'late_days'            => $lateRecordsCount,
+            'late_penalty_absents' => $totalPenaltyDays,
+            'penalized_employees'  => $penalizedEmployeesCount,
+            'leave'                => (clone $statsQuery)->where('status', 'leave')->count(),
         ];
+
+        // Precompute monthly late counts for displayed employees to show on attendance table rows
+        $displayedEmpIds = $attendances->pluck('employee_id')->filter()->unique()->values();
+        $targetMonthYear = $selectedMonth 
+            ? explode('-', $selectedMonth) 
+            : ($selectedDate ? explode('-', substr($selectedDate, 0, 7)) : [date('Y'), date('m')]);
+        $pYear = isset($targetMonthYear[0]) ? (int)$targetMonthYear[0] : (int)date('Y');
+        $pMonth = isset($targetMonthYear[1]) ? (int)$targetMonthYear[1] : (int)date('n');
+
+        $monthlyLateCounts = Attendance::whereIn('employee_id', $displayedEmpIds)
+            ->whereYear('attendance_date', $pYear)
+            ->whereMonth('attendance_date', $pMonth)
+            ->where(function($q) {
+                $q->where('late_minutes', '>', 0)
+                  ->orWhere('status', 'late')
+                  ->orWhere(function($sq) {
+                      $sq->whereNotNull('morning_in')->where('morning_in', '>', '08:40:59');
+                  });
+            })
+            ->select('employee_id', DB::raw('count(*) as count'))
+            ->groupBy('employee_id')
+            ->pluck('count', 'employee_id')
+            ->toArray();
 
         $allEmployees = Employee::where('status', 'active')->orderBy('full_name')->get();
         $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
@@ -272,6 +334,7 @@ class AttendanceController extends Controller
             'availableMonths',
             'availableDatesWithLabels',
             'stats',
+            'monthlyLateCounts',
             'selectedDate',
             'selectedMonth',
             'allEmployees',

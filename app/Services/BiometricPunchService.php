@@ -134,6 +134,41 @@ class BiometricPunchService
     }
 
     /**
+     * RULE: 3 Late Days = 1 Absent Day Penalty.
+     * Computes the penalty absent days and remainder from total late days.
+     *
+     * @param int $lateDaysCount Total days an employee clocked in after 08:40 AM
+     * @return array [
+     *   'late_days'       => int,
+     *   'penalty_days'    => int, // floor($lateDaysCount / 3)
+     *   'remainder'       => int, // $lateDaysCount % 3
+     *   'needed_for_next' => int, // late days until next penalty
+     *   'formula_label'   => string,
+     *   'display_text'    => string,
+     * ]
+     */
+    public static function calculateLatePenalty(int $lateDaysCount): array
+    {
+        $lateDays    = max(0, $lateDaysCount);
+        $penaltyDays = intdiv($lateDays, 3);
+        $remainder   = $lateDays % 3;
+        $needed      = $remainder === 0 ? 3 : (3 - $remainder);
+
+        $displayText = $penaltyDays > 0
+            ? "{$penaltyDays} day(s) absent penalty ({$lateDays} late days)" . ($remainder > 0 ? " + {$remainder} towards next" : '')
+            : ($lateDays > 0 ? "{$lateDays}/3 late day(s) ({$needed} more = 1 absent)" : "0 late days");
+
+        return [
+            'late_days'       => $lateDays,
+            'penalty_days'    => $penaltyDays,
+            'remainder'       => $remainder,
+            'needed_for_next' => $needed,
+            'formula_label'   => '3 Late Days = 1 Absent Day Penalty',
+            'display_text'    => $displayText,
+        ];
+    }
+
+    /**
      * Normalize an array of punch times into standardized 'H:i:s' strings (24h format).
      * Sorts ascending and removes duplicates.
      */
