@@ -28,6 +28,9 @@
             <button type="button" class="btn btn-outline-danger fw-semibold" data-bs-toggle="modal" data-bs-target="#clearResyncModal" title="Clear processed attendance and freshly re-sync from raw biometric punch logs">
                 <i class="fa-solid fa-broom me-1"></i>Clear &amp; Resync Fresh
             </button>
+            <span class="badge bg-warning-subtle text-dark border border-warning-subtle d-inline-flex align-items-center gap-1 px-2 py-2" title="Attendance machine runs 5h ahead; ERP converts punches automatically (-5h)">
+                <i class="fa-solid fa-clock-rotate-left text-warning-emphasis"></i><span class="fw-semibold">Device TZ: -5h</span>
+            </span>
             <button type="button" class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#siteAttendanceModal">
                 <i class="fa-solid fa-person-digging me-1"></i>Employee On Site (ወደ ሳይት የወጣ)
             </button>
@@ -852,6 +855,45 @@
                             </label>
                             <div class="mt-2 ps-4">
                                 <input type="date" name="date" class="form-control form-control-sm" value="{{ request('date', today()->toDateString()) }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Machine Timezone Conversion --}}
+                    <div class="card border border-warning-subtle bg-warning bg-opacity-10 mb-3 rounded-3">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <label class="form-label fw-bold small text-dark mb-0">
+                                    <i class="fa-solid fa-clock-rotate-left text-warning-emphasis me-1"></i>Biometric Machine Timezone Conversion
+                                </label>
+                                <span class="badge bg-warning text-dark font-monospace fw-bold px-2 py-1">-5 Hours Offset</span>
+                            </div>
+                            <p class="text-muted mb-2" style="font-size:0.78rem;">
+                                Machine clock is running 5 hours ahead:
+                                <strong class="text-dark">Machine shows 05:07 PM &rarr; Local Ethiopia Time is 12:07 PM</strong>.
+                                (e.g. Machine 01:40 PM &rarr; Morning Check-in 08:40 AM).
+                            </p>
+                            <div class="row g-2 align-items-center mb-2">
+                                <div class="col-8">
+                                    <select name="timezone_offset" id="timezoneOffsetSelect" class="form-select form-select-sm fw-semibold">
+                                        <option value="-5" selected>-5 Hours (Convert 05:07 PM &rarr; 12:07 PM) [Recommended]</option>
+                                        <option value="0">0 Hours (No conversion / Machine is on local time)</option>
+                                        <option value="-4">-4 Hours</option>
+                                        <option value="-3">-3 Hours</option>
+                                        <option value="-6">-6 Hours</option>
+                                    </select>
+                                </div>
+                                <div class="col-4 text-end">
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 small">
+                                        <i class="fa-solid fa-check-double me-1"></i>Active Auto-Fix
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="shift_existing_logs" id="shiftExistingLogs" value="1" checked>
+                                <label class="form-check-label text-dark small" for="shiftExistingLogs" style="font-size:0.78rem;">
+                                    <strong>Convert &amp; shift existing punch logs:</strong> Safely preserve original machine timestamps in <code>raw_punch_time</code> and shift stored punches by -5h so Morning &amp; Afternoon sessions display real times.
+                                </label>
                             </div>
                         </div>
                     </div>

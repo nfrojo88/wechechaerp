@@ -17,10 +17,7 @@ class AttendanceController extends Controller
     public function index()
     {
         if (request()->has('fresh_resync')) {
-            Attendance::query()->delete();
-            DB::table('device_attendance_logs')->update(['synced_at' => null]);
-            Artisan::call('zkteco:sync', ['--all' => true, '--force' => true]);
-            return redirect()->route('attendance.index')->with('success', 'All attendance records successfully wiped and freshly rebuilt from biometric punches!');
+            return $this->resetAndResync(request());
         }
 
         $query = Attendance::with('employee')->whereHas('employee')->latest('attendance_date');
@@ -1817,17 +1814,63 @@ class AttendanceController extends Controller
         try {
             $scope = $request->input('scope', 'all'); // 'all' or 'date'
             $date = $request->input('date') ?: request('date_from');
+            $tzOffset = (int)$request->input('timezone_offset', -5);
+            $shiftExisting = $request->boolean('shift_existing_logs', true);
+
+            // 1. Ensure raw_punch_time column exists in device_attendance_logs
+            if (\Illuminate\Support\Facades\Schema::hasTable('device_attendance_logs')) {
+                if (!\Illuminate\Support\Facades\Schema::hasColumn('device_attendance_logs', 'raw_punch_time')) {
+                    \Illuminate\Support\Facades\Schema::table('device_attendance_logs', function ($table) {
+                        $table->dateTime('raw_punch_time')->nullable()->after('punch_time');
+                    });
+                }
+            }
+
+            // 2. Persist biometric timezone offset setting
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('system_settings')) {
+                    DB::table('system_settings')->updateOrInsert(
+                        ['key' => 'biometric_timezone_offset_hours'],
+                        [
+                            'value'       => (string)$tzOffset,
+                            'type'        => 'integer',
+                            'group'       => 'attendance',
+                            'description' => 'Biometric machine timezone offset in hours (-5 hours converts machine 05:07 PM to local 12:07 PM)',
+                            'updated_at'  => now(),
+                        ]
+                    );
+                }
+                if (\Illuminate\Support\Facades\Schema::hasTable('zk_devices') && \Illuminate\Support\Facades\Schema::hasColumn('zk_devices', 'timezone_offset_hours')) {
+                    DB::table('zk_devices')->update(['timezone_offset_hours' => $tzOffset]);
+                }
+            } catch (\Throwable $e) {}
+
+            // 3. Shift existing logs that have not yet been shifted (raw_punch_time IS NULL)
+            if ($shiftExisting && \Illuminate\Support\Facades\Schema::hasTable('device_attendance_logs') && $tzOffset !== 0) {
+                $absOffset = abs($tzOffset);
+                if ($tzOffset < 0) {
+                    DB::statement("UPDATE device_attendance_logs 
+                        SET raw_punch_time = punch_time, 
+                            punch_time = DATE_SUB(punch_time, INTERVAL {$absOffset} HOUR) 
+                        WHERE raw_punch_time IS NULL AND punch_time IS NOT NULL");
+                } else {
+                    DB::statement("UPDATE device_attendance_logs 
+                        SET raw_punch_time = punch_time, 
+                            punch_time = DATE_ADD(punch_time, INTERVAL {$absOffset} HOUR) 
+                        WHERE raw_punch_time IS NULL AND punch_time IS NOT NULL");
+                }
+            }
 
             if ($scope === 'date' && $date) {
                 Attendance::whereDate('attendance_date', $date)->delete();
                 DB::table('device_attendance_logs')->whereDate('punch_time', $date)->update(['synced_at' => null]);
                 Artisan::call('zkteco:sync', ['--date' => $date, '--force' => true]);
-                $msg = "Attendance records for {$date} cleared and freshly synchronized from raw biometric punches!";
+                $msg = "Attendance records for {$date} cleared and freshly synchronized with machine timezone offset applied ({$tzOffset} hrs)!";
             } else {
                 Attendance::query()->delete();
                 DB::table('device_attendance_logs')->update(['synced_at' => null]);
                 Artisan::call('zkteco:sync', ['--all' => true, '--force' => true]);
-                $msg = "All attendance records cleared and freshly synchronized from all stored biometric punches!";
+                $msg = "All attendance records cleared and freshly synchronized from all stored biometric punches with machine timezone offset applied ({$tzOffset} hrs)!";
             }
 
             return redirect()->route('attendance.index')

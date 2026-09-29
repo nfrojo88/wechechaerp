@@ -14,6 +14,56 @@ use Illuminate\Support\Facades\Log;
 class BiometricPunchService
 {
     /**
+     * Get the configured timezone offset hours for biometric devices (e.g. -5).
+     * Physical machine clock runs 5h ahead of Ethiopia (e.g. Machine 05:07 PM -> Local 12:07 PM).
+     */
+    public static function getTimezoneOffsetHours(?string $deviceSn = null): int
+    {
+        // 1. Device-specific offset if available
+        if ($deviceSn) {
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('zk_devices') && \Illuminate\Support\Facades\Schema::hasColumn('zk_devices', 'timezone_offset_hours')) {
+                    $dev = DB::table('zk_devices')->where('serial_number', $deviceSn)->first();
+                    if ($dev && isset($dev->timezone_offset_hours) && $dev->timezone_offset_hours !== null) {
+                        return (int)$dev->timezone_offset_hours;
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        // 2. Global system setting
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('system_settings')) {
+                $val = DB::table('system_settings')->where('key', 'biometric_timezone_offset_hours')->value('value');
+                if ($val !== null && is_numeric($val)) {
+                    return (int)$val;
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // 3. Fallback to env or default -5 hours
+        return (int)env('BIOMETRIC_TIMEZONE_OFFSET_HOURS', -5);
+    }
+
+    /**
+     * Convert machine punch time string to real local time string.
+     * Example: '2026-09-29 17:07:00' -> '2026-09-29 12:07:00' (-5 hours).
+     */
+    public static function convertMachineTimeToLocal(string $machinePunchTime, ?string $deviceSn = null): string
+    {
+        $offset = self::getTimezoneOffsetHours($deviceSn);
+        if ($offset === 0) {
+            return $machinePunchTime;
+        }
+
+        try {
+            return Carbon::parse($machinePunchTime)->addHours($offset)->format('Y-m-d H:i:s');
+        } catch (\Throwable $e) {
+            return $machinePunchTime;
+        }
+    }
+
+    /**
      * Map a chronological list of punch times (H:i:s or Y-m-d H:i:s) into
      * check_in, check_out, morning_in, morning_out, afternoon_in, afternoon_out, and hours_worked.
      *
@@ -73,9 +123,9 @@ class BiometricPunchService
         $afternoonIn  = null;
         $afternoonOut = null;
 
-        // Separate real punches strictly into Morning (< 12:30:00) and Afternoon (>= 12:30:00)
-        $morningPunches   = array_values(array_filter($times, fn($t) => $t < '12:30:00'));
-        $afternoonPunches = array_values(array_filter($times, fn($t) => $t >= '12:30:00'));
+        // Separate real punches strictly into Morning (<= 12:45:00) and Afternoon (> 12:45:00)
+        $morningPunches   = array_values(array_filter($times, fn($t) => $t <= '12:45:00'));
+        $afternoonPunches = array_values(array_filter($times, fn($t) => $t > '12:45:00'));
 
         $mCount = count($morningPunches);
         $aCount = count($afternoonPunches);

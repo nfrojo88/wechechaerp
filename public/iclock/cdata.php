@@ -161,9 +161,24 @@ if ($method === 'POST' && strtoupper($table) === 'ATTLOG') {
             continue;
         }
 
+        // Preserve raw machine punch time
+        $rawPunchTime = $punchTime;
+
+        // Convert machine timezone to local time (default -5 hours offset)
+        // Machine clock is running 5h ahead (e.g. 05:07 PM machine -> 12:07 PM local)
+        $offsetHours = -5;
         try {
-            // INSERT IGNORE — device resends same records; UNIQUE KEY prevents duplicates
-            DB::table('device_attendance_logs')->insertOrIgnore([
+            if (class_exists(\App\Services\BiometricPunchService::class)) {
+                $offsetHours = \App\Services\BiometricPunchService::getTimezoneOffsetHours($sn);
+            }
+        } catch (\Throwable $e) {}
+
+        if ($offsetHours !== 0) {
+            $punchTime = date('Y-m-d H:i:s', strtotime($punchTime . " {$offsetHours} hours"));
+        }
+
+        try {
+            $insertData = [
                 'device_sn'      => $sn ?: null,
                 'device_user_id' => $userId,
                 'punch_time'     => $punchTime,
@@ -172,7 +187,16 @@ if ($method === 'POST' && strtoupper($table) === 'ATTLOG') {
                 'full_name'      => null,
                 'created_at'     => now(),
                 'updated_at'     => now(),
-            ]);
+            ];
+
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasColumn('device_attendance_logs', 'raw_punch_time')) {
+                    $insertData['raw_punch_time'] = $rawPunchTime;
+                }
+            } catch (\Throwable $e) {}
+
+            // INSERT IGNORE — device resends same records; UNIQUE KEY prevents duplicates
+            DB::table('device_attendance_logs')->insertOrIgnore($insertData);
 
             // Also auto-sync to attendance table if employee is mapped
             _autoSyncPunch($sn, $userId, $punchTime, $status);
@@ -233,6 +257,20 @@ function _autoSyncPunch(string $sn, string $userId, string $punchTime, string $s
 
         $dateStr = substr($punchTime, 0, 10); // Y-m-d
         $timeStr = strlen($punchTime) > 10 ? substr($punchTime, 11, 8) : '00:00:00'; // H:i:s
+
+        // Delegate to unified BiometricPunchService for complete Morning/Afternoon session mapping
+        try {
+            if (class_exists(\App\Services\BiometricPunchService::class) && class_exists(\App\Models\Employee::class)) {
+                $empModel = \App\Models\Employee::find($employee->id);
+                if ($empModel) {
+                    \App\Services\BiometricPunchService::syncEmployeeDatePunches($empModel, $dateStr, $sn);
+                    adms_log("Auto-synced via BiometricPunchService for {$employee->full_name} (ID {$employee->id}) at {$punchTime}");
+                    return;
+                }
+            }
+        } catch (\Throwable $e) {
+            adms_log("BiometricPunchService sync note: " . $e->getMessage());
+        }
 
         // ── Determine OT type from day of week & punch time ───────────────────
         $punchHour  = (int) substr($timeStr, 0, 2);

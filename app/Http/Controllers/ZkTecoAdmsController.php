@@ -107,6 +107,15 @@ class ZkTecoAdmsController extends Controller
                     continue;
                 }
 
+                // Preserve original machine punch time
+                $rawPunchTime = $punchTime;
+
+                // Timezone conversion (default -5 hours offset: Machine 05:07 PM -> Local 12:07 PM)
+                $offsetHours = \App\Services\BiometricPunchService::getTimezoneOffsetHours($sn);
+                if ($offsetHours !== 0) {
+                    $punchTime = \Carbon\Carbon::parse($punchTime)->addHours($offsetHours)->format('Y-m-d H:i:s');
+                }
+
                 try {
                     // Match employee by device_user_id or employee_code
                     $cleanId = trim($userId);
@@ -119,8 +128,7 @@ class ZkTecoAdmsController extends Controller
 
                     $fullName = $employee ? $employee->full_name : null;
 
-                    // 1. Insert into raw device attendance logs
-                    DB::table('device_attendance_logs')->insertOrIgnore([
+                    $insertData = [
                         'device_sn'      => $sn ?: 'AF6P230860018',
                         'device_user_id' => $cleanId,
                         'punch_time'     => $punchTime,
@@ -129,7 +137,16 @@ class ZkTecoAdmsController extends Controller
                         'full_name'      => $fullName,
                         'created_at'     => now(),
                         'updated_at'     => now(),
-                    ]);
+                    ];
+
+                    try {
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('device_attendance_logs', 'raw_punch_time')) {
+                            $insertData['raw_punch_time'] = $rawPunchTime;
+                        }
+                    } catch (\Throwable $e) {}
+
+                    // 1. Insert into raw device attendance logs
+                    DB::table('device_attendance_logs')->insertOrIgnore($insertData);
 
                     // 2. Real-time auto-sync to employee attendance table
                     if ($employee) {
