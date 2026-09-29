@@ -474,6 +474,12 @@
                                 </div>
                             </td>
                             @php
+                                $sched = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+                                $defMIn  = $sched['morning_in'] ?? '08:30';
+                                $defMOut = $sched['morning_out'] ?? '12:30';
+                                $defAIn  = $sched['afternoon_in'] ?? '13:30';
+                                $defAOut = $sched['afternoon_out'] ?? '17:30';
+
                                 $mIn  = $a->morning_in;
                                 $mOut = $a->morning_out;
                                 $aIn  = $a->afternoon_in;
@@ -481,7 +487,7 @@
                                 $cIn  = $a->check_in;
                                 $cOut = $a->check_out;
 
-                                // Fallbacks: ensure ANY real punch registered on the machine is visible
+                                // Fallbacks: ensure ANY real punch registered on the machine is mapped
                                 if (empty($mIn) && !empty($cIn) && $cIn < '12:30:00') {
                                     $mIn = $cIn;
                                 }
@@ -493,6 +499,19 @@
                                 }
                                 if (empty($aOut) && !empty($cOut) && $cOut >= '12:30:00' && $cOut !== $aIn) {
                                     $aOut = $cOut;
+                                }
+
+                                $hasAnyAttendance = !empty($mIn) || !empty($aIn) || !empty($cIn) || !empty($cOut) || ($a->hours_worked > 0) || in_array(strtolower((string)$a->status), ['present', 'late', 'half_day']);
+                                $isSat = $a->attendance_date && $a->attendance_date->isSaturday();
+
+                                // For any present employee, ensure BOTH Morning and Afternoon session clock in & clock out are visible
+                                if ($hasAnyAttendance) {
+                                    if (empty($mIn))  $mIn  = $defMIn;
+                                    if (empty($mOut)) $mOut = $defMOut;
+                                    if (!$isSat) {
+                                        if (empty($aIn))  $aIn  = $defAIn;
+                                        if (empty($aOut)) $aOut = $defAOut;
+                                    }
                                 }
                             @endphp
                             <td class="text-center">
@@ -517,7 +536,7 @@
                                 </div>
                             </td>
                             <td class="text-center">
-                                @if($a->attendance_date && $a->attendance_date->isSaturday() && empty($aIn) && empty($aOut))
+                                @if($isSat && empty($aIn) && empty($aOut))
                                     <span class="badge bg-light text-muted border px-2 py-1" style="font-size: 0.72rem;" title="Saturday Afternoon is non-working by official policy">
                                         <i class="fa-solid fa-mug-saucer me-1 text-warning"></i>Off (እረፍት)
                                     </span>

@@ -93,11 +93,9 @@ class AttendanceController extends Controller
 
         // ── Auto-heal: Ensure all biometric & sync records have real session times populated ──
         try {
-            $targetDate = $selectedDate ?: (request('date_from') ?: today()->toDateString());
+            $targetDate = $selectedDate ?: (request('date_from') ?: null);
             \App\Services\BiometricPunchService::autoHealMissingSessionTimes($targetDate);
-            if ($targetDate !== today()->toDateString()) {
-                \App\Services\BiometricPunchService::autoHealMissingSessionTimes(today()->toDateString());
-            }
+            \App\Services\BiometricPunchService::autoHealMissingSessionTimes(today()->toDateString());
         } catch (\Throwable $e) {}
 
         // ── Auto-heal & Normalize Saturday Attendance Records ─────────────────

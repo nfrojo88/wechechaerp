@@ -70,6 +70,17 @@ class BiometricPunchService
         $checkIn  = $firstPunch;
         $checkOut = $lastPunch;
 
+        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+        $defMIn  = $workSchedule['morning_in'] ?? '08:30:00';
+        $defMOut = $workSchedule['morning_out'] ?? '12:30:00';
+        $defAIn  = $workSchedule['afternoon_in'] ?? '13:30:00';
+        $defAOut = $workSchedule['afternoon_out'] ?? '17:30:00';
+
+        if (strlen($defMIn) === 5)  $defMIn .= ':00';
+        if (strlen($defMOut) === 5) $defMOut .= ':00';
+        if (strlen($defAIn) === 5)  $defAIn .= ':00';
+        if (strlen($defAOut) === 5) $defAOut .= ':00';
+
         $morningIn    = null;
         $morningOut   = null;
         $afternoonIn  = null;
@@ -77,39 +88,23 @@ class BiometricPunchService
 
         $count = count($times);
 
-        // Saturday Policy: Morning session only
+        // Saturday Policy: Morning session only (4.0 hours)
         if ($isSaturday) {
             $morningIn = $firstPunch;
-            if ($count > 1) {
-                $morningOut = $lastPunch;
-            }
+            $morningOut = ($count > 1) ? $lastPunch : $defMOut;
         }
-        // Exactly 1 punch on weekday
-        elseif ($count === 1) {
-            if ($firstPunch < '12:30:00') {
-                $morningIn = $firstPunch;
-            } else {
-                $afternoonIn = $firstPunch;
-            }
-        }
-        // Exactly 2 punches on weekday
-        elseif ($count === 2) {
-            $p1 = $times[0];
-            $p2 = $times[1];
+        // 4 or more punches (Standard full in/out for both sessions)
+        elseif ($count >= 4) {
+            $morningPunches   = array_filter($times, fn($t) => $t < '12:45:00');
+            $afternoonPunches = array_filter($times, fn($t) => $t >= '12:45:00');
 
-            if ($p1 < '12:30:00' && $p2 < '13:00:00') {
-                // Morning session only
-                $morningIn  = $p1;
-                $morningOut = $p2;
-            } elseif ($p1 >= '12:30:00') {
-                // Afternoon session only
-                $afternoonIn  = $p1;
-                $afternoonOut = $p2;
-            } else {
-                // p1 is morning, p2 is afternoon/evening
-                $morningIn    = $p1;
-                $afternoonOut = $p2;
-            }
+            $mArr = !empty($morningPunches) ? array_values($morningPunches) : [$firstPunch];
+            $aArr = !empty($afternoonPunches) ? array_values($afternoonPunches) : [$lastPunch];
+
+            $morningIn    = $mArr[0];
+            $morningOut   = count($mArr) > 1 ? end($mArr) : $defMOut;
+            $afternoonIn  = $aArr[0];
+            $afternoonOut = count($aArr) > 1 ? end($aArr) : $defAOut;
         }
         // Exactly 3 punches on weekday
         elseif ($count === 3) {
@@ -121,43 +116,57 @@ class BiometricPunchService
                 $morningIn = $p1;
                 if ($p2 < '13:15:00') {
                     $morningOut   = $p2;
+                    $afternoonIn  = $defAIn;
                     $afternoonOut = $p3;
                 } else {
+                    $morningOut   = $defMOut;
                     $afternoonIn  = $p2;
                     $afternoonOut = $p3;
                 }
             } else {
+                $morningIn    = $defMIn;
+                $morningOut   = $defMOut;
                 $afternoonIn  = $p1;
                 $afternoonOut = $p3;
             }
         }
-        // 4 or more punches (Standard full in/out for both sessions)
+        // Exactly 2 punches on weekday
+        elseif ($count === 2) {
+            $p1 = $times[0];
+            $p2 = $times[1];
+
+            if ($p1 < '12:30:00' && $p2 < '13:00:00') {
+                // Morning punches: also populate afternoon by policy so both sessions are seen
+                $morningIn    = $p1;
+                $morningOut   = $p2;
+                $afternoonIn  = $defAIn;
+                $afternoonOut = $defAOut;
+            } elseif ($p1 >= '12:30:00') {
+                // Afternoon punches: also populate morning by policy so both sessions are seen
+                $morningIn    = $defMIn;
+                $morningOut   = $defMOut;
+                $afternoonIn  = $p1;
+                $afternoonOut = $p2;
+            } else {
+                // p1 is morning entry (real!), p2 is afternoon/evening exit (real!)
+                $morningIn    = $p1;
+                $morningOut   = $defMOut;
+                $afternoonIn  = $defAIn;
+                $afternoonOut = $p2;
+            }
+        }
+        // Exactly 1 punch on weekday
         else {
-            $morningPunches   = array_filter($times, fn($t) => $t < '12:45:00');
-            $afternoonPunches = array_filter($times, fn($t) => $t >= '12:45:00');
-
-            if (!empty($morningPunches)) {
-                $mArr = array_values($morningPunches);
-                $morningIn = $mArr[0];
-                if (count($mArr) > 1) {
-                    $morningOut = end($mArr);
-                }
-            }
-
-            if (!empty($afternoonPunches)) {
-                $aArr = array_values($afternoonPunches);
-                $afternoonIn  = $aArr[0];
-                if (count($aArr) > 1) {
-                    $afternoonOut = end($aArr);
-                }
-            }
-
-            // Fallback if afternoon had only 1 punch and morning had only 1 punch
-            if (empty($morningIn) && $firstPunch < '12:30:00') {
-                $morningIn = $firstPunch;
-            }
-            if (empty($afternoonOut) && $lastPunch >= '12:30:00') {
-                $afternoonOut = $lastPunch;
+            if ($firstPunch < '12:30:00') {
+                $morningIn    = $firstPunch;
+                $morningOut   = $defMOut;
+                $afternoonIn  = $defAIn;
+                $afternoonOut = $defAOut;
+            } else {
+                $morningIn    = $defMIn;
+                $morningOut   = $defMOut;
+                $afternoonIn  = $firstPunch;
+                $afternoonOut = $defAOut;
             }
         }
 
@@ -340,11 +349,15 @@ class BiometricPunchService
             $query = Attendance::with('employee')
                 ->where(function ($q) {
                     $q->whereNull('morning_in')
-                      ->whereNull('afternoon_in')
-                      ->where(function ($sq) {
-                          $sq->whereNotNull('check_in')
-                             ->orWhereNotNull('check_out');
-                      });
+                      ->orWhereNull('morning_out')
+                      ->orWhereNull('afternoon_in')
+                      ->orWhereNull('afternoon_out');
+                })
+                ->where(function ($sq) {
+                    $sq->whereNotNull('check_in')
+                       ->orWhereNotNull('check_out')
+                       ->orWhere('source', 'biometric')
+                       ->orWhere('source', 'device');
                 });
 
             if ($date) {
