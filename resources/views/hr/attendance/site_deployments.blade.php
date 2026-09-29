@@ -354,11 +354,16 @@
                                 @endif
                             </td>
                             <td class="pe-3 text-end">
-                                @if($d->isPending())
-                                    @if($isHr)
-                                        <div class="d-flex align-items-center justify-content-end gap-1">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    {{-- Detail Button --}}
+                                    <button type="button" class="btn btn-outline-primary btn-sm px-2 py-1 shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#deploymentDetailModal{{ $d->id }}" title="View Full Details (ዝርዝር ይመልከቱ)">
+                                        <i class="fa-solid fa-circle-info me-1"></i>Detail
+                                    </button>
+
+                                    @if($d->isPending())
+                                        @if($isHr)
                                             {{-- Approve Form --}}
-                                            <form action="{{ route('attendance.site-deployments.approve', $d) }}" method="POST" onsubmit="return confirm('Are you sure you want to APPROVE this site deployment for {{ $d->employee?->full_name }}? Official attendance will be recorded with Status S.');">
+                                            <form action="{{ route('attendance.site-deployments.approve', $d) }}" method="POST" onsubmit="return confirm('Are you sure you want to APPROVE this site deployment for {{ $d->employee?->full_name }}? Official attendance will be recorded with Status S.');" class="d-inline">
                                                 @csrf
                                                 <button type="submit" class="btn btn-success btn-sm fw-bold px-2 py-1 shadow-xs" title="Approve & Save in Attendance (ፍቀድ)">
                                                     <i class="fa-solid fa-check me-1"></i>Approve
@@ -368,23 +373,236 @@
                                             <button type="button" class="btn btn-outline-danger btn-sm px-2 py-1 shadow-xs" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $d->id }}" title="Reject & Do Not Accept (አትቀበል)">
                                                 <i class="fa-solid fa-xmark me-1"></i>Reject
                                             </button>
-                                        </div>
-                                    @else
-                                        <span class="badge bg-light text-muted border px-2 py-1">
-                                            <i class="fa-solid fa-hourglass-half text-warning me-1"></i>Awaiting HR
+                                        @else
+                                            <span class="badge bg-light text-muted border px-2 py-1">
+                                                <i class="fa-solid fa-hourglass-half text-warning me-1"></i>Awaiting HR
+                                            </span>
+                                        @endif
+                                    @elseif($d->isApproved())
+                                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
+                                            <i class="fa-solid fa-calendar-check me-1"></i>In Attendance
                                         </span>
+                                    @elseif($d->isRejected())
+                                        <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1" data-bs-toggle="modal" data-bs-target="#rejectionDetailModal{{ $d->id }}" title="View Rejection Details">
+                                            <i class="fa-solid fa-eye me-1"></i>Reason
+                                        </button>
                                     @endif
-                                @elseif($d->isApproved())
-                                    <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
-                                        <i class="fa-solid fa-calendar-check me-1"></i>In Attendance
-                                    </span>
-                                @elseif($d->isRejected())
-                                    <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1" data-bs-toggle="modal" data-bs-target="#rejectionDetailModal{{ $d->id }}" title="View Rejection Details">
-                                        <i class="fa-solid fa-eye me-1"></i>Reason
-                                    </button>
-                                @endif
+                                </div>
                             </td>
                         </tr>
+
+                        {{-- MODAL: FULL DEPLOYMENT DETAILS --}}
+                        <div class="modal fade" id="deploymentDetailModal{{ $d->id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered modal-lg">
+                                <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+                                    <div class="modal-header bg-primary text-white py-3 px-4">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <i class="fa-solid fa-file-lines fs-5"></i>
+                                            <div>
+                                                <h6 class="modal-title fw-bold mb-0">Site Deployment Details &bull; የሳይት ሥራ ስምሪት ዝርዝር</h6>
+                                                <small class="opacity-75 font-monospace">Ref #DEP-{{ str_pad($d->id, 5, '0', STR_PAD_LEFT) }}</small>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            @if($d->isPending())
+                                                <span class="badge bg-warning text-dark border border-warning px-2 py-1 shadow-xs fw-bold">
+                                                    <i class="fa-solid fa-clock-rotate-left me-1"></i>Pending HR Approval
+                                                </span>
+                                            @elseif($d->isApproved())
+                                                <span class="badge bg-success text-white px-2 py-1 shadow-xs fw-bold">
+                                                    <span class="badge bg-white text-success me-1">S</span> Approved &bull; Recorded
+                                                </span>
+                                            @elseif($d->isRejected())
+                                                <span class="badge bg-danger text-white px-2 py-1 shadow-xs fw-bold">
+                                                    <i class="fa-solid fa-circle-xmark me-1"></i>Rejected by HR
+                                                </span>
+                                            @endif
+                                            <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal"></button>
+                                        </div>
+                                    </div>
+                                    <div class="modal-body p-4 text-start bg-light-subtle">
+                                        {{-- Employee Profile Card --}}
+                                        <div class="card border-0 shadow-xs rounded-3 p-3 mb-3 bg-white">
+                                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                                <div class="d-flex align-items-center gap-3">
+                                                    <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-bold fs-5 shadow-xs" style="width: 48px; height: 48px;">
+                                                        {{ strtoupper(substr($d->employee?->full_name ?? 'E', 0, 1)) }}
+                                                    </div>
+                                                    <div>
+                                                        <h6 class="fw-bold text-dark mb-0 fs-6">{{ $d->employee?->full_name ?? 'Unknown Employee' }}</h6>
+                                                        <div class="text-muted small">
+                                                            <span class="font-monospace text-primary fw-semibold">{{ $d->employee?->employee_code ?? 'EMP' }}</span>
+                                                            @if($d->employee?->designation) &bull; {{ $d->employee->designation }} @endif
+                                                            @if($d->employee?->department) &bull; <span class="badge bg-light text-secondary border">{{ is_object($d->employee->department) ? ($d->employee->department->name ?? '') : $d->employee->department }}</span> @endif
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 font-monospace">
+                                                        <i class="fa-solid fa-fingerprint me-1"></i>Device ID: {{ $d->employee?->device_user_id ?: 'Not assigned' }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {{-- Grid Details --}}
+                                        <div class="row g-3 mb-3">
+                                            {{-- Site & Project Location --}}
+                                            <div class="col-md-6">
+                                                <div class="card border-0 shadow-xs rounded-3 p-3 h-100 bg-white">
+                                                    <span class="text-muted small fw-bold text-uppercase d-block mb-2">
+                                                        <i class="fa-solid fa-location-dot text-danger me-1"></i>Destination Site &amp; Project
+                                                    </span>
+                                                    <h6 class="fw-bold text-dark mb-1">
+                                                        {{ $d->siteProject?->name ?: ($d->site_name ?: 'General Site') }}
+                                                    </h6>
+                                                    @if($d->siteProject?->code)
+                                                        <div class="small text-muted mb-1 font-monospace">Project Code: {{ $d->siteProject->code }}</div>
+                                                    @endif
+                                                    @if($d->siteProject?->location)
+                                                        <div class="small text-muted"><i class="fa-solid fa-map-pin me-1 text-secondary"></i>{{ $d->siteProject->location }}</div>
+                                                    @endif
+                                                </div>
+                                            </div>
+
+                                            {{-- Deployment Dates & Calendar --}}
+                                            <div class="col-md-6">
+                                                <div class="card border-0 shadow-xs rounded-3 p-3 h-100 bg-white">
+                                                    <span class="text-muted small fw-bold text-uppercase d-block mb-2">
+                                                        <i class="fa-regular fa-calendar-days text-primary me-1"></i>Deployment Period &amp; Dates
+                                                    </span>
+                                                    <div class="fw-bold text-dark mb-1">
+                                                        {{ $d->start_date?->format('d M Y') }}
+                                                        @if(!$isSingle && $d->end_date && $d->end_date->ne($d->start_date))
+                                                            <span class="text-muted fw-normal">to</span> {{ $d->end_date->format('d M Y') }}
+                                                        @endif
+                                                        <span class="badge bg-light text-dark border ms-1">{{ $d->duration_type === 'multi_day' ? 'Multi-Day' : 'Single Day' }}</span>
+                                                    </div>
+                                                    <div class="mt-1">
+                                                        <span class="badge bg-light text-dark border font-monospace" style="font-size:0.75rem;">
+                                                            🇪🇹 {{ \App\Helpers\EthiopianCalendar::format($d->start_date, 'am') }}
+                                                            @if(!$isSingle && $d->end_date && $d->end_date->ne($d->start_date))
+                                                                – {{ \App\Helpers\EthiopianCalendar::format($d->end_date, 'am') }}
+                                                            @endif
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {{-- Shift, Punches & Working Hours --}}
+                                            <div class="col-12">
+                                                <div class="card border-0 shadow-xs rounded-3 p-3 bg-white">
+                                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                                        <span class="text-muted small fw-bold text-uppercase">
+                                                            <i class="fa-solid fa-business-time text-warning me-1"></i>Shift Session &amp; Credited Punches
+                                                        </span>
+                                                        <span class="badge bg-success-subtle text-success border border-success fw-bold px-2 py-1">
+                                                            <i class="fa-solid fa-clock me-1"></i>{{ number_format($d->hours_worked, 1) }} Hours Credited (Non-deductible)
+                                                        </span>
+                                                    </div>
+
+                                                    <div class="row g-2 text-center">
+                                                        <div class="col-6 col-md-3">
+                                                            <div class="p-2 border rounded bg-light">
+                                                                <small class="text-muted d-block" style="font-size:0.72rem;">Morning In (ጠዋት መግቢያ)</small>
+                                                                <strong class="font-monospace text-dark">{{ $d->morning_in ? \Carbon\Carbon::parse($d->morning_in)->format('h:i A') : '—' }}</strong>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-6 col-md-3">
+                                                            <div class="p-2 border rounded bg-light">
+                                                                <small class="text-muted d-block" style="font-size:0.72rem;">Morning Out (ምሳ መውጫ)</small>
+                                                                <strong class="font-monospace text-dark">{{ $d->morning_out ? \Carbon\Carbon::parse($d->morning_out)->format('h:i A') : '—' }}</strong>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-6 col-md-3">
+                                                            <div class="p-2 border rounded bg-light">
+                                                                <small class="text-muted d-block" style="font-size:0.72rem;">Afternoon In (ከሰዓት መግቢያ)</small>
+                                                                <strong class="font-monospace text-dark">{{ $d->afternoon_in ? \Carbon\Carbon::parse($d->afternoon_in)->format('h:i A') : '—' }}</strong>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-6 col-md-3">
+                                                            <div class="p-2 border rounded bg-light">
+                                                                <small class="text-muted d-block" style="font-size:0.72rem;">Afternoon Out (ቀን ማብቂያ)</small>
+                                                                <strong class="font-monospace text-dark">{{ $d->afternoon_out ? \Carbon\Carbon::parse($d->afternoon_out)->format('h:i A') : '—' }}</strong>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {{-- Assignment / Notes --}}
+                                            <div class="col-12">
+                                                <div class="card border-0 shadow-xs rounded-3 p-3 bg-white">
+                                                    <span class="text-muted small fw-bold text-uppercase d-block mb-1">
+                                                        <i class="fa-solid fa-clipboard-list text-info me-1"></i>Assignment &amp; Task Description (የሥራ ዝርዝር / ማስታወሻ)
+                                                    </span>
+                                                    <div class="p-3 border rounded bg-light text-dark small" style="white-space: pre-wrap; font-family: inherit;">{{ $d->task_notes ?: 'No specific task notes provided.' }}</div>
+                                                </div>
+                                            </div>
+
+                                            {{-- Audit Trail: Requester & HR Reviewer --}}
+                                            <div class="col-12">
+                                                <div class="card border-0 shadow-xs rounded-3 p-3 bg-white">
+                                                    <span class="text-muted small fw-bold text-uppercase d-block mb-2">
+                                                        <i class="fa-solid fa-user-shield text-secondary me-1"></i>Audit &amp; Dispatch Governance
+                                                    </span>
+                                                    <div class="row g-2 small">
+                                                        <div class="col-md-6 border-end-md">
+                                                            <div class="text-muted">Dispatched / Requested By:</div>
+                                                            <strong class="text-dark">{{ $d->requestedBy?->name ?? 'Manager' }}</strong>
+                                                            <span class="badge bg-light text-secondary border ms-1">{{ $d->requested_by_role ?? 'Manager' }}</span>
+                                                            @if($d->requestedBy?->email)
+                                                                <div class="text-muted font-monospace" style="font-size:0.75rem;">{{ $d->requestedBy->email }}</div>
+                                                            @endif
+                                                            <div class="text-muted mt-1" style="font-size:0.75rem;">Submitted: {{ $d->created_at?->format('d M Y, h:i A') }}</div>
+                                                        </div>
+                                                        <div class="col-md-6 ps-md-3">
+                                                            <div class="text-muted">HR Review Decision:</div>
+                                                            @if($d->isApproved())
+                                                                <div class="text-success fw-bold">
+                                                                    <i class="fa-solid fa-check-circle me-1"></i>Approved by {{ $d->hrReviewedBy?->name ?? 'HR Department' }}
+                                                                </div>
+                                                                <div class="text-muted" style="font-size:0.75rem;">Reviewed: {{ $d->hr_reviewed_at?->format('d M Y, h:i A') }}</div>
+                                                                <div class="small text-muted mt-1">Recorded into official attendance as Present (Status S).</div>
+                                                            @elseif($d->isRejected())
+                                                                <div class="text-danger fw-bold">
+                                                                    <i class="fa-solid fa-circle-xmark me-1"></i>Rejected by {{ $d->hrReviewedBy?->name ?? 'HR Department' }}
+                                                                </div>
+                                                                <div class="text-muted" style="font-size:0.75rem;">Reviewed: {{ $d->hr_reviewed_at?->format('d M Y, h:i A') }}</div>
+                                                                <div class="alert alert-danger p-2 mt-2 mb-0 small">
+                                                                    <strong>Rejection Reason:</strong> {{ $d->hr_notes ?: 'No reason stated.' }}
+                                                                </div>
+                                                            @else
+                                                                <div class="text-warning fw-bold">
+                                                                    <i class="fa-solid fa-hourglass-half me-1"></i>Pending HR Decision
+                                                                </div>
+                                                                <div class="text-muted" style="font-size:0.75rem;">Awaiting verification and approval by HR Officer.</div>
+                                                            @endif
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer bg-light py-2 px-4 d-flex justify-content-between align-items-center">
+                                        <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Close</button>
+                                        @if($d->isPending() && $isHr)
+                                            <div class="d-flex align-items-center gap-2">
+                                                <button type="button" class="btn btn-outline-danger btn-sm px-3" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $d->id }}">
+                                                    <i class="fa-solid fa-xmark me-1"></i>Reject
+                                                </button>
+                                                <form action="{{ route('attendance.site-deployments.approve', $d) }}" method="POST" onsubmit="return confirm('Are you sure you want to APPROVE this site deployment for {{ $d->employee?->full_name }}? Official attendance will be recorded with Status S.');">
+                                                    @csrf
+                                                    <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-xs">
+                                                        <i class="fa-solid fa-check me-1"></i>Approve Deployment
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
                         {{-- MODAL: REJECT DEPLOYMENT (HR Action) --}}
                         @if($d->isPending() && $isHr)
