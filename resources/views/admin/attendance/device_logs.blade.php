@@ -292,8 +292,8 @@
                                 </label>
                             </div>
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="force" value="1" id="forceSync">
-                                <label class="form-check-label small text-muted" for="forceSync">Re-sync existing</label>
+                                <input class="form-check-input" type="checkbox" name="force" value="1" id="forceSync" checked>
+                                <label class="form-check-label small fw-semibold text-dark" for="forceSync">Always update existing records</label>
                             </div>
                         </div>
 

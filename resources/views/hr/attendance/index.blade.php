@@ -17,6 +17,14 @@
             </div>
         </div>
         <div class="btn-group flex-wrap" role="group">
+            <form action="{{ route('attendance.zkteco-sync') }}" method="POST" class="d-inline">
+                @csrf
+                <input type="hidden" name="date" value="{{ request('date', today()->toDateString()) }}">
+                <input type="hidden" name="redirect_to" value="attendance">
+                <button type="submit" class="btn btn-info text-white fw-semibold" title="Synchronize biometric device punches">
+                    <i class="fa-solid fa-rotate me-1"></i>Sync Biometrics
+                </button>
+            </form>
             <button type="button" class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#siteAttendanceModal">
                 <i class="fa-solid fa-person-digging me-1"></i>Employee On Site (ወደ ሳይት የወጣ)
             </button>
@@ -189,7 +197,7 @@
                 <div class="row g-2 align-items-end">
                     
                     {{-- Select Month --}}
-                    <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="col-12 col-sm-6 col-lg-2">
                         <label class="form-label small fw-bold text-dark mb-1">
                             <i class="far fa-calendar text-primary me-1"></i>Select Month (ወር)
                         </label>
@@ -220,6 +228,19 @@
                         </select>
                     </div>
 
+                    {{-- Source Filter --}}
+                    <div class="col-6 col-sm-6 col-lg-2">
+                        <label class="form-label small fw-bold text-dark mb-1">
+                            <i class="fas fa-fingerprint text-primary me-1"></i>Source (ምንጭ)
+                        </label>
+                        <select name="source" class="form-select">
+                            <option value="">All Sources</option>
+                            <option value="biometric" {{ request('source') === 'biometric' ? 'selected' : '' }}>⚡ Biometric (Synced)</option>
+                            <option value="site" {{ request('source') === 'site' ? 'selected' : '' }}>🏗️ On-Site (ሳይት ላይ)</option>
+                            <option value="manual" {{ request('source') === 'manual' ? 'selected' : '' }}>✍️ Manual Entry</option>
+                        </select>
+                    </div>
+
                     {{-- Status Filter --}}
                     <div class="col-6 col-sm-6 col-lg-2">
                         <label class="form-label small fw-bold text-dark mb-1">
@@ -244,9 +265,9 @@
                     </div>
 
                     {{-- Filter Buttons --}}
-                    <div class="col-12 col-lg-2 d-flex gap-1">
-                        <button type="submit" class="btn btn-primary flex-grow-1 shadow-xs">
-                            <i class="fas fa-filter me-1"></i>Filter
+                    <div class="col-6 col-sm-6 col-lg-1 d-flex gap-1">
+                        <button type="submit" class="btn btn-primary flex-grow-1 shadow-xs" title="Filter Records">
+                            <i class="fas fa-filter"></i>
                         </button>
                         <a href="{{ route('attendance.index') }}" class="btn btn-outline-secondary" title="Reset all filters">
                             <i class="fas fa-redo"></i>
@@ -452,21 +473,43 @@
                                     </span>
                                 </div>
                             </td>
+                            @php
+                                $mIn  = $a->morning_in;
+                                $mOut = $a->morning_out;
+                                $aIn  = $a->afternoon_in;
+                                $aOut = $a->afternoon_out;
+                                $cIn  = $a->check_in;
+                                $cOut = $a->check_out;
+
+                                // Fallbacks: ensure ANY real punch registered on the machine is visible
+                                if (empty($mIn) && !empty($cIn) && $cIn < '12:30:00') {
+                                    $mIn = $cIn;
+                                }
+                                if (empty($mOut) && !empty($cOut) && $cOut < '13:00:00' && $cOut !== $mIn) {
+                                    $mOut = $cOut;
+                                }
+                                if (empty($aIn) && !empty($cIn) && $cIn >= '12:30:00') {
+                                    $aIn = $cIn;
+                                }
+                                if (empty($aOut) && !empty($cOut) && $cOut >= '12:30:00' && $cOut !== $aIn) {
+                                    $aOut = $cOut;
+                                }
+                            @endphp
                             <td class="text-center">
                                 <div class="d-flex justify-content-center align-items-center gap-1">
-                                    @if($a->morning_in)
+                                    @if($mIn)
                                         <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" 
-                                              title="Morning Clock In • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($a->morning_in) }}">
-                                            <i class="fas fa-arrow-right me-1"></i>{{ substr($a->morning_in, 0, 5) }}
+                                              title="Morning Clock In: {{ $mIn }} • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mIn) }}">
+                                            <i class="fas fa-arrow-right me-1"></i>{{ substr($mIn, 0, 5) }}
                                         </span>
                                     @else
                                         <span class="badge bg-light text-muted border px-2 py-1" title="No Morning Clock In">—</span>
                                     @endif
                                     <span class="text-muted small">&bull;</span>
-                                    @if($a->morning_out)
+                                    @if($mOut)
                                         <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1" 
-                                              title="Morning Clock Out • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($a->morning_out) }}">
-                                            <i class="fas fa-arrow-left me-1"></i>{{ substr($a->morning_out, 0, 5) }}
+                                              title="Morning Clock Out: {{ $mOut }} • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mOut) }}">
+                                            <i class="fas fa-arrow-left me-1"></i>{{ substr($mOut, 0, 5) }}
                                         </span>
                                     @else
                                         <span class="badge bg-light text-muted border px-2 py-1" title="No Morning Clock Out">—</span>
@@ -474,25 +517,25 @@
                                 </div>
                             </td>
                             <td class="text-center">
-                                @if($a->attendance_date && $a->attendance_date->isSaturday() && empty($a->afternoon_in) && empty($a->afternoon_out))
+                                @if($a->attendance_date && $a->attendance_date->isSaturday() && empty($aIn) && empty($aOut))
                                     <span class="badge bg-light text-muted border px-2 py-1" style="font-size: 0.72rem;" title="Saturday Afternoon is non-working by official policy">
                                         <i class="fa-solid fa-mug-saucer me-1 text-warning"></i>Off (እረፍት)
                                     </span>
                                 @else
                                     <div class="d-flex justify-content-center align-items-center gap-1">
-                                        @if($a->afternoon_in)
+                                        @if($aIn)
                                             <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1" 
-                                                  title="Afternoon Clock In • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($a->afternoon_in) }}">
-                                                <i class="fas fa-arrow-right me-1"></i>{{ substr($a->afternoon_in, 0, 5) }}
+                                                  title="Afternoon Clock In: {{ $aIn }} • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($aIn) }}">
+                                                <i class="fas fa-arrow-right me-1"></i>{{ substr($aIn, 0, 5) }}
                                             </span>
                                         @else
                                             <span class="badge bg-light text-muted border px-2 py-1" title="No Afternoon Clock In">—</span>
                                         @endif
                                         <span class="text-muted small">&bull;</span>
-                                        @if($a->afternoon_out)
+                                        @if($aOut)
                                             <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1" 
-                                                  title="Afternoon Clock Out • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($a->afternoon_out) }}">
-                                                <i class="fas fa-arrow-left me-1"></i>{{ substr($a->afternoon_out, 0, 5) }}
+                                                  title="Afternoon Clock Out: {{ $aOut }} • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($aOut) }}">
+                                                <i class="fas fa-arrow-left me-1"></i>{{ substr($aOut, 0, 5) }}
                                             </span>
                                         @else
                                             <span class="badge bg-light text-muted border px-2 py-1" title="No Afternoon Clock Out">—</span>

@@ -49,6 +49,22 @@ class AttendanceController extends Controller
             });
         }
 
+        // Filter by source (e.g. biometric/device synced, site, manual)
+        if (request('source')) {
+            $src = request('source');
+            if ($src === 'biometric' || $src === 'device' || $src === 'synced') {
+                $query->whereIn('source', ['biometric', 'device']);
+            } elseif ($src === 'site') {
+                $query->where(function ($q) {
+                    $q->whereIn('status', ['site', 'S', 's', 'on_site'])
+                      ->orWhere('source', 'site_dispatch')
+                      ->orWhere('notes', 'like', '%On-Site%');
+                });
+            } elseif ($src === 'manual') {
+                $query->where('source', 'manual');
+            }
+        }
+
         // Filter by status or only records with punches added / site deployments
         if (request('status')) {
             if (request('status') === 'site' || request('status') === 'S') {
@@ -74,6 +90,15 @@ class AttendanceController extends Controller
                   ->orWhere('notes', 'like', '%On-Site%');
             });
         }
+
+        // ── Auto-heal: Ensure all biometric & sync records have real session times populated ──
+        try {
+            $targetDate = $selectedDate ?: (request('date_from') ?: today()->toDateString());
+            \App\Services\BiometricPunchService::autoHealMissingSessionTimes($targetDate);
+            if ($targetDate !== today()->toDateString()) {
+                \App\Services\BiometricPunchService::autoHealMissingSessionTimes(today()->toDateString());
+            }
+        } catch (\Throwable $e) {}
 
         // ── Auto-heal & Normalize Saturday Attendance Records ─────────────────
         // Under company policy, Saturday operates strictly on a Morning Session (4.0 hrs).
@@ -2086,9 +2111,9 @@ class AttendanceController extends Controller
             $redirectParams = ['date_from' => $start, 'date_to' => $end];
         }
 
-        if ($force) {
-            $args['--force'] = true;
-        }
+        // Always force update punch logs into attendance records to guarantee latest times are stored
+        $args['--force'] = true;
+
         if (!empty($locationType)) {
             $args['--location'] = $locationType;
             $redirectParams['location_type'] = $locationType;
@@ -2102,12 +2127,15 @@ class AttendanceController extends Controller
             $redirectParams['device_sn'] = $deviceSn;
         }
 
-        $targetRoute = (auth()->check() && auth()->user()->hasAnyRole(['admin', 'global_admin']))
-            ? 'admin.attendance.device-logs'
-            : 'attendance.index';
+        $targetRoute = $request->input('redirect_to') === 'attendance'
+            ? 'attendance.index'
+            : ((auth()->check() && auth()->user()->hasAnyRole(['admin', 'global_admin']))
+                ? 'admin.attendance.device-logs'
+                : 'attendance.index');
 
         try {
             Artisan::call('zkteco:sync', $args);
+            \App\Services\BiometricPunchService::autoHealMissingSessionTimes();
             $output = trim(Artisan::output());
 
             $scopeLabel = '';

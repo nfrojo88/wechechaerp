@@ -217,120 +217,27 @@ class SyncZktecoAttendance extends Command
                 $employee->device_user_id = $cleanId;
             }
 
-            // If not forcing, skip if attendance record already exists for this date and source=device/biometric
-            if (!$force) {
-                $alreadyExists = DB::table('attendance')
-                    ->where('employee_id', $employee->id)
+            try {
+                $empModel = Employee::find($employee->id);
+                if (!$empModel) {
+                    continue;
+                }
+
+                $devSn = $punches->first()->device_sn ?? $deviceSn;
+                $existedBefore = DB::table('attendance')
+                    ->where('employee_id', $empModel->id)
                     ->where('attendance_date', $date)
                     ->exists();
 
-                if ($alreadyExists) {
-                    $skipped++;
-                    continue;
-                }
-            }
+                $syncedRecord = \App\Services\BiometricPunchService::syncEmployeeDatePunches($empModel, $date, $devSn);
 
-            try {
-                $sorted = $punches->sortBy('punch_time')->values();
-                $first = $sorted->first();
-                $last  = $sorted->last();
-
-                $checkIn  = Carbon::parse($first->punch_time)->format('H:i:s');
-                $checkOut = ($sorted->count() > 1 && $first->punch_time !== $last->punch_time)
-                    ? Carbon::parse($last->punch_time)->format('H:i:s')
-                    : null;
-
-                $hoursWorked = null;
-                if ($checkIn && $checkOut) {
-                    $inDt  = Carbon::parse("{$date} {$checkIn}");
-                    $outDt = Carbon::parse("{$date} {$checkOut}");
-                    if ($outDt->gt($inDt)) {
-                        $hoursWorked = round($outDt->diffInMinutes($inDt) / 60, 2);
-                    }
-                }
-
-                $isSat = Carbon::parse($date)->isSaturday();
-                $status = 'present';
-                if ($checkIn > '09:15:00' && !$isSat) {
-                    $status = 'late';
-                }
-
-                // Morning & Afternoon session mapping
-                $morningIn    = $checkIn;
-                $morningOut   = null;
-                $afternoonIn  = null;
-                $afternoonOut = null;
-
-                if ($isSat) {
-                    $morningOut = $checkOut;
-                } else {
-                    if ($checkOut) {
-                        if ($checkOut >= '13:00:00') {
-                            $afternoonOut = $checkOut;
-                        } else {
-                            $morningOut = $checkOut;
-                        }
-                    }
-                }
-
-                $devSn = $first->device_sn ?? null;
-                $deviceInfo = $devSn && isset($devices[$devSn]) ? $devices[$devSn] : null;
-                $devType = $deviceInfo ? ($deviceInfo->device_type ?? 'head_office') : 'head_office';
-
-                $siteProjId = null;
-                $siteProjName = null;
-                if ($devType === 'site') {
-                    $siteProjId = $deviceInfo->project_id ?? null;
-                    if ($siteProjId && isset($projects[$siteProjId])) {
-                        $siteProjName = $projects[$siteProjId]->name;
-                    } else {
-                        $siteProjName = $deviceInfo->location ?? 'Site';
-                    }
-                } else {
-                    $siteProjName = 'Head Office';
-                }
-
-                $attendanceData = [
-                    'check_in'            => $checkIn,
-                    'check_out'           => $checkOut,
-                    'morning_in'          => $morningIn,
-                    'morning_out'         => $morningOut,
-                    'afternoon_in'        => $afternoonIn,
-                    'afternoon_out'       => $afternoonOut,
-                    'hours_worked'        => $hoursWorked,
-                    'status'              => $status,
-                    'source'              => 'device',
-                    'biometric_device_id' => $devSn ?: 'AF6P230860018',
-                    'site_project_id'     => $siteProjId,
-                    'site_name'           => $siteProjName,
-                    'is_approved'         => true,
-                    'updated_at'          => now(),
-                ];
-
-                $existing = DB::table('attendance')
-                    ->where('employee_id', $employee->id)
-                    ->where('attendance_date', $date)
-                    ->first();
-
-                if ($existing) {
-                    DB::table('attendance')->where('id', $existing->id)->update($attendanceData);
+                if ($existedBefore) {
                     $updated++;
                 } else {
-                    DB::table('attendance')->insert(array_merge($attendanceData, [
-                        'employee_id'     => $employee->id,
-                        'attendance_date' => $date,
-                        'created_at'      => now(),
-                    ]));
                     $synced++;
                 }
 
-                // Mark device logs as synced
-                DB::table('device_attendance_logs')
-                    ->whereDate('punch_time', $date)
-                    ->where('device_user_id', $deviceUserId)
-                    ->update(['synced_at' => now()]);
-
-                $this->line("  ✓ {$employee->full_name} [PIN: {$cleanId}]: In={$checkIn}, Out=" . ($checkOut ?? '—') . " [{$status}]");
+                $this->line("  ✓ {$employee->full_name} [PIN: {$cleanId}]: In=" . ($syncedRecord->check_in ?? '—') . ", Out=" . ($syncedRecord->check_out ?? '—') . " [{$syncedRecord->status}]");
 
             } catch (\Exception $e) {
                 $this->error("  ✗ Employee {$employee->full_name} (ID {$employee->id}): " . $e->getMessage());

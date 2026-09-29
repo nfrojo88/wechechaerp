@@ -220,59 +220,11 @@ class ZkTecoAdmsController extends Controller
     {
         try {
             $dateStr = substr($punchTime, 0, 10);
-            $timeStr = strlen($punchTime) > 10 ? substr($punchTime, 11, 8) : '00:00:00';
-
-            $existing = DB::table('attendance')
-                ->where('employee_id', $employee->id)
-                ->where('attendance_date', $dateStr)
-                ->first();
-
-            if (!$existing) {
-                // First punch: Check-In
-                DB::table('attendance')->insert([
-                    'employee_id'         => $employee->id,
-                    'attendance_date'     => $dateStr,
-                    'check_in'            => $timeStr,
-                    'check_out'           => null,
-                    'hours_worked'        => null,
-                    'status'              => 'present',
-                    'source'              => 'biometric',
-                    'biometric_device_id' => $sn ?: 'AF6P230860018',
-                    'is_approved'         => true,
-                    'created_at'          => now(),
-                    'updated_at'          => now(),
-                ]);
-
-                $this->logAdms("CHECK-IN RECORDED: {$employee->full_name} at {$timeStr} on {$dateStr}");
-            } else {
-                // Subsequent punch: Check-Out
-                $checkIn = $existing->check_in;
-                if ($checkIn && $timeStr > $checkIn) {
-                    $inSecs  = strtotime($dateStr . ' ' . $checkIn);
-                    $outSecs = strtotime($dateStr . ' ' . $timeStr);
-                    $hours   = $outSecs > $inSecs ? round(($outSecs - $inSecs) / 3600, 2) : null;
-
-                    DB::table('attendance')
-                        ->where('employee_id', $employee->id)
-                        ->where('attendance_date', $dateStr)
-                        ->update([
-                            'check_out'           => $timeStr,
-                            'hours_worked'        => $hours,
-                            'source'              => 'biometric',
-                            'biometric_device_id' => $sn ?: ($existing->biometric_device_id ?? 'AF6P230860018'),
-                            'updated_at'          => now(),
-                        ]);
-
-                    $this->logAdms("CHECK-OUT UPDATED: {$employee->full_name} at {$timeStr} (Hours: {$hours})");
-                }
+            $empModel = ($employee instanceof Employee) ? $employee : Employee::find($employee->id);
+            if ($empModel) {
+                \App\Services\BiometricPunchService::syncEmployeeDatePunches($empModel, $dateStr, $sn);
+                $this->logAdms("PUNCH SYNCED: {$empModel->full_name} for {$dateStr} at {$punchTime}");
             }
-
-            // Mark punch log as synced
-            DB::table('device_attendance_logs')
-                ->where('device_user_id', $employee->device_user_id)
-                ->where('punch_time', $punchTime)
-                ->update(['synced_at' => now()]);
-
         } catch (\Throwable $e) {
             $this->logAdms("ERROR in autoSyncPunch: " . $e->getMessage());
         }
