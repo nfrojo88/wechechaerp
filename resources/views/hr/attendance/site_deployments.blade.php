@@ -392,95 +392,115 @@
                         </tr>
 
                         {{-- MODAL: FULL DEPLOYMENT DETAILS --}}
-                        <div class="modal fade" id="deploymentDetailModal{{ $d->id }}" tabindex="-1" aria-hidden="true">
-                            <div class="modal-dialog modal-dialog-centered modal-lg">
-                                <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
-                                    <div class="modal-header bg-primary text-white py-3 px-4">
-                                        <div class="d-flex align-items-center gap-2">
-                                            <i class="fa-solid fa-file-lines fs-5"></i>
+                        {{-- MODAL: FULL DEPLOYMENT DETAILS --}}
+                        <div class="modal fade" id="deploymentDetailModal{{ $d->id }}" tabindex="-1" aria-labelledby="deploymentDetailModalLabel{{ $d->id }}" aria-hidden="true">
+                            <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable my-3">
+                                <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" style="max-height: 90vh;">
+                                    {{-- Modal Header --}}
+                                    <div class="modal-header text-white py-3 px-4 flex-shrink-0" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                        <div class="d-flex align-items-center gap-3">
+                                            <div class="p-2 rounded-circle d-flex align-items-center justify-content-center shadow-xs" style="width: 44px; height: 44px; background: rgba(255,255,255,0.12);">
+                                                <i class="fa-solid fa-person-digging fs-5 text-warning"></i>
+                                            </div>
                                             <div>
-                                                <h6 class="modal-title fw-bold mb-0">Site Deployment Details &bull; የሳይት ሥራ ስምሪት ዝርዝር</h6>
-                                                <small class="opacity-75 font-monospace">Ref #DEP-{{ str_pad($d->id, 5, '0', STR_PAD_LEFT) }}</small>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <h5 class="modal-title fw-bold mb-0 text-white" id="deploymentDetailModalLabel{{ $d->id }}">Site Deployment Details</h5>
+                                                    <span class="badge bg-white bg-opacity-20 text-white font-monospace" style="font-size: 0.72rem;">#DEP-{{ str_pad($d->id, 5, '0', STR_PAD_LEFT) }}</span>
+                                                </div>
+                                                <small class="text-white text-opacity-75" style="font-size: 0.8rem;">የሳይት ሥራ ስምሪት ዝርዝር መረጃ &bull; Official HR Deployment Record</small>
                                             </div>
                                         </div>
                                         <div class="d-flex align-items-center gap-2">
                                             @if($d->isPending())
-                                                <span class="badge bg-warning text-dark border border-warning px-2 py-1 shadow-xs fw-bold">
+                                                <span class="badge bg-warning text-dark fw-bold px-2 py-1 shadow-xs">
                                                     <i class="fa-solid fa-clock-rotate-left me-1"></i>Pending HR Approval
                                                 </span>
                                             @elseif($d->isApproved())
-                                                <span class="badge bg-success text-white px-2 py-1 shadow-xs fw-bold">
+                                                <span class="badge bg-success text-white fw-bold px-2 py-1 shadow-xs">
                                                     <span class="badge bg-white text-success me-1">S</span> Approved &bull; Recorded
                                                 </span>
                                             @elseif($d->isRejected())
-                                                <span class="badge bg-danger text-white px-2 py-1 shadow-xs fw-bold">
+                                                <span class="badge bg-danger text-white fw-bold px-2 py-1 shadow-xs">
                                                     <i class="fa-solid fa-circle-xmark me-1"></i>Rejected by HR
                                                 </span>
                                             @endif
-                                            <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal"></button>
+                                            <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
                                         </div>
                                     </div>
-                                    <div class="modal-body p-4 text-start bg-light-subtle">
+
+                                    {{-- Modal Body (Scrollable) --}}
+                                    <div class="modal-body p-4 text-start bg-light" style="overflow-y: auto;">
                                         {{-- Employee Profile Card --}}
-                                        <div class="card border-0 shadow-xs rounded-3 p-3 mb-3 bg-white">
+                                        <div class="card border border-light-subtle shadow-xs rounded-3 p-3 mb-3 bg-white">
                                             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                                                 <div class="d-flex align-items-center gap-3">
-                                                    <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-bold fs-5 shadow-xs" style="width: 48px; height: 48px;">
+                                                    <div class="rounded-circle text-white d-flex align-items-center justify-content-center fw-bold fs-5 shadow-xs" style="width: 48px; height: 48px; background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%);">
                                                         {{ strtoupper(substr($d->employee?->full_name ?? 'E', 0, 1)) }}
                                                     </div>
                                                     <div>
                                                         <h6 class="fw-bold text-dark mb-0 fs-6">{{ $d->employee?->full_name ?? 'Unknown Employee' }}</h6>
-                                                        <div class="text-muted small">
-                                                            <span class="font-monospace text-primary fw-semibold">{{ $d->employee?->employee_code ?? 'EMP' }}</span>
-                                                            @if($d->employee?->designation) &bull; {{ $d->employee->designation }} @endif
+                                                        <div class="text-muted small mt-0.5">
+                                                            <span class="font-monospace text-primary fw-bold">{{ $d->employee?->employee_code ?? 'EMP' }}</span>
+                                                            @if($d->employee?->designation) &bull; <span class="fw-semibold text-dark">{{ $d->employee->designation }}</span> @endif
                                                             @if($d->employee?->department) &bull; <span class="badge bg-light text-secondary border">{{ is_object($d->employee->department) ? ($d->employee->department->name ?? '') : $d->employee->department }}</span> @endif
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div>
+                                                <div class="d-flex align-items-center gap-2 flex-wrap">
                                                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 font-monospace">
                                                         <i class="fa-solid fa-fingerprint me-1"></i>Device ID: {{ $d->employee?->device_user_id ?: 'Not assigned' }}
                                                     </span>
+                                                    @if($d->start_date)
+                                                    <span class="badge bg-light text-dark border px-2 py-1 font-monospace" style="font-size:0.75rem;">
+                                                        🇪🇹 {{ \App\Helpers\EthiopianCalendar::format($d->start_date, 'am') }}
+                                                    </span>
+                                                    @endif
                                                 </div>
                                             </div>
                                         </div>
 
                                         {{-- Grid Details --}}
                                         <div class="row g-3 mb-3">
-                                            {{-- Site & Project Location --}}
+                                            {{-- Destination Site & Project --}}
                                             <div class="col-md-6">
-                                                <div class="card border-0 shadow-xs rounded-3 p-3 h-100 bg-white">
+                                                <div class="card border border-light-subtle shadow-xs rounded-3 p-3 h-100 bg-white">
                                                     <span class="text-muted small fw-bold text-uppercase d-block mb-2">
                                                         <i class="fa-solid fa-location-dot text-danger me-1"></i>Destination Site &amp; Project
                                                     </span>
-                                                    <h6 class="fw-bold text-dark mb-1">
+                                                    <h6 class="fw-bold text-dark mb-1 lh-sm">
                                                         {{ $d->siteProject?->name ?: ($d->site_name ?: 'General Site') }}
                                                     </h6>
                                                     @if($d->siteProject?->code)
-                                                        <div class="small text-muted mb-1 font-monospace">Project Code: {{ $d->siteProject->code }}</div>
+                                                        <div class="small text-muted mb-1 font-monospace">
+                                                            <span class="badge bg-light text-secondary border">Project Code: {{ $d->siteProject->code }}</span>
+                                                        </div>
                                                     @endif
                                                     @if($d->siteProject?->location)
-                                                        <div class="small text-muted"><i class="fa-solid fa-map-pin me-1 text-secondary"></i>{{ $d->siteProject->location }}</div>
+                                                        <div class="small text-muted mt-1">
+                                                            <i class="fa-solid fa-map-pin me-1 text-secondary"></i>{{ $d->siteProject->location }}
+                                                        </div>
                                                     @endif
                                                 </div>
                                             </div>
 
                                             {{-- Deployment Dates & Calendar --}}
                                             <div class="col-md-6">
-                                                <div class="card border-0 shadow-xs rounded-3 p-3 h-100 bg-white">
+                                                <div class="card border border-light-subtle shadow-xs rounded-3 p-3 h-100 bg-white">
                                                     <span class="text-muted small fw-bold text-uppercase d-block mb-2">
                                                         <i class="fa-regular fa-calendar-days text-primary me-1"></i>Deployment Period &amp; Dates
                                                     </span>
-                                                    <div class="fw-bold text-dark mb-1">
+                                                    <div class="fw-bold text-dark mb-1 fs-6">
                                                         {{ $d->start_date?->format('d M Y') }}
                                                         @if(!$isSingle && $d->end_date && $d->end_date->ne($d->start_date))
                                                             <span class="text-muted fw-normal">to</span> {{ $d->end_date->format('d M Y') }}
                                                         @endif
-                                                        <span class="badge bg-light text-dark border ms-1">{{ $d->duration_type === 'multi_day' ? 'Multi-Day' : 'Single Day' }}</span>
+                                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size:0.75rem;">
+                                                            {{ $d->duration_type === 'multi_day' ? 'Multi-Day Deployment' : 'Single Day' }}
+                                                        </span>
                                                     </div>
-                                                    <div class="mt-1">
-                                                        <span class="badge bg-light text-dark border font-monospace" style="font-size:0.75rem;">
-                                                            🇪🇹 {{ \App\Helpers\EthiopianCalendar::format($d->start_date, 'am') }}
+                                                    <div class="mt-2">
+                                                        <span class="badge bg-light text-dark border font-monospace px-2 py-1" style="font-size:0.75rem;">
+                                                            🇪🇹 Ethiopian: {{ \App\Helpers\EthiopianCalendar::format($d->start_date, 'am') }}
                                                             @if(!$isSingle && $d->end_date && $d->end_date->ne($d->start_date))
                                                                 – {{ \App\Helpers\EthiopianCalendar::format($d->end_date, 'am') }}
                                                             @endif
@@ -489,94 +509,100 @@
                                                 </div>
                                             </div>
 
-                                            {{-- Shift, Punches & Working Hours --}}
+                                            {{-- Shift Session & Credited Punches --}}
                                             <div class="col-12">
-                                                <div class="card border-0 shadow-xs rounded-3 p-3 bg-white">
+                                                <div class="card border border-light-subtle shadow-xs rounded-3 p-3 bg-white">
                                                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
                                                         <span class="text-muted small fw-bold text-uppercase">
                                                             <i class="fa-solid fa-business-time text-warning me-1"></i>Shift Session &amp; Credited Punches
                                                         </span>
                                                         <span class="badge bg-success-subtle text-success border border-success fw-bold px-2 py-1">
-                                                            <i class="fa-solid fa-clock me-1"></i>{{ number_format($d->hours_worked, 1) }} Hours Credited (Non-deductible)
+                                                            <i class="fa-solid fa-check-double me-1"></i>{{ number_format($d->hours_worked, 1) }} Hours Credited (Non-deductible &bull; Status S)
                                                         </span>
                                                     </div>
 
                                                     <div class="row g-2 text-center">
                                                         <div class="col-6 col-md-3">
-                                                            <div class="p-2 border rounded bg-light">
+                                                            <div class="p-2 border rounded-3 bg-light">
                                                                 <small class="text-muted d-block" style="font-size:0.72rem;">Morning In (ጠዋት መግቢያ)</small>
-                                                                <strong class="font-monospace text-dark">{{ $d->morning_in ? \Carbon\Carbon::parse($d->morning_in)->format('h:i A') : '—' }}</strong>
+                                                                <strong class="font-monospace text-dark fs-6">{{ $d->morning_in ? \Carbon\Carbon::parse($d->morning_in)->format('h:i A') : '—' }}</strong>
                                                             </div>
                                                         </div>
                                                         <div class="col-6 col-md-3">
-                                                            <div class="p-2 border rounded bg-light">
+                                                            <div class="p-2 border rounded-3 bg-light">
                                                                 <small class="text-muted d-block" style="font-size:0.72rem;">Morning Out (ምሳ መውጫ)</small>
-                                                                <strong class="font-monospace text-dark">{{ $d->morning_out ? \Carbon\Carbon::parse($d->morning_out)->format('h:i A') : '—' }}</strong>
+                                                                <strong class="font-monospace text-dark fs-6">{{ $d->morning_out ? \Carbon\Carbon::parse($d->morning_out)->format('h:i A') : '—' }}</strong>
                                                             </div>
                                                         </div>
                                                         <div class="col-6 col-md-3">
-                                                            <div class="p-2 border rounded bg-light">
+                                                            <div class="p-2 border rounded-3 bg-light">
                                                                 <small class="text-muted d-block" style="font-size:0.72rem;">Afternoon In (ከሰዓት መግቢያ)</small>
-                                                                <strong class="font-monospace text-dark">{{ $d->afternoon_in ? \Carbon\Carbon::parse($d->afternoon_in)->format('h:i A') : '—' }}</strong>
+                                                                <strong class="font-monospace text-dark fs-6">{{ $d->afternoon_in ? \Carbon\Carbon::parse($d->afternoon_in)->format('h:i A') : '—' }}</strong>
                                                             </div>
                                                         </div>
                                                         <div class="col-6 col-md-3">
-                                                            <div class="p-2 border rounded bg-light">
+                                                            <div class="p-2 border rounded-3 bg-light">
                                                                 <small class="text-muted d-block" style="font-size:0.72rem;">Afternoon Out (ቀን ማብቂያ)</small>
-                                                                <strong class="font-monospace text-dark">{{ $d->afternoon_out ? \Carbon\Carbon::parse($d->afternoon_out)->format('h:i A') : '—' }}</strong>
+                                                                <strong class="font-monospace text-dark fs-6">{{ $d->afternoon_out ? \Carbon\Carbon::parse($d->afternoon_out)->format('h:i A') : '—' }}</strong>
                                                             </div>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            {{-- Assignment / Notes --}}
+                                            {{-- Assignment / Task Description --}}
                                             <div class="col-12">
-                                                <div class="card border-0 shadow-xs rounded-3 p-3 bg-white">
-                                                    <span class="text-muted small fw-bold text-uppercase d-block mb-1">
+                                                <div class="card border border-light-subtle shadow-xs rounded-3 p-3 bg-white">
+                                                    <span class="text-muted small fw-bold text-uppercase d-block mb-2">
                                                         <i class="fa-solid fa-clipboard-list text-info me-1"></i>Assignment &amp; Task Description (የሥራ ዝርዝር / ማስታወሻ)
                                                     </span>
-                                                    <div class="p-3 border rounded bg-light text-dark small" style="white-space: pre-wrap; font-family: inherit;">{{ $d->task_notes ?: 'No specific task notes provided.' }}</div>
+                                                    <div class="p-3 border rounded-3 bg-light text-dark small" style="white-space: pre-wrap; font-family: inherit; line-height: 1.6;">{{ $d->task_notes ?: 'No specific task notes provided.' }}</div>
                                                 </div>
                                             </div>
 
                                             {{-- Audit Trail: Requester & HR Reviewer --}}
                                             <div class="col-12">
-                                                <div class="card border-0 shadow-xs rounded-3 p-3 bg-white">
+                                                <div class="card border border-light-subtle shadow-xs rounded-3 p-3 bg-white">
                                                     <span class="text-muted small fw-bold text-uppercase d-block mb-2">
                                                         <i class="fa-solid fa-user-shield text-secondary me-1"></i>Audit &amp; Dispatch Governance
                                                     </span>
-                                                    <div class="row g-2 small">
+                                                    <div class="row g-3 small">
                                                         <div class="col-md-6 border-end-md">
-                                                            <div class="text-muted">Dispatched / Requested By:</div>
-                                                            <strong class="text-dark">{{ $d->requestedBy?->name ?? 'Manager' }}</strong>
+                                                            <div class="text-muted mb-1">Dispatched / Requested By:</div>
+                                                            <strong class="text-dark fs-6">{{ $d->requestedBy?->name ?? 'Manager' }}</strong>
                                                             <span class="badge bg-light text-secondary border ms-1">{{ $d->requested_by_role ?? 'Manager' }}</span>
                                                             @if($d->requestedBy?->email)
-                                                                <div class="text-muted font-monospace" style="font-size:0.75rem;">{{ $d->requestedBy->email }}</div>
+                                                                <div class="text-muted font-monospace mt-1" style="font-size:0.75rem;">{{ $d->requestedBy->email }}</div>
                                                             @endif
-                                                            <div class="text-muted mt-1" style="font-size:0.75rem;">Submitted: {{ $d->created_at?->format('d M Y, h:i A') }}</div>
+                                                            <div class="text-muted mt-1" style="font-size:0.75rem;">
+                                                                <i class="fa-regular fa-clock me-1"></i>Submitted: {{ $d->created_at?->format('d M Y, h:i A') }}
+                                                            </div>
                                                         </div>
                                                         <div class="col-md-6 ps-md-3">
-                                                            <div class="text-muted">HR Review Decision:</div>
+                                                            <div class="text-muted mb-1">HR Review Decision:</div>
                                                             @if($d->isApproved())
-                                                                <div class="text-success fw-bold">
+                                                                <div class="text-success fw-bold fs-6">
                                                                     <i class="fa-solid fa-check-circle me-1"></i>Approved by {{ $d->hrReviewedBy?->name ?? 'HR Department' }}
                                                                 </div>
-                                                                <div class="text-muted" style="font-size:0.75rem;">Reviewed: {{ $d->hr_reviewed_at?->format('d M Y, h:i A') }}</div>
+                                                                <div class="text-muted mt-1" style="font-size:0.75rem;">
+                                                                    <i class="fa-regular fa-clock me-1"></i>Reviewed: {{ $d->hr_reviewed_at?->format('d M Y, h:i A') }}
+                                                                </div>
                                                                 <div class="small text-muted mt-1">Recorded into official attendance as Present (Status S).</div>
                                                             @elseif($d->isRejected())
-                                                                <div class="text-danger fw-bold">
+                                                                <div class="text-danger fw-bold fs-6">
                                                                     <i class="fa-solid fa-circle-xmark me-1"></i>Rejected by {{ $d->hrReviewedBy?->name ?? 'HR Department' }}
                                                                 </div>
-                                                                <div class="text-muted" style="font-size:0.75rem;">Reviewed: {{ $d->hr_reviewed_at?->format('d M Y, h:i A') }}</div>
+                                                                <div class="text-muted mt-1" style="font-size:0.75rem;">
+                                                                    <i class="fa-regular fa-clock me-1"></i>Reviewed: {{ $d->hr_reviewed_at?->format('d M Y, h:i A') }}
+                                                                </div>
                                                                 <div class="alert alert-danger p-2 mt-2 mb-0 small">
                                                                     <strong>Rejection Reason:</strong> {{ $d->hr_notes ?: 'No reason stated.' }}
                                                                 </div>
                                                             @else
-                                                                <div class="text-warning fw-bold">
+                                                                <div class="text-warning fw-bold fs-6">
                                                                     <i class="fa-solid fa-hourglass-half me-1"></i>Pending HR Decision
                                                                 </div>
-                                                                <div class="text-muted" style="font-size:0.75rem;">Awaiting verification and approval by HR Officer.</div>
+                                                                <div class="text-muted mt-1" style="font-size:0.75rem;">Awaiting verification and approval by HR Officer.</div>
                                                             @endif
                                                         </div>
                                                     </div>
@@ -584,14 +610,16 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="modal-footer bg-light py-2 px-4 d-flex justify-content-between align-items-center">
+
+                                    {{-- Modal Footer --}}
+                                    <div class="modal-footer bg-white border-top py-3 px-4 d-flex justify-content-between align-items-center flex-shrink-0">
                                         <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Close</button>
                                         @if($d->isPending() && $isHr)
                                             <div class="d-flex align-items-center gap-2">
-                                                <button type="button" class="btn btn-outline-danger btn-sm px-3" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $d->id }}">
+                                                <button type="button" class="btn btn-outline-danger btn-sm px-3 shadow-xs" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#rejectModal{{ $d->id }}">
                                                     <i class="fa-solid fa-xmark me-1"></i>Reject
                                                 </button>
-                                                <form action="{{ route('attendance.site-deployments.approve', $d) }}" method="POST" onsubmit="return confirm('Are you sure you want to APPROVE this site deployment for {{ $d->employee?->full_name }}? Official attendance will be recorded with Status S.');">
+                                                <form action="{{ route('attendance.site-deployments.approve', $d) }}" method="POST" onsubmit="return confirm('Are you sure you want to APPROVE this site deployment for {{ $d->employee?->full_name }}? Official attendance will be recorded with Status S.');" class="d-inline">
                                                     @csrf
                                                     <button type="submit" class="btn btn-success btn-sm fw-bold px-3 shadow-xs">
                                                         <i class="fa-solid fa-check me-1"></i>Approve Deployment
