@@ -147,7 +147,7 @@
                     <thead class="table-light text-muted text-uppercase small">
                         <tr>
                             <th class="ps-4 py-3">Request No.</th>
-                            <th class="py-3">Employee</th>
+                            <th class="py-3">Reported By / To</th>
                             <th class="py-3">Asset</th>
                             <th class="py-3">Workflow Lifecycle</th>
                             <th class="py-3">Status &amp; Urgency</th>
@@ -170,8 +170,12 @@
                                 <div class="text-muted small" style="font-size:0.75rem;">{{ $req->created_at->format('d M Y') }}</div>
                             </td>
                             <td class="py-3">
-                                <div class="fw-semibold text-dark">{{ $req->employee->full_name ?? 'N/A' }}</div>
-                                <div class="text-muted small">{{ $req->employee->employee_code ?? '' }}</div>
+                                <div class="fw-semibold text-dark" style="font-size:0.85rem;">
+                                    <i class="fa-solid fa-user-pen me-1 text-primary"></i>{{ $req->reportedBy?->name ?? ($req->employee?->full_name ?? 'Requester') }}
+                                </div>
+                                <div class="text-muted small mt-0.5" style="font-size:0.75rem;">
+                                    <i class="fa-solid fa-gavel me-1 text-warning"></i>To: {{ $req->assignedTo?->name ?? 'Wondimagnhu Siyum' }}
+                                </div>
                             </td>
                             <td class="py-3">
                                 <div class="fw-semibold text-dark">{{ $req->asset_name }}</div>

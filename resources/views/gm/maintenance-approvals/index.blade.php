@@ -984,7 +984,7 @@
                         @endif
                     </div>
                     <div class="small text-muted mb-2">
-                        Reported by: <strong>{{ $mReq->employee->full_name ?? ($mReq->reportedBy->name ?? 'Staff') }}</strong> ({{ $mReq->employee->role_title ?? $mReq->employee->department ?? 'General' }})
+                        Reported by: <strong>{{ $mReq->reportedBy?->name ?? ($mReq->employee?->full_name ?? 'Staff') }}</strong> &bull; Reported to / Handled by: <strong>{{ $mReq->assignedTo?->name ?? 'Wondimagnhu Siyum' }}</strong>
                     </div>
                     <div class="p-2.5 rounded bg-light border-start border-4 border-warning small text-dark" style="white-space: pre-wrap;">
                         {{ $mReq->description }}
@@ -1306,7 +1306,7 @@
                                 <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Reported Issue &amp; Repair Details
                             </span>
                             <small class="text-muted" style="font-size:0.75rem;">
-                                Reported by <strong>{{ $mReq->employee?->full_name ?? ($mReq->reportedBy?->name ?? 'Staff') }}</strong> ({{ $mReq->employee?->role_title ?? $mReq->employee?->department ?? 'Employee' }}) on {{ $mReq->created_at->format('M d, Y h:i A') }}
+                                Reported by <strong>{{ $mReq->reportedBy?->name ?? ($mReq->employee?->full_name ?? 'Staff') }}</strong> &bull; Reported to <strong>{{ $mReq->assignedTo?->name ?? 'Wondimagnhu Siyum' }}</strong> on {{ $mReq->created_at->format('M d, Y h:i A') }}
                             </small>
                         </div>
                         <div class="text-dark" style="white-space: pre-wrap; font-size: 0.92rem; line-height: 1.5;">{{ $mReq->description }}</div>

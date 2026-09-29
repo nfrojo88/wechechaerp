@@ -188,7 +188,7 @@
                                             <span class="badge bg-dark font-monospace px-2 py-0 me-1" style="font-size:0.7rem;">{{ $req->asset_code }}</span>
                                         @endif
                                         <span class="text-muted small">
-                                            <i class="fa-solid fa-user me-1 text-primary"></i>{{ $req->employee->full_name ?? ($req->reportedBy->name ?? 'Staff') }}
+                                            <i class="fa-solid fa-user-pen me-1 text-primary"></i>{{ $req->reportedBy?->name ?? 'Requester' }} &bull; <i class="fa-solid fa-gavel me-1 text-warning"></i>To: {{ $req->assignedTo?->name ?? 'Wondimagnhu Siyum' }}
                                         </span>
                                     </td>
                                     <td class="py-3">

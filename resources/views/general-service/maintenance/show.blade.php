@@ -297,6 +297,27 @@
             </div>
 
             {{-- 1. Request Details Card --}}
+            @php
+                // Creator of the report/request
+                $reporterUser = $maintenanceRequest->reportedBy;
+                $reportedByName = $reporterUser?->name ?? 'Requester / Staff';
+                $reporterEmp = $reporterUser?->employee;
+                $reportedByCode = $reporterEmp?->employee_code;
+                $reportedByRole = $reporterEmp?->role_title 
+                    ?? $reporterEmp?->department 
+                    ?? ($reporterUser?->roles?->pluck('name')->map(fn($r) => ucwords(str_replace('_', ' ', $r)))->join(', ') ?: ($reporterUser?->email ?: 'Authorized Requester'));
+
+                // Decision Maker / General Service Evaluator (Wondimagnhu Siyum)
+                $decisionMakerUser = $maintenanceRequest->assignedTo;
+                $decisionMakerName = $decisionMakerUser?->name ?? 'Wondimagnhu Siyum';
+                $decisionMakerEmp = $decisionMakerUser?->employee ?? ($decisionMakerName === 'Wondimagnhu Siyum' ? \App\Models\Employee::where('full_name', 'like', '%Wondimag%')->first() : null);
+                $decisionMakerCode = $decisionMakerEmp?->employee_code ?? 'EMP-01';
+                $decisionMakerDept = $decisionMakerEmp?->department ?? 'Administration / General Service';
+
+                // Asset Operator / Custodian (if assigned to the equipment)
+                $assetUnit = $maintenanceRequest->fixedAssetUnit;
+                $operatorEmp = $assetUnit?->assignedEmployee ?? ($maintenanceRequest->employee && $maintenanceRequest->employee->full_name !== $decisionMakerName ? $maintenanceRequest->employee : null);
+            @endphp
             <div class="card border-0 shadow-sm rounded-4 mb-4">
                 <div class="card-header bg-white border-0 py-3 px-4 rounded-top-4 d-flex justify-content-between align-items-center">
                     <h5 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-file-lines me-2 text-muted"></i>Request Details</h5>
@@ -304,16 +325,47 @@
                 </div>
                 <div class="card-body p-4">
                     <div class="row g-3 mb-4">
+                        {{-- Reported By (The Creator of the Request) --}}
                         <div class="col-md-6">
                             <div class="p-3 rounded-3 border bg-light bg-opacity-50 h-100">
-                                <div class="small text-muted mb-1 text-uppercase fw-semibold" style="font-size:0.75rem;">Reported By Employee</div>
-                                <strong class="d-block text-dark fs-6">{{ $maintenanceRequest->employee->full_name ?? 'N/A' }}</strong>
-                                @if($maintenanceRequest->employee->employee_code ?? null)
-                                    <span class="badge bg-dark font-monospace mt-1">{{ $maintenanceRequest->employee->employee_code }}</span>
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="small text-muted text-uppercase fw-semibold" style="font-size:0.75rem;">Reported By (Report Creator)</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.7rem;">
+                                        <i class="fa-solid fa-user-pen me-1"></i>Report Creator
+                                    </span>
+                                </div>
+                                <strong class="d-block text-dark fs-6">{{ $reportedByName }}</strong>
+                                @if($reportedByCode)
+                                    <span class="badge bg-dark font-monospace mt-1">{{ $reportedByCode }}</span>
                                 @endif
-                                <div class="text-muted small mt-1">{{ $maintenanceRequest->employee->role_title ?? $maintenanceRequest->employee->department ?? '' }}</div>
+                                <div class="text-muted small mt-1">{{ $reportedByRole }}</div>
+                                <div class="text-muted mt-1" style="font-size:0.75rem;">
+                                    <i class="fa-regular fa-clock me-1"></i>Submitted: {{ $maintenanceRequest->created_at->format('d M Y, h:i A') }}
+                                </div>
                             </div>
                         </div>
+
+                        {{-- Reported To (Decision Maker / General Service Evaluator) --}}
+                        <div class="col-md-6">
+                            <div class="p-3 rounded-3 border bg-light bg-opacity-50 h-100 border-start border-4 border-warning">
+                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                    <span class="small text-muted text-uppercase fw-semibold" style="font-size:0.75rem;">Reported To (Decision Maker)</span>
+                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle" style="font-size:0.7rem;">
+                                        <i class="fa-solid fa-gavel me-1"></i>Decision Maker
+                                    </span>
+                                </div>
+                                <strong class="d-block text-dark fs-6">{{ $decisionMakerName }}</strong>
+                                @if($decisionMakerCode)
+                                    <span class="badge bg-dark font-monospace mt-1">{{ $decisionMakerCode }}</span>
+                                @endif
+                                <div class="text-muted small mt-1">{{ $decisionMakerDept }}</div>
+                                <div class="text-secondary small mt-1" style="font-size:0.75rem; line-height: 1.4;">
+                                    <i class="fa-solid fa-circle-check text-success me-1"></i>Evaluates and decides on this maintenance request (Not the creator)
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Asset / Equipment --}}
                         <div class="col-md-6">
                             <div class="p-3 rounded-3 border bg-light bg-opacity-50 h-100">
                                 <div class="small text-muted mb-1 text-uppercase fw-semibold" style="font-size:0.75rem;">Asset / Equipment</div>
@@ -324,16 +376,26 @@
                                 @if($maintenanceRequest->fixedAssetUnit && $maintenanceRequest->fixedAssetUnit->parentAsset)
                                     <div class="small text-muted mt-1">{{ $maintenanceRequest->fixedAssetUnit->parentAsset->name }}</div>
                                 @endif
+                                @if($operatorEmp)
+                                    <div class="small text-muted mt-1 pt-1 border-top">
+                                        <i class="fa-solid fa-id-badge me-1 text-secondary"></i>Asset Custodian / Operator: <strong class="text-dark">{{ $operatorEmp->full_name }}</strong> ({{ $operatorEmp->employee_code ?? 'EMP' }})
+                                    </div>
+                                @endif
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="p-3 rounded-3 border bg-light bg-opacity-50">
+
+                        {{-- Issue Category --}}
+                        <div class="col-md-3">
+                            <div class="p-3 rounded-3 border bg-light bg-opacity-50 h-100">
                                 <div class="small text-muted mb-1 text-uppercase fw-semibold" style="font-size:0.75rem;">Issue Category</div>
-                                <strong class="text-dark">{{ $maintenanceRequest->issue_type_label }}</strong>
+                                <strong class="text-dark d-block mb-1">{{ $maintenanceRequest->issue_type_label }}</strong>
+                                <span class="badge bg-light text-secondary border" style="font-size:0.72rem;">{{ ucwords(str_replace('_', ' ', $maintenanceRequest->issue_type)) }}</span>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="p-3 rounded-3 border bg-light bg-opacity-50">
+
+                        {{-- Urgency Level --}}
+                        <div class="col-md-3">
+                            <div class="p-3 rounded-3 border bg-light bg-opacity-50 h-100">
                                 <div class="small text-muted mb-1 text-uppercase fw-semibold" style="font-size:0.75rem;">Urgency Level</div>
                                 <span class="badge {{ $ub['class'] }} rounded-pill px-3">{{ $ub['label'] }}</span>
                             </div>
@@ -341,7 +403,7 @@
                     </div>
 
                     <div class="mb-0">
-                        <div class="fw-semibold small text-muted mb-2 text-uppercase" style="font-size:0.75rem;">Description from Employee</div>
+                        <div class="fw-semibold small text-muted mb-2 text-uppercase" style="font-size:0.75rem;">Description from Requester</div>
                         <div class="p-3 bg-light rounded-3" style="white-space: pre-wrap; font-size: 0.95rem; border-left: 4px solid #f59e0b; line-height: 1.6;">
                             {{ $maintenanceRequest->description }}
                         </div>
@@ -693,19 +755,17 @@
                             <span class="fw-semibold font-monospace text-primary">{{ $maintenanceRequest->request_no }}</span>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <span class="text-muted">Reported By</span>
-                            <span class="fw-semibold text-dark">{{ $maintenanceRequest->reportedBy->name ?? ($maintenanceRequest->employee->full_name ?? 'N/A') }}</span>
+                            <span class="text-muted">Reported By (Creator)</span>
+                            <span class="fw-semibold text-dark">{{ $reportedByName }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Reported To (Decision Maker)</span>
+                            <span class="fw-semibold text-primary">{{ $decisionMakerName }}</span>
                         </div>
                         <div class="d-flex justify-content-between">
                             <span class="text-muted">Submitted Date</span>
                             <span>{{ $maintenanceRequest->created_at->format('d M Y, H:i') }}</span>
                         </div>
-                        @if($maintenanceRequest->assignedTo)
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Assigned Handler</span>
-                            <span class="fw-semibold text-primary">{{ $maintenanceRequest->assignedTo->name }}</span>
-                        </div>
-                        @endif
                         @if($maintenanceRequest->resolved_at)
                         <div class="d-flex justify-content-between">
                             <span class="text-muted">Resolved Date</span>

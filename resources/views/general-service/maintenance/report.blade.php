@@ -156,13 +156,19 @@
                 @endif
             @endif
             <div class="info-item">
-                <div class="label">Operator / Custodian</div>
-                <div class="value">{{ $maintenanceRequest->employee->full_name ?? ($maintenanceRequest->reportedBy->name ?? 'Staff') }}</div>
+                <div class="label">Reported By (Creator)</div>
+                <div class="value">{{ $maintenanceRequest->reportedBy?->name ?? 'Staff Requester' }}</div>
             </div>
             <div class="info-item">
-                <div class="label">General Service Technician</div>
-                <div class="value">{{ $maintenanceRequest->assignedTo->name ?? 'General Service Team' }}</div>
+                <div class="label">Reported To (Decision Maker)</div>
+                <div class="value">{{ $maintenanceRequest->assignedTo?->name ?? 'Wondimagnhu Siyum' }}</div>
             </div>
+            @if($maintenanceRequest->fixedAssetUnit?->assignedEmployee)
+            <div class="info-item">
+                <div class="label">Operator / Custodian</div>
+                <div class="value">{{ $maintenanceRequest->fixedAssetUnit->assignedEmployee->full_name }}</div>
+            </div>
+            @endif
             <div class="info-item">
                 <div class="label">Current Ticket Status</div>
                 <div class="value text-capitalize">{{ str_replace('_', ' ', $maintenanceRequest->status) }}</div>

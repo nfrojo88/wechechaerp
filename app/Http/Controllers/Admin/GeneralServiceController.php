@@ -93,8 +93,10 @@ class GeneralServiceController extends Controller
 
         $query = MaintenanceRequest::with([
             'employee', 
-            'reportedBy', 
-            'assignedTo', 
+            'reportedBy.employee',
+            'reportedBy.roles',
+            'assignedTo.employee',
+            'assignedTo.roles',
             'pettyCashOwner',
             'fixedAssetUnit.parentAsset',
             'expenseRequests',
@@ -242,6 +244,14 @@ class GeneralServiceController extends Controller
             $employeeId = \App\Models\Employee::where('status', 'active')->value('id') ?? \App\Models\Employee::value('id');
         }
 
+        // Resolve assigned_to_user_id (Decision maker / General Service staff)
+        $assignedToUserId = $validated['assigned_to_user_id'] ?? null;
+        if (!$assignedToUserId) {
+            $gsUser = User::where('name', 'like', '%Wondimag%')->first()
+                   ?? User::whereHas('roles', fn($q) => $q->where('name', 'general_service'))->first();
+            $assignedToUserId = $gsUser?->id ?? $user->id;
+        }
+
         $maintenanceRequest = MaintenanceRequest::create([
             'employee_id'         => $employeeId,
             'fixed_asset_unit_id' => $validated['fixed_asset_unit_id'] ?? null,
@@ -253,7 +263,7 @@ class GeneralServiceController extends Controller
             'admin_notes'         => $validated['admin_notes'] ?? null,
             'status'              => 'in_progress',
             'reported_by_user_id' => $user->id,
-            'assigned_to_user_id' => $validated['assigned_to_user_id'] ?? $user->id,
+            'assigned_to_user_id' => $assignedToUserId,
         ]);
 
         // Process direct Ask Money if requested
@@ -346,8 +356,10 @@ class GeneralServiceController extends Controller
     {
         $maintenanceRequest->load([
             'employee', 
-            'reportedBy', 
-            'assignedTo', 
+            'reportedBy.employee', 
+            'reportedBy.roles', 
+            'assignedTo.employee', 
+            'assignedTo.roles', 
             'fixedAssetUnit.parentAsset',
             'expenseRequests.user',
             'expenseRequests.paidBy',
@@ -369,8 +381,10 @@ class GeneralServiceController extends Controller
     {
         $maintenanceRequest->load([
             'employee', 
-            'reportedBy', 
-            'assignedTo', 
+            'reportedBy.employee', 
+            'reportedBy.roles', 
+            'assignedTo.employee', 
+            'assignedTo.roles', 
             'pettyCashOwner',
             'fixedAssetUnit.parentAsset',
             'expenseRequests.user',
