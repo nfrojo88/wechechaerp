@@ -64,27 +64,81 @@ class BiometricPunchService
     }
 
     /**
-     * Map a chronological list of punch times (H:i:s or Y-m-d H:i:s) into
-     * check_in, check_out, morning_in, morning_out, afternoon_in, afternoon_out, and hours_worked.
-     *
-     * Guarantees that EVERY punch registered on the machine (e.g. 08:40, 09:00, 13:48)
-     * is accurately preserved, mapped, and displayed.
+     * Official check-in cutoff (08:40 AM).
      */
-    public static function mapPunchesToSessions(array $punchTimes, string $date, bool $isSaturday = false): array
+    public const OFFICIAL_CHECKIN_CUTOFF = '08:40';
+    public const OFFICIAL_CHECKIN_CUTOFF_MINUTES = 520; // 8 * 60 + 40
+
+    /**
+     * RULE 1: Late calculation (strict)
+     * - Official check-in cutoff: 8:40 AM.
+     * - Punch at or before 8:40 -> On time, 0 minutes late.
+     * - Punch at 8:41 -> 1 minute late.
+     * - Punch at 8:42 -> 2 minutes late, and so on.
+     * - Formula: late minutes = punch time (in minutes) - 8:40 (in minutes), only if positive. Otherwise 0.
+     * - Compare at minute level only, ignoring seconds. 8:40:59 counts as 8:40 (on time). 8:41:00 counts as 1 minute late.
+     * - No grace period and no rounding beyond the rule above.
+     */
+    public static function calculateLateMinutes(?string $punchTime, string $cutoff = self::OFFICIAL_CHECKIN_CUTOFF): int
     {
-        if (empty($punchTimes)) {
-            return [
-                'check_in'      => null,
-                'check_out'     => null,
-                'morning_in'    => null,
-                'morning_out'   => null,
-                'afternoon_in'  => null,
-                'afternoon_out' => null,
-                'hours_worked'  => null,
-            ];
+        if (empty($punchTime)) {
+            return 0;
         }
 
-        // Clean & extract 'H:i:s' sorted chronologically
+        // Clean string and extract 'H:i' (ignoring seconds)
+        $timeStr = trim($punchTime);
+        if (strlen($timeStr) >= 19 && str_contains($timeStr, ' ')) {
+            $timeStr = substr($timeStr, 11, 5);
+        } else {
+            $timeStr = substr($timeStr, 0, 5);
+        }
+
+        $parts = explode(':', $timeStr);
+        if (count($parts) < 2) {
+            return 0;
+        }
+
+        $punchHours   = (int)$parts[0];
+        $punchMinutes = (int)$parts[1];
+        $totalPunchMins = ($punchHours * 60) + $punchMinutes;
+
+        // Cutoff calculation at minute level
+        $cParts = explode(':', $cutoff);
+        $cutoffHours   = isset($cParts[0]) ? (int)$cParts[0] : 8;
+        $cutoffMinutes = isset($cParts[1]) ? (int)$cParts[1] : 40;
+        $totalCutoffMins = ($cutoffHours * 60) + $cutoffMinutes;
+
+        return max(0, $totalPunchMins - $totalCutoffMins);
+    }
+
+    /**
+     * Format a late minutes count into user-facing label: 'On time' or 'X min late'.
+     */
+    public static function formatLateLabel(int $lateMinutes): string
+    {
+        return $lateMinutes === 0 ? 'On time' : "{$lateMinutes} min late";
+    }
+
+    /**
+     * Get structured late status array:
+     * ['late_minutes' => int, 'is_late' => bool, 'label' => string]
+     */
+    public static function getLateStatus(?string $punchTime, string $cutoff = self::OFFICIAL_CHECKIN_CUTOFF): array
+    {
+        $lateMins = self::calculateLateMinutes($punchTime, $cutoff);
+        return [
+            'late_minutes' => $lateMins,
+            'is_late'      => $lateMins > 0,
+            'label'        => self::formatLateLabel($lateMins),
+        ];
+    }
+
+    /**
+     * Normalize an array of punch times into standardized 'H:i:s' strings (24h format).
+     * Sorts ascending and removes duplicates.
+     */
+    public static function normalizePunchTimes(array $punchTimes): array
+    {
         $times = [];
         foreach ($punchTimes as $pt) {
             if ($pt instanceof \DateTimeInterface) {
@@ -98,9 +152,50 @@ class BiometricPunchService
                 }
             }
         }
-
-        $times = array_unique($times);
+        $times = array_values(array_unique($times));
         sort($times);
+        return $times;
+    }
+
+    /**
+     * RULE 2 (IN Section):
+     * If an employee punches more than once in an arrival/check-in window,
+     * ALWAYS use the FIRST punch and ignore later ones.
+     * Sort punches ascending before picking first.
+     * Example: Punches 8:38 and 8:50 -> use 8:38 (On time), ignore 8:50.
+     */
+    public static function resolveInPunch(array $punches): ?string
+    {
+        $times = self::normalizePunchTimes($punches);
+        if (empty($times)) {
+            return null;
+        }
+        return $times[0];
+    }
+
+    /**
+     * RULE 2 & Test Case 6 (OUT Section):
+     * If an employee punches more than once in a departure/check-out window,
+     * use the departure punch.
+     * Example (Test Case 6): Two OUT punches 17:00 and 17:05 -> use 17:05.
+     */
+    public static function resolveOutPunch(array $punches): ?string
+    {
+        $times = self::normalizePunchTimes($punches);
+        if (empty($times)) {
+            return null;
+        }
+        return end($times);
+    }
+
+    /**
+     * Master shared attendance calculation function.
+     * Used everywhere: IN section, OUT section, reports, summaries, and exports.
+     * Guarantees identical values across every view.
+     */
+    public static function calculateAttendanceRecord(array $punchTimes, ?string $date = null, bool $isSaturday = false): array
+    {
+        $times = self::normalizePunchTimes($punchTimes);
 
         if (empty($times)) {
             return [
@@ -110,96 +205,135 @@ class BiometricPunchService
                 'morning_out'   => null,
                 'afternoon_in'  => null,
                 'afternoon_out' => null,
-                'hours_worked'  => null,
+                'hours_worked'  => 0,
+                'late_minutes'  => 0,
+                'is_late'       => false,
+                'late_label'    => 'On time',
+                'status'        => 'absent',
             ];
         }
-
-        $count = count($times);
-        $checkIn  = $times[0];
-        $checkOut = $count > 1 ? end($times) : null;
 
         $morningIn    = null;
         $morningOut   = null;
         $afternoonIn  = null;
         $afternoonOut = null;
 
-        // Separate real punches strictly into Morning (<= 12:45:00) and Afternoon (> 12:45:00)
-        $morningPunches   = array_values(array_filter($times, fn($t) => $t <= '12:45:00'));
-        $afternoonPunches = array_values(array_filter($times, fn($t) => $t > '12:45:00'));
-
-        $mCount = count($morningPunches);
-        $aCount = count($afternoonPunches);
-
         if ($isSaturday) {
-            // Saturday is Morning shift only
-            $morningIn  = $times[0];
-            $morningOut = $count > 1 ? end($times) : null;
+            // Saturday is Morning shift only (08:40 - 12:30, no lunch or afternoon)
+            $morningIn  = self::resolveInPunch($times);
+            $morningOut = count($times) > 1 ? self::resolveOutPunch($times) : null;
         } else {
-            // Weekdays: Map real punches without injecting fake defaults
-            if ($mCount >= 2) {
-                $morningIn  = $morningPunches[0];
-                $morningOut = end($morningPunches);
-            } elseif ($mCount === 1) {
-                $morningIn  = $morningPunches[0];
-                $morningOut = null;
+            // Official company shift policy:
+            // Morning Shift: 08:40 - 12:30 | Lunch: 12:30 - 13:35 | Afternoon: 13:35 - 17:30
+
+            // 1. Morning Arrival Window: punches before lunch (< 12:00:00)
+            $morningArrivals = array_values(array_filter($times, fn($t) => $t < '12:00:00'));
+            if (!empty($morningArrivals)) {
+                // RULE 2: use the FIRST punch (e.g. 8:38 and 8:50 -> 8:38)
+                $morningIn = self::resolveInPunch($morningArrivals);
             }
 
-            if ($aCount >= 2) {
-                $afternoonIn  = $afternoonPunches[0];
-                $afternoonOut = end($afternoonPunches);
-            } elseif ($aCount === 1) {
-                // If employee also has a morning punch and this single afternoon punch is at departure (>= 15:00:00)
-                if ($mCount >= 1 && $afternoonPunches[0] >= '15:00:00') {
-                    $afternoonIn  = null;
-                    $afternoonOut = $afternoonPunches[0];
+            // 2. Morning Departure (Lunch Out) Window: punches between 12:00:00 and 13:14:59
+            $lunchOuts = array_values(array_filter($times, fn($t) => $t >= '12:00:00' && $t < '13:15:00'));
+            if (!empty($lunchOuts)) {
+                // Resolve OUT punch (e.g. 12:35 and 12:36)
+                $morningOut = self::resolveOutPunch($lunchOuts);
+            }
+
+            // 3. Afternoon Arrival (Lunch Return) Window: punches between 13:15:00 and 15:29:59
+            $lunchReturns = array_values(array_filter($times, fn($t) => $t >= '13:15:00' && $t < '15:30:00'));
+            if (!empty($lunchReturns)) {
+                // RULE 2: use the FIRST punch (e.g. 13:29 and 13:32 -> use 13:29, ignore 13:32)
+                $afternoonIn = self::resolveInPunch($lunchReturns);
+            }
+
+            // 4. Afternoon Departure (Day End Out) Window: punches >= 15:30:00
+            $dayOuts = array_values(array_filter($times, fn($t) => $t >= '15:30:00'));
+            if (!empty($dayOuts)) {
+                // Test Case 6: Two OUT punches 17:00 and 17:05 -> use 17:05
+                $afternoonOut = self::resolveOutPunch($dayOuts);
+            }
+
+            // Fallback for non-standard arrivals (only if no sessions were detected at all)
+            if (empty($morningIn) && empty($morningOut) && empty($afternoonIn) && empty($afternoonOut) && !empty($times)) {
+                $earliest = self::resolveInPunch($times);
+                if ($earliest < '13:15:00') {
+                    $morningIn = $earliest;
+                } elseif ($earliest < '15:30:00') {
+                    $afternoonIn = $earliest;
                 } else {
-                    $afternoonIn  = $afternoonPunches[0];
-                    $afternoonOut = null;
+                    // All punches are end-of-day departures (>= 15:30:00)
+                    $afternoonOut = self::resolveOutPunch($times);
                 }
             }
         }
 
-        // Calculate hours worked accurately from real punches
-        $hoursWorked = null;
+        // Daily Check-in & Check-out:
+        $checkIn = $morningIn ?: $afternoonIn;
+        if (empty($checkIn)) {
+            $earlyPunches = array_values(array_filter($times, fn($t) => $t < '15:30:00'));
+            if (!empty($earlyPunches)) {
+                $checkIn = self::resolveInPunch($earlyPunches);
+            }
+        }
+
+        $checkOut = $afternoonOut;
+        if (empty($checkOut)) {
+            if ($morningOut && empty($afternoonIn)) {
+                $checkOut = $morningOut;
+            }
+        }
+        if ($checkIn && $checkOut && $checkOut <= $checkIn) {
+            $checkOut = null;
+        }
+
+        // RULE 1: Late calculation strictly against 8:40 AM
+        $lateMinutes = self::calculateLateMinutes($morningIn ?: $checkIn);
+        $isLate      = $lateMinutes > 0;
+        $lateLabel   = self::formatLateLabel($lateMinutes);
+
+        // Hours Worked calculation
+        $hoursWorked = 0;
+        $datePrefix = $date ?: today()->toDateString();
+
         if ($morningIn && $morningOut) {
-            $inSec  = strtotime("{$date} {$morningIn}");
-            $outSec = strtotime("{$date} {$morningOut}");
+            $inSec  = strtotime("{$datePrefix} {$morningIn}");
+            $outSec = strtotime("{$datePrefix} {$morningOut}");
             if ($outSec > $inSec) {
-                $hoursWorked = ($hoursWorked ?? 0) + (($outSec - $inSec) / 3600);
+                $hoursWorked += ($outSec - $inSec) / 3600;
             }
         }
 
         if ($afternoonIn && $afternoonOut) {
-            $inSec  = strtotime("{$date} {$afternoonIn}");
-            $outSec = strtotime("{$date} {$afternoonOut}");
+            $inSec  = strtotime("{$datePrefix} {$afternoonIn}");
+            $outSec = strtotime("{$datePrefix} {$afternoonOut}");
             if ($outSec > $inSec) {
-                $hoursWorked = ($hoursWorked ?? 0) + (($outSec - $inSec) / 3600);
+                $hoursWorked += ($outSec - $inSec) / 3600;
             }
         }
 
-        // Cross-session span: morning arrival to afternoon departure without separate lunch punches
+        // Cross-session span without separate lunch punches (e.g. 08:38 to 17:05)
         if ($morningIn && $afternoonOut && empty($morningOut) && empty($afternoonIn)) {
-            $inSec  = strtotime("{$date} {$morningIn}");
-            $outSec = strtotime("{$date} {$afternoonOut}");
+            $inSec  = strtotime("{$datePrefix} {$morningIn}");
+            $outSec = strtotime("{$datePrefix} {$afternoonOut}");
             if ($outSec > $inSec) {
-                $rawHours = ($outSec - $inSec) / 3600;
-                // Deduct standard 1.0 hour lunch break if shift was >= 5.0 hours
-                $hoursWorked = $rawHours >= 5.0 ? max(0, $rawHours - 1.0) : $rawHours;
+                $span = ($outSec - $inSec) / 3600;
+                $hoursWorked = $span >= 5.0 ? max(0, $span - 1.0) : $span;
             }
         }
 
-        // Single session span fallback: if first punch to last punch has duration
-        if ($hoursWorked === null && $checkIn && $checkOut && $checkIn !== $checkOut) {
-            $inSec  = strtotime("{$date} {$checkIn}");
-            $outSec = strtotime("{$date} {$checkOut}");
+        // Fallback for check_in / check_out if session hours are 0
+        if ($hoursWorked <= 0 && $checkIn && $checkOut) {
+            $inSec  = strtotime("{$datePrefix} {$checkIn}");
+            $outSec = strtotime("{$datePrefix} {$checkOut}");
             if ($outSec > $inSec) {
-                $hoursWorked = ($outSec - $inSec) / 3600;
+                $span = ($outSec - $inSec) / 3600;
+                $hoursWorked = $span >= 5.0 ? max(0, $span - 1.0) : $span;
             }
         }
 
-        if ($hoursWorked !== null) {
-            $hoursWorked = round($hoursWorked, 1);
-        }
+        $hoursWorked = round($hoursWorked, 1);
+        $status = (!empty($checkIn) || $hoursWorked > 0) ? 'present' : 'absent';
 
         return [
             'check_in'      => $checkIn,
@@ -209,7 +343,19 @@ class BiometricPunchService
             'afternoon_in'  => $afternoonIn,
             'afternoon_out' => $afternoonOut,
             'hours_worked'  => $hoursWorked,
+            'late_minutes'  => $lateMinutes,
+            'is_late'       => $isLate,
+            'late_label'    => $lateLabel,
+            'status'        => $status,
         ];
+    }
+
+    /**
+     * Map punch times to sessions by delegating directly to calculateAttendanceRecord.
+     */
+    public static function mapPunchesToSessions(array $punchTimes, string $date, bool $isSaturday = false): array
+    {
+        return self::calculateAttendanceRecord($punchTimes, $date, $isSaturday);
     }
 
     /**
@@ -268,6 +414,9 @@ class BiometricPunchService
                 if (($existing->hours_worked === null || $existing->hours_worked == 0) && !empty($mapped['hours_worked'])) {
                     $updateData['hours_worked'] = $mapped['hours_worked'];
                 }
+                if (isset($mapped['late_minutes'])) {
+                    $updateData['late_minutes'] = $mapped['late_minutes'];
+                }
 
                 if (!empty($updateData)) {
                     $updateData['status'] = 'present';
@@ -303,6 +452,7 @@ class BiometricPunchService
             'afternoon_in'        => $mapped['afternoon_in'],
             'afternoon_out'       => $mapped['afternoon_out'],
             'hours_worked'        => $mapped['hours_worked'] ?? ($existing?->hours_worked),
+            'late_minutes'        => $mapped['late_minutes'] ?? 0,
             'status'              => 'present',
             'source'              => 'biometric',
             'biometric_device_id' => $actualDevSn,

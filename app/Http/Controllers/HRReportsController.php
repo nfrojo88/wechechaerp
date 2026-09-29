@@ -328,7 +328,7 @@ class HRReportsController extends Controller
 
         $callback = function () use ($fromDate, $toDate) {
             $file = fopen('php://output', 'w');
-            fputcsv($file, ['Employee', 'Present', 'Absent', 'Leave', 'Attendance %']);
+            fputcsv($file, ['Employee', 'Present', 'Absent', 'Leave', 'Late Days', 'Late (Mins)', 'Attendance %']);
 
             $employees = Employee::where(function($q) {
                 $q->where('status', 'active')->orWhereNull('status');
@@ -336,20 +336,23 @@ class HRReportsController extends Controller
             $totalWorkingDays = $this->getWorkingDays($fromDate, $toDate);
 
             foreach ($employees as $emp) {
-                $present = Attendance::where('employee_id', $emp->id)
+                $records = Attendance::where('employee_id', $emp->id)
                     ->whereBetween('attendance_date', [$fromDate, $toDate])
-                    ->where('status', 'present')
-                    ->count();
+                    ->get();
 
-                $absent = Attendance::where('employee_id', $emp->id)
-                    ->whereBetween('attendance_date', [$fromDate, $toDate])
-                    ->where('status', 'absent')
-                    ->count();
+                $present = $records->where('status', 'present')->count();
+                $absent  = $records->where('status', 'absent')->count();
+                $leave   = $records->where('status', 'leave')->count();
 
-                $leave = Attendance::where('employee_id', $emp->id)
-                    ->whereBetween('attendance_date', [$fromDate, $toDate])
-                    ->where('status', 'leave')
-                    ->count();
+                $lateDays = 0;
+                $lateMins = 0;
+                foreach ($records as $r) {
+                    $lm = (int)$r->late_minutes;
+                    if ($lm > 0) {
+                        $lateDays++;
+                        $lateMins += $lm;
+                    }
+                }
 
                 $percentage = $totalWorkingDays > 0 ? ($present / $totalWorkingDays) * 100 : 0;
 
@@ -358,6 +361,8 @@ class HRReportsController extends Controller
                     $present,
                     $absent,
                     $leave,
+                    $lateDays,
+                    $lateMins,
                     number_format($percentage, 2) . '%'
                 ]);
             }

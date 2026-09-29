@@ -13,7 +13,7 @@ class Attendance extends Model
         'employee_id', 'attendance_date', 
         'morning_in', 'morning_out', 'afternoon_in', 'afternoon_out',
         'check_in', 'check_out',
-        'hours_worked', 'status', 'source', 'biometric_device_id',
+        'hours_worked', 'late_minutes', 'status', 'source', 'biometric_device_id',
         'notes', 'is_approved', 'approved_by',
         'overtime_hours', 'overtime_type', 'overtime_pay',
         'decided_by', 'decided_by_role', 'site_project_id', 'site_name',
@@ -25,9 +25,38 @@ class Attendance extends Model
         'site_start_date' => 'date',
         'site_end_date'   => 'date',
         'is_approved'     => 'boolean',
+        'late_minutes'    => 'integer',
         'overtime_hours'  => 'decimal:2',
         'overtime_pay'    => 'decimal:2',
     ];
+
+    /**
+     * Get late minutes (RULE 1: strictly calculated against 08:40 AM cutoff).
+     */
+    public function getLateMinutesAttribute($value): int
+    {
+        if ($value !== null && is_numeric($value)) {
+            return (int)$value;
+        }
+        $inTime = $this->morning_in ?: $this->check_in;
+        return \App\Services\BiometricPunchService::calculateLateMinutes($inTime);
+    }
+
+    /**
+     * Determine if attendance is late.
+     */
+    public function getIsLateAttribute(): bool
+    {
+        return $this->late_minutes > 0;
+    }
+
+    /**
+     * Formatted label: 'On time' or 'X min late'.
+     */
+    public function getLateLabelAttribute(): string
+    {
+        return \App\Services\BiometricPunchService::formatLateLabel($this->late_minutes);
+    }
 
     public function employee()    { return $this->belongsTo(Employee::class); }
     public function approvedBy()  { return $this->belongsTo(User::class, 'approved_by'); }

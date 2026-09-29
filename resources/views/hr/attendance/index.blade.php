@@ -493,18 +493,21 @@
                                 $cIn  = $a->check_in;
                                 $cOut = $a->check_out;
 
-                                // Fallbacks: only map actual raw check_in / check_out if session columns were not filled
-                                if (empty($mIn) && !empty($cIn) && $cIn < '12:30:00') {
-                                    $mIn = $cIn;
-                                }
-                                if (empty($aIn) && !empty($cIn) && $cIn >= '12:30:00') {
-                                    $aIn = $cIn;
-                                }
-                                if (empty($aOut) && !empty($cOut) && $cOut >= '12:30:00' && $cOut !== $aIn && $cOut !== $cIn) {
-                                    $aOut = $cOut;
+                                // Fallback: if session columns were not filled, use the shared BiometricPunchService logic
+                                if (empty($mIn) && empty($mOut) && empty($aIn) && empty($aOut) && (!empty($cIn) || !empty($cOut))) {
+                                    $calc = \App\Services\BiometricPunchService::calculateAttendanceRecord(
+                                        array_filter([$cIn, $cOut]),
+                                        $a->attendance_date?->toDateString(),
+                                        (bool)$isSat
+                                    );
+                                    $mIn  = $calc['morning_in'];
+                                    $mOut = $calc['morning_out'];
+                                    $aIn  = $calc['afternoon_in'];
+                                    $aOut = $calc['afternoon_out'];
                                 }
 
                                 $isSat = $a->attendance_date && $a->attendance_date->isSaturday();
+                                $lateStatus = \App\Services\BiometricPunchService::getLateStatus($mIn ?: $cIn);
 
                                 $fmt12 = function($val) {
                                     if (!$val) return null;
@@ -518,10 +521,18 @@
                             <td class="text-center">
                                 <div class="d-flex justify-content-center align-items-center gap-1">
                                     @if($mIn)
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 font-monospace" 
-                                              title="Morning Clock In: {{ $fmt12($mIn) }} (24h: {{ substr($mIn, 0, 5) }}) • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mIn) }}">
-                                            <i class="fas fa-arrow-right me-1"></i>{{ $fmt12($mIn) }}
-                                        </span>
+                                        @if($lateStatus['is_late'])
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-2 py-1 font-monospace" 
+                                                  title="Morning Clock In: {{ $fmt12($mIn) }} ({{ $lateStatus['label'] }} • Cutoff 08:40 AM) • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mIn) }}">
+                                                <i class="fas fa-arrow-right me-1 text-warning"></i>{{ $fmt12($mIn) }}
+                                                <span class="badge bg-danger text-white ms-1 px-1 py-0" style="font-size: 0.65rem;">+{{ $lateStatus['late_minutes'] }}m</span>
+                                            </span>
+                                        @else
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 font-monospace" 
+                                                  title="Morning Clock In: {{ $fmt12($mIn) }} (On time) • {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($mIn) }}">
+                                                <i class="fas fa-arrow-right me-1"></i>{{ $fmt12($mIn) }}
+                                            </span>
+                                        @endif
                                     @else
                                         <span class="badge bg-light text-muted border px-2 py-1" title="No Morning Clock In">—</span>
                                     @endif
@@ -596,6 +607,13 @@
                                     <span class="badge bg-{{ $statusColors[$rowStatus] ?? 'secondary' }}">
                                         {{ ucfirst(str_replace('_', ' ', $rowStatus)) }}
                                     </span>
+                                    @if($lateStatus['is_late'])
+                                        <div class="mt-1">
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-1 py-0 font-monospace" style="font-size: 0.68rem;" title="Late arrival by {{ $lateStatus['late_minutes'] }} minutes (Cutoff: 08:40 AM)">
+                                                <i class="fa-regular fa-clock me-1"></i>{{ $lateStatus['label'] }}
+                                            </span>
+                                        </div>
+                                    @endif
                                 @endif
                             </td>
                             <td class="text-center">

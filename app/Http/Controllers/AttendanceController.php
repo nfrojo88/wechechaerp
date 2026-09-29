@@ -947,6 +947,7 @@ class AttendanceController extends Controller
         }
 
         $attendance->hours_worked = $hours;
+        $attendance->late_minutes = \App\Services\BiometricPunchService::calculateLateMinutes($attendance->morning_in ?: $attendance->check_in);
         $attendance->source = 'manual_quick';
         $attendance->is_approved = true;
         $attendance->approved_by = Auth::id();
@@ -1071,6 +1072,7 @@ class AttendanceController extends Controller
                 'check_in'       => $checkIn,
                 'check_out'      => $checkOut,
                 'hours_worked'   => $hours,
+                'late_minutes'   => \App\Services\BiometricPunchService::calculateLateMinutes($morningIn ?: $checkIn),
                 'status'         => $status,
                 'source'         => 'manual',
                 'notes'          => $request->notes,
@@ -1590,6 +1592,7 @@ class AttendanceController extends Controller
                         'check_in'            => $checkIn,
                         'check_out'           => $checkOut,
                         'hours_worked'        => $hours,
+                        'late_minutes'        => \App\Services\BiometricPunchService::calculateLateMinutes($mInTime ?: $checkIn),
                         'status'              => $status,
                         'source'              => 'bulk_upload',
                         'is_approved'         => true,
