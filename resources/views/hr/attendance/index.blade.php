@@ -518,8 +518,10 @@
                                         'weekend' => 'light'
                                     ];
                                     $rowStatus = $a->status;
-                                    // Ensure Saturday morning attendees are displayed as Present
-                                    if ($a->attendance_date && $a->attendance_date->isSaturday() && $rowStatus === 'half_day' && ($a->morning_in || $a->hours_worked >= 2.0)) {
+                                    // Under company policy, employees with punches or worked hours are Present (morning session is not required)
+                                    if ($rowStatus === 'half_day' && ($a->hours_worked > 0 || $a->morning_in || $a->afternoon_in || $a->check_in)) {
+                                        $rowStatus = 'present';
+                                    } elseif ($a->attendance_date && $a->attendance_date->isSaturday() && $rowStatus === 'half_day' && ($a->morning_in || $a->hours_worked >= 2.0)) {
                                         $rowStatus = 'present';
                                     }
                                 @endphp

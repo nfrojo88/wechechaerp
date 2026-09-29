@@ -117,8 +117,20 @@ class AttendanceController extends Controller
             }
         }
 
-        // ── Clean biometric_device_id if employee has no device_user_id ──────
+        // ── Auto-heal & Clean: All employees with punch records or worked hours are PRESENT ──
         try {
+            Attendance::where('status', 'half_day')
+                ->where(function ($q) {
+                    $q->whereNotNull('morning_in')
+                      ->orWhereNotNull('morning_out')
+                      ->orWhereNotNull('afternoon_in')
+                      ->orWhereNotNull('afternoon_out')
+                      ->orWhereNotNull('check_in')
+                      ->orWhereNotNull('check_out')
+                      ->orWhere('hours_worked', '>', 0);
+                })
+                ->update(['status' => 'present']);
+
             Attendance::whereNotNull('biometric_device_id')
                 ->where(function ($q) {
                     $q->whereHas('employee', function ($eq) {
@@ -1297,7 +1309,7 @@ class AttendanceController extends Controller
                 return null;
             };
 
-            // Map clock times into morning vs afternoon sessions
+            // Map clock times into sessions without requiring morning session
             if ($isMorning) {
                 if (!empty($clockIn))  $grouped[$userKey][$date]['morning_in']  = $clockIn;
                 if (!empty($clockOut)) $grouped[$userKey][$date]['morning_out'] = $clockOut;
@@ -1305,24 +1317,18 @@ class AttendanceController extends Controller
                 if (!empty($clockIn))  $grouped[$userKey][$date]['afternoon_in']  = $clockIn;
                 if (!empty($clockOut)) $grouped[$userKey][$date]['afternoon_out'] = $clockOut;
             } else {
-                // If timetable header is missing, infer session based on time of day (12:30 threshold)
                 $inHour  = $timeToHour($clockIn);
                 $outHour = $timeToHour($clockOut);
 
                 if (!empty($clockIn)) {
-                    if ($inHour !== null && $inHour >= 12.5) {
+                    if ($inHour !== null && $inHour >= 12.0) {
                         $grouped[$userKey][$date]['afternoon_in'] = $clockIn;
                     } else {
-                        if (empty($grouped[$userKey][$date]['morning_in'])) {
-                            $grouped[$userKey][$date]['morning_in'] = $clockIn;
-                        } elseif ($inHour !== null && $inHour >= 11.5) {
-                            $grouped[$userKey][$date]['morning_out'] = $clockIn;
-                        }
+                        $grouped[$userKey][$date]['morning_in'] = $clockIn;
                     }
                 }
-
                 if (!empty($clockOut)) {
-                    if ($outHour !== null && $outHour < 13.5 && !empty($grouped[$userKey][$date]['morning_in'])) {
+                    if ($outHour !== null && $outHour < 13.0 && empty($grouped[$userKey][$date]['afternoon_in'])) {
                         $grouped[$userKey][$date]['morning_out'] = $clockOut;
                     } else {
                         $grouped[$userKey][$date]['afternoon_out'] = $clockOut;
@@ -1476,7 +1482,7 @@ class AttendanceController extends Controller
                 $checkIn  = $mInTime ?: ($aInTime ?: ($existing?->check_in));
                 $checkOut = $aOutTime ?: ($mOutTime ?: ($existing?->check_out));
 
-                // Calculate hours worked across both merged sessions
+                // Calculate hours worked across sessions
                 $hours = (float) ($info['work_hours'] ?? 0);
                 $calcHours = 0;
                 if ($mInTime && $mOutTime) {
@@ -1507,34 +1513,22 @@ class AttendanceController extends Controller
                     if ($mInTime && ($aInTime || $aOutTime)) {
                         $hours = 8.0;
                     } elseif ($mInTime || $aInTime || $aOutTime) {
-                        $hours = 3.0;
+                        $hours = 4.0;
                     }
                 }
 
-                // Determine status (Saturday policy vs weekday)
+                // Determine status:
+                // Under company policy, if an employee has punch records or worked hours,
+                // do NOT require morning session and do NOT penalize as half_day! Save as PRESENT!
                 $hasMorningIn   = !empty($mInTime);
                 $hasAfternoonIn = !empty($aInTime) || !empty($aOutTime);
-                $dateCarbon     = Carbon::parse($date);
-                $isSaturday     = $dateCarbon->isSaturday();
 
-                if ($isSaturday) {
-                    if ($hasMorningIn || !empty($mOutTime) || ($hours >= 2.0)) {
-                        $status = 'present';
-                    } elseif (!empty($info['absent_morning'])) {
-                        $status = 'absent';
-                    } else {
-                        $status = $hours > 0 ? 'present' : 'absent';
-                    }
+                if ($hasMorningIn || $hasAfternoonIn || !empty($checkIn) || !empty($checkOut) || $hours > 0) {
+                    $status = 'present';
+                } elseif (!empty($info['absent_morning']) || !empty($info['absent_afternoon'])) {
+                    $status = 'absent';
                 } else {
-                    if (($hasMorningIn && $hasAfternoonIn) || $hours >= 6.0) {
-                        $status = 'present';
-                    } elseif ($hasMorningIn || $hasAfternoonIn || $hours > 0) {
-                        $status = 'half_day';
-                    } elseif (!empty($info['absent_morning']) && !empty($info['absent_afternoon'])) {
-                        $status = 'absent';
-                    } else {
-                        $status = 'absent';
-                    }
+                    $status = 'absent';
                 }
 
                 // Overtime calculation
