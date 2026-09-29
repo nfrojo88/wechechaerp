@@ -375,9 +375,18 @@
                 @if(isset($totalLogsCount) && $totalLogsCount > 0)
                 <button type="button" class="btn btn-outline-danger btn-sm shadow-xs py-1"
                         data-bs-toggle="modal" data-bs-target="#clearDeviceLogsModal"
-                        title="Purge raw biometric device punch logs only (employee attendance records remain safe)">
+                        title="Purge raw biometric device punch logs only">
                     <i class="fa-solid fa-eraser me-1"></i>Clear Device Punches
                 </button>
+                <form action="{{ route('attendance.reset-and-resync') }}" method="POST" class="d-inline"
+                      onsubmit="return confirm('Are you sure? This will wipe all processed attendance records and freshly recalculate everyone\'s attendance from stored biometric punches.');">
+                    @csrf
+                    <input type="hidden" name="scope" value="all">
+                    <button type="submit" class="btn btn-warning btn-sm shadow-xs py-1 fw-semibold text-dark"
+                            title="Wipe calculated attendance records and rebuild fresh from raw device punches">
+                        <i class="fa-solid fa-arrows-rotate me-1"></i>Reset &amp; Resync Attendance
+                    </button>
+                </form>
                 @endif
             </div>
         </div>

@@ -1892,6 +1892,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('attendance/clear-history', [App\Http\Controllers\AttendanceController::class, 'clearHistory'])->name('attendance.clearHistory');
     Route::get('attendance/device-logs', [App\Http\Controllers\AttendanceController::class, 'deviceLogs'])->name('attendance.deviceLogs');
     Route::post('attendance/zkteco-sync', [App\Http\Controllers\AttendanceController::class, 'syncZkteco'])->name('attendance.zkteco-sync');
+    Route::match(['GET', 'POST'], 'attendance/reset-and-resync', [App\Http\Controllers\AttendanceController::class, 'resetAndResync'])->name('attendance.reset-and-resync');
     Route::get('attendance/zkteco-status', [App\Http\Controllers\AttendanceController::class, 'zktecoStatus'])->name('attendance.zkteco-status');
     Route::get('attendance/machine-test', [App\Http\Controllers\AttendanceController::class, 'machineTest'])->name('attendance.machine-test');
     Route::post('attendance/simulate-punch', [App\Http\Controllers\AttendanceController::class, 'simulateTestPunch'])->name('attendance.simulate-punch');

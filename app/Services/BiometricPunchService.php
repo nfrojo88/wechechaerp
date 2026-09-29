@@ -64,113 +64,52 @@ class BiometricPunchService
             ];
         }
 
-        $firstPunch = $times[0];
-        $lastPunch  = count($times) > 1 ? end($times) : null;
-
-        $checkIn  = $firstPunch;
-        $checkOut = $lastPunch;
-
-        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
-        $defMIn  = $workSchedule['morning_in'] ?? '08:30:00';
-        $defMOut = $workSchedule['morning_out'] ?? '12:30:00';
-        $defAIn  = $workSchedule['afternoon_in'] ?? '13:30:00';
-        $defAOut = $workSchedule['afternoon_out'] ?? '17:30:00';
-
-        if (strlen($defMIn) === 5)  $defMIn .= ':00';
-        if (strlen($defMOut) === 5) $defMOut .= ':00';
-        if (strlen($defAIn) === 5)  $defAIn .= ':00';
-        if (strlen($defAOut) === 5) $defAOut .= ':00';
+        $count = count($times);
+        $checkIn  = $times[0];
+        $checkOut = $count > 1 ? end($times) : null;
 
         $morningIn    = null;
         $morningOut   = null;
         $afternoonIn  = null;
         $afternoonOut = null;
 
-        $count = count($times);
+        // Separate real punches strictly into Morning (< 12:30:00) and Afternoon (>= 12:30:00)
+        $morningPunches   = array_values(array_filter($times, fn($t) => $t < '12:30:00'));
+        $afternoonPunches = array_values(array_filter($times, fn($t) => $t >= '12:30:00'));
 
-        // Saturday Policy: Morning session only (4.0 hours)
+        $mCount = count($morningPunches);
+        $aCount = count($afternoonPunches);
+
         if ($isSaturday) {
-            $morningIn = $firstPunch;
-            $morningOut = ($count > 1) ? $lastPunch : $defMOut;
-        }
-        // 4 or more punches (Standard full in/out for both sessions)
-        elseif ($count >= 4) {
-            $morningPunches   = array_filter($times, fn($t) => $t < '12:45:00');
-            $afternoonPunches = array_filter($times, fn($t) => $t >= '12:45:00');
+            // Saturday is Morning shift only
+            $morningIn  = $times[0];
+            $morningOut = $count > 1 ? end($times) : null;
+        } else {
+            // Weekdays: Map real punches without injecting fake defaults
+            if ($mCount >= 2) {
+                $morningIn  = $morningPunches[0];
+                $morningOut = end($morningPunches);
+            } elseif ($mCount === 1) {
+                $morningIn  = $morningPunches[0];
+                $morningOut = null;
+            }
 
-            $mArr = !empty($morningPunches) ? array_values($morningPunches) : [$firstPunch];
-            $aArr = !empty($afternoonPunches) ? array_values($afternoonPunches) : [$lastPunch];
-
-            $morningIn    = $mArr[0];
-            $morningOut   = count($mArr) > 1 ? end($mArr) : $defMOut;
-            $afternoonIn  = $aArr[0];
-            $afternoonOut = count($aArr) > 1 ? end($aArr) : $defAOut;
-        }
-        // Exactly 3 punches on weekday
-        elseif ($count === 3) {
-            $p1 = $times[0];
-            $p2 = $times[1];
-            $p3 = $times[2];
-
-            if ($p1 < '12:30:00') {
-                $morningIn = $p1;
-                if ($p2 < '13:15:00') {
-                    $morningOut   = $p2;
-                    $afternoonIn  = $defAIn;
-                    $afternoonOut = $p3;
+            if ($aCount >= 2) {
+                $afternoonIn  = $afternoonPunches[0];
+                $afternoonOut = end($afternoonPunches);
+            } elseif ($aCount === 1) {
+                // If employee also has a morning punch and this single afternoon punch is at departure (>= 15:00:00)
+                if ($mCount >= 1 && $afternoonPunches[0] >= '15:00:00') {
+                    $afternoonIn  = null;
+                    $afternoonOut = $afternoonPunches[0];
                 } else {
-                    $morningOut   = $defMOut;
-                    $afternoonIn  = $p2;
-                    $afternoonOut = $p3;
+                    $afternoonIn  = $afternoonPunches[0];
+                    $afternoonOut = null;
                 }
-            } else {
-                $morningIn    = $defMIn;
-                $morningOut   = $defMOut;
-                $afternoonIn  = $p1;
-                $afternoonOut = $p3;
-            }
-        }
-        // Exactly 2 punches on weekday
-        elseif ($count === 2) {
-            $p1 = $times[0];
-            $p2 = $times[1];
-
-            if ($p1 < '12:30:00' && $p2 < '13:00:00') {
-                // Morning punches: also populate afternoon by policy so both sessions are seen
-                $morningIn    = $p1;
-                $morningOut   = $p2;
-                $afternoonIn  = $defAIn;
-                $afternoonOut = $defAOut;
-            } elseif ($p1 >= '12:30:00') {
-                // Afternoon punches: also populate morning by policy so both sessions are seen
-                $morningIn    = $defMIn;
-                $morningOut   = $defMOut;
-                $afternoonIn  = $p1;
-                $afternoonOut = $p2;
-            } else {
-                // p1 is morning entry (real!), p2 is afternoon/evening exit (real!)
-                $morningIn    = $p1;
-                $morningOut   = $defMOut;
-                $afternoonIn  = $defAIn;
-                $afternoonOut = $p2;
-            }
-        }
-        // Exactly 1 punch on weekday
-        else {
-            if ($firstPunch < '12:30:00') {
-                $morningIn    = $firstPunch;
-                $morningOut   = $defMOut;
-                $afternoonIn  = $defAIn;
-                $afternoonOut = $defAOut;
-            } else {
-                $morningIn    = $defMIn;
-                $morningOut   = $defMOut;
-                $afternoonIn  = $firstPunch;
-                $afternoonOut = $defAOut;
             }
         }
 
-        // Calculate hours worked accurately
+        // Calculate hours worked accurately from real punches
         $hoursWorked = null;
         if ($morningIn && $morningOut) {
             $inSec  = strtotime("{$date} {$morningIn}");
@@ -188,19 +127,28 @@ class BiometricPunchService
             }
         }
 
-        // If span covers morning in to afternoon out without separate lunch punches
-        if ($hoursWorked === null && $morningIn && $afternoonOut) {
+        // Cross-session span: morning arrival to afternoon departure without separate lunch punches
+        if ($morningIn && $afternoonOut && empty($morningOut) && empty($afternoonIn)) {
             $inSec  = strtotime("{$date} {$morningIn}");
             $outSec = strtotime("{$date} {$afternoonOut}");
             if ($outSec > $inSec) {
                 $rawHours = ($outSec - $inSec) / 3600;
-                // Deduct standard 1.0 hour lunch break if shift was >= 5 hours
+                // Deduct standard 1.0 hour lunch break if shift was >= 5.0 hours
                 $hoursWorked = $rawHours >= 5.0 ? max(0, $rawHours - 1.0) : $rawHours;
             }
         }
 
+        // Single session span fallback: if first punch to last punch has duration
+        if ($hoursWorked === null && $checkIn && $checkOut && $checkIn !== $checkOut) {
+            $inSec  = strtotime("{$date} {$checkIn}");
+            $outSec = strtotime("{$date} {$checkOut}");
+            if ($outSec > $inSec) {
+                $hoursWorked = ($outSec - $inSec) / 3600;
+            }
+        }
+
         if ($hoursWorked !== null) {
-            $hoursWorked = round($hoursWorked, 2);
+            $hoursWorked = round($hoursWorked, 1);
         }
 
         return [

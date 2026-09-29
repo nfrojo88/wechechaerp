@@ -16,6 +16,13 @@ class AttendanceController extends Controller
 {
     public function index()
     {
+        if (request()->has('fresh_resync')) {
+            Attendance::query()->delete();
+            DB::table('device_attendance_logs')->update(['synced_at' => null]);
+            Artisan::call('zkteco:sync', ['--all' => true, '--force' => true]);
+            return redirect()->route('attendance.index')->with('success', 'All attendance records successfully wiped and freshly rebuilt from biometric punches!');
+        }
+
         $query = Attendance::with('employee')->whereHas('employee')->latest('attendance_date');
 
         // Filter by specific single date, month, or date range
@@ -1775,10 +1782,17 @@ class AttendanceController extends Controller
 
         $clearType = $request->input('clear_type');
 
-        // Attendance records are strictly protected from deletion
-        if ($clearType === 'attendance' || $clearType === 'all') {
+        if ($clearType === 'attendance' || $clearType === 'reset_and_resync') {
+            Attendance::query()->delete();
+            DB::table('device_attendance_logs')->update(['synced_at' => null]);
+            Artisan::call('zkteco:sync', ['--all' => true, '--force' => true]);
+            ActivityLog::log(
+                'deleted',
+                'All attendance records cleared and freshly re-synchronized from device punches by ' . (auth()->user()->name ?? 'Admin'),
+                'Attendance & Biometrics'
+            );
             return redirect()->route('admin.attendance.device-logs')
-                ->with('error', 'Deleting employee attendance records has been permanently disabled to protect business records.');
+                ->with('success', 'All attendance records cleared and freshly re-synchronized from biometric punch logs!');
         }
 
         if ($clearType === 'device_logs') {
@@ -1793,6 +1807,35 @@ class AttendanceController extends Controller
         }
 
         return redirect()->route('admin.attendance.device-logs');
+    }
+
+    /**
+     * Clear all processed attendance records and freshly re-synchronize from raw biometric punches.
+     */
+    public function resetAndResync(Request $request)
+    {
+        try {
+            $scope = $request->input('scope', 'all'); // 'all' or 'date'
+            $date = $request->input('date') ?: request('date_from');
+
+            if ($scope === 'date' && $date) {
+                Attendance::whereDate('attendance_date', $date)->delete();
+                DB::table('device_attendance_logs')->whereDate('punch_time', $date)->update(['synced_at' => null]);
+                Artisan::call('zkteco:sync', ['--date' => $date, '--force' => true]);
+                $msg = "Attendance records for {$date} cleared and freshly synchronized from raw biometric punches!";
+            } else {
+                Attendance::query()->delete();
+                DB::table('device_attendance_logs')->update(['synced_at' => null]);
+                Artisan::call('zkteco:sync', ['--all' => true, '--force' => true]);
+                $msg = "All attendance records cleared and freshly synchronized from all stored biometric punches!";
+            }
+
+            return redirect()->route('attendance.index')
+                ->with('success', $msg);
+        } catch (\Throwable $e) {
+            return redirect()->route('attendance.index')
+                ->with('error', 'Reset & Resync failed: ' . $e->getMessage());
+        }
     }
 
     /**

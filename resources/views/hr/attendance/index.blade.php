@@ -25,6 +25,9 @@
                     <i class="fa-solid fa-rotate me-1"></i>Sync Biometrics
                 </button>
             </form>
+            <button type="button" class="btn btn-outline-danger fw-semibold" data-bs-toggle="modal" data-bs-target="#clearResyncModal" title="Clear processed attendance and freshly re-sync from raw biometric punch logs">
+                <i class="fa-solid fa-broom me-1"></i>Clear &amp; Resync Fresh
+            </button>
             <button type="button" class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#siteAttendanceModal">
                 <i class="fa-solid fa-person-digging me-1"></i>Employee On Site (ወደ ሳይት የወጣ)
             </button>
@@ -487,32 +490,18 @@
                                 $cIn  = $a->check_in;
                                 $cOut = $a->check_out;
 
-                                // Fallbacks: ensure ANY real punch registered on the machine is mapped
+                                // Fallbacks: only map actual raw check_in / check_out if session columns were not filled
                                 if (empty($mIn) && !empty($cIn) && $cIn < '12:30:00') {
                                     $mIn = $cIn;
-                                }
-                                if (empty($mOut) && !empty($cOut) && $cOut < '13:00:00' && $cOut !== $mIn) {
-                                    $mOut = $cOut;
                                 }
                                 if (empty($aIn) && !empty($cIn) && $cIn >= '12:30:00') {
                                     $aIn = $cIn;
                                 }
-                                if (empty($aOut) && !empty($cOut) && $cOut >= '12:30:00' && $cOut !== $aIn) {
+                                if (empty($aOut) && !empty($cOut) && $cOut >= '12:30:00' && $cOut !== $aIn && $cOut !== $cIn) {
                                     $aOut = $cOut;
                                 }
 
-                                $hasAnyAttendance = !empty($mIn) || !empty($aIn) || !empty($cIn) || !empty($cOut) || ($a->hours_worked > 0) || in_array(strtolower((string)$a->status), ['present', 'late', 'half_day']);
                                 $isSat = $a->attendance_date && $a->attendance_date->isSaturday();
-
-                                // For any present employee, ensure BOTH Morning and Afternoon session clock in & clock out are visible
-                                if ($hasAnyAttendance) {
-                                    if (empty($mIn))  $mIn  = $defMIn;
-                                    if (empty($mOut)) $mOut = $defMOut;
-                                    if (!$isSat) {
-                                        if (empty($aIn))  $aIn  = $defAIn;
-                                        if (empty($aOut)) $aOut = $defAOut;
-                                    }
-                                }
 
                                 $fmt12 = function($val) {
                                     if (!$val) return null;
@@ -822,6 +811,60 @@
                     </button>
                     <button type="submit" class="btn btn-success px-4" id="importSubmitBtn">
                         <i class="fas fa-file-import me-1"></i>Import Attendance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- Modal: Clear Attendance & Resync Fresh from Biometrics --}}
+<div class="modal fade" id="clearResyncModal" tabindex="-1" aria-labelledby="clearResyncModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger-subtle text-danger border-bottom">
+                <h5 class="modal-title fw-bold" id="clearResyncModalLabel">
+                    <i class="fa-solid fa-broom text-danger me-2"></i>Clear &amp; Resync Fresh from Biometrics
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ route('attendance.reset-and-resync') }}" method="POST">
+                @csrf
+                <div class="modal-body p-4">
+                    <div class="alert alert-warning mb-3 small">
+                        <i class="fa-solid fa-triangle-exclamation me-1 fs-6"></i>
+                        <strong>Clean Slate Sync:</strong> This will clear processed attendance records and immediately re-calculate everyone's attendance directly from the <strong>real raw biometric device punch logs</strong>.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold small text-dark">Scope of Reset:</label>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="scope" id="scopeAll" value="all" checked>
+                            <label class="form-check-label fw-bold text-dark small" for="scopeAll">
+                                <i class="fa-solid fa-layer-group text-primary me-1"></i>Clear ALL Dates &amp; Resync Everything Fresh
+                            </label>
+                            <small class="d-block text-muted ps-4" style="font-size:0.78rem;">Clears processed attendance and rebuilds every day cleanly from all raw biometric punch logs.</small>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="scope" id="scopeDate" value="date">
+                            <label class="form-check-label fw-bold text-dark small" for="scopeDate">
+                                <i class="fa-solid fa-calendar-day text-info me-1"></i>Clear &amp; Resync Specific Day Only
+                            </label>
+                            <div class="mt-2 ps-4">
+                                <input type="date" name="date" class="form-control form-control-sm" value="{{ request('date', today()->toDateString()) }}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-success-subtle text-success-emphasis rounded-3 border border-success-subtle small">
+                        <i class="fa-solid fa-shield-check text-success me-1"></i>
+                        <strong>Safe:</strong> Raw biometric punch logs are permanently preserved on the machine &amp; database. Only the calculated daily attendance records are refreshed with 100% real punches.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold shadow-xs">
+                        <i class="fa-solid fa-arrows-rotate me-1"></i>Yes, Clear &amp; Resync Fresh Now
                     </button>
                 </div>
             </form>
