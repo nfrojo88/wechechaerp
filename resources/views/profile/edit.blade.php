@@ -57,38 +57,27 @@
         </div>
         @endif
 
-        <!-- Header & Breadcrumbs -->
+        <!-- Header & Navigation -->
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
             <div class="d-flex align-items-center">
-                <a href="{{ url('/') }}" class="btn btn-sm btn-outline-secondary me-3 shadow-sm rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                <a href="{{ url('/') }}" class="btn btn-sm btn-outline-secondary me-3 shadow-sm rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 38px; height: 38px;" title="Back to Dashboard">
                     <i class="fa-solid fa-arrow-left"></i>
                 </a>
-                <div class="me-3">
-                    <img src="{{ $employee->profile_picture_url }}" alt="{{ $employee->full_name }}"
-                         onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name={{ urlencode($employee->full_name) }}&background=0D8ABC&color=fff';"
-                         style="width:58px;height:58px;border-radius:50%;object-fit:cover;border:2px solid #0d6efd;"
-                         class="shadow-sm">
-                </div>
                 <div>
-                    <h1 class="h3 mb-0 fw-bold text-gray-800">{{ $employee->full_name }}</h1>
-                    <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
-                        <span class="text-muted fw-semibold">{{ $employee->employee_code }} • {{ $employee->role_title ?? 'Employee' }}</span>
-                        @if($employee->is_approved_by_gm)
-                            <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>GM Approved</span>
-                        @elseif($employee->gm_approval_status === 'rejected')
-                            <span class="badge bg-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>Returned by GM</span>
-                        @else
-                            <span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>Awaiting GM Approval</span>
-                        @endif
-                        @if(isset($assignedPettyCash) && $assignedPettyCash->isNotEmpty())
-                            <span class="badge bg-success bg-gradient"><i class="fa-solid fa-wallet me-1"></i>Petty Cash Custodian</span>
-                        @endif
+                    <div class="d-flex align-items-center gap-2">
+                        <h1 class="h3 mb-0 fw-bold text-gray-800">My Profile</h1>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1 rounded-pill" style="font-size:0.75rem;">
+                            <i class="fa-solid fa-id-badge me-1"></i>Personnel File
+                        </span>
+                    </div>
+                    <div class="text-muted small mt-0.5">
+                        <span>ConstructPro ERP</span> &bull; <span>Verified Employment Record &amp; System Portal</span>
                     </div>
                 </div>
             </div>
             @if(isset($assignedPettyCash) && $assignedPettyCash->isNotEmpty())
             <div class="d-flex align-items-center gap-2">
-                <div class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2 rounded-pill font-monospace fs-6">
+                <div class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2 rounded-pill font-monospace fs-6 shadow-xs">
                     <i class="fa-solid fa-wallet me-1"></i> Available: <strong>ETB {{ number_format($pettyCashBalance, 2) }}</strong>
                 </div>
             </div>
@@ -658,46 +647,115 @@
             {{-- Right Column: Profile Sidebar Card, Summary Stat Cards & Password Security --}}
             <div class="col-lg-4">
 
-                {{-- Profile Identity Card --}}
+                {{-- Profile Identity Card (Executive Digital Employee ID) --}}
                 <div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
-                    <div class="p-4 text-center" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: #fff;">
-                        <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center shadow-lg border border-3 border-white mb-3"
-                             style="width: 85px; height: 85px; font-size: 2.2rem; background: #0f172a; color: #fff;">
-                            {{ strtoupper(substr($employee->full_name ?? 'U', 0, 1)) }}
+                    {{-- Banner & Avatar --}}
+                    <div class="p-4 text-center text-white position-relative" style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%);">
+                        <div class="position-relative d-inline-block mx-auto mb-3">
+                            <img src="{{ $employee->profile_picture_url }}" 
+                                 alt="{{ $employee->full_name }}"
+                                 onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name={{ urlencode($employee->full_name) }}&background=0D8ABC&color=fff&size=200';"
+                                 class="rounded-circle border border-4 border-white shadow-lg"
+                                 style="width: 104px; height: 104px; object-fit: cover;">
+                            @if($employee->status === 'active')
+                                <span class="position-absolute bottom-0 end-0 bg-success border border-3 border-white rounded-circle shadow-xs" 
+                                      style="width: 22px; height: 22px; transform: translate(-4px, -4px);" 
+                                      title="Active Employee"></span>
+                            @endif
                         </div>
                         <h4 class="fw-bold mb-1 text-white">{{ $employee->full_name }}</h4>
-                        <div class="d-flex justify-content-center gap-1 mt-2">
-                            @if($employee->is_approved_by_gm)
-                                <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>Approved GM</span>
-                            @else
-                                <span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>Pending GM</span>
+                        <div class="text-white text-opacity-85 small fw-semibold mb-2">
+                            {{ $employee->role_title ?? 'Employee' }}
+                            @if($employee->department)
+                                &bull; <span class="text-white text-opacity-75">{{ $employee->department }}</span>
                             @endif
-                            <span class="badge bg-success bg-opacity-75">Active</span>
+                        </div>
+                        <div class="d-flex justify-content-center flex-wrap gap-1 mt-2">
+                            @if($employee->is_approved_by_gm)
+                                <span class="badge bg-success shadow-xs"><i class="fa-solid fa-circle-check me-1"></i>Approved GM</span>
+                            @elseif($employee->gm_approval_status === 'rejected')
+                                <span class="badge bg-danger shadow-xs"><i class="fa-solid fa-triangle-exclamation me-1"></i>Returned by GM</span>
+                            @else
+                                <span class="badge bg-warning text-dark shadow-xs"><i class="fa-solid fa-clock me-1"></i>Pending GM</span>
+                            @endif
+                            <span class="badge bg-white bg-opacity-20 text-white border border-white border-opacity-25 shadow-xs">
+                                {{ ucfirst($employee->status ?? 'Active') }}
+                            </span>
+                            <span class="badge bg-dark font-monospace text-warning border border-secondary shadow-xs">
+                                {{ $employee->employee_code }}
+                            </span>
                         </div>
                     </div>
+
+                    {{-- Metadata List --}}
                     <div class="card-body p-4 bg-white">
-                        <ul class="list-unstyled mb-0 d-flex flex-column gap-3 small">
-                            <li class="d-flex align-items-center">
-                                <i class="fa-solid fa-id-card text-muted me-3 fs-6"></i>
-                                <span class="text-muted me-2">ID:</span>
-                                <strong class="text-dark font-monospace">{{ $employee->employee_code }}</strong>
-                            </li>
-                            <li class="d-flex align-items-center">
-                                <i class="fa-solid fa-phone text-muted me-3 fs-6"></i>
-                                <span class="text-muted me-2">Phone:</span>
-                                <strong class="text-dark">{{ $employee->phone ?? 'N/A' }}</strong>
-                            </li>
-                            <li class="d-flex align-items-center">
-                                <i class="fa-solid fa-calendar text-muted me-3 fs-6"></i>
-                                <span class="text-muted me-2">Joined:</span>
-                                <strong class="text-dark">{{ $employee->date_of_joining ? $employee->date_of_joining->format('d M Y') : 'N/A' }}</strong>
-                            </li>
-                            <li class="d-flex align-items-center">
-                                <i class="fa-solid fa-building text-muted me-3 fs-6"></i>
-                                <span class="text-muted me-2">Dept:</span>
-                                <strong class="text-dark">{{ $employee->department ?? 'N/A' }}</strong>
-                            </li>
-                        </ul>
+                        <div class="d-flex flex-column gap-2.5">
+                            {{-- ID Code --}}
+                            <div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-light bg-opacity-75">
+                                <div class="d-flex align-items-center gap-2.5">
+                                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="fa-solid fa-id-badge small"></i>
+                                    </div>
+                                    <span class="text-muted small">Employee ID</span>
+                                </div>
+                                <strong class="text-dark font-monospace fs-6">{{ $employee->employee_code }}</strong>
+                            </div>
+
+                            {{-- Department --}}
+                            <div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-light bg-opacity-75">
+                                <div class="d-flex align-items-center gap-2.5">
+                                    <div class="rounded-circle bg-info bg-opacity-10 text-info d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="fa-solid fa-building small"></i>
+                                    </div>
+                                    <span class="text-muted small">Department</span>
+                                </div>
+                                <strong class="text-dark small">{{ $employee->department ?? 'N/A' }}</strong>
+                            </div>
+
+                            {{-- Phone --}}
+                            @if($employee->phone)
+                            <div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-light bg-opacity-75">
+                                <div class="d-flex align-items-center gap-2.5">
+                                    <div class="rounded-circle bg-success bg-opacity-10 text-success d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="fa-solid fa-phone small"></i>
+                                    </div>
+                                    <span class="text-muted small">Phone</span>
+                                </div>
+                                <a href="tel:{{ $employee->phone }}" class="text-dark fw-bold small text-decoration-none font-monospace">{{ $employee->phone }}</a>
+                            </div>
+                            @endif
+
+                            {{-- Email --}}
+                            @if($employee->email || $user->email)
+                            <div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-light bg-opacity-75">
+                                <div class="d-flex align-items-center gap-2.5">
+                                    <div class="rounded-circle bg-warning bg-opacity-10 text-warning d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="fa-solid fa-envelope small"></i>
+                                    </div>
+                                    <span class="text-muted small">Email</span>
+                                </div>
+                                <a href="mailto:{{ $employee->email ?? $user->email }}" class="text-dark fw-semibold small text-decoration-none text-truncate" style="max-width: 175px;" title="{{ $employee->email ?? $user->email }}">
+                                    {{ $employee->email ?? $user->email }}
+                                </a>
+                            </div>
+                            @endif
+
+                            {{-- Date of Joining --}}
+                            <div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-light bg-opacity-75">
+                                <div class="d-flex align-items-center gap-2.5">
+                                    <div class="rounded-circle bg-secondary bg-opacity-10 text-secondary d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
+                                        <i class="fa-solid fa-calendar-check small"></i>
+                                    </div>
+                                    <span class="text-muted small">Joined Date</span>
+                                </div>
+                                <div class="text-end">
+                                    <strong class="text-dark small d-block">{{ $employee->date_of_joining ? $employee->date_of_joining->format('d M Y') : 'N/A' }}</strong>
+                                    @if($employee->date_of_joining)
+                                        <small class="text-muted" style="font-size:0.7rem;">🇪🇹 {{ \App\Helpers\EthiopianCalendar::format($employee->date_of_joining, 'am') }}</small>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
