@@ -107,7 +107,9 @@ class AttendanceController extends Controller
         // Employees who attended the morning session or worked their hours (>= 2.0h or had morning punches)
         // are recognized as FULLY 'present', NOT 'half_day'.
         try {
-            $driver = \Illuminate\Support\Facades\DB::connection()->getDriverName();
+            /** @var \Illuminate\Database\Connection $connection */
+            $connection = \Illuminate\Support\Facades\DB::connection();
+            $driver = $connection->getDriverName();
             if ($driver === 'sqlite') {
                 Attendance::whereRaw("strftime('%w', attendance_date) = '6'")
                     ->where('status', 'half_day')
@@ -173,7 +175,7 @@ class AttendanceController extends Controller
                 ->update(['biometric_device_id' => null]);
         } catch (\Throwable $e) {}
 
-        $attendances = $query->paginate(30)->withQueryString();
+        $attendances = $query->paginate(30)->appends(request()->query());
 
         // Fetch distinct available dates from attendance records for navigation
         $availableDates = Attendance::select('attendance_date')
@@ -382,6 +384,20 @@ class AttendanceController extends Controller
     }
 
     /**
+     * Check if a user has any of the specified roles.
+     *
+     * @param array $roles
+     * @param \App\Models\User|null $user
+     * @return bool
+     */
+    public static function userHasAnyRole(array $roles, $user = null): bool
+    {
+        /** @var \App\Models\User|null $u */
+        $u = $user ?: auth()->user();
+        return $u !== null && $u->hasAnyRole($roles);
+    }
+
+    /**
      * Dedicated Report & Dispatch Management Page for Site Deployments.
      * Visible to HR, HR Officer, Planning Manager, Coordinator, Finance Head, and GM.
      */
@@ -419,7 +435,7 @@ class AttendanceController extends Controller
             $query->where('end_date', '<=', $request->date_to);
         }
 
-        $deployments = $query->paginate(25)->withQueryString();
+        $deployments = $query->paginate(25)->appends(request()->query());
 
         $todayStr = today()->toDateString();
         $stats = [
@@ -660,7 +676,7 @@ class AttendanceController extends Controller
     /**
      * HR Approves the site deployment. Saves record into attendance with Status 'S'.
      */
-    public function approveSiteDeployment(Request $request, $id)
+    public function approveSiteDeployment(Request $request, int|string $id)
     {
         if (!self::isHrOrAdmin()) {
             abort(403, 'Unauthorized. Only HR Officers, HR Managers, or Administrators can approve site deployments.');
@@ -700,7 +716,7 @@ class AttendanceController extends Controller
     /**
      * HR Rejects the site deployment. HR does not accept this info, no attendance record is saved.
      */
-    public function rejectSiteDeployment(Request $request, $id)
+    public function rejectSiteDeployment(Request $request, int|string $id)
     {
         if (!self::isHrOrAdmin()) {
             abort(403, 'Unauthorized. Only HR Officers, HR Managers, or Administrators can reject site deployments.');
@@ -1765,7 +1781,7 @@ class AttendanceController extends Controller
         $headers = null;
 
         try {
-            $reader = \OpenSpout\Reader\XLSX\Reader::create();
+            $reader = new \OpenSpout\Reader\XLSX\Reader();
             $reader->open($filePath);
 
             foreach ($reader->getSheetIterator() as $sheet) {
@@ -1839,7 +1855,7 @@ class AttendanceController extends Controller
      */
     public function clearHistory(Request $request)
     {
-        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'global_admin'])) {
+        if (!self::userHasAnyRole(['admin', 'global_admin'])) {
             abort(403, 'Unauthorized access. Only Global Admin and Admin roles can perform maintenance.');
         }
 
@@ -1952,7 +1968,7 @@ class AttendanceController extends Controller
      */
     public function deviceLogs()
     {
-        if (auth()->check() && auth()->user()->hasAnyRole(['admin', 'global_admin'])) {
+        if (self::userHasAnyRole(['admin', 'global_admin'])) {
             return redirect()->route('admin.attendance.device-logs', request()->query());
         }
 
@@ -1964,7 +1980,7 @@ class AttendanceController extends Controller
      */
     public function adminDeviceLogs()
     {
-        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'global_admin'])) {
+        if (!self::userHasAnyRole(['admin', 'global_admin'])) {
             abort(403, 'Unauthorized. Device punch logs and data maintenance is restricted to Admin & Global Admin.');
         }
 
@@ -2082,7 +2098,7 @@ class AttendanceController extends Controller
             }
         }
 
-        $logs = $query->paginate(50)->withQueryString();
+        $logs = $query->paginate(50)->appends(request()->query());
 
         // Compute diagnostics about raw biometric punches and attendances in database safely
         try {
@@ -2134,7 +2150,7 @@ class AttendanceController extends Controller
      */
     public function saveZkDevice(Request $request)
     {
-        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'global_admin', 'hr_manager'])) {
+        if (!self::userHasAnyRole(['admin', 'global_admin', 'hr_manager'])) {
             abort(403, 'Unauthorized.');
         }
 
@@ -2192,7 +2208,7 @@ class AttendanceController extends Controller
      */
     public function deleteZkDevice(Request $request, $id = null)
     {
-        if (!auth()->check() || !auth()->user()->hasAnyRole(['admin', 'global_admin'])) {
+        if (!self::userHasAnyRole(['admin', 'global_admin'])) {
             abort(403, 'Unauthorized.');
         }
 
@@ -2277,7 +2293,7 @@ class AttendanceController extends Controller
 
         $targetRoute = $request->input('redirect_to') === 'attendance'
             ? 'attendance.index'
-            : ((auth()->check() && auth()->user()->hasAnyRole(['admin', 'global_admin']))
+            : (self::userHasAnyRole(['admin', 'global_admin'])
                 ? 'admin.attendance.device-logs'
                 : 'attendance.index');
 

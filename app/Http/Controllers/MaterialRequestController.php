@@ -346,6 +346,7 @@ class MaterialRequestController extends Controller
      */
     public function destroy(Request $request, MaterialRequest $materialRequest)
     {
+        /** @var \App\Models\User|null $user */
         $user = auth()->user();
         $refNo = $materialRequest->reference_number ?? ('MR #' . $materialRequest->id);
 

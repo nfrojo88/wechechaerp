@@ -1,4 +1,4 @@
-﻿@extends('layouts.guest')
+@extends('layouts.guest')
 
 @section('title', 'Verify OTP - Construct-Pro ERP')
 
@@ -384,7 +384,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (timeLeft <= 0) {
             clearInterval(expiryInterval);
             alert('OTP code has expired. Please request a new code.');
-            window.location.href = '{{ route('password.request') }}';
+            window.location.href = "{{ route('password.request') }}";
         }
     }, 1000);
     
@@ -404,12 +404,12 @@ document.addEventListener('DOMContentLoaded', function() {
         if (confirm('Request a new verification code?')) {
             const form = document.createElement('form');
             form.method = 'POST';
-            form.action = '{{ route('password.resend') }}';
+            form.action = "{{ route('password.resend') }}";
             
             const csrfToken = document.createElement('input');
             csrfToken.type = 'hidden';
             csrfToken.name = '_token';
-            csrfToken.value = '{{ csrf_token() }}';
+            csrfToken.value = "{{ csrf_token() }}";
             form.appendChild(csrfToken);
             
             document.body.appendChild(form);

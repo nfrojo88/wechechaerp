@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 @section('title', 'Buy Material with Petty Cash - Store Keeper')
 
 @section('content')
@@ -683,11 +683,12 @@
 </div>
 
 @push('scripts')
+<script type="application/json" id="storesDataScript">{!! json_encode($storesData ?? []) !!}</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     let rowIndex = 1;
     let availablePettyCash = parseFloat("{{ $pettyCashAccount->current_balance ?? 0 }}") || 0;
-    const storesData = @json($storesData ?? []);
+    const storesData = JSON.parse(document.getElementById('storesDataScript')?.textContent || '[]');
 
     const tbody = document.getElementById('itemsTbody');
     const addRowBtn = document.getElementById('addRowBtn');

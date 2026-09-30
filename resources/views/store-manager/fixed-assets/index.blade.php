@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'Fixed Assets Management - Store Manager')
 
@@ -255,7 +255,7 @@
                                     <span class="text-muted">/ {{ $asset->total_quantity }} Max</span>
                                 </div>
                                 <div class="progress mt-1" style="height: 5px; width: 90px;">
-                                    <div class="progress-bar bg-primary" role="progressbar" style="width: {{ $asset->total_quantity > 0 ? ($uCount / $asset->total_quantity) * 100 : 100 }}%"></div>
+                                    <div class="progress-bar bg-primary" role="progressbar" style="<?php echo 'width: ' . ($asset->total_quantity > 0 ? ($uCount / $asset->total_quantity) * 100 : 100) . '%;'; ?>"></div>
                                 </div>
                             </td>
                             <td>
@@ -291,7 +291,7 @@
                                     <a href="{{ route('store-manager.fixed-assets.show', $asset->id) }}" class="btn btn-outline-primary" title="View Units & Details">
                                         <i class="fa-solid fa-eye me-1"></i> View ({{ $uCount }})
                                     </a>
-                                    <button type="button" class="btn btn-outline-secondary" onclick="openEditAssetModal({{ json_encode($asset) }})" title="Edit Asset & Quantity">
+                                    <button type="button" class="btn btn-outline-secondary" data-asset='@json($asset)' onclick="openEditAssetModalFromBtn(this)" title="Edit Asset & Quantity">
                                         <i class="fa-solid fa-sliders"></i>
                                     </button>
                                 </div>
@@ -366,11 +366,11 @@
                                                         </td>
                                                         <td class="text-end pe-3">
                                                             <div class="btn-group btn-group-sm">
-                                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" onclick="openEditUnitModal({{ json_encode($unit) }}, '{{ addslashes($asset->category) }}', '{{ addslashes($unitStore) }}')" title="Edit Unit Specs">
+                                                                <button type="button" class="btn btn-outline-secondary py-0 px-2" data-unit='@json($unit)' data-category="{{ $asset->category }}" data-store="{{ $unitStore }}" onclick="openEditUnitModalFromBtn(this)" title="Edit Unit Specs">
                                                                     <i class="fa-solid fa-pencil"></i>
                                                                 </button>
                                                                 @if($unit->isAvailable())
-                                                                    <button type="button" class="btn btn-outline-primary py-0 px-2" onclick="openAssignUnitModal({{ json_encode($unit) }})" title="Assign to Staff">
+                                                                    <button type="button" class="btn btn-outline-primary py-0 px-2" data-unit='@json($unit)' onclick="openAssignUnitModalFromBtn(this)" title="Assign to Staff">
                                                                         <i class="fa-solid fa-user-plus"></i>
                                                                     </button>
                                                                 @elseif($unit->isAssigned())
@@ -1003,6 +1003,23 @@ function openEditAssetModal(asset) {
     form.action = "{{ url('store-manager/fixed-assets') }}/" + asset.id;
 
     new bootstrap.Modal(document.getElementById('sharedEditAssetModal')).show();
+}
+
+function openEditAssetModalFromBtn(btn) {
+    const asset = JSON.parse(btn.getAttribute('data-asset') || '{}');
+    openEditAssetModal(asset);
+}
+
+function openEditUnitModalFromBtn(btn) {
+    const unit = JSON.parse(btn.getAttribute('data-unit') || '{}');
+    const category = btn.getAttribute('data-category') || '';
+    const store = btn.getAttribute('data-store') || '';
+    openEditUnitModal(unit, category, store);
+}
+
+function openAssignUnitModalFromBtn(btn) {
+    const unit = JSON.parse(btn.getAttribute('data-unit') || '{}');
+    openAssignUnitModal(unit);
 }
 </script>
 @endpush

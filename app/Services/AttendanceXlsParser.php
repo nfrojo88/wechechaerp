@@ -248,7 +248,7 @@ class AttendanceXlsParser
         $headers = null;
 
         try {
-            $reader = \OpenSpout\Reader\XLSX\Reader::create();
+            $reader = new \OpenSpout\Reader\XLSX\Reader();
             $reader->open($filePath);
 
             foreach ($reader->getSheetIterator() as $sheet) {

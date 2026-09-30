@@ -131,11 +131,11 @@
                         @forelse($templates as $tpl)
                             <div class="btn-group template-btn-group shadow-xs" role="group" id="tplPill_{{ $tpl->id }}">
                                 <button type="button" class="btn btn-sm {{ $tpl->color ?? 'btn-outline-primary' }} text-dark rounded-pill template-btn px-3"
-                                        onclick="applyTemplateById({{ $tpl->id }})" title="Click to auto-fill title &amp; message">
+                                        onclick="applyTemplateById('{{ $tpl->id }}')" title="Click to auto-fill title &amp; message">
                                     <span>{{ $tpl->icon ?? '📝' }}</span> {{ $tpl->name }}
                                 </button>
                                 <button type="button" class="btn btn-sm btn-light border text-muted px-2 py-0" 
-                                        onclick="openEditTemplateModal({{ json_encode($tpl) }})" title="Edit '{{ $tpl->name }}'" 
+                                        onclick="openEditTemplateById('{{ $tpl->id }}')" title="Edit '{{ $tpl->name }}'" 
                                         style="border-radius: 50px; margin-left: -14px; z-index: 2; padding-right: 8px !important;">
                                     <i class="fa-solid fa-pencil" style="font-size: 0.68rem;"></i>
                                 </button>
@@ -708,8 +708,9 @@
     </div>
 </div>
 
+<script type="application/json" id="announcementsTemplatesJson">{!! json_encode($templates) !!}</script>
 <script>
-let templatesList = @json($templates);
+let templatesList = JSON.parse(document.getElementById('announcementsTemplatesJson')?.textContent || '[]');
 
 function applyTemplateById(id) {
     const tpl = templatesList.find(t => t.id == id);
@@ -723,6 +724,13 @@ function applyTemplateById(id) {
         // Subtle animation to draw user attention
         titleInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
         titleInput.focus();
+    }
+}
+
+function openEditTemplateById(id) {
+    const tpl = templatesList.find(t => t.id == id);
+    if (tpl) {
+        openEditTemplateModal(tpl);
     }
 }
 

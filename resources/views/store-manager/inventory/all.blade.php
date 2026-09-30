@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'All Inventory - Store Manager')
 
@@ -1046,7 +1046,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 setText('sdUnit1', u); setText('sdUnit2', u); setText('sdUnit3', u);
                 setBadge('sdStatus', d.status, d.statusBg);
                 var btnT = document.getElementById('sdBtnTransfer');
-                if (btnT) btnT.href = '{{ route('transfers.create') }}?store_id=' + (d.storeId || '');
+                if (btnT) btnT.href = "{{ route('transfers.create') }}?store_id=" + (d.storeId || '');
 
                 // Reset tab to overview
                 var firstTabBtn = document.getElementById('sd-tab-overview-btn');

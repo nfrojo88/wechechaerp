@@ -458,7 +458,7 @@ if (!function_exists('evalTakeoffExpr')) {
                                         <td></td>
                                         <td style="white-space:nowrap;">
                                             <button type="submit" class="btn btn-sm btn-success py-0 px-2 fw-bold me-1" style="font-size:11px;">Save</button>
-                                            <button type="button" onclick="hideInlineForm({{ $section->id }})" class="btn btn-sm btn-outline-secondary border-0 py-0 px-1">✕</button>
+                                            <button type="button" onclick="hideInlineForm('{{ $section->id }}')" class="btn btn-sm btn-outline-secondary border-0 py-0 px-1">✕</button>
                                         </td>
                                         </form>
                                     </tr>
