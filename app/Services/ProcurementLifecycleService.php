@@ -152,9 +152,10 @@ class ProcurementLifecycleService
         $from = $pr->status;
         $targetRole = $this->resolveOwnerRole('purchase', $pr);
         $pr->update([
-            'sourcing_method'    => $sourcingMethod,
-            'status'             => PurchaseRequest::STATUS_PENDING_PROC_TEAM,
-            'current_owner_role' => $targetRole,
+            'sourcing_method'        => $sourcingMethod,
+            'status'                 => PurchaseRequest::STATUS_PENDING_PROC_TEAM,
+            'current_owner_role'     => $targetRole,
+            'procurement_team_notes' => $notes,
         ]);
         $actionName = $sourcingMethod === 'direct_buy' ? 'send_to_proc_team_direct_buy' : 'send_to_proc_team_proforma';
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_PROC_TEAM, $actionName, 'purchase_manager', $notes);

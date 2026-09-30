@@ -214,6 +214,12 @@
                             </h6>
                             <p class="small text-muted mb-0">Review stock availability across stores. Decide which items to fulfill via <strong>Store Transfer</strong> or send to <strong>Purchase</strong>. (No pricing needed at this stage).</p>
                         </div>
+                        @if($purchaseRequest->pm_sendback_reason)
+                            <div class="alert alert-warning py-2 px-3 small mb-3 border-start border-4 border-warning shadow-xs">
+                                <div class="fw-bold text-dark mb-1"><i class="fas fa-undo text-warning me-1"></i> Returned from Purchasing Manager:</div>
+                                <div class="text-muted">{{ $purchaseRequest->pm_sendback_reason }}</div>
+                            </div>
+                        @endif
                         <div class="d-grid gap-2">
                             <button type="button" class="btn btn-outline-info btn-sm w-100 text-start py-2 fw-semibold" onclick="openSelectiveTransferModal()">
                                 <i class="fas fa-truck-ramp-box text-info me-1"></i> 🚚 Transfer Selected Items (<span class="selected-items-count fw-bold">0</span>)
@@ -321,6 +327,12 @@
                                 <i class="fas fa-bolt me-1"></i>Direct Buy: Add Material Prices
                             </h6>
                             <p class="small text-muted mb-2">Enter the direct purchase unit price for each requested material below.</p>
+                            @if($purchaseRequest->procurement_team_notes)
+                                <div class="alert alert-warning py-2 px-3 small mb-3 border-start border-4 border-warning shadow-xs">
+                                    <div class="fw-bold text-dark mb-1"><i class="fas fa-comment-dots text-warning me-1"></i> PM Instructions / Feedback:</div>
+                                    <div class="text-muted">{{ $purchaseRequest->procurement_team_notes }}</div>
+                                </div>
+                            @endif
                             <form action="{{ route('purchase-requests.submit-direct-buy', $purchaseRequest) }}" method="POST">
                                 @csrf
                                 <div class="bg-light p-2 rounded border mb-3" style="max-height: 250px; overflow-y: auto;">
@@ -375,6 +387,12 @@
                                     <i class="fas fa-plus me-1"></i> Attach Quote
                                 </button>
                             </div>
+                            @if($purchaseRequest->procurement_team_notes)
+                                <div class="alert alert-warning py-2 px-3 small mb-3 border-start border-4 border-warning shadow-xs">
+                                    <div class="fw-bold text-dark mb-1"><i class="fas fa-comment-dots text-warning me-1"></i> PM Instructions / Feedback:</div>
+                                    <div class="text-muted">{{ $purchaseRequest->procurement_team_notes }}</div>
+                                </div>
+                            @endif
 
                             @if($purchaseRequest->proformaInvoices->count() > 0)
                                 <div class="bg-light p-2 rounded border mb-3 small">
@@ -594,6 +612,67 @@
                             </button>
                         </form>
 
+                        {{-- STAGE 5a: Send Back / Revision Options --}}
+                        <div class="pt-2 mt-3 border-top">
+                            <button type="button" class="btn btn-outline-danger btn-sm w-100 fw-semibold" data-bs-toggle="collapse" data-bs-target="#pmPriceReviewSendBackCollapse" aria-expanded="false" aria-controls="pmPriceReviewSendBackCollapse">
+                                <i class="fas fa-undo me-1"></i> Send Back / Return Request
+                            </button>
+                            <div class="collapse mt-2" id="pmPriceReviewSendBackCollapse">
+                                <div class="card card-body bg-light border-danger border-opacity-25 p-3 rounded shadow-xs">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="small fw-bold text-danger">
+                                            <i class="fas fa-rotate-left me-1"></i> Return Purchase Request
+                                        </span>
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle small px-2">Revision</span>
+                                    </div>
+                                    <p class="text-muted small mb-2" style="font-size: 11px;">
+                                        Select return destination and provide reason or renegotiation instructions:
+                                    </p>
+
+                                    <!-- Destination Selection -->
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-bold text-muted mb-1">Return Destination:</label>
+                                        <div class="btn-group btn-group-sm w-100" role="group">
+                                            <input type="radio" class="btn-check" name="pmSendBackDest5a" id="pmSendBackDestProc5a" autocomplete="off" checked onchange="switchSendBackTarget5a('proc_team')">
+                                            <label class="btn btn-outline-secondary btn-xs py-1" for="pmSendBackDestProc5a">
+                                                <i class="fas fa-user-tag me-1"></i> Procurement Team
+                                            </label>
+
+                                            <input type="radio" class="btn-check" name="pmSendBackDest5a" id="pmSendBackDestStore5a" autocomplete="off" onchange="switchSendBackTarget5a('store')">
+                                            <label class="btn btn-outline-secondary btn-xs py-1" for="pmSendBackDestStore5a">
+                                                <i class="fas fa-warehouse me-1"></i> Store Manager
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Destination A: Return to Procurement Team (Direct Buy pricing renegotiation) -->
+                                    <form action="{{ route('purchase-requests.send-to-proc-team', $purchaseRequest) }}" method="POST" id="formPmSendBackToProcTeam5a">
+                                        @csrf
+                                        <input type="hidden" name="sourcing_method" value="direct_buy">
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-bold text-dark mb-1">Instructions for Purchaser <span class="text-danger">*</span></label>
+                                            <textarea name="notes" id="notesProcTeam5a" class="form-control form-control-sm" rows="2" placeholder="e.g., Direct price exceeds current market benchmark. Please renegotiate with vendor or obtain alternative quotes..." required></textarea>
+                                        </div>
+                                        <button type="submit" class="btn btn-warning text-dark btn-sm w-100 fw-bold shadow-xs">
+                                            <i class="fas fa-paper-plane me-1"></i> Return to Procurement Team for Repricing
+                                        </button>
+                                    </form>
+
+                                    <!-- Destination B: Return to Store Manager (Inventory review / Return to site) -->
+                                    <form action="{{ route('purchase-requests.send-back-to-store', $purchaseRequest) }}" method="POST" id="formPmSendBackToStore5a" style="display: none;">
+                                        @csrf
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-bold text-dark mb-1">Reason for Store Manager <span class="text-danger">*</span></label>
+                                            <textarea name="reason" id="reasonStore5a" class="form-control form-control-sm" rows="2" placeholder="e.g., Re-check cross-project store stock or request requester review..."></textarea>
+                                        </div>
+                                        <button type="submit" class="btn btn-danger btn-sm w-100 fw-bold shadow-xs">
+                                            <i class="fas fa-undo me-1"></i> Confirm Send Back to Store Manager
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
                     <!-- STAGE 5b: PM Proforma Selection -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION)
                         <h6 class="font-weight-bold text-primary mb-2">
@@ -623,6 +702,67 @@
                                 <i class="fas fa-paper-plane me-1"></i> Send Selected Proformas to GM
                             </button>
                         </form>
+
+                        {{-- STAGE 5b: Send Back / Revision Options --}}
+                        <div class="pt-2 mt-3 border-top">
+                            <button type="button" class="btn btn-outline-danger btn-sm w-100 fw-semibold" data-bs-toggle="collapse" data-bs-target="#pmProformaSendBackCollapse" aria-expanded="false" aria-controls="pmProformaSendBackCollapse">
+                                <i class="fas fa-undo me-1"></i> Send Back / Return Options
+                            </button>
+                            <div class="collapse mt-2" id="pmProformaSendBackCollapse">
+                                <div class="card card-body bg-light border-danger border-opacity-25 p-3 rounded shadow-xs">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="small fw-bold text-danger">
+                                            <i class="fas fa-rotate-left me-1"></i> Return Purchase Request
+                                        </span>
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle small px-2">Revision</span>
+                                    </div>
+                                    <p class="text-muted small mb-2" style="font-size: 11px;">
+                                        If attached proformas are insufficient, uncompetitive, or need changes:
+                                    </p>
+
+                                    <!-- Destination Selection -->
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-bold text-muted mb-1">Return Destination:</label>
+                                        <div class="btn-group btn-group-sm w-100" role="group">
+                                            <input type="radio" class="btn-check" name="pmSendBackDest5b" id="pmSendBackDestProc5b" autocomplete="off" checked onchange="switchSendBackTarget5b('proc_team')">
+                                            <label class="btn btn-outline-secondary btn-xs py-1" for="pmSendBackDestProc5b">
+                                                <i class="fas fa-user-tag me-1"></i> Procurement Team
+                                            </label>
+
+                                            <input type="radio" class="btn-check" name="pmSendBackDest5b" id="pmSendBackDestStore5b" autocomplete="off" onchange="switchSendBackTarget5b('store')">
+                                            <label class="btn btn-outline-secondary btn-xs py-1" for="pmSendBackDestStore5b">
+                                                <i class="fas fa-warehouse me-1"></i> Store Manager
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Destination A: Return to Procurement Team (Proforma sourcing) -->
+                                    <form action="{{ route('purchase-requests.send-to-proc-team', $purchaseRequest) }}" method="POST" id="formPmSendBackToProcTeam5b">
+                                        @csrf
+                                        <input type="hidden" name="sourcing_method" value="proforma">
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-bold text-dark mb-1">Instructions for Procurement Team <span class="text-danger">*</span></label>
+                                            <textarea name="notes" id="notesProcTeam5b" class="form-control form-control-sm" rows="2" placeholder="e.g., Quotations are uncompetitive or incomplete. Please obtain at least 3 competitive quotations..." required></textarea>
+                                        </div>
+                                        <button type="submit" class="btn btn-warning text-dark btn-sm w-100 fw-bold shadow-xs">
+                                            <i class="fas fa-paper-plane me-1"></i> Return to Procurement Team for More Quotes
+                                        </button>
+                                    </form>
+
+                                    <!-- Destination B: Return to Store Manager -->
+                                    <form action="{{ route('purchase-requests.send-back-to-store', $purchaseRequest) }}" method="POST" id="formPmSendBackToStore5b" style="display: none;">
+                                        @csrf
+                                        <div class="mb-2">
+                                            <label class="form-label small fw-bold text-dark mb-1">Reason for Store Manager <span class="text-danger">*</span></label>
+                                            <textarea name="reason" id="reasonStore5b" class="form-control form-control-sm" rows="2" placeholder="Reason for returning request to Store Manager..."></textarea>
+                                        </div>
+                                        <button type="submit" class="btn btn-danger btn-sm w-100 fw-bold shadow-xs">
+                                            <i class="fas fa-undo me-1"></i> Confirm Send Back to Store Manager
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
 
                     <!-- STAGE 6: GM Decision -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
@@ -3879,6 +4019,48 @@ function generateMarketingVarianceNote() {
 document.addEventListener('DOMContentLoaded', function() {
     recalculateMarketingVariance();
 });
+
+// ── Purchasing Manager Send Back Destination Switchers (Stage 5a & 5b) ──
+function switchSendBackTarget5a(target) {
+    const procForm = document.getElementById('formPmSendBackToProcTeam5a');
+    const storeForm = document.getElementById('formPmSendBackToStore5a');
+    const notesEl = document.getElementById('notesProcTeam5a');
+    const reasonEl = document.getElementById('reasonStore5a');
+    if (!procForm || !storeForm) return;
+
+    if (target === 'proc_team') {
+        procForm.style.display = 'block';
+        storeForm.style.display = 'none';
+        if (notesEl) notesEl.setAttribute('required', 'required');
+        if (reasonEl) reasonEl.removeAttribute('required');
+    } else {
+        procForm.style.display = 'none';
+        storeForm.style.display = 'block';
+        if (reasonEl) reasonEl.setAttribute('required', 'required');
+        if (notesEl) notesEl.removeAttribute('required');
+    }
+}
+
+function switchSendBackTarget5b(target) {
+    const procForm = document.getElementById('formPmSendBackToProcTeam5b');
+    const storeForm = document.getElementById('formPmSendBackToStore5b');
+    const notesEl = document.getElementById('notesProcTeam5b');
+    const reasonEl = document.getElementById('reasonStore5b');
+    if (!procForm || !storeForm) return;
+
+    if (target === 'proc_team') {
+        procForm.style.display = 'block';
+        storeForm.style.display = 'none';
+        if (notesEl) notesEl.setAttribute('required', 'required');
+        if (reasonEl) reasonEl.removeAttribute('required');
+    } else {
+        procForm.style.display = 'none';
+        storeForm.style.display = 'block';
+        if (reasonEl) reasonEl.setAttribute('required', 'required');
+        if (notesEl) notesEl.removeAttribute('required');
+    }
+}
+
 
 // ── Quick Supplier Management (Add & Edit within Proforma Modal) ──
 function toggleSupplierQuickForm(mode) {

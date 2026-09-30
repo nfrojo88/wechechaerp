@@ -944,7 +944,7 @@ class PurchaseRequestController extends Controller
 
     public function sendBackToStoreManager(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
+        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager', 'admin', 'global_admin', 'marketing', 'market_research']);
         $request->validate(['reason' => 'required|string']);
         $this->lifecycle->sendBackToStoreManager($purchaseRequest, $request->reason);
         return back()->with('success', 'Sent back to Store Manager.');
@@ -1038,7 +1038,7 @@ class PurchaseRequestController extends Controller
 
     public function sendToProcurementTeam(Request $request, PurchaseRequest $purchaseRequest)
     {
-        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager']);
+        $this->authorizeStageRole($purchaseRequest, ['purchase_manager', 'procurement_manager', 'admin', 'global_admin', 'marketing', 'market_research']);
         $request->validate([
             'sourcing_method' => 'nullable|in:direct_buy,proforma',
             'notes'           => 'nullable|string',
