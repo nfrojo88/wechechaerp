@@ -1473,7 +1473,7 @@ class StoreManagerController extends Controller
         $isStoreKeeper = $user && $user->hasRole('store_keeper') && !$user->hasAnyRole(['admin', 'global_admin', 'store_manager', 'coordinator', 'planning_manager']);
         $assignedStore = null;
 
-        $query = MaterialRequest::with(['project', 'requestedBy', 'items.product', 'maintenanceRequest']);
+        $query = MaterialRequest::with(['project', 'requestedBy', 'items.product', 'maintenanceRequest', 'purchaseRequests']);
 
         if ($isStoreKeeper) {
             $assignedStore = $user->store
@@ -1661,10 +1661,17 @@ class StoreManagerController extends Controller
 
             return back()->with('success', 'Transfer created successfully for the material request.');
         } else {
-            // Send to Purchase Manager
+            // Send to Purchase Manager and auto-route in Procurement PR Lifecycle
             $materialRequest->update(['status' => 'needs_purchase']);
+            $pr = $materialRequest->createOrGetPurchaseRequest(Auth::id());
+            if ($pr) {
+                $pr->update([
+                    'status' => \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING,
+                    'current_owner_role' => 'purchase_manager',
+                ]);
+            }
             
-            return back()->with('warning', 'Materials not available (' . implode(', ', $unavailableItems) . '). Request sent to Purchase Manager.');
+            return back()->with('warning', 'Materials not available in store (' . implode(', ', $unavailableItems) . '). Request routed into Procurement Lifecycle as PR #' . ($pr?->pr_no ?? $materialRequest->reference_number) . ' for Purchase Manager price review.');
         }
     }
 

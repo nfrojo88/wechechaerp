@@ -152,7 +152,7 @@
         <div class="card-body p-3">
             <form method="GET" action="{{ route('procurement.my-queue') }}" class="row g-2 align-items-center">
                 <input type="hidden" name="tab" value="{{ $currentTab }}">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <select name="project_id" class="form-select form-select-sm">
                         <option value="">-- All Projects --</option>
                         @foreach($projects as $p)
@@ -160,7 +160,7 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <select name="status" class="form-select form-select-sm">
                         <option value="">-- All Statuses --</option>
                         @foreach(\App\Models\PurchaseRequest::statusLabels() as $key => $lbl)
@@ -168,7 +168,14 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-4 d-flex gap-2">
+                <div class="col-md-3">
+                    <select name="request_type" class="form-select form-select-sm">
+                        <option value="">-- All Request Channels --</option>
+                        <option value="mr" {{ request('request_type') == 'mr' ? 'selected' : '' }}>📋 Site Requisitions (MR Flow)</option>
+                        <option value="direct_pr" {{ request('request_type') == 'direct_pr' ? 'selected' : '' }}>🏢 Direct Purchase Requests</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
                     <button type="submit" class="btn btn-sm btn-secondary flex-grow-1"><i class="fas fa-filter me-1"></i> Filter</button>
                     <a href="{{ route('procurement.my-queue', ['tab' => $currentTab]) }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-undo me-1"></i> Reset</a>
                 </div>
@@ -276,12 +283,12 @@
                         <span class="badge {{ $currentTab === 'completed' ? 'bg-white text-success' : 'bg-success text-white' }} ms-1">{{ $kpi['completed'] }}</span>
                     </a>
                 </li>
-                <!-- Tab 4: All Company PR History (Auditor / Admin / GM) -->
+                <!-- Tab 4: All Company Requests & PR History (Auditor / Admin / GM) -->
                 @if($isAdmin || $isAuditorUser || $isGmUser || $isCoordinatorUser || $isPurchaseManagerUser)
                 <li class="nav-item">
                     <a class="nav-link {{ $currentTab === 'all' ? 'active shadow-sm' : '' }} fw-bold" 
                        href="{{ route('procurement.my-queue', array_merge(request()->query(), ['tab' => 'all'])) }}">
-                        <i class="fas fa-list-check me-1"></i> All Company PR History
+                        <i class="fas fa-list-check me-1"></i> All Company Requests &amp; PRs
                         <span class="badge {{ $currentTab === 'all' ? 'bg-white text-secondary' : 'bg-secondary text-white' }} ms-1">{{ $kpi['all_prs'] }}</span>
                     </a>
                 </li>
@@ -353,14 +360,20 @@
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end align-items-center gap-1">
                                         @if($linkedPr)
-                                            <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-sm btn-outline-primary">
-                                                <i class="fas fa-eye me-1"></i> View PR
+                                            <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-sm btn-outline-primary shadow-xs">
+                                                <i class="fas fa-route me-1"></i> Track PR Flow
                                             </a>
                                         @else
-                                            <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-secondary">
-                                                <i class="fas fa-eye me-1"></i> View MR
-                                            </a>
+                                            <form action="{{ route('material-requests.convert-to-pr', $mr) }}" method="POST" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-sm btn-primary shadow-xs">
+                                                    <i class="fas fa-play me-1"></i> Follow PR Flow
+                                                </button>
+                                            </form>
                                         @endif
+                                        <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-secondary" title="View Material Request Details">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
                                         @if($isGlobalAdmin)
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="Delete MR (Admin Only)" onclick="openDeleteQueueMrModal({{ $mr->id }}, '{{ addslashes($mr->reference_number) }}')">
                                             <i class="fas fa-trash-can"></i>
@@ -428,6 +441,13 @@
                                     <a href="{{ route('purchase-requests.show', $pr->id) }}" class="fw-bold text-decoration-none">
                                         {{ $pr->pr_no }}
                                     </a>
+                                    @if($pr->materialRequest)
+                                        <div class="mt-1">
+                                            <a href="{{ route('material-requests.show', $pr->materialRequest) }}" class="badge bg-info bg-opacity-10 text-primary border border-info border-opacity-25 font-monospace text-decoration-none" title="Linked Material Request">
+                                                <i class="fa-solid fa-clipboard-list me-1"></i>{{ $pr->materialRequest->reference_number }}
+                                            </a>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td>
                                     <span class="fw-medium text-dark">{{ $pr->project?->name ?? 'N/A' }}</span>
@@ -827,6 +847,13 @@
                                     <a href="{{ route('purchase-requests.show', $aPr->id) }}" class="fw-bold text-primary font-monospace text-decoration-none">
                                         {{ $aPr->pr_no }}
                                     </a>
+                                    @if($aPr->materialRequest)
+                                        <div class="mt-1">
+                                            <a href="{{ route('material-requests.show', $aPr->materialRequest) }}" class="badge bg-info bg-opacity-10 text-primary border border-info border-opacity-25 font-monospace text-decoration-none" title="Linked Material Request">
+                                                <i class="fa-solid fa-clipboard-list me-1"></i>{{ $aPr->materialRequest->reference_number }}
+                                            </a>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td>
                                     <strong>{{ $aPr->project?->name ?? 'Head Office' }}</strong>

@@ -234,11 +234,27 @@ class MaterialRequestController extends Controller
             }
         }
 
+        // Auto-create or link companion Purchase Request so this Material Request immediately enters the PR Procurement Flow
+        $linkedPr = null;
+        try {
+            $linkedPr = $mr->createOrGetPurchaseRequest(auth()->id());
+        } catch (\Throwable $e) {
+            \Log::error("Failed to auto-create companion PR for MR #{$mr->reference_number}: " . $e->getMessage());
+        }
+
         if ($request->filled('redirect_back')) {
-            return redirect($request->input('redirect_back'))->with('success', "Emergency Material Request #{$mr->reference_number} submitted directly to Planning Manager.");
+            $msg = "Material Request #{$mr->reference_number} submitted to Procurement Queue";
+            if ($linkedPr) {
+                $msg .= " (PR #{$linkedPr->pr_no}).";
+            }
+            return redirect($request->input('redirect_back'))->with('success', $msg);
         }
         
-        return redirect()->route('material-requests.show', $mr)->with('success', "Emergency Material Request #{$mr->reference_number} created with requested materials and sent directly to Planning Manager for urgent approval.");
+        $msg = "Material Request #{$mr->reference_number} created and entered into the Procurement Lifecycle";
+        if ($linkedPr) {
+            $msg .= " as Purchase Request #{$linkedPr->pr_no}.";
+        }
+        return redirect()->route('material-requests.show', $mr)->with('success', $msg);
     }
 
     public function show(MaterialRequest $materialRequest)
@@ -319,13 +335,18 @@ class MaterialRequestController extends Controller
     public function sendToPr(MaterialRequest $materialRequest)
     {
         Gate::authorize('actionStoreManager', $materialRequest);
-        $materialRequest->update(['status' => 'sent_to_pr']);
+        $pr = $materialRequest->createOrGetPurchaseRequest(auth()->id());
 
-        return redirect()->route('purchase-requests.create', [
-            'material_request_id' => $materialRequest->id,
-            'project_id' => $materialRequest->project_id,
-            'store_id' => $materialRequest->destination_store_id,
-        ])->with('success', 'Material Request routed to Purchase Request creation.');
+        return redirect()->route('purchase-requests.show', $pr)
+            ->with('success', "Material Request #{$materialRequest->reference_number} successfully routed to Purchase Request #{$pr->pr_no} in the Procurement Lifecycle.");
+    }
+
+    public function convertToPr(MaterialRequest $materialRequest)
+    {
+        $pr = $materialRequest->createOrGetPurchaseRequest(auth()->id());
+
+        return redirect()->route('purchase-requests.show', $pr)
+            ->with('success', "Material Request #{$materialRequest->reference_number} is now active in the Procurement Lifecycle as Purchase Request #{$pr->pr_no}.");
     }
 
     public function createTransfer(MaterialRequest $materialRequest)

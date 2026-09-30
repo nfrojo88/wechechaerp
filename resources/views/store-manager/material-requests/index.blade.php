@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'Material Requests - ' . ($isStoreKeeper ? 'Site Store' : 'Store Hub'))
 
@@ -19,11 +19,16 @@
                 {{ $isStoreKeeper ? 'Review material requests from Site Engineers and issue materials directly from ' . ($assignedStore->name ?? 'your site store') : 'Review material requests and process transfers or purchase requests' }}
             </p>
         </div>
-        @if($isStoreKeeper)
-        <a href="{{ route('dashboard.store-keeper') }}" class="btn btn-outline-secondary btn-sm shadow-sm">
-            <i class="fa-solid fa-arrow-left me-1"></i> Store Dashboard
-        </a>
-        @endif
+        <div class="d-flex gap-2">
+            <a href="{{ route('procurement.my-queue') }}" class="btn btn-outline-primary btn-sm shadow-sm">
+                <i class="fas fa-tasks me-1"></i> Procurement — My Queue
+            </a>
+            @if($isStoreKeeper)
+            <a href="{{ route('dashboard.store-keeper') }}" class="btn btn-outline-secondary btn-sm shadow-sm">
+                <i class="fa-solid fa-arrow-left me-1"></i> Store Dashboard
+            </a>
+            @endif
+        </div>
     </div>
 
     {{-- Context Banner --}}
@@ -89,11 +94,21 @@
                     </thead>
                     <tbody>
                         @forelse($requests as $req)
+                        @php
+                            $linkedPr = $req->purchaseRequests->first();
+                        @endphp
                         <tr>
                             <td class="ps-3">
                                 <strong class="font-monospace text-primary">
                                     {{ $req->reference_number ?? '#MR-'.$req->id }}
                                 </strong>
+                                @if($linkedPr)
+                                    <div class="mt-1">
+                                        <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="badge bg-primary text-decoration-none shadow-xs" title="Track in Procurement Lifecycle">
+                                            <i class="fas fa-route me-1"></i>PR #{{ $linkedPr->pr_no }}
+                                        </a>
+                                    </div>
+                                @endif
                                 @if($req->maintenance_request_id && $req->maintenanceRequest)
                                     <div>
                                         <a href="{{ route('general-service.maintenance.show', $req->maintenanceRequest) }}" class="badge bg-warning text-dark text-decoration-none border shadow-xs" title="View linked maintenance ticket">
@@ -112,26 +127,46 @@
                             </td>
                             <td><small class="text-muted">{{ $req->required_date ? $req->required_date->format('d M Y') : '-' }}</small></td>
                             <td>
-                                @switch($req->status)
-                                    @case('pending')
-                                    @case('sent_to_store_manager')
-                                        <span class="badge bg-warning text-dark">Pending Review</span>
-                                        @break
-                                    @case('issued')
-                                        <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Issued</span>
-                                        @break
-                                    @case('processed')
-                                        <span class="badge bg-info text-dark">Processed</span>
-                                        @break
-                                    @case('needs_purchase')
-                                    @case('sent_to_pr')
-                                        <span class="badge bg-secondary">Sent to Purchase</span>
-                                        @break
-                                    @default
-                                        <span class="badge bg-secondary">{{ ucfirst(str_replace('_', ' ', $req->status)) }}</span>
-                                @endswitch
+                                @if($linkedPr)
+                                    <span class="badge bg-{{ \App\Models\PurchaseRequest::statusBadgeClass($linkedPr->status) }} py-1 px-2 d-block mb-1">
+                                        <i class="fas fa-route me-1"></i>{{ $linkedPr->status_label }}
+                                    </span>
+                                    <small class="text-muted" style="font-size:10px;">Owner: {{ ucfirst(str_replace('_', ' ', $linkedPr->current_owner_role ?? 'Store Review')) }}</small>
+                                @else
+                                    @switch($req->status)
+                                        @case('pending')
+                                        @case('sent_to_store_manager')
+                                            <span class="badge bg-warning text-dark">Pending Review</span>
+                                            @break
+                                        @case('issued')
+                                            <span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Issued</span>
+                                            @break
+                                        @case('processed')
+                                            <span class="badge bg-info text-dark">Processed</span>
+                                            @break
+                                        @case('needs_purchase')
+                                        @case('sent_to_pr')
+                                            <span class="badge bg-secondary">Sent to Purchase</span>
+                                            @break
+                                        @default
+                                            <span class="badge bg-secondary">{{ ucfirst(str_replace('_', ' ', $req->status)) }}</span>
+                                    @endswitch
+                                @endif
                             </td>
                             <td class="text-end pe-3">
+                                @if($linkedPr)
+                                    <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-sm btn-outline-primary shadow-xs me-1 fw-semibold" title="Follow full Procurement flow">
+                                        <i class="fas fa-route me-1"></i>Track PR Flow
+                                    </a>
+                                @else
+                                    <form action="{{ route('material-requests.convert-to-pr', $req) }}" method="POST" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-sm btn-primary shadow-xs me-1 fw-semibold" title="Launch complete Purchase Request procurement flow">
+                                            <i class="fas fa-play me-1"></i>Send to PR Flow
+                                        </button>
+                                    </form>
+                                @endif
+
                                 <button type="button" class="btn btn-sm btn-outline-info me-1" data-bs-toggle="modal" data-bs-target="#modal-{{ $req->id }}">
                                     <i class="fas fa-eye me-1"></i>Items
                                 </button>

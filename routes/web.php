@@ -1819,6 +1819,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('material-requests/{materialRequest}/planning-reject', [App\Http\Controllers\MaterialRequestController::class, 'planningReject'])->name('material-requests.planning-reject');
     Route::post('material-requests/{materialRequest}/coordinator-dispatch', [App\Http\Controllers\MaterialRequestController::class, 'coordinatorDispatch'])->name('material-requests.coordinator-dispatch');
     Route::post('material-requests/{materialRequest}/send-to-pr', [App\Http\Controllers\MaterialRequestController::class, 'sendToPr'])->name('material-requests.send-to-pr');
+    Route::post('material-requests/{materialRequest}/convert-to-pr', [App\Http\Controllers\MaterialRequestController::class, 'convertToPr'])->name('material-requests.convert-to-pr');
     Route::post('material-requests/{materialRequest}/create-transfer', [App\Http\Controllers\MaterialRequestController::class, 'createTransfer'])->name('material-requests.create-transfer');
 
 

@@ -31,4 +31,9 @@ class MaterialRequestItem extends Model
     {
         return $this->belongsTo(Product::class);
     }
+
+    public function getQuantityAttribute(): float
+    {
+        return (float)($this->attributes['quantity_requested'] ?? $this->attributes['quantity'] ?? 0);
+    }
 }

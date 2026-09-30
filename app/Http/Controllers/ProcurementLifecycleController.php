@@ -28,6 +28,18 @@ class ProcurementLifecycleController extends Controller
                 ->update(['current_owner_role' => 'purchase_manager']);
         } catch (\Throwable $e) {}
 
+        // Auto-heal / Sync: Ensure every Material Request is seamlessly integrated into the Purchase Request Procurement Lifecycle
+        try {
+            $unlinkedMrs = MaterialRequest::whereDoesntHave('purchaseRequests')
+                ->with(['items.product', 'project'])
+                ->get();
+            foreach ($unlinkedMrs as $uMr) {
+                $uMr->createOrGetPurchaseRequest();
+            }
+        } catch (\Throwable $e) {
+            \Log::error("ProcurementLifecycleController::myQueue auto-sync MRs to PR flow error: " . $e->getMessage());
+        }
+
         $user = Auth::user();
         $roles = $user->getRoleNames()->toArray();
 
@@ -140,6 +152,16 @@ class ProcurementLifecycleController extends Controller
             });
         };
 
+        $applyTypeFilter = function ($q) use ($request) {
+            if ($request->filled('request_type')) {
+                if ($request->request_type === 'mr') {
+                    $q->whereNotNull('material_request_id');
+                } elseif ($request->request_type === 'direct_pr') {
+                    $q->whereNull('material_request_id');
+                }
+            }
+        };
+
         // 1. Identify owner roles to query
         $targetRoles = [];
         if ($isAdmin || $isAuditor) {
@@ -169,7 +191,7 @@ class ProcurementLifecycleController extends Controller
         }
 
         // 2. Fetch PRs awaiting action by this user's role(s)
-        $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'materialRequest', 'items'])
+        $prQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest.project', 'materialRequest.creator', 'items.product'])
             ->latest();
 
         if (!$isAdmin && !$isAuditor) {
@@ -248,6 +270,7 @@ class ProcurementLifecycleController extends Controller
 
         // Apply strict destination store filter for Store Keeper
         $applyPrStoreScope($prQuery);
+        $applyTypeFilter($prQuery);
 
         if ($request->filled('project_id')) {
             $prQuery->where('project_id', $request->project_id);
@@ -261,7 +284,7 @@ class ProcurementLifecycleController extends Controller
         // 3. Emergency / Pending MR approval queue for Planning Team
         $emergencyMrs = collect();
         if ($user->hasRole('planning') || $user->hasRole('planning_manager') || $isAdmin) {
-            $emergencyMrs = MaterialRequest::with(['project', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product'])
+            $emergencyMrs = MaterialRequest::with(['project', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
                 ->where(function($q) {
                     $q->where('planning_approval_status', 'pending')
                       ->orWhereIn('status', ['pending_planning', 'submitted', 'pending']);
@@ -296,7 +319,7 @@ class ProcurementLifecycleController extends Controller
             }
         }
 
-        $materialRequestsQueue = $mrQuery->take(25)->get();
+        $materialRequestsQueue = $mrQuery->take(50)->get();
 
         $pendingOfficeCount = 0;
         $pendingStoreOfficeCount = 0;
@@ -314,6 +337,8 @@ class ProcurementLifecycleController extends Controller
             $createdMrQuery->where('created_by', $user->id);
         }
 
+        $applyTypeFilter($createdPrQuery);
+
         if ($request->filled('project_id')) {
             $createdPrQuery->where('project_id', $request->project_id);
             $createdMrQuery->where('project_id', $request->project_id);
@@ -324,18 +349,19 @@ class ProcurementLifecycleController extends Controller
         }
 
         $myCreatedPrs = $createdPrQuery->paginate(15, ['*'], 'created_pr_page')->withQueryString();
-        $myCreatedMrs = $createdMrQuery->take(25)->get();
+        $myCreatedMrs = $createdMrQuery->take(50)->get();
 
         $myCreatedCount = ($isAdmin || $isAuditor)
             ? (PurchaseRequest::count() + MaterialRequest::count())
             : (PurchaseRequest::where('requested_by', $user->id)->count() + MaterialRequest::where('created_by', $user->id)->count());
 
         // 6. Completed History
-        $completedPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'items.product', 'deliveryReceipts'])
+        $completedPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest', 'items.product', 'deliveryReceipts'])
             ->where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE)
             ->latest();
 
         $applyPrStoreScope($completedPrQuery);
+        $applyTypeFilter($completedPrQuery);
 
         if ($request->filled('project_id')) {
             $completedPrQuery->where('project_id', $request->project_id);
@@ -343,10 +369,11 @@ class ProcurementLifecycleController extends Controller
         $completedPrs = $completedPrQuery->paginate(15, ['*'], 'completed_page')->withQueryString();
 
         // 7. All Company PR History (Oversight)
-        $allPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'items.product'])
+        $allPrQuery = PurchaseRequest::with(['project', 'requestedBy', 'store', 'materialRequest', 'items.product'])
             ->latest();
 
         $applyPrStoreScope($allPrQuery);
+        $applyTypeFilter($allPrQuery);
 
         if ($request->filled('project_id')) {
             $allPrQuery->where('project_id', $request->project_id);
@@ -363,9 +390,11 @@ class ProcurementLifecycleController extends Controller
 
         $completedCountQuery = PurchaseRequest::where('status', PurchaseRequest::STATUS_INTAKE_COMPLETE);
         $applyPrStoreScope($completedCountQuery);
+        $applyTypeFilter($completedCountQuery);
 
         $allPrCountQuery = PurchaseRequest::query();
         $applyPrStoreScope($allPrCountQuery);
+        $applyTypeFilter($allPrCountQuery);
 
         $kpi = [
             'my_pending'                     => $pendingCount,

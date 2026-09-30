@@ -101,7 +101,20 @@
                     <i class="fa-solid fa-truck-ramp-box me-1"></i> Create Transfer
                 </button>
             </form>
-            @endif
+        @php
+            $linkedPr = $materialRequest->purchaseRequests->first();
+        @endphp
+        @if($linkedPr)
+            <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-primary shadow-sm fw-semibold">
+                <i class="fas fa-route me-1"></i> Track PR Flow ({{ $linkedPr->pr_no }})
+            </a>
+        @else
+            <form action="{{ route('material-requests.convert-to-pr', $materialRequest) }}" method="POST" class="d-inline">
+                @csrf
+                <button type="submit" class="btn btn-primary shadow-sm fw-semibold">
+                    <i class="fas fa-play me-1"></i> Launch PR Procurement Flow
+                </button>
+            </form>
         @endif
     </div>
 </div>
@@ -130,6 +143,27 @@
             </form>
         </div>
     </div>
+</div>
+@endif
+
+@if($linkedPr)
+<div class="alert alert-primary bg-primary bg-opacity-10 border-primary border-opacity-25 d-flex align-items-center justify-content-between p-3 rounded-3 shadow-sm mb-4 flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-3">
+        <div class="bg-primary text-white rounded-circle p-2 d-flex align-items-center justify-content-center" style="width:42px;height:42px;">
+            <i class="fas fa-route fs-5"></i>
+        </div>
+        <div>
+            <div class="fw-bold text-dark mb-0">Active in Complete Procurement Lifecycle as <span class="text-primary font-monospace">PR #{{ $linkedPr->pr_no }}</span></div>
+            <div class="small text-muted">
+                Current Stage: <span class="badge bg-{{ \App\Models\PurchaseRequest::statusBadgeClass($linkedPr->status) }}">{{ $linkedPr->status_label }}</span>
+                &bull; Current Owner: <strong>{{ ucfirst(str_replace('_', ' ', $linkedPr->current_owner_role ?? 'Store Review')) }}</strong>
+                &bull; Items: <strong>{{ $linkedPr->items->count() }} materials</strong>
+            </div>
+        </div>
+    </div>
+    <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-sm btn-primary fw-semibold shadow-xs">
+        <i class="fas fa-arrow-up-right-from-square me-1"></i> View &amp; Action in PR Flow
+    </a>
 </div>
 @endif
 
@@ -168,12 +202,12 @@
                 <div class="mb-3">
                     <div class="text-uppercase fw-bold mb-1">Created By</div>
                     <div class="fw-semibold text-dark">{{ $materialRequest->creator?->name ?? 'Staff' }}</div>
-                    <div>{{ optional($materialRequest->created_at)->format('d M Y H:i') ?? '—' }}</div>
+                    <div>{{ optional($materialRequest->created_at)->format('d M Y H:i') ?? 'â€”' }}</div>
                 </div>
                 <div>
                     <div class="text-uppercase fw-bold mb-1">Approved By</div>
-                    <div class="fw-semibold text-dark">{{ $materialRequest->approver?->name ?? '—' }}</div>
-                    <div>{{ $materialRequest->approved_at?->format('d M Y H:i') ?? '—' }}</div>
+                    <div class="fw-semibold text-dark">{{ $materialRequest->approver?->name ?? 'â€”' }}</div>
+                    <div>{{ $materialRequest->approved_at?->format('d M Y H:i') ?? 'â€”' }}</div>
                 </div>
             </div>
         </div>
@@ -324,9 +358,9 @@
                         <div class="col-12">
                             <label class="form-label">Product / Material <span class="text-danger">*</span></label>
                             <select name="product_id" class="form-select" required>
-                                <option value="">— Select Product —</option>
+                                <option value="">â€” Select Product â€”</option>
                                 @foreach($products as $p)
-                                <option value="{{ $p->id }}">{{ $p->name }} ({{ $p->code }}) – {{ $p->unit }}</option>
+                                <option value="{{ $p->id }}">{{ $p->name }} ({{ $p->code }}) â€“ {{ $p->unit }}</option>
                                 @endforeach
                             </select>
                         </div>
