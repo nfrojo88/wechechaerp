@@ -497,6 +497,114 @@
                         </div>
                     </div>
 
+                    @php
+                        $rawReq = ($item->type === 'expense_request') ? $item->raw_model : null;
+                        $mReq = $rawReq?->maintenanceRequest ?? null;
+                        $techName = $mReq?->maintenance_person_name;
+                        $techAcc = $mReq?->maintenance_person_account;
+                        $techPhone = $mReq?->maintenance_person_phone;
+                        $custodian = $mReq?->pettyCashOwner ?? $rawReq?->pettyCashOwner ?? null;
+                        $emp = $rawReq?->employee ?? $rawReq?->user?->employee ?? null;
+
+                        // Fallback parser from description text if direct attributes are missing
+                        if (!$techAcc && preg_match('/Acc:\s*([0-9A-Za-z\s\-]+?)(?:,|\)|\.|$)/i', $item->description ?? '', $accM)) {
+                            $techAcc = trim($accM[1]);
+                        }
+                        if (!$techPhone && preg_match('/Tel:\s*([0-9\+\s\-]+?)(?:,|\)|\.|$)/i', $item->description ?? '', $telM)) {
+                            $techPhone = trim($telM[1]);
+                        }
+                        if (!$techName && preg_match('/Technician:\s*([^\(]+?)(?:\(|$)/i', $item->description ?? '', $techM)) {
+                            $techName = trim($techM[1]);
+                        }
+                        $custodianName = $custodian?->name;
+                        if (!$custodianName && preg_match('/Petty Cash Custodian:\s*([^\.]+?)(?:\.|$)/i', $item->description ?? '', $custM)) {
+                            $custodianName = trim($custM[1]);
+                        }
+                        $hasBankInfo = !empty($techAcc) || !empty($emp?->account_number) || !empty($techName) || !empty($techPhone);
+                    @endphp
+
+                    @if($hasBankInfo)
+                        {{-- 💳 Beneficiary Bank & Payment Recipient Card --}}
+                        <div class="card border border-success border-opacity-50 rounded-4 mb-4 overflow-hidden shadow-xs">
+                            <div class="card-header bg-success bg-opacity-10 py-3 px-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="rounded-circle p-2 text-white bg-success d-flex align-items-center justify-content-center" style="width:32px;height:32px;">
+                                        <i class="fa-solid fa-building-columns fs-6"></i>
+                                    </span>
+                                    <div>
+                                        <h6 class="mb-0 fw-bold text-dark">Beneficiary &amp; Bank Account Information (የባንክ እና የክፍያ መረጃ)</h6>
+                                        <small class="text-muted">Payment recipient details for finance disbursement &amp; electronic transfer.</small>
+                                    </div>
+                                </div>
+                                <span class="badge bg-success font-monospace px-3 py-1.5 fs-6 shadow-xs">
+                                    <i class="fa-solid fa-money-bill-transfer me-1"></i>Payee Bank Details
+                                </span>
+                            </div>
+                            <div class="card-body p-3 bg-white">
+                                <div class="row g-3">
+                                    {{-- Account Number with Copy Button --}}
+                                    <div class="col-md-5">
+                                        <div class="p-3 rounded-3 bg-success bg-opacity-10 border border-success border-opacity-25 h-100">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <small class="text-success text-uppercase fw-bold" style="font-size:0.75rem;">
+                                                    <i class="fa-solid fa-credit-card me-1"></i>Bank Account Number
+                                                </small>
+                                                @if($techAcc || $emp?->account_number)
+                                                    <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-semibold" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $techAcc ?: $emp?->account_number }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
+                                                        <i class="fa-regular fa-copy me-1"></i>Copy
+                                                    </button>
+                                                @endif
+                                            </div>
+                                            <div class="fs-5 fw-bold text-success font-monospace">
+                                                {{ $techAcc ?: ($emp?->account_number ?: 'Not on file') }}
+                                            </div>
+                                            <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
+                                                <i class="fa-solid fa-building-columns me-1 text-secondary"></i>Bank: <strong>{{ $emp?->bank_name ?: 'Commercial Bank of Ethiopia (CBE) / Local Bank' }}</strong>
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    {{-- Payee / Technician Name --}}
+                                    <div class="col-md-4">
+                                        <div class="p-3 rounded-3 bg-light border h-100">
+                                            <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
+                                                <i class="fa-solid fa-user-check text-primary me-1"></i>Beneficiary / Technician Name
+                                            </small>
+                                            <div class="fs-6 fw-bold text-dark">
+                                                {{ $techName ?: ($emp?->full_name ?: ($item->applicant_name ?? 'Payee')) }}
+                                            </div>
+                                            @if($techPhone)
+                                                <div class="small mt-1 text-muted">
+                                                    <i class="fa-solid fa-phone text-info me-1"></i>Tel: <a href="tel:{{ $techPhone }}" class="fw-bold text-dark text-decoration-none">{{ $techPhone }}</a>
+                                                </div>
+                                            @elseif($emp?->phone)
+                                                <div class="small mt-1 text-muted">
+                                                    <i class="fa-solid fa-phone text-info me-1"></i>Tel: <a href="tel:{{ $emp->phone }}" class="fw-bold text-dark text-decoration-none">{{ $emp->phone }}</a>
+                                                </div>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    {{-- Custodian & Disbursement Amount --}}
+                                    <div class="col-md-3">
+                                        <div class="p-3 rounded-3 bg-light border h-100">
+                                            <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
+                                                <i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i>Petty Cash Custodian
+                                            </small>
+                                            <div class="fw-bold text-primary small">
+                                                {{ $custodianName ?: ($item->applicant_name ?? 'Assigned Custodian') }}
+                                            </div>
+                                            <div class="mt-2 pt-2 border-top">
+                                                <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Amount Due to Pay</small>
+                                                <strong class="text-danger font-monospace fs-6">ETB {{ number_format($item->net_amount, 2) }}</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
                     @if($item->status_key === 'finance_queue')
                         <div class="p-3 mb-4 rounded-3 border border-warning bg-warning bg-opacity-10">
                             <div class="d-flex align-items-center justify-content-between mb-2">
@@ -651,14 +759,39 @@
                         @if($req->maintenanceRequest)
                             {{-- Maintenance Request Summary Card --}}
                             <div class="card border border-warning border-opacity-25 rounded-4 mb-4 overflow-hidden shadow-xs">
-                                <div class="card-header bg-warning bg-opacity-10 py-3 px-4">
+                                <div class="card-header bg-warning bg-opacity-10 py-3 px-4 d-flex justify-content-between align-items-center">
                                     <h6 class="mb-0 fw-bold text-dark"><i class="fa-solid fa-screwdriver-wrench text-warning me-2"></i>Linked Maintenance Ticket: {{ $req->maintenanceRequest->request_no }}</h6>
+                                    <span class="badge bg-warning text-dark font-monospace">{{ $req->maintenanceRequest->status ?? 'Approved' }}</span>
                                 </div>
                                 <div class="card-body p-3">
                                     <div class="row g-2 small">
                                         <div class="col-md-6"><strong>Asset / Equipment:</strong> {{ $req->maintenanceRequest->asset_name }} ({{ $req->maintenanceRequest->asset_code ?? 'Tag' }})</div>
                                         <div class="col-md-6"><strong>Issue Category:</strong> {{ $req->maintenanceRequest->issue_type_label }}</div>
                                         <div class="col-12 mt-2"><strong>Fault Description:</strong> {{ $req->maintenanceRequest->description }}</div>
+                                        @if($req->maintenanceRequest->maintenance_person_name || $req->maintenanceRequest->maintenance_person_account || $req->maintenanceRequest->maintenance_person_phone)
+                                            <div class="col-12 mt-2 pt-2 border-top">
+                                                <div class="row g-2">
+                                                    <div class="col-md-4">
+                                                        <span class="text-muted d-block">Assigned Technician:</span>
+                                                        <strong class="text-dark"><i class="fa-solid fa-user-gear text-primary me-1"></i>{{ $req->maintenanceRequest->maintenance_person_name ?? 'N/A' }}</strong>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <span class="text-muted d-block">Bank Account No:</span>
+                                                        <strong class="text-success font-monospace"><i class="fa-solid fa-credit-card text-success me-1"></i>{{ $req->maintenanceRequest->maintenance_person_account ?? 'N/A' }}</strong>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <span class="text-muted d-block">Technician Phone:</span>
+                                                        <strong class="text-dark">
+                                                            @if($req->maintenanceRequest->maintenance_person_phone)
+                                                                <i class="fa-solid fa-phone text-info me-1"></i><a href="tel:{{ $req->maintenanceRequest->maintenance_person_phone }}" class="text-dark text-decoration-none">{{ $req->maintenanceRequest->maintenance_person_phone }}</a>
+                                                            @else
+                                                                N/A
+                                                            @endif
+                                                        </strong>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endif
                                     </div>
                                 </div>
                             </div>
@@ -922,17 +1055,50 @@
                             @endif
 
                             @if($req->maintenanceRequest)
-                                <div class="alert alert-warning border border-warning d-flex align-items-center justify-content-between p-3 rounded-3 mb-3">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <i class="fa-solid fa-wrench text-warning fs-5"></i>
-                                        <div>
-                                            <strong class="text-dark">Maintenance Request Ticket: {{ $req->maintenanceRequest->request_no }}</strong>
-                                            <span class="text-muted small d-block">Asset: <strong>{{ $req->maintenanceRequest->asset_name }}</strong> ({{ $req->maintenanceRequest->asset_code ?? 'Asset' }}) &bull; Category: {{ $req->maintenanceRequest->issue_category ?? 'Maintenance' }}</span>
+                                <div class="card border border-warning border-opacity-50 rounded-3 mb-3 overflow-hidden shadow-xs">
+                                    <div class="card-header bg-warning bg-opacity-10 py-2 px-3 d-flex align-items-center justify-content-between">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <i class="fa-solid fa-screwdriver-wrench text-warning fs-5"></i>
+                                            <div>
+                                                <strong class="text-dark">Maintenance Ticket: {{ $req->maintenanceRequest->request_no }}</strong>
+                                                <span class="text-muted small d-block">Asset: <strong>{{ $req->maintenanceRequest->asset_name }}</strong> ({{ $req->maintenanceRequest->asset_code ?? 'Asset' }}) &bull; Category: {{ $req->maintenanceRequest->issue_category ?? 'Maintenance' }}</span>
+                                            </div>
                                         </div>
+                                        <a href="{{ route('general-service.maintenance.show', $req->maintenanceRequest) }}" target="_blank" class="btn btn-sm btn-outline-dark rounded-pill px-3">
+                                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Ticket
+                                        </a>
                                     </div>
-                                    <a href="{{ route('general-service.maintenance.show', $req->maintenanceRequest) }}" target="_blank" class="btn btn-sm btn-outline-dark rounded-pill px-3">
-                                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View Ticket
-                                    </a>
+                                    @if($req->maintenanceRequest->maintenance_person_name || $req->maintenanceRequest->maintenance_person_account || $req->maintenanceRequest->maintenance_person_phone)
+                                        <div class="card-body p-3 bg-white">
+                                            <div class="row g-2 small">
+                                                <div class="col-md-4">
+                                                    <span class="text-muted d-block">Assigned Technician:</span>
+                                                    <strong class="text-dark"><i class="fa-solid fa-user-gear text-primary me-1"></i>{{ $req->maintenanceRequest->maintenance_person_name ?? 'N/A' }}</strong>
+                                                </div>
+                                                <div class="col-md-5">
+                                                    <span class="text-muted d-block">Technician Bank Account:</span>
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <strong class="text-success font-monospace fs-6">{{ $req->maintenanceRequest->maintenance_person_account ?? 'N/A' }}</strong>
+                                                        @if($req->maintenanceRequest->maintenance_person_account)
+                                                            <button type="button" class="btn btn-xs btn-outline-success py-0 px-2" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $req->maintenanceRequest->maintenance_person_account }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
+                                                                <i class="fa-regular fa-copy me-1"></i>Copy
+                                                            </button>
+                                                        @endif
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <span class="text-muted d-block">Phone Number:</span>
+                                                    <strong class="text-dark">
+                                                        @if($req->maintenanceRequest->maintenance_person_phone)
+                                                            <i class="fa-solid fa-phone text-info me-1"></i><a href="tel:{{ $req->maintenanceRequest->maintenance_person_phone }}" class="text-dark text-decoration-none">{{ $req->maintenanceRequest->maintenance_person_phone }}</a>
+                                                        @else
+                                                            N/A
+                                                        @endif
+                                                    </strong>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endif
                                 </div>
                             @endif
 
@@ -1189,6 +1355,61 @@
                                 <div class="small text-muted mb-1"><i class="fa-solid fa-sitemap me-1"></i> Paying Account: <strong>{{ $req->chartOfAccount->name ?? ($req->coa->name ?? 'Default Petty Cash') }}</strong></div>
                                 <div class="small text-muted"><i class="fa-solid fa-list me-1"></i> Description: {{ $req->description }}</div>
                             </div>
+
+                            @php
+                                $payMReq = $req->maintenanceRequest ?? null;
+                                $payTechName = $payMReq?->maintenance_person_name;
+                                $payTechAcc = $payMReq?->maintenance_person_account;
+                                $payTechPhone = $payMReq?->maintenance_person_phone;
+                                $payEmp = $req->employee ?? $req->user?->employee ?? null;
+
+                                if (!$payTechAcc && preg_match('/Acc:\s*([0-9A-Za-z\s\-]+?)(?:,|\)|\.|$)/i', $req->description ?? '', $pAccM)) {
+                                    $payTechAcc = trim($pAccM[1]);
+                                }
+                                if (!$payTechPhone && preg_match('/Tel:\s*([0-9\+\s\-]+?)(?:,|\)|\.|$)/i', $req->description ?? '', $pTelM)) {
+                                    $payTechPhone = trim($pTelM[1]);
+                                }
+                                if (!$payTechName && preg_match('/Technician:\s*([^\(]+?)(?:\(|$)/i', $req->description ?? '', $pTechM)) {
+                                    $payTechName = trim($pTechM[1]);
+                                }
+                                $hasPayBankInfo = !empty($payTechAcc) || !empty($payEmp?->account_number) || !empty($payTechName) || !empty($payTechPhone);
+                            @endphp
+
+                            @if($hasPayBankInfo)
+                                <div class="card border border-success border-opacity-50 rounded-3 mb-3 bg-success bg-opacity-10 overflow-hidden shadow-xs">
+                                    <div class="card-body p-3">
+                                        <div class="row g-2 align-items-center">
+                                            <div class="col-md-5 border-end pe-3">
+                                                <small class="text-success text-uppercase fw-bold d-block" style="font-size:0.75rem;">
+                                                    <i class="fa-solid fa-credit-card me-1"></i>Payee Bank Account
+                                                </small>
+                                                <div class="d-flex align-items-center gap-2 mt-1">
+                                                    <span class="fs-5 fw-bold text-success font-monospace">{{ $payTechAcc ?: ($payEmp?->account_number ?: 'Not on file') }}</span>
+                                                    @if($payTechAcc || $payEmp?->account_number)
+                                                        <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-semibold" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $payTechAcc ?: $payEmp?->account_number }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
+                                                            <i class="fa-regular fa-copy me-1"></i>Copy
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                                <small class="text-muted d-block" style="font-size:0.72rem;">Bank: <strong>{{ $payEmp?->bank_name ?: 'Commercial Bank of Ethiopia (CBE)' }}</strong></small>
+                                            </div>
+                                            <div class="col-md-4 border-end pe-3">
+                                                <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.75rem;">
+                                                    <i class="fa-solid fa-user-check text-primary me-1"></i>Beneficiary / Technician
+                                                </small>
+                                                <strong class="text-dark d-block">{{ $payTechName ?: ($payEmp?->full_name ?: $item->applicant_name) }}</strong>
+                                                @if($payTechPhone || $payEmp?->phone)
+                                                    <small class="text-muted"><i class="fa-solid fa-phone text-info me-1"></i><a href="tel:{{ $payTechPhone ?: $payEmp?->phone }}" class="text-dark text-decoration-none">{{ $payTechPhone ?: $payEmp?->phone }}</a></small>
+                                                @endif
+                                            </div>
+                                            <div class="col-md-3">
+                                                <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.72rem;">Amount to Disburse</small>
+                                                <strong class="text-danger font-monospace fs-5">ETB {{ number_format($req->amount, 2) }}</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
 
                             <!-- Category & Gross Invoice Amount -->
                             <div class="row g-3 mb-3">
