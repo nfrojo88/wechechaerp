@@ -379,9 +379,11 @@
                                             </span>
                                         @endif
                                     @elseif($d->isApproved())
-                                        <span class="badge bg-success-subtle text-success border border-success px-2 py-1">
-                                            <i class="fa-solid fa-calendar-check me-1"></i>In Attendance
-                                        </span>
+                                        <a href="{{ route('attendance.index', ['date' => $d->start_date?->format('Y-m-d'), 'employee' => $d->employee?->full_name]) }}" 
+                                           class="btn btn-outline-success btn-sm px-2 py-1 shadow-xs fw-semibold" 
+                                           title="View this employee in attendance section with Status S">
+                                            <span class="badge bg-success text-white me-1" style="font-size:0.68rem;">S</span> In Attendance <i class="fa-solid fa-arrow-up-right-from-square ms-1" style="font-size:0.7rem;"></i>
+                                        </a>
                                     @elseif($d->isRejected())
                                         <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-1" data-bs-toggle="modal" data-bs-target="#rejectionDetailModal{{ $d->id }}" title="View Rejection Details">
                                             <i class="fa-solid fa-eye me-1"></i>Reason

@@ -255,6 +255,7 @@
                         <select name="status" class="form-select">
                             <option value="">All Statuses</option>
                             <option value="present" {{ request('status') === 'present' ? 'selected' : '' }}>Present</option>
+                            <option value="S" {{ in_array(request('status'), ['S', 'site', 's']) ? 'selected' : '' }}>S - On Site (ሳይት ላይ)</option>
                             <option value="half_day" {{ request('status') === 'half_day' ? 'selected' : '' }}>Half Day</option>
                             <option value="absent" {{ request('status') === 'absent' ? 'selected' : '' }}>Absent</option>
                             <option value="leave" {{ request('status') === 'leave' ? 'selected' : '' }}>Leave</option>
@@ -356,21 +357,23 @@
 
         {{-- On Site (S) Card --}}
         <div class="col-6 col-lg">
-            <div class="card border-0 border-start border-4 shadow-sm h-100 py-2 bg-white" style="border-left-color: #6366f1 !important;">
-                <div class="card-body py-2 px-3">
-                    <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #6366f1;">
-                        On Site (S) &bull; {{ $stats['title'] ?? 'Selected Period' }}
-                    </div>
-                    @if(!empty($stats['et_title']))
-                    <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
-                        🇪🇹 {{ $stats['et_title'] }}
-                    </small>
-                    @endif
-                    <div class="h4 mb-0 font-weight-bold" style="color: #6366f1;">
-                        {{ $stats['site'] ?? 0 }}
+            <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['status' => 'S'])) }}" class="text-decoration-none">
+                <div class="card border-0 border-start border-4 shadow-sm h-100 py-2 bg-white" style="border-left-color: #6366f1 !important;">
+                    <div class="card-body py-2 px-3">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #6366f1;">
+                            On Site (S) &bull; {{ $stats['title'] ?? 'Selected Period' }}
+                        </div>
+                        @if(!empty($stats['et_title']))
+                        <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
+                            🇪🇹 {{ $stats['et_title'] }}
+                        </small>
+                        @endif
+                        <div class="h4 mb-0 font-weight-bold" style="color: #6366f1;">
+                            {{ $stats['site'] ?? 0 }}
+                        </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
 
         {{-- Late Days & 3 Late = 1 Absent Penalty Card --}}
@@ -684,15 +687,21 @@
                                         'holiday' => 'secondary',
                                         'weekend' => 'light'
                                     ];
+                                    $isSite = in_array(strtoupper((string)$a->status), ['S', 'SITE', 'ON_SITE']) 
+                                        || str_contains((string)($a->notes ?? ''), 'On-Site')
+                                        || $a->source === 'site_dispatch'
+                                        || (method_exists($a, 'isOnSite') && $a->isOnSite());
                                     $rowStatus = $a->status;
-                                    // Under company policy, employees with punches or worked hours are Present (morning session is not required)
-                                    if ($rowStatus === 'half_day' && ($a->hours_worked > 0 || $a->morning_in || $a->afternoon_in || $a->check_in)) {
-                                        $rowStatus = 'present';
-                                    } elseif ($a->attendance_date && $a->attendance_date->isSaturday() && $rowStatus === 'half_day' && ($a->morning_in || $a->hours_worked >= 2.0)) {
-                                        $rowStatus = 'present';
+                                    if (!$isSite) {
+                                        // Under company policy, employees with punches or worked hours are Present (morning session is not required)
+                                        if ($rowStatus === 'half_day' && ($a->hours_worked > 0 || $a->morning_in || $a->afternoon_in || $a->check_in)) {
+                                            $rowStatus = 'present';
+                                        } elseif ($a->attendance_date && $a->attendance_date->isSaturday() && $rowStatus === 'half_day' && ($a->morning_in || $a->hours_worked >= 2.0)) {
+                                            $rowStatus = 'present';
+                                        }
                                     }
                                 @endphp
-                                @if(in_array(strtolower($a->status), ['s', 'site', 'on_site']) || str_contains($a->notes ?? '', 'On-Site'))
+                                @if($isSite)
                                     <span class="badge text-white px-2 py-1 shadow-xs fw-bold" style="background-color: #6366f1;" title="{{ $a->notes }}">
                                         <span class="badge bg-white text-dark me-1" style="font-size:0.75rem;">S</span> On Site (ሳይት ላይ)
                                     </span>
@@ -720,7 +729,7 @@
                                 @endif
                             </td>
                             <td>
-                                @if(str_contains($a->notes ?? '', 'On-Site'))
+                                @if(str_contains($a->notes ?? '', 'On-Site') || in_array(strtoupper((string)$a->status), ['S', 'SITE', 'ON_SITE']) || $a->source === 'site_dispatch')
                                     <span class="badge bg-purple-subtle text-purple border" style="background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe !important;">
                                         <i class="fa-solid fa-location-dot me-1"></i>Site Assigned
                                     </span>

@@ -30,6 +30,20 @@ class AttendanceController extends Controller
                 ->update(['device_user_id' => null]);
         } catch (\Throwable $e) {}
 
+        // Guarantee all approved site deployments are reflected in Attendance with status 'S'
+        try {
+            $driver = DB::connection()->getDriverName();
+            if ($driver !== 'sqlite') {
+                DB::statement("ALTER TABLE `attendance` MODIFY `status` VARCHAR(50) NOT NULL DEFAULT 'present'");
+            }
+            $approvedDeployments = \App\Models\SiteDeploymentRequest::where('status', 'approved')
+                ->with('employee')
+                ->get();
+            foreach ($approvedDeployments as $dep) {
+                self::applyDeploymentToAttendance($dep);
+            }
+        } catch (\Throwable $e) {}
+
         $query = Attendance::activeRoster()->with('employee')->latest('attendance_date');
 
         // Filter by specific single date, month, or date range
@@ -170,6 +184,11 @@ class AttendanceController extends Controller
         // ── Auto-heal & Clean: All employees with punch records or worked hours are PRESENT ──
         try {
             Attendance::where('status', 'half_day')
+                ->whereNotIn('status', ['S', 's', 'site', 'on_site'])
+                ->where('source', '!=', 'site_dispatch')
+                ->where(function($q) {
+                    $q->whereNull('notes')->orWhere('notes', 'not like', '%On-Site%');
+                })
                 ->where(function ($q) {
                     $q->whereNotNull('morning_in')
                       ->orWhereNotNull('morning_out')
@@ -834,6 +853,8 @@ class AttendanceController extends Controller
             $finalCIn  = $finalMIn ?: ($finalAIn ?: ($existing?->check_in));
             $finalCOut = $finalAOut ?: ($finalMOut ?: ($existing?->check_out));
 
+            $effectiveHours = $hours > 0 ? $hours : 8.0;
+
             $data = [
                 'status'         => 'S', // 'S' for site attendance, non-deductible in payroll
                 'source'         => 'site_dispatch',
@@ -843,7 +864,7 @@ class AttendanceController extends Controller
                 'afternoon_out'  => $finalAOut,
                 'check_in'       => $finalCIn,
                 'check_out'      => $finalCOut,
-                'hours_worked'   => $hours,
+                'hours_worked'   => $effectiveHours,
                 'notes'          => $formattedNote,
                 'is_approved'    => true,
                 'approved_by'    => $user?->id,

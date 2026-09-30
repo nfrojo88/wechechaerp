@@ -81,7 +81,8 @@ class Attendance extends Model
     public function isOnSite(): bool
     {
         return in_array(strtolower((string)$this->status), ['s', 'site', 'on_site'])
-            || str_contains((string)($this->notes ?? ''), 'On-Site');
+            || str_contains((string)($this->notes ?? ''), 'On-Site')
+            || $this->source === 'site_dispatch';
     }
 
     /**

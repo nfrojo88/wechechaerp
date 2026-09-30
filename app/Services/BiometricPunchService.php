@@ -459,7 +459,18 @@ class BiometricPunchService
                 }
 
                 if (!empty($updateData)) {
-                    $updateData['status'] = 'present';
+                    $isSiteDeployment = ($existing && ($existing->status === 'S' || $existing->source === 'site_dispatch' || $existing->isOnSite()))
+                        || \App\Models\SiteDeploymentRequest::where('employee_id', $employee->id)
+                            ->where('status', 'approved')
+                            ->where('start_date', '<=', $date)
+                            ->where('end_date', '>=', $date)
+                            ->exists();
+
+                    if (!$isSiteDeployment) {
+                        $updateData['status'] = 'present';
+                    } else {
+                        $updateData['status'] = 'S';
+                    }
                     $existing->update($updateData);
                 }
             }
@@ -482,6 +493,13 @@ class BiometricPunchService
             $siteProjName = $zkDev->project?->name ?? ($zkDev->location ?? 'Site');
         }
 
+        $isSiteDeployment = ($existing && ($existing->status === 'S' || $existing->source === 'site_dispatch' || $existing->isOnSite()))
+            || \App\Models\SiteDeploymentRequest::where('employee_id', $employee->id)
+                ->where('status', 'approved')
+                ->where('start_date', '<=', $date)
+                ->where('end_date', '>=', $date)
+                ->exists();
+
         $data = [
             'employee_id'         => $employee->id,
             'attendance_date'     => $date,
@@ -493,8 +511,8 @@ class BiometricPunchService
             'afternoon_out'       => $mapped['afternoon_out'],
             'hours_worked'        => $mapped['hours_worked'] ?? ($existing?->hours_worked),
             'late_minutes'        => $mapped['late_minutes'] ?? 0,
-            'status'              => 'present',
-            'source'              => 'biometric',
+            'status'              => $isSiteDeployment ? 'S' : 'present',
+            'source'              => $isSiteDeployment ? ($existing?->source ?? 'site_dispatch') : 'biometric',
             'biometric_device_id' => $actualDevSn,
             'site_project_id'     => $siteProjId ?? ($existing?->site_project_id),
             'site_name'           => $siteProjName ?? ($existing?->site_name),
@@ -535,6 +553,11 @@ class BiometricPunchService
     {
         try {
             $query = Attendance::with('employee')
+                ->whereNotIn('status', ['S', 's', 'site', 'on_site'])
+                ->where('source', '!=', 'site_dispatch')
+                ->where(function ($q) {
+                    $q->whereNull('notes')->orWhere('notes', 'not like', '%On-Site%');
+                })
                 ->where(function ($q) {
                     $q->whereNull('morning_in')
                       ->orWhereNull('morning_out')
