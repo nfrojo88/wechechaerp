@@ -1061,6 +1061,7 @@ class AttendanceController extends Controller
     {
         $validated = $request->validate([
             'status'          => 'required|string',
+            'device_user_id'  => 'nullable|string|max:50',
             'morning_in'      => 'nullable|string',
             'morning_out'     => 'nullable|string',
             'afternoon_in'    => 'nullable|string',
@@ -1072,6 +1073,19 @@ class AttendanceController extends Controller
         ]);
 
         self::ensureAttendanceSchemaReady();
+
+        // Update Device ID on Employee and Attendance record if requested
+        $cleanDevId = null;
+        if ($request->has('device_user_id')) {
+            $rawDevId = trim((string)$request->input('device_user_id'));
+            $cleanDevId = $rawDevId !== '' ? $rawDevId : null;
+            if ($attendance->employee) {
+                $attendance->employee->update(['device_user_id' => $cleanDevId]);
+            }
+            $attendance->biometric_device_id = $cleanDevId;
+        } else {
+            $cleanDevId = $attendance->employee?->device_user_id;
+        }
 
         $status = $validated['status'];
         if (in_array(strtolower($status), ['s', 'site', 'on_site'])) {
@@ -1087,6 +1101,26 @@ class AttendanceController extends Controller
         $mOut = !empty($validated['morning_out']) ? substr(trim($validated['morning_out']), 0, 5) : null;
         $aIn  = !empty($validated['afternoon_in']) ? substr(trim($validated['afternoon_in']), 0, 5) : null;
         $aOut = !empty($validated['afternoon_out']) ? substr(trim($validated['afternoon_out']), 0, 5) : null;
+
+        // If punch times are empty and a device ID is provided/updated, check if raw device logs exist for this date
+        if (!empty($cleanDevId) && empty($mIn) && empty($mOut) && empty($aIn) && empty($aOut) && $status !== 'absent') {
+            try {
+                $rawLogs = DB::table('device_attendance_logs')
+                    ->where('user_id', $cleanDevId)
+                    ->whereDate('punch_time', $dateStr)
+                    ->pluck('punch_time')
+                    ->all();
+                if (!empty($rawLogs)) {
+                    $calc = \App\Services\BiometricPunchService::calculateAttendanceRecord($rawLogs, $dateStr, $isSat);
+                    if (!empty($calc['morning_in']) || !empty($calc['afternoon_in'])) {
+                        $mIn  = $calc['morning_in'] ?? $mIn;
+                        $mOut = $calc['morning_out'] ?? $mOut;
+                        $aIn  = $calc['afternoon_in'] ?? $aIn;
+                        $aOut = $calc['afternoon_out'] ?? $aOut;
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
 
         $cIn  = $mIn ?: $aIn;
         $cOut = $aOut ?: $mOut;
@@ -1173,6 +1207,7 @@ class AttendanceController extends Controller
     {
         $validated = $request->validate([
             'employee_id'     => 'required|exists:employees,id',
+            'device_user_id'  => 'nullable|string|max:50',
             'attendance_date' => 'required|date',
             'status'          => 'required|string',
             'morning_in'      => 'nullable|string',
@@ -1186,6 +1221,15 @@ class AttendanceController extends Controller
         ]);
 
         self::ensureAttendanceSchemaReady();
+
+        if ($request->has('device_user_id')) {
+            $rawDevId = trim((string)$request->input('device_user_id'));
+            $cleanDevId = $rawDevId !== '' ? $rawDevId : null;
+            $emp = Employee::find($validated['employee_id']);
+            if ($emp) {
+                $emp->update(['device_user_id' => $cleanDevId]);
+            }
+        }
 
         $status = $validated['status'];
         if (in_array(strtolower($status), ['s', 'site', 'on_site'])) {

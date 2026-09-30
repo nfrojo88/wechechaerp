@@ -834,9 +834,13 @@
                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1 font-monospace">
                                     {{ $a->employee?->employee_code }}
                                 </span>
-                                @if($modalDevId !== 'None')
+                                @if(!empty($a->employee?->device_user_id))
                                     <span class="badge bg-info-subtle text-info border border-info-subtle ms-1 font-monospace">
-                                        Device: {{ $modalDevId }}
+                                        <i class="fa-solid fa-fingerprint me-0.5"></i>Device: {{ $a->employee->device_user_id }}
+                                    </span>
+                                @else
+                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle ms-1 font-monospace">
+                                        <i class="fa-solid fa-triangle-exclamation me-0.5"></i>No Device ID
                                     </span>
                                 @endif
                             </div>
@@ -852,7 +856,7 @@
 
                     <div class="row g-3">
                         {{-- Status Selection --}}
-                        <div class="col-12 col-md-6">
+                        <div class="col-12 col-md-5">
                             <label class="form-label fw-bold text-dark mb-1">
                                 <i class="fa-solid fa-tag me-1 text-primary"></i>Attendance Status <span class="text-danger">*</span>
                             </label>
@@ -864,21 +868,38 @@
                                 <option value="leave" {{ $currentStatus === 'leave' ? 'selected' : '' }}>🌴 Leave (ፈቃድ ላይ)</option>
                                 <option value="holiday" {{ $currentStatus === 'holiday' ? 'selected' : '' }}>🎉 Holiday (የበዓል ቀን)</option>
                             </select>
-                            <small class="text-muted">Selecting <strong>Absent</strong> sets worked hours to 0 and clears clock times.</small>
+                            <small class="text-muted">Selecting <strong>Absent</strong> sets worked hours to 0.</small>
+                        </div>
+
+                        {{-- Biometric Device ID (Editable) --}}
+                        <div class="col-12 col-md-3">
+                            <label class="form-label fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-fingerprint me-1 text-primary"></i>Device ID (የመሳሪያ ID)
+                            </label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text bg-white text-primary">
+                                    <i class="fa-solid fa-id-badge"></i>
+                                </span>
+                                <input type="text" name="device_user_id" id="devUserId{{ $a->id }}" 
+                                       class="form-control form-control-lg font-monospace fw-bold" 
+                                       value="{{ $a->employee?->device_user_id ?? ($a->biometric_device_id ?? '') }}" 
+                                       placeholder="e.g. 16" title="Change or assign employee ZKTeco Device User ID">
+                            </div>
+                            <small class="text-muted" style="font-size: 0.72rem;">Update employee device ID</small>
                         </div>
 
                         {{-- Hours Worked --}}
-                        <div class="col-12 col-md-6">
+                        <div class="col-12 col-md-4">
                             <label class="form-label fw-bold text-dark mb-1">
-                                <i class="fa-solid fa-business-time me-1 text-primary"></i>Total Hours Worked (የተሠራ ሰዓት)
+                                <i class="fa-solid fa-business-time me-1 text-primary"></i>Total Hours (የተሠራ ሰዓት)
                             </label>
                             <input type="number" step="0.1" min="0" max="24" name="hours_worked" id="hoursWorked{{ $a->id }}" 
                                    class="form-control form-control-lg font-monospace fw-bold" 
                                    value="{{ $a->hours_worked ?? 0 }}" placeholder="e.g. 8.0">
                             <div class="d-flex gap-1 mt-1">
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size: 0.72rem;" onclick="setHours{{ $a->id }}(8.0)">8.0h Full Day</button>
-                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size: 0.72rem;" onclick="setHours{{ $a->id }}(4.0)">4.0h Half Day</button>
-                                <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size: 0.72rem;" onclick="setHours{{ $a->id }}(0.0)">0.0h Absent</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size: 0.72rem;" onclick="setHours{{ $a->id }}(8.0)">8.0h</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size: 0.72rem;" onclick="setHours{{ $a->id }}(4.0)">4.0h</button>
+                                <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size: 0.72rem;" onclick="setHours{{ $a->id }}(0.0)">0.0h</button>
                             </div>
                         </div>
 
@@ -1039,7 +1060,7 @@ function fillStandardTimes{{ $a->id }}() {
                             </label>
                             <input type="date" name="attendance_date" class="form-control" value="{{ request('date', $statsDate ?? today()->toDateString()) }}" required>
                         </div>
-                        <div class="col-12 col-md-6">
+                        <div class="col-12 col-md-4">
                             <label class="form-label fw-bold text-dark mb-1">
                                 <i class="fa-solid fa-tag me-1 text-primary"></i>Status (ሁኔታ) <span class="text-danger">*</span>
                             </label>
@@ -1052,7 +1073,13 @@ function fillStandardTimes{{ $a->id }}() {
                                 <option value="holiday">🎉 Holiday (የበዓል ቀን)</option>
                             </select>
                         </div>
-                        <div class="col-12 col-md-6">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-fingerprint me-1 text-primary"></i>Device ID (የመሳሪያ ID)
+                            </label>
+                            <input type="text" name="device_user_id" class="form-control font-monospace" placeholder="e.g. 16">
+                        </div>
+                        <div class="col-12 col-md-4">
                             <label class="form-label fw-bold text-dark mb-1">
                                 <i class="fa-solid fa-business-time me-1 text-primary"></i>Hours Worked (ሰዓት)
                             </label>
