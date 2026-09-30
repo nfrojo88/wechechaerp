@@ -54,16 +54,32 @@ class AttendanceController extends Controller
 
         $targetDateToPopulate = $selectedDate ?: (request('date_from') ?: (Attendance::max('attendance_date') ? Carbon::parse(Attendance::max('attendance_date'))->toDateString() : today()->toDateString()));
 
-        // Auto-populate missing active roster employees as absent on the active target date
+        // Clean up auto-generated dummy 'absent' attendance records for site, driver, and remote workers
+        try {
+            $exemptEmployeeIds = Employee::siteDriverRemoteOnly()->pluck('id');
+            if ($exemptEmployeeIds->isNotEmpty()) {
+                Attendance::whereIn('employee_id', $exemptEmployeeIds)
+                    ->where('status', 'absent')
+                    ->where('source', 'manual')
+                    ->whereNull('check_in')
+                    ->whereNull('check_out')
+                    ->where('hours_worked', 0)
+                    ->where('late_minutes', 0)
+                    ->delete();
+            }
+        } catch (\Throwable $e) {}
+
+        // Auto-populate missing active HEAD OFFICE staff as absent on the active target date
+        // Note: Site workers, drivers, and remote workers are strictly excluded from head office attendance!
         try {
             if ($targetDateToPopulate && !$selectedMonth && !request()->has('all_dates')) {
-                $activeEmployees = Employee::activeRoster()->get(['id']);
-                if ($activeEmployees->isNotEmpty()) {
+                $activeOfficeEmployees = Employee::officeStaffOnly()->get(['id']);
+                if ($activeOfficeEmployees->isNotEmpty()) {
                     $existingEmpIds = Attendance::whereDate('attendance_date', $targetDateToPopulate)
                         ->pluck('employee_id')
                         ->flip();
 
-                    $missingEmployees = $activeEmployees->filter(fn($emp) => !isset($existingEmpIds[$emp->id]));
+                    $missingEmployees = $activeOfficeEmployees->filter(fn($emp) => !isset($existingEmpIds[$emp->id]));
 
                     foreach ($missingEmployees as $emp) {
                         $hasSiteDep = \App\Models\SiteDeploymentRequest::where('employee_id', $emp->id)
@@ -94,7 +110,16 @@ class AttendanceController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        $query = Attendance::activeRoster()->with('employee')->latest('attendance_date');
+        $staffType = request('staff_type', 'office'); // 'office' (default), 'all', or 'site_driver_remote'
+
+        if ($staffType === 'all') {
+            $query = Attendance::activeRoster()->with('employee')->latest('attendance_date');
+        } elseif ($staffType === 'site_driver_remote') {
+            $query = Attendance::siteDriverRemoteOnly()->with('employee')->latest('attendance_date');
+        } else {
+            // Default: strictly office staff only
+            $query = Attendance::officeStaffOnly()->with('employee')->latest('attendance_date');
+        }
 
         if ($selectedDate) {
             $query->whereDate('attendance_date', $selectedDate);
@@ -245,7 +270,11 @@ class AttendanceController extends Controller
         $attendances = $query->paginate(30)->appends(request()->query());
 
         // Fetch distinct available dates from attendance records for navigation
-        $availableDates = Attendance::activeRoster()
+        $datesQuery = ($staffType === 'all')
+            ? Attendance::activeRoster()
+            : (($staffType === 'site_driver_remote') ? Attendance::siteDriverRemoteOnly() : Attendance::officeStaffOnly());
+
+        $availableDates = $datesQuery
             ->select('attendance_date')
             ->distinct()
             ->whereNotNull('attendance_date')
@@ -282,7 +311,9 @@ class AttendanceController extends Controller
         });
 
         // Determine date/period for statistics cards
-        $statsQuery = Attendance::query();
+        $statsQuery = ($staffType === 'all')
+            ? Attendance::activeRoster()
+            : (($staffType === 'site_driver_remote') ? Attendance::siteDriverRemoteOnly() : Attendance::officeStaffOnly());
         if ($selectedDate) {
             $statsTitle = \Carbon\Carbon::parse($selectedDate)->format('M d, Y');
             $statsEt = \App\Helpers\EthiopianCalendar::format($selectedDate, 'am');
@@ -392,7 +423,8 @@ class AttendanceController extends Controller
             ->pluck('count', 'employee_id')
             ->toArray();
 
-        $allEmployees = Employee::activeRoster()->orderBy('full_name')->get();
+        $allEmployees = Employee::officeStaffOnly()->orderBy('full_name')->get();
+        $allStaffForFilter = Employee::activeRoster()->orderBy('full_name')->get();
         $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
         $projects     = \App\Models\Project::orderBy('name')->get();
 
@@ -408,6 +440,8 @@ class AttendanceController extends Controller
             'selectedDate',
             'selectedMonth',
             'allEmployees',
+            'allStaffForFilter',
+            'staffType',
             'workSchedule',
             'projects',
             'lastAttendanceDate'

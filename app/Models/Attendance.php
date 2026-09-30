@@ -71,6 +71,28 @@ class Attendance extends Model
             })->where('status', '!=', 'dead_file');
         });
     }
+
+    /**
+     * Scope query to strictly include attendance records for Head Office staff only
+     * (excludes site workers, drivers, and remote workers).
+     */
+    public function scopeOfficeStaffOnly($query)
+    {
+        return $query->whereHas('employee', function ($q) {
+            $q->officeStaffOnly();
+        });
+    }
+
+    /**
+     * Scope query to attendance records for Site, Driver, and Remote workers.
+     */
+    public function scopeSiteDriverRemoteOnly($query)
+    {
+        return $query->whereHas('employee', function ($q) {
+            $q->siteDriverRemoteOnly();
+        });
+    }
+
     public function approvedBy()  { return $this->belongsTo(User::class, 'approved_by'); }
     public function decidedBy()   { return $this->belongsTo(User::class, 'decided_by'); }
     public function siteProject() { return $this->belongsTo(Project::class, 'site_project_id'); }

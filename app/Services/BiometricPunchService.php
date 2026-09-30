@@ -582,7 +582,7 @@ class BiometricPunchService
             $healed = 0;
 
             foreach ($records as $att) {
-                if (!$att->employee || $att->employee->is_dead_file || $att->employee->status === 'dead_file') continue;
+                if (!$att->employee || $att->employee->is_dead_file || $att->employee->status === 'dead_file' || $att->employee->isSiteDriverOrRemote()) continue;
 
                 $dStr = $att->attendance_date->format('Y-m-d');
                 self::syncEmployeeDatePunches($att->employee, $dStr, $att->biometric_device_id);

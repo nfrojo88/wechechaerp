@@ -221,7 +221,7 @@
                     </div>
 
                     {{-- Select Specific Date --}}
-                    <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="col-12 col-sm-6 col-lg-2">
                         <label class="form-label small fw-bold text-dark mb-1">
                             <i class="far fa-calendar-check text-success me-1"></i>Select Date (ቀን)
                         </label>
@@ -234,6 +234,18 @@
                                     {{ $item['full_label'] }}
                                 </option>
                             @endforeach
+                        </select>
+                    </div>
+
+                    {{-- Staff Scope Filter --}}
+                    <div class="col-6 col-sm-6 col-lg-2">
+                        <label class="form-label small fw-bold text-dark mb-1">
+                            <i class="fas fa-building text-primary me-1"></i>Staff Scope
+                        </label>
+                        <select name="staff_type" class="form-select" onchange="this.form.submit()">
+                            <option value="office" {{ ($staffType ?? 'office') === 'office' ? 'selected' : '' }}>🏢 Head Office Only</option>
+                            <option value="all" {{ ($staffType ?? '') === 'all' ? 'selected' : '' }}>👥 All Employees</option>
+                            <option value="site_driver_remote" {{ ($staffType ?? '') === 'site_driver_remote' ? 'selected' : '' }}>🚜 Site, Driver &amp; Remote</option>
                         </select>
                     </div>
 
@@ -251,14 +263,14 @@
                     </div>
 
                     {{-- Status Filter --}}
-                    <div class="col-6 col-sm-6 col-lg-2">
+                    <div class="col-6 col-sm-6 col-lg-1">
                         <label class="form-label small fw-bold text-dark mb-1">
                             <i class="fas fa-tag text-secondary me-1"></i>Status
                         </label>
                         <select name="status" class="form-select">
-                            <option value="">All Statuses</option>
+                            <option value="">All</option>
                             <option value="present" {{ request('status') === 'present' ? 'selected' : '' }}>Present</option>
-                            <option value="S" {{ in_array(request('status'), ['S', 'site', 's']) ? 'selected' : '' }}>S - On Site (ሳይት ላይ)</option>
+                            <option value="S" {{ in_array(request('status'), ['S', 'site', 's']) ? 'selected' : '' }}>S - On Site</option>
                             <option value="half_day" {{ request('status') === 'half_day' ? 'selected' : '' }}>Half Day</option>
                             <option value="absent" {{ request('status') === 'absent' ? 'selected' : '' }}>Absent</option>
                             <option value="leave" {{ request('status') === 'leave' ? 'selected' : '' }}>Leave</option>
@@ -315,6 +327,41 @@
             </form>
         </div>
     </div>
+
+    {{-- Staff Scope Banner --}}
+    @if(($staffType ?? 'office') === 'office')
+        <div class="alert bg-primary-subtle border border-primary-subtle d-flex align-items-center justify-content-between flex-wrap gap-2 p-2 px-3 rounded-3 mb-2 shadow-xs">
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary text-white px-2 py-1 small">
+                    <i class="fa-solid fa-building me-1"></i>Head Office Staff Active
+                </span>
+                <span class="text-dark small">
+                    <strong>Site workers, drivers, and remote workers are excluded</strong> from this attendance register and absent penalty calculation.
+                </span>
+            </div>
+            <div>
+                <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['staff_type' => 'all'])) }}" class="btn btn-xs btn-outline-primary py-0 px-2 fw-semibold" style="font-size: 0.75rem;">
+                    <i class="fa-solid fa-users me-1"></i>View All Employees
+                </a>
+            </div>
+        </div>
+    @elseif(($staffType ?? '') === 'site_driver_remote')
+        <div class="alert bg-warning-subtle border border-warning d-flex align-items-center justify-content-between flex-wrap gap-2 p-2 px-3 rounded-3 mb-2 shadow-xs">
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-warning text-dark px-2 py-1 small">
+                    <i class="fa-solid fa-truck-pickup me-1"></i>Site, Drivers &amp; Remote Staff View
+                </span>
+                <span class="text-dark small">
+                    Currently showing field personnel, project-assigned staff, drivers, and remote workers.
+                </span>
+            </div>
+            <div>
+                <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['staff_type' => 'office'])) }}" class="btn btn-xs btn-outline-dark py-0 px-2 fw-semibold" style="font-size: 0.75rem;">
+                    <i class="fa-solid fa-building me-1"></i>Switch to Head Office Staff Only
+                </a>
+            </div>
+        </div>
+    @endif
 
     {{-- Attendance Policy Rule Banner (3 Late Days = 1 Absent Day Penalty) --}}
     <div class="alert bg-warning-subtle border border-warning d-flex align-items-center justify-content-between flex-wrap gap-2 p-2.5 px-3 rounded-3 mb-3 shadow-xs">

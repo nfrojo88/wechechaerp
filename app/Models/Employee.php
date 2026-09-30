@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class Employee extends Model
 {
@@ -131,6 +132,128 @@ class Employee extends Model
     {
         return $query->where('is_dead_file', true)
                      ->orWhere('status', 'dead_file');
+    }
+
+    /**
+     * Check if an employee is a site worker, driver, or remote worker.
+     * These workers do NOT use the head office attendance system.
+     */
+    public function isSiteDriverOrRemote(): bool
+    {
+        // 1. Explicit project-based flag or assigned to a specific construction site/project
+        if (!empty($this->is_project_based) || !empty($this->project_id)) {
+            return true;
+        }
+
+        // 2. Employment type checks
+        $empType = strtolower(trim((string)$this->employment_type));
+        if (in_array($empType, ['remote', 'daily', 'site', 'project', 'field'])) {
+            return true;
+        }
+
+        // 3. Role / Job Title checks
+        $role = strtolower(trim((string)$this->role_title));
+        $keywords = [
+            'site', 'driver', 'chauffeur', 'operator', 'machinery',
+            'transport', 'fleet', 'remote', 'telecommute', 'virtual',
+            'field', 'foreman', 'surveyor', 'laborer', 'daily',
+            'welder', 'carpenter', 'mason', 'barbender', 'mechanic', 'technician'
+        ];
+        foreach ($keywords as $kw) {
+            if (str_contains($role, $kw)) {
+                return true;
+            }
+        }
+
+        // 4. Department checks
+        $dept = strtolower(trim((string)$this->department));
+        $deptKeywords = ['site', 'driver', 'transport', 'fleet', 'remote', 'field', 'project', 'logistics', 'machinery', 'plant', 'workshop'];
+        foreach ($deptKeywords as $kw) {
+            if (str_contains($dept, $kw)) {
+                return true;
+            }
+        }
+
+        // 5. Notes checks
+        $notes = strtolower((string)$this->notes);
+        if (str_contains($notes, 'remote') || str_contains($notes, 'wfh') || str_contains($notes, 'work from home')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Scope query to Head Office staff only (excluding Site workers, Drivers, and Remote workers).
+     */
+    public function scopeOfficeStaffOnly($query)
+    {
+        return $query->activeRoster()
+            ->where(function ($q) {
+                $q->where('is_project_based', false)
+                  ->orWhereNull('is_project_based');
+            })
+            ->whereNull('project_id')
+            ->where(function ($q) {
+                $q->whereNull('employment_type')
+                  ->orWhereNotIn(DB::raw('LOWER(employment_type)'), ['remote', 'daily', 'site', 'project', 'field']);
+            })
+            ->where(function ($q) {
+                $q->whereNull('role_title')
+                  ->orWhere(function ($rq) {
+                      $keywords = [
+                          'site', 'driver', 'chauffeur', 'operator', 'machinery',
+                          'transport', 'fleet', 'remote', 'telecommute', 'virtual',
+                          'field', 'foreman', 'surveyor', 'laborer', 'daily',
+                          'welder', 'carpenter', 'mason', 'barbender', 'mechanic', 'technician'
+                      ];
+                      foreach ($keywords as $kw) {
+                          $rq->where(DB::raw('LOWER(role_title)'), 'not like', "%{$kw}%");
+                      }
+                  });
+            })
+            ->where(function ($q) {
+                $q->whereNull('department')
+                  ->orWhere(function ($dq) {
+                      $deptKeywords = [
+                          'site', 'driver', 'transport', 'fleet', 'remote',
+                          'field', 'project', 'logistics', 'machinery', 'plant', 'workshop'
+                      ];
+                      foreach ($deptKeywords as $kw) {
+                          $dq->where(DB::raw('LOWER(department)'), 'not like', "%{$kw}%");
+                      }
+                  });
+            });
+    }
+
+    /**
+     * Scope query to Site, Driver, and Remote workers only.
+     */
+    public function scopeSiteDriverRemoteOnly($query)
+    {
+        return $query->activeRoster()->where(function ($q) {
+            $q->where('is_project_based', true)
+              ->orWhereNotNull('project_id')
+              ->orWhereIn(DB::raw('LOWER(employment_type)'), ['remote', 'daily', 'site', 'project', 'field']);
+
+            $keywords = [
+                'site', 'driver', 'chauffeur', 'operator', 'machinery',
+                'transport', 'fleet', 'remote', 'telecommute', 'virtual',
+                'field', 'foreman', 'surveyor', 'laborer', 'daily',
+                'welder', 'carpenter', 'mason', 'barbender', 'mechanic', 'technician'
+            ];
+            foreach ($keywords as $kw) {
+                $q->orWhere(DB::raw('LOWER(role_title)'), 'like', "%{$kw}%");
+            }
+
+            $deptKeywords = [
+                'site', 'driver', 'transport', 'fleet', 'remote',
+                'field', 'project', 'logistics', 'machinery', 'plant', 'workshop'
+            ];
+            foreach ($deptKeywords as $kw) {
+                $q->orWhere(DB::raw('LOWER(department)'), 'like', "%{$kw}%");
+            }
+        });
     }
 
     public function user()
