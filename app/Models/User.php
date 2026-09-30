@@ -48,7 +48,23 @@ class User extends Authenticatable
 
     public function employee()
     {
-        return $this->hasOne(Employee::class);
+        return $this->hasOne(Employee::class)->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class);
+    }
+
+    /**
+     * Scope query to strictly active users who are not in Dead File.
+     */
+    public function scopeActiveUsers($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('is_active', true)->orWhereNull('is_active');
+        })->whereDoesntHave('employee', function ($eq) {
+            $eq->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)
+               ->where(function ($deadQ) {
+                   $deadQ->where('is_dead_file', true)
+                         ->orWhere('status', 'dead_file');
+               });
+        });
     }
 
     public function assignedAccounts()

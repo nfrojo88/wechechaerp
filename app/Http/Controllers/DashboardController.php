@@ -278,7 +278,20 @@ class DashboardController extends Controller
 
         $activityLogs = $this->safe(fn() => \App\Models\ActivityLog::with('user')->latest()->take(20)->get(), collect());
         
-        $unassignedUsers = $this->safe(fn() => User::whereDoesntHave('roles')->with('employee')->latest()->get(), collect());
+        $unassignedUsers = $this->safe(fn() => User::whereDoesntHave('roles')
+            ->where(function ($q) {
+                $q->where('is_active', true)->orWhereNull('is_active');
+            })
+            ->whereDoesntHave('employee', function ($eq) {
+                $eq->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)
+                   ->where(function ($deadQ) {
+                       $deadQ->where('is_dead_file', true)
+                             ->orWhere('status', 'dead_file');
+                   });
+            })
+            ->with('employee')
+            ->latest()
+            ->get(), collect());
         
         $ticketStats = $this->safe(fn() => [
             'open' => \App\Models\SupportTicket::where('status', 'open')->count(),

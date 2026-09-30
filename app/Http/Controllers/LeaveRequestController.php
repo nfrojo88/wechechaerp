@@ -208,6 +208,10 @@ class LeaveRequestController extends Controller
             return back()->withErrors(['employee_id' => 'Employee profile not found.']);
         }
 
+        if ($employee->is_dead_file || $employee->status === 'dead_file') {
+            return back()->withInput()->withErrors(['employee_id' => 'Cannot create leave request for an employee archived in Dead File.']);
+        }
+
         $validated = $request->validate([
             'leave_type_id' => 'required|exists:leave_types,id',
             'start_date' => 'required|date',
@@ -215,6 +219,11 @@ class LeaveRequestController extends Controller
             'reason' => 'required|string|min:5|max:1000',
             'attachment' => 'nullable|file|mimes:pdf,doc,docx,jpg,jpeg,png|max:5120',
         ]);
+
+        $deadDate = $employee->dead_file_date ?? $employee->dead_file_at;
+        if ($deadDate && Carbon::parse($validated['start_date'])->gte(Carbon::parse($deadDate))) {
+            return back()->withInput()->withErrors(['start_date' => 'Cannot create leave request on or after the employee\'s dead file date (' . Carbon::parse($deadDate)->format('d M Y') . ').']);
+        }
 
         $leaveType = LeaveType::findOrFail($validated['leave_type_id']);
         $daysRequested = Carbon::parse($validated['start_date'])

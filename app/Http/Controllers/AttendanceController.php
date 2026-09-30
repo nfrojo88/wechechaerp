@@ -1256,6 +1256,18 @@ class AttendanceController extends Controller
 
         self::ensureAttendanceSchemaReady();
 
+        $empCheck = Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->find($validated['employee_id']);
+        if ($empCheck && ($empCheck->is_dead_file || $empCheck->status === 'dead_file')) {
+            $deadDate = $empCheck->dead_file_date ?? $empCheck->dead_file_at;
+            $attDate = Carbon::parse($validated['attendance_date'])->toDateString();
+            if (!$deadDate || $attDate >= Carbon::parse($deadDate)->toDateString()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot record attendance for an employee archived in Dead File on or after dead file date.',
+                ], 422);
+            }
+        }
+
         if ($request->has('device_user_id')) {
             $rawDevId = trim((string)$request->input('device_user_id'));
             $cleanDevId = $rawDevId !== '' ? $rawDevId : null;
@@ -1455,6 +1467,15 @@ class AttendanceController extends Controller
             'overtime_type'   => 'nullable|in:none,holiday,rest_day,night_12_4,night_4_12',
             'notes'           => 'nullable|string',
         ]);
+
+        $empCheck = Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->find($request->employee_id);
+        if ($empCheck && ($empCheck->is_dead_file || $empCheck->status === 'dead_file')) {
+            $deadDate = $empCheck->dead_file_date ?? $empCheck->dead_file_at;
+            $attDate = Carbon::parse($request->attendance_date)->toDateString();
+            if (!$deadDate || $attDate >= Carbon::parse($deadDate)->toDateString()) {
+                return back()->withInput()->with('error', "Cannot record attendance for employee in Dead File on or after dead file date.");
+            }
+        }
 
         $existing = Attendance::where('employee_id', $request->employee_id)
             ->whereDate('attendance_date', $request->attendance_date)

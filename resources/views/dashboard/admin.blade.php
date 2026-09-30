@@ -158,8 +158,17 @@
                 <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                     <p class="text-xs text-muted mb-3">Employees registered by HR who have created credentials but need a system role.</p>
                     
-                    @if(isset($unassignedUsers) && $unassignedUsers->count() > 0)
-                        @foreach($unassignedUsers as $uUser)
+                    @php
+                        $displayUnassigned = isset($unassignedUsers) ? $unassignedUsers->filter(function($u) {
+                            if (!$u->is_active) return false;
+                            $emp = $u->employee;
+                            if ($emp && ($emp->is_dead_file || $emp->status === 'dead_file')) return false;
+                            return true;
+                        }) : collect();
+                    @endphp
+
+                    @if($displayUnassigned->count() > 0)
+                        @foreach($displayUnassigned as $uUser)
                             <div class="card mb-2 border-left-warning shadow-sm">
                                 <div class="card-body p-2">
                                     <div class="d-flex justify-content-between align-items-center">

@@ -1381,14 +1381,18 @@ class EmployeeController extends Controller
         $this->ensureGuarantorAndRegistrationColumnsExist();
 
         $validated = $request->validate([
-            'dead_file_reason' => 'required|string|max:150',
+            'dead_file_reason' => 'nullable|string|max:150',
+            'dead_file_date'   => 'nullable|date',
             'dead_file_at'     => 'nullable|date',
             'dead_file_notes'  => 'nullable|string|max:2000',
+            'redirect_to'      => 'nullable|string',
         ]);
 
         $name = $employee->full_name;
         $code = $employee->employee_code;
-        $departureDate = $validated['dead_file_at'] ? \Carbon\Carbon::parse($validated['dead_file_at']) : now();
+        $rawDate = $validated['dead_file_date'] ?? $validated['dead_file_at'] ?? null;
+        $departureDate = $rawDate ? \Carbon\Carbon::parse($rawDate) : now();
+        $reason = !empty($validated['dead_file_reason']) ? $validated['dead_file_reason'] : 'Transferred to Dead File';
 
         // Release any assigned company fixed assets back to store
         try {
@@ -1396,7 +1400,7 @@ class EmployeeController extends Controller
                 foreach ($employee->assignedFixedAssets as $unit) {
                     $unit->returnToStore(
                         auth()->id() ?? 1,
-                        "Auto-returned upon employee transfer to Dead File ({$validated['dead_file_reason']})",
+                        "Auto-returned upon employee transfer to Dead File ({$reason})",
                         'good'
                     );
                 }
@@ -1424,14 +1428,19 @@ class EmployeeController extends Controller
             'is_dead_file'      => true,
             'status'            => 'dead_file',
             'dead_file_at'      => $departureDate,
-            'dead_file_reason'  => $validated['dead_file_reason'],
+            'dead_file_date'    => $departureDate,
+            'dead_file_reason'  => $reason,
             'dead_file_notes'   => $deadNotes ?: null,
             'dead_file_by'      => auth()->id(),
-            'lock_reason'       => "Dead File: {$validated['dead_file_reason']}",
+            'lock_reason'       => "Dead File: {$reason}",
             'device_user_id'    => null,
         ]);
 
-        return redirect()->to(\Illuminate\Support\Facades\Route::has('employees.dead-file') ? route('employees.dead-file') : url('/employees/dead-file'))
+        $redirectRoute = ($request->input('redirect_to') === 'show')
+            ? route('employees.show', $employee)
+            : (\Illuminate\Support\Facades\Route::has('employees.dead-file') ? route('employees.dead-file') : url('/employees/dead-file'));
+
+        return redirect()->to($redirectRoute)
             ->with('success', "Employee {$name} ({$code}) has been transferred to the Dead File section. All history, contracts, payroll, and documents remain securely archived.");
     }
 
@@ -1476,6 +1485,7 @@ class EmployeeController extends Controller
             'is_dead_file'      => true,
             'status'            => 'dead_file',
             'dead_file_at'      => now(),
+            'dead_file_date'    => now(),
             'dead_file_reason'  => 'Removed from Active Roster (Transferred to Dead File)',
             'dead_file_notes'   => $deadNotes,
             'dead_file_by'      => auth()->id(),
@@ -1518,11 +1528,17 @@ class EmployeeController extends Controller
         }
 
         if ($request->filled('date_from')) {
-            $query->whereDate('dead_file_at', '>=', $request->input('date_from'));
+            $query->where(function ($q) use ($request) {
+                $q->whereDate('dead_file_date', '>=', $request->input('date_from'))
+                  ->orWhereDate('dead_file_at', '>=', $request->input('date_from'));
+            });
         }
 
         if ($request->filled('date_to')) {
-            $query->whereDate('dead_file_at', '<=', $request->input('date_to'));
+            $query->where(function ($q) use ($request) {
+                $q->whereDate('dead_file_date', '<=', $request->input('date_to'))
+                  ->orWhereDate('dead_file_at', '<=', $request->input('date_to'));
+            });
         }
 
         $employees = $query->latest('dead_file_at')->latest('updated_at')->paginate(20)->withQueryString();
@@ -1562,7 +1578,7 @@ class EmployeeController extends Controller
         $this->ensureGuarantorAndRegistrationColumnsExist();
 
         $validated = $request->validate([
-            'employment_type'   => 'required|in:permanent,contract,daily',
+            'employment_type'   => 'nullable|in:permanent,contract,daily',
             'contract_end_date' => 'nullable|date',
             'restore_notes'     => 'nullable|string|max:1000',
         ]);
@@ -1571,14 +1587,23 @@ class EmployeeController extends Controller
             'is_dead_file'        => false,
             'status'              => 'active',
             'dead_file_at'        => null,
+            'dead_file_date'      => null,
             'dead_file_reason'    => null,
             'dead_file_notes'     => null,
             'dead_file_by'        => null,
-            'employment_type'     => $validated['employment_type'],
-            'contract_end_date'   => $validated['contract_end_date'] ?? null,
+            'employment_type'     => $validated['employment_type'] ?? ($employee->employment_type ?: 'permanent'),
+            'contract_end_date'   => $validated['contract_end_date'] ?? $employee->contract_end_date,
             'lock_reason'         => null,
             'probation_completed' => true,
         ]);
+
+        // Reactivate linked system user account if exists
+        if ($employee->user_id) {
+            $user = \App\Models\User::find($employee->user_id);
+            if ($user && \Illuminate\Support\Facades\Schema::hasColumn('users', 'is_active')) {
+                $user->update(['is_active' => true]);
+            }
+        }
 
         return redirect()->route('employees.show', $employee)
             ->with('success', "Employee {$employee->full_name} ({$employee->employee_code}) has been restored from Dead File back to active roster!");
@@ -1732,6 +1757,9 @@ class EmployeeController extends Controller
                     }
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'dead_file_at')) {
                         $table->timestamp('dead_file_at')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'dead_file_date')) {
+                        $table->timestamp('dead_file_date')->nullable();
                     }
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('employees', 'dead_file_reason')) {
                         $table->string('dead_file_reason', 150)->nullable();

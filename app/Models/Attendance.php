@@ -58,17 +58,43 @@ class Attendance extends Model
         return \App\Services\BiometricPunchService::formatLateLabel($this->late_minutes);
     }
 
-    public function employee()    { return $this->belongsTo(Employee::class); }
+    protected static function booted()
+    {
+        static::creating(function ($attendance) {
+            if ($attendance->employee_id) {
+                $emp = Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->find($attendance->employee_id);
+                if ($emp && ($emp->is_dead_file || $emp->status === 'dead_file')) {
+                    $deadDate = $emp->dead_file_date ?: ($emp->dead_file_at ? $emp->dead_file_at->toDateString() : null);
+                    if ($deadDate && $attendance->date && \Carbon\Carbon::parse($attendance->date)->toDateString() >= $deadDate) {
+                        throw new \InvalidArgumentException("Cannot create attendance for archived employee {$emp->full_name} on or after Dead File date ({$deadDate}).");
+                    }
+                }
+            }
+        });
+    }
+
+    public function employee()    { return $this->belongsTo(Employee::class)->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class); }
 
     /**
-     * Scope query to strictly include attendance records for active employees (excluding Dead File).
+     * Scope query to strictly include attendance records for active employees (or historical records before dead_file_date).
      */
     public function scopeActiveRoster($query)
     {
         return $query->whereHas('employee', function ($q) {
             $q->where(function ($sq) {
                 $sq->where('is_dead_file', false)->orWhereNull('is_dead_file');
-            })->where('status', '!=', 'dead_file');
+            })->orWhere(function ($deadQ) {
+                $deadQ->where(function ($d) {
+                    $d->where('is_dead_file', true)
+                      ->orWhere('status', 'dead_file');
+                })->where(function ($dateQ) {
+                    $dateQ->whereColumn('attendances.date', '<', 'employees.dead_file_date')
+                          ->orWhere(function ($fbQ) {
+                              $fbQ->whereNull('employees.dead_file_date')
+                                  ->whereColumn('attendances.date', '<', 'employees.dead_file_at');
+                          });
+                });
+            });
         });
     }
 

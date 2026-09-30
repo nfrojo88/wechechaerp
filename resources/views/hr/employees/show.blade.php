@@ -4,26 +4,40 @@
 
 @section('content')
 
-{{-- Dead File Security Banner --}}
+{{-- Dead File Security Banner & Read-Only Notice --}}
 @if($employee->is_dead_file || $employee->status === 'dead_file')
-<div class="alert alert-danger border-start border-4 border-danger shadow-sm mb-4 rounded-3" role="alert" style="background-color: #fef2f2;">
+<div class="alert alert-danger border-start border-4 border-danger shadow-sm mb-4 rounded-3 p-3" role="alert" style="background-color: #fef2f2;">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-        <div class="d-flex align-items-center gap-3">
+        <div class="d-flex align-items-start gap-3">
             <div class="rounded-circle bg-danger text-white p-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 44px; height: 44px;">
-                <i class="fa-solid fa-ban fs-5"></i>
+                <i class="fa-solid fa-box-archive fs-5"></i>
             </div>
             <div>
-                <strong class="fs-6 text-danger d-block mb-0">
-                    <i class="fa-solid fa-box-archive me-1"></i> ARCHIVED IN DEAD FILE — LOGIN CREDENTIALS STRICTLY REVOKED
+                <strong class="fs-6 text-danger d-block mb-1">
+                    <i class="fa-solid fa-folder-closed me-1"></i> ARCHIVED IN DEAD FILE — READ-ONLY PROFILE
                 </strong>
-                <p class="mb-0 text-muted small mt-1">
-                    Reason: <strong>{{ $employee->dead_file_reason ?? 'Separated' }}</strong> • Archived on: <strong>{{ $employee->dead_file_at ? $employee->dead_file_at->format('d M Y') : optional($employee->updated_at)->format('d M Y') }}</strong>.
-                    In accordance with strict security policy, this employee cannot be assigned login credentials and system login access is permanently blocked.
+                <div class="text-dark small mb-1">
+                    Effective Dead File Date: <strong>{{ $employee->dead_file_date ? \Carbon\Carbon::parse($employee->dead_file_date)->format('d M Y') : ($employee->dead_file_at ? \Carbon\Carbon::parse($employee->dead_file_at)->format('d M Y') : '—') }}</strong>
+                    &nbsp;•&nbsp; Reason: <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle">{{ $employee->dead_file_reason ?? 'Separated' }}</span>
+                    @if($employee->deadFileArchivedBy)
+                        &nbsp;•&nbsp; Archived By: <strong>{{ $employee->deadFileArchivedBy->name }}</strong>
+                    @endif
+                </div>
+                @if($employee->dead_file_notes)
+                    <div class="small text-muted mb-1"><i class="fa-solid fa-note-sticky me-1"></i>Notes: {{ $employee->dead_file_notes }}</div>
+                @endif
+                <p class="mb-0 text-muted small">
+                    This profile is preserved for historical audit, payroll, tax, and legal records. The employee is hidden from active rosters and system login access is permanently revoked.
                 </p>
             </div>
         </div>
-        <div>
+        <div class="d-flex align-items-center gap-2">
             <span class="badge bg-danger text-white px-3 py-2 text-uppercase fw-bold"><i class="fa-solid fa-lock me-1"></i> Login Prohibited</span>
+            @if(auth()->user() && auth()->user()->hasAnyRole(['admin', 'global_admin', 'gm', 'general_manager', 'hr_manager', 'hr']))
+                <button type="button" class="btn btn-sm btn-success fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#restoreDeadFileModal">
+                    <i class="fa-solid fa-rotate-left me-1"></i> Restore Employee
+                </button>
+            @endif
         </div>
     </div>
 </div>
@@ -65,14 +79,22 @@
 
 <div class="d-flex align-items-center justify-content-between mb-4">
     <div class="d-flex align-items-center">
-        <a href="{{ route('employees.index') }}" class="btn btn-sm btn-outline-secondary me-3">
-            <i class="fa-solid fa-arrow-left"></i>
-        </a>
+        @if($employee->is_dead_file || $employee->status === 'dead_file')
+            <a href="{{ route('employees.dead-file') }}" class="btn btn-sm btn-outline-secondary me-3 shadow-xs" title="Return to Dead File Section">
+                <i class="fa-solid fa-arrow-left me-1"></i> Dead File
+            </a>
+        @else
+            <a href="{{ route('employees.index') }}" class="btn btn-sm btn-outline-secondary me-3 shadow-xs">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+        @endif
         <div>
             <h1 class="h3 mb-0">{{ $employee->full_name }}</h1>
             <div class="d-flex align-items-center gap-2 mt-1">
                 <small class="text-muted">{{ $employee->employee_code }} • {{ $employee->role_title ?? 'Employee' }}</small>
-                @if($employee->is_approved_by_gm)
+                @if($employee->is_dead_file || $employee->status === 'dead_file')
+                    <span class="badge bg-danger"><i class="fa-solid fa-box-archive me-1"></i>Dead File Archive</span>
+                @elseif($employee->is_approved_by_gm)
                     <span class="badge bg-success"><i class="fa-solid fa-circle-check me-1"></i>GM Approved</span>
                 @elseif($employee->gm_approval_status === 'rejected')
                     <span class="badge bg-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>Returned by GM</span>
@@ -83,34 +105,50 @@
         </div>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        @role('gm')
-            @if(!$employee->is_approved_by_gm && $employee->gm_approval_status !== 'rejected')
-                <form action="{{ route('employees.approve', $employee) }}" method="POST" class="d-inline">
-                    @csrf
-                    @method('PUT')
-                    <button type="submit" class="btn btn-sm btn-success fw-bold shadow-sm" onclick="return confirm('Approve {{ addslashes($employee->full_name) }}?')">
-                        <i class="fa-solid fa-check me-1"></i>Approve Employee
-                    </button>
-                </form>
-                <button type="button" class="btn btn-sm btn-outline-danger fw-bold" onclick="openRejectModal()">
-                    <i class="fa-solid fa-rotate-left me-1"></i>Reject & Return to HR
+        @if($employee->is_dead_file || $employee->status === 'dead_file')
+            @if(auth()->user() && auth()->user()->hasAnyRole(['admin', 'global_admin', 'gm', 'general_manager', 'hr_manager', 'hr']))
+                <button type="button" class="btn btn-sm btn-success fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#restoreDeadFileModal">
+                    <i class="fa-solid fa-rotate-left me-1"></i>Restore Employee
                 </button>
-            @elseif($employee->is_approved_by_gm)
-                <span class="btn btn-sm btn-success disabled">
-                    <i class="fa-solid fa-circle-check me-1"></i>Approved by GM
-                </span>
-            @elseif($employee->gm_approval_status === 'rejected')
-                <span class="btn btn-sm btn-outline-danger disabled">
-                    <i class="fa-solid fa-triangle-exclamation me-1"></i>Returned to HR
-                </span>
             @endif
-        @endrole
-        <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.create') ? route('employee-letters.create', ['employee_id' => $employee->id]) : url('/employee-letters/create?employee_id='.$employee->id) }}" class="btn btn-sm btn-outline-warning text-dark fw-bold">
-            <i class="fa-solid fa-envelope-open-text me-1"></i>Issue Letter
-        </a>
-        <a href="{{ route('employees.edit', $employee) }}" class="btn btn-sm btn-primary">
-            <i class="fa-solid fa-edit me-2"></i>Edit
-        </a>
+            <span class="btn btn-sm btn-outline-secondary disabled">
+                <i class="fa-solid fa-eye me-1"></i>Read-Only View
+            </span>
+        @else
+            @role('gm')
+                @if(!$employee->is_approved_by_gm && $employee->gm_approval_status !== 'rejected')
+                    <form action="{{ route('employees.approve', $employee) }}" method="POST" class="d-inline">
+                        @csrf
+                        @method('PUT')
+                        <button type="submit" class="btn btn-sm btn-success fw-bold shadow-sm" onclick="return confirm('Approve {{ addslashes($employee->full_name) }}?')">
+                            <i class="fa-solid fa-check me-1"></i>Approve Employee
+                        </button>
+                    </form>
+                    <button type="button" class="btn btn-sm btn-outline-danger fw-bold" onclick="openRejectModal()">
+                        <i class="fa-solid fa-rotate-left me-1"></i>Reject & Return to HR
+                    </button>
+                @elseif($employee->is_approved_by_gm)
+                    <span class="btn btn-sm btn-success disabled">
+                        <i class="fa-solid fa-circle-check me-1"></i>Approved by GM
+                    </span>
+                @elseif($employee->gm_approval_status === 'rejected')
+                    <span class="btn btn-sm btn-outline-danger disabled">
+                        <i class="fa-solid fa-triangle-exclamation me-1"></i>Returned to HR
+                    </span>
+                @endif
+            @endrole
+            <a href="{{ \Illuminate\Support\Facades\Route::has('employee-letters.create') ? route('employee-letters.create', ['employee_id' => $employee->id]) : url('/employee-letters/create?employee_id='.$employee->id) }}" class="btn btn-sm btn-outline-warning text-dark fw-bold">
+                <i class="fa-solid fa-envelope-open-text me-1"></i>Issue Letter
+            </a>
+            <a href="{{ route('employees.edit', $employee) }}" class="btn btn-sm btn-primary">
+                <i class="fa-solid fa-edit me-2"></i>Edit
+            </a>
+            @if(auth()->user() && auth()->user()->hasAnyRole(['admin', 'global_admin', 'gm', 'general_manager', 'hr_manager', 'hr']))
+                <button type="button" class="btn btn-sm btn-outline-danger fw-semibold shadow-xs" data-bs-toggle="modal" data-bs-target="#moveToDeadFileModal" title="Archive employee to Dead File">
+                    <i class="fa-solid fa-box-archive me-1"></i>Move to Dead File
+                </button>
+            @endif
+        @endif
     </div>
 </div>
 
@@ -2752,6 +2790,131 @@ function openLetterModal(id) {
     }
 }
 </script>
+
+{{-- Move to Dead File Modal --}}
+@if(!$employee->is_dead_file && $employee->status !== 'dead_file')
+<div class="modal fade" id="moveToDeadFileModal" tabindex="-1" aria-labelledby="moveToDeadFileModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <form action="{{ route('employees.send-to-dead-file', $employee) }}" method="POST">
+                @csrf
+                <input type="hidden" name="redirect_to" value="show">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold" id="moveToDeadFileModalLabel">
+                        <i class="fa-solid fa-box-archive me-2"></i>Move Employee to Dead File
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-warning border-0 rounded-3 mb-3 small d-flex align-items-start gap-2">
+                        <i class="fa-solid fa-triangle-exclamation text-warning fs-5 mt-1 flex-shrink-0"></i>
+                        <div>
+                            <strong>Zero Data Loss Policy:</strong> The employee record is never deleted. Moving to Dead File safely deactivates credentials, releases assigned biometric devices, hides them from active rosters, and preserves all historical payroll, contracts, and attendance prior to the dead file date.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold text-dark">Employee</label>
+                        <input type="text" class="form-control bg-light" value="{{ $employee->full_name }} ({{ $employee->employee_code }})" readonly>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="dead_file_date" class="form-label fw-bold text-dark">
+                            Effective Dead File Date <span class="text-danger">*</span>
+                        </label>
+                        <input type="date" name="dead_file_date" id="dead_file_date" class="form-control" value="{{ now()->format('Y-m-d') }}" required>
+                        <div class="form-text small text-muted">Records dated on or after this date will be hidden from active lists; historical records before this date remain intact.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="dead_file_reason" class="form-label fw-bold text-dark">
+                            Departure Reason <span class="text-muted fw-normal">(Optional)</span>
+                        </label>
+                        <select name="dead_file_reason" id="dead_file_reason" class="form-select mb-2" onchange="if(this.value==='Other'){document.getElementById('customReasonWrapper').classList.remove('d-none');}else{document.getElementById('customReasonWrapper').classList.add('d-none');}">
+                            <option value="Resignation (መልቀቂያ)">Resignation (መልቀቂያ)</option>
+                            <option value="Contract Ended (የውል ጊዜ ያለቀ)">Contract Ended (የውል ጊዜ ያለቀ)</option>
+                            <option value="Termination / Dismissal (ከሥራ መሰናበት)">Termination / Dismissal (ከሥራ መሰናበት)</option>
+                            <option value="Project Completed (ፕሮጀክት ያለቀለት)">Project Completed (ፕሮጀክት ያለቀለት)</option>
+                            <option value="Deceased (ህልፈተ ሕይወት)">Deceased (ህልፈተ ሕይወት)</option>
+                            <option value="Other">Other / Custom Reason...</option>
+                        </select>
+                        <div id="customReasonWrapper" class="d-none mt-2">
+                            <input type="text" name="custom_reason" id="custom_reason" class="form-control" placeholder="Specify departure reason..." oninput="document.getElementById('dead_file_reason').value = this.value">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="dead_file_notes" class="form-label fw-bold text-dark">
+                            Handover &amp; File Notes <span class="text-muted fw-normal">(Optional)</span>
+                        </label>
+                        <textarea name="dead_file_notes" id="dead_file_notes" rows="3" class="form-control" placeholder="Optional notes regarding asset clearance, exit interview, document archive..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger fw-bold" onclick="return confirm('Confirm moving {{ addslashes($employee->full_name) }} to Dead File?')">
+                        <i class="fa-solid fa-box-archive me-1"></i>Confirm &amp; Move to Dead File
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+
+{{-- Restore Employee Modal --}}
+@if($employee->is_dead_file || $employee->status === 'dead_file')
+<div class="modal fade" id="restoreDeadFileModal" tabindex="-1" aria-labelledby="restoreDeadFileModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <form action="{{ route('employees.restore-from-dead-file', $employee) }}" method="POST">
+                @csrf
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold" id="restoreDeadFileModalLabel">
+                        <i class="fa-solid fa-rotate-left me-2"></i>Restore Employee from Dead File
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-info border-0 rounded-3 mb-3 small d-flex align-items-start gap-2">
+                        <i class="fa-solid fa-circle-info text-info fs-5 mt-1 flex-shrink-0"></i>
+                        <div>
+                            Restoring <strong>{{ $employee->full_name }}</strong> will remove them from the Dead File archive and return their profile to the active employee roster.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="employment_type" class="form-label fw-bold text-dark">Employment Type</label>
+                        <select name="employment_type" id="employment_type" class="form-select" required>
+                            <option value="permanent" {{ ($employee->employment_type === 'permanent') ? 'selected' : '' }}>Permanent (ቋሚ)</option>
+                            <option value="contract" {{ ($employee->employment_type === 'contract') ? 'selected' : '' }}>Contract (የውል)</option>
+                            <option value="daily" {{ ($employee->employment_type === 'daily') ? 'selected' : '' }}>Daily / Temporary (የቀን ሠራተኛ)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="contract_end_date" class="form-label fw-bold text-dark">Contract End Date <span class="text-muted fw-normal">(Optional)</span></label>
+                        <input type="date" name="contract_end_date" id="contract_end_date" class="form-control" value="{{ optional($employee->contract_end_date)->format('Y-m-d') }}">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="restore_notes" class="form-label fw-bold text-dark">
+                            Rehire / Restoration Notes <span class="text-muted fw-normal">(Optional)</span>
+                        </label>
+                        <textarea name="restore_notes" id="restore_notes" rows="3" class="form-control" placeholder="Notes regarding rehire approval, new contract terms, etc."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success fw-bold" onclick="return confirm('Confirm restoring {{ addslashes($employee->full_name) }} to active status?')">
+                        <i class="fa-solid fa-rotate-left me-1"></i>Confirm &amp; Restore to Active
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 
 @endsection
 

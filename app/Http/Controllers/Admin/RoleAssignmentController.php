@@ -23,8 +23,18 @@ class RoleAssignmentController extends Controller
 
     public function index(Request $request)
     {
-        // Users with NO roles assigned yet
+        // Users with NO roles assigned yet (strictly active users, excluding Dead File)
         $unassigned = User::whereDoesntHave('roles')
+            ->where(function ($q) {
+                $q->where('is_active', true)->orWhereNull('is_active');
+            })
+            ->whereDoesntHave('employee', function ($eq) {
+                $eq->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)
+                   ->where(function ($deadQ) {
+                       $deadQ->where('is_dead_file', true)
+                             ->orWhere('status', 'dead_file');
+                   });
+            })
             ->with('employee')
             ->latest()
             ->get();

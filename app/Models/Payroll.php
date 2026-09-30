@@ -59,7 +59,7 @@ class Payroll extends Model
         'gross_salary'        => 'decimal:2',
     ];
 
-    public function employee()   { return $this->belongsTo(Employee::class); }
+    public function employee()   { return $this->belongsTo(Employee::class)->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class); }
     public function creator()    { return $this->belongsTo(User::class, 'created_by'); }
     public function processedBy(){ return $this->belongsTo(User::class, 'processed_by'); }
     public function gmApprover() { return $this->belongsTo(User::class, 'gm_approved_by'); }

@@ -18,7 +18,7 @@ class Employee extends Model
         'probation_ends_at', 'probation_completed', 'lock_reason',
         'basic_salary', 'transport_allowance', 'house_allowance', 'position_allowance',
         'status', 'notes', 'bank_name', 'account_number',
-        'is_dead_file', 'dead_file_at', 'dead_file_reason', 'dead_file_notes', 'dead_file_by',
+        'is_dead_file', 'dead_file_at', 'dead_file_date', 'dead_file_reason', 'dead_file_notes', 'dead_file_by',
         'guarantee_letter', 'guarantee_letter_2', 'guarantee_letter_submitted_at', 'guarantee_letter_required',
         'guarantor_name', 'guarantor_id_number', 'guarantor_id_card', 'guarantor_phone',
         'guarantor_2_name', 'guarantor_2_id_number', 'guarantor_2_id_card', 'guarantor_2_phone',
@@ -36,6 +36,7 @@ class Employee extends Model
         'basic_salary'    => 'decimal:2',
         'is_dead_file'    => 'boolean',
         'dead_file_at'    => 'datetime',
+        'dead_file_date'  => 'date',
         'guarantee_letter_submitted_at' => 'date',
         'guarantee_letter_required' => 'boolean',
         'registration_letters' => 'array',
@@ -51,6 +52,9 @@ class Employee extends Model
      */
     protected static function booted()
     {
+        // Central Dead File Filter: Automatically hide archived employees from all active queries & dropdowns
+        static::addGlobalScope(new \App\Scopes\NotDeadFileScope);
+
         static::creating(function ($employee) {
             // Strict Rule: Every new or re-added employee MUST strictly start with pending GM approval
             $employee->is_approved_by_gm = false;
@@ -120,6 +124,34 @@ class Employee extends Model
         return $this->belongsTo(User::class, 'dead_file_by');
     }
 
+    public function getDeadFileDateAttribute()
+    {
+        if (!empty($this->attributes['dead_file_date'])) {
+            return $this->attributes['dead_file_date'];
+        }
+        return $this->dead_file_at ? $this->dead_file_at->toDateString() : null;
+    }
+
+    public function setDeadFileDateAttribute($value)
+    {
+        $this->attributes['dead_file_date'] = $value ? \Carbon\Carbon::parse($value)->toDateString() : null;
+        if ($value && empty($this->attributes['dead_file_at'])) {
+            $this->attributes['dead_file_at'] = \Carbon\Carbon::parse($value);
+        }
+    }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)
+                    ->where($field ?? $this->getRouteKeyName(), $value)
+                    ->first();
+    }
+
+    public function scopeWithDeadFile($query)
+    {
+        return $query->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class);
+    }
+
     public function scopeActiveRoster($query)
     {
         return $query->where(function ($q) {
@@ -130,8 +162,40 @@ class Employee extends Model
 
     public function scopeInDeadFile($query)
     {
-        return $query->where('is_dead_file', true)
-                     ->orWhere('status', 'dead_file');
+        return $query->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)
+                     ->where(function ($q) {
+                         $q->where('is_dead_file', true)
+                           ->orWhere('status', 'dead_file');
+                     });
+    }
+
+    /**
+     * Historical Date Filter Rule:
+     * Records dated BEFORE dead_file_date must stay intact and visible.
+     * Records dated ON or AFTER dead_file_date must NOT show them.
+     * Rule: show the employee only when record_date < dead_file_date.
+     */
+    public function scopeActiveOnDate($query, $date)
+    {
+        $targetDate = \Carbon\Carbon::parse($date)->toDateString();
+        return $query->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)
+            ->where(function ($q) use ($targetDate) {
+                $q->where(function ($activeQ) {
+                    $activeQ->where('is_dead_file', false)
+                            ->orWhereNull('is_dead_file');
+                })->orWhere(function ($deadQ) use ($targetDate) {
+                    $deadQ->where(function ($d) {
+                        $d->where('is_dead_file', true)
+                          ->orWhere('status', 'dead_file');
+                    })->where(function ($dateQ) use ($targetDate) {
+                        $dateQ->whereDate('dead_file_date', '>', $targetDate)
+                              ->orWhere(function ($fallbackQ) use ($targetDate) {
+                                  $fallbackQ->whereNull('dead_file_date')
+                                            ->whereDate('dead_file_at', '>', $targetDate);
+                              });
+                    });
+                });
+            });
     }
 
     /**
