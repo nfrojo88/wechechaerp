@@ -1029,28 +1029,27 @@ body.sidebar-open { overflow-y: hidden !important; }
 
             <main class="content-wrapper">
                 @if($isHrOrGm && $probationAlertCount > 0)
-                    <div class="alert alert-warning border-start border-4 border-warning shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3" role="alert">
-                        <div class="d-flex align-items-start gap-3">
-                            <div class="rounded-circle bg-warning bg-opacity-25 p-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
-                                <i class="fa-solid fa-triangle-exclamation text-dark fa-lg"></i>
-                            </div>
+                    <div class="alert alert-warning alert-dismissible fade show border-0 border-start border-4 border-warning shadow-sm mb-3 py-2 px-3 d-flex align-items-center justify-content-between flex-wrap gap-2" role="alert">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation text-warning-emphasis fs-5 flex-shrink-0"></i>
                             <div>
-                                <strong class="d-block text-dark fs-6">
-                                    ⏳ 45-Day Test Period Compliance Alert ({{ $probationAlertCount }} Employee{{ $probationAlertCount > 1 ? 's' : '' }} on Day 20–45)
-                                </strong>
+                                <span class="fw-bold text-dark small">
+                                    ⏳ 45-Day Test Period Alert:
+                                </span>
                                 <span class="text-dark small">
-                                    These employees are currently in their 20 to 45 day test/probation period. Guarantee Letter & TIN information or Renewal must be completed before the 45-day deadline to prevent automatic account lockout.
+                                    <strong>{{ $probationAlertCount }}</strong> employee{{ $probationAlertCount > 1 ? 's are' : ' is' }} on Day 20–45. Complete Guarantee Letter &amp; TIN before Day 45 lockout.
                                 </span>
                             </div>
                         </div>
-                        <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                            <a href="{{ route('employees.index') }}?probation_alert=1" class="btn btn-sm btn-warning text-dark fw-bold shadow-xs">
-                                <i class="fa-solid fa-users me-1"></i> Review {{ $probationAlertCount }} Employee(s)
+                        <div class="d-flex align-items-center gap-2 me-4 flex-shrink-0">
+                            <a href="{{ route('employees.index') }}?probation_alert=1" class="btn btn-xs btn-warning text-dark fw-bold shadow-xs py-1 px-2.5" style="font-size:0.78rem;">
+                                <i class="fa-solid fa-users me-1"></i> Review ({{ $probationAlertCount }})
                             </a>
-                            <a href="{{ route('employees.history') }}" class="btn btn-sm btn-outline-dark">
-                                <i class="fa-solid fa-clock-rotate-left me-1"></i> Employee History
+                            <a href="{{ route('employees.history') }}" class="btn btn-xs btn-outline-dark py-1 px-2" style="font-size:0.78rem;">
+                                <i class="fa-solid fa-clock-rotate-left me-1"></i> History
                             </a>
                         </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close" style="padding: 0.75rem 1rem;"></button>
                     </div>
                 @endif
 

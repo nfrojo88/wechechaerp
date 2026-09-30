@@ -2,196 +2,155 @@
 @section('title', 'Attendance Management')
 @section('content')
 <div class="container-fluid">
-    <!-- Page Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <!-- Clean ERP Page Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-3 border-bottom gap-3">
         <div>
-            <h1 class="h3 mb-0"><i class="fas fa-calendar-check me-2 text-primary"></i>Attendance Management</h1>
-            <p class="text-muted mt-1 mb-1">Track and manage employee attendance records</p>
             <div class="d-flex align-items-center gap-2 flex-wrap">
-                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
-                    <i class="fas fa-calendar-day me-1"></i>Today: {{ now()->format('M d, Y') }} ({{ now()->format('l') }})
+                <h4 class="fw-bold text-dark mb-0">
+                    <i class="fa-solid fa-calendar-check text-primary me-1"></i> Attendance Management
+                </h4>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 small">
+                    <i class="far fa-calendar-day me-1"></i>Today: {{ now()->format('M d, Y') }} ({{ now()->format('l') }})
                 </span>
-                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
-                    <i class="fas fa-landmark me-1"></i>🇪🇹 {{ \App\Helpers\EthiopianCalendar::format(today(), 'am') }} ({{ \App\Helpers\EthiopianCalendar::format(today(), 'en') }})
+                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 small">
+                    <i class="fas fa-landmark me-1"></i>🇪🇹 {{ \App\Helpers\EthiopianCalendar::format(today(), 'am') }}
                 </span>
             </div>
+            <p class="text-muted small mb-0 mt-1">Track daily biometric punches, attendance verification, site deployments, and work hours</p>
         </div>
-        <div class="btn-group flex-wrap" role="group">
+
+        {{-- Unified Action Controls --}}
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            {{-- Biometric Sync --}}
             <form action="{{ route('attendance.zkteco-sync') }}" method="POST" class="d-inline">
                 @csrf
                 <input type="hidden" name="date" value="{{ request('date', today()->toDateString()) }}">
                 <input type="hidden" name="redirect_to" value="attendance">
-                <button type="submit" class="btn btn-info text-white fw-semibold" title="Synchronize biometric device punches">
+                <button type="submit" class="btn btn-sm btn-outline-primary shadow-xs" title="Synchronize biometric device punches">
                     <i class="fa-solid fa-rotate me-1"></i>Sync Biometrics
                 </button>
             </form>
-            <button type="button" class="btn btn-outline-danger fw-semibold" data-bs-toggle="modal" data-bs-target="#clearResyncModal" title="Clear processed attendance and freshly re-sync from raw biometric punch logs">
-                <i class="fa-solid fa-broom me-1"></i>Clear &amp; Resync Fresh
+
+            {{-- Quick Mark Attendance (Primary Modal) --}}
+            <button type="button" class="btn btn-sm btn-primary shadow-xs" data-bs-toggle="modal" data-bs-target="#quickAttendanceModal" title="Mark or modify attendance">
+                <i class="fa-solid fa-user-pen me-1"></i>Mark Attendance
             </button>
-            <span class="badge bg-warning-subtle text-dark border border-warning-subtle d-inline-flex align-items-center gap-1 px-2 py-2" title="Attendance machine runs 5h ahead; ERP converts punches automatically (-5h)">
-                <i class="fa-solid fa-clock-rotate-left text-warning-emphasis"></i><span class="fw-semibold">Device TZ: -5h</span>
-            </span>
-            <button type="button" class="btn btn-warning text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#quickAttendanceModal" title="Mark or modify attendance for any employee">
-                <i class="fa-solid fa-user-pen me-1"></i>Mark Attendance (መዝግብ)
+
+            {{-- Site Deployment Dispatch --}}
+            <button type="button" class="btn btn-sm btn-outline-secondary shadow-xs" data-bs-toggle="modal" data-bs-target="#siteAttendanceModal" title="Dispatch employee to site project">
+                <i class="fa-solid fa-person-digging me-1"></i>On-Site Dispatch
             </button>
-            <button type="button" class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#siteAttendanceModal">
-                <i class="fa-solid fa-person-digging me-1"></i>Employee On Site (ወደ ሳይት የወጣ)
-            </button>
-            <a href="{{ route('attendance.site-deployments') }}" class="btn btn-outline-primary fw-semibold">
-                <i class="fa-solid fa-list-check me-1"></i>Site Deployments Report (ሪፖርት)
-            </a>
-            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#workScheduleModal">
-                <i class="fas fa-business-time me-1"></i>Work Schedule
-            </button>
-            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#importDeviceModal">
-                <i class="fas fa-file-excel me-1"></i>Bulk Upload (XLS)
-            </button>
+
+            {{-- More Actions Dropdown --}}
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle shadow-xs" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-ellipsis-vertical me-1"></i>More
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 rounded-3">
+                    <li>
+                        <a class="dropdown-item py-2 small" href="#" data-bs-toggle="modal" data-bs-target="#clearResyncModal">
+                            <i class="fa-solid fa-broom text-danger me-2"></i>Clear &amp; Resync Fresh
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item py-2 small" href="#" data-bs-toggle="modal" data-bs-target="#importDeviceModal">
+                            <i class="fa-solid fa-file-excel text-success me-2"></i>Bulk Upload (Excel / CSV)
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item py-2 small" href="{{ route('attendance.site-deployments') }}">
+                            <i class="fa-solid fa-list-check text-primary me-2"></i>Site Deployments Report
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item py-2 small" href="#" data-bs-toggle="modal" data-bs-target="#workScheduleModal">
+                            <i class="fa-solid fa-business-time text-info me-2"></i>Configure Shift Schedule
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li class="dropdown-header small text-muted">
+                        <i class="fa-solid fa-clock-rotate-left me-1"></i>Device Timezone: -5h Auto
+                    </li>
+                </ul>
+            </div>
         </div>
     </div>
 
     @if(session('success'))
-    <div class="alert alert-success alert-dismissible fade show">
-        {{ session('success') }}
+    <div class="alert alert-success alert-dismissible fade show border-0 shadow-xs rounded-3 py-2 px-3 mb-3 d-flex align-items-center gap-2">
+        <i class="fa-solid fa-circle-check text-success"></i>
+        <div class="small flex-grow-1">{{ session('success') }}</div>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     @endif
 
-
-
-    <!-- Official Work Hours & Schedule Card (Working Time vs Non-Working/Break Time) -->
-    <div class="card border-0 shadow-sm mb-3 bg-white rounded-3">
-        <div class="card-body p-3">
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    {{-- Compact Shift Schedule Bar (Collapsible to eliminate vertical bulk) --}}
+    <div class="card border-0 shadow-xs mb-3 bg-white rounded-3">
+        <div class="card-body py-2 px-3">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-primary rounded-circle p-2"><i class="fas fa-business-time text-white"></i></span>
-                    <div>
-                        <h6 class="mb-0 fw-bold text-dark">
-                            Work Hours &amp; Shift Schedule <span class="text-muted fw-normal small">(የሥራና የእረፍት ሰዓት ድልድል)</span>
-                        </h6>
-                        <small class="text-muted">
-                            <span class="badge bg-primary-subtle text-primary border border-primary px-2 py-0.5 me-1">Mon – Fri: {{ $workSchedule['total_hours'] ?? '8.0' }} hrs/day</span>
-                            <span class="badge bg-warning-subtle text-dark border border-warning px-2 py-0.5 me-1">Sat: {{ $workSchedule['sat_total_hours'] ?? '4.0' }} hrs (Morning Only)</span>
-                            &bull; Linked with Ethiopian Time &amp; Calendar
-                        </small>
+                    <span class="badge bg-primary-subtle text-primary p-1.5 rounded-2">
+                        <i class="fa-solid fa-business-time"></i>
+                    </span>
+                    <div class="small">
+                        <strong class="text-dark">Official Shift Schedule:</strong>
+                        <span class="text-muted ms-1">
+                            Mon–Fri: <strong>08:40 AM – 05:30 PM</strong> (Lunch 12:30–01:35 PM) &bull; Sat: <strong>08:40 AM – 12:30 PM</strong> (Morning Only)
+                        </span>
                     </div>
                 </div>
-                <div class="d-flex gap-2 align-items-center">
-                    <button class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#workScheduleModal">
-                        <i class="fas fa-cog me-1"></i>Configure Schedule
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-xs btn-outline-secondary py-1 px-2.5 small" type="button" data-bs-toggle="collapse" data-bs-target="#shiftScheduleDetails" aria-expanded="false" title="Toggle detailed schedule breakdown">
+                        <i class="fa-solid fa-clock me-1"></i> Shift Breakdown
+                    </button>
+                    <button class="btn btn-xs btn-outline-primary py-1 px-2 small" data-bs-toggle="modal" data-bs-target="#workScheduleModal" title="Edit work hours">
+                        <i class="fa-solid fa-gear me-1"></i> Configure
                     </button>
                 </div>
             </div>
 
-            <!-- Schedule Badges / Panels -->
-            <div class="row g-3">
-                <!-- Left: Monday – Friday (Full Working Day) -->
-                <div class="col-12 col-xl-8 border-end-xl">
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                        <span class="badge bg-dark text-white px-2.5 py-1 small fw-bold">
-                            <i class="fa-solid fa-calendar-week me-1 text-info"></i> Monday – Friday (ሰኞ – ዓርብ - Full Day)
-                        </span>
-                        <span class="small text-muted fw-semibold">Expected: <strong>{{ $workSchedule['total_hours'] ?? '8.0' }} hrs</strong></span>
-                    </div>
-                    <div class="row g-2">
-                        {{-- Morning Working Hours --}}
-                        <div class="col-md-4">
-                            <div class="p-2 rounded-3 border bg-success-subtle bg-opacity-50 border-success-subtle d-flex align-items-center justify-content-between">
-                                <div>
-                                    <div class="d-flex align-items-center gap-1">
-                                        <span class="badge bg-success text-white px-1 py-0 me-1" style="font-size: 0.65rem;">IN WORK</span>
-                                        <span class="fw-bold small text-success-emphasis"><i class="fas fa-sun text-warning me-1"></i>Morning Shift</span>
-                                    </div>
-                                    <div class="small fw-bold text-dark mt-1 font-monospace">
-                                        {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['morning_in'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['morning_out'])->format('h:i A') }}
-                                    </div>
-                                    <small class="text-muted d-block" style="font-size: 0.72rem;">
-                                        🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['morning_in']) }}
-                                    </small>
-                                </div>
+            <!-- Collapsible Detailed Shift Breakdown -->
+            <div class="collapse mt-2 pt-2 border-top" id="shiftScheduleDetails">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <div class="p-2 rounded-2 border bg-success-subtle bg-opacity-50">
+                            <span class="badge bg-success text-white px-1 py-0 me-1" style="font-size: 0.65rem;">IN WORK</span>
+                            <span class="fw-bold small text-success-emphasis">Morning Shift</span>
+                            <div class="small fw-bold text-dark mt-1 font-monospace">
+                                {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['morning_in'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['morning_out'])->format('h:i A') }}
                             </div>
-                        </div>
-
-                        {{-- Lunch & Rest Break --}}
-                        <div class="col-md-4">
-                            <div class="p-2 rounded-3 border bg-warning-subtle bg-opacity-50 border-warning-subtle d-flex align-items-center justify-content-between">
-                                <div>
-                                    <div class="d-flex align-items-center gap-1">
-                                        <span class="badge bg-warning text-dark px-1 py-0 me-1" style="font-size: 0.65rem;">BREAK</span>
-                                        <span class="fw-bold small text-warning-emphasis"><i class="fas fa-utensils text-warning me-1"></i>Lunch Break</span>
-                                    </div>
-                                    <div class="small fw-bold text-dark mt-1 font-monospace">
-                                        {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['break_start'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['break_end'])->format('h:i A') }}
-                                    </div>
-                                    <small class="text-muted d-block" style="font-size: 0.72rem;">
-                                        🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['break_start']) }}
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-
-                        {{-- Afternoon Working Hours --}}
-                        <div class="col-md-4">
-                            <div class="p-2 rounded-3 border bg-primary-subtle bg-opacity-50 border-primary-subtle d-flex align-items-center justify-content-between">
-                                <div>
-                                    <div class="d-flex align-items-center gap-1">
-                                        <span class="badge bg-primary text-white px-1 py-0 me-1" style="font-size: 0.65rem;">IN WORK</span>
-                                        <span class="fw-bold small text-primary-emphasis"><i class="fas fa-cloud-sun text-warning me-1"></i>Afternoon Shift</span>
-                                    </div>
-                                    <div class="small fw-bold text-dark mt-1 font-monospace">
-                                        {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['afternoon_in'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['afternoon_out'])->format('h:i A') }}
-                                    </div>
-                                    <small class="text-muted d-block" style="font-size: 0.72rem;">
-                                        🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['afternoon_in']) }}
-                                    </small>
-                                </div>
-                            </div>
+                            <small class="text-muted d-block" style="font-size: 0.72rem;">🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['morning_in']) }}</small>
                         </div>
                     </div>
-                </div>
-
-                <!-- Right: Saturday (Morning Session Only) -->
-                <div class="col-12 col-xl-4">
-                    <div class="d-flex align-items-center justify-content-between mb-2">
-                        <span class="badge bg-warning text-dark px-2.5 py-1 small fw-bold border border-warning">
-                            <i class="fa-solid fa-mug-saucer me-1"></i> Saturday (ቅዳሜ - Morning Only)
-                        </span>
-                        <span class="small text-muted fw-semibold">Expected: <strong>{{ $workSchedule['sat_total_hours'] ?? '4.0' }} hrs</strong></span>
-                    </div>
-                    <div class="row g-2">
-                        {{-- Saturday Morning Shift --}}
-                        <div class="col-12 col-sm-7">
-                            <div class="p-2 rounded-3 border bg-success-subtle bg-opacity-50 border-success-subtle d-flex align-items-center justify-content-between">
-                                <div>
-                                    <div class="d-flex align-items-center gap-1">
-                                        <span class="badge bg-success text-white px-1 py-0 me-1" style="font-size: 0.65rem;">IN WORK</span>
-                                        <span class="fw-bold small text-success-emphasis"><i class="fas fa-sun text-warning me-1"></i>Morning (ጠዋት)</span>
-                                    </div>
-                                    <div class="small fw-bold text-dark mt-1 font-monospace">
-                                        {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['sat_morning_in'] ?? '08:30')->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['sat_morning_out'] ?? '12:30')->format('h:i A') }}
-                                    </div>
-                                    <small class="text-muted d-block" style="font-size: 0.72rem;">
-                                        🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['sat_morning_in'] ?? '08:30') }}
-                                    </small>
-                                </div>
+                    <div class="col-md-3">
+                        <div class="p-2 rounded-2 border bg-warning-subtle bg-opacity-50">
+                            <span class="badge bg-warning text-dark px-1 py-0 me-1" style="font-size: 0.65rem;">BREAK</span>
+                            <span class="fw-bold small text-warning-emphasis">Lunch Break</span>
+                            <div class="small fw-bold text-dark mt-1 font-monospace">
+                                {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['break_start'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['break_end'])->format('h:i A') }}
                             </div>
+                            <small class="text-muted d-block" style="font-size: 0.72rem;">🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['break_start']) }}</small>
                         </div>
-
-                        {{-- Saturday Afternoon Off --}}
-                        <div class="col-12 col-sm-5">
-                            <div class="p-2 rounded-3 border bg-light d-flex align-items-center justify-content-between h-100">
-                                <div>
-                                    <div class="d-flex align-items-center gap-1">
-                                        <span class="badge bg-secondary text-white px-1 py-0 me-1" style="font-size: 0.65rem;">OFF</span>
-                                        <span class="fw-bold small text-muted"><i class="fa-solid fa-moon text-secondary me-1"></i>Afternoon</span>
-                                    </div>
-                                    <div class="small fw-bold text-muted mt-1">
-                                        Off / Non-Working
-                                    </div>
-                                    <small class="text-muted d-block" style="font-size: 0.72rem;">
-                                        ከሰዓት እረፍት
-                                    </small>
-                                </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-2 rounded-2 border bg-primary-subtle bg-opacity-50">
+                            <span class="badge bg-primary text-white px-1 py-0 me-1" style="font-size: 0.65rem;">IN WORK</span>
+                            <span class="fw-bold small text-primary-emphasis">Afternoon Shift</span>
+                            <div class="small fw-bold text-dark mt-1 font-monospace">
+                                {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['afternoon_in'])->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['afternoon_out'])->format('h:i A') }}
                             </div>
+                            <small class="text-muted d-block" style="font-size: 0.72rem;">🇪🇹 {{ \App\Helpers\EthiopianCalendar::toEthiopianTime($workSchedule['afternoon_in']) }}</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-2 rounded-2 border bg-light">
+                            <span class="badge bg-info text-white px-1 py-0 me-1" style="font-size: 0.65rem;">SATURDAY</span>
+                            <span class="fw-bold small text-dark">Saturday Morning</span>
+                            <div class="small fw-bold text-dark mt-1 font-monospace">
+                                {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['sat_morning_in'] ?? '08:40')->format('h:i A') }} – {{ \Carbon\Carbon::createFromFormat('H:i', $workSchedule['sat_morning_out'] ?? '12:30')->format('h:i A') }}
+                            </div>
+                            <small class="text-muted d-block" style="font-size: 0.72rem;">Afternoon Off (ከሰዓት እረፍት)</small>
                         </div>
                     </div>
                 </div>
@@ -199,19 +158,19 @@
         </div>
     </div>
 
-    {{-- Clean Month, Date & Filter Toolbar --}}
-    <div class="card border-0 shadow-sm mb-4 bg-white rounded-3">
+    {{-- Clean Unified Filter Toolbar --}}
+    <div class="card border-0 shadow-sm mb-3 bg-white rounded-3">
         <div class="card-body p-3">
             <form method="GET" action="{{ route('attendance.index') }}" id="attendanceFilterForm">
                 <div class="row g-2 align-items-end">
                     
                     {{-- Select Month --}}
-                    <div class="col-12 col-sm-6 col-lg-2">
-                        <label class="form-label small fw-bold text-dark mb-1">
-                            <i class="far fa-calendar text-primary me-1"></i>Select Month (ወር)
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">
+                            <i class="far fa-calendar text-primary me-1"></i>Month (ወር)
                         </label>
-                        <select name="month" id="filterMonth" class="form-select" onchange="onMonthFilterChange(this.value)">
-                            <option value="">All Months (ሁሉም ወራት)</option>
+                        <select name="month" id="filterMonth" class="form-select form-select-sm" onchange="onMonthFilterChange(this.value)">
+                            <option value="">All Months</option>
                             @foreach($availableMonths ?? [] as $m)
                                 <option value="{{ $m['value'] }}" {{ request('month', $selectedMonth ?? '') === $m['value'] ? 'selected' : '' }}>
                                     {{ $m['label_en'] }} @if(!empty($m['label_et'])) ({{ $m['label_et'] }}) @endif
@@ -221,12 +180,12 @@
                     </div>
 
                     {{-- Select Specific Date --}}
-                    <div class="col-12 col-sm-6 col-lg-2">
-                        <label class="form-label small fw-bold text-dark mb-1">
-                            <i class="far fa-calendar-check text-success me-1"></i>Select Date (ቀን)
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">
+                            <i class="far fa-calendar-check text-success me-1"></i>Date (ቀን)
                         </label>
-                        <select name="date" id="filterDate" class="form-select">
-                            <option value="">All Dates in Selected Period</option>
+                        <select name="date" id="filterDate" class="form-select form-select-sm">
+                            <option value="">All Dates</option>
                             @foreach($availableDatesWithLabels ?? [] as $item)
                                 <option value="{{ $item['date'] }}" 
                                         data-month="{{ $item['month'] }}"
@@ -238,11 +197,11 @@
                     </div>
 
                     {{-- Staff Scope Filter --}}
-                    <div class="col-6 col-sm-6 col-lg-2">
-                        <label class="form-label small fw-bold text-dark mb-1">
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">
                             <i class="fas fa-building text-primary me-1"></i>Staff Scope
                         </label>
-                        <select name="staff_type" class="form-select" onchange="this.form.submit()">
+                        <select name="staff_type" class="form-select form-select-sm" onchange="this.form.submit()">
                             <option value="office" {{ ($staffType ?? 'office') === 'office' ? 'selected' : '' }}>🏢 Head Office Only</option>
                             <option value="all" {{ ($staffType ?? '') === 'all' ? 'selected' : '' }}>👥 All Employees</option>
                             <option value="site_driver_remote" {{ ($staffType ?? '') === 'site_driver_remote' ? 'selected' : '' }}>🚜 Site, Driver &amp; Remote</option>
@@ -250,11 +209,11 @@
                     </div>
 
                     {{-- Source Filter --}}
-                    <div class="col-6 col-sm-6 col-lg-2">
-                        <label class="form-label small fw-bold text-dark mb-1">
+                    <div class="col-6 col-md-3 col-lg-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">
                             <i class="fas fa-fingerprint text-primary me-1"></i>Source (ምንጭ)
                         </label>
-                        <select name="source" class="form-select">
+                        <select name="source" class="form-select form-select-sm">
                             <option value="">All Sources</option>
                             <option value="biometric" {{ request('source') === 'biometric' ? 'selected' : '' }}>⚡ Biometric (Synced)</option>
                             <option value="site" {{ request('source') === 'site' ? 'selected' : '' }}>🏗️ On-Site (ሳይት ላይ)</option>
@@ -263,11 +222,11 @@
                     </div>
 
                     {{-- Status Filter --}}
-                    <div class="col-6 col-sm-6 col-lg-1">
-                        <label class="form-label small fw-bold text-dark mb-1">
+                    <div class="col-6 col-md-3 col-lg-1">
+                        <label class="form-label small fw-semibold text-muted mb-1">
                             <i class="fas fa-tag text-secondary me-1"></i>Status
                         </label>
-                        <select name="status" class="form-select">
+                        <select name="status" class="form-select form-select-sm">
                             <option value="">All</option>
                             <option value="present" {{ request('status') === 'present' ? 'selected' : '' }}>Present</option>
                             <option value="S" {{ in_array(request('status'), ['S', 'site', 's']) ? 'selected' : '' }}>S - On Site</option>
@@ -278,23 +237,23 @@
                     </div>
 
                     {{-- Employee / Device ID Search --}}
-                    <div class="col-6 col-sm-6 col-lg-2">
-                        <label class="form-label small fw-bold text-dark mb-1">
+                    <div class="col-6 col-md-5 col-lg-2">
+                        <label class="form-label small fw-semibold text-muted mb-1">
                             <i class="fas fa-search text-secondary me-1"></i>Employee / ID
                         </label>
-                        <input type="text" name="employee" class="form-control" 
+                        <input type="text" name="employee" class="form-control form-control-sm"
                                placeholder="Name or Device ID..." value="{{ request('employee') }}">
                     </div>
 
                     {{-- Filter Buttons --}}
-                    <div class="col-6 col-sm-6 col-lg-1 d-flex gap-1">
-                        <button type="submit" class="btn btn-primary flex-grow-1 shadow-xs" title="Filter Records">
+                    <div class="col-12 col-md-4 col-lg-1 d-flex gap-1">
+                        <button type="submit" class="btn btn-sm btn-primary flex-grow-1 shadow-xs" title="Apply filter">
                             <i class="fas fa-filter"></i>
                         </button>
-                        <a href="{{ route('attendance.index') }}" class="btn btn-outline-secondary" title="Reset all filters">
+                        <a href="{{ route('attendance.index') }}" class="btn btn-sm btn-outline-secondary" title="Reset all filters">
                             <i class="fas fa-redo"></i>
                         </a>
-                        <button type="button" class="btn btn-outline-info" data-bs-toggle="collapse" 
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse"
                                 data-bs-target="#customDateRangeCollapse" title="Custom Date Range">
                             <i class="fas fa-calendar-alt"></i>
                         </button>
@@ -302,7 +261,7 @@
                 </div>
 
                 {{-- Optional Expandable Custom Date Range (Date From & To) --}}
-                <div class="collapse {{ (request('date_from') || request('date_to')) ? 'show' : '' }} mt-3 pt-2 border-top" id="customDateRangeCollapse">
+                <div class="collapse {{ (request('date_from') || request('date_to')) ? 'show' : '' }} mt-2 pt-2 border-top" id="customDateRangeCollapse">
                     <div class="row g-2 align-items-center">
                         <div class="col-12 col-md-auto text-muted small fw-semibold">
                             <i class="fas fa-calendar-week me-1 text-info"></i>Custom Date Range:
@@ -328,58 +287,44 @@
         </div>
     </div>
 
-    {{-- Staff Scope Banner --}}
-    @if(($staffType ?? 'office') === 'office')
-        <div class="alert bg-primary-subtle border border-primary-subtle d-flex align-items-center justify-content-between flex-wrap gap-2 p-2 px-3 rounded-3 mb-2 shadow-xs">
-            <div class="d-flex align-items-center gap-2">
+    {{-- Unified Scope & Policy Status Bar --}}
+    <div class="alert bg-white border shadow-xs d-flex align-items-center justify-content-between flex-wrap gap-2 py-2 px-3 rounded-3 mb-3">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if(($staffType ?? 'office') === 'office')
                 <span class="badge bg-primary text-white px-2 py-1 small">
                     <i class="fa-solid fa-building me-1"></i>Head Office Staff Active
                 </span>
-                <span class="text-dark small">
-                    <strong>Site workers, drivers, and remote workers are excluded</strong> from this attendance register and absent penalty calculation.
+                <span class="text-secondary small">
+                    Site workers, drivers, and remote workers are excluded from head office attendance and absence penalty calculations.
                 </span>
-            </div>
-            <div>
-                <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['staff_type' => 'all'])) }}" class="btn btn-xs btn-outline-primary py-0 px-2 fw-semibold" style="font-size: 0.75rem;">
-                    <i class="fa-solid fa-users me-1"></i>View All Employees
+                <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['staff_type' => 'all'])) }}" class="text-decoration-none small ms-1 fw-semibold text-primary">
+                    <i class="fa-solid fa-users me-1"></i>View All Staff
                 </a>
-            </div>
-        </div>
-    @elseif(($staffType ?? '') === 'site_driver_remote')
-        <div class="alert bg-warning-subtle border border-warning d-flex align-items-center justify-content-between flex-wrap gap-2 p-2 px-3 rounded-3 mb-2 shadow-xs">
-            <div class="d-flex align-items-center gap-2">
+            @elseif(($staffType ?? '') === 'site_driver_remote')
                 <span class="badge bg-warning text-dark px-2 py-1 small">
                     <i class="fa-solid fa-truck-pickup me-1"></i>Site, Drivers &amp; Remote Staff View
                 </span>
-                <span class="text-dark small">
-                    Currently showing field personnel, project-assigned staff, drivers, and remote workers.
+                <span class="text-secondary small">
+                    Currently displaying project personnel, drivers, and remote workers.
                 </span>
-            </div>
-            <div>
-                <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['staff_type' => 'office'])) }}" class="btn btn-xs btn-outline-dark py-0 px-2 fw-semibold" style="font-size: 0.75rem;">
+                <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['staff_type' => 'office'])) }}" class="text-decoration-none small ms-1 fw-semibold text-primary">
                     <i class="fa-solid fa-building me-1"></i>Switch to Head Office Staff Only
                 </a>
-            </div>
-        </div>
-    @endif
-
-    {{-- Attendance Policy Rule Banner (3 Late Days = 1 Absent Day Penalty) --}}
-    <div class="alert bg-warning-subtle border border-warning d-flex align-items-center justify-content-between flex-wrap gap-2 p-2.5 px-3 rounded-3 mb-3 shadow-xs">
-        <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-warning text-dark px-2.5 py-1.5 fw-bold font-monospace shadow-xs">
-                <i class="fa-solid fa-scale-balanced me-1"></i>POLICY RULE
-            </span>
-            <div>
-                <span class="fw-bold text-dark small">Attendance Penalty: 3 Late Days = 1 Absent Day Penalty</span>
-                <span class="text-muted small ms-1 d-none d-md-inline">&bull; Official check-in cutoff is 08:40 AM. Every 3 late arrivals incur 1 full day absence penalty.</span>
-            </div>
+            @else
+                <span class="badge bg-secondary text-white px-2 py-1 small">
+                    <i class="fa-solid fa-users me-1"></i>All Company Personnel View
+                </span>
+                <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['staff_type' => 'office'])) }}" class="text-decoration-none small ms-1 fw-semibold text-primary">
+                    <i class="fa-solid fa-building me-1"></i>Switch to Head Office Staff Only
+                </a>
+            @endif
         </div>
         <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-white text-dark border font-monospace px-2.5 py-1 small shadow-xs">
-                <i class="fa-regular fa-clock text-warning me-1"></i>Cutoff: 08:40 AM
+            <span class="badge bg-warning-subtle text-dark border border-warning font-monospace px-2 py-1 small">
+                <i class="fa-solid fa-scale-balanced me-1 text-warning-emphasis"></i>3 Late Days = 1 Absent Day Penalty
             </span>
-            <span class="badge bg-danger text-white font-monospace px-2.5 py-1 small shadow-xs">
-                3 Late Days = 1 Day Absent
+            <span class="text-muted small d-none d-md-inline">
+                Cutoff: <strong>08:40 AM</strong>
             </span>
         </div>
     </div>
