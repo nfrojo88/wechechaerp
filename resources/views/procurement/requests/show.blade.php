@@ -101,6 +101,9 @@
                     <i class="fa-solid fa-truck-ramp-box me-1"></i> Create Transfer
                 </button>
             </form>
+            @endif
+        @endif
+
         @php
             $linkedPr = $materialRequest->purchaseRequests->first();
         @endphp
