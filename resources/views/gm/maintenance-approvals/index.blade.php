@@ -285,6 +285,19 @@
                                             <span class="text-muted small">
                                                 <i class="fa-solid fa-user me-1 text-primary"></i>{{ $mReq->employee->full_name ?? ($mReq->reportedBy->name ?? 'Staff') }}
                                             </span>
+                                            @if($mReq->maintenance_person_name || $mReq->maintenance_person_account)
+                                                <div class="mt-1 small">
+                                                    @if($mReq->maintenance_person_name)
+                                                        <span class="badge bg-light text-dark border me-1"><i class="fa-solid fa-user-wrench me-1 text-primary"></i>{{ $mReq->maintenance_person_name }}</span>
+                                                    @endif
+                                                    @if($mReq->maintenance_person_account)
+                                                        <span class="badge bg-success bg-opacity-10 text-success font-monospace border border-success border-opacity-25 me-1"><i class="fa-solid fa-credit-card me-1"></i>Acc: {{ $mReq->maintenance_person_account }}</span>
+                                                    @endif
+                                                    @if($mReq->maintenance_person_phone)
+                                                        <span class="badge bg-light text-dark border"><i class="fa-solid fa-phone me-1 text-info"></i>{{ $mReq->maintenance_person_phone }}</span>
+                                                    @endif
+                                                </div>
+                                            @endif
                                         </td>
 
                                         {{-- Issue Type & Urgency --}}
@@ -1116,20 +1129,32 @@
                 @endif
 
                 {{-- Personnel Contact Info (Record-keeping only) --}}
-                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3">
-                    <h6 class="fw-bold text-secondary mb-2 small text-uppercase"><i class="fa-solid fa-address-card me-1"></i>Technician Contact Info (For Record-Keeping Only)</h6>
+                <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-3 border-top border-3 border-primary">
+                    <h6 class="fw-bold text-dark mb-2 small text-uppercase"><i class="fa-solid fa-address-card me-1 text-primary"></i>Technician &amp; Payment Account Information</h6>
                     <div class="row g-2">
                         <div class="col-md-4">
-                            <div class="small text-muted">Technician Name:</div>
-                            <strong class="text-dark">{{ $mReq->maintenance_person_name ?? 'N/A' }}</strong>
+                            <div class="p-2 rounded bg-light border">
+                                <small class="text-muted d-block" style="font-size:0.75rem;"><i class="fa-solid fa-user-wrench me-1 text-primary"></i>Technician Name:</small>
+                                <strong class="text-dark fs-6">{{ $mReq->maintenance_person_name ?? 'N/A' }}</strong>
+                            </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="small text-muted">Account Name:</div>
-                            <strong class="text-dark">{{ $mReq->maintenance_person_account ?? 'N/A' }}</strong>
+                            <div class="p-2 rounded bg-success bg-opacity-10 border border-success border-opacity-25">
+                                <small class="text-success d-block" style="font-size:0.75rem;"><i class="fa-solid fa-credit-card me-1"></i>Account No / Bank Account:</small>
+                                <strong class="text-success font-monospace fs-6">{{ $mReq->maintenance_person_account ?? 'N/A' }}</strong>
+                            </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="small text-muted">Phone Number:</div>
-                            <strong class="text-dark">{{ $mReq->maintenance_person_phone ?? 'N/A' }}</strong>
+                            <div class="p-2 rounded bg-light border">
+                                <small class="text-muted d-block" style="font-size:0.75rem;"><i class="fa-solid fa-phone me-1 text-info"></i>Phone Number:</small>
+                                @if($mReq->maintenance_person_phone)
+                                    <a href="tel:{{ $mReq->maintenance_person_phone }}" class="text-dark fw-bold text-decoration-none fs-6">
+                                        {{ $mReq->maintenance_person_phone }}
+                                    </a>
+                                @else
+                                    <strong class="text-muted fs-6">N/A</strong>
+                                @endif
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -255,7 +255,7 @@
 
                     {{-- Step 4 / 5: Pending GM Final Approval --}}
                     @elseif($maintenanceRequest->gs_status === 'pending_gm_final')
-                        <div class="alert alert-primary border-0 shadow-xs rounded-3 p-3 mb-0">
+                        <div class="alert alert-primary border-0 shadow-xs rounded-3 p-3 mb-3">
                             <div class="d-flex align-items-center gap-3">
                                 <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
                                 <div>
@@ -267,17 +267,196 @@
                             </div>
                         </div>
 
+                        {{-- Prominent Details Card: Account No, Phone No, Name & Financials for GM Review --}}
+                        <div class="card border-0 shadow-xs rounded-3 bg-white p-3 mb-0 border-top border-3 border-primary">
+                            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom flex-wrap gap-2">
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-0">
+                                        <i class="fa-solid fa-address-card text-primary me-2"></i>Technician &amp; Payment Account Information (Submitted to GM)
+                                    </h6>
+                                    <small class="text-muted">Review payee details, bank account number, phone, and budget before final approval.</small>
+                                </div>
+                                <span class="badge bg-warning text-dark border border-warning px-3 py-1.5 rounded-pill small fw-bold">
+                                    <i class="fa-solid fa-clock me-1"></i>Awaiting GM Decision
+                                </span>
+                            </div>
+
+                            <div class="row g-3">
+                                {{-- 1. Maintenance Person / Technician Name --}}
+                                <div class="col-md-4">
+                                    <div class="p-3 rounded-3 bg-light border h-100">
+                                        <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-user-wrench text-primary me-1"></i>Technician / Person Name
+                                        </small>
+                                        <span class="fs-6 fw-bold text-dark d-block">
+                                            {{ $maintenanceRequest->maintenance_person_name ?: 'Not Provided' }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {{-- 2. Account No / Bank Account --}}
+                                <div class="col-md-4">
+                                    <div class="p-3 rounded-3 bg-success bg-opacity-10 border border-success border-opacity-25 h-100">
+                                        <small class="text-success text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-credit-card me-1"></i>Account No / Bank Account
+                                        </small>
+                                        <span class="fs-6 fw-bold text-success font-monospace d-block">
+                                            {{ $maintenanceRequest->maintenance_person_account ?: 'Not Provided' }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {{-- 3. Phone Number --}}
+                                <div class="col-md-4">
+                                    <div class="p-3 rounded-3 bg-light border h-100">
+                                        <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-phone text-info me-1"></i>Phone Number
+                                        </small>
+                                        @if($maintenanceRequest->maintenance_person_phone)
+                                            <a href="tel:{{ $maintenanceRequest->maintenance_person_phone }}" class="fs-6 fw-bold text-primary text-decoration-none d-block">
+                                                <i class="fa-solid fa-phone-volume me-1"></i>{{ $maintenanceRequest->maintenance_person_phone }}
+                                            </a>
+                                        @else
+                                            <span class="fs-6 fw-bold text-muted">Not Provided</span>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                {{-- 4. Assigned Petty Cash Custodian --}}
+                                <div class="col-md-4">
+                                    <div class="p-3 rounded-3 bg-light border h-100">
+                                        <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i>Petty Cash Custodian
+                                        </small>
+                                        <span class="fs-6 fw-bold text-dark d-block">
+                                            {{ $maintenanceRequest->pettyCashOwner->name ?? 'Not Assigned' }}
+                                        </span>
+                                        @if($maintenanceRequest->pettyCashOwner?->employee)
+                                            <small class="text-muted d-block font-monospace mt-1" style="font-size:0.75rem;">
+                                                <span class="badge bg-secondary font-monospace">{{ $maintenanceRequest->pettyCashOwner->employee->employee_code }}</span>
+                                                @if($maintenanceRequest->pettyCashOwner->employee->account_number)
+                                                    &bull; Acc: <strong>{{ $maintenanceRequest->pettyCashOwner->employee->account_number }}</strong>
+                                                @endif
+                                                @if($maintenanceRequest->pettyCashOwner->employee->phone)
+                                                    &bull; Tel: {{ $maintenanceRequest->pettyCashOwner->employee->phone }}
+                                                @endif
+                                            </small>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                {{-- 5. Money Needed (ETB) --}}
+                                <div class="col-md-4">
+                                    <div class="p-3 rounded-3 bg-light border h-100">
+                                        <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-money-bill-wave text-success me-1"></i>Estimated Money (ETB)
+                                        </small>
+                                        <span class="fs-5 fw-bold text-success font-monospace d-block">
+                                            {{ number_format($maintenanceRequest->money_amount ?? 0, 2) }} ETB
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {{-- 6. Estimated Time --}}
+                                <div class="col-md-4">
+                                    <div class="p-3 rounded-3 bg-light border h-100">
+                                        <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-business-time text-secondary me-1"></i>Estimated Time
+                                        </small>
+                                        <span class="fs-6 fw-bold text-dark d-block">
+                                            {{ $maintenanceRequest->estimated_time ?: 'Standard / As Needed' }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                @if($maintenanceRequest->material_description)
+                                    <div class="col-12">
+                                        <div class="p-3 rounded-3 bg-light border">
+                                            <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
+                                                <i class="fa-solid fa-boxes-stacked text-secondary me-1"></i>Material / Spare Parts Requirements (Will appear in Store PR)
+                                            </small>
+                                            <div class="small text-dark fw-semibold" style="white-space: pre-wrap;">{{ $maintenanceRequest->material_description }}</div>
+                                        </div>
+                                    </div>
+                                @endif
+                            </div>
+
+                            {{-- GM / Admin Executive Decision Direct Controls --}}
+                            @if(auth()->check() && auth()->user()->hasAnyRole(['gm', 'general_manager', 'admin', 'global_admin']))
+                                <div class="border-top mt-3 pt-3">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge bg-warning text-dark px-2.5 py-1.5 rounded-pill fw-bold">
+                                                <i class="fa-solid fa-crown me-1"></i>GM Executive Decision
+                                            </span>
+                                            <small class="text-muted">You are logged in as General Manager. You can approve or return directly from here.</small>
+                                        </div>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold shadow-xs" data-bs-toggle="collapse" data-bs-target="#gmReturnSectionShow" aria-expanded="false">
+                                                <i class="fa-solid fa-rotate-left me-1"></i>Return to GS
+                                            </button>
+                                            <button type="button" class="btn btn-success btn-sm rounded-pill px-4 fw-bold shadow-sm" data-bs-toggle="collapse" data-bs-target="#gmApproveSectionShow" aria-expanded="false">
+                                                <i class="fa-solid fa-check-circle me-1"></i>Approve Petty Cash &amp; Forward
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {{-- Collapse 1: GM Approval Form --}}
+                                    <div class="collapse mt-3" id="gmApproveSectionShow">
+                                        <form action="{{ route('gm.maintenance-approvals.final-approval', $maintenanceRequest) }}" method="POST" class="p-3 bg-light rounded-3 border border-success border-opacity-50">
+                                            @csrf
+                                            <input type="hidden" name="petty_cash_owner_id" value="{{ $maintenanceRequest->petty_cash_owner_id }}">
+                                            <input type="hidden" name="money_amount" value="{{ $maintenanceRequest->money_amount }}">
+                                            <h6 class="fw-bold text-success mb-2"><i class="fa-solid fa-check-circle me-1"></i>Confirm GM Final Approval</h6>
+                                            <p class="small text-muted mb-2">
+                                                Approving will authorize Petty Cash assignment to <strong>{{ $maintenanceRequest->pettyCashOwner->name ?? 'Assigned Custodian' }}</strong> for ETB <strong>{{ number_format($maintenanceRequest->money_amount ?? 0, 2) }}</strong>. This automatically creates an Expense Request in Finance and routes materials to Store PR.
+                                            </p>
+                                            <div class="mb-2">
+                                                <label class="form-label small fw-bold text-secondary text-uppercase mb-1">GM Directives / Remarks (Optional)</label>
+                                                <textarea name="gm_notes" class="form-control form-control-sm rounded-3" rows="2" placeholder="e.g. Approved. Proceed with repair under standard petty cash guidelines..."></textarea>
+                                            </div>
+                                            <div class="d-flex justify-content-end gap-2">
+                                                <button type="button" class="btn btn-sm btn-light border" data-bs-toggle="collapse" data-bs-target="#gmApproveSectionShow">Cancel</button>
+                                                <button type="submit" class="btn btn-sm btn-success fw-bold px-4">
+                                                    <i class="fa-solid fa-paper-plane me-1"></i>Confirm &amp; Route to Finance
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+
+                                    {{-- Collapse 2: GM Return Form --}}
+                                    <div class="collapse mt-3" id="gmReturnSectionShow">
+                                        <form action="{{ route('gm.maintenance-approvals.initial-decision', $maintenanceRequest) }}" method="POST" class="p-3 bg-light rounded-3 border border-danger border-opacity-50">
+                                            @csrf
+                                            <input type="hidden" name="action" value="return">
+                                            <h6 class="fw-bold text-danger mb-2"><i class="fa-solid fa-rotate-left me-1"></i>Return Request to General Service</h6>
+                                            <div class="mb-2">
+                                                <label class="form-label small fw-bold text-danger text-uppercase mb-1">Return Reason / Required Revisions <span class="text-danger">*</span></label>
+                                                <textarea name="return_reason" class="form-control form-control-sm rounded-3" rows="2" placeholder="Specify reason (e.g. verify technician account number, re-negotiate labor cost, check store stock first)..." required></textarea>
+                                            </div>
+                                            <div class="d-flex justify-content-end gap-2">
+                                                <button type="button" class="btn btn-sm btn-light border" data-bs-toggle="collapse" data-bs-target="#gmReturnSectionShow">Cancel</button>
+                                                <button type="submit" class="btn btn-sm btn-danger fw-bold px-4">
+                                                    <i class="fa-solid fa-rotate-left me-1"></i>Confirm Return
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            @endif
+                        </div>
+
                     {{-- Step 4 / 5 Approved --}}
                     @elseif($maintenanceRequest->gs_status === 'approved' || $maintenanceRequest->gm_final_approved_at)
                         <div class="alert alert-success border-0 shadow-xs rounded-3 p-3 mb-0">
-                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
                                 <div class="d-flex align-items-center gap-2">
                                     <i class="fa-solid fa-circle-check fs-3 text-success"></i>
                                     <div>
                                         <strong class="text-dark">Fully Authorized by General Manager!</strong>
                                         <div class="small text-muted">
                                             Assigned Petty Cash Custodian: <strong>{{ $maintenanceRequest->pettyCashOwner->name ?? 'Assigned' }}</strong> |
-                                            Technician: <strong>{{ $maintenanceRequest->maintenance_person_name ?? 'N/A' }}</strong>
+                                            Budget: <strong>{{ number_format($maintenanceRequest->money_amount ?? 0, 2) }} ETB</strong>
                                         </div>
                                     </div>
                                 </div>
@@ -288,6 +467,20 @@
                                     <a href="{{ url('/procurement-lifecycle/queue') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
                                         <i class="fa-solid fa-boxes-stacked me-1"></i>Store PR Section
                                     </a>
+                                </div>
+                            </div>
+                            <div class="row g-2 pt-2 border-top border-success border-opacity-25 small">
+                                <div class="col-md-4">
+                                    <span class="text-muted">Technician Name:</span>
+                                    <strong class="text-dark ms-1">{{ $maintenanceRequest->maintenance_person_name ?? 'N/A' }}</strong>
+                                </div>
+                                <div class="col-md-4">
+                                    <span class="text-muted">Account No:</span>
+                                    <strong class="text-success font-monospace ms-1">{{ $maintenanceRequest->maintenance_person_account ?? 'N/A' }}</strong>
+                                </div>
+                                <div class="col-md-4">
+                                    <span class="text-muted">Phone No:</span>
+                                    <strong class="text-dark ms-1">{{ $maintenanceRequest->maintenance_person_phone ?? 'N/A' }}</strong>
                                 </div>
                             </div>
                         </div>
@@ -408,6 +601,56 @@
                             {{ $maintenanceRequest->description }}
                         </div>
                     </div>
+
+                    @if($maintenanceRequest->maintenance_person_name || $maintenanceRequest->maintenance_person_account || $maintenanceRequest->maintenance_person_phone || $maintenanceRequest->petty_cash_owner_id)
+                        <div class="mt-4 pt-3 border-top">
+                            <h6 class="fw-bold text-dark mb-3"><i class="fa-solid fa-address-card text-primary me-2"></i>Technician &amp; Financial Payment Details</h6>
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <div class="p-2.5 rounded bg-light border">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Technician Name</small>
+                                        <strong class="text-dark fs-6">{{ $maintenanceRequest->maintenance_person_name ?: 'N/A' }}</strong>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2.5 rounded bg-success bg-opacity-10 border border-success border-opacity-25">
+                                        <small class="text-success text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Account No / Bank Account</small>
+                                        <strong class="text-success font-monospace fs-6">{{ $maintenanceRequest->maintenance_person_account ?: 'N/A' }}</strong>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2.5 rounded bg-light border">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Phone Number</small>
+                                        @if($maintenanceRequest->maintenance_person_phone)
+                                            <a href="tel:{{ $maintenanceRequest->maintenance_person_phone }}" class="text-dark fw-bold text-decoration-none fs-6">
+                                                <i class="fa-solid fa-phone text-info me-1"></i>{{ $maintenanceRequest->maintenance_person_phone }}
+                                            </a>
+                                        @else
+                                            <strong class="text-muted fs-6">N/A</strong>
+                                        @endif
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2.5 rounded bg-light border">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Petty Cash Custodian</small>
+                                        <strong class="text-primary fs-6">{{ $maintenanceRequest->pettyCashOwner->name ?? 'N/A' }}</strong>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2.5 rounded bg-light border">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Money Amount</small>
+                                        <strong class="text-dark font-monospace fs-6">{{ number_format($maintenanceRequest->money_amount ?? 0, 2) }} ETB</strong>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="p-2.5 rounded bg-light border">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Est. Repair Time</small>
+                                        <strong class="text-dark fs-6">{{ $maintenanceRequest->estimated_time ?: 'Standard' }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
                 </div>
             </div>
 
