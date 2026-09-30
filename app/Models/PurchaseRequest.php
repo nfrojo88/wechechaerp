@@ -62,7 +62,7 @@ class PurchaseRequest extends Model
         return [
             self::STATUS_DRAFT                      => 'Draft',
             self::STATUS_PENDING_PLANNING           => 'Pending Planning Approval',
-            self::STATUS_PENDING_HR_APPROVAL        => 'Pending HR / Coordinator Approval',
+            self::STATUS_PENDING_HR_APPROVAL        => 'Pending Coordinator Review',
             self::STATUS_APPROVED                   => 'Approved',
             self::STATUS_PENDING_STORE_REVIEW       => 'Pending Store Review',
             self::STATUS_TRANSFERRED                => 'Transferred',

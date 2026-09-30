@@ -287,6 +287,62 @@ class PurchaseRequestController extends Controller
             }
         }
 
+        // Auto-heal: If linked Material Request is already planning approved or beyond, advance PR to coordinator review
+        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_PLANNING && $purchaseRequest->materialRequest) {
+            $mr = $purchaseRequest->materialRequest;
+            if ($mr->planning_approval_status === 'approved' || in_array($mr->status, ['planning_approved', 'sent_to_store_manager', 'sent_to_pr', 'needs_purchase', 'approved'])) {
+                $targetRole = $this->lifecycle->resolveOwnerRole('coordinator', $purchaseRequest);
+                $purchaseRequest->update([
+                    'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                    'current_owner_role' => $targetRole,
+                    'approved_by'        => $mr->planning_approved_by ?: Auth::id(),
+                    'approved_at'        => $mr->planning_approved_at ?: now(),
+                ]);
+
+                try {
+                    PrWorkflowLog::create([
+                        'purchase_request_id' => $purchaseRequest->id,
+                        'from_stage'          => PurchaseRequest::STATUS_PENDING_PLANNING,
+                        'to_stage'            => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                        'action'              => 'planning_approve_to_coordinator',
+                        'actor_role'          => 'system',
+                        'actor_id'            => Auth::id(),
+                        'notes'               => "Auto-synchronized: Linked Material Request #{$mr->reference_number} was already approved by Planning. PR forwarded to Coordinator.",
+                        'created_at'          => now(),
+                    ]);
+                } catch (\Throwable $e) {}
+
+                $purchaseRequest->refresh();
+            }
+        }
+
+        // Auto-heal: If linked Material Request is already sent to Store Manager, advance PR to store review
+        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_HR_APPROVAL && $purchaseRequest->materialRequest) {
+            $mr = $purchaseRequest->materialRequest;
+            if (in_array($mr->status, ['sent_to_store_manager', 'sent_to_pr', 'needs_purchase'])) {
+                $targetRole = $this->lifecycle->resolveOwnerRole('store_manager', $purchaseRequest);
+                $purchaseRequest->update([
+                    'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                    'current_owner_role' => $targetRole,
+                ]);
+
+                try {
+                    PrWorkflowLog::create([
+                        'purchase_request_id' => $purchaseRequest->id,
+                        'from_stage'          => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                        'to_stage'            => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                        'action'              => 'coordinator_dispatch_to_store',
+                        'actor_role'          => 'system',
+                        'actor_id'            => Auth::id(),
+                        'notes'               => "Auto-synchronized: Linked Material Request #{$mr->reference_number} was already dispatched to Store Manager by Coordinator.",
+                        'created_at'          => now(),
+                    ]);
+                } catch (\Throwable $e) {}
+
+                $purchaseRequest->refresh();
+            }
+        }
+
         $purchaseRequest->load([
             'project', 'store', 'requestedBy', 'items.product',
             'marketResearch.supplier', 'proformaInvoices.supplier',
@@ -1875,9 +1931,179 @@ class PurchaseRequestController extends Controller
         return back()->with('success', 'Full material intake complete! All items received into store inventory and slip sequence updated.');
     }
 
+    // ─── STAGE: Planning Team Review & Approval ─────────────────────────────
+    public function planningApprove(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['planning', 'planning_manager']);
+
+        $targetRole = $this->lifecycle->resolveOwnerRole('coordinator', $purchaseRequest);
+        $purchaseRequest->update([
+            'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+            'current_owner_role' => $targetRole,
+            'approved_by'        => Auth::id(),
+            'approved_at'        => now(),
+        ]);
+
+        if ($purchaseRequest->materialRequest) {
+            $purchaseRequest->materialRequest->update([
+                'planning_approval_status' => 'approved',
+                'planning_approved_by'      => Auth::id(),
+                'planning_approved_at'      => now(),
+                'status'                    => 'planning_approved',
+            ]);
+        }
+
+        try {
+            PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_stage'          => PurchaseRequest::STATUS_PENDING_PLANNING,
+                'to_stage'            => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                'action'              => 'planning_approve_to_coordinator',
+                'actor_role'          => 'planning',
+                'actor_id'            => Auth::id(),
+                'notes'               => $request->input('notes') ?: 'Approved by Planning Team. Forwarded to Project Coordinator.',
+                'created_at'          => now(),
+            ]);
+        } catch (\Throwable $e) {}
+
+        try {
+            $this->lifecycle->notifyStageRole(
+                $purchaseRequest->id,
+                $targetRole,
+                "ConstructPro: PR #{$purchaseRequest->pr_no} approved by Planning for Project: " . ($purchaseRequest->project?->name ?? 'General') . ". Awaiting coordinator review. Open: " . url("/purchase-requests/{$purchaseRequest->id}"),
+                $purchaseRequest->project_id,
+                $purchaseRequest->store_id
+            );
+        } catch (\Throwable $e) {}
+
+        return back()->with('success', 'Purchase Request approved by Planning and sent to Coordinator.');
+    }
+
+    public function planningReject(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['planning', 'planning_manager']);
+        $request->validate(['rejection_reason' => 'required|string|max:1000']);
+
+        $purchaseRequest->update([
+            'status'           => PurchaseRequest::STATUS_REJECTED,
+            'rejection_reason' => $request->rejection_reason,
+        ]);
+
+        if ($purchaseRequest->materialRequest) {
+            $purchaseRequest->materialRequest->update([
+                'planning_approval_status' => 'rejected',
+                'planning_approved_by'      => Auth::id(),
+                'planning_approved_at'      => now(),
+                'planning_rejection_reason' => $request->rejection_reason,
+                'status'                    => 'rejected',
+            ]);
+        }
+
+        try {
+            PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_stage'          => PurchaseRequest::STATUS_PENDING_PLANNING,
+                'to_stage'            => PurchaseRequest::STATUS_REJECTED,
+                'action'              => 'planning_reject',
+                'actor_role'          => 'planning',
+                'actor_id'            => Auth::id(),
+                'notes'               => $request->rejection_reason,
+                'created_at'          => now(),
+            ]);
+        } catch (\Throwable $e) {}
+
+        return back()->with('success', 'Purchase Request rejected by Planning.');
+    }
+
+    // ─── STAGE: Coordinator Review & Dispatch ───────────────────────────────
+    public function coordinatorApprove(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['coordinator', 'hr_manager', 'hr']);
+
+        $targetRole = $this->lifecycle->resolveOwnerRole('store_manager', $purchaseRequest);
+        $purchaseRequest->update([
+            'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+            'current_owner_role' => $targetRole,
+        ]);
+
+        if ($purchaseRequest->materialRequest) {
+            $purchaseRequest->materialRequest->update([
+                'status'      => 'sent_to_store_manager',
+                'approved_by' => Auth::id(),
+                'approved_at' => now(),
+            ]);
+        }
+
+        try {
+            PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_stage'          => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                'to_stage'            => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                'action'              => 'coordinator_dispatch_to_store',
+                'actor_role'          => 'coordinator',
+                'actor_id'            => Auth::id(),
+                'notes'               => $request->input('notes') ?: 'Coordinator reviewed and dispatched request to Store Manager for stock check.',
+                'created_at'          => now(),
+            ]);
+        } catch (\Throwable $e) {}
+
+        try {
+            $this->lifecycle->notifyStageRole(
+                $purchaseRequest->id,
+                $targetRole,
+                "ConstructPro: PR #{$purchaseRequest->pr_no} dispatched by Coordinator to Store Manager for Project: " . ($purchaseRequest->project?->name ?? 'General') . ". Open: " . url("/purchase-requests/{$purchaseRequest->id}"),
+                $purchaseRequest->project_id,
+                $purchaseRequest->store_id
+            );
+        } catch (\Throwable $e) {}
+
+        return back()->with('success', 'Purchase Request approved by Coordinator and dispatched to Store Manager.');
+    }
+
+    public function coordinatorReject(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['coordinator', 'hr_manager', 'hr']);
+        $request->validate(['rejection_reason' => 'required|string|max:1000']);
+
+        $purchaseRequest->update([
+            'status'           => PurchaseRequest::STATUS_REJECTED,
+            'rejection_reason' => $request->rejection_reason,
+        ]);
+
+        if ($purchaseRequest->materialRequest) {
+            $purchaseRequest->materialRequest->update([
+                'status'                    => 'rejected',
+                'planning_rejection_reason' => $request->rejection_reason,
+            ]);
+        }
+
+        try {
+            PrWorkflowLog::create([
+                'purchase_request_id' => $purchaseRequest->id,
+                'from_stage'          => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                'to_stage'            => PurchaseRequest::STATUS_REJECTED,
+                'action'              => 'coordinator_reject',
+                'actor_role'          => 'coordinator',
+                'actor_id'            => Auth::id(),
+                'notes'               => $request->rejection_reason,
+                'created_at'          => now(),
+            ]);
+        } catch (\Throwable $e) {}
+
+        return back()->with('success', 'Purchase Request rejected by Coordinator.');
+    }
+
     // ─── Legacy: approve/reject (kept for backward compat) ──────────────────
     public function approve(PurchaseRequest $purchaseRequest)
     {
+        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_PLANNING) {
+            return $this->planningApprove(request(), $purchaseRequest);
+        }
+
+        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_HR_APPROVAL) {
+            return $this->coordinatorApprove(request(), $purchaseRequest);
+        }
+
         $purchaseRequest->update([
             'status'      => PurchaseRequest::STATUS_PENDING_PROC_MANAGER,
             'approved_by' => Auth::id(),
@@ -1888,6 +2114,14 @@ class PurchaseRequestController extends Controller
 
     public function reject(Request $request, PurchaseRequest $purchaseRequest)
     {
+        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_PLANNING) {
+            return $this->planningReject($request, $purchaseRequest);
+        }
+
+        if ($purchaseRequest->status === PurchaseRequest::STATUS_PENDING_HR_APPROVAL) {
+            return $this->coordinatorReject($request, $purchaseRequest);
+        }
+
         $request->validate(['rejection_reason' => 'required|string']);
         $purchaseRequest->update([
             'status'           => PurchaseRequest::STATUS_REJECTED,

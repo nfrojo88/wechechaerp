@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\MaterialRequest;
 use App\Models\Store;
 use App\Models\Project;
+use App\Models\PurchaseRequest;
+use App\Models\PrWorkflowLog;
+use App\Services\ProcurementLifecycleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -302,6 +305,49 @@ class MaterialRequestController extends Controller
             'planning_approved_at'      => now(),
             'status'                    => 'planning_approved', // Move to Coordinator
         ]);
+
+        // Forward companion Purchase Request to Coordinator
+        try {
+            $lifecycle = app(ProcurementLifecycleService::class);
+            $materialRequest->loadMissing('purchaseRequests');
+            foreach ($materialRequest->purchaseRequests as $pr) {
+                if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_PLANNING, PurchaseRequest::STATUS_DRAFT])) {
+                    $targetRole = $lifecycle->resolveOwnerRole('coordinator', $pr);
+                    $pr->update([
+                        'status'             => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                        'current_owner_role' => $targetRole,
+                        'approved_by'        => auth()->id(),
+                        'approved_at'        => now(),
+                    ]);
+
+                    try {
+                        PrWorkflowLog::create([
+                            'purchase_request_id' => $pr->id,
+                            'from_stage'          => PurchaseRequest::STATUS_PENDING_PLANNING,
+                            'to_stage'            => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                            'action'              => 'planning_approve_to_coordinator',
+                            'actor_role'          => 'planning',
+                            'actor_id'            => auth()->id(),
+                            'notes'               => "Planning Team approved Material Request #{$materialRequest->reference_number}. PR forwarded to Project Coordinator.",
+                            'created_at'          => now(),
+                        ]);
+                    } catch (\Throwable $e) {}
+
+                    try {
+                        $lifecycle->notifyStageRole(
+                            $pr->id,
+                            $targetRole,
+                            "ConstructPro: PR #{$pr->pr_no} approved by Planning for Project: " . ($pr->project?->name ?? 'General') . ". Awaiting coordinator review. Open: " . url("/purchase-requests/{$pr->id}"),
+                            $pr->project_id,
+                            $pr->store_id
+                        );
+                    } catch (\Throwable $e) {}
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::error("Failed to forward companion PRs to coordinator for MR #{$materialRequest->reference_number}: " . $e->getMessage());
+        }
+
         return back()->with('success', 'Material Request approved by Planning Team and sent to Coordinator.');
     }
 
@@ -316,6 +362,34 @@ class MaterialRequestController extends Controller
             'planning_rejection_reason' => $request->rejection_reason,
             'status'                    => 'rejected',
         ]);
+
+        try {
+            $materialRequest->loadMissing('purchaseRequests');
+            foreach ($materialRequest->purchaseRequests as $pr) {
+                if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_PLANNING, PurchaseRequest::STATUS_DRAFT])) {
+                    $pr->update([
+                        'status'           => PurchaseRequest::STATUS_REJECTED,
+                        'rejection_reason' => $request->rejection_reason,
+                    ]);
+
+                    try {
+                        PrWorkflowLog::create([
+                            'purchase_request_id' => $pr->id,
+                            'from_stage'          => $pr->status,
+                            'to_stage'            => PurchaseRequest::STATUS_REJECTED,
+                            'action'              => 'planning_reject',
+                            'actor_role'          => 'planning',
+                            'actor_id'            => auth()->id(),
+                            'notes'               => "Planning Team rejected Material Request: " . $request->rejection_reason,
+                            'created_at'          => now(),
+                        ]);
+                    } catch (\Throwable $e) {}
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::error("Failed to reject companion PRs for MR #{$materialRequest->reference_number}: " . $e->getMessage());
+        }
+
         return back()->with('success', 'Material Request rejected by Planning Team.');
     }
 
@@ -328,6 +402,46 @@ class MaterialRequestController extends Controller
             'approved_by' => auth()->id(),
             'approved_at' => now(),
         ]);
+
+        try {
+            $lifecycle = app(ProcurementLifecycleService::class);
+            $materialRequest->loadMissing('purchaseRequests');
+            foreach ($materialRequest->purchaseRequests as $pr) {
+                if (in_array($pr->status, [PurchaseRequest::STATUS_PENDING_HR_APPROVAL, PurchaseRequest::STATUS_DRAFT])) {
+                    $targetRole = $lifecycle->resolveOwnerRole('store_manager', $pr);
+                    $pr->update([
+                        'status'             => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                        'current_owner_role' => $targetRole,
+                    ]);
+
+                    try {
+                        PrWorkflowLog::create([
+                            'purchase_request_id' => $pr->id,
+                            'from_stage'          => PurchaseRequest::STATUS_PENDING_HR_APPROVAL,
+                            'to_stage'            => PurchaseRequest::STATUS_PENDING_STORE_REVIEW,
+                            'action'              => 'coordinator_dispatch_to_store',
+                            'actor_role'          => 'coordinator',
+                            'actor_id'            => auth()->id(),
+                            'notes'               => "Coordinator dispatched Material Request #{$materialRequest->reference_number} to Store Manager.",
+                            'created_at'          => now(),
+                        ]);
+                    } catch (\Throwable $e) {}
+
+                    try {
+                        $lifecycle->notifyStageRole(
+                            $pr->id,
+                            $targetRole,
+                            "ConstructPro: PR #{$pr->pr_no} dispatched by Coordinator to Store Manager for Project: " . ($pr->project?->name ?? 'General') . ". Open: " . url("/purchase-requests/{$pr->id}"),
+                            $pr->project_id,
+                            $pr->store_id
+                        );
+                    } catch (\Throwable $e) {}
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::error("Failed to dispatch companion PRs to store for MR #{$materialRequest->reference_number}: " . $e->getMessage());
+        }
+
         return back()->with('success', 'Material Request sent to Store Manager.');
     }
 

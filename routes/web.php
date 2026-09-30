@@ -1757,6 +1757,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/submit', [App\Http\Controllers\PurchaseRequestController::class, 'submit'])->name('purchase-requests.submit');
     Route::post('purchase-requests/{purchaseRequest}/approve', [App\Http\Controllers\PurchaseRequestController::class, 'approve'])->name('purchase-requests.approve');
     Route::post('purchase-requests/{purchaseRequest}/reject', [App\Http\Controllers\PurchaseRequestController::class, 'reject'])->name('purchase-requests.reject');
+    Route::post('purchase-requests/{purchaseRequest}/planning-approve', [App\Http\Controllers\PurchaseRequestController::class, 'planningApprove'])->name('purchase-requests.planning-approve');
+    Route::post('purchase-requests/{purchaseRequest}/planning-reject', [App\Http\Controllers\PurchaseRequestController::class, 'planningReject'])->name('purchase-requests.planning-reject');
+    Route::post('purchase-requests/{purchaseRequest}/coordinator-approve', [App\Http\Controllers\PurchaseRequestController::class, 'coordinatorApprove'])->name('purchase-requests.coordinator-approve');
+    Route::post('purchase-requests/{purchaseRequest}/coordinator-reject', [App\Http\Controllers\PurchaseRequestController::class, 'coordinatorReject'])->name('purchase-requests.coordinator-reject');
 
     // ── Procurement Lifecycle Upgraded Routes ──────────────────────────────
     Route::get('procurement/my-queue', [App\Http\Controllers\ProcurementLifecycleController::class, 'myQueue'])->name('procurement.my-queue');

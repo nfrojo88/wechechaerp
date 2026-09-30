@@ -60,11 +60,11 @@
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING:
-                $canActOnCurrentStage = $isGlobalAdmin || in_array('planning', $rawUserRoles) || in_array('planning_manager', $rawUserRoles);
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('planning', $rawUserRoles) || in_array('planning_manager', $rawUserRoles) || in_array('planner', $rawUserRoles);
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL:
-                $canActOnCurrentStage = $isGlobalAdmin || in_array('coordinator', $rawUserRoles) || in_array('hr_manager', $rawUserRoles) || in_array('hr', $rawUserRoles);
+                $canActOnCurrentStage = $isGlobalAdmin || in_array('coordinator', $rawUserRoles) || in_array('project_coordinator', $rawUserRoles) || in_array('site_coordinator', $rawUserRoles) || in_array('hr_manager', $rawUserRoles) || in_array('hr', $rawUserRoles);
                 break;
 
             case \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW:
@@ -178,6 +178,10 @@
                                 <span class="badge bg-warning text-dark"><i class="fas fa-user-shield me-1"></i>Global Admin (Unassigned Role)</span>
                             @elseif(($isFinalIntake ?? false) && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW)
                                 <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-bold"><i class="fas fa-boxes-packing me-1"></i>Store Keeper (Final Intake)</span>
+                            @elseif($purchaseRequest->current_owner_role === 'coordinator')
+                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 fw-bold"><i class="fas fa-user-tie me-1"></i>Project Coordinator</span>
+                            @elseif($purchaseRequest->current_owner_role === 'planning')
+                                <span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-25 fw-bold"><i class="fas fa-calendar-check me-1"></i>Planning Team</span>
                             @else
                                 <span class="badge bg-secondary bg-opacity-10 text-dark"><i class="fas fa-user-tag me-1"></i>{{ ucfirst(str_replace('_', ' ', $purchaseRequest->current_owner_role ?? 'Completed')) }}</span>
                             @endif
@@ -205,6 +209,98 @@
                             <p class="small text-muted mb-2">Submit draft to Store Manager for stock check.</p>
                             <button class="btn btn-primary btn-sm w-100"><i class="fas fa-paper-plane me-1"></i> Submit to Store Manager</button>
                         </form>
+
+                    <!-- STAGE: Planning Team Review & Approval -->
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_PLANNING)
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-dark mb-1">
+                                <i class="fas fa-calendar-check text-primary me-1"></i> Planning Team Review & Approval
+                            </h6>
+                            <p class="small text-muted mb-0">
+                                Verify project requirements, schedule alignment, and material quantities. Upon approval, this request will be forwarded to the <strong>Project Coordinator</strong>.
+                            </p>
+                        </div>
+                        @if($purchaseRequest->materialRequest)
+                            <div class="alert alert-light border py-2 px-3 small mb-3">
+                                <div class="fw-bold text-dark mb-1"><i class="fas fa-link text-primary me-1"></i> Linked Requisition:</div>
+                                <div class="text-muted">
+                                    <a href="{{ route('material-requests.show', $purchaseRequest->materialRequest) }}" target="_blank" class="fw-bold text-decoration-none">
+                                        #{{ $purchaseRequest->materialRequest->reference_number }}
+                                    </a> 
+                                    ({{ $purchaseRequest->materialRequest->source ?? 'Emergency' }})
+                                </div>
+                            </div>
+                        @endif
+                        <div class="d-grid gap-2">
+                            <form action="{{ route('purchase-requests.planning-approve', $purchaseRequest) }}" method="POST">
+                                @csrf
+                                <button type="submit" class="btn btn-success btn-sm w-100 fw-bold shadow-sm py-2">
+                                    <i class="fas fa-check-circle me-1"></i> Approve & Send to Coordinator
+                                </button>
+                            </form>
+                            <button type="button" class="btn btn-outline-danger btn-sm w-100 py-2" data-bs-toggle="collapse" data-bs-target="#planningRejectCollapse">
+                                <i class="fas fa-times-circle me-1"></i> Reject Request
+                            </button>
+                            <div class="collapse mt-2" id="planningRejectCollapse">
+                                <form action="{{ route('purchase-requests.planning-reject', $purchaseRequest) }}" method="POST" class="p-3 border rounded bg-light">
+                                    @csrf
+                                    <label class="form-label small fw-bold text-danger">Rejection Reason <span class="text-danger">*</span></label>
+                                    <textarea name="rejection_reason" class="form-control form-control-sm mb-2" rows="2" placeholder="Explain why this request cannot be approved..." required></textarea>
+                                    <button type="submit" class="btn btn-danger btn-sm w-100 fw-bold">
+                                        <i class="fas fa-ban me-1"></i> Confirm Rejection
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                    <!-- STAGE: Coordinator Review & Dispatch -->
+                    @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_HR_APPROVAL)
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-dark mb-1">
+                                <i class="fas fa-user-tie text-primary me-1"></i> Project Coordinator Review & Dispatch
+                            </h6>
+                            <p class="small text-muted mb-0">
+                                Planning has approved this request. As Coordinator, dispatch to the <strong>Store Manager</strong> for store stock review and transfers, or route directly to <strong>Procurement Manager</strong> if urgent purchasing is required.
+                            </p>
+                        </div>
+                        @if($purchaseRequest->materialRequest)
+                            <div class="alert alert-light border py-2 px-3 small mb-3">
+                                <div class="fw-bold text-dark mb-1"><i class="fas fa-link text-primary me-1"></i> Linked Requisition:</div>
+                                <div class="text-muted">
+                                    <a href="{{ route('material-requests.show', $purchaseRequest->materialRequest) }}" target="_blank" class="fw-bold text-decoration-none">
+                                        #{{ $purchaseRequest->materialRequest->reference_number }}
+                                    </a> 
+                                    ({{ $purchaseRequest->materialRequest->source ?? 'Emergency' }})
+                                </div>
+                            </div>
+                        @endif
+                        <div class="d-grid gap-2">
+                            <form action="{{ route('purchase-requests.coordinator-approve', $purchaseRequest) }}" method="POST">
+                                @csrf
+                                <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold shadow-sm py-2">
+                                    <i class="fas fa-share me-1"></i> Dispatch to Store Manager (Stock Review)
+                                </button>
+                            </form>
+                            <form action="{{ route('purchase-requests.send-to-pm', $purchaseRequest) }}" method="POST">
+                                @csrf
+                                <button type="submit" class="btn btn-outline-success btn-sm w-100 py-2 fw-semibold" onclick="return confirm('Skip Store Manager and send directly to Procurement Manager for purchase?');">
+                                    <i class="fas fa-cart-shopping me-1"></i> Skip Store & Send to Procurement Manager
+                                </button>
+                            </form>
+                            <button type="button" class="btn btn-outline-danger btn-sm w-100 py-2" data-bs-toggle="collapse" data-bs-target="#coordinatorRejectCollapse">
+                                <i class="fas fa-times-circle me-1"></i> Reject Request
+                            </button>
+                            <div class="collapse mt-2" id="coordinatorRejectCollapse">
+                                <form action="{{ route('purchase-requests.coordinator-reject', $purchaseRequest) }}" method="POST" class="p-3 border rounded bg-light">
+                                    @csrf
+                                    <label class="form-label small fw-bold text-danger">Rejection Reason <span class="text-danger">*</span></label>
+                                    <textarea name="rejection_reason" class="form-control form-control-sm mb-2" rows="2" placeholder="Explain why this request is being rejected or returned..." required></textarea>
+                                    <button type="submit" class="btn btn-danger btn-sm w-100 fw-bold">
+                                        <i class="fas fa-ban me-1"></i> Confirm Rejection
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
 
                     <!-- STAGE 2: Store Manager Review (Transfer vs Send to Purchase) -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_STORE_REVIEW && !($isFinalIntake ?? false))
