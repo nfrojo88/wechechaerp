@@ -69,12 +69,24 @@ class Employee extends Model
             // Strict Rule: Any employee in Dead File must immediately have all login credentials revoked and disabled
             if ($employee->is_dead_file || $employee->status === 'dead_file') {
                 $employee->revokeLoginCredentials();
+                if (!empty($employee->device_user_id)) {
+                    \Illuminate\Support\Facades\DB::table('employees')
+                        ->where('id', $employee->id)
+                        ->whereNotNull('device_user_id')
+                        ->update(['device_user_id' => null]);
+                }
             }
         });
 
         static::saving(function ($employee) {
             if ($employee->date_of_joining && !$employee->probation_ends_at) {
                 $employee->probation_ends_at = \Carbon\Carbon::parse($employee->date_of_joining)->addDays(45);
+            }
+
+            // Strict Rule: Biometric information cannot be retained by Dead File employees.
+            // Biometric machine slots/IDs are strictly recycled and reserved for new active employees.
+            if ($employee->is_dead_file || $employee->status === 'dead_file') {
+                $employee->releaseBiometricInfo();
             }
         });
 
@@ -743,6 +755,23 @@ class Employee extends Model
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning("Failed to revoke credentials for Dead File employee {$this->employee_code}: " . $e->getMessage());
             }
+        }
+    }
+
+    /**
+     * Strict Rule: Release biometric information from Dead File employee.
+     * Biometric machine enrollment slots/IDs are strictly recycled and assigned to new active employees.
+     */
+    public function releaseBiometricInfo(): void
+    {
+        if (!empty($this->device_user_id)) {
+            $oldDevId = $this->device_user_id;
+            $note = "[Biometric ID #{$oldDevId} released upon transfer to Dead File for new employee reuse]";
+            if (!str_contains($this->dead_file_notes ?? '', "Biometric ID #{$oldDevId}")) {
+                $this->dead_file_notes = trim(($this->dead_file_notes ?? '') . "\n" . $note);
+            }
+            $this->device_user_id = null;
+            \Illuminate\Support\Facades\Log::info("Strict Rule Enforced: Biometric device_user_id #{$oldDevId} released from Dead File employee {$this->employee_code} for new employee reuse.");
         }
     }
 }

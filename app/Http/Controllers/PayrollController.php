@@ -21,7 +21,7 @@ class PayrollController extends Controller
     public function create()
     {
         Gate::authorize('create', Payroll::class);
-        $employees = Employee::where('status', 'active')->get();
+        $employees = Employee::activeRoster()->get();
         return view('hr.payrolls.create', compact('employees'));
     }
 

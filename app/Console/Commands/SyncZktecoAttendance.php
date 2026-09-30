@@ -162,11 +162,12 @@ class SyncZktecoAttendance extends Command
             return;
         }
 
-        // Cache all active employees for resilient matching
+        // Cache all active employees for resilient matching (strictly exclude Dead File)
         $employees = DB::table('employees')
             ->where(function ($q) {
-                $q->where('status', 'active')->orWhereNull('status');
+                $q->where('is_dead_file', false)->orWhereNull('is_dead_file');
             })
+            ->where('status', '!=', 'dead_file')
             ->get();
 
         $groupedByUser = $rawPunches->groupBy('device_user_id');
@@ -219,7 +220,7 @@ class SyncZktecoAttendance extends Command
 
             try {
                 $empModel = Employee::find($employee->id);
-                if (!$empModel) {
+                if (!$empModel || $empModel->is_dead_file || $empModel->status === 'dead_file') {
                     continue;
                 }
 

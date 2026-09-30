@@ -414,6 +414,12 @@ class EmployeeController extends Controller
 
             // Strip nested arrays before Eloquent creation
             $employeeData = \Illuminate\Support\Arr::except($validated, ['fixed_asset_units', 'education', 'experience', 'licenses']);
+            if (!empty($employeeData['device_user_id'])) {
+                $devId = trim((string)$employeeData['device_user_id']);
+                Employee::where(function($q) {
+                    $q->where('is_dead_file', true)->orWhere('status', 'dead_file');
+                })->where('device_user_id', $devId)->update(['device_user_id' => null]);
+            }
             $employee = Employee::create($employeeData);
 
             // Attach Centralized Fixed Asset Units
@@ -852,6 +858,12 @@ class EmployeeController extends Controller
 
         // Strip non-model attributes
         $employeeData = \Illuminate\Support\Arr::except($validated, ['fixed_asset_units', 'education', 'experience', 'licenses']);
+        if (!empty($employeeData['device_user_id'])) {
+            $devId = trim((string)$employeeData['device_user_id']);
+            Employee::where(function($q) {
+                $q->where('is_dead_file', true)->orWhere('status', 'dead_file');
+            })->where('device_user_id', $devId)->update(['device_user_id' => null]);
+        }
         $employee->update($employeeData);
 
 
@@ -1246,6 +1258,11 @@ class EmployeeController extends Controller
         ]);
 
         $deviceId = $request->filled('device_user_id') ? trim($request->device_user_id) : null;
+        if ($deviceId) {
+            Employee::where(function($q) {
+                $q->where('is_dead_file', true)->orWhere('status', 'dead_file');
+            })->where('device_user_id', $deviceId)->update(['device_user_id' => null]);
+        }
         $employee->update(['device_user_id' => $deviceId]);
 
         $syncedCount = 0;
@@ -1396,15 +1413,22 @@ class EmployeeController extends Controller
             }
         }
 
-        // Transfer employee record to Dead File
+        $oldDevId = $employee->device_user_id;
+        $deadNotes = $validated['dead_file_notes'] ?? '';
+        if (!empty($oldDevId)) {
+            $deadNotes = trim($deadNotes . "\n" . "[Biometric Device ID #{$oldDevId} released for new employee reuse]");
+        }
+
+        // Transfer employee record to Dead File (Strict Rule: Release biometric information)
         $employee->update([
             'is_dead_file'      => true,
             'status'            => 'dead_file',
             'dead_file_at'      => $departureDate,
             'dead_file_reason'  => $validated['dead_file_reason'],
-            'dead_file_notes'   => $validated['dead_file_notes'] ?? null,
+            'dead_file_notes'   => $deadNotes ?: null,
             'dead_file_by'      => auth()->id(),
             'lock_reason'       => "Dead File: {$validated['dead_file_reason']}",
+            'device_user_id'    => null,
         ]);
 
         return redirect()->to(\Illuminate\Support\Facades\Route::has('employees.dead-file') ? route('employees.dead-file') : url('/employees/dead-file'))
@@ -1441,15 +1465,22 @@ class EmployeeController extends Controller
             }
         }
 
-        // Automatically archive to Dead File to enforce zero data-loss policy
+        $oldDevId = $employee->device_user_id;
+        $deadNotes = 'Archived via Employee Management action. Hard deletion is disabled by company policy to protect legal and audit records.';
+        if (!empty($oldDevId)) {
+            $deadNotes .= "\n" . "[Biometric Device ID #{$oldDevId} released for new employee reuse]";
+        }
+
+        // Automatically archive to Dead File to enforce zero data-loss policy (Strict Rule: Release biometric info)
         $employee->update([
             'is_dead_file'      => true,
             'status'            => 'dead_file',
             'dead_file_at'      => now(),
             'dead_file_reason'  => 'Removed from Active Roster (Transferred to Dead File)',
-            'dead_file_notes'   => 'Archived via Employee Management action. Hard deletion is disabled by company policy to protect legal and audit records.',
+            'dead_file_notes'   => $deadNotes,
             'dead_file_by'      => auth()->id(),
             'lock_reason'       => 'Dead File: Decommissioned from Active Roster',
+            'device_user_id'    => null,
         ]);
 
         return redirect()->to(\Illuminate\Support\Facades\Route::has('employees.dead-file') ? route('employees.dead-file') : url('/employees/dead-file'))

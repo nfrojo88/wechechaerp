@@ -117,13 +117,19 @@ class ZkTecoAdmsController extends Controller
                 }
 
                 try {
-                    // Match employee by device_user_id or employee_code
+                    // Match employee by device_user_id or employee_code (STRICT: only active roster, exclude Dead File)
                     $cleanId = trim($userId);
                     $employee = DB::table('employees')
-                        ->where('device_user_id', $cleanId)
-                        ->orWhere('device_user_id', ltrim($cleanId, '0'))
-                        ->orWhere('employee_code', $cleanId)
-                        ->orWhere('employee_code', 'EMP-' . $cleanId)
+                        ->where(function ($q) {
+                            $q->where('is_dead_file', false)->orWhereNull('is_dead_file');
+                        })
+                        ->where('status', '!=', 'dead_file')
+                        ->where(function ($q) use ($cleanId) {
+                            $q->where('device_user_id', $cleanId)
+                              ->orWhere('device_user_id', ltrim($cleanId, '0'))
+                              ->orWhere('employee_code', $cleanId)
+                              ->orWhere('employee_code', 'EMP-' . $cleanId);
+                        })
                         ->first();
 
                     $fullName = $employee ? $employee->full_name : null;
@@ -238,7 +244,7 @@ class ZkTecoAdmsController extends Controller
         try {
             $dateStr = substr($punchTime, 0, 10);
             $empModel = ($employee instanceof Employee) ? $employee : Employee::find($employee->id);
-            if ($empModel) {
+            if ($empModel && !$empModel->is_dead_file && $empModel->status !== 'dead_file') {
                 \App\Services\BiometricPunchService::syncEmployeeDatePunches($empModel, $dateStr, $sn);
                 $this->logAdms("PUNCH SYNCED: {$empModel->full_name} for {$dateStr} at {$punchTime}");
             }

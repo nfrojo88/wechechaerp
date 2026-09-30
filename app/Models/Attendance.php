@@ -59,6 +59,18 @@ class Attendance extends Model
     }
 
     public function employee()    { return $this->belongsTo(Employee::class); }
+
+    /**
+     * Scope query to strictly include attendance records for active employees (excluding Dead File).
+     */
+    public function scopeActiveRoster($query)
+    {
+        return $query->whereHas('employee', function ($q) {
+            $q->where(function ($sq) {
+                $sq->where('is_dead_file', false)->orWhereNull('is_dead_file');
+            })->where('status', '!=', 'dead_file');
+        });
+    }
     public function approvedBy()  { return $this->belongsTo(User::class, 'approved_by'); }
     public function decidedBy()   { return $this->belongsTo(User::class, 'decided_by'); }
     public function siteProject() { return $this->belongsTo(Project::class, 'site_project_id'); }

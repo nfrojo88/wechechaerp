@@ -398,6 +398,11 @@ class BiometricPunchService
      */
     public static function syncEmployeeDatePunches(Employee $employee, string $date, ?string $deviceSn = null): ?Attendance
     {
+        // Strict Rule: If an employee is in Dead File, biometric info cannot be used for them
+        if ($employee->is_dead_file || $employee->status === 'dead_file') {
+            return null;
+        }
+
         $devId = trim((string)($employee->device_user_id ?? ''));
         $code  = trim((string)($employee->employee_code ?? ''));
 
@@ -554,7 +559,7 @@ class BiometricPunchService
             $healed = 0;
 
             foreach ($records as $att) {
-                if (!$att->employee) continue;
+                if (!$att->employee || $att->employee->is_dead_file || $att->employee->status === 'dead_file') continue;
 
                 $dStr = $att->attendance_date->format('Y-m-d');
                 self::syncEmployeeDatePunches($att->employee, $dStr, $att->biometric_device_id);

@@ -24,7 +24,12 @@ class DeviceAttendanceLog extends Model
 
     public function employee()
     {
-        return $this->belongsTo(Employee::class, 'device_user_id', 'device_user_id');
+        return $this->belongsTo(Employee::class, 'device_user_id', 'device_user_id')
+            ->where(function ($q) {
+                $q->where('is_dead_file', false)
+                  ->orWhereNull('is_dead_file');
+            })
+            ->where('status', '!=', 'dead_file');
     }
 
     public function zkDevice()

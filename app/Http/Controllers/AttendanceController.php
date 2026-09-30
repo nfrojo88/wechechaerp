@@ -20,7 +20,17 @@ class AttendanceController extends Controller
             return $this->resetAndResync(request());
         }
 
-        $query = Attendance::with('employee')->whereHas('employee')->latest('attendance_date');
+        // Strict Rule: Auto-release biometric device_user_id from any Dead File employees
+        try {
+            DB::table('employees')
+                ->where(function($q) {
+                    $q->where('is_dead_file', true)->orWhere('status', 'dead_file');
+                })
+                ->whereNotNull('device_user_id')
+                ->update(['device_user_id' => null]);
+        } catch (\Throwable $e) {}
+
+        $query = Attendance::activeRoster()->with('employee')->latest('attendance_date');
 
         // Filter by specific single date, month, or date range
         $selectedDate = request('date');
@@ -47,9 +57,14 @@ class AttendanceController extends Controller
         if (request('employee')) {
             $search = request('employee');
             $query->whereHas('employee', function ($q) use ($search) {
-                $q->where('full_name', 'like', "%$search%")
-                  ->orWhere('employee_code', 'like', "%$search%")
-                  ->orWhere('device_user_id', 'like', "%$search%");
+                $q->where(function ($sq) {
+                    $sq->where('is_dead_file', false)->orWhereNull('is_dead_file');
+                })->where('status', '!=', 'dead_file')
+                  ->where(function ($sq) use ($search) {
+                      $sq->where('full_name', 'like', "%$search%")
+                         ->orWhere('employee_code', 'like', "%$search%")
+                         ->orWhere('device_user_id', 'like', "%$search%");
+                  });
             });
         }
 
@@ -178,7 +193,8 @@ class AttendanceController extends Controller
         $attendances = $query->paginate(30)->appends(request()->query());
 
         // Fetch distinct available dates from attendance records for navigation
-        $availableDates = Attendance::select('attendance_date')
+        $availableDates = Attendance::activeRoster()
+            ->select('attendance_date')
             ->distinct()
             ->whereNotNull('attendance_date')
             ->orderBy('attendance_date', 'desc')
@@ -324,7 +340,7 @@ class AttendanceController extends Controller
             ->pluck('count', 'employee_id')
             ->toArray();
 
-        $allEmployees = Employee::where('status', 'active')->orderBy('full_name')->get();
+        $allEmployees = Employee::activeRoster()->orderBy('full_name')->get();
         $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
         $projects     = \App\Models\Project::orderBy('name')->get();
 
@@ -452,7 +468,7 @@ class AttendanceController extends Controller
                                     ->count('employee_id'),
         ];
 
-        $employees = Employee::where('status', 'active')->orderBy('full_name')->get();
+        $employees = Employee::activeRoster()->orderBy('full_name')->get();
         $projects  = \App\Models\Project::orderBy('name')->get();
         $decidedUsers = \App\Models\User::whereHas('roles', function($r) {
             $r->whereIn('name', [
@@ -947,7 +963,7 @@ class AttendanceController extends Controller
         $selectedDate = $request->input('date', today()->toDateString());
         $selectedEmployeeId = $request->input('employee_id');
 
-        $employees = Employee::where('status', 'active')->orderBy('full_name')->get();
+        $employees = Employee::activeRoster()->orderBy('full_name')->get();
 
         // Fetch all existing attendance records for the selected date keyed by employee_id
         $attendances = Attendance::whereDate('attendance_date', $selectedDate)
@@ -1295,7 +1311,8 @@ class AttendanceController extends Controller
 
         // ── Load employees with registered biometric device IDs ──────────────
         // If device ID is not added to an employee, do NOT use emp ID / code / name to match them.
-        $allEmployees = Employee::whereNotNull('device_user_id')
+        $allEmployees = Employee::activeRoster()
+            ->whereNotNull('device_user_id')
             ->where('device_user_id', '!=', '')
             ->select('id', 'employee_code', 'device_user_id', 'full_name', 'basic_salary')
             ->get();
@@ -2363,15 +2380,19 @@ class AttendanceController extends Controller
     {
         $devices = DB::table('zk_devices')->orderBy('last_seen_at', 'desc')->get();
         $recentLogs = DB::table('device_attendance_logs')
-            ->leftJoin('employees', 'employees.device_user_id', '=', 'device_attendance_logs.device_user_id')
+            ->leftJoin('employees', function($join) {
+                $join->on('employees.device_user_id', '=', 'device_attendance_logs.device_user_id')
+                     ->where(function($q) {
+                         $q->where('employees.is_dead_file', false)->orWhereNull('employees.is_dead_file');
+                     })
+                     ->where('employees.status', '!=', 'dead_file');
+            })
             ->select('device_attendance_logs.*', 'employees.full_name as employee_name', 'employees.department as employee_department')
             ->orderBy('device_attendance_logs.created_at', 'desc')
             ->take(30)
             ->get();
 
-        $employees = Employee::where(function($q) {
-            $q->where('status', 'active')->orWhereNull('status');
-        })->orderBy('full_name')->get();
+        $employees = Employee::activeRoster()->orderBy('full_name')->get();
 
         $admsLogFile = public_path('iclock/adms.log');
         $rawAdmsLogs = file_exists($admsLogFile) ? file_get_contents($admsLogFile) : 'No incoming device requests recorded yet.';
@@ -2397,8 +2418,11 @@ class AttendanceController extends Controller
         $punchTime = now()->format('Y-m-d H:i:s');
         $punchState = (string)$request->input('punch_state', '0');
 
-        $emp = Employee::where('device_user_id', $deviceUserId)
-            ->orWhere('id', $deviceUserId)
+        $emp = Employee::activeRoster()
+            ->where(function($q) use ($deviceUserId) {
+                $q->where('device_user_id', $deviceUserId)
+                  ->orWhere('id', $deviceUserId);
+            })
             ->first();
 
         if ($emp && empty($emp->device_user_id)) {

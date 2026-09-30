@@ -160,7 +160,7 @@ class FinancePayrollController extends Controller
 
         $selectedDate = $endDate;
 
-        $employees = Employee::where('status', 'active')->get();
+        $employees = Employee::activeRoster()->get();
         $created = 0;
         $skipped = 0;
 
@@ -314,7 +314,7 @@ class FinancePayrollController extends Controller
 
         $selectedDate = $endDate;
 
-        $employees = Employee::where('status', 'active')->get();
+        $employees = Employee::activeRoster()->get();
         $updatedCount = 0;
         $createdCount = 0;
 

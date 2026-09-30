@@ -27,7 +27,7 @@ class PayrollIntegrationController extends Controller
     {
         $this->authorize('viewAny', Payroll::class);
 
-        $employees = Employee::where('status', 'active')->get();
+        $employees = Employee::activeRoster()->get();
 
         $payrollData = [];
         $totals = [
@@ -129,7 +129,7 @@ class PayrollIntegrationController extends Controller
         }
 
         $structures = $query->paginate(15);
-        $employees = Employee::where('status', 'active')->orderBy('full_name')->get();
+        $employees = Employee::activeRoster()->orderBy('full_name')->get();
 
         return view('hr-manager.payroll.salary-structures', compact('structures', 'employees'));
     }
@@ -141,7 +141,7 @@ class PayrollIntegrationController extends Controller
     {
         $this->authorize('create', SalaryStructure::class);
 
-        $employees = Employee::where('status', 'active')->orderBy('full_name')->get();
+        $employees = Employee::activeRoster()->orderBy('full_name')->get();
 
         return view('hr-manager.payroll.create-structure', compact('employees'));
     }
@@ -204,7 +204,7 @@ class PayrollIntegrationController extends Controller
 
         $advances = $query->orderBy('advance_date', 'desc')->paginate(15);
 
-        $employees = Employee::where('status', 'active')->orderBy('full_name')->get();
+        $employees = Employee::activeRoster()->orderBy('full_name')->get();
 
         return view('hr-manager.payroll.advances', compact('advances', 'employees'));
     }
