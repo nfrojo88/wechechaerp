@@ -31,6 +31,9 @@
             <span class="badge bg-warning-subtle text-dark border border-warning-subtle d-inline-flex align-items-center gap-1 px-2 py-2" title="Attendance machine runs 5h ahead; ERP converts punches automatically (-5h)">
                 <i class="fa-solid fa-clock-rotate-left text-warning-emphasis"></i><span class="fw-semibold">Device TZ: -5h</span>
             </span>
+            <button type="button" class="btn btn-warning text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#quickAttendanceModal" title="Mark or modify attendance for any employee">
+                <i class="fa-solid fa-user-pen me-1"></i>Mark Attendance (መዝግብ)
+            </button>
             <button type="button" class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#siteAttendanceModal">
                 <i class="fa-solid fa-person-digging me-1"></i>Employee On Site (ወደ ሳይት የወጣ)
             </button>
@@ -338,21 +341,23 @@
     <div class="row mb-4 g-3">
         {{-- Present Card --}}
         <div class="col-6 col-lg">
-            <div class="card border-0 border-start border-4 border-success shadow-sm h-100 py-2 bg-white">
-                <div class="card-body py-2 px-3">
-                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                        Present &bull; {{ $stats['title'] ?? 'Selected Period' }}
-                    </div>
-                    @if(!empty($stats['et_title']))
-                    <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
-                        🇪🇹 {{ $stats['et_title'] }}
-                    </small>
-                    @endif
-                    <div class="h4 mb-0 font-weight-bold text-gray-800">
-                        {{ $stats['present'] ?? 0 }}
+            <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['status' => 'present'])) }}" class="text-decoration-none">
+                <div class="card border-0 border-start border-4 border-success shadow-sm h-100 py-2 bg-white">
+                    <div class="card-body py-2 px-3">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Present &bull; {{ $stats['title'] ?? 'Selected Period' }}
+                        </div>
+                        @if(!empty($stats['et_title']))
+                        <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
+                            🇪🇹 {{ $stats['et_title'] }}
+                        </small>
+                        @endif
+                        <div class="h4 mb-0 font-weight-bold text-gray-800">
+                            {{ $stats['present'] ?? 0 }}
+                        </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
 
         {{-- On Site (S) Card --}}
@@ -413,73 +418,79 @@
 
         {{-- Effective Absent Card (Base + Late Penalty) --}}
         <div class="col-6 col-lg">
-            <div class="card border-0 border-start border-4 border-danger shadow-sm h-100 py-2 bg-white">
-                <div class="card-body py-2 px-3">
-                    <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
-                        Absent &bull; {{ $stats['title'] ?? 'Selected Period' }}
-                    </div>
-                    @if(!empty($stats['et_title']))
-                    <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
-                        🇪🇹 {{ $stats['et_title'] }}
-                    </small>
-                    @endif
-                    <div class="d-flex align-items-baseline gap-2">
-                        <div class="h4 mb-0 font-weight-bold text-danger">
-                            {{ $stats['effective_absent'] ?? $stats['absent'] }}
+            <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['status' => 'absent'])) }}" class="text-decoration-none">
+                <div class="card border-0 border-start border-4 border-danger shadow-sm h-100 py-2 bg-white">
+                    <div class="card-body py-2 px-3">
+                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                            Absent &bull; {{ $stats['title'] ?? 'Selected Period' }}
                         </div>
-                        <small class="text-muted fw-semibold" style="font-size:0.75rem;">Effective</small>
-                    </div>
-                    <div class="mt-1">
-                        @if(($stats['late_penalty_absents'] ?? 0) > 0)
-                            <small class="text-danger fw-semibold font-monospace" style="font-size: 0.68rem;">
-                                {{ $stats['absent'] }} Base + {{ $stats['late_penalty_absents'] }} Late Pen.
-                            </small>
-                        @else
-                            <small class="text-muted" style="font-size: 0.68rem;">
-                                {{ $stats['absent'] ?? 0 }} unexcused
-                            </small>
+                        @if(!empty($stats['et_title']))
+                        <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
+                            🇪🇹 {{ $stats['et_title'] }}
+                        </small>
                         @endif
+                        <div class="d-flex align-items-baseline gap-2">
+                            <div class="h4 mb-0 font-weight-bold text-danger">
+                                {{ $stats['effective_absent'] ?? $stats['absent'] }}
+                            </div>
+                            <small class="text-muted fw-semibold" style="font-size:0.75rem;">Effective</small>
+                        </div>
+                        <div class="mt-1">
+                            @if(($stats['late_penalty_absents'] ?? 0) > 0)
+                                <small class="text-danger fw-semibold font-monospace" style="font-size: 0.68rem;">
+                                    {{ $stats['absent'] }} Base + {{ $stats['late_penalty_absents'] }} Late Pen.
+                                </small>
+                            @else
+                                <small class="text-muted" style="font-size: 0.68rem;">
+                                    {{ $stats['absent'] ?? 0 }} unexcused
+                                </small>
+                            @endif
+                        </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
 
         {{-- Half Day Card --}}
         <div class="col-6 col-lg">
-            <div class="card border-0 border-start border-4 border-warning shadow-sm h-100 py-2 bg-white">
-                <div class="card-body py-2 px-3">
-                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                        Half Day &bull; {{ $stats['title'] ?? 'Selected Period' }}
-                    </div>
-                    @if(!empty($stats['et_title']))
-                    <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
-                        🇪🇹 {{ $stats['et_title'] }}
-                    </small>
-                    @endif
-                    <div class="h4 mb-0 font-weight-bold text-gray-800">
-                        {{ $stats['half_day'] ?? 0 }}
+            <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['status' => 'half_day'])) }}" class="text-decoration-none">
+                <div class="card border-0 border-start border-4 border-warning shadow-sm h-100 py-2 bg-white">
+                    <div class="card-body py-2 px-3">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                            Half Day &bull; {{ $stats['title'] ?? 'Selected Period' }}
+                        </div>
+                        @if(!empty($stats['et_title']))
+                        <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
+                            🇪🇹 {{ $stats['et_title'] }}
+                        </small>
+                        @endif
+                        <div class="h4 mb-0 font-weight-bold text-gray-800">
+                            {{ $stats['half_day'] ?? 0 }}
+                        </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
 
         {{-- Leave Card --}}
         <div class="col-6 col-lg">
-            <div class="card border-0 border-start border-4 border-info shadow-sm h-100 py-2 bg-white">
-                <div class="card-body py-2 px-3">
-                    <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                        Leave &bull; {{ $stats['title'] ?? 'Selected Period' }}
-                    </div>
-                    @if(!empty($stats['et_title']))
-                    <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
-                        🇪🇹 {{ $stats['et_title'] }}
-                    </small>
-                    @endif
-                    <div class="h4 mb-0 font-weight-bold text-gray-800">
-                        {{ $stats['leave'] ?? 0 }}
+            <a href="{{ route('attendance.index', array_merge(request()->except('page'), ['status' => 'leave'])) }}" class="text-decoration-none">
+                <div class="card border-0 border-start border-4 border-info shadow-sm h-100 py-2 bg-white">
+                    <div class="card-body py-2 px-3">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                            Leave &bull; {{ $stats['title'] ?? 'Selected Period' }}
+                        </div>
+                        @if(!empty($stats['et_title']))
+                        <small class="text-muted d-block mb-1 font-monospace" style="font-size: 0.72rem;">
+                            🇪🇹 {{ $stats['et_title'] }}
+                        </small>
+                        @endif
+                        <div class="h4 mb-0 font-weight-bold text-gray-800">
+                            {{ $stats['leave'] ?? 0 }}
+                        </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
 
@@ -510,6 +521,7 @@
                             <th class="text-center">OT (Hrs / Pay)</th>
                             <th>Source</th>
                             <th class="text-center">Approved</th>
+                            <th class="text-center" style="min-width: 100px;">Action (ማስተካከያ)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -705,6 +717,14 @@
                                     <span class="badge text-white px-2 py-1 shadow-xs fw-bold" style="background-color: #6366f1;" title="{{ $a->notes }}">
                                         <span class="badge bg-white text-dark me-1" style="font-size:0.75rem;">S</span> On Site (ሳይት ላይ)
                                     </span>
+                                @elseif($rowStatus === 'absent')
+                                    <span class="badge bg-danger text-white px-2 py-1 shadow-xs fw-bold">
+                                        <i class="fa-solid fa-user-xmark me-1"></i>Absent (ቀሪ)
+                                    </span>
+                                @elseif($rowStatus === 'leave')
+                                    <span class="badge bg-info text-white px-2 py-1 shadow-xs fw-bold">
+                                        <i class="fa-solid fa-plane-departure me-1"></i>Leave (ፈቃድ)
+                                    </span>
                                 @else
                                     <span class="badge bg-{{ $statusColors[$rowStatus] ?? 'secondary' }}">
                                         {{ ucfirst(str_replace('_', ' ', $rowStatus)) }}
@@ -748,10 +768,16 @@
                                     </span>
                                 @endif
                             </td>
+                            <td class="text-center text-nowrap">
+                                <button type="button" class="btn btn-sm btn-outline-primary px-2.5 py-1 fw-semibold shadow-xs" 
+                                        data-bs-toggle="modal" data-bs-target="#editAttendanceModal{{ $a->id }}" title="Modify attendance status, times, and hours">
+                                    <i class="fa-solid fa-pen-to-square me-1"></i>Modify
+                                </button>
+                            </td>
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="9" class="text-center py-5 text-muted">
+                            <td colspan="10" class="text-center py-5 text-muted">
                                 <i class="fas fa-inbox fa-3x mb-3 opacity-50"></i>
                                 <p class="mb-0">No attendance records found.</p>
                             </td>
@@ -766,6 +792,304 @@
             {{ $attendances->links() }}
         </div>
         @endif
+    </div>
+</div>
+
+{{-- Modals for Modifying Attendance Records --}}
+@foreach($attendances as $a)
+@php
+    $empDevId = trim((string)($a->employee?->device_user_id ?? ''));
+    $bioDevId = trim((string)($a->biometric_device_id ?? ''));
+    $empCode  = trim((string)($a->employee?->employee_code ?? ''));
+    $modalDevId = $empDevId !== '' ? $empDevId : (($bioDevId !== '' && $bioDevId !== $empCode) ? $bioDevId : 'None');
+    $isSiteModal = in_array(strtoupper((string)$a->status), ['S', 'SITE', 'ON_SITE']) 
+        || str_contains((string)($a->notes ?? ''), 'On-Site') 
+        || $a->source === 'site_dispatch';
+    $currentStatus = $isSiteModal ? 'S' : $a->status;
+@endphp
+<div class="modal fade" id="editAttendanceModal{{ $a->id }}" tabindex="-1" aria-labelledby="editAttendanceModalLabel{{ $a->id }}" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white py-3">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary rounded-circle p-2"><i class="fa-solid fa-user-pen text-white"></i></span>
+                    <div>
+                        <h5 class="modal-title mb-0 fw-bold" id="editAttendanceModalLabel{{ $a->id }}">
+                            Modify Attendance (የአቴንዳንስ ማስተካከያ)
+                        </h5>
+                        <small class="text-white-50">{{ $a->employee?->full_name }} &bull; {{ $a->employee?->employee_code }}</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ route('attendance.update-record', $a->id) }}" method="POST">
+                @csrf
+                <div class="modal-body p-4">
+                    {{-- Employee & Date Summary Banner --}}
+                    <div class="bg-light p-3 rounded-3 mb-3 border">
+                        <div class="row g-2 align-items-center">
+                            <div class="col-sm-6">
+                                <small class="text-muted d-block">Employee Name &amp; ID</small>
+                                <strong class="text-dark fs-6">{{ $a->employee?->full_name }}</strong>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1 font-monospace">
+                                    {{ $a->employee?->employee_code }}
+                                </span>
+                                @if($modalDevId !== 'None')
+                                    <span class="badge bg-info-subtle text-info border border-info-subtle ms-1 font-monospace">
+                                        Device: {{ $modalDevId }}
+                                    </span>
+                                @endif
+                            </div>
+                            <div class="col-sm-6 text-sm-end">
+                                <small class="text-muted d-block">Attendance Date</small>
+                                <strong class="text-primary fs-6">{{ $a->attendance_date?->format('M d, Y (l)') }}</strong>
+                                <div class="small text-muted font-monospace mt-0.5">
+                                    🇪🇹 {{ \App\Helpers\EthiopianCalendar::format($a->attendance_date, 'am') }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        {{-- Status Selection --}}
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-tag me-1 text-primary"></i>Attendance Status <span class="text-danger">*</span>
+                            </label>
+                            <select name="status" id="statusSelect{{ $a->id }}" class="form-select form-select-lg fw-semibold" onchange="onStatusChange{{ $a->id }}(this.value)" required>
+                                <option value="present" {{ $currentStatus === 'present' ? 'selected' : '' }}>✅ Present (ተገኝቷል - Office)</option>
+                                <option value="S" {{ $currentStatus === 'S' ? 'selected' : '' }}>🏗️ S - On Site (ሳይት ላይ የወጣ - Site Duty)</option>
+                                <option value="half_day" {{ $currentStatus === 'half_day' ? 'selected' : '' }}>⏳ Half Day (ግማሽ ቀን - 4.0 Hours)</option>
+                                <option value="absent" {{ $currentStatus === 'absent' ? 'selected' : '' }}>❌ Absent (ቀሪ - 0.0 Hours)</option>
+                                <option value="leave" {{ $currentStatus === 'leave' ? 'selected' : '' }}>🌴 Leave (ፈቃድ ላይ)</option>
+                                <option value="holiday" {{ $currentStatus === 'holiday' ? 'selected' : '' }}>🎉 Holiday (የበዓል ቀን)</option>
+                            </select>
+                            <small class="text-muted">Selecting <strong>Absent</strong> sets worked hours to 0 and clears clock times.</small>
+                        </div>
+
+                        {{-- Hours Worked --}}
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-business-time me-1 text-primary"></i>Total Hours Worked (የተሠራ ሰዓት)
+                            </label>
+                            <input type="number" step="0.1" min="0" max="24" name="hours_worked" id="hoursWorked{{ $a->id }}" 
+                                   class="form-control form-control-lg font-monospace fw-bold" 
+                                   value="{{ $a->hours_worked ?? 0 }}" placeholder="e.g. 8.0">
+                            <div class="d-flex gap-1 mt-1">
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size: 0.72rem;" onclick="setHours{{ $a->id }}(8.0)">8.0h Full Day</button>
+                                <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size: 0.72rem;" onclick="setHours{{ $a->id }}(4.0)">4.0h Half Day</button>
+                                <button type="button" class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size: 0.72rem;" onclick="setHours{{ $a->id }}(0.0)">0.0h Absent</button>
+                            </div>
+                        </div>
+
+                        {{-- Clock Times Block (Morning & Afternoon Sessions) --}}
+                        <div class="col-12" id="clockTimesSection{{ $a->id }}">
+                            <div class="card border border-primary-subtle bg-light-subtle rounded-3">
+                                <div class="card-body p-3">
+                                    <div class="fw-bold small text-dark mb-2 d-flex align-items-center justify-content-between">
+                                        <span><i class="fa-regular fa-clock me-1 text-primary"></i>Session Clock Times (መግቢያ እና መውጫ ሰዓቶች)</span>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" onclick="fillStandardTimes{{ $a->id }}()">
+                                            <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Fill Standard Schedule Times
+                                        </button>
+                                    </div>
+                                    <div class="row g-2">
+                                        {{-- Morning In --}}
+                                        <div class="col-6 col-md-3">
+                                            <label class="form-label small mb-1 text-muted">☀️ Morning In</label>
+                                            <input type="time" name="morning_in" id="morningIn{{ $a->id }}" class="form-control form-control-sm font-monospace" 
+                                                   value="{{ $a->morning_in ? substr($a->morning_in, 0, 5) : '' }}">
+                                        </div>
+                                        {{-- Morning Out --}}
+                                        <div class="col-6 col-md-3">
+                                            <label class="form-label small mb-1 text-muted">☀️ Morning Out</label>
+                                            <input type="time" name="morning_out" id="morningOut{{ $a->id }}" class="form-control form-control-sm font-monospace" 
+                                                   value="{{ $a->morning_out ? substr($a->morning_out, 0, 5) : '' }}">
+                                        </div>
+                                        {{-- Afternoon In --}}
+                                        <div class="col-6 col-md-3">
+                                            <label class="form-label small mb-1 text-muted">🌤️ Afternoon In</label>
+                                            <input type="time" name="afternoon_in" id="afternoonIn{{ $a->id }}" class="form-control form-control-sm font-monospace" 
+                                                   value="{{ $a->afternoon_in ? substr($a->afternoon_in, 0, 5) : '' }}">
+                                        </div>
+                                        {{-- Afternoon Out --}}
+                                        <div class="col-6 col-md-3">
+                                            <label class="form-label small mb-1 text-muted">🌤️ Afternoon Out</label>
+                                            <input type="time" name="afternoon_out" id="afternoonOut{{ $a->id }}" class="form-control form-control-sm font-monospace" 
+                                                   value="{{ $a->afternoon_out ? substr($a->afternoon_out, 0, 5) : '' }}">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Overtime Details --}}
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-clock-rotate-left text-warning me-1"></i>Overtime Hours
+                            </label>
+                            <input type="number" step="0.5" min="0" max="24" name="overtime_hours" class="form-control" 
+                                   value="{{ $a->overtime_hours ?? 0 }}" placeholder="0.0">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-percent text-warning me-1"></i>Overtime Type
+                            </label>
+                            <select name="overtime_type" class="form-select">
+                                <option value="none" {{ ($a->overtime_type ?? 'none') === 'none' ? 'selected' : '' }}>No Overtime</option>
+                                <option value="holiday" {{ ($a->overtime_type ?? '') === 'holiday' ? 'selected' : '' }}>Holiday (×2.5)</option>
+                                <option value="rest_day" {{ ($a->overtime_type ?? '') === 'rest_day' ? 'selected' : '' }}>Rest Day / Sunday (×2.0)</option>
+                                <option value="night_12_4" {{ ($a->overtime_type ?? '') === 'night_12_4' ? 'selected' : '' }}>Night 12AM–4AM (×1.5)</option>
+                                <option value="night_4_12" {{ ($a->overtime_type ?? '') === 'night_4_12' ? 'selected' : '' }}>Night 4PM–12AM (×1.75)</option>
+                            </select>
+                        </div>
+
+                        {{-- Remarks / Notes --}}
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-regular fa-comment-dots text-secondary me-1"></i>Reason / Notes (ምክንያት ወይም ማስታወሻ)
+                            </label>
+                            <input type="text" name="notes" class="form-control" value="{{ $a->notes }}" 
+                                   placeholder="e.g. Authorized by Manager, Sick leave, Client meeting, Biometric missed punch...">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-3">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary fw-bold px-3">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>Save Changes (አዘምን)
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+function onStatusChange{{ $a->id }}(status) {
+    const hoursEl = document.getElementById('hoursWorked{{ $a->id }}');
+    if (status === 'absent') {
+        if (hoursEl) hoursEl.value = '0.0';
+        document.getElementById('morningIn{{ $a->id }}').value = '';
+        document.getElementById('morningOut{{ $a->id }}').value = '';
+        document.getElementById('afternoonIn{{ $a->id }}').value = '';
+        document.getElementById('afternoonOut{{ $a->id }}').value = '';
+    } else if (status === 'half_day') {
+        if (hoursEl && (!hoursEl.value || hoursEl.value === '0.0' || hoursEl.value === '0')) hoursEl.value = '4.0';
+    } else if (status === 'present' || status === 'S') {
+        if (hoursEl && (!hoursEl.value || hoursEl.value === '0.0' || hoursEl.value === '0')) hoursEl.value = '8.0';
+    }
+}
+function setHours{{ $a->id }}(val) {
+    const hoursEl = document.getElementById('hoursWorked{{ $a->id }}');
+    if (hoursEl) hoursEl.value = val.toFixed(1);
+    if (val === 0.0) {
+        const sel = document.getElementById('statusSelect{{ $a->id }}');
+        if (sel) sel.value = 'absent';
+    }
+}
+function fillStandardTimes{{ $a->id }}() {
+    document.getElementById('morningIn{{ $a->id }}').value = '08:30';
+    document.getElementById('morningOut{{ $a->id }}').value = '12:30';
+    document.getElementById('afternoonIn{{ $a->id }}').value = '13:30';
+    document.getElementById('afternoonOut{{ $a->id }}').value = '17:30';
+    const hoursEl = document.getElementById('hoursWorked{{ $a->id }}');
+    if (hoursEl) hoursEl.value = '8.0';
+    const sel = document.getElementById('statusSelect{{ $a->id }}');
+    if (sel && sel.value === 'absent') sel.value = 'present';
+}
+</script>
+@endforeach
+
+{{-- Quick Create / Mark Attendance Modal --}}
+<div class="modal fade" id="quickAttendanceModal" tabindex="-1" aria-labelledby="quickAttendanceModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white py-3">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-white text-primary rounded-circle p-2"><i class="fa-solid fa-user-plus"></i></span>
+                    <div>
+                        <h5 class="modal-title mb-0 fw-bold" id="quickAttendanceModalLabel">
+                            Mark / Add Attendance Record (ፈጣን ምዝገባ)
+                        </h5>
+                        <small class="text-white-50">Create or modify attendance for any employee</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ route('attendance.quick-create-or-update') }}" method="POST">
+                @csrf
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-user me-1 text-primary"></i>Employee (ሠራተኛ) <span class="text-danger">*</span>
+                            </label>
+                            <select name="employee_id" class="form-select" required>
+                                <option value="">-- Select Employee --</option>
+                                @foreach($allEmployees ?? [] as $emp)
+                                    <option value="{{ $emp->id }}">
+                                        {{ $emp->full_name }} ({{ $emp->employee_code }})
+                                        @if($emp->device_user_id) [Device: {{ $emp->device_user_id }}] @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold text-dark mb-1">
+                                <i class="fa-regular fa-calendar-check me-1 text-primary"></i>Attendance Date (ቀን) <span class="text-danger">*</span>
+                            </label>
+                            <input type="date" name="attendance_date" class="form-control" value="{{ request('date', $statsDate ?? today()->toDateString()) }}" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-tag me-1 text-primary"></i>Status (ሁኔታ) <span class="text-danger">*</span>
+                            </label>
+                            <select name="status" class="form-select fw-semibold" required>
+                                <option value="present">✅ Present (ተገኝቷል - Office)</option>
+                                <option value="S">🏗️ S - On Site (ሳይት ላይ የወጣ - Site Duty)</option>
+                                <option value="half_day">⏳ Half Day (ግማሽ ቀን - 4.0h)</option>
+                                <option value="absent">❌ Absent (ቀሪ - 0.0h)</option>
+                                <option value="leave">🌴 Leave (ፈቃድ ላይ)</option>
+                                <option value="holiday">🎉 Holiday (የበዓል ቀን)</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-business-time me-1 text-primary"></i>Hours Worked (ሰዓት)
+                            </label>
+                            <input type="number" step="0.1" min="0" max="24" name="hours_worked" class="form-control font-monospace" value="8.0">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small text-muted mb-1">☀️ Morning In</label>
+                            <input type="time" name="morning_in" class="form-control form-control-sm font-monospace" value="08:30">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small text-muted mb-1">☀️ Morning Out</label>
+                            <input type="time" name="morning_out" class="form-control form-control-sm font-monospace" value="12:30">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small text-muted mb-1">🌤️ Afternoon In</label>
+                            <input type="time" name="afternoon_in" class="form-control form-control-sm font-monospace" value="13:30">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small text-muted mb-1">🌤️ Afternoon Out</label>
+                            <input type="time" name="afternoon_out" class="form-control form-control-sm font-monospace" value="17:30">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-regular fa-comment-dots text-secondary me-1"></i>Notes / Reason
+                            </label>
+                            <input type="text" name="notes" class="form-control" placeholder="e.g. Dispatched to Bole site, Sick leave, Manual entry...">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-3">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary fw-bold px-3">
+                        <i class="fa-solid fa-check me-1"></i>Save Record (መዝግብ)
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 

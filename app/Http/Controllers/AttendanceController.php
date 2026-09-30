@@ -20,6 +20,8 @@ class AttendanceController extends Controller
             return $this->resetAndResync(request());
         }
 
+        self::ensureAttendanceSchemaReady();
+
         // Strict Rule: Auto-release biometric device_user_id from any Dead File employees
         try {
             DB::table('employees')
@@ -32,10 +34,6 @@ class AttendanceController extends Controller
 
         // Guarantee all approved site deployments are reflected in Attendance with status 'S'
         try {
-            $driver = DB::connection()->getDriverName();
-            if ($driver !== 'sqlite') {
-                DB::statement("ALTER TABLE `attendance` MODIFY `status` VARCHAR(50) NOT NULL DEFAULT 'present'");
-            }
             $approvedDeployments = \App\Models\SiteDeploymentRequest::where('status', 'approved')
                 ->with('employee')
                 ->get();
@@ -44,11 +42,59 @@ class AttendanceController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        $query = Attendance::activeRoster()->with('employee')->latest('attendance_date');
-
         // Filter by specific single date, month, or date range
         $selectedDate = request('date');
         $selectedMonth = request('month');
+
+        // If no filter is provided, default to the latest date with attendance records (e.g. today / current attendance date)
+        if (!$selectedDate && !$selectedMonth && !request('date_from') && !request('date_to') && !request()->has('all_dates')) {
+            $latestRecordDate = Attendance::max('attendance_date');
+            $selectedDate = $latestRecordDate ? Carbon::parse($latestRecordDate)->toDateString() : today()->toDateString();
+        }
+
+        $targetDateToPopulate = $selectedDate ?: (request('date_from') ?: (Attendance::max('attendance_date') ? Carbon::parse(Attendance::max('attendance_date'))->toDateString() : today()->toDateString()));
+
+        // Auto-populate missing active roster employees as absent on the active target date
+        try {
+            if ($targetDateToPopulate && !$selectedMonth && !request()->has('all_dates')) {
+                $activeEmployees = Employee::activeRoster()->get(['id']);
+                if ($activeEmployees->isNotEmpty()) {
+                    $existingEmpIds = Attendance::whereDate('attendance_date', $targetDateToPopulate)
+                        ->pluck('employee_id')
+                        ->flip();
+
+                    $missingEmployees = $activeEmployees->filter(fn($emp) => !isset($existingEmpIds[$emp->id]));
+
+                    foreach ($missingEmployees as $emp) {
+                        $hasSiteDep = \App\Models\SiteDeploymentRequest::where('employee_id', $emp->id)
+                            ->where('status', 'approved')
+                            ->whereDate('start_date', '<=', $targetDateToPopulate)
+                            ->whereDate('end_date', '>=', $targetDateToPopulate)
+                            ->first();
+
+                        if ($hasSiteDep) {
+                            self::applyDeploymentToAttendance($hasSiteDep);
+                        } else {
+                            Attendance::firstOrCreate(
+                                [
+                                    'employee_id'     => $emp->id,
+                                    'attendance_date' => $targetDateToPopulate,
+                                ],
+                                [
+                                    'status'          => 'absent',
+                                    'source'          => 'manual',
+                                    'hours_worked'    => 0,
+                                    'late_minutes'    => 0,
+                                    'is_approved'     => false,
+                                ]
+                            );
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        $query = Attendance::activeRoster()->with('employee')->latest('attendance_date');
 
         if ($selectedDate) {
             $query->whereDate('attendance_date', $selectedDate);
@@ -109,19 +155,6 @@ class AttendanceController extends Controller
             } else {
                 $query->where('status', request('status'));
             }
-        } elseif (!request()->has('show_all')) {
-            // "if not added don't show in attendance section": only show records with actual clock times OR on-site deployments
-            $query->where(function ($q) {
-                $q->whereNotNull('morning_in')
-                  ->orWhereNotNull('morning_out')
-                  ->orWhereNotNull('afternoon_in')
-                  ->orWhereNotNull('afternoon_out')
-                  ->orWhereNotNull('check_in')
-                  ->orWhereNotNull('check_out')
-                  ->orWhereIn('status', ['site', 'S', 's', 'on_site'])
-                  ->orWhere('source', 'site_dispatch')
-                  ->orWhere('notes', 'like', '%On-Site%');
-            });
         }
 
         // ── Auto-heal: Ensure all biometric & sync records have real session times populated ──
@@ -992,6 +1025,245 @@ class AttendanceController extends Controller
             ->keyBy('employee_id');
 
         return view('hr.attendance.create', compact('employees', 'attendances', 'selectedDate', 'selectedEmployeeId'));
+    }
+
+    /**
+     * Ensure attendance table schema has status column wide enough for 'S' and deployment metadata.
+     */
+    public static function ensureAttendanceSchemaReady(): void
+    {
+        try {
+            $driver = DB::connection()->getDriverName();
+            if ($driver !== 'sqlite') {
+                DB::statement("ALTER TABLE `attendance` MODIFY `status` VARCHAR(50) NOT NULL DEFAULT 'present'");
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('attendance', 'decided_by')) {
+                \Illuminate\Support\Facades\Schema::table('attendance', function ($table) {
+                    $table->unsignedBigInteger('decided_by')->nullable()->after('approved_by');
+                    $table->string('decided_by_role')->nullable()->after('decided_by');
+                    $table->unsignedBigInteger('site_project_id')->nullable()->after('decided_by_role');
+                    $table->string('site_name')->nullable()->after('site_project_id');
+                    $table->text('site_task')->nullable()->after('site_name');
+                    $table->date('site_start_date')->nullable()->after('site_task');
+                    $table->date('site_end_date')->nullable()->after('site_start_date');
+                });
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    /**
+     * Update an individual attendance record (Status, session times, hours, notes).
+     */
+    public function updateRecord(Request $request, Attendance $attendance)
+    {
+        $validated = $request->validate([
+            'status'          => 'required|string',
+            'morning_in'      => 'nullable|string',
+            'morning_out'     => 'nullable|string',
+            'afternoon_in'    => 'nullable|string',
+            'afternoon_out'   => 'nullable|string',
+            'hours_worked'    => 'nullable|numeric|min:0|max:24',
+            'overtime_hours'  => 'nullable|numeric|min:0|max:24',
+            'overtime_type'   => 'nullable|string',
+            'notes'           => 'nullable|string|max:500',
+        ]);
+
+        self::ensureAttendanceSchemaReady();
+
+        $status = $validated['status'];
+        if (in_array(strtolower($status), ['s', 'site', 'on_site'])) {
+            $status = 'S';
+        }
+
+        $dateStr = $attendance->attendance_date ? $attendance->attendance_date->toDateString() : today()->toDateString();
+        $isSat = $attendance->attendance_date ? $attendance->attendance_date->isSaturday() : false;
+        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+        $defaultFullHours = $isSat ? (float)($workSchedule['sat_total_hours'] ?? 4.0) : (float)($workSchedule['total_hours'] ?? 8.0);
+
+        $mIn  = !empty($validated['morning_in']) ? substr(trim($validated['morning_in']), 0, 5) : null;
+        $mOut = !empty($validated['morning_out']) ? substr(trim($validated['morning_out']), 0, 5) : null;
+        $aIn  = !empty($validated['afternoon_in']) ? substr(trim($validated['afternoon_in']), 0, 5) : null;
+        $aOut = !empty($validated['afternoon_out']) ? substr(trim($validated['afternoon_out']), 0, 5) : null;
+
+        $cIn  = $mIn ?: $aIn;
+        $cOut = $aOut ?: $mOut;
+
+        $hours = isset($validated['hours_worked']) && is_numeric($validated['hours_worked'])
+            ? (float)$validated['hours_worked']
+            : null;
+
+        if ($status === 'absent') {
+            $mIn = null;
+            $mOut = null;
+            $aIn = null;
+            $aOut = null;
+            $cIn = null;
+            $cOut = null;
+            $hours = 0.0;
+            $lateMinutes = 0;
+        } elseif ($status === 'S') {
+            if ($hours === null || $hours <= 0) {
+                $hours = $defaultFullHours;
+            }
+            if (empty($mIn) && empty($aIn)) {
+                $mIn = $workSchedule['morning_in'] ?? '08:30';
+                $mOut = $workSchedule['morning_out'] ?? '12:30';
+                if (!$isSat) {
+                    $aIn = $workSchedule['afternoon_in'] ?? '13:30';
+                    $aOut = $workSchedule['afternoon_out'] ?? '17:30';
+                }
+                $cIn = $mIn;
+                $cOut = $aOut ?: $mOut;
+            }
+            $lateMinutes = 0;
+            $attendance->source = 'site_dispatch';
+        } else {
+            if ($hours === null) {
+                if ($status === 'half_day') {
+                    $hours = 4.0;
+                } else {
+                    $hours = $defaultFullHours;
+                }
+            }
+            $lateMinutes = \App\Services\BiometricPunchService::calculateLateMinutes($mIn ?: $cIn);
+        }
+
+        $attendance->status         = $status;
+        $attendance->morning_in     = $mIn;
+        $attendance->morning_out    = $mOut;
+        $attendance->afternoon_in   = $aIn;
+        $attendance->afternoon_out  = $aOut;
+        $attendance->check_in       = $cIn;
+        $attendance->check_out      = $cOut;
+        $attendance->hours_worked   = $hours;
+        $attendance->late_minutes   = $lateMinutes;
+        $attendance->overtime_hours = $validated['overtime_hours'] ?? 0;
+        $attendance->overtime_type  = $validated['overtime_type'] ?? 'none';
+        if ($request->has('notes')) {
+            $attendance->notes = $validated['notes'];
+        }
+        $attendance->is_approved = true;
+        $attendance->approved_by = auth()->id();
+        $attendance->save();
+
+        ActivityLog::log(
+            'updated',
+            "Attendance for {$attendance->employee?->full_name} on {$dateStr} updated to status '{$status}', hours: {$hours}h",
+            'HR Attendance'
+        );
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => "Attendance for {$attendance->employee?->full_name} updated successfully.",
+                'attendance' => $attendance,
+            ]);
+        }
+
+        return redirect()->back()->with('success', "Attendance record for {$attendance->employee?->full_name} updated successfully.");
+    }
+
+    /**
+     * Quick create or update attendance for an employee on a specific date.
+     */
+    public function quickCreateOrUpdate(Request $request)
+    {
+        $validated = $request->validate([
+            'employee_id'     => 'required|exists:employees,id',
+            'attendance_date' => 'required|date',
+            'status'          => 'required|string',
+            'morning_in'      => 'nullable|string',
+            'morning_out'     => 'nullable|string',
+            'afternoon_in'    => 'nullable|string',
+            'afternoon_out'   => 'nullable|string',
+            'hours_worked'    => 'nullable|numeric|min:0|max:24',
+            'overtime_hours'  => 'nullable|numeric|min:0|max:24',
+            'overtime_type'   => 'nullable|string',
+            'notes'           => 'nullable|string|max:500',
+        ]);
+
+        self::ensureAttendanceSchemaReady();
+
+        $status = $validated['status'];
+        if (in_array(strtolower($status), ['s', 'site', 'on_site'])) {
+            $status = 'S';
+        }
+
+        $dateStr = Carbon::parse($validated['attendance_date'])->toDateString();
+        $isSat = Carbon::parse($dateStr)->isSaturday();
+        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+        $defaultFullHours = $isSat ? (float)($workSchedule['sat_total_hours'] ?? 4.0) : (float)($workSchedule['total_hours'] ?? 8.0);
+
+        $mIn  = !empty($validated['morning_in']) ? substr(trim($validated['morning_in']), 0, 5) : null;
+        $mOut = !empty($validated['morning_out']) ? substr(trim($validated['morning_out']), 0, 5) : null;
+        $aIn  = !empty($validated['afternoon_in']) ? substr(trim($validated['afternoon_in']), 0, 5) : null;
+        $aOut = !empty($validated['afternoon_out']) ? substr(trim($validated['afternoon_out']), 0, 5) : null;
+        $cIn  = $mIn ?: $aIn;
+        $cOut = $aOut ?: $mOut;
+
+        $hours = isset($validated['hours_worked']) && is_numeric($validated['hours_worked'])
+            ? (float)$validated['hours_worked']
+            : null;
+
+        if ($status === 'absent') {
+            $mIn = null; $mOut = null; $aIn = null; $aOut = null; $cIn = null; $cOut = null;
+            $hours = 0.0;
+            $lateMinutes = 0;
+        } elseif ($status === 'S') {
+            if ($hours === null || $hours <= 0) $hours = $defaultFullHours;
+            if (empty($mIn) && empty($aIn)) {
+                $mIn = $workSchedule['morning_in'] ?? '08:30';
+                $mOut = $workSchedule['morning_out'] ?? '12:30';
+                if (!$isSat) {
+                    $aIn = $workSchedule['afternoon_in'] ?? '13:30';
+                    $aOut = $workSchedule['afternoon_out'] ?? '17:30';
+                }
+                $cIn = $mIn;
+                $cOut = $aOut ?: $mOut;
+            }
+            $lateMinutes = 0;
+        } else {
+            if ($hours === null) {
+                $hours = ($status === 'half_day') ? 4.0 : $defaultFullHours;
+            }
+            $lateMinutes = \App\Services\BiometricPunchService::calculateLateMinutes($mIn ?: $cIn);
+        }
+
+        $attendance = Attendance::updateOrCreate(
+            [
+                'employee_id'     => $validated['employee_id'],
+                'attendance_date' => $dateStr,
+            ],
+            [
+                'status'         => $status,
+                'source'         => ($status === 'S') ? 'site_dispatch' : 'manual',
+                'morning_in'     => $mIn,
+                'morning_out'    => $mOut,
+                'afternoon_in'   => $aIn,
+                'afternoon_out'  => $aOut,
+                'check_in'       => $cIn,
+                'check_out'      => $cOut,
+                'hours_worked'   => $hours,
+                'late_minutes'   => $lateMinutes,
+                'overtime_hours' => $validated['overtime_hours'] ?? 0,
+                'overtime_type'  => $validated['overtime_type'] ?? 'none',
+                'notes'          => $validated['notes'] ?? null,
+                'is_approved'    => true,
+                'approved_by'    => auth()->id(),
+            ]
+        );
+
+        $empName = Employee::find($validated['employee_id'])?->full_name ?? 'Employee';
+        ActivityLog::log(
+            'created',
+            "Attendance for {$empName} on {$dateStr} saved with status '{$status}', hours: {$hours}h",
+            'HR Attendance'
+        );
+
+        return redirect()->back()->with('success', "Attendance record for {$empName} ({$dateStr}) saved successfully.");
     }
 
     public function quickClock(Request $request)

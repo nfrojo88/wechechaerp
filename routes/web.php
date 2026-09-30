@@ -1885,6 +1885,8 @@ Route::middleware(['auth'])->group(function () {
 
     Route::resource('departments', App\Http\Controllers\DepartmentController::class)->except(['show', 'destroy']);
     Route::resource('attendance', App\Http\Controllers\AttendanceController::class)->only(['index', 'create', 'store']);
+    Route::post('attendance/{attendance}/update-record', [App\Http\Controllers\AttendanceController::class, 'updateRecord'])->name('attendance.update-record');
+    Route::post('attendance/quick-create-or-update', [App\Http\Controllers\AttendanceController::class, 'quickCreateOrUpdate'])->name('attendance.quick-create-or-update');
     Route::post('attendance/quick-clock', [App\Http\Controllers\AttendanceController::class, 'quickClock'])->name('attendance.quickClock');
     Route::post('attendance/update-schedule', [App\Http\Controllers\AttendanceController::class, 'updateSchedule'])->name('attendance.updateSchedule');
     Route::post('attendance/bulk', [App\Http\Controllers\AttendanceController::class, 'bulkStore'])->name('attendance.bulkStore');
