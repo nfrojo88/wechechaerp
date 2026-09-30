@@ -714,7 +714,7 @@ class PurchaseRequestController extends Controller
         $transferredCount = 0;
 
         DB::transaction(function () use ($request, $purchaseRequest, &$createdTransfer, &$transferredCount) {
-            $no = 'TR-' . date('Ymd') . '-' . str_pad(Transfer::count() + 1, 4, '0', STR_PAD_LEFT);
+            $no = Transfer::generateUniqueNo();
 
             $transfer = Transfer::create([
                 'transfer_no'   => $no,
@@ -918,12 +918,13 @@ class PurchaseRequestController extends Controller
             }
 
             // 1. Process Transfers
+            $transferLoopIndex = 0;
             foreach ($transferItemsByStore as $fromStoreId => $items) {
                 $fallbackTo = ($fromStoreId == $destinationStoreId)
                     ? (Store::where('id', '!=', $fromStoreId)->where('is_active', true)->value('id') ?? $destinationStoreId)
                     : $destinationStoreId;
 
-                $no = 'TR-' . date('Ymd') . '-' . str_pad(Transfer::count() + 1, 4, '0', STR_PAD_LEFT);
+                $no = Transfer::generateUniqueNo($transferLoopIndex);
                 $transfer = Transfer::create([
                     'transfer_no'   => $no,
                     'from_store_id' => $fromStoreId,
@@ -953,6 +954,7 @@ class PurchaseRequestController extends Controller
                 }
 
                 $createdTransfers[] = $transfer;
+                $transferLoopIndex++;
             }
 
             // 2. Process Purchase Items (Route PR to Procurement Manager)

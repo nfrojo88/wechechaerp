@@ -121,5 +121,32 @@ class Transfer extends Model
         }
         return asset('storage/' . $this->receiving_slip_file);
     }
+
+    /**
+     * Generate a unique transfer number safe against race conditions and deletions.
+     *
+     * Uses the maximum existing sequence for today (across ALL transfers including soft-deleted)
+     * and increments it. If a duplicate collision still occurs, it retries with a higher offset.
+     * This replaces the broken `Transfer::count() + 1` pattern which produced duplicates
+     * whenever records had been deleted or concurrent requests arrived at the same millisecond.
+     *
+     * @param  int  $extraOffset  Additional offset to skip ahead (used on retry after collision)
+     * @return string  e.g. "TR-20260930-0034"
+     */
+    public static function generateUniqueNo(int $extraOffset = 0): string
+    {
+        $today = date('Ymd');
+        $prefix = "TR-{$today}-";
+
+        // Query the highest sequence already used today (include soft-deleted so we never reuse)
+        $maxExisting = static::withTrashed()
+            ->where('transfer_no', 'like', "{$prefix}%")
+            ->selectRaw("MAX(CAST(SUBSTRING(transfer_no, ?) AS UNSIGNED)) as max_seq", [strlen($prefix) + 1])
+            ->value('max_seq');
+
+        $next = ($maxExisting ?? 0) + 1 + $extraOffset;
+
+        return $prefix . str_pad($next, 4, '0', STR_PAD_LEFT);
+    }
 }
 

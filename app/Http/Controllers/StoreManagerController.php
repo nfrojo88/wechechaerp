@@ -348,7 +348,7 @@ class StoreManagerController extends Controller
         ]);
 
         DB::transaction(function () use ($request) {
-            $no = 'TR-' . date('Ymd') . '-' . str_pad(Transfer::count() + 1, 4, '0', STR_PAD_LEFT);
+            $no = Transfer::generateUniqueNo();
 
             $transfer = Transfer::create([
                 'transfer_no'   => $no,
@@ -1150,7 +1150,7 @@ class StoreManagerController extends Controller
                 }
             } else {
                 // Split to a new transfer request
-                $no = 'TR-' . date('Ymd') . '-' . str_pad(Transfer::count() + 1, 4, '0', STR_PAD_LEFT);
+                $no = Transfer::generateUniqueNo();
                 $targetTransferNo = $no;
 
                 $destinationTransfer = Transfer::create([
@@ -1305,7 +1305,7 @@ class StoreManagerController extends Controller
         $newTransfer = null;
 
         DB::transaction(function () use ($request, $transfer, &$newTransfer) {
-            $no = 'TR-' . date('Ymd') . '-' . str_pad(Transfer::count() + 1, 4, '0', STR_PAD_LEFT);
+            $no = Transfer::generateUniqueNo();
 
             $newTransfer = Transfer::create([
                 'transfer_no'        => $no,
@@ -1630,7 +1630,7 @@ class StoreManagerController extends Controller
         if ($allAvailable) {
             // Create transfer
             DB::transaction(function () use ($materialRequest) {
-                $no = 'TR-' . date('Ymd') . '-' . str_pad(Transfer::count() + 1, 4, '0', STR_PAD_LEFT);
+                $no = Transfer::generateUniqueNo();
 
                 // Find source store with inventory
                 $firstItem = $materialRequest->items->first();

@@ -55,7 +55,7 @@ class TransferController extends Controller
         ]);
 
         DB::transaction(function () use ($request) {
-            $no = 'TR-' . date('Ymd') . '-' . str_pad(Transfer::count() + 1, 4, '0', STR_PAD_LEFT);
+            $no = Transfer::generateUniqueNo();
 
             $transfer = Transfer::create([
                 'transfer_no'  => $no,
