@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
+    <link rel="icon" type="image/png" href="https://res.cloudinary.com/dg1ijsqx6/image/upload/v1785238806/Gemini_Generated_Image_4aap624aap624aap_1_djaxwl.png">
+    <link rel="apple-touch-icon" href="https://res.cloudinary.com/dg1ijsqx6/image/upload/v1785238806/Gemini_Generated_Image_4aap624aap624aap_1_djaxwl.png">
     <title>{{ config('app.name', 'Wechecha Construction ERP') }}</title>
 
     <!-- Bootstrap 5 -->
@@ -16,7 +18,7 @@
     <!-- Custom CSS (embedded for reliable deployment) -->
     <style>
 /* ==========================================================================
-   Construct-Pro ERP — Global Design System
+   Construct-Pro ERP â€” Global Design System
    ========================================================================== */
 :root {
   --brand-900: #0f1623;
@@ -403,7 +405,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .empty-state h6 { font-size: 15px; font-weight: 600; color: var(--gray-500); margin-bottom: 6px; }
 .empty-state p { font-size: 13px; margin: 0; }
 /* ======================================================
-   MOBILE RESPONSIVE SYSTEM — Full Breakpoint Cascade
+   MOBILE RESPONSIVE SYSTEM â€” Full Breakpoint Cascade
    ====================================================== */
 
 /* Sidebar Backdrop (mobile drawer overlay) */
@@ -432,13 +434,13 @@ body.sidebar-open { overflow-y: hidden !important; }
   justify-content: center;
 }
 
-/* ── XL (≤1200px) ── */
+/* â”€â”€ XL (â‰¤1200px) â”€â”€ */
 @media (max-width: 1200px) {
   .stat-card .stat-value { font-size: 22px; }
   .content-wrapper { padding: 24px 20px 36px; }
 }
 
-/* ── LG (≤992px) ── */
+/* â”€â”€ LG (â‰¤992px) â”€â”€ */
 @media (max-width: 992px) {
   :root { --sidebar-width: 240px; }
   .content-wrapper { padding: 20px 18px 32px; }
@@ -448,7 +450,7 @@ body.sidebar-open { overflow-y: hidden !important; }
   .app-footer { padding: 14px 20px; }
 }
 
-/* ── MD / Tablet (≤768px) ── */
+/* â”€â”€ MD / Tablet (â‰¤768px) â”€â”€ */
 @media (max-width: 768px) {
   html, body {
     overflow-x: hidden !important;
@@ -624,7 +626,7 @@ body.sidebar-open { overflow-y: hidden !important; }
   .page-link { padding: 5px 10px; font-size: 12px; }
 }
 
-/* ── SM / Small Phone (≤576px) ── */
+/* â”€â”€ SM / Small Phone (â‰¤576px) â”€â”€ */
 @media (max-width: 576px) {
   /* Header: slim on tiny screens */
   .top-header { height: 50px; padding: 0 8px !important; }
@@ -687,7 +689,7 @@ body.sidebar-open { overflow-y: hidden !important; }
   .dropdown-menu { min-width: 180px !important; }
 }
 
-/* ── XS / Tiny Phone (≤400px) ── */
+/* â”€â”€ XS / Tiny Phone (â‰¤400px) â”€â”€ */
 @media (max-width: 400px) {
   .top-header { height: 48px; padding: 0 6px !important; }
   #headerRoleButton .badge.bg-primary { max-width: 45px !important; }
@@ -699,7 +701,7 @@ body.sidebar-open { overflow-y: hidden !important; }
   .modal-content { border-radius: 0 !important; min-height: 100dvh; }
 }
 
-/* ── Print ── */
+/* â”€â”€ Print â”€â”€ */
 @media print {
   .sidebar, .top-header, .app-footer, .sidebar-backdrop, .btn-print-hide { display: none !important; }
   .main-content { margin-left: 0 !important; }
@@ -799,7 +801,7 @@ body.sidebar-open { overflow-y: hidden !important; }
                     @endphp
 
                     @if($isHrOrGm && $probationAlertCount > 0)
-                        <a href="{{ route('employees.index') }}?probation_alert=1" class="btn btn-sm btn-outline-warning d-flex align-items-center gap-2 fw-bold text-dark px-2.5 py-1 rounded-3 shadow-xs me-2 border-warning" title="{{ $probationAlertCount }} Employee(s) on Day 20–45 of Test Period requiring Guarantee Letter / TIN">
+                        <a href="{{ route('employees.index') }}?probation_alert=1" class="btn btn-sm btn-outline-warning d-flex align-items-center gap-2 fw-bold text-dark px-2.5 py-1 rounded-3 shadow-xs me-2 border-warning" title="{{ $probationAlertCount }} Employee(s) on Day 20â€“45 of Test Period requiring Guarantee Letter / TIN">
                             <i class="fa-solid fa-clock-rotate-left text-danger animate-pulse"></i>
                             <span class="d-none d-xl-inline">Test Period Alert</span>
                             <span class="badge bg-danger rounded-pill">{{ $probationAlertCount }}</span>
@@ -832,7 +834,7 @@ body.sidebar-open { overflow-y: hidden !important; }
                                             <i class="fa-solid fa-triangle-exclamation text-danger mt-1"></i>
                                             <div>
                                                 <strong class="d-block text-dark font-size-13">{{ $probationAlertCount }} Employee(s) in Test Period Alert</strong>
-                                                <small class="text-muted">Day 20–45 window: Guarantee Letter & TIN / Renewal needed before account lockout.</small>
+                                                <small class="text-muted">Day 20â€“45 window: Guarantee Letter & TIN / Renewal needed before account lockout.</small>
                                             </div>
                                         </div>
                                     </a>
@@ -888,7 +890,7 @@ body.sidebar-open { overflow-y: hidden !important; }
                                     || str_contains($name, 'petty')
                                     || str_contains($name, 'cash')
                                     || str_contains($name, 'fund')
-                                    || str_contains($name, 'ፔቲ')
+                                    || str_contains($name, 'á”á‰²')
                                     || in_array($subtype, ['cash', 'petty_cash', 'cash_equivalent'])
                                     || ($type === 'asset' && in_array($subtype, ['cash', 'current_asset', 'asset']));
                             });
@@ -1034,10 +1036,10 @@ body.sidebar-open { overflow-y: hidden !important; }
                             <i class="fa-solid fa-triangle-exclamation text-warning-emphasis fs-5 flex-shrink-0"></i>
                             <div>
                                 <span class="fw-bold text-dark small">
-                                    ⏳ 45-Day Test Period Alert:
+                                    â³ 45-Day Test Period Alert:
                                 </span>
                                 <span class="text-dark small">
-                                    <strong>{{ $probationAlertCount }}</strong> employee{{ $probationAlertCount > 1 ? 's are' : ' is' }} on Day 20–45. Complete Guarantee Letter &amp; TIN before Day 45 lockout.
+                                    <strong>{{ $probationAlertCount }}</strong> employee{{ $probationAlertCount > 1 ? 's are' : ' is' }} on Day 20â€“45. Complete Guarantee Letter &amp; TIN before Day 45 lockout.
                                 </span>
                             </div>
                         </div>
@@ -1132,9 +1134,9 @@ body.sidebar-open { overflow-y: hidden !important; }
             
             <footer class="app-footer">
                 <div>
-                    <span class="me-1">© {{ date('Y') }}</span>
+                    <span class="me-1">Â© {{ date('Y') }}</span>
                     <span class="footer-brand"><i class="fa-solid fa-helmet-safety me-1 text-warning"></i>Wechecha Construction</span>
-                    <span class="ms-1 d-none d-sm-inline">· All rights reserved · Developed by Nataye Technology</span>
+                    <span class="ms-1 d-none d-sm-inline">Â· All rights reserved Â· Developed by Nataye Technology</span>
                 </div>
                 <div class="d-flex align-items-center gap-3">
                     <span class="footer-version">v1.0.0</span>
@@ -1151,19 +1153,19 @@ body.sidebar-open { overflow-y: hidden !important; }
     <script>
     $(document).ready(function () {
 
-        /* ── Desktop sidebar collapse ── */
+        /* â”€â”€ Desktop sidebar collapse â”€â”€ */
         $('#sidebarToggle').on('click', function () {
             $('#sidebar').toggleClass('collapsed');
         });
 
-        /* ── Mobile sidebar open ── */
+        /* â”€â”€ Mobile sidebar open â”€â”€ */
         function openMobileSidebar() {
             $('#sidebar').addClass('mobile-open');
             $('#sidebarBackdrop').addClass('active');
             $('body').addClass('sidebar-open');
         }
 
-        /* ── Mobile sidebar close ── */
+        /* â”€â”€ Mobile sidebar close â”€â”€ */
         function closeMobileSidebar() {
             $('#sidebar').removeClass('mobile-open');
             $('#sidebarBackdrop').removeClass('active');
@@ -1188,7 +1190,7 @@ body.sidebar-open { overflow-y: hidden !important; }
             if (e.key === 'Escape') closeMobileSidebar();
         });
 
-        /* ── Responsive table wrappers ──
+        /* â”€â”€ Responsive table wrappers â”€â”€
            Wrap any bare <table> inside a card on mobile for horizontal scroll */
         if (window.innerWidth <= 768) {
             $('.card-body table:not(.table-no-wrap)').each(function () {
@@ -1198,7 +1200,7 @@ body.sidebar-open { overflow-y: hidden !important; }
             });
         }
 
-        /* ── Fix dropdown overflow on mobile ── */
+        /* â”€â”€ Fix dropdown overflow on mobile â”€â”€ */
         $(document).on('shown.bs.dropdown', function (e) {
             if (window.innerWidth <= 768) {
                 var menu = $(e.target).find('.dropdown-menu');
@@ -1209,7 +1211,7 @@ body.sidebar-open { overflow-y: hidden !important; }
             }
         });
 
-        /* ── Auto-dismiss flash alerts after 6 seconds ── */
+        /* â”€â”€ Auto-dismiss flash alerts after 6 seconds â”€â”€ */
         setTimeout(function () {
             $('.flash-container .alert').fadeOut(600, function () { $(this).remove(); });
         }, 6000);

@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="https://res.cloudinary.com/dg1ijsqx6/image/upload/v1785238806/Gemini_Generated_Image_4aap624aap624aap_1_djaxwl.png">
     <title>Login - {{ config('app.name', 'Construct-Pro ERP') }}</title>
     <!-- Bootstrap 5 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -11,7 +12,7 @@
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-/* ── Design Tokens ────────────────────────────────── */
+/* â”€â”€ Design Tokens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
   --brand-900: #0f1623;
   --brand-800: #1a2436;
@@ -43,7 +44,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Auth Wrapper ─────────────────────────────────── */
+/* â”€â”€ Auth Wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .auth-wrapper {
   min-height: 100vh;
   min-height: 100dvh; /* Dynamic viewport for mobile keyboards */
@@ -75,7 +76,7 @@ body {
   pointer-events: none;
 }
 
-/* ── Auth Card ────────────────────────────────────── */
+/* â”€â”€ Auth Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .auth-card {
   background: white;
   border-radius: var(--radius-xl);
@@ -92,7 +93,7 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Logo ─────────────────────────────────────────── */
+/* â”€â”€ Logo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .auth-logo {
   display: flex;
   align-items: center;
@@ -135,7 +136,7 @@ body {
   margin: 24px 0;
 }
 
-/* ── Form elements ────────────────────────────────── */
+/* â”€â”€ Form elements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .form-label {
   font-size: 12px;
   font-weight: 700;
@@ -161,7 +162,7 @@ body {
 }
 .form-control::placeholder { color: var(--gray-400); }
 
-/* ── Sign In button ───────────────────────────────── */
+/* â”€â”€ Sign In button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .btn-signin {
   display: flex;
   align-items: center;
@@ -198,7 +199,7 @@ body {
 .btn-signin:active { transform: translateY(0); }
 .btn-signin i { font-size: 16px; }
 
-/* ── Error alert ──────────────────────────────────── */
+/* â”€â”€ Error alert â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .alert-danger {
   background: #fee2e2;
   color: #991b1b;
@@ -209,7 +210,7 @@ body {
   font-weight: 500;
 }
 
-/* ── Footer note ──────────────────────────────────── */
+/* â”€â”€ Footer note â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .auth-footer {
   text-align: center;
   margin-top: 28px;
@@ -217,8 +218,8 @@ body {
   color: var(--gray-400);
 }
 
-/* ── Mobile Responsive ────────────────────────────── */
-/* MD — ≤768px (phones & small tablets) */
+/* â”€â”€ Mobile Responsive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* MD â€” â‰¤768px (phones & small tablets) */
 @media (max-width: 768px) {
   .auth-wrapper { align-items: flex-start; padding: 20px 12px 32px; }
   .auth-card {
@@ -232,13 +233,13 @@ body {
   .auth-logo-text .title { font-size: 18px; }
   .auth-logo-text .sub { font-size: 10.5px; }
   .auth-divider { margin: 18px 0; }
-  /* Prevent iOS input zoom (must be ≥16px) */
+  /* Prevent iOS input zoom (must be â‰¥16px) */
   .form-control { font-size: 16px; padding: 12px 14px; padding-right: 44px; }
   .btn-signin { font-size: 15px; padding: 14px 20px; min-height: 50px; }
   .auth-footer { font-size: 10.5px; margin-top: 20px; }
 }
 
-/* SM — ≤480px (small phones) */
+/* SM â€” â‰¤480px (small phones) */
 @media (max-width: 480px) {
   .auth-wrapper { padding: 12px 8px 24px; }
   .auth-card { padding: 28px 18px; border-radius: 16px; }
@@ -252,7 +253,7 @@ body {
   .auth-footer br { display: block; }
 }
 
-/* XS — ≤360px (very tiny phones) */
+/* XS â€” â‰¤360px (very tiny phones) */
 @media (max-width: 360px) {
   .auth-card { padding: 22px 14px; }
   .auth-logo-icon { width: 52px; height: 52px; }
@@ -320,7 +321,7 @@ body {
                         class="form-control"
                         id="password"
                         name="password"
-                        placeholder="••••••••"
+                        placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                         required
                         style="padding-right: 40px;"
                     >
@@ -352,7 +353,7 @@ body {
         </form>
 
         <div class="auth-footer">
-            © {{ date('Y') }} Wechecha Construction &nbsp;·&nbsp; All rights reserved &nbsp;·&nbsp; Developed by Nataye Technology
+            Â© {{ date('Y') }} Wechecha Construction &nbsp;Â·&nbsp; All rights reserved &nbsp;Â·&nbsp; Developed by Nataye Technology
         </div>
     </div>
 
