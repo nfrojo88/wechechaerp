@@ -1835,7 +1835,19 @@
                                     <td><span class="badge bg-light text-dark border">{{ $item->unit }}</span></td>
                                     @if(!$hideMoneyColumns)
                                     <td>{{ number_format($item->estimated_unit_cost ?? 0, 2) }} ETB</td>
-                                    <td class="fw-bold text-primary">{{ number_format($item->estimated_total ?? ($reqQty * (float)($item->estimated_unit_cost ?? 0)), 2) }} ETB</td>
+                                    @php
+                                        $effectiveQtyForTotal = ($purchQty > 0) ? $purchQty : $reqQty;
+                                        $unitCostVal = (float)($item->estimated_unit_cost ?? 0);
+                                        $itemCalculatedTotal = $effectiveQtyForTotal * $unitCostVal;
+                                    @endphp
+                                    <td class="fw-bold text-primary">
+                                        {{ number_format($itemCalculatedTotal, 2) }} ETB
+                                        @if($purchQty > 0)
+                                            <div class="small text-muted" style="font-size: 10px;">
+                                                ({{ number_format($purchQty, 2) }} &times; {{ number_format($unitCostVal, 2) }})
+                                            </div>
+                                        @endif
+                                    </td>
                                     @endif
                                     <td class="pe-3 text-end">
                                         <div class="d-flex justify-content-end align-items-center gap-1 flex-wrap">
@@ -1964,6 +1976,30 @@
                                     @endif
                                 @endif
                             </tbody>
+                            @if(!$hideMoneyColumns && $purchaseRequest->items->isNotEmpty())
+                            @php
+                                $totalPrSpentOrEst = $purchaseRequest->items->sum(function($itm) {
+                                    $pQty = method_exists($itm, 'getEffectivePurchasedQty') ? $itm->getEffectivePurchasedQty() : (float)($itm->purchased_quantity ?? 0);
+                                    $q = ($pQty > 0) ? $pQty : (float)$itm->quantity;
+                                    return $q * (float)($itm->estimated_unit_cost ?? 0);
+                                });
+                                $hasAnyPurchased = $purchaseRequest->items->contains(function($itm) {
+                                    $pQty = method_exists($itm, 'getEffectivePurchasedQty') ? $itm->getEffectivePurchasedQty() : (float)($itm->purchased_quantity ?? 0);
+                                    return $pQty > 0;
+                                });
+                            @endphp
+                            <tfoot class="table-light border-top">
+                                <tr>
+                                    <th colspan="{{ $isSelectableStage ? 8 : 7 }}" class="text-end fw-bold text-uppercase small text-muted">
+                                        Total ({{ $hasAnyPurchased ? 'Purchased Actual / Est.' : 'Est. Total' }}):
+                                    </th>
+                                    <th class="fw-bold text-primary fs-6 text-nowrap">
+                                        {{ number_format($totalPrSpentOrEst, 2) }} ETB
+                                    </th>
+                                    <th></th>
+                                </tr>
+                            </tfoot>
+                            @endif
                         </table>
                     </div>
                 </div>

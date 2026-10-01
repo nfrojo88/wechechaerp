@@ -321,7 +321,6 @@
                                 <th>PR / Ref Number</th>
                                 <th>Project / Purpose / Store</th>
                                 <th>Channel Source</th>
-                                <th>Priority</th>
                                 <th>Stage / Status</th>
                                 <th>Current Owner</th>
                                 <th>Created Date</th>
@@ -347,7 +346,6 @@
                                     <small class="text-muted d-block">Store: {{ $mr->store?->name ?? 'N/A' }}</small>
                                 </td>
                                 <td><span class="badge bg-info text-dark border">Material Request</span></td>
-                                <td><span class="badge bg-secondary">Normal</span></td>
                                 <td>
                                     <span class="badge bg-warning text-dark">{{ ucfirst(str_replace('_', ' ', $mr->status)) }}</span>
                                 </td>
@@ -467,11 +465,6 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <span class="badge bg-{{ $pr->priority === 'urgent' ? 'danger' : ($pr->priority === 'high' ? 'warning' : 'secondary') }}">
-                                        {{ ucfirst($pr->priority) }}
-                                    </span>
-                                </td>
-                                <td>
                                     <span class="badge bg-{{ \App\Models\PurchaseRequest::statusBadgeClass($pr->status) }}">
                                         {{ $pr->status_label }}
                                     </span>
@@ -517,7 +510,7 @@
 
                             @if(($materialRequestsQueue->isEmpty() ?? true) && $myPrs->isEmpty())
                             <tr>
-                                <td colspan="8" class="text-center py-5 text-muted">
+                                <td colspan="7" class="text-center py-5 text-muted">
                                     <i class="fas fa-check-circle fa-3x mb-3 text-success d-block"></i>
                                     <h6 class="fw-bold text-dark">No pending procurement or requisition items awaiting your action right now!</h6>
                                     @if($kpi['my_created'] > 0)
