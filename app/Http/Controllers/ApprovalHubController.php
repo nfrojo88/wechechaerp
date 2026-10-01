@@ -27,7 +27,7 @@ class ApprovalHubController extends Controller
         // 1. Fetch Expense Requests (Employee "Ask Money" Requests)
         // Exclude expense requests linked to Purchase Requests, which are tracked natively in Section 5
         $expenseRequests = ExpenseRequest::with([
-            'user',
+            'user.employee',
             'employee',
             'hrReviewer',
             'gmApprover',
@@ -37,8 +37,10 @@ class ApprovalHubController extends Controller
             'chartOfAccount',
             'coa',
             'bankAccount',
-            'maintenanceRequest',
-            'pettyCashOwner',
+            'maintenanceRequest.employee',
+            'maintenanceRequest.reportedBy.employee',
+            'maintenanceRequest.reportedBy',
+            'pettyCashOwner.employee',
         ])
         ->where(function ($q) {
             $q->where(function ($sub) {
@@ -64,10 +66,12 @@ class ApprovalHubController extends Controller
                 default                                     => [$statusRaw ?? 'Pending', 'pending', 'secondary'],
             };
 
-            $applicantName = $req->pettyCashOwner
-                ? ($req->pettyCashOwner->name . ' (Petty Cash Owner)')
-                : ($req->employee ? $req->employee->full_name : ($req->user->name ?? 'Employee'));
-            $deptOrProject = $req->employee->department ?? ($req->user->department ?? 'General Service / Operations');
+            // True Asking Person / Requester who submitted the request (not the custodian/approver)
+            $applicantName = $req->maintenanceRequest?->employee?->full_name
+                ?? $req->maintenanceRequest?->reportedBy?->name
+                ?? ($req->employee ? $req->employee->full_name : ($req->user->name ?? 'Employee'));
+            $deptOrProject = $req->maintenanceRequest?->employee?->department
+                ?? ($req->employee->department ?? ($req->user->department ?? 'General Service / Operations'));
             $categoryName = $req->category . ($req->other_reason ? ' (' . $req->other_reason . ')' : '');
             if ($req->maintenanceRequest) {
                 $categoryName .= ' [Ticket #' . $req->maintenanceRequest->request_no . ']';

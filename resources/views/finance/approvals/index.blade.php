@@ -500,27 +500,84 @@
                     @php
                         $rawReq = ($item->type === 'expense_request') ? $item->raw_model : null;
                         $mReq = $rawReq?->maintenanceRequest ?? null;
-                        $techName = $mReq?->maintenance_person_name;
-                        $techAcc = $mReq?->maintenance_person_account;
-                        $techPhone = $mReq?->maintenance_person_phone;
-                        $custodian = $mReq?->pettyCashOwner ?? $rawReq?->pettyCashOwner ?? null;
-                        $emp = $rawReq?->employee ?? $rawReq?->user?->employee ?? null;
 
-                        // Fallback parser from description text if direct attributes are missing
-                        if (!$techAcc && preg_match('/Acc:\s*([0-9A-Za-z\s\-]+?)(?:,|\)|\.|$)/i', $item->description ?? '', $accM)) {
-                            $techAcc = trim($accM[1]);
-                        }
-                        if (!$techPhone && preg_match('/Tel:\s*([0-9\+\s\-]+?)(?:,|\)|\.|$)/i', $item->description ?? '', $telM)) {
-                            $techPhone = trim($telM[1]);
-                        }
-                        if (!$techName && preg_match('/Technician:\s*([^\(]+?)(?:\(|$)/i', $item->description ?? '', $techM)) {
-                            $techName = trim($techM[1]);
-                        }
+                        // 1. Identify Approved Person / Petty Cash Custodian (to exclude their bank account)
+                        $custodian = $mReq?->pettyCashOwner ?? $rawReq?->pettyCashOwner ?? null;
+                        $custodianUserId = $custodian?->id ?? $rawReq?->petty_cash_owner_id;
+                        $custodianEmpId = $custodian?->employee?->id;
                         $custodianName = $custodian?->name;
                         if (!$custodianName && preg_match('/Petty Cash Custodian:\s*([^\.]+?)(?:\.|$)/i', $item->description ?? '', $custM)) {
                             $custodianName = trim($custM[1]);
                         }
-                        $hasBankInfo = !empty($techAcc) || !empty($emp?->account_number) || !empty($techName) || !empty($techPhone);
+
+                        // 2. Identify Asking Question Person (Requester - ጥያቄ አቅራቢ)
+                        $askingEmployee = null;
+                        $askingUser = null;
+
+                        if ($mReq) {
+                            if ($mReq->employee && (!$custodianEmpId || $mReq->employee->id !== $custodianEmpId)) {
+                                $askingEmployee = $mReq->employee;
+                            }
+                            if (!$askingEmployee && $mReq->reportedBy && (!$custodianUserId || $mReq->reportedBy->id !== $custodianUserId)) {
+                                $askingUser = $mReq->reportedBy;
+                                $askingEmployee = $mReq->reportedBy->employee;
+                            }
+                            if (!$askingEmployee && $mReq->employee) {
+                                $askingEmployee = $mReq->employee;
+                            }
+                            if (!$askingUser && $mReq->reportedBy) {
+                                $askingUser = $mReq->reportedBy;
+                            }
+                        }
+
+                        if (!$askingEmployee && $rawReq) {
+                            if ($rawReq->employee && (!$custodianEmpId || $rawReq->employee->id !== $custodianEmpId)) {
+                                $askingEmployee = $rawReq->employee;
+                            }
+                            if (!$askingUser && $rawReq->user && (!$custodianUserId || $rawReq->user->id !== $custodianUserId)) {
+                                $askingUser = $rawReq->user;
+                                $askingEmployee = $askingEmployee ?: $rawReq->user->employee;
+                            }
+                            if (!$askingEmployee && $rawReq->employee) {
+                                $askingEmployee = $rawReq->employee;
+                            }
+                            if (!$askingUser && $rawReq->user) {
+                                $askingUser = $rawReq->user;
+                            }
+                        }
+
+                        if (!$askingEmployee && $item->type === 'purchase_request') {
+                            $pr = $item->raw_model;
+                            $askingUser = $pr?->requestedBy;
+                            $askingEmployee = $askingUser?->employee;
+                        }
+
+                        // Asking Person Details (ጥያቄ አቅራቢ)
+                        $requesterName = $askingEmployee?->full_name 
+                            ?? $askingUser?->name 
+                            ?? ($mReq?->employee?->full_name ?? ($mReq?->reportedBy?->name ?? 'Requester'));
+
+                        $requesterAcc = $askingEmployee?->account_number ?? $askingUser?->employee?->account_number ?? null;
+                        $requesterBank = $askingEmployee?->bank_name ?? $askingUser?->employee?->bank_name ?? null;
+                        $requesterPhone = $askingEmployee?->phone ?? $askingUser?->employee?->phone ?? null;
+
+                        // Ensure we NEVER display the approved person / custodian's bank account
+                        if ($custodian?->employee && $requesterAcc === $custodian->employee->account_number) {
+                            $requesterAcc = null;
+                        }
+
+                        // Optional external technician info (if recorded separately from custodian)
+                        $techName = $mReq?->maintenance_person_name;
+                        $techAcc = $mReq?->maintenance_person_account;
+                        $techPhone = $mReq?->maintenance_person_phone;
+                        if ($custodian?->employee && $techAcc === $custodian->employee->account_number) {
+                            $techAcc = null;
+                        }
+                        if ($custodian && $techName === $custodian->name) {
+                            $techName = null;
+                        }
+
+                        $hasBankInfo = !empty($requesterAcc) || !empty($techAcc) || !empty($requesterName) || !empty($requesterPhone);
                     @endphp
 
                     @if($hasBankInfo)
@@ -547,39 +604,44 @@
                                         <div class="p-3 rounded-3 bg-success bg-opacity-10 border border-success border-opacity-25 h-100">
                                             <div class="d-flex justify-content-between align-items-center mb-1">
                                                 <small class="text-success text-uppercase fw-bold" style="font-size:0.75rem;">
-                                                    <i class="fa-solid fa-credit-card me-1"></i>Bank Account Number
+                                                    <i class="fa-solid fa-credit-card me-1"></i>Requester Bank Account (ጥያቄ አቅራቢ)
                                                 </small>
-                                                @if($techAcc || $emp?->account_number)
-                                                    <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-semibold" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $techAcc ?: $emp?->account_number }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
+                                                @if($requesterAcc || $techAcc)
+                                                    <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-semibold" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $requesterAcc ?: $techAcc }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
                                                         <i class="fa-regular fa-copy me-1"></i>Copy
                                                     </button>
                                                 @endif
                                             </div>
                                             <div class="fs-5 fw-bold text-success font-monospace">
-                                                {{ $techAcc ?: ($emp?->account_number ?: 'Not on file') }}
+                                                {{ $requesterAcc ?: ($techAcc ?: 'Not on file') }}
                                             </div>
                                             <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
-                                                <i class="fa-solid fa-building-columns me-1 text-secondary"></i>Bank: <strong>{{ $emp?->bank_name ?: 'Commercial Bank of Ethiopia (CBE) / Local Bank' }}</strong>
+                                                <i class="fa-solid fa-building-columns me-1 text-secondary"></i>Bank: <strong>{{ $requesterBank ?: ($techAcc ? 'Technician Bank Account' : 'Commercial Bank of Ethiopia (CBE) / Local Bank') }}</strong>
                                             </small>
                                         </div>
                                     </div>
 
-                                    {{-- Payee / Technician Name --}}
+                                    {{-- Asking Person / Requester Name --}}
                                     <div class="col-md-4">
                                         <div class="p-3 rounded-3 bg-light border h-100">
                                             <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
-                                                <i class="fa-solid fa-user-check text-primary me-1"></i>Beneficiary / Technician Name
+                                                <i class="fa-solid fa-user-tag text-primary me-1"></i>Asking Person / Requester (ጥያቄ አቅራቢ)
                                             </small>
                                             <div class="fs-6 fw-bold text-dark">
-                                                {{ $techName ?: ($emp?->full_name ?: ($item->applicant_name ?? 'Payee')) }}
+                                                {{ $requesterName }}
                                             </div>
-                                            @if($techPhone)
+                                            @if($requesterPhone)
+                                                <div class="small mt-1 text-muted">
+                                                    <i class="fa-solid fa-phone text-info me-1"></i>Tel: <a href="tel:{{ $requesterPhone }}" class="fw-bold text-dark text-decoration-none">{{ $requesterPhone }}</a>
+                                                </div>
+                                            @elseif($techPhone)
                                                 <div class="small mt-1 text-muted">
                                                     <i class="fa-solid fa-phone text-info me-1"></i>Tel: <a href="tel:{{ $techPhone }}" class="fw-bold text-dark text-decoration-none">{{ $techPhone }}</a>
                                                 </div>
-                                            @elseif($emp?->phone)
-                                                <div class="small mt-1 text-muted">
-                                                    <i class="fa-solid fa-phone text-info me-1"></i>Tel: <a href="tel:{{ $emp->phone }}" class="fw-bold text-dark text-decoration-none">{{ $emp->phone }}</a>
+                                            @endif
+                                            @if($techName && $techName !== $requesterName)
+                                                <div class="small text-muted mt-1" style="font-size:0.72rem;">
+                                                    <i class="fa-solid fa-screwdriver-wrench me-1 text-secondary"></i>Tech: {{ $techName }}
                                                 </div>
                                             @endif
                                         </div>
@@ -589,10 +651,10 @@
                                     <div class="col-md-3">
                                         <div class="p-3 rounded-3 bg-light border h-100">
                                             <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
-                                                <i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i>Petty Cash Custodian
+                                                <i class="fa-solid fa-hand-holding-dollar text-warning me-1"></i>Petty Cash Custodian (Approver)
                                             </small>
                                             <div class="fw-bold text-primary small">
-                                                {{ $custodianName ?: ($item->applicant_name ?? 'Assigned Custodian') }}
+                                                {{ $custodianName ?: 'Assigned Custodian' }}
                                             </div>
                                             <div class="mt-2 pt-2 border-top">
                                                 <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.7rem;">Amount Due to Pay</small>
@@ -1358,21 +1420,68 @@
 
                             @php
                                 $payMReq = $req->maintenanceRequest ?? null;
+
+                                // 1. Identify Approved Person / Petty Cash Custodian
+                                $payCustodian = $payMReq?->pettyCashOwner ?? $req->pettyCashOwner ?? null;
+                                $payCustodianUserId = $payCustodian?->id ?? $req->petty_cash_owner_id;
+                                $payCustodianEmpId = $payCustodian?->employee?->id;
+
+                                // 2. Identify Asking Question Person (Requester - ጥያቄ አቅራቢ)
+                                $payAskingEmp = null;
+                                $payAskingUser = null;
+
+                                if ($payMReq) {
+                                    if ($payMReq->employee && (!$payCustodianEmpId || $payMReq->employee->id !== $payCustodianEmpId)) {
+                                        $payAskingEmp = $payMReq->employee;
+                                    }
+                                    if (!$payAskingEmp && $payMReq->reportedBy && (!$payCustodianUserId || $payMReq->reportedBy->id !== $payCustodianUserId)) {
+                                        $payAskingUser = $payMReq->reportedBy;
+                                        $payAskingEmp = $payMReq->reportedBy->employee;
+                                    }
+                                    if (!$payAskingEmp && $payMReq->employee) {
+                                        $payAskingEmp = $payMReq->employee;
+                                    }
+                                    if (!$payAskingUser && $payMReq->reportedBy) {
+                                        $payAskingUser = $payMReq->reportedBy;
+                                    }
+                                }
+
+                                if (!$payAskingEmp && $req) {
+                                    if ($req->employee && (!$payCustodianEmpId || $req->employee->id !== $payCustodianEmpId)) {
+                                        $payAskingEmp = $req->employee;
+                                    }
+                                    if (!$payAskingUser && $req->user && (!$payCustodianUserId || $req->user->id !== $payCustodianUserId)) {
+                                        $payAskingUser = $req->user;
+                                        $payAskingEmp = $payAskingEmp ?: $req->user->employee;
+                                    }
+                                    if (!$payAskingEmp && $req->employee) {
+                                        $payAskingEmp = $req->employee;
+                                    }
+                                    if (!$payAskingUser && $req->user) {
+                                        $payAskingUser = $req->user;
+                                    }
+                                }
+
+                                $payRequesterName = $payAskingEmp?->full_name 
+                                    ?? $payAskingUser?->name 
+                                    ?? ($payMReq?->employee?->full_name ?? ($payMReq?->reportedBy?->name ?? 'Requester'));
+
+                                $payRequesterAcc = $payAskingEmp?->account_number ?? $payAskingUser?->employee?->account_number ?? null;
+                                $payRequesterBank = $payAskingEmp?->bank_name ?? $payAskingUser?->employee?->bank_name ?? 'Commercial Bank of Ethiopia (CBE)';
+                                $payRequesterPhone = $payAskingEmp?->phone ?? $payAskingUser?->employee?->phone ?? null;
+
+                                if ($payCustodian?->employee && $payRequesterAcc === $payCustodian->employee->account_number) {
+                                    $payRequesterAcc = null;
+                                }
+
                                 $payTechName = $payMReq?->maintenance_person_name;
                                 $payTechAcc = $payMReq?->maintenance_person_account;
                                 $payTechPhone = $payMReq?->maintenance_person_phone;
-                                $payEmp = $req->employee ?? $req->user?->employee ?? null;
+                                if ($payCustodian?->employee && $payTechAcc === $payCustodian->employee->account_number) {
+                                    $payTechAcc = null;
+                                }
 
-                                if (!$payTechAcc && preg_match('/Acc:\s*([0-9A-Za-z\s\-]+?)(?:,|\)|\.|$)/i', $req->description ?? '', $pAccM)) {
-                                    $payTechAcc = trim($pAccM[1]);
-                                }
-                                if (!$payTechPhone && preg_match('/Tel:\s*([0-9\+\s\-]+?)(?:,|\)|\.|$)/i', $req->description ?? '', $pTelM)) {
-                                    $payTechPhone = trim($pTelM[1]);
-                                }
-                                if (!$payTechName && preg_match('/Technician:\s*([^\(]+?)(?:\(|$)/i', $req->description ?? '', $pTechM)) {
-                                    $payTechName = trim($pTechM[1]);
-                                }
-                                $hasPayBankInfo = !empty($payTechAcc) || !empty($payEmp?->account_number) || !empty($payTechName) || !empty($payTechPhone);
+                                $hasPayBankInfo = !empty($payRequesterAcc) || !empty($payTechAcc) || !empty($payRequesterName) || !empty($payRequesterPhone);
                             @endphp
 
                             @if($hasPayBankInfo)
@@ -1381,25 +1490,25 @@
                                         <div class="row g-2 align-items-center">
                                             <div class="col-md-5 border-end pe-3">
                                                 <small class="text-success text-uppercase fw-bold d-block" style="font-size:0.75rem;">
-                                                    <i class="fa-solid fa-credit-card me-1"></i>Payee Bank Account
+                                                    <i class="fa-solid fa-credit-card me-1"></i>Requester Bank Account (ጥያቄ አቅራቢ)
                                                 </small>
                                                 <div class="d-flex align-items-center gap-2 mt-1">
-                                                    <span class="fs-5 fw-bold text-success font-monospace">{{ $payTechAcc ?: ($payEmp?->account_number ?: 'Not on file') }}</span>
-                                                    @if($payTechAcc || $payEmp?->account_number)
-                                                        <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-semibold" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $payTechAcc ?: $payEmp?->account_number }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
+                                                    <span class="fs-5 fw-bold text-success font-monospace">{{ $payRequesterAcc ?: ($payTechAcc ?: 'Not on file') }}</span>
+                                                    @if($payRequesterAcc || $payTechAcc)
+                                                        <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-semibold" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $payRequesterAcc ?: $payTechAcc }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
                                                             <i class="fa-regular fa-copy me-1"></i>Copy
                                                         </button>
                                                     @endif
                                                 </div>
-                                                <small class="text-muted d-block" style="font-size:0.72rem;">Bank: <strong>{{ $payEmp?->bank_name ?: 'Commercial Bank of Ethiopia (CBE)' }}</strong></small>
+                                                <small class="text-muted d-block" style="font-size:0.72rem;">Bank: <strong>{{ $payRequesterBank ?: 'Commercial Bank of Ethiopia (CBE)' }}</strong></small>
                                             </div>
                                             <div class="col-md-4 border-end pe-3">
                                                 <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.75rem;">
-                                                    <i class="fa-solid fa-user-check text-primary me-1"></i>Beneficiary / Technician
+                                                    <i class="fa-solid fa-user-tag text-primary me-1"></i>Asking Person / Requester
                                                 </small>
-                                                <strong class="text-dark d-block">{{ $payTechName ?: ($payEmp?->full_name ?: $item->applicant_name) }}</strong>
-                                                @if($payTechPhone || $payEmp?->phone)
-                                                    <small class="text-muted"><i class="fa-solid fa-phone text-info me-1"></i><a href="tel:{{ $payTechPhone ?: $payEmp?->phone }}" class="text-dark text-decoration-none">{{ $payTechPhone ?: $payEmp?->phone }}</a></small>
+                                                <strong class="text-dark d-block">{{ $payRequesterName }}</strong>
+                                                @if($payRequesterPhone || $payTechPhone)
+                                                    <small class="text-muted"><i class="fa-solid fa-phone text-info me-1"></i><a href="tel:{{ $payRequesterPhone ?: $payTechPhone }}" class="text-dark text-decoration-none">{{ $payRequesterPhone ?: $payTechPhone }}</a></small>
                                                 @endif
                                             </div>
                                             <div class="col-md-3">
