@@ -4,8 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\User;
+use App\Models\SiteDeploymentRequest;
+use App\Models\Holiday;
+use App\Models\LeaveRequest;
+use App\Models\Project;
 use App\Models\DeviceAttendanceLog;
 use App\Models\ActivityLog;
+use App\Helpers\EthiopianCalendar;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Artisan;
