@@ -1888,14 +1888,9 @@ Route::middleware(['auth'])->group(function () {
     // ─── Phase 6 HR ─────────────────────────────────────────────────────────
 
     Route::resource('departments', App\Http\Controllers\DepartmentController::class)->except(['show', 'destroy']);
-    Route::resource('attendance', App\Http\Controllers\AttendanceController::class)->only(['index', 'create', 'store']);
-    Route::post('attendance/{attendance}/update-record', [App\Http\Controllers\AttendanceController::class, 'updateRecord'])->name('attendance.update-record');
-    Route::post('attendance/quick-create-or-update', [App\Http\Controllers\AttendanceController::class, 'quickCreateOrUpdate'])->name('attendance.quick-create-or-update');
-    Route::post('attendance/quick-clock', [App\Http\Controllers\AttendanceController::class, 'quickClock'])->name('attendance.quickClock');
+    Route::resource('attendance', App\Http\Controllers\AttendanceController::class)->only(['index']);
     Route::post('attendance/update-schedule', [App\Http\Controllers\AttendanceController::class, 'updateSchedule'])->name('attendance.updateSchedule');
-    Route::post('attendance/bulk', [App\Http\Controllers\AttendanceController::class, 'bulkStore'])->name('attendance.bulkStore');
-    Route::post('attendance/import-xls', [App\Http\Controllers\AttendanceController::class, 'importXls'])->name('attendance.importXls');
-    Route::get('attendance/download-template', [App\Http\Controllers\AttendanceController::class, 'downloadTemplate'])->name('attendance.downloadTemplate');
+    Route::post('attendance/restore-access/{user}', [App\Http\Controllers\AttendanceController::class, 'restoreUserAccess'])->name('admin.attendance.restore-access');
     Route::post('attendance/clear-history', [App\Http\Controllers\AttendanceController::class, 'clearHistory'])->name('attendance.clearHistory');
     Route::get('attendance/device-logs', [App\Http\Controllers\AttendanceController::class, 'deviceLogs'])->name('attendance.deviceLogs');
     Route::post('attendance/zkteco-sync', [App\Http\Controllers\AttendanceController::class, 'syncZkteco'])->name('attendance.zkteco-sync');

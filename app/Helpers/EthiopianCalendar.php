@@ -216,4 +216,216 @@ class EthiopianCalendar
 
         return $updated;
     }
+
+    /**
+     * Convert Ethiopian date (year, month, day) to Gregorian date string (Y-m-d).
+     */
+    public static function toGregorian(int $ethYear, int $ethMonth, int $ethDay): string
+    {
+        $ep = 1723856;
+        $jdn = $ep + 365 * $ethYear + intdiv($ethYear, 4) + 30 * ($ethMonth - 1) + $ethDay - 1;
+
+        $a = $jdn + 32044;
+        $b = intdiv(4 * $a + 3, 146097);
+        $c = $a - intdiv(146097 * $b, 4);
+        $d = intdiv(4 * $c + 3, 1461);
+        $e = $c - intdiv(1461 * $d, 4);
+        $m = intdiv(5 * e + 2, 153);
+        $day = $e - intdiv(153 * $m + 2, 5) + 1;
+        $month = $m + 3 - 12 * intdiv($m, 10);
+        $year = 100 * $b + $d - 4800 + intdiv($m, 10);
+
+        return sprintf('%04d-%02d-%02d', $year, $month, $day);
+    }
+
+    /**
+     * Get Ethiopian payroll period details (26th of previous Ethiopian month to 25th of current Ethiopian month).
+     *
+     * @param int $ethYear
+     * @param int $ethMonth (1 = Meskerem ... 13 = Pagume)
+     * @param string|null $pagumeRule ('separate_pagume' or 'combined_with_meskerem')
+     * @return array
+     */
+    public static function getPayrollPeriod(int $ethYear, int $ethMonth, ?string $pagumeRule = null): array
+    {
+        $pagumeRule = $pagumeRule ?: (SystemSetting::get('payroll_period_pagume_rule', 'separate_pagume'));
+        $days = [];
+
+        if ($ethMonth === 1) { // Meskerem
+            if ($pagumeRule === 'combined_with_meskerem') {
+                // 26 Nehase through Pagume to 25 Meskerem
+                $prevYear = $ethYear - 1;
+                for ($d = 26; $d <= 30; $d++) {
+                    $greg = self::toGregorian($prevYear, 12, $d);
+                    $days[] = self::buildPeriodDayItem($prevYear, 12, $d, $greg);
+                }
+                $pagumeMax = ($prevYear % 4 === 3) ? 6 : 5;
+                for ($d = 1; $d <= $pagumeMax; $d++) {
+                    $greg = self::toGregorian($prevYear, 13, $d);
+                    $days[] = self::buildPeriodDayItem($prevYear, 13, $d, $greg);
+                }
+                for ($d = 1; $d <= 25; $d++) {
+                    $greg = self::toGregorian($ethYear, 1, $d);
+                    $days[] = self::buildPeriodDayItem($ethYear, 1, $d, $greg);
+                }
+            } else {
+                // Standard default: 1 Meskerem to 25 Meskerem
+                for ($d = 1; $d <= 25; $d++) {
+                    $greg = self::toGregorian($ethYear, 1, $d);
+                    $days[] = self::buildPeriodDayItem($ethYear, 1, $d, $greg);
+                }
+            }
+        } elseif ($ethMonth === 13) { // Pagume
+            // 26 Nehase to last day of Pagume (5 or 6)
+            for ($d = 26; $d <= 30; $d++) {
+                $greg = self::toGregorian($ethYear, 12, $d);
+                $days[] = self::buildPeriodDayItem($ethYear, 12, $d, $greg);
+            }
+            $pagumeMax = ($ethYear % 4 === 3) ? 6 : 5;
+            for ($d = 1; $d <= $pagumeMax; $d++) {
+                $greg = self::toGregorian($ethYear, 13, $d);
+                $days[] = self::buildPeriodDayItem($ethYear, 13, $d, $greg);
+            }
+        } else { // Months 2 to 12 (Tikimt .. Nehase)
+            $prevMonth = $ethMonth - 1;
+            for ($d = 26; $d <= 30; $d++) {
+                $greg = self::toGregorian($ethYear, $prevMonth, $d);
+                $days[] = self::buildPeriodDayItem($ethYear, $prevMonth, $d, $greg);
+            }
+            for ($d = 1; $d <= 25; $d++) {
+                $greg = self::toGregorian($ethYear, $ethMonth, $d);
+                $days[] = self::buildPeriodDayItem($ethYear, $ethMonth, $d, $greg);
+            }
+        }
+
+        $startDate = $days[0]['greg_date'] ?? null;
+        $endDate   = end($days)['greg_date'] ?? null;
+
+        $mAm = self::MONTHS_AM[$ethMonth] ?? '';
+        $mEn = self::MONTHS_EN[$ethMonth] ?? '';
+
+        return [
+            'eth_year'       => $ethYear,
+            'eth_month'      => $ethMonth,
+            'month_am'       => $mAm,
+            'month_en'       => $mEn,
+            'period_key'     => "{$ethYear}-{$ethMonth}",
+            'label_am'       => "{$mAm} {$ethYear} (26-25)",
+            'label_en'       => "{$mEn} {$ethYear} (26th-25th)",
+            'full_label'     => "{$mEn} ({$mAm}) {$ethYear}",
+            'start_greg'     => $startDate,
+            'end_greg'       => $endDate,
+            'total_days'     => count($days),
+            'days'           => $days,
+        ];
+    }
+
+    /**
+     * Helper to construct individual day descriptor in a payroll period.
+     */
+    private static function buildPeriodDayItem(int $ey, int $em, int $ed, string $greg): array
+    {
+        $c = \Carbon\Carbon::parse($greg);
+        $mAm = self::MONTHS_AM[$em] ?? '';
+        $mEn = self::MONTHS_EN[$em] ?? '';
+
+        return [
+            'greg_date'    => $greg,
+            'greg_day'     => $c->format('d'),
+            'greg_month'   => $c->format('M'),
+            'greg_label'   => $c->format('M d'),
+            'day_of_week'  => $c->dayOfWeek, // 0 = Sunday, 6 = Saturday
+            'day_name_en'  => $c->format('D'),
+            'is_sunday'    => $c->isSunday(),
+            'is_saturday'  => $c->isSaturday(),
+            'eth_year'     => $ey,
+            'eth_month'    => $em,
+            'eth_day'      => $ed,
+            'eth_label_am' => "{$mAm} {$ed}",
+            'eth_label_en' => "{$mEn} {$ed}",
+            'display_label'=> "{$ed} {$mEn}",
+        ];
+    }
+
+    /**
+     * Detect current active Ethiopian payroll period based on a given date (default today).
+     */
+    public static function getCurrentPayrollPeriod(?string $date = null): array
+    {
+        $date = $date ?: today()->toDateString();
+        $et = self::toEthiopian($date);
+
+        if (empty($et)) {
+            $c = \Carbon\Carbon::parse($date);
+            $et = ['year' => 2019, 'month' => 1, 'day' => 1];
+        }
+
+        $y = (int)$et['year'];
+        $m = (int)$et['month'];
+        $d = (int)$et['day'];
+
+        // If today is day >= 26:
+        // By standard 26th-to-25th rule, day 26 of month m belongs to period (m + 1)!
+        if ($d >= 26) {
+            if ($m === 12) {
+                // 26 Nehase belongs to Pagume (month 13)
+                $targetMonth = 13;
+                $targetYear  = $y;
+            } elseif ($m === 13) {
+                // Pagume days belong to Pagume period (unless Pagume is over, in which case 1 Meskerem starts)
+                $targetMonth = 13;
+                $targetYear  = $y;
+            } else {
+                $targetMonth = $m + 1;
+                $targetYear  = $y;
+            }
+        } else {
+            // Days 1..25 belong to month m's period
+            $targetMonth = $m;
+            $targetYear  = $y;
+        }
+
+        return self::getPayrollPeriod($targetYear, $targetMonth);
+    }
+
+    /**
+     * Get list of available Ethiopian payroll periods for dropdown selection.
+     */
+    public static function getAvailablePayrollPeriods(int $pastCount = 12, int $futureCount = 2): array
+    {
+        $current = self::getCurrentPayrollPeriod();
+        $periods = [];
+
+        $curYear  = $current['eth_year'];
+        $curMonth = $current['eth_month'];
+
+        // Generate past periods
+        $y = $curYear;
+        $m = $curMonth;
+        for ($i = 0; $i < $pastCount; $i++) {
+            $periods[] = self::getPayrollPeriod($y, $m);
+            $m--;
+            if ($m < 1) {
+                $m = 13;
+                $y--;
+            }
+        }
+
+        // Generate future periods
+        $y = $curYear;
+        $m = $curMonth;
+        $futurePeriods = [];
+        for ($i = 0; $i < $futureCount; $i++) {
+            $m++;
+            if ($m > 13) {
+                $m = 1;
+                $y++;
+            }
+            $futurePeriods[] = self::getPayrollPeriod($y, $m);
+        }
+
+        $all = array_merge(array_reverse($futurePeriods), $periods);
+        return $all;
+    }
 }
+

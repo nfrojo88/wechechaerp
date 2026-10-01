@@ -18,6 +18,9 @@ class Kernel extends ConsoleKernel
         // Sync ZKTeco device punch logs → attendance table every 5 minutes
         $schedule->command('zkteco:sync')->everyFiveMinutes()->withoutOverlapping();
 
+        // Detect 5 consecutive absent days and auto-suspend access (daily at 18:30 after sync)
+        $schedule->command('attendance:check-absence-blocks')->dailyAt('18:30')->withoutOverlapping();
+
         // Check & escalate overdue audit receipt inquiries (>3 days to Auditor/Finance Head, >5 days to GM/Admin)
         $schedule->command('audit:escalate-overdue-inquiries')->hourly()->withoutOverlapping();
     }

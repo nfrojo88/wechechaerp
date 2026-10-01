@@ -9,6 +9,20 @@ class Attendance extends Model
 {
     protected $table = 'attendance';
 
+    public const SOURCE_BIOMETRIC     = 'biometric';
+    public const SOURCE_SITE_DISPATCH = 'site_dispatch';
+
+    public const VALID_SOURCES = [
+        self::SOURCE_BIOMETRIC,
+        self::SOURCE_SITE_DISPATCH,
+    ];
+
+    public const STATUS_PRESENT = 'present';
+    public const STATUS_ABSENT  = 'absent';
+    public const STATUS_SITE    = 'S';
+    public const STATUS_LEAVE   = 'leave';
+    public const STATUS_HOLIDAY = 'holiday';
+
     protected $fillable = [
         'employee_id', 'attendance_date', 
         'morning_in', 'morning_out', 'afternoon_in', 'afternoon_out',

@@ -211,8 +211,8 @@
                     <a href="{{ route('employees.create') }}" class="btn btn-outline-success w-100 text-start">
                         <i class="fas fa-user-plus me-2"></i>Add Employee
                     </a>
-                    <a href="{{ route('attendance.create') }}" class="btn btn-outline-info w-100 text-start text-dark">
-                        <i class="fas fa-clipboard-user me-2 text-info"></i>Mark Attendance
+                    <a href="{{ route('attendance.index') }}" class="btn btn-outline-info w-100 text-start text-dark">
+                        <i class="fas fa-clipboard-user me-2 text-info"></i>Attendance Matrix
                     </a>
                     <a href="{{ route('manpower-requests.create') }}" class="btn btn-outline-warning text-dark w-100 text-start">
                         <i class="fas fa-person-circle-plus me-2 text-warning"></i>Manpower Request
@@ -485,14 +485,14 @@
 
         <!-- Record Attendance -->
         <div class="col-lg-3 col-md-6 mb-3">
-            <a href="{{ route('attendance.create') }}" class="text-decoration-none">
+            <a href="{{ route('attendance.index') }}" class="text-decoration-none">
                 <div class="card border-0 shadow-sm rounded-4 h-100 overflow-hidden quick-module-card">
                     <div class="card-body p-4 d-flex align-items-center gap-3">
                         <div class="rounded-3 p-3 flex-shrink-0" style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);">
                             <i class="fa-solid fa-calendar-check fa-lg text-white"></i>
                         </div>
                         <div>
-                            <div class="fw-bold text-gray-900 fs-6 mb-0">Record Attendance</div>
+                            <div class="fw-bold text-gray-900 fs-6 mb-0">Biometric Attendance</div>
                             <small class="text-muted">Mark &amp; record attendance</small>
                         </div>
                         <i class="fa-solid fa-arrow-right ms-auto text-muted small"></i>
@@ -740,7 +740,7 @@
         <a href="{{ route('employees.create') }}" class="btn btn-primary btn-lg rounded-circle" title="Add Employee">
             <i class="fas fa-user-plus"></i>
         </a>
-        <a href="{{ route('attendance.create') }}" class="btn btn-info btn-lg rounded-circle text-white" title="Mark Attendance">
+        <a href="{{ route('attendance.index') }}" class="btn btn-info btn-lg rounded-circle text-white" title="Attendance Matrix">
             <i class="fas fa-clipboard-list"></i>
         </a>
     </div>

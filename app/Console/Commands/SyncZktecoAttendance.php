@@ -118,6 +118,9 @@ class SyncZktecoAttendance extends Command
             $this->syncDate($date, $forceResync, $locationType, $projectId ? (int)$projectId : null, $deviceSn);
         }
 
+        // Run automated background maintenance tasks (never on web page load)
+        $this->runPostSyncMaintenance();
+
         return self::SUCCESS;
     }
 
@@ -252,5 +255,43 @@ class SyncZktecoAttendance extends Command
         }
 
         $this->info("  → {$date} result: {$synced} created, {$updated} updated" . ($skipped ? ", {$skipped} already synced" : "") . ".");
+    }
+
+    /**
+     * Automated background maintenance routines moved from AttendanceController::index().
+     * Keeps the web index page 100% read-only while guaranteeing data consistency.
+     */
+    private function runPostSyncMaintenance(): void
+    {
+        // 1. Release biometric device_user_id from Dead File employees
+        try {
+            DB::table('employees')
+                ->where(function($q) {
+                    $q->where('is_dead_file', true)->orWhere('status', 'dead_file');
+                })
+                ->whereNotNull('device_user_id')
+                ->update(['device_user_id' => null]);
+        } catch (\Throwable $e) {}
+
+        // 2. Guarantee all approved site deployments are reflected in Attendance with status 'S'
+        try {
+            $approvedDeployments = \App\Models\SiteDeploymentRequest::where('status', 'approved')
+                ->with('employee')
+                ->get();
+            foreach ($approvedDeployments as $dep) {
+                \App\Http\Controllers\AttendanceController::applyDeploymentToAttendance($dep);
+            }
+        } catch (\Throwable $e) {}
+
+        // 3. Purge test-device simulated punch data
+        try {
+            DB::table('device_attendance_logs')->where('device_sn', 'TEST-DEVICE-01')->delete();
+            DB::table('attendance')->where('device_sn', 'TEST-DEVICE-01')->delete();
+        } catch (\Throwable $e) {}
+
+        // 4. Auto-heal missing session times from raw punches
+        try {
+            \App\Services\BiometricPunchService::autoHealMissingSessionTimes();
+        } catch (\Throwable $e) {}
     }
 }

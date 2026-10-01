@@ -19,6 +19,11 @@ class User extends Authenticatable
         'password',
         'store_id',
         'is_active',
+        'access_blocked_at',
+        'access_block_reason',
+        'access_unblocked_by',
+        'access_unblocked_at',
+        'access_unblock_reason',
     ];
 
     protected $hidden = [
@@ -27,8 +32,10 @@ class User extends Authenticatable
     ];
 
     protected $casts = [
-        'email_verified_at' => 'datetime',
-        'is_active' => 'boolean',
+        'email_verified_at'   => 'datetime',
+        'is_active'           => 'boolean',
+        'access_blocked_at'   => 'datetime',
+        'access_unblocked_at' => 'datetime',
     ];
 
     public function store()
@@ -153,5 +160,89 @@ class User extends Authenticatable
             || in_array('admin', $roleNames) 
             || in_array('super_admin', $roleNames)
             || (bool)($this->is_admin ?? false);
+    }
+
+    public function accessUnblockedByUser()
+    {
+        return $this->belongsTo(User::class, 'access_unblocked_by');
+    }
+
+    /**
+     * Check if user login / API access is suspended.
+     */
+    public function isAccessBlocked(): bool
+    {
+        return $this->access_blocked_at !== null;
+    }
+
+    /**
+     * Block user access due to consecutive attendance absences.
+     */
+    public function blockAccess(string $reason, int $missedStreakDays = 5): void
+    {
+        // Strict Rule: Never auto-block Admin or Global Admin accounts
+        if ($this->isGlobalAdmin() || $this->hasAnyRole(['admin', 'global_admin', 'super_admin'])) {
+            return;
+        }
+
+        $this->update([
+            'access_blocked_at'   => now(),
+            'access_block_reason' => $reason,
+        ]);
+
+        try {
+            \App\Models\UserAccessAudit::create([
+                'user_id'            => $this->id,
+                'employee_id'        => $this->employee?->id,
+                'action'             => 'blocked',
+                'performed_by'       => null, // System automated
+                'reason'             => $reason,
+                'missed_streak_days' => $missedStreakDays,
+                'ip_address'         => request()->ip() ?? '127.0.0.1',
+            ]);
+        } catch (\Throwable $e) {}
+
+        try {
+            \App\Models\ActivityLog::log(
+                'suspended',
+                "User [{$this->name}] access suspended due to {$missedStreakDays} consecutive absence days without attendance.",
+                'HR Attendance Security',
+                $this
+            );
+        } catch (\Throwable $e) {}
+    }
+
+    /**
+     * Restore user access with mandatory HR/Admin reason.
+     */
+    public function unblockAccess(User $unblockedBy, string $reason): void
+    {
+        $this->update([
+            'access_blocked_at'     => null,
+            'access_unblocked_by'   => $unblockedBy->id,
+            'access_unblocked_at'   => now(),
+            'access_unblock_reason' => $reason,
+        ]);
+
+        try {
+            \App\Models\UserAccessAudit::create([
+                'user_id'            => $this->id,
+                'employee_id'        => $this->employee?->id,
+                'action'             => 'unblocked',
+                'performed_by'       => $unblockedBy->id,
+                'reason'             => $reason,
+                'missed_streak_days' => 0,
+                'ip_address'         => request()->ip() ?? '127.0.0.1',
+            ]);
+        } catch (\Throwable $e) {}
+
+        try {
+            \App\Models\ActivityLog::log(
+                'restored',
+                "User [{$this->name}] access restored by [{$unblockedBy->name}]. Reason: {$reason}",
+                'HR Attendance Security',
+                $this
+            );
+        } catch (\Throwable $e) {}
     }
 }

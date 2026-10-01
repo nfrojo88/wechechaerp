@@ -170,7 +170,7 @@
                     <hr class="my-2">
                     <a href="{{ route('payrolls.create') }}" class="btn btn-outline-secondary w-100 text-left"><i class="fas fa-plus mr-2"></i> Generate Payroll</a>
                     <a href="{{ route('employees.create') }}" class="btn btn-outline-success w-100 text-left"><i class="fas fa-user-plus mr-2"></i> Add Employee</a>
-                    <a href="{{ route('attendance.create') }}" class="btn btn-outline-info w-100 text-left"><i class="fas fa-clipboard-user mr-2"></i> Mark Attendance</a>
+                    <a href="{{ route('attendance.index') }}" class="btn btn-outline-info w-100 text-left"><i class="fas fa-clipboard-user mr-2"></i> Attendance Roster</a>
                     <a href="{{ route('manpower-requests.create') }}" class="btn btn-outline-warning text-dark w-100 text-left"><i class="fas fa-person-circle-plus mr-2"></i> Manpower Request</a>
                 </div>
             </div>

@@ -71,8 +71,17 @@ class LoginController extends Controller
         if ($user && Auth::attempt(['email' => $user->email, 'password' => $password])) {
             $request->session()->regenerate();
             
-            // Check guarantee letter restriction
             $authUser = Auth::user();
+
+            // Check consecutive absence access suspension
+            if ($authUser->access_blocked_at) {
+                Auth::logout();
+                return back()->withErrors([
+                    'email' => 'Access suspended due to 5 consecutive days without attendance. Contact HR.',
+                ])->onlyInput('email');
+            }
+
+            // Check guarantee letter restriction
             if ($authUser->employee && $authUser->employee->isGuaranteeLetterExpired()) {
                 Auth::logout();
                 return back()->withErrors([

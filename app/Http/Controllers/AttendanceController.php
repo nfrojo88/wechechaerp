@@ -14,6 +14,10 @@ use Carbon\Carbon;
 
 class AttendanceController extends Controller
 {
+    /**
+     * Display the Attendance Matrix for all active employees across the Ethiopian Payroll Period (26th to 25th).
+     * Strictly READ-ONLY: zero database writes on page load.
+     */
     public function index()
     {
         if (request()->has('fresh_resync')) {
@@ -22,429 +26,345 @@ class AttendanceController extends Controller
 
         self::ensureAttendanceSchemaReady();
 
-        // Strict Rule: Auto-release biometric device_user_id from any Dead File employees
-        try {
-            DB::table('employees')
-                ->where(function($q) {
-                    $q->where('is_dead_file', true)->orWhere('status', 'dead_file');
-                })
-                ->whereNotNull('device_user_id')
-                ->update(['device_user_id' => null]);
-        } catch (\Throwable $e) {}
+        // 1. Determine Ethiopian Payroll Period (26th of previous month to 25th of current month)
+        $selectedPeriodKey = request('period'); // e.g. "2019-1" or "2019-2"
+        $ey = request('eth_year');
+        $em = request('eth_month');
 
-        // Guarantee all approved site deployments are reflected in Attendance with status 'S'
-        try {
-            $approvedDeployments = \App\Models\SiteDeploymentRequest::where('status', 'approved')
-                ->with('employee')
-                ->get();
-            foreach ($approvedDeployments as $dep) {
-                self::applyDeploymentToAttendance($dep);
-            }
-        } catch (\Throwable $e) {}
-
-        // Filter by specific single date, month, or date range
-        $selectedDate = request('date');
-        $selectedMonth = request('month');
-
-        // If no filter is provided, default to the latest date with attendance records (e.g. today / current attendance date)
-        if (!$selectedDate && !$selectedMonth && !request('date_from') && !request('date_to') && !request()->has('all_dates')) {
-            $latestRecordDate = Attendance::max('attendance_date');
-            $selectedDate = $latestRecordDate ? Carbon::parse($latestRecordDate)->toDateString() : today()->toDateString();
+        if ($selectedPeriodKey && str_contains($selectedPeriodKey, '-')) {
+            [$ey, $em] = explode('-', $selectedPeriodKey);
+            $ey = (int)$ey;
+            $em = (int)$em;
         }
 
-        $targetDateToPopulate = $selectedDate ?: (request('date_from') ?: (Attendance::max('attendance_date') ? Carbon::parse(Attendance::max('attendance_date'))->toDateString() : today()->toDateString()));
+        if ($ey && $em && $em >= 1 && $em <= 13) {
+            $period = \App\Helpers\EthiopianCalendar::getPayrollPeriod((int)$ey, (int)$em);
+        } else {
+            $period = \App\Helpers\EthiopianCalendar::getCurrentPayrollPeriod();
+        }
 
-        // Clean up auto-generated dummy 'absent' attendance records for site, driver, and remote workers
-        try {
-            $exemptEmployeeIds = Employee::siteDriverRemoteOnly()->pluck('id');
-            if ($exemptEmployeeIds->isNotEmpty()) {
-                Attendance::whereIn('employee_id', $exemptEmployeeIds)
-                    ->where('status', 'absent')
-                    ->where('source', 'manual')
-                    ->whereNull('check_in')
-                    ->whereNull('check_out')
-                    ->where('hours_worked', 0)
-                    ->where('late_minutes', 0)
-                    ->delete();
-            }
-        } catch (\Throwable $e) {}
+        $selectedPeriodKey = $period['period_key'];
+        $periodDays = $period['days'];
+        $startDate  = $period['start_greg'];
+        $endDate    = $period['end_greg'];
+        $availablePeriods = \App\Helpers\EthiopianCalendar::getAvailablePayrollPeriods();
 
-        // Auto-populate missing active HEAD OFFICE staff as absent on the active target date
-        // Note: Site workers, drivers, and remote workers are strictly excluded from head office attendance!
-        try {
-            if ($targetDateToPopulate && !$selectedMonth && !request()->has('all_dates')) {
-                $activeOfficeEmployees = Employee::officeStaffOnly()->get(['id']);
-                if ($activeOfficeEmployees->isNotEmpty()) {
-                    $existingEmpIds = Attendance::whereDate('attendance_date', $targetDateToPopulate)
-                        ->pluck('employee_id')
-                        ->flip();
+        // 2. Fetch all active employees (strictly exclude Dead File)
+        // Default: Show EVERY active employee (office, site, driver, remote)
+        $staffType = request('staff_type', 'all'); // 'all' (default), 'office', or 'site_driver_remote'
+        
+        $empQuery = Employee::activeRoster()->orderBy('full_name');
 
-                    $missingEmployees = $activeOfficeEmployees->filter(fn($emp) => !isset($existingEmpIds[$emp->id]));
-
-                    foreach ($missingEmployees as $emp) {
-                        $hasSiteDep = \App\Models\SiteDeploymentRequest::where('employee_id', $emp->id)
-                            ->where('status', 'approved')
-                            ->whereDate('start_date', '<=', $targetDateToPopulate)
-                            ->whereDate('end_date', '>=', $targetDateToPopulate)
-                            ->first();
-
-                        if ($hasSiteDep) {
-                            self::applyDeploymentToAttendance($hasSiteDep);
-                        } else {
-                            Attendance::firstOrCreate(
-                                [
-                                    'employee_id'     => $emp->id,
-                                    'attendance_date' => $targetDateToPopulate,
-                                ],
-                                [
-                                    'status'          => 'absent',
-                                    'source'          => 'manual',
-                                    'hours_worked'    => 0,
-                                    'late_minutes'    => 0,
-                                    'is_approved'     => false,
-                                ]
-                            );
-                        }
-                    }
-                }
-            }
-        } catch (\Throwable $e) {}
-
-        $staffType = request('staff_type', 'office'); // 'office' (default), 'all', or 'site_driver_remote'
-
-        if ($staffType === 'all') {
-            $query = Attendance::activeRoster()->with('employee')->latest('attendance_date');
+        if ($staffType === 'office') {
+            $empQuery->officeStaffOnly();
         } elseif ($staffType === 'site_driver_remote') {
-            $query = Attendance::siteDriverRemoteOnly()->with('employee')->latest('attendance_date');
-        } else {
-            // Default: strictly office staff only
-            $query = Attendance::officeStaffOnly()->with('employee')->latest('attendance_date');
+            $empQuery->siteDriverRemoteOnly();
         }
 
-        if ($selectedDate) {
-            $query->whereDate('attendance_date', $selectedDate);
-        } elseif ($selectedMonth) {
-            $parts = explode('-', $selectedMonth);
-            if (count($parts) === 2) {
-                $query->whereYear('attendance_date', (int)$parts[0])
-                      ->whereMonth('attendance_date', (int)$parts[1]);
-            }
-        } else {
-            if (request('date_from')) {
-                $query->whereDate('attendance_date', '>=', request('date_from'));
-            }
-            if (request('date_to')) {
-                $query->whereDate('attendance_date', '<=', request('date_to'));
-            }
-        }
-
-        // Filter by employee (name, code, or ZKTeco device ID)
-        if (request('employee')) {
-            $search = request('employee');
-            $query->whereHas('employee', function ($q) use ($search) {
-                $q->where(function ($sq) {
-                    $sq->where('is_dead_file', false)->orWhereNull('is_dead_file');
-                })->where('status', '!=', 'dead_file')
-                  ->where(function ($sq) use ($search) {
-                      $sq->where('full_name', 'like', "%$search%")
-                         ->orWhere('employee_code', 'like', "%$search%")
-                         ->orWhere('device_user_id', 'like', "%$search%");
-                  });
+        if (request()->filled('search')) {
+            $search = trim(request('search'));
+            $empQuery->where(function($q) use ($search) {
+                $q->where('full_name', 'like', "%{$search}%")
+                  ->orWhere('employee_code', 'like', "%{$search}%")
+                  ->orWhere('device_user_id', 'like', "%{$search}%")
+                  ->orWhere('role_title', 'like', "%{$search}%")
+                  ->orWhere('department', 'like', "%{$search}%");
             });
         }
 
-        // Filter by source (e.g. biometric/device synced, site, manual)
-        if (request('source')) {
-            $src = request('source');
-            if ($src === 'biometric' || $src === 'device' || $src === 'synced') {
-                $query->whereIn('source', ['biometric', 'device']);
-            } elseif ($src === 'site') {
-                $query->where(function ($q) {
-                    $q->whereIn('status', ['site', 'S', 's', 'on_site'])
-                      ->orWhere('source', 'site_dispatch')
-                      ->orWhere('notes', 'like', '%On-Site%');
-                });
-            } elseif ($src === 'manual') {
-                $query->where('source', 'manual');
-            }
+        if (request()->filled('department')) {
+            $empQuery->where('department', request('department'));
         }
 
-        // Filter by status or only records with punches added / site deployments
-        if (request('status')) {
-            if (request('status') === 'site' || request('status') === 'S') {
-                $query->where(function ($q) {
-                    $q->whereIn('status', ['site', 'S', 's', 'on_site'])
-                      ->orWhere('source', 'site_dispatch')
-                      ->orWhere('notes', 'like', '%On-Site%');
-                });
-            } else {
-                $query->where('status', request('status'));
-            }
+        if (request()->filled('project_id')) {
+            $empQuery->where('project_id', request('project_id'));
         }
 
-        // ── Auto-heal: Ensure all biometric & sync records have real session times populated ──
-        try {
-            $targetDate = $selectedDate ?: (request('date_from') ?: null);
-            \App\Services\BiometricPunchService::autoHealMissingSessionTimes($targetDate);
-            \App\Services\BiometricPunchService::autoHealMissingSessionTimes(today()->toDateString());
-        } catch (\Throwable $e) {}
+        $allActiveEmployees = Employee::activeRoster()->orderBy('full_name')->get();
+        $employees = $empQuery->get();
+        $employeeIds = $employees->pluck('id')->toArray();
 
-        // ── Auto-heal & Normalize Saturday Attendance Records ─────────────────
-        // Under company policy, Saturday operates strictly on a Morning Session (4.0 hrs).
-        // Employees who attended the morning session or worked their hours (>= 2.0h or had morning punches)
-        // are recognized as FULLY 'present', NOT 'half_day'.
-        try {
-            /** @var \Illuminate\Database\Connection $connection */
-            $connection = \Illuminate\Support\Facades\DB::connection();
-            $driver = $connection->getDriverName();
-            if ($driver === 'sqlite') {
-                Attendance::whereRaw("strftime('%w', attendance_date) = '6'")
-                    ->where('status', 'half_day')
-                    ->where(function ($q) {
-                        $q->whereNotNull('morning_in')
-                          ->orWhereNotNull('morning_out')
-                          ->orWhereNotNull('check_in')
-                          ->orWhere('hours_worked', '>=', 2.0);
-                    })
-                    ->update(['status' => 'present']);
-            } else {
-                Attendance::whereRaw('DAYOFWEEK(attendance_date) = 7')
-                    ->where('status', 'half_day')
-                    ->where(function ($q) {
-                        $q->whereNotNull('morning_in')
-                          ->orWhereNotNull('morning_out')
-                          ->orWhereNotNull('check_in')
-                          ->orWhere('hours_worked', '>=', 2.0);
-                    })
-                    ->update(['status' => 'present']);
-            }
-        } catch (\Throwable $e) {
-            $targetDate = $selectedDate ?: (request('date_from') ?: today()->toDateString());
-            if (\Carbon\Carbon::parse($targetDate)->isSaturday()) {
-                Attendance::whereDate('attendance_date', $targetDate)
-                    ->where('status', 'half_day')
-                    ->where(function ($q) {
-                        $q->whereNotNull('morning_in')
-                          ->orWhereNotNull('morning_out')
-                          ->orWhereNotNull('check_in')
-                          ->orWhere('hours_worked', '>=', 2.0);
-                    })
-                    ->update(['status' => 'present']);
-            }
-        }
-
-        // ── Auto-purge any demo/test machine logs or simulated attendance records ──
-        try {
-            DB::table('device_attendance_logs')->where('device_sn', 'TEST-DEVICE-01')->delete();
-            DB::table('attendances')->where('device_sn', 'TEST-DEVICE-01')->delete();
-        } catch (\Throwable $e) {}
-
-        // ── Auto-heal & Clean: All employees with punch records or worked hours are PRESENT ──
-        try {
-            Attendance::where('status', 'half_day')
-                ->whereNotIn('status', ['S', 's', 'site', 'on_site'])
-                ->where('source', '!=', 'site_dispatch')
-                ->where(function($q) {
-                    $q->whereNull('notes')->orWhere('notes', 'not like', '%On-Site%');
-                })
-                ->where(function ($q) {
-                    $q->whereNotNull('morning_in')
-                      ->orWhereNotNull('morning_out')
-                      ->orWhereNotNull('afternoon_in')
-                      ->orWhereNotNull('afternoon_out')
-                      ->orWhereNotNull('check_in')
-                      ->orWhereNotNull('check_out')
-                      ->orWhere('hours_worked', '>', 0);
-                })
-                ->update(['status' => 'present']);
-
-            Attendance::whereNotNull('biometric_device_id')
-                ->where(function ($q) {
-                    $q->whereHas('employee', function ($eq) {
-                        $eq->whereNull('device_user_id')->orWhere('device_user_id', '');
-                    });
-                })
-                ->update(['biometric_device_id' => null]);
-        } catch (\Throwable $e) {}
-
-        $attendances = $query->paginate(30)->appends(request()->query());
-
-        // Fetch distinct available dates from attendance records for navigation
-        $datesQuery = ($staffType === 'all')
-            ? Attendance::activeRoster()
-            : (($staffType === 'site_driver_remote') ? Attendance::siteDriverRemoteOnly() : Attendance::officeStaffOnly());
-
-        $availableDates = $datesQuery
-            ->select('attendance_date')
-            ->distinct()
-            ->whereNotNull('attendance_date')
-            ->orderBy('attendance_date', 'desc')
+        // 3. Batch query period records for efficiency (READ-ONLY)
+        // Attendance records (Biometric punches and approved site deployments)
+        $attendances = Attendance::whereIn('employee_id', $employeeIds)
+            ->whereBetween('attendance_date', [$startDate, $endDate])
             ->get()
-            ->map(fn($a) => $a->attendance_date ? $a->attendance_date->format('Y-m-d') : null)
-            ->filter()
-            ->values();
+            ->groupBy('employee_id');
 
-        // Build list of distinct available months with English & Ethiopian labels
-        $availableMonths = $availableDates->map(function ($dt) {
-            $c = \Carbon\Carbon::parse($dt);
-            $et = \App\Helpers\EthiopianCalendar::toEthiopian($dt);
-            $etMonthName = $et['month_am'] ?? '';
-            return [
-                'value'    => $c->format('Y-m'),
-                'label_en' => $c->format('F Y'),
-                'label_et' => $etMonthName ? ($etMonthName . ' ' . ($et['year'] ?? '')) : '',
-            ];
-        })->unique('value')->values();
+        // Approved Leaves
+        $leaves = collect();
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('leave_requests')) {
+                $leaves = \App\Models\LeaveRequest::whereIn('employee_id', $employeeIds)
+                    ->where('status', 'approved')
+                    ->where(function($q) use ($startDate, $endDate) {
+                        $q->whereBetween('start_date', [$startDate, $endDate])
+                          ->orWhereBetween('end_date', [$startDate, $endDate])
+                          ->orWhere(function($sq) use ($startDate, $endDate) {
+                              $sq->where('start_date', '<=', $startDate)->where('end_date', '>=', $endDate);
+                          });
+                    })
+                    ->get();
+            }
+        } catch (\Throwable $e) {}
 
-        // Build rich labels for each date
-        $availableDatesWithLabels = $availableDates->map(function ($dt) {
-            $c = \Carbon\Carbon::parse($dt);
-            $et = \App\Helpers\EthiopianCalendar::toEthiopian($dt);
-            $etBadge = $et['short_am'] ?? '';
-            return [
-                'date'       => $dt,
-                'month'      => $c->format('Y-m'),
-                'label_en'   => $c->format('M d, Y (D)'),
-                'label_et'   => $etBadge,
-                'full_label' => $c->format('M d, Y (D)') . ($etBadge ? ' — ' . $etBadge : ''),
-            ];
-        });
+        // Public Holidays
+        $holidays = collect();
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('holidays')) {
+                $holidays = \App\Models\Holiday::where(function($q) use ($startDate, $endDate) {
+                        $q->whereBetween('holiday_date', [$startDate, $endDate])
+                          ->orWhere(function($sq) use ($startDate, $endDate) {
+                              $sq->whereBetween('from_date', [$startDate, $endDate])
+                                ->orWhereBetween('to_date', [$startDate, $endDate]);
+                          });
+                    })
+                    ->get();
+            }
+        } catch (\Throwable $e) {}
 
-        // Determine date/period for statistics cards
-        $statsQuery = ($staffType === 'all')
-            ? Attendance::activeRoster()
-            : (($staffType === 'site_driver_remote') ? Attendance::siteDriverRemoteOnly() : Attendance::officeStaffOnly());
-        if ($selectedDate) {
-            $statsTitle = \Carbon\Carbon::parse($selectedDate)->format('M d, Y');
-            $statsEt = \App\Helpers\EthiopianCalendar::format($selectedDate, 'am');
-            $statsQuery->whereDate('attendance_date', $selectedDate);
-            $statsDate = $selectedDate;
-        } elseif ($selectedMonth) {
-            $mParts = explode('-', $selectedMonth);
-            $mYear = (int)$mParts[0];
-            $mNum = (int)$mParts[1];
-            $statsTitle = \Carbon\Carbon::createFromFormat('Y-m', $selectedMonth)->format('F Y');
-            $etM = \App\Helpers\EthiopianCalendar::toEthiopian($selectedMonth . '-01');
-            $statsEt = ($etM['month_am'] ?? '') . ' ' . ($etM['year'] ?? '');
-            $statsQuery->whereYear('attendance_date', $mYear)->whereMonth('attendance_date', $mNum);
-            $statsDate = $selectedMonth;
-        } elseif (request('date_from') || request('date_to')) {
-            $statsTitle = 'Selected Date Range';
-            $statsEt = (request('date_from') ?: '—') . ' to ' . (request('date_to') ?: '—');
-            if (request('date_from')) $statsQuery->whereDate('attendance_date', '>=', request('date_from'));
-            if (request('date_to')) $statsQuery->whereDate('attendance_date', '<=', request('date_to'));
-            $statsDate = request('date_from') ?: today()->toDateString();
-        } else {
-            $fallbackDate = $availableDates->first() ?? today()->toDateString();
-            $statsTitle = \Carbon\Carbon::parse($fallbackDate)->format('M d, Y');
-            $statsEt = \App\Helpers\EthiopianCalendar::format($fallbackDate, 'am');
-            $statsQuery->whereDate('attendance_date', $fallbackDate);
-            $statsDate = $fallbackDate;
-        }
+        // Approved Site Deployments ('S')
+        $approvedSiteDeployments = collect();
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('site_deployment_requests')) {
+                $approvedSiteDeployments = \App\Models\SiteDeploymentRequest::whereIn('employee_id', $employeeIds)
+                    ->where('status', 'approved')
+                    ->where(function($q) use ($startDate, $endDate) {
+                        $q->whereBetween('start_date', [$startDate, $endDate])
+                          ->orWhereBetween('end_date', [$startDate, $endDate])
+                          ->orWhere(function($sq) use ($startDate, $endDate) {
+                              $sq->where('start_date', '<=', $startDate)->where('end_date', '>=', $endDate);
+                          });
+                    })
+                    ->get();
+            }
+        } catch (\Throwable $e) {}
 
-        // ── RULE: 3 Late Days = 1 Absent Day Penalty ──────────────────────────
-        // 1. Total late records in the current period/filters (check-in after 08:40 AM)
-        $lateRecordsCount = (clone $statsQuery)->where(function($q) {
-            $q->where('late_minutes', '>', 0)
-              ->orWhere('status', 'late')
-              ->orWhere(function($sq) {
-                  $sq->whereNotNull('morning_in')->where('morning_in', '>', '08:40:59');
-              });
-        })->count();
-
-        // 2. Exact late penalty absent days grouped by employee (fair per-person calculation)
-        $employeeLateCounts = (clone $statsQuery)->where(function($q) {
-            $q->where('late_minutes', '>', 0)
-              ->orWhere('status', 'late')
-              ->orWhere(function($sq) {
-                  $sq->whereNotNull('morning_in')->where('morning_in', '>', '08:40:59');
-              });
-        })->select('employee_id', DB::raw('count(*) as late_count'))
-          ->groupBy('employee_id')
-          ->get();
-
+        // 4. Build Matrix per Employee per Day and calculate stats
+        $matrix = [];
+        $totalPresentCount = 0;
+        $totalSiteCount = 0;
+        $totalBaseAbsentCount = 0;
+        $totalLateCount = 0;
         $totalPenaltyDays = 0;
         $penalizedEmployeesCount = 0;
-        foreach ($employeeLateCounts as $row) {
-            $pen = intdiv((int)$row->late_count, 3);
-            if ($pen > 0) {
-                $totalPenaltyDays += $pen;
-                $penalizedEmployeesCount++;
+
+        $todayDateStr = today()->toDateString();
+
+        foreach ($employees as $emp) {
+            $empAttByDate = ($attendances[$emp->id] ?? collect())->keyBy(function($item) {
+                return $item->attendance_date ? $item->attendance_date->toDateString() : '';
+            });
+
+            $dayStatuses = [];
+            $empPresent = 0;
+            $empSite = 0;
+            $empAbsent = 0;
+            $empLate = 0;
+            $empLeave = 0;
+            $empHoliday = 0;
+
+            foreach ($periodDays as $dayItem) {
+                $greg = $dayItem['greg_date'];
+                $isSunday = $dayItem['is_sunday'];
+                $isSaturday = $dayItem['is_saturday'];
+
+                $att = $empAttByDate->get($greg);
+
+                // Check punches: any punch = present
+                $hasPunch = $att && (
+                    !empty($att->morning_in) ||
+                    !empty($att->morning_out) ||
+                    !empty($att->afternoon_in) ||
+                    !empty($att->afternoon_out) ||
+                    !empty($att->check_in) ||
+                    !empty($att->check_out) ||
+                    (float)$att->hours_worked > 0
+                );
+
+                $isLate = false;
+                $lateMinutes = 0;
+                if ($hasPunch) {
+                    $inPunch = $att->morning_in ?: $att->check_in;
+                    $lateMinutes = $att->late_minutes ?: \App\Services\BiometricPunchService::calculateLateMinutes($inPunch);
+                    $isLate = $lateMinutes > 0 || ($att->morning_in && $att->morning_in > '08:40:59');
+                }
+
+                // Check approved site deployment
+                $hasApprovedSite = ($att && ($att->status === 'S' || $att->source === 'site_dispatch' || $att->isOnSite()))
+                    || $approvedSiteDeployments->first(function($sd) use ($emp, $greg) {
+                        return $sd->employee_id === $emp->id 
+                            && $sd->start_date <= $greg 
+                            && $sd->end_date >= $greg;
+                    });
+
+                // Check approved leave
+                $leaveObj = $leaves->first(function($lv) use ($emp, $greg) {
+                    return $lv->employee_id === $emp->id 
+                        && $lv->start_date <= $greg 
+                        && $lv->end_date >= $greg;
+                });
+
+                // Check public holiday
+                $holidayObj = $holidays->first(function($h) use ($greg) {
+                    $hd = $h->holiday_date ? Carbon::parse($h->holiday_date)->toDateString() : null;
+                    if ($hd && $hd === $greg) return true;
+                    if ($h->from_date && $h->to_date) {
+                        return Carbon::parse($h->from_date)->toDateString() <= $greg 
+                            && Carbon::parse($h->to_date)->toDateString() >= $greg;
+                    }
+                    return false;
+                });
+
+                // Determine cellular code
+                if ($isSunday) {
+                    // Sunday is rest day (never generate Absent)
+                    if ($hasPunch) {
+                        $statusCode = 'P';
+                        $cellClass  = 'bg-success text-white';
+                        $label      = 'Sunday Overtime (P)';
+                        $empPresent++;
+                    } else {
+                        $statusCode = 'SUN';
+                        $cellClass  = 'bg-secondary bg-opacity-25 text-muted';
+                        $label      = 'Sunday (Rest Day)';
+                    }
+                } elseif ($hasPunch) {
+                    // Any punch means present!
+                    $statusCode = 'P';
+                    $cellClass  = $isLate ? 'bg-warning text-dark border-warning' : 'bg-success text-white';
+                    $label      = $isLate ? "Present (Late {$lateMinutes}m)" : 'Present (P)';
+                    $empPresent++;
+                    if ($isLate) {
+                        $empLate++;
+                        $totalLateCount++;
+                    }
+                } elseif ($hasApprovedSite) {
+                    // Approved site deployment: always S (non-deductible)
+                    $statusCode = 'S';
+                    $cellClass  = 'bg-info text-white';
+                    $label      = 'On-Site Deployment (S)';
+                    $empSite++;
+                } elseif ($leaveObj) {
+                    // Approved leave
+                    $statusCode = 'L';
+                    $cellClass  = 'bg-primary text-white';
+                    $label      = 'Approved Leave (L)';
+                    $empLeave++;
+                } elseif ($holidayObj) {
+                    // Public holiday
+                    $statusCode = 'H';
+                    $cellClass  = 'bg-purple text-white bg-opacity-75';
+                    $label      = 'Public Holiday (H)';
+                    $empHoliday++;
+                } else {
+                    // Expected working day with no punch, no site, no leave, no holiday
+                    if ($greg > $todayDateStr) {
+                        $statusCode = '—';
+                        $cellClass  = 'bg-light text-muted';
+                        $label      = 'Upcoming Day';
+                    } else {
+                        $statusCode = 'A';
+                        $cellClass  = 'bg-danger text-white';
+                        $label      = 'Absent (A)';
+                        $empAbsent++;
+                        $totalBaseAbsentCount++;
+                    }
+                }
+
+                $dayStatuses[$greg] = [
+                    'code'         => $statusCode,
+                    'class'        => $cellClass,
+                    'label'        => $label,
+                    'is_late'      => $isLate,
+                    'late_minutes' => $lateMinutes,
+                    'punch_in'     => $att?->morning_in ?: $att?->check_in,
+                    'punch_out'    => $att?->afternoon_out ?: $att?->check_out,
+                    'hours'        => $att?->hours_worked,
+                    'notes'        => $att?->notes,
+                ];
             }
+
+            // Calculate Late Penalties: 3 late days = 1 absent day
+            $empPenaltyDays = intdiv($empLate, 3);
+            if ($empPenaltyDays > 0) {
+                $penalizedEmployeesCount++;
+                $totalPenaltyDays += $empPenaltyDays;
+            }
+
+            $effectiveAbsent = $empAbsent + $empPenaltyDays;
+            $effectivePresent = $empPresent + $empSite;
+
+            $totalPresentCount += $empPresent;
+            $totalSiteCount += $empSite;
+
+            $matrix[$emp->id] = [
+                'employee' => $emp,
+                'days'     => $dayStatuses,
+                'summary'  => [
+                    'present_days'      => $empPresent,
+                    'site_days'         => $empSite,
+                    'leave_days'        => $empLeave,
+                    'holiday_days'      => $empHoliday,
+                    'absent_days'       => $empAbsent,
+                    'late_days'         => $empLate,
+                    'penalty_days'      => $empPenaltyDays,
+                    'effective_absent'  => $effectiveAbsent,
+                    'effective_present' => $effectivePresent,
+                ],
+            ];
         }
 
-        $baseAbsent = (clone $statsQuery)->where('status', 'absent')
-            ->whereNotIn('status', ['site', 'S', 's', 'on_site'])
-            ->where(function($q) {
-                $q->whereNull('notes')->orWhere('notes', 'not like', '%On-Site%');
-            })->count();
+        $totalEffectiveAbsent = $totalBaseAbsentCount + $totalPenaltyDays;
 
-        $effectiveAbsent = $baseAbsent + $totalPenaltyDays;
-
+        // Statistics for Dashboard Cards
         $stats = [
-            'date'                 => $statsDate,
-            'title'                => $statsTitle,
-            'et_title'             => $statsEt,
-            'present'              => (clone $statsQuery)->where('status', 'present')->count(),
-            'site'                 => (clone $statsQuery)->where(function($q) {
-                $q->whereIn('status', ['site', 'S', 's', 'on_site'])
-                  ->orWhere('source', 'site_dispatch')
-                  ->orWhere('notes', 'like', '%On-Site%');
-            })->count(),
-            'half_day'             => (clone $statsQuery)->where('status', 'half_day')->count(),
-            'absent'               => $baseAbsent,
-            'effective_absent'     => $effectiveAbsent,
-            'late_days'            => $lateRecordsCount,
-            'late_penalty_absents' => $totalPenaltyDays,
-            'penalized_employees'  => $penalizedEmployeesCount,
-            'leave'                => (clone $statsQuery)->where('status', 'leave')->count(),
+            'period_title'             => $period['full_label'],
+            'label_am'                 => $period['label_am'],
+            'label_en'                 => $period['label_en'],
+            'start_date'               => $startDate,
+            'end_date'                 => $endDate,
+            'total_days'               => count($periodDays),
+            'total_staff'              => count($employees),
+            'total_present'            => $totalPresentCount,
+            'total_site'               => $totalSiteCount,
+            'total_absent'             => $totalBaseAbsentCount,
+            'total_late'               => $totalLateCount,
+            'total_penalty_days'       => $totalPenaltyDays,
+            'total_effective_absent'   => $totalEffectiveAbsent,
+            'penalized_employees_count'=> $penalizedEmployeesCount,
         ];
 
-        // Precompute monthly late counts for displayed employees to show on attendance table rows
-        $displayedEmpIds = $attendances->pluck('employee_id')->filter()->unique()->values();
-        $targetMonthYear = $selectedMonth 
-            ? explode('-', $selectedMonth) 
-            : ($selectedDate ? explode('-', substr($selectedDate, 0, 7)) : [date('Y'), date('m')]);
-        $pYear = isset($targetMonthYear[0]) ? (int)$targetMonthYear[0] : (int)date('Y');
-        $pMonth = isset($targetMonthYear[1]) ? (int)$targetMonthYear[1] : (int)date('n');
+        // 5. Diagnostics for HR warning panels
+        // Missing Device ID panel: active employees with no registered device_user_id
+        $missingDeviceEmployees = $allActiveEmployees->filter(function($e) {
+            return empty(trim((string)$e->device_user_id));
+        });
 
-        $monthlyLateCounts = Attendance::whereIn('employee_id', $displayedEmpIds)
-            ->whereYear('attendance_date', $pYear)
-            ->whereMonth('attendance_date', $pMonth)
-            ->where(function($q) {
-                $q->where('late_minutes', '>', 0)
-                  ->orWhere('status', 'late')
-                  ->orWhere(function($sq) {
-                      $sq->whereNotNull('morning_in')->where('morning_in', '>', '08:40:59');
-                  });
-            })
-            ->select('employee_id', DB::raw('count(*) as count'))
-            ->groupBy('employee_id')
-            ->pluck('count', 'employee_id')
-            ->toArray();
+        // Suspended Access Accounts panel: users with access_blocked_at
+        $blockedUsers = User::whereNotNull('access_blocked_at')
+            ->with(['employee', 'roles', 'accessUnblockedByUser'])
+            ->get();
 
-        $allEmployees = Employee::officeStaffOnly()->orderBy('full_name')->get();
-        $allStaffForFilter = Employee::activeRoster()->orderBy('full_name')->get();
-        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+        $departments  = Employee::activeRoster()->distinct()->pluck('department')->filter()->values();
         $projects     = \App\Models\Project::orderBy('name')->get();
-
-        $lastAttendanceDate = $availableDates->first() ?? (Attendance::max('attendance_date') ? \Carbon\Carbon::parse(Attendance::max('attendance_date'))->format('Y-m-d') : null);
+        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
 
         return view('hr.attendance.index', compact(
-            'attendances',
-            'availableDates',
-            'availableMonths',
-            'availableDatesWithLabels',
+            'period',
+            'periodDays',
+            'selectedPeriodKey',
+            'availablePeriods',
+            'matrix',
+            'employees',
+            'allActiveEmployees',
             'stats',
-            'monthlyLateCounts',
-            'selectedDate',
-            'selectedMonth',
-            'allEmployees',
-            'allStaffForFilter',
             'staffType',
-            'workSchedule',
+            'missingDeviceEmployees',
+            'blockedUsers',
+            'departments',
             'projects',
-            'lastAttendanceDate'
+            'workSchedule'
         ));
     }
 
@@ -1046,21 +966,6 @@ class AttendanceController extends Controller
         return redirect()->back()->with('success', 'Work schedule & working hours policy updated successfully.');
     }
 
-    public function create(Request $request)
-    {
-        $selectedDate = $request->input('date', today()->toDateString());
-        $selectedEmployeeId = $request->input('employee_id');
-
-        $employees = Employee::activeRoster()->orderBy('full_name')->get();
-
-        // Fetch all existing attendance records for the selected date keyed by employee_id
-        $attendances = Attendance::whereDate('attendance_date', $selectedDate)
-            ->get()
-            ->keyBy('employee_id');
-
-        return view('hr.attendance.create', compact('employees', 'attendances', 'selectedDate', 'selectedEmployeeId'));
-    }
-
     /**
      * Ensure attendance table schema has status column wide enough for 'S' and deployment metadata.
      */
@@ -1089,1173 +994,26 @@ class AttendanceController extends Controller
     }
 
     /**
-     * Update an individual attendance record (Status, session times, hours, notes).
+     * Restore user login & API access after 5-day absence suspension.
+     * Restricted to HR Manager, Admin, and Global Admin with mandatory reason.
      */
-    public function updateRecord(Request $request, Attendance $attendance)
+    public function restoreUserAccess(Request $request, \App\Models\User $user)
     {
+        if (!self::isHrOrAdmin()) {
+            abort(403, 'Unauthorized. Only HR Manager, Admin, or Global Admin can restore user access.');
+        }
+
         $validated = $request->validate([
-            'status'          => 'required|string',
-            'device_user_id'  => 'nullable|string|max:50',
-            'morning_in'      => 'nullable|string',
-            'morning_out'     => 'nullable|string',
-            'afternoon_in'    => 'nullable|string',
-            'afternoon_out'   => 'nullable|string',
-            'hours_worked'    => 'nullable|numeric|min:0|max:24',
-            'overtime_hours'  => 'nullable|numeric|min:0|max:24',
-            'overtime_type'   => 'nullable|string',
-            'notes'           => 'nullable|string|max:500',
+            'reason' => 'required|string|min:5|max:500',
         ]);
 
-        self::ensureAttendanceSchemaReady();
+        $currentUser = auth()->user();
+        $user->unblockAccess($currentUser, $validated['reason']);
 
-        // Update Device ID on Employee and Attendance record if requested
-        $cleanDevId = null;
-        if ($request->has('device_user_id')) {
-            $rawDevId = trim((string)$request->input('device_user_id'));
-            $cleanDevId = $rawDevId !== '' ? $rawDevId : null;
-            if ($attendance->employee) {
-                $attendance->employee->update(['device_user_id' => $cleanDevId]);
-            }
-            $attendance->biometric_device_id = $cleanDevId;
-        } else {
-            $cleanDevId = $attendance->employee?->device_user_id;
-        }
-
-        $status = $validated['status'];
-        if (in_array(strtolower($status), ['s', 'site', 'on_site'])) {
-            $status = 'S';
-        }
-
-        $dateStr = $attendance->attendance_date ? $attendance->attendance_date->toDateString() : today()->toDateString();
-        $isSat = $attendance->attendance_date ? $attendance->attendance_date->isSaturday() : false;
-        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
-        $defaultFullHours = $isSat ? (float)($workSchedule['sat_total_hours'] ?? 4.0) : (float)($workSchedule['total_hours'] ?? 8.0);
-
-        $mIn  = !empty($validated['morning_in']) ? substr(trim($validated['morning_in']), 0, 5) : null;
-        $mOut = !empty($validated['morning_out']) ? substr(trim($validated['morning_out']), 0, 5) : null;
-        $aIn  = !empty($validated['afternoon_in']) ? substr(trim($validated['afternoon_in']), 0, 5) : null;
-        $aOut = !empty($validated['afternoon_out']) ? substr(trim($validated['afternoon_out']), 0, 5) : null;
-
-        // If punch times are empty and a device ID is provided/updated, check if raw device logs exist for this date
-        if (!empty($cleanDevId) && empty($mIn) && empty($mOut) && empty($aIn) && empty($aOut) && $status !== 'absent') {
-            try {
-                $rawLogs = DB::table('device_attendance_logs')
-                    ->where('user_id', $cleanDevId)
-                    ->whereDate('punch_time', $dateStr)
-                    ->pluck('punch_time')
-                    ->all();
-                if (!empty($rawLogs)) {
-                    $calc = \App\Services\BiometricPunchService::calculateAttendanceRecord($rawLogs, $dateStr, $isSat);
-                    if (!empty($calc['morning_in']) || !empty($calc['afternoon_in'])) {
-                        $mIn  = $calc['morning_in'] ?? $mIn;
-                        $mOut = $calc['morning_out'] ?? $mOut;
-                        $aIn  = $calc['afternoon_in'] ?? $aIn;
-                        $aOut = $calc['afternoon_out'] ?? $aOut;
-                    }
-                }
-            } catch (\Throwable $e) {}
-        }
-
-        $cIn  = $mIn ?: $aIn;
-        $cOut = $aOut ?: $mOut;
-
-        $hours = isset($validated['hours_worked']) && is_numeric($validated['hours_worked'])
-            ? (float)$validated['hours_worked']
-            : null;
-
-        if ($status === 'absent') {
-            $mIn = null;
-            $mOut = null;
-            $aIn = null;
-            $aOut = null;
-            $cIn = null;
-            $cOut = null;
-            $hours = 0.0;
-            $lateMinutes = 0;
-        } elseif ($status === 'S') {
-            if ($hours === null || $hours <= 0) {
-                $hours = $defaultFullHours;
-            }
-            if (empty($mIn) && empty($aIn)) {
-                $mIn = $workSchedule['morning_in'] ?? '08:30';
-                $mOut = $workSchedule['morning_out'] ?? '12:30';
-                if (!$isSat) {
-                    $aIn = $workSchedule['afternoon_in'] ?? '13:30';
-                    $aOut = $workSchedule['afternoon_out'] ?? '17:30';
-                }
-                $cIn = $mIn;
-                $cOut = $aOut ?: $mOut;
-            }
-            $lateMinutes = 0;
-            $attendance->source = 'site_dispatch';
-        } else {
-            if ($hours === null) {
-                if ($status === 'half_day') {
-                    $hours = 4.0;
-                } else {
-                    $hours = $defaultFullHours;
-                }
-            }
-            $lateMinutes = \App\Services\BiometricPunchService::calculateLateMinutes($mIn ?: $cIn);
-        }
-
-        $attendance->status         = $status;
-        $attendance->morning_in     = $mIn;
-        $attendance->morning_out    = $mOut;
-        $attendance->afternoon_in   = $aIn;
-        $attendance->afternoon_out  = $aOut;
-        $attendance->check_in       = $cIn;
-        $attendance->check_out      = $cOut;
-        $attendance->hours_worked   = $hours;
-        $attendance->late_minutes   = $lateMinutes;
-        $attendance->overtime_hours = $validated['overtime_hours'] ?? 0;
-        $attendance->overtime_type  = $validated['overtime_type'] ?? 'none';
-        if ($request->has('notes')) {
-            $attendance->notes = $validated['notes'];
-        }
-        $attendance->is_approved = true;
-        $attendance->approved_by = auth()->id();
-        $attendance->save();
-
-        ActivityLog::log(
-            'updated',
-            "Attendance for {$attendance->employee?->full_name} on {$dateStr} updated to status '{$status}', hours: {$hours}h",
-            'HR Attendance'
+        return redirect()->back()->with(
+            'success',
+            "Access for user [{$user->name}] has been successfully restored! Restoration has been logged in the audit trail."
         );
-
-        if ($request->wantsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => "Attendance for {$attendance->employee?->full_name} updated successfully.",
-                'attendance' => $attendance,
-            ]);
-        }
-
-        return redirect()->back()->with('success', "Attendance record for {$attendance->employee?->full_name} updated successfully.");
-    }
-
-    /**
-     * Quick create or update attendance for an employee on a specific date.
-     */
-    public function quickCreateOrUpdate(Request $request)
-    {
-        $validated = $request->validate([
-            'employee_id'     => 'required|exists:employees,id',
-            'device_user_id'  => 'nullable|string|max:50',
-            'attendance_date' => 'required|date',
-            'status'          => 'required|string',
-            'morning_in'      => 'nullable|string',
-            'morning_out'     => 'nullable|string',
-            'afternoon_in'    => 'nullable|string',
-            'afternoon_out'   => 'nullable|string',
-            'hours_worked'    => 'nullable|numeric|min:0|max:24',
-            'overtime_hours'  => 'nullable|numeric|min:0|max:24',
-            'overtime_type'   => 'nullable|string',
-            'notes'           => 'nullable|string|max:500',
-        ]);
-
-        self::ensureAttendanceSchemaReady();
-
-        $empCheck = Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->find($validated['employee_id']);
-        if ($empCheck && ($empCheck->is_dead_file || $empCheck->status === 'dead_file')) {
-            $deadDate = $empCheck->dead_file_date ?? $empCheck->dead_file_at;
-            $attDate = Carbon::parse($validated['attendance_date'])->toDateString();
-            if (!$deadDate || $attDate >= Carbon::parse($deadDate)->toDateString()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot record attendance for an employee archived in Dead File on or after dead file date.',
-                ], 422);
-            }
-        }
-
-        if ($request->has('device_user_id')) {
-            $rawDevId = trim((string)$request->input('device_user_id'));
-            $cleanDevId = $rawDevId !== '' ? $rawDevId : null;
-            $emp = Employee::find($validated['employee_id']);
-            if ($emp) {
-                $emp->update(['device_user_id' => $cleanDevId]);
-            }
-        }
-
-        $status = $validated['status'];
-        if (in_array(strtolower($status), ['s', 'site', 'on_site'])) {
-            $status = 'S';
-        }
-
-        $dateStr = Carbon::parse($validated['attendance_date'])->toDateString();
-        $isSat = Carbon::parse($dateStr)->isSaturday();
-        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
-        $defaultFullHours = $isSat ? (float)($workSchedule['sat_total_hours'] ?? 4.0) : (float)($workSchedule['total_hours'] ?? 8.0);
-
-        $mIn  = !empty($validated['morning_in']) ? substr(trim($validated['morning_in']), 0, 5) : null;
-        $mOut = !empty($validated['morning_out']) ? substr(trim($validated['morning_out']), 0, 5) : null;
-        $aIn  = !empty($validated['afternoon_in']) ? substr(trim($validated['afternoon_in']), 0, 5) : null;
-        $aOut = !empty($validated['afternoon_out']) ? substr(trim($validated['afternoon_out']), 0, 5) : null;
-        $cIn  = $mIn ?: $aIn;
-        $cOut = $aOut ?: $mOut;
-
-        $hours = isset($validated['hours_worked']) && is_numeric($validated['hours_worked'])
-            ? (float)$validated['hours_worked']
-            : null;
-
-        if ($status === 'absent') {
-            $mIn = null; $mOut = null; $aIn = null; $aOut = null; $cIn = null; $cOut = null;
-            $hours = 0.0;
-            $lateMinutes = 0;
-        } elseif ($status === 'S') {
-            if ($hours === null || $hours <= 0) $hours = $defaultFullHours;
-            if (empty($mIn) && empty($aIn)) {
-                $mIn = $workSchedule['morning_in'] ?? '08:30';
-                $mOut = $workSchedule['morning_out'] ?? '12:30';
-                if (!$isSat) {
-                    $aIn = $workSchedule['afternoon_in'] ?? '13:30';
-                    $aOut = $workSchedule['afternoon_out'] ?? '17:30';
-                }
-                $cIn = $mIn;
-                $cOut = $aOut ?: $mOut;
-            }
-            $lateMinutes = 0;
-        } else {
-            if ($hours === null) {
-                $hours = ($status === 'half_day') ? 4.0 : $defaultFullHours;
-            }
-            $lateMinutes = \App\Services\BiometricPunchService::calculateLateMinutes($mIn ?: $cIn);
-        }
-
-        $attendance = Attendance::updateOrCreate(
-            [
-                'employee_id'     => $validated['employee_id'],
-                'attendance_date' => $dateStr,
-            ],
-            [
-                'status'         => $status,
-                'source'         => ($status === 'S') ? 'site_dispatch' : 'manual',
-                'morning_in'     => $mIn,
-                'morning_out'    => $mOut,
-                'afternoon_in'   => $aIn,
-                'afternoon_out'  => $aOut,
-                'check_in'       => $cIn,
-                'check_out'      => $cOut,
-                'hours_worked'   => $hours,
-                'late_minutes'   => $lateMinutes,
-                'overtime_hours' => $validated['overtime_hours'] ?? 0,
-                'overtime_type'  => $validated['overtime_type'] ?? 'none',
-                'notes'          => $validated['notes'] ?? null,
-                'is_approved'    => true,
-                'approved_by'    => auth()->id(),
-            ]
-        );
-
-        $empName = Employee::find($validated['employee_id'])?->full_name ?? 'Employee';
-        ActivityLog::log(
-            'created',
-            "Attendance for {$empName} on {$dateStr} saved with status '{$status}', hours: {$hours}h",
-            'HR Attendance'
-        );
-
-        return redirect()->back()->with('success', "Attendance record for {$empName} ({$dateStr}) saved successfully.");
-    }
-
-    public function quickClock(Request $request)
-    {
-        $request->validate([
-            'employee_id'     => 'required|exists:employees,id',
-            'attendance_date' => 'required|date',
-            'action'          => 'required|in:morning_in,morning_out,afternoon_in,afternoon_out,clock_in,clock_out,absent',
-        ]);
-
-        $employee = Employee::findOrFail($request->employee_id);
-        $date = $request->attendance_date;
-        $nowTime = now()->format('H:i');
-
-        $attendance = Attendance::firstOrNew([
-            'employee_id'     => $employee->id,
-            'attendance_date' => $date,
-        ]);
-
-        $action = $request->action;
-        if ($action === 'morning_in') {
-            $attendance->morning_in = $nowTime;
-            $attendance->status = 'present';
-        } elseif ($action === 'morning_out') {
-            $attendance->morning_out = $nowTime;
-            $attendance->status = 'present';
-        } elseif ($action === 'afternoon_in') {
-            $attendance->afternoon_in = $nowTime;
-            $attendance->status = 'present';
-        } elseif ($action === 'afternoon_out') {
-            $attendance->afternoon_out = $nowTime;
-            $attendance->status = 'present';
-        } elseif ($action === 'clock_in') {
-            $attendance->morning_in = $attendance->morning_in ?? $nowTime;
-            $attendance->status = 'present';
-        } elseif ($action === 'clock_out') {
-            $attendance->afternoon_out = $nowTime;
-            $attendance->status = 'present';
-        } elseif ($action === 'absent') {
-            $attendance->status = 'absent';
-            $attendance->morning_in = null;
-            $attendance->morning_out = null;
-            $attendance->afternoon_in = null;
-            $attendance->afternoon_out = null;
-            $attendance->check_in = null;
-            $attendance->check_out = null;
-            $attendance->hours_worked = 0;
-        }
-
-        $attendance->check_in = $attendance->morning_in ?? ($attendance->afternoon_in ?? $attendance->check_in);
-        $attendance->check_out = $attendance->afternoon_out ?? ($attendance->morning_out ?? $attendance->check_out);
-
-        // Recalculate total hours worked across both sessions
-        $hours = 0;
-        if ($attendance->morning_in && $attendance->morning_out) {
-            $mIn  = \Carbon\Carbon::createFromFormat('H:i', $attendance->morning_in);
-            $mOut = \Carbon\Carbon::createFromFormat('H:i', $attendance->morning_out);
-            $hours += max(0, round($mOut->diffInMinutes($mIn) / 60, 2));
-        }
-        if ($attendance->afternoon_in && $attendance->afternoon_out) {
-            $aIn  = \Carbon\Carbon::createFromFormat('H:i', $attendance->afternoon_in);
-            $aOut = \Carbon\Carbon::createFromFormat('H:i', $attendance->afternoon_out);
-            $hours += max(0, round($aOut->diffInMinutes($aIn) / 60, 2));
-        }
-        if ($hours == 0 && $attendance->check_in && $attendance->check_out) {
-            $in    = \Carbon\Carbon::createFromFormat('H:i', $attendance->check_in);
-            $out   = \Carbon\Carbon::createFromFormat('H:i', $attendance->check_out);
-            $hours = round($out->diffInMinutes($in) / 60, 2);
-        }
-
-        $attendance->hours_worked = $hours;
-        $attendance->late_minutes = \App\Services\BiometricPunchService::calculateLateMinutes($attendance->morning_in ?: $attendance->check_in);
-        $attendance->source = 'manual_quick';
-        $attendance->is_approved = true;
-        $attendance->approved_by = Auth::id();
-        $attendance->save();
-
-        if ($request->wantsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => "Attendance updated for {$employee->full_name}",
-                'attendance' => $attendance,
-            ]);
-        }
-
-        return redirect()->route('attendance.create', ['date' => $date, 'employee_id' => $employee->id])
-            ->with('success', "Updated " . str_replace('_', ' ', $action) . " for {$employee->full_name} ({$nowTime}).");
-    }
-
-    public function store(Request $request)
-    {
-        if ($request->input('action') === 'update_schedule') {
-            return $this->updateSchedule($request);
-        }
-
-        if ($request->input('action') === 'record_site_attendance') {
-            return $this->recordSiteAttendance($request);
-        }
-
-        $request->validate([
-            'employee_id'     => 'required|exists:employees,id',
-            'attendance_date' => 'required|date',
-            'status'          => 'required|in:present,absent,half_day,leave,holiday,weekend',
-            'morning_in'      => 'nullable|date_format:H:i',
-            'morning_out'     => 'nullable|date_format:H:i',
-            'afternoon_in'    => 'nullable|date_format:H:i',
-            'afternoon_out'   => 'nullable|date_format:H:i',
-            'check_in'        => 'nullable|date_format:H:i',
-            'check_out'       => 'nullable|date_format:H:i',
-            'overtime_hours'  => 'nullable|numeric|min:0|max:24',
-            'overtime_type'   => 'nullable|in:none,holiday,rest_day,night_12_4,night_4_12',
-            'notes'           => 'nullable|string',
-        ]);
-
-        $empCheck = Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->find($request->employee_id);
-        if ($empCheck && ($empCheck->is_dead_file || $empCheck->status === 'dead_file')) {
-            $deadDate = $empCheck->dead_file_date ?? $empCheck->dead_file_at;
-            $attDate = Carbon::parse($request->attendance_date)->toDateString();
-            if (!$deadDate || $attDate >= Carbon::parse($deadDate)->toDateString()) {
-                return back()->withInput()->with('error', "Cannot record attendance for employee in Dead File on or after dead file date.");
-            }
-        }
-
-        $existing = Attendance::where('employee_id', $request->employee_id)
-            ->whereDate('attendance_date', $request->attendance_date)
-            ->first();
-
-        // Merge punches: keep existing punches if not explicitly provided, completing any missing parts!
-        $morningIn    = $request->filled('morning_in') ? $request->morning_in : ($existing?->morning_in);
-        $morningOut   = $request->filled('morning_out') ? $request->morning_out : ($existing?->morning_out);
-        $afternoonIn  = $request->filled('afternoon_in') ? $request->afternoon_in : ($existing?->afternoon_in);
-        $afternoonOut = $request->filled('afternoon_out') ? $request->afternoon_out : ($existing?->afternoon_out);
-
-        $checkIn  = $morningIn ?: ($afternoonIn ?: ($request->check_in ?: ($existing?->check_in)));
-        $checkOut = $afternoonOut ?: ($morningOut ?: ($request->check_out ?: ($existing?->check_out)));
-
-        $hours = 0;
-        if ($morningIn && $morningOut) {
-            $mIn  = \Carbon\Carbon::createFromFormat('H:i', $morningIn);
-            $mOut = \Carbon\Carbon::createFromFormat('H:i', $morningOut);
-            $hours += max(0, round($mOut->diffInMinutes($mIn) / 60, 2));
-        }
-        if ($afternoonIn && $afternoonOut) {
-            $aIn  = \Carbon\Carbon::createFromFormat('H:i', $afternoonIn);
-            $aOut = \Carbon\Carbon::createFromFormat('H:i', $afternoonOut);
-            $hours += max(0, round($aOut->diffInMinutes($aIn) / 60, 2));
-        }
-        if ($hours == 0 && $checkIn && $checkOut) {
-            $in    = \Carbon\Carbon::createFromFormat('H:i', $checkIn);
-            $out   = \Carbon\Carbon::createFromFormat('H:i', $checkOut);
-            $hours = round($out->diffInMinutes($in) / 60, 2);
-        }
-        if ($hours == 0) {
-            if ($morningIn && ($afternoonIn || $afternoonOut)) {
-                $hours = 8.0;
-            } elseif ($morningIn || $afternoonIn || $afternoonOut) {
-                $hours = 3.0;
-            }
-        }
-
-        $status = $request->status;
-        // If status was half_day but user filled in both morning and afternoon sessions, upgrade to present:
-        if ($status === 'half_day' && !empty($morningIn) && (!empty($afternoonIn) || !empty($afternoonOut))) {
-            $status = 'present';
-        }
-
-        // ── Auto-detect OT type if not explicitly set ────────────────────────
-        $otHours = (float) ($request->overtime_hours ?? 0);
-        $otType  = $request->overtime_type ?? 'none';
-
-        if ($otHours > 0 && $otType === 'none') {
-            $date    = \Carbon\Carbon::parse($request->attendance_date);
-            $cIn = $checkIn ? \Carbon\Carbon::createFromFormat('H:i', $checkIn) : null;
-
-            if ($request->status === 'holiday') {
-                $otType = 'holiday';
-            } elseif ($request->status === 'weekend' || $date->isSunday()) {
-                $otType = 'rest_day';
-            } elseif ($date->isSaturday()) {
-                $otType = 'rest_day';
-            } elseif ($cIn) {
-                $hour = (int) $cIn->format('H');
-                if ($hour >= 0 && $hour < 4) {
-                    $otType = 'night_12_4';
-                } elseif ($hour >= 16) {
-                    $otType = 'night_4_12';
-                }
-            }
-        }
-
-        // ── Calculate OT pay ─────────────────────────────────────────────────
-        $employee = \App\Models\Employee::find($request->employee_id);
-        $basic    = (float) ($employee->basic_salary ?? 0);
-        $otPay    = \App\Models\Payroll::calculateOvertimePay($basic, $otHours, $otType);
-
-        Attendance::updateOrCreate(
-            ['employee_id' => $request->employee_id, 'attendance_date' => $request->attendance_date],
-            [
-                'morning_in'     => $morningIn,
-                'morning_out'    => $morningOut,
-                'afternoon_in'   => $afternoonIn,
-                'afternoon_out'  => $afternoonOut,
-                'check_in'       => $checkIn,
-                'check_out'      => $checkOut,
-                'hours_worked'   => $hours,
-                'late_minutes'   => \App\Services\BiometricPunchService::calculateLateMinutes($morningIn ?: $checkIn),
-                'status'         => $status,
-                'source'         => 'manual',
-                'notes'          => $request->notes,
-                'is_approved'    => true,
-                'approved_by'    => Auth::id(),
-                'overtime_hours' => $otHours,
-                'overtime_type'  => $otType,
-                'overtime_pay'   => $otPay,
-            ]
-        );
-
-        return redirect()->route('attendance.create', ['date' => $request->attendance_date, 'employee_id' => $request->employee_id])
-                         ->with('success', 'Attendance record saved for ' . ($employee->full_name ?? 'Employee'));
-    }
-
-    public function bulkStore(Request $request)
-    {
-        $request->validate([
-            'attendance_date'              => 'required|date',
-            'records'                      => 'required|array',
-            'records.*.employee_id'        => 'required|exists:employees,id',
-            'records.*.status'             => 'required|in:present,absent,half_day,leave,holiday,weekend',
-        ]);
-
-        $count = 0;
-        foreach ($request->records as $rec) {
-            Attendance::updateOrCreate(
-                ['employee_id' => $rec['employee_id'], 'attendance_date' => $request->attendance_date],
-                [
-                    'status'      => $rec['status'],
-                    'source'      => 'bulk_upload',
-                    'is_approved' => true,
-                    'approved_by' => Auth::id(),
-                ]
-            );
-            $count++;
-        }
-
-        return back()->with('success', "$count attendance records saved successfully.");
-    }
-
-    /**
-     * Import attendance from a biometric machine XLS export (BIFF2 format)
-     * or a CSV file in the same column layout.
-     *
-     * Expected XLS columns:
-     *   Emp No. | AC-No. | Name | Date | Timetable | On duty | Off duty |
-     *   Clock In | Clock Out | Normal | Late | Early | Absent | OT Time | Work Time | Department
-     */
-    public function importXls(Request $request)
-    {
-        $request->validate([
-            'file' => [
-                'required',
-                'file',
-                'max:10240',
-                function ($attribute, $value, $fail) {
-                    $ext = strtolower($value->getClientOriginalExtension());
-                    if (!in_array($ext, ['xls', 'xlsx', 'csv', 'txt'])) {
-                        $fail('The uploaded file must be an XLS, XLSX, or CSV file.');
-                    }
-                },
-            ],
-            'after_last_day' => 'nullable|boolean',
-        ]);
-
-        $file     = $request->file('file');
-        $ext      = strtolower($file->getClientOriginalExtension());
-        $tmpPath  = $file->getRealPath();
-
-        // ── Determine Last Recorded Attendance Date for incremental filtering ─
-        $onlyAfterLastDay = $request->boolean('after_last_day');
-        $rawLastDate = Attendance::max('attendance_date');
-        $lastRecordedDate = null;
-        if ($rawLastDate instanceof \DateTimeInterface) {
-            $lastRecordedDate = $rawLastDate->format('Y-m-d');
-        } elseif ($rawLastDate) {
-            try {
-                $lastRecordedDate = Carbon::parse($rawLastDate)->format('Y-m-d');
-            } catch (\Exception $e) {}
-        }
-
-        // ── Multi-strategy file parsing ────────────────────────────────────
-        $records = [];
-
-        if ($ext === 'csv' || $ext === 'txt') {
-            $records = $this->parseCsvAttendance($tmpPath);
-        } elseif ($ext === 'xlsx') {
-            $records = $this->parseXlsxAttendance($tmpPath);
-            if (empty($records)) {
-                $parser  = new \App\Services\AttendanceXlsParser();
-                $records = $parser->parse($tmpPath);
-            }
-        } elseif ($ext === 'xls') {
-            $parser  = new \App\Services\AttendanceXlsParser();
-            $records = $parser->parse($tmpPath);
-            if (empty($records)) {
-                $records = $this->parseXlsxAttendance($tmpPath);
-            }
-            if (empty($records)) {
-                $records = $this->parseCsvAttendance($tmpPath);
-            }
-        }
-
-        if (empty($records)) {
-            return back()->with('error', 'No readable attendance records found in the uploaded file. Please ensure the file has column headers (e.g. AC-No, Date, Clock In, Clock Out).');
-        }
-
-        // ── Helper to extract fields case-insensitively and flexibly ────────
-        $getField = function(array $rec, array $candidateKeys): string {
-            foreach ($candidateKeys as $k) {
-                if (isset($rec[$k]) && $rec[$k] !== null && $rec[$k] !== '') {
-                    $val = $rec[$k];
-                    if ($val instanceof \DateTimeInterface) {
-                        return $val->format('Y-m-d H:i:s');
-                    }
-                    return trim((string)$val);
-                }
-            }
-
-            // Normalised lookup: remove non-alphanumeric chars
-            $normalizedRec = [];
-            foreach ($rec as $k => $v) {
-                $normK = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', (string)$k));
-                $normalizedRec[$normK] = $v;
-            }
-
-            foreach ($candidateKeys as $k) {
-                $normSearch = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', (string)$k));
-                if (isset($normalizedRec[$normSearch]) && $normalizedRec[$normSearch] !== null && $normalizedRec[$normSearch] !== '') {
-                    $val = $normalizedRec[$normSearch];
-                    if ($val instanceof \DateTimeInterface) {
-                        return $val->format('Y-m-d H:i:s');
-                    }
-                    return trim((string)$val);
-                }
-            }
-
-            return '';
-        };
-
-        // ── Load employees with registered biometric device IDs ──────────────
-        // If device ID is not added to an employee, do NOT use emp ID / code / name to match them.
-        $allEmployees = Employee::activeRoster()
-            ->whereNotNull('device_user_id')
-            ->where('device_user_id', '!=', '')
-            ->select('id', 'employee_code', 'device_user_id', 'full_name', 'basic_salary')
-            ->get();
-
-        $empByDevice = [];
-
-        foreach ($allEmployees as $e) {
-            $dev = trim((string)$e->device_user_id);
-            if ($dev === '') continue;
-
-            $empByDevice[strtoupper($dev)] = $e;
-            $empByDevice[ltrim($dev, '0')] = $e;
-            if (is_numeric($dev)) {
-                $empByDevice[(int)$dev] = $e;
-                $empByDevice[(string)(int)$dev] = $e;
-            }
-        }
-
-        // ── Group records by (employee, date) and merge Morning+Afternoon ─
-        $grouped = [];
-
-        foreach ($records as $rec) {
-            $acNo = $getField($rec, [
-                'AC-No.', 'ac_no', 'AC-No', 'AC No', 'ACNo', 'User ID', 'UserId', 'User_ID',
-                'Enroll ID', 'EnrollID', 'Pin', 'PIN', 'No.', 'No', 'Badgenumber', 'ID'
-            ]);
-
-            $empNo = $getField($rec, [
-                'Emp No.', 'emp_no', 'Emp No', 'EmpNo', 'Employee Code', 'Staff No', 'employee_code'
-            ]);
-
-            $empName = $getField($rec, [
-                'Name', 'name', 'Employee Name', 'Emp Name', 'Staff Name', 'Full Name'
-            ]);
-
-            $dateRaw = $getField($rec, [
-                'Date', 'date', 'Attendance Date', 'Att Date', 'Punch Date', 'Date/Time', 'Time'
-            ]);
-
-            $session = $getField($rec, [
-                'Timetable', 'timetable', 'Session', 'session', 'Shift', 'shift', 'Schedule', 'schedule'
-            ]);
-
-            $clockIn = $getField($rec, [
-                'Clock In', 'clock_in', 'ClockIn', 'In', 'Time In', 'Check In', 'CheckIn', 'C/In', 'Morning In', 'morning_in'
-            ]);
-
-            $clockOut = $getField($rec, [
-                'Clock Out', 'clock_out', 'ClockOut', 'Out', 'Time Out', 'Check Out', 'CheckOut', 'C/Out', 'Afternoon Out', 'afternoon_out'
-            ]);
-
-            $absent = $getField($rec, ['Absent', 'absent']);
-            $late = $getField($rec, ['Late', 'late', 'Tardy', 'late_mins']);
-            $otTime = $getField($rec, ['OT Time', 'ot_time', 'OT', 'ot', 'Overtime', 'overtime']);
-            $workTime = $getField($rec, ['Work Time', 'work_time', 'Hours', 'hours', 'Actual Time', 'Work Hours']);
-
-            if (empty($dateRaw) || ($acNo === '' && $empNo === '' && $empName === '')) {
-                continue;
-            }
-
-            // Extract Attendance Date from 'Date' column
-            $date = null;
-
-            // Handle Excel serial date numbers (e.g. 45563)
-            if (is_numeric($dateRaw) && (float)$dateRaw > 30000 && (float)$dateRaw < 65000) {
-                try {
-                    $date = Carbon::createFromTimestampUTC(((float)$dateRaw - 25569) * 86400)->format('Y-m-d');
-                } catch (\Exception $e) {}
-            }
-
-            if (!$date) {
-                try {
-                    $date = Carbon::parse($dateRaw)->format('Y-m-d');
-                } catch (\Exception $e) {
-                    if (preg_match('/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/', $dateRaw, $m)) {
-                        if ((int)$m[1] > 12) {
-                            $date = Carbon::createFromDate($m[3], $m[2], $m[1])->format('Y-m-d');
-                        } else {
-                            try {
-                                $date = Carbon::createFromFormat('m/d/Y', "{$m[1]}/{$m[2]}/{$m[3]}")->format('Y-m-d');
-                            } catch (\Exception $e2) {
-                                try {
-                                    $date = Carbon::createFromFormat('d/m/Y', "{$m[1]}/{$m[2]}/{$m[3]}")->format('Y-m-d');
-                                } catch (\Exception $e3) {}
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!$date) {
-                continue;
-            }
-
-            $userKey = $acNo !== '' ? "AC:{$acNo}" : ($empNo !== '' ? "EMP:{$empNo}" : "NAME:{$empName}");
-
-            if (!isset($grouped[$userKey][$date])) {
-                $grouped[$userKey][$date] = [
-                    'emp_no'        => $empNo,
-                    'ac_no'         => $acNo,
-                    'emp_name'      => $empName,
-                    'morning_in'    => null,
-                    'morning_out'   => null,
-                    'afternoon_in'  => null,
-                    'afternoon_out' => null,
-                    'absent'        => false,
-                    'late_mins'     => 0,
-                    'ot_hours'      => 0,
-                    'work_hours'    => 0,
-                ];
-            }
-
-            $isMorning   = stripos($session, 'morning') !== false;
-            $isAfternoon = stripos($session, 'afternoon') !== false || stripos($session, 'evening') !== false;
-
-            // Helper to infer hour from string time
-            $timeToHour = function($t) {
-                if (empty($t)) return null;
-                $str = trim((string)$t);
-                if (preg_match('/(\d{1,2}):(\d{2})/', $str, $m)) {
-                    $h = (int)$m[1];
-                    if (preg_match('/pm/i', $str) && $h < 12) $h += 12;
-                    return $h + ((int)$m[2] / 60);
-                }
-                return null;
-            };
-
-            // Map clock times into sessions without requiring morning session
-            if ($isMorning) {
-                if (!empty($clockIn))  $grouped[$userKey][$date]['morning_in']  = $clockIn;
-                if (!empty($clockOut)) $grouped[$userKey][$date]['morning_out'] = $clockOut;
-            } elseif ($isAfternoon) {
-                if (!empty($clockIn))  $grouped[$userKey][$date]['afternoon_in']  = $clockIn;
-                if (!empty($clockOut)) $grouped[$userKey][$date]['afternoon_out'] = $clockOut;
-            } else {
-                $inHour  = $timeToHour($clockIn);
-                $outHour = $timeToHour($clockOut);
-
-                if (!empty($clockIn)) {
-                    if ($inHour !== null && $inHour >= 12.0) {
-                        $grouped[$userKey][$date]['afternoon_in'] = $clockIn;
-                    } else {
-                        $grouped[$userKey][$date]['morning_in'] = $clockIn;
-                    }
-                }
-                if (!empty($clockOut)) {
-                    if ($outHour !== null && $outHour < 13.0 && empty($grouped[$userKey][$date]['afternoon_in'])) {
-                        $grouped[$userKey][$date]['morning_out'] = $clockOut;
-                    } else {
-                        $grouped[$userKey][$date]['afternoon_out'] = $clockOut;
-                    }
-                }
-            }
-
-            // Accumulate absent/late/OT
-            if (strtolower($absent) === 'true' || $absent === '1') {
-                if ($isMorning && empty($clockIn)) {
-                    $grouped[$userKey][$date]['absent_morning'] = true;
-                }
-                if ($isAfternoon && empty($clockIn)) {
-                    $grouped[$userKey][$date]['absent_afternoon'] = true;
-                }
-            }
-
-            if (!empty($late)) {
-                if (preg_match('/^(\d+):(\d+)$/', $late, $lm)) {
-                    $grouped[$userKey][$date]['late_mins'] += ((int)$lm[1] * 60) + (int)$lm[2];
-                } elseif (is_numeric($late)) {
-                    $grouped[$userKey][$date]['late_mins'] += (float) $late;
-                }
-            }
-
-            if (!empty($otTime)) {
-                if (preg_match('/^(\d+):(\d+)$/', $otTime, $om)) {
-                    $otH = (int)$om[1] + ((int)$om[2] / 60);
-                    $grouped[$userKey][$date]['ot_hours'] = max($grouped[$userKey][$date]['ot_hours'], round($otH, 2));
-                } elseif (is_numeric($otTime)) {
-                    $grouped[$userKey][$date]['ot_hours'] = max($grouped[$userKey][$date]['ot_hours'], (float) $otTime);
-                }
-            }
-
-            if (!empty($workTime)) {
-                if (preg_match('/^(\d+):(\d+)$/', $workTime, $wm)) {
-                    $wH = (int)$wm[1] + ((int)$wm[2] / 60);
-                    $grouped[$userKey][$date]['work_hours'] += round($wH, 2);
-                } elseif (is_numeric($workTime)) {
-                    $grouped[$userKey][$date]['work_hours'] += (float) $workTime;
-                }
-            }
-        }
-
-        // ── Upsert attendance records ─────────────────────────────────────
-        $saved              = 0;
-        $skippedOlderCount  = 0;
-        $skippedUnmatched   = 0;
-        $errors             = [];
-
-        foreach ($grouped as $userKey => $dates) {
-            $firstEntry = array_values($dates)[0] ?? [];
-            $acNo       = trim($firstEntry['ac_no'] ?? '');
-            $empNo      = trim($firstEntry['emp_no'] ?? '');
-            $rawName    = trim($firstEntry['emp_name'] ?? '');
-
-            $employee = null;
-
-            // Strict matching: ONLY by registered Device User ID.
-            // If device id is not added to an employee, do NOT use employee ID / code / name.
-            $searchDev = $acNo !== '' ? $acNo : $empNo;
-            if ($searchDev !== '') {
-                $devUpper = strtoupper(trim((string)$searchDev));
-                $devStrip = ltrim($devUpper, '0');
-                if (isset($empByDevice[$devUpper])) {
-                    $employee = $empByDevice[$devUpper];
-                } elseif ($devStrip !== '' && isset($empByDevice[$devStrip])) {
-                    $employee = $empByDevice[$devStrip];
-                } elseif (is_numeric($searchDev) && isset($empByDevice[(int)$searchDev])) {
-                    $employee = $empByDevice[(int)$searchDev];
-                }
-            }
-
-            if (!$employee) {
-                $skippedUnmatched++;
-                $label = $searchDev !== '' ? "Device ID #{$searchDev}" : ($rawName !== '' ? $rawName : "Unknown");
-                $errors[] = "Skipped: {$label} - No employee found with this registered Device ID. (If Device ID is not added to the employee's profile, attendance cannot be matched).";
-                continue;
-            }
-
-            foreach ($dates as $date => $info) {
-                // ── "use after last day" Smart Filter & Missing Part Completion ──
-                // If onlyAfterLastDay is on:
-                // - ALWAYS process $date >= $lastRecordedDate (the last day itself is often incomplete and needs its missing parts filled).
-                // - For $date < $lastRecordedDate, only skip if the existing record in database is already 100% complete with full hours.
-                if ($onlyAfterLastDay && $lastRecordedDate) {
-                    if ($date < $lastRecordedDate) {
-                        $existingRecord = Attendance::where('employee_id', $employee->id)
-                            ->whereDate('attendance_date', $date)
-                            ->first();
-
-                        $isMissingParts = empty($existingRecord) || (
-                            empty($existingRecord->morning_out) ||
-                            empty($existingRecord->afternoon_in) ||
-                            empty($existingRecord->afternoon_out) ||
-                            empty($existingRecord->check_out) ||
-                            $existingRecord->status === 'half_day' ||
-                            (float)$existingRecord->hours_worked < 4.0
-                        );
-
-                        // If not missing parts, this older record is already complete -> safely skip
-                        if (!$isMissingParts) {
-                            $skippedOlderCount++;
-                            continue;
-                        }
-                    }
-                }
-
-                $hasAnyPunch = !empty($info['morning_in']) || !empty($info['morning_out'])
-                            || !empty($info['afternoon_in']) || !empty($info['afternoon_out']);
-                if (!$hasAnyPunch) {
-                    continue;
-                }
-
-                // Helper to format clean time H:i
-                $toTime = function($val) {
-                    if (empty($val)) return null;
-                    $str = trim((string)$val);
-                    if ($str === '') return null;
-                    if ($val instanceof \DateTimeInterface) {
-                        return $val->format('H:i');
-                    }
-                    if (preg_match('/(\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AaPp][Mm])?)/', $str, $matches)) {
-                        try {
-                            return Carbon::parse($matches[1])->format('H:i');
-                        } catch (\Exception $e) {}
-                    }
-                    try {
-                        return Carbon::parse($str)->format('H:i');
-                    } catch (\Exception $e) {
-                        return substr($str, 0, 5);
-                    }
-                };
-
-                $mInTime  = $toTime($info['morning_in']);
-                $mOutTime = $toTime($info['morning_out']);
-                $aInTime  = $toTime($info['afternoon_in']);
-                $aOutTime = $toTime($info['afternoon_out']);
-
-                // Find existing record to merge and fill missing parts:
-                $existing = Attendance::where('employee_id', $employee->id)
-                    ->whereDate('attendance_date', $date)
-                    ->first();
-
-                // Seamlessly merge existing punches with new upload punches:
-                $mInTime   = $mInTime   ?: ($existing?->morning_in);
-                $mOutTime  = $mOutTime  ?: ($existing?->morning_out);
-                $aInTime   = $aInTime   ?: ($existing?->afternoon_in);
-                $aOutTime  = $aOutTime  ?: ($existing?->afternoon_out);
-
-                $checkIn  = $mInTime ?: ($aInTime ?: ($existing?->check_in));
-                $checkOut = $aOutTime ?: ($mOutTime ?: ($existing?->check_out));
-
-                // Calculate hours worked across sessions
-                $hours = (float) ($info['work_hours'] ?? 0);
-                $calcHours = 0;
-                if ($mInTime && $mOutTime) {
-                    try {
-                        $mIn  = Carbon::createFromFormat('H:i', $mInTime);
-                        $mOut = Carbon::createFromFormat('H:i', $mOutTime);
-                        $calcHours += max(0, round($mOut->diffInMinutes($mIn) / 60, 2));
-                    } catch (\Exception $e) {}
-                }
-                if ($aInTime && $aOutTime) {
-                    try {
-                        $aIn  = Carbon::createFromFormat('H:i', $aInTime);
-                        $aOut = Carbon::createFromFormat('H:i', $aOutTime);
-                        $calcHours += max(0, round($aOut->diffInMinutes($aIn) / 60, 2));
-                    } catch (\Exception $e) {}
-                }
-                if ($calcHours == 0 && $checkIn && $checkOut) {
-                    try {
-                        $cIn  = Carbon::createFromFormat('H:i', $checkIn);
-                        $cOut = Carbon::createFromFormat('H:i', $checkOut);
-                        $calcHours = max(0, round($cOut->diffInMinutes($cIn) / 60, 2));
-                    } catch (\Exception $e) {}
-                }
-
-                if ($calcHours > 0) {
-                    $hours = $calcHours;
-                } elseif ($hours == 0) {
-                    if ($mInTime && ($aInTime || $aOutTime)) {
-                        $hours = 8.0;
-                    } elseif ($mInTime || $aInTime || $aOutTime) {
-                        $hours = 4.0;
-                    }
-                }
-
-                // Determine status:
-                // Under company policy, if an employee has punch records or worked hours,
-                // do NOT require morning session and do NOT penalize as half_day! Save as PRESENT!
-                $hasMorningIn   = !empty($mInTime);
-                $hasAfternoonIn = !empty($aInTime) || !empty($aOutTime);
-
-                if ($hasMorningIn || $hasAfternoonIn || !empty($checkIn) || !empty($checkOut) || $hours > 0) {
-                    $status = 'present';
-                } elseif (!empty($info['absent_morning']) || !empty($info['absent_afternoon'])) {
-                    $status = 'absent';
-                } else {
-                    $status = 'absent';
-                }
-
-                // Overtime calculation
-                $otHours = (float) ($info['ot_hours'] ?? 0);
-                $otType  = 'none';
-                if ($otHours > 0) {
-                    $dayOfWeek = Carbon::parse($date)->dayOfWeek;
-                    if ($dayOfWeek === 0 || $dayOfWeek === 6) {
-                        $otType = 'rest_day';
-                    }
-                }
-
-                $basic = (float) ($employee->basic_salary ?? 0);
-                $otPay = \App\Models\Payroll::calculateOvertimePay($basic, $otHours, $otType);
-
-                Attendance::updateOrCreate(
-                    [
-                        'employee_id'     => $employee->id,
-                        'attendance_date' => $date,
-                    ],
-                    [
-                        'morning_in'          => $mInTime,
-                        'morning_out'         => $mOutTime,
-                        'afternoon_in'        => $aInTime,
-                        'afternoon_out'       => $aOutTime,
-                        'check_in'            => $checkIn,
-                        'check_out'           => $checkOut,
-                        'hours_worked'        => $hours,
-                        'late_minutes'        => \App\Services\BiometricPunchService::calculateLateMinutes($mInTime ?: $checkIn),
-                        'status'              => $status,
-                        'source'              => 'bulk_upload',
-                        'is_approved'         => true,
-                        'approved_by'         => Auth::id(),
-                        'overtime_hours'      => $otHours,
-                        'overtime_type'       => $otType,
-                        'overtime_pay'        => $otPay,
-                        'biometric_device_id' => $employee->device_user_id,
-                        'notes'               => $info['late_mins'] > 0 ? "Late: {$info['late_mins']} min" : null,
-                    ]
-                );
-                $saved++;
-                $savedDates[$date] = true;
-            }
-        }
-
-        // ── Determine target date to show after import ─────────────────────
-        $targetDate = null;
-        if (!empty($savedDates)) {
-            krsort($savedDates);
-            $targetDate = array_key_first($savedDates);
-        } elseif ($lastRecordedDate) {
-            $targetDate = $lastRecordedDate;
-        }
-
-        // ── Response Message ───────────────────────────────────────────────
-        if ($saved === 0 && $skippedOlderCount > 0) {
-            $message = "ℹ️ No new records imported: all {$skippedOlderCount} record(s) in this file are already recorded. To re-import them, uncheck 'Only import records after last recorded day'.";
-            $status = 'info';
-        } else {
-            $message = "✅ Import complete: {$saved} attendance record(s) saved.";
-            if ($skippedOlderCount > 0) {
-                $message .= " ({$skippedOlderCount} older record(s) skipped).";
-            }
-            if ($skippedUnmatched > 0) {
-                $message .= " ⚠️ {$skippedUnmatched} device ID(s) could not be matched with registered employees.";
-            }
-            $status = ($skippedUnmatched > 0 && $saved === 0) ? 'error' : 'success';
-        }
-
-        if ($request->wantsJson()) {
-            return response()->json([
-                'success'     => $saved > 0,
-                'saved'       => $saved,
-                'skipped'     => $skippedUnmatched,
-                'older'       => $skippedOlderCount,
-                'errors'      => $errors,
-                'message'     => $message,
-                'target_date' => $targetDate,
-            ]);
-        }
-
-        return redirect()->route('attendance.index', $targetDate ? ['date' => $targetDate] : [])->with($status, $message);
-    }
-
-    /**
-     * Parse a CSV/TSV file in biometric machine export format.
-     */
-    private function parseCsvAttendance(string $filePath): array
-    {
-        $rows    = [];
-        $headers = null;
-
-        if (($handle = fopen($filePath, 'r')) !== false) {
-            $firstLine = fgets($handle);
-            rewind($handle);
-
-            $delimiter = ',';
-            if (substr_count($firstLine, "\t") > substr_count($firstLine, ',')) {
-                $delimiter = "\t";
-            } elseif (substr_count($firstLine, ';') > substr_count($firstLine, ',')) {
-                $delimiter = ';';
-            }
-
-            while (($row = fgetcsv($handle, 2000, $delimiter)) !== false) {
-                if ($headers === null) {
-                    $headers = array_map(function ($h) {
-                        return trim(str_replace("\xEF\xBB\xBF", '', (string)$h));
-                    }, $row);
-                    continue;
-                }
-
-                if (empty(array_filter($row))) {
-                    continue;
-                }
-
-                if (count($row) > count($headers)) {
-                    $row = array_slice($row, 0, count($headers));
-                } elseif (count($row) < count($headers)) {
-                    $row = array_pad($row, count($headers), null);
-                }
-
-                $rows[] = array_combine($headers, $row);
-            }
-            fclose($handle);
-        }
-
-        return $rows;
-    }
-
-    /**
-     * Parse an XLSX file using openspout with safe DateTime handling.
-     */
-    private function parseXlsxAttendance(string $filePath): array
-    {
-        $rows    = [];
-        $headers = null;
-
-        try {
-            $reader = new \OpenSpout\Reader\XLSX\Reader();
-            $reader->open($filePath);
-
-            foreach ($reader->getSheetIterator() as $sheet) {
-                foreach ($sheet->getRowIterator() as $row) {
-                    $cells = $row->getCells();
-                    $values = [];
-                    foreach ($cells as $cell) {
-                        $val = $cell->getValue();
-                        if ($val instanceof \DateTimeInterface) {
-                            $values[] = $val->format('Y-m-d H:i:s');
-                        } elseif (is_numeric($val) && (float)$val > 30000 && (float)$val < 65000) {
-                            $values[] = (string)$val;
-                        } else {
-                            $values[] = is_scalar($val) ? (string)$val : '';
-                        }
-                    }
-
-                    if ($headers === null) {
-                        $headers = array_map(function ($v) {
-                            return trim(str_replace("\xEF\xBB\xBF", '', (string)$v));
-                        }, $values);
-                        continue;
-                    }
-
-                    if (empty(array_filter($values))) {
-                        continue;
-                    }
-
-                    if (count($values) > count($headers)) {
-                        $values = array_slice($values, 0, count($headers));
-                    } elseif (count($values) < count($headers)) {
-                        $values = array_pad($values, count($headers), null);
-                    }
-
-                    $rows[] = array_combine($headers, $values);
-                }
-                break; // First sheet only
-            }
-
-            $reader->close();
-        } catch (\Throwable $e) {
-            // Return empty if XLSX reading fails
-        }
-
-        return $rows;
-    }
-
-    /**
-     * Download a clean CSV template matching the biometric machine export format.
-     */
-    public function downloadTemplate()
-    {
-        $headers = [
-            'Emp No.', 'AC-No.', 'No.', 'Name', 'Auto-Assign', 'Date',
-            'Timetable', 'On duty', 'Off duty', 'Clock In', 'Clock Out',
-            'Normal', 'Real time', 'Late', 'Early', 'Absent', 'OT Time',
-            'Work Time', 'Exception', 'Must C/In', 'Must C/Out', 'Department',
-        ];
-
-        $csv = implode(',', $headers) . "\r\n";
-
-        return response($csv, 200, [
-            'Content-Type'        => 'text/csv',
-            'Content-Disposition' => 'attachment; filename="attendance-import-template.csv"',
-        ]);
     }
 
     /**
