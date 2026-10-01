@@ -510,63 +510,73 @@
                             $custodianName = trim($custM[1]);
                         }
 
-                        // 2. Identify Asking Question Person (Requester - ጥያቄ አቅራቢ)
-                        $askingEmployee = null;
+                        // 2. Identify Beneficiary / Approvee Employee (e.g. Nebeyu Engedashet)
+                        $beneficiaryEmployee = $rawReq?->employee;
+                        $beneficiaryEmpId = $beneficiaryEmployee?->id;
+
+                        // 3. Identify Asking Person (Requester - ጥያቄ አቅራቢ)
+                        // STRICT RULE: Show the person who ASKED / SUBMITTED the request, NOT the approved person!
                         $askingUser = null;
+                        $askingEmployee = null;
 
-                        if ($mReq) {
-                            if ($mReq->employee && (!$custodianEmpId || $mReq->employee->id !== $custodianEmpId)) {
-                                $askingEmployee = $mReq->employee;
+                        if ($rawReq) {
+                            // In ExpenseRequest, user_id is the person who asked (e.g. General Admin)
+                            $askingUser = $rawReq->user;
+                            if ($askingUser) {
+                                $askingEmployee = $askingUser->employee 
+                                    ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
+                                    ?? ($askingUser->email ? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('email', $askingUser->email)->first() : null);
                             }
-                            if (!$askingEmployee && $mReq->reportedBy && (!$custodianUserId || $mReq->reportedBy->id !== $custodianUserId)) {
-                                $askingUser = $mReq->reportedBy;
-                                $askingEmployee = $mReq->reportedBy->employee;
-                            }
-                            if (!$askingEmployee && $mReq->employee) {
-                                $askingEmployee = $mReq->employee;
-                            }
-                            if (!$askingUser && $mReq->reportedBy) {
-                                $askingUser = $mReq->reportedBy;
-                            }
-                        }
 
-                        if (!$askingEmployee && $rawReq) {
-                            if ($rawReq->employee && (!$custodianEmpId || $rawReq->employee->id !== $custodianEmpId)) {
+                            // Only fallback to rawReq->employee if rawReq has no user
+                            if (!$askingUser && !$askingEmployee && $rawReq->employee && (!$custodianEmpId || $rawReq->employee->id !== $custodianEmpId)) {
                                 $askingEmployee = $rawReq->employee;
                             }
-                            if (!$askingUser && $rawReq->user && (!$custodianUserId || $rawReq->user->id !== $custodianUserId)) {
-                                $askingUser = $rawReq->user;
-                                $askingEmployee = $askingEmployee ?: $rawReq->user->employee;
+                        } elseif ($mReq) {
+                            // In MaintenanceRequest, reportedBy is the person who reported/asked
+                            $askingUser = $mReq->reportedBy;
+                            if ($askingUser) {
+                                $askingEmployee = $askingUser->employee 
+                                    ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
+                                    ?? ($askingUser->email ? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('email', $askingUser->email)->first() : null);
                             }
-                            if (!$askingEmployee && $rawReq->employee) {
-                                $askingEmployee = $rawReq->employee;
-                            }
-                            if (!$askingUser && $rawReq->user) {
-                                $askingUser = $rawReq->user;
-                            }
-                        }
 
-                        if (!$askingEmployee && $item->type === 'purchase_request') {
+                            if (!$askingUser && !$askingEmployee && $mReq->employee && (!$custodianEmpId || $mReq->employee->id !== $custodianEmpId)) {
+                                $askingEmployee = $mReq->employee;
+                            }
+                        } elseif ($item->type === 'purchase_request') {
                             $pr = $item->raw_model;
                             $askingUser = $pr?->requestedBy;
-                            $askingEmployee = $askingUser?->employee;
+                            if ($askingUser) {
+                                $askingEmployee = $askingUser->employee 
+                                    ?? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('user_id', $askingUser->id)->first()
+                                    ?? ($askingUser->email ? \App\Models\Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->where('email', $askingUser->email)->first() : null);
+                            }
                         }
 
                         // Asking Person Details (ጥያቄ አቅራቢ)
-                        $requesterName = $askingEmployee?->full_name 
-                            ?? $askingUser?->name 
-                            ?? ($mReq?->employee?->full_name ?? ($mReq?->reportedBy?->name ?? 'Requester'));
+                        $requesterName = $askingUser?->name 
+                            ?? $askingEmployee?->full_name 
+                            ?? 'Requester';
 
-                        $requesterAcc = $askingEmployee?->account_number ?? $askingUser?->employee?->account_number ?? null;
-                        $requesterBank = $askingEmployee?->bank_name ?? $askingUser?->employee?->bank_name ?? null;
-                        $requesterPhone = $askingEmployee?->phone ?? $askingUser?->employee?->phone ?? null;
+                        $requesterEmail = $askingUser?->email ?? $askingEmployee?->email ?? null;
+                        $requesterAcc = $askingEmployee?->account_number ?? null;
+                        $requesterBank = $askingEmployee?->bank_name ?? null;
+                        $requesterPhone = $askingEmployee?->phone ?? null;
 
                         // Ensure we NEVER display the approved person / custodian's bank account
                         if ($custodian?->employee && $requesterAcc === $custodian->employee->account_number) {
                             $requesterAcc = null;
                         }
 
-                        // Optional external technician info (if recorded separately from custodian)
+                        // Ensure we NEVER display the approved beneficiary's bank account when distinct from Asker
+                        if ($beneficiaryEmployee && $askingEmployee && $beneficiaryEmployee->id !== $askingEmployee->id) {
+                            if ($requesterAcc === $beneficiaryEmployee->account_number) {
+                                $requesterAcc = null;
+                            }
+                        }
+
+                        // Optional external technician info (if recorded on maintenance ticket)
                         $techName = $mReq?->maintenance_person_name;
                         $techAcc = $mReq?->maintenance_person_account;
                         $techPhone = $mReq?->maintenance_person_phone;
@@ -577,7 +587,7 @@
                             $techName = null;
                         }
 
-                        $hasBankInfo = !empty($requesterAcc) || !empty($techAcc) || !empty($requesterName) || !empty($requesterPhone);
+                        $hasBankInfo = true;
                     @endphp
 
                     @if($hasBankInfo)
@@ -604,19 +614,19 @@
                                         <div class="p-3 rounded-3 bg-success bg-opacity-10 border border-success border-opacity-25 h-100">
                                             <div class="d-flex justify-content-between align-items-center mb-1">
                                                 <small class="text-success text-uppercase fw-bold" style="font-size:0.75rem;">
-                                                    <i class="fa-solid fa-credit-card me-1"></i>Requester Bank Account (ጥያቄ አቅራቢ)
+                                                    <i class="fa-solid fa-credit-card me-1"></i>Requester Bank Account (የጠያቂው የባንክ ሂሳብ)
                                                 </small>
-                                                @if($requesterAcc || $techAcc)
-                                                    <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-semibold" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $requesterAcc ?: $techAcc }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
+                                                @if($requesterAcc)
+                                                    <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-semibold" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $requesterAcc }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
                                                         <i class="fa-regular fa-copy me-1"></i>Copy
                                                     </button>
                                                 @endif
                                             </div>
                                             <div class="fs-5 fw-bold text-success font-monospace">
-                                                {{ $requesterAcc ?: ($techAcc ?: 'Not on file') }}
+                                                {{ $requesterAcc ?: 'Not on file' }}
                                             </div>
                                             <small class="text-muted d-block mt-1" style="font-size:0.75rem;">
-                                                <i class="fa-solid fa-building-columns me-1 text-secondary"></i>Bank: <strong>{{ $requesterBank ?: ($techAcc ? 'Technician Bank Account' : 'Commercial Bank of Ethiopia (CBE) / Local Bank') }}</strong>
+                                                <i class="fa-solid fa-building-columns me-1 text-secondary"></i>Bank: <strong>{{ $requesterBank ?: ($requesterAcc ? 'Commercial Bank of Ethiopia (CBE) / Local Bank' : 'No account on file for ' . $requesterName) }}</strong>
                                             </small>
                                         </div>
                                     </div>
@@ -625,11 +635,16 @@
                                     <div class="col-md-4">
                                         <div class="p-3 rounded-3 bg-light border h-100">
                                             <small class="text-muted text-uppercase fw-semibold d-block mb-1" style="font-size:0.75rem;">
-                                                <i class="fa-solid fa-user-tag text-primary me-1"></i>Asking Person / Requester (ጥያቄ አቅራቢ)
+                                                <i class="fa-solid fa-user-pen text-primary me-1"></i>Asking Person / Requester (ጥያቄ አቅራቢ)
                                             </small>
                                             <div class="fs-6 fw-bold text-dark">
                                                 {{ $requesterName }}
                                             </div>
+                                            @if($requesterEmail)
+                                                <div class="small text-muted" style="font-size:0.75rem;">
+                                                    <i class="fa-regular fa-envelope me-1"></i>{{ $requesterEmail }}
+                                                </div>
+                                            @endif
                                             @if($requesterPhone)
                                                 <div class="small mt-1 text-muted">
                                                     <i class="fa-solid fa-phone text-info me-1"></i>Tel: <a href="tel:{{ $requesterPhone }}" class="fw-bold text-dark text-decoration-none">{{ $requesterPhone }}</a>
@@ -637,6 +652,11 @@
                                             @elseif($techPhone)
                                                 <div class="small mt-1 text-muted">
                                                     <i class="fa-solid fa-phone text-info me-1"></i>Tel: <a href="tel:{{ $techPhone }}" class="fw-bold text-dark text-decoration-none">{{ $techPhone }}</a>
+                                                </div>
+                                            @endif
+                                            @if($beneficiaryEmployee && $beneficiaryEmployee->full_name !== $requesterName)
+                                                <div class="mt-2 pt-2 border-top small text-muted" style="font-size:0.72rem;">
+                                                    <i class="fa-solid fa-id-badge text-info me-1"></i>Assigned Beneficiary: <strong class="text-dark">{{ $beneficiaryEmployee->full_name }}</strong>
                                                 </div>
                                             @endif
                                             @if($techName && $techName !== $requesterName)

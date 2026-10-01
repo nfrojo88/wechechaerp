@@ -67,11 +67,11 @@ class ApprovalHubController extends Controller
             };
 
             // True Asking Person / Requester who submitted the request (not the custodian/approver)
-            $applicantName = $req->maintenanceRequest?->employee?->full_name
+            $applicantName = $req->user?->name
                 ?? $req->maintenanceRequest?->reportedBy?->name
-                ?? ($req->employee ? $req->employee->full_name : ($req->user->name ?? 'Employee'));
-            $deptOrProject = $req->maintenanceRequest?->employee?->department
-                ?? ($req->employee->department ?? ($req->user->department ?? 'General Service / Operations'));
+                ?? ($req->employee ? $req->employee->full_name : 'Employee');
+            $deptOrProject = $req->user?->department
+                ?? ($req->maintenanceRequest?->reportedBy?->department ?? ($req->employee?->department ?? 'General Service / Operations'));
             $categoryName = $req->category . ($req->other_reason ? ' (' . $req->other_reason . ')' : '');
             if ($req->maintenanceRequest) {
                 $categoryName .= ' [Ticket #' . $req->maintenanceRequest->request_no . ']';
