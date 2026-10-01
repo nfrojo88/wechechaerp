@@ -52,8 +52,18 @@
                         </a>
                     </li>
                     <li>
-                        <a class="dropdown-item py-2" href="{{ route('store-manager.inventory.export-pdf', ['by_store' => 1]) }}" target="_blank">
-                            <i class="fas fa-layer-group text-success me-2"></i> All Inventory by Store (Grouped)
+                        <a class="dropdown-item py-2" href="{{ route('store-manager.inventory.export-pdf', array_merge(request()->query(), ['category' => 'all'])) }}" target="_blank">
+                            <i class="fas fa-layer-group text-success me-2"></i> All (Separated: Consumables &amp; Fixed Assets)
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item py-2" href="{{ route('store-manager.inventory.export-pdf', array_merge(request()->query(), ['category' => 'consumable'])) }}" target="_blank">
+                            <i class="fas fa-boxes-stacked text-primary me-2"></i> Consumables Only (PDF)
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item py-2" href="{{ route('store-manager.inventory.export-pdf', array_merge(request()->query(), ['category' => 'fixed_asset'])) }}" target="_blank">
+                            <i class="fas fa-tools text-warning me-2"></i> Fixed Assets Only (PDF)
                         </a>
                     </li>
                     @if(isset($stores) && $stores->count() > 0)
@@ -90,9 +100,17 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold small text-uppercase">Search Product</label>
-                    <input type="text" name="search" class="form-control" value="{{ request('search') }}" placeholder="Product name or code...">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold small text-uppercase">Material Type</label>
+                    <select name="category" class="form-select" onchange="this.form.submit()">
+                        <option value="all" {{ ($categoryFilter ?? 'all') === 'all' ? 'selected' : '' }}>All Types (Consumable &amp; Fixed)</option>
+                        <option value="consumable" {{ ($categoryFilter ?? '') === 'consumable' ? 'selected' : '' }}>Consumables (መጠቀሚያ)</option>
+                        <option value="fixed_asset" {{ ($categoryFilter ?? '') === 'fixed_asset' ? 'selected' : '' }}>Fixed Assets (ቋሚ እቃ)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label fw-semibold small text-uppercase">Search</label>
+                    <input type="text" name="search" class="form-control" value="{{ request('search') }}" placeholder="Name or code...">
                 </div>
                 <div class="col-md-2 pt-4">
                     <div class="form-check">
@@ -100,14 +118,51 @@
                         <label class="form-check-label fw-semibold" for="lowStockCheck">Low Stock Only</label>
                     </div>
                 </div>
-                <div class="col-md-3 d-flex gap-2">
+                <div class="col-md-2 d-flex gap-2">
                     <button type="submit" class="btn btn-primary flex-fill"><i class="fas fa-filter me-1"></i>Filter</button>
                     <a href="{{ route('store-manager.inventory.export-pdf', request()->query()) }}" target="_blank" class="btn btn-outline-danger" title="Export this view to PDF">
-                        <i class="fas fa-file-pdf"></i> PDF
+                        <i class="fas fa-file-pdf"></i>
                     </a>
-                    <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-secondary flex-fill">Reset</a>
+                    <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-secondary"><i class="fas fa-redo"></i></a>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Material Type Navigation Tabs -->
+    <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <ul class="nav nav-pills gap-2 p-1 bg-light rounded-3 border">
+            <li class="nav-item">
+                <a class="nav-link py-1.5 px-3 fw-bold {{ ($categoryFilter ?? 'all') === 'all' ? 'active shadow-xs' : 'text-dark' }}" 
+                   href="{{ route('store-manager.inventory.all', array_merge(request()->query(), ['category' => 'all', 'page' => 1])) }}">
+                    <i class="fas fa-layer-group me-1.5"></i>All Materials 
+                    <span class="badge {{ ($categoryFilter ?? 'all') === 'all' ? 'bg-white text-primary' : 'bg-secondary' }} ms-1">{{ number_format($countAll ?? 0) }}</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link py-1.5 px-3 fw-bold {{ ($categoryFilter ?? '') === 'consumable' ? 'active bg-primary shadow-xs' : 'text-dark' }}" 
+                   href="{{ route('store-manager.inventory.all', array_merge(request()->query(), ['category' => 'consumable', 'page' => 1])) }}">
+                    <i class="fas fa-box-open me-1.5"></i>Consumables (መጠቀሚያ)
+                    <span class="badge {{ ($categoryFilter ?? '') === 'consumable' ? 'bg-white text-primary' : 'bg-primary bg-opacity-25 text-primary' }} ms-1">{{ number_format($countConsumable ?? 0) }}</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link py-1.5 px-3 fw-bold {{ ($categoryFilter ?? '') === 'fixed_asset' ? 'active bg-success shadow-xs' : 'text-dark' }}" 
+                   href="{{ route('store-manager.inventory.all', array_merge(request()->query(), ['category' => 'fixed_asset', 'page' => 1])) }}">
+                    <i class="fas fa-tools me-1.5"></i>Fixed Assets &amp; Equipment (ቋሚ እቃ)
+                    <span class="badge {{ ($categoryFilter ?? '') === 'fixed_asset' ? 'bg-white text-success' : 'bg-success bg-opacity-25 text-success' }} ms-1">{{ number_format($countFixedAsset ?? 0) }}</span>
+                </a>
+            </li>
+        </ul>
+
+        <div class="text-muted small">
+            @if(($categoryFilter ?? 'all') === 'consumable')
+                Showing <strong class="text-primary"><i class="fas fa-box-open me-1"></i>Consumable Materials</strong>
+            @elseif(($categoryFilter ?? 'all') === 'fixed_asset')
+                Showing <strong class="text-success"><i class="fas fa-tools me-1"></i>Fixed Assets &amp; Equipment</strong>
+            @else
+                Showing <strong class="text-dark">All Materials</strong> (Consumables &amp; Fixed Assets)
+            @endif
         </div>
     </div>
 
@@ -157,6 +212,11 @@
                             <td>
                                 <strong class="text-primary">{{ $item['product_name'] }}</strong>
                                 <span class="badge bg-light text-primary border ms-1 fw-semibold">{{ $item['product_unit'] }}</span>
+                                @if(!empty($item['is_fixed_asset']))
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1"><i class="fas fa-tools me-1"></i>Fixed Asset</span>
+                                @else
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1"><i class="fas fa-box me-1"></i>Consumable</span>
+                                @endif
                                 @if($item['product_code'])
                                     <br><small class="text-muted"><i class="fas fa-barcode me-1"></i>{{ $item['product_code'] }}</small>
                                 @endif
@@ -254,6 +314,15 @@
                             <td>
                                 <strong class="text-primary">{{ $item->product->name ?? 'N/A' }}</strong>
                                 <span class="badge bg-light text-primary border ms-1 fw-semibold">{{ $unitStr }}</span>
+                                @php
+                                    $cStr = strtolower($item->product->category ?? '');
+                                    $isFA = str_contains($cStr, 'fixed') || str_contains($cStr, 'asset') || str_contains($cStr, 'equipment');
+                                @endphp
+                                @if($isFA)
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1"><i class="fas fa-tools me-1"></i>Fixed Asset</span>
+                                @else
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1"><i class="fas fa-box me-1"></i>Consumable</span>
+                                @endif
                                 @if($item->product && $item->product->code)
                                     <br><small class="text-muted"><i class="fas fa-barcode me-1"></i>{{ $item->product->code }}</small>
                                 @endif

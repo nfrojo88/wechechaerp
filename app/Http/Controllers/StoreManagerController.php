@@ -188,8 +188,9 @@ class StoreManagerController extends Controller
     public function allInventory(Request $request)
     {
         $selectedStoreId = $request->input('store_id');
-        $search = $request->input('search');
-        $lowStockOnly = $request->boolean('low_stock');
+        $search          = $request->input('search');
+        $lowStockOnly    = $request->boolean('low_stock');
+        $categoryFilter  = $request->input('category', 'all'); // 'all', 'consumable', 'fixed_asset'
 
         $stores = Store::where('is_active', true)->orderBy('name')->get();
         $products = Product::where('is_active', true)->orderBy('name')->get();
@@ -205,6 +206,30 @@ class StoreManagerController extends Controller
             }
         }
 
+        // Base query for category tab counts
+        $countQuery = Inventory::whereHas('store', fn($q) => $q->where('is_active', true));
+        if ($selectedStoreId) {
+            $countQuery->where('store_id', $selectedStoreId);
+        }
+        if ($search) {
+            $countQuery->whereHas('product', fn($q) => $q->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%"));
+        }
+        if ($lowStockOnly) {
+            $countQuery->whereColumn('quantity_on_hand', '<=', 'min_stock');
+        }
+
+        $allProductIdsInScope = (clone $countQuery)->pluck('product_id')->unique();
+        $countAll = $allProductIdsInScope->count();
+
+        $countFixedAsset = Product::whereIn('id', $allProductIdsInScope)
+            ->where(function($q) {
+                $q->whereRaw('LOWER(category) LIKE ?', ['%fixed%'])
+                  ->orWhereRaw('LOWER(category) LIKE ?', ['%asset%'])
+                  ->orWhereRaw('LOWER(category) LIKE ?', ['%equipment%']);
+            })->count();
+
+        $countConsumable = max(0, $countAll - $countFixedAsset);
+
         if ($selectedStoreId) {
             // Single Store View
             $query = Inventory::with('product', 'store')
@@ -219,6 +244,22 @@ class StoreManagerController extends Controller
                 $query->whereColumn('quantity_on_hand', '<=', 'min_stock');
             }
 
+            if ($categoryFilter === 'consumable') {
+                $query->whereHas('product', function ($q) {
+                    $q->whereRaw('LOWER(category) NOT LIKE ?', ['%fixed%'])
+                      ->whereRaw('LOWER(category) NOT LIKE ?', ['%asset%'])
+                      ->whereRaw('LOWER(category) NOT LIKE ?', ['%equipment%']);
+                });
+            } elseif ($categoryFilter === 'fixed_asset') {
+                $query->whereHas('product', function ($q) {
+                    $q->where(function ($sub) {
+                        $sub->whereRaw('LOWER(category) LIKE ?', ['%fixed%'])
+                            ->orWhereRaw('LOWER(category) LIKE ?', ['%asset%'])
+                            ->orWhereRaw('LOWER(category) LIKE ?', ['%equipment%']);
+                    });
+                });
+            }
+
             $inventory = $query->orderBy('quantity_on_hand', 'desc')->paginate(25)->withQueryString();
             $isGrouped = false;
         } else {
@@ -230,6 +271,22 @@ class StoreManagerController extends Controller
                 $query->whereHas('product', fn($q) => $q->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%"));
             }
 
+            if ($categoryFilter === 'consumable') {
+                $query->whereHas('product', function ($q) {
+                    $q->whereRaw('LOWER(category) NOT LIKE ?', ['%fixed%'])
+                      ->whereRaw('LOWER(category) NOT LIKE ?', ['%asset%'])
+                      ->whereRaw('LOWER(category) NOT LIKE ?', ['%equipment%']);
+                });
+            } elseif ($categoryFilter === 'fixed_asset') {
+                $query->whereHas('product', function ($q) {
+                    $q->where(function ($sub) {
+                        $sub->whereRaw('LOWER(category) LIKE ?', ['%fixed%'])
+                            ->orWhereRaw('LOWER(category) LIKE ?', ['%asset%'])
+                            ->orWhereRaw('LOWER(category) LIKE ?', ['%equipment%']);
+                    });
+                });
+            }
+
             $allRecords = $query->get();
 
             // Group inventory items by product_id
@@ -239,6 +296,9 @@ class StoreManagerController extends Controller
                 $totalReserved = (float) $items->sum('quantity_reserved');
                 $totalMinStock = (float) $items->sum('min_stock');
                 $product = $first->product;
+
+                $catStr = strtolower($product->category ?? '');
+                $isFixedAsset = str_contains($catStr, 'fixed') || str_contains($catStr, 'asset') || str_contains($catStr, 'equipment');
 
                 $effectiveCost = (float) (
                     $first->unit_cost ?: (
@@ -268,6 +328,8 @@ class StoreManagerController extends Controller
                     'product_name'     => $product->name ?? 'N/A',
                     'product_code'     => $product->code ?? '',
                     'product_category' => $product->category ?? 'General Material',
+                    'is_fixed_asset'   => $isFixedAsset,
+                    'is_consumable'    => !$isFixedAsset,
                     'product_unit'     => $product->unit ?? 'pcs',
                     'product_desc'     => $product->description ?? 'No additional specification provided.',
                     'total_on_hand'    => $totalOnHand,
@@ -303,17 +365,21 @@ class StoreManagerController extends Controller
             $isGrouped = true;
         }
 
-        return view('store-manager.inventory.all', compact('inventory', 'stores', 'products', 'isGrouped', 'isStoreKeeper', 'assignedStore'));
+        return view('store-manager.inventory.all', compact(
+            'inventory', 'stores', 'products', 'isGrouped', 'isStoreKeeper', 'assignedStore',
+            'categoryFilter', 'countAll', 'countConsumable', 'countFixedAsset'
+        ));
     }
 
     /**
-     * Export Inventory by Store as a PDF document.
+     * Export Inventory by Store as a PDF document (Separating Consumables and Fixed Assets).
      */
     public function exportInventoryPdf(Request $request)
     {
         $selectedStoreId = $request->input('store_id');
         $search          = $request->input('search');
         $lowStockOnly    = $request->boolean('low_stock');
+        $categoryFilter  = $request->input('category', 'all'); // 'all', 'consumable', 'fixed_asset'
 
         $user          = Auth::user();
         $isStoreKeeper = $user && $user->hasRole('store_keeper');
@@ -345,6 +411,22 @@ class StoreManagerController extends Controller
             $invQuery->whereColumn('quantity_on_hand', '<=', 'min_stock');
         }
 
+        if ($categoryFilter === 'consumable') {
+            $invQuery->whereHas('product', function ($q) {
+                $q->whereRaw('LOWER(category) NOT LIKE ?', ['%fixed%'])
+                  ->whereRaw('LOWER(category) NOT LIKE ?', ['%asset%'])
+                  ->whereRaw('LOWER(category) NOT LIKE ?', ['%equipment%']);
+            });
+        } elseif ($categoryFilter === 'fixed_asset') {
+            $invQuery->whereHas('product', function ($q) {
+                $q->where(function ($sub) {
+                    $sub->whereRaw('LOWER(category) LIKE ?', ['%fixed%'])
+                        ->orWhereRaw('LOWER(category) LIKE ?', ['%asset%'])
+                        ->orWhereRaw('LOWER(category) LIKE ?', ['%equipment%']);
+                });
+            });
+        }
+
         $records = $invQuery->get();
 
         // Calculate pricing & structure data grouped by store
@@ -361,21 +443,36 @@ class StoreManagerController extends Controller
         foreach ($targetStoreList as $st) {
             $storeItems = $groupedByStore->get($st->id, collect());
 
-            if ($storeItems->isEmpty() && ($selectedStoreId || $search || $lowStockOnly)) {
+            if ($storeItems->isEmpty() && ($selectedStoreId || $search || $lowStockOnly || $categoryFilter !== 'all')) {
                 if (!$selectedStoreId) {
                     continue;
                 }
             }
 
-            $storeItemsList = [];
+            $consumableList = [];
+            $fixedAssetList = [];
+
             $storeOnHand    = 0;
             $storeReserved  = 0;
             $storeAvailable = 0;
             $storeValue     = 0;
 
+            $consOnHand    = 0;
+            $consReserved  = 0;
+            $consAvailable = 0;
+            $consValue     = 0;
+
+            $faOnHand    = 0;
+            $faReserved  = 0;
+            $faAvailable = 0;
+            $faValue     = 0;
+
             foreach ($storeItems as $item) {
                 $prod = $item->product;
                 if (!$prod) continue;
+
+                $catStr = strtolower($prod->category ?? '');
+                $isFixedAsset = str_contains($catStr, 'fixed') || str_contains($catStr, 'asset') || str_contains($catStr, 'equipment');
 
                 $effectiveCost = (float) (
                     $item->unit_cost ?: (
@@ -398,17 +495,13 @@ class StoreManagerController extends Controller
                     $status = 'Low Stock';
                 }
 
-                $storeOnHand    += $onHand;
-                $storeReserved  += $reserved;
-                $storeAvailable += $available;
-                $storeValue     += $itemVal;
-
-                $storeItemsList[] = [
+                $formattedItem = [
                     'id'               => $item->id,
                     'product_id'       => $item->product_id,
                     'product_name'     => $prod->name,
                     'sku'              => $prod->sku ?? $prod->code ?? '-',
-                    'category'         => $prod->category ?? 'General Material',
+                    'category'         => $prod->category ?? ($isFixedAsset ? 'Fixed Asset' : 'Consumable'),
+                    'is_fixed_asset'   => $isFixedAsset,
                     'unit'             => $prod->unit ?? 'pcs',
                     'on_hand'          => $onHand,
                     'reserved'         => $reserved,
@@ -419,35 +512,74 @@ class StoreManagerController extends Controller
                     'status'           => $status,
                     'last_movement_at' => $item->last_movement_at,
                 ];
+
+                if ($isFixedAsset) {
+                    $fixedAssetList[] = $formattedItem;
+                    $faOnHand += $onHand;
+                    $faReserved += $reserved;
+                    $faAvailable += $available;
+                    $faValue += $itemVal;
+                } else {
+                    $consumableList[] = $formattedItem;
+                    $consOnHand += $onHand;
+                    $consReserved += $reserved;
+                    $consAvailable += $available;
+                    $consValue += $itemVal;
+                }
+
+                $storeOnHand    += $onHand;
+                $storeReserved  += $reserved;
+                $storeAvailable += $available;
+                $storeValue     += $itemVal;
             }
 
-            usort($storeItemsList, fn($a, $b) => strcmp($a['product_name'], $b['product_name']));
+            usort($consumableList, fn($a, $b) => strcmp($a['product_name'], $b['product_name']));
+            usort($fixedAssetList, fn($a, $b) => strcmp($a['product_name'], $b['product_name']));
+
+            $allStoreItems = array_merge($consumableList, $fixedAssetList);
 
             $structuredStores[] = [
-                'store'           => $st,
-                'items'           => $storeItemsList,
-                'total_items'     => count($storeItemsList),
-                'total_on_hand'   => $storeOnHand,
-                'total_reserved'  => $storeReserved,
-                'total_available' => $storeAvailable,
-                'total_value'     => $storeValue,
+                'store'               => $st,
+                'items'               => $allStoreItems,
+                'consumables'         => $consumableList,
+                'fixed_assets'        => $fixedAssetList,
+                'total_items'         => count($allStoreItems),
+                'total_on_hand'       => $storeOnHand,
+                'total_reserved'      => $storeReserved,
+                'total_available'     => $storeAvailable,
+                'total_value'         => $storeValue,
+                'consumable_on_hand'  => $consOnHand,
+                'consumable_reserved' => $consReserved,
+                'consumable_avail'    => $consAvailable,
+                'consumable_value'    => $consValue,
+                'fixed_on_hand'       => $faOnHand,
+                'fixed_reserved'      => $faReserved,
+                'fixed_avail'         => $faAvailable,
+                'fixed_value'         => $faValue,
             ];
 
             $grandTotalOnHand     += $storeOnHand;
             $grandTotalReserved   += $storeReserved;
             $grandTotalAvailable  += $storeAvailable;
             $grandTotalValue      += $storeValue;
-            $grandTotalItemsCount += count($storeItemsList);
+            $grandTotalItemsCount += count($allStoreItems);
         }
 
         $reportTitle = $selectedStore 
             ? "INVENTORY REPORT — {$selectedStore->name}" 
             : "ALL INVENTORY BY STORE REPORT";
 
+        if ($categoryFilter === 'consumable') {
+            $reportTitle .= ' (CONSUMABLES)';
+        } elseif ($categoryFilter === 'fixed_asset') {
+            $reportTitle .= ' (FIXED ASSETS)';
+        }
+
         return view('store-manager.inventory.pdf-by-store', [
             'structuredStores'     => $structuredStores,
             'selectedStore'        => $selectedStore,
             'reportTitle'          => $reportTitle,
+            'categoryFilter'       => $categoryFilter,
             'search'               => $search,
             'lowStockOnly'         => $lowStockOnly,
             'grandTotalOnHand'     => $grandTotalOnHand,
