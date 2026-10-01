@@ -411,6 +411,9 @@ class StoreManagerController extends Controller
             $invQuery->whereColumn('quantity_on_hand', '<=', 'min_stock');
         }
 
+        // Strict rule: Do not show zero stock items in PDF report
+        $invQuery->where('quantity_on_hand', '>', 0);
+
         if ($categoryFilter === 'consumable') {
             $invQuery->whereHas('product', function ($q) {
                 $q->whereRaw('LOWER(category) NOT LIKE ?', ['%fixed%'])
@@ -483,6 +486,8 @@ class StoreManagerController extends Controller
                 );
 
                 $onHand    = (float) $item->quantity_on_hand;
+                if ($onHand <= 0) continue; // Do not show zero stock items in PDF
+
                 $reserved  = (float) ($item->quantity_reserved ?? 0);
                 $available = max(0, $onHand - $reserved);
                 $itemVal   = $onHand * $effectiveCost;

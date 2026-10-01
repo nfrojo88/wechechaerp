@@ -34,13 +34,13 @@
             background-color: #64748b;
             color: var(--text-main);
             padding: 20px 0;
-            font-size: 11px;
+            font-size: 10.5px;
             line-height: 1.35;
         }
 
         /* ── Top Floating Action Toolbar ────────────────────────────── */
         .no-print-toolbar {
-            max-width: 1140px;
+            max-width: 800px;
             margin: 0 auto 20px auto;
             background: #ffffff;
             padding: 12px 20px;
@@ -56,9 +56,9 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            font-size: 13px;
+            font-size: 12.5px;
             font-weight: 600;
-            padding: 8px 16px;
+            padding: 7px 14px;
             border-radius: 6px;
             border: none;
             cursor: pointer;
@@ -75,13 +75,13 @@
         .btn-outline-secondary { background: #fff; color: #4b5563; border: 1px solid #d1d5db; }
         .btn-outline-secondary:hover { background: #f3f4f6; color: #111827; }
 
-        /* ── PDF Page Physical Sheet (A4 Landscape) ─────────────────── */
+        /* ── PDF Page Physical Sheet (A4 Portrait) ──────────────────── */
         .pdf-page {
-            width: 1140px;
-            min-height: 780px;
+            width: 800px;
+            min-height: 1100px;
             background: #ffffff;
             margin: 0 auto 25px auto;
-            padding: 22px 26px 18px 26px;
+            padding: 20px 22px 16px 22px;
             border-radius: 6px;
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
             border: 1px solid #cbd5e1;
@@ -99,54 +99,54 @@
             justify-content: space-between;
             align-items: center;
             border-bottom: 2px solid #1e3a8a;
-            padding-bottom: 10px;
-            margin-bottom: 10px;
+            padding-bottom: 8px;
+            margin-bottom: 8px;
         }
 
         .company-brand {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
         }
 
         .company-logo {
-            width: 44px;
-            height: 44px;
+            width: 40px;
+            height: 40px;
             object-fit: contain;
-            border-radius: 6px;
+            border-radius: 5px;
         }
 
         .company-info h1 {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 800;
             color: #0f172a;
             letter-spacing: -0.02em;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
 
         .company-info p {
-            font-size: 10px;
+            font-size: 9.5px;
             color: var(--text-muted);
             font-weight: 500;
         }
 
         .report-meta-box {
             text-align: right;
-            font-size: 10px;
-            line-height: 1.4;
+            font-size: 9.5px;
+            line-height: 1.35;
         }
 
         .report-meta-box .report-badge {
             background: #eef2ff;
             color: #1e3a8a;
-            padding: 2px 8px;
+            padding: 2px 7px;
             border-radius: 4px;
             font-weight: 700;
-            font-size: 9.5px;
+            font-size: 9px;
             text-transform: uppercase;
             letter-spacing: 0.04em;
             display: inline-block;
-            margin-bottom: 3px;
+            margin-bottom: 2px;
             border: 1px solid #c7d2fe;
         }
 
@@ -154,7 +154,7 @@
         .store-header-bar {
             background: #1e293b;
             color: #ffffff;
-            padding: 7px 12px;
+            padding: 6px 10px;
             border-radius: 5px 5px 0 0;
             display: flex;
             justify-content: space-between;
@@ -163,20 +163,20 @@
         }
 
         .store-header-title {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 700;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
         }
 
         .store-header-type {
-            font-size: 9.5px;
+            font-size: 9px;
             font-weight: 600;
             background: rgba(255, 255, 255, 0.18);
-            padding: 1px 7px;
+            padding: 1px 6px;
             border-radius: 10px;
-            margin-left: 6px;
+            margin-left: 5px;
         }
 
         /* Section Banner (Consumables vs Fixed Assets) */
@@ -184,11 +184,11 @@
             background: #f1f5f9;
             border: 1px solid #cbd5e1;
             border-top: none;
-            padding: 5px 12px;
+            padding: 5px 10px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 700;
         }
 
@@ -204,25 +204,25 @@
             color: #166534;
         }
 
-        /* ── Materials Data Table ──────────────────────────────────── */
+        /* ── Materials Data Table (Portrait Optimized) ─────────────── */
         .inv-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 10px;
+            font-size: 9.5px;
             background: #ffffff;
             border: 1px solid var(--border-color);
             border-top: none;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .inv-table th {
             background: #f8fafc;
             color: #334155;
-            font-size: 9px;
+            font-size: 8.5px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.04em;
-            padding: 6px 8px;
+            letter-spacing: 0.03em;
+            padding: 5px 6px;
             border-bottom: 2px solid #cbd5e1;
             border-right: 1px solid #e2e8f0;
         }
@@ -232,7 +232,7 @@
         }
 
         .inv-table td {
-            padding: 5px 8px;
+            padding: 4.5px 6px;
             border-bottom: 1px solid #e2e8f0;
             border-right: 1px solid #f1f5f9;
             vertical-align: middle;
@@ -250,7 +250,7 @@
             background-color: #f8fafc;
             font-weight: 700;
             border-top: 2px solid #cbd5e1;
-            padding: 6px 8px;
+            padding: 5px 6px;
         }
 
         .text-start  { text-align: left; }
@@ -261,23 +261,11 @@
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
         }
 
-        .badge-status {
-            display: inline-block;
-            padding: 1.5px 6px;
-            border-radius: 10px;
-            font-size: 8.5px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .badge-available    { background: #dcfce7; color: #15803d; }
-        .badge-low-stock    { background: #fef3c7; color: #b45309; }
-        .badge-out-of-stock { background: #fee2e2; color: #b91c1c; }
-
         /* ── 3-Column Ethiopian Store Signatures (አስርካቢ፣ ተረካቢ፣ አረካካቢ) ─ */
         .signature-section-amharic {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
+            gap: 12px;
             margin-top: auto;
             padding-top: 8px;
             border-top: 1.5px solid #cbd5e1;
@@ -286,8 +274,8 @@
 
         .sign-card {
             border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            padding: 7px 12px;
+            border-radius: 5px;
+            padding: 6px 10px;
             background: #f8fafc;
         }
 
@@ -301,14 +289,14 @@
         }
 
         .sign-role-title .am-title {
-            font-size: 11.5px;
+            font-size: 11px;
             font-weight: 700;
             color: #1e3a8a;
             font-family: 'Noto Sans Ethiopic', 'Inter', sans-serif;
         }
 
         .sign-role-title .en-title {
-            font-size: 9px;
+            font-size: 8.5px;
             color: #64748b;
             font-weight: 600;
             text-transform: uppercase;
@@ -317,20 +305,20 @@
         .sign-lines {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 3.5px;
         }
 
         .sign-field {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 9.5px;
+            font-size: 9px;
             color: #334155;
         }
 
         .sign-field .lbl {
             font-weight: 600;
-            min-width: 75px;
+            min-width: 65px;
         }
 
         .sign-field .dots {
@@ -345,16 +333,16 @@
         /* ── Page Footer ───────────────────────────────────────────── */
         .page-footer-bar {
             margin-top: 6px;
-            padding-top: 5px;
+            padding-top: 4px;
             border-top: 1px solid #e2e8f0;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            font-size: 9px;
+            font-size: 8.5px;
             color: #94a3b8;
         }
 
-        /* ── Print Media Optimization ──────────────────────────────── */
+        /* ── Print Media Optimization (A4 Portrait) ────────────────── */
         @media print {
             body {
                 background: #ffffff;
@@ -372,7 +360,7 @@
                 height: 100vh !important;
                 box-shadow: none !important;
                 border: none !important;
-                padding: 4mm 5mm !important;
+                padding: 5mm 6mm !important;
                 margin: 0 !important;
                 page-break-after: always !important;
                 break-after: page !important;
@@ -415,7 +403,7 @@
             }
 
             @page {
-                size: A4 landscape;
+                size: A4 portrait;
                 margin: 5mm;
             }
         }
@@ -433,11 +421,11 @@
             <span style="font-weight:600; color:#374151;">
                 <i class="fas fa-file-pdf text-danger me-1"></i>
                 @if($categoryFilter === 'consumable')
-                    Consumables Inventory (የፍጆታ እቃዎች)
+                    Consumables (Portrait &bull; In-Stock Only)
                 @elseif($categoryFilter === 'fixed_asset')
-                    Fixed Assets Inventory (የቋሚ እቃዎች)
+                    Fixed Assets (Portrait &bull; In-Stock Only)
                 @else
-                    All Inventory (Separated: Consumables &amp; Fixed Assets)
+                    Inventory (Portrait &bull; In-Stock Only)
                 @endif
             </span>
         </div>
@@ -451,42 +439,46 @@
         </div>
     </div>
 
-    <!-- ── Flatten and Chunk Store Pages (Separated by Consumable and Fixed Asset) ── -->
+    <!-- ── Flatten and Chunk Store Pages (Portrait Mode, Separating Consumable and Fixed Asset) ── -->
     @php
-        $itemsPerPage = 13;
+        $itemsPerPage = 18; // Optimum rows per A4 portrait page with 3-signature block
         $allPages = [];
 
         foreach ($structuredStores as $storeData) {
             $st = $storeData['store'];
             $sections = [];
 
-            if ($categoryFilter !== 'fixed_asset' && !empty($storeData['consumables'])) {
+            // Filter out any zero stock items just in case
+            $activeConsumables = array_values(array_filter($storeData['consumables'], fn($i) => $i['on_hand'] > 0));
+            $activeFixedAssets = array_values(array_filter($storeData['fixed_assets'], fn($i) => $i['on_hand'] > 0));
+
+            if ($categoryFilter !== 'fixed_asset' && !empty($activeConsumables)) {
                 $sections[] = [
                     'type'         => 'consumable',
                     'title_en'     => 'Consumable Materials',
                     'title_am'     => 'የፍጆታ እና መጠቀሚያ እቃዎች (Consumables)',
                     'banner_class' => 'banner-consumable',
                     'icon'         => 'fa-boxes-stacked',
-                    'items'        => $storeData['consumables'],
-                    'subtotal_qty' => $storeData['consumable_on_hand'],
-                    'subtotal_res' => $storeData['consumable_reserved'],
-                    'subtotal_avl' => $storeData['consumable_avail'],
-                    'subtotal_val' => $storeData['consumable_value'],
+                    'items'        => $activeConsumables,
+                    'subtotal_qty' => array_sum(array_column($activeConsumables, 'on_hand')),
+                    'subtotal_res' => array_sum(array_column($activeConsumables, 'reserved')),
+                    'subtotal_avl' => array_sum(array_column($activeConsumables, 'available')),
+                    'subtotal_val' => array_sum(array_column($activeConsumables, 'total_value')),
                 ];
             }
 
-            if ($categoryFilter !== 'consumable' && !empty($storeData['fixed_assets'])) {
+            if ($categoryFilter !== 'consumable' && !empty($activeFixedAssets)) {
                 $sections[] = [
                     'type'         => 'fixed_asset',
                     'title_en'     => 'Fixed Assets & Equipment',
                     'title_am'     => 'ቋሚ እቃዎች እና መሳሪያዎች (Fixed Assets)',
                     'banner_class' => 'banner-fixed-asset',
                     'icon'         => 'fa-tools',
-                    'items'        => $storeData['fixed_assets'],
-                    'subtotal_qty' => $storeData['fixed_on_hand'],
-                    'subtotal_res' => $storeData['fixed_reserved'],
-                    'subtotal_avl' => $storeData['fixed_avail'],
-                    'subtotal_val' => $storeData['fixed_value'],
+                    'items'        => $activeFixedAssets,
+                    'subtotal_qty' => array_sum(array_column($activeFixedAssets, 'on_hand')),
+                    'subtotal_res' => array_sum(array_column($activeFixedAssets, 'reserved')),
+                    'subtotal_avl' => array_sum(array_column($activeFixedAssets, 'available')),
+                    'subtotal_val' => array_sum(array_column($activeFixedAssets, 'total_value')),
                 ];
             }
 
@@ -544,7 +536,7 @@
                 $itemOffset = $pageData['chunk_index'] * $itemsPerPage;
             @endphp
 
-            <!-- ── A4 Landscape Physical Page ────────────────────────── -->
+            <!-- ── A4 Portrait Physical Page ─────────────────────────── -->
             <div class="pdf-page">
 
                 <div>
@@ -560,7 +552,7 @@
 
                         <div class="report-meta-box">
                             <div class="report-badge">Official Store Audit</div>
-                            <div style="font-weight:800; color:#1e3a8a; font-size:11.5px;">{{ $reportTitle }}</div>
+                            <div style="font-weight:800; color:#1e3a8a; font-size:11px;">{{ $reportTitle }}</div>
                             <div><strong>Date:</strong> {{ $generatedAt->format('M d, Y h:i A') }} &bull; <strong>Page:</strong> {{ $globalIdx + 1 }} of {{ $totalReportPages }}</div>
                         </div>
                     </div>
@@ -571,11 +563,11 @@
                             <i class="fas fa-store"></i> {{ $currStore->name }}
                             <span class="store-header-type">{{ $currStore->type ?? 'Site Store' }}</span>
                             @if($currStore->location)
-                                <small style="color:#cbd5e1; font-weight:normal; font-size:9.5px;">&bull; {{ $currStore->location }}</small>
+                                <small style="color:#cbd5e1; font-weight:normal; font-size:9px;">&bull; {{ $currStore->location }}</small>
                             @endif
                         </div>
-                        <div style="font-size:10px; color:#cbd5e1;">
-                            Store Total Items: <strong>{{ $storeTotals['total_items'] }}</strong>
+                        <div style="font-size:9.5px; color:#cbd5e1;">
+                            Active Items: <strong>{{ count($pageSection['items']) }}</strong>
                             | Store Total Value: <strong>{{ number_format($storeTotals['total_value'], 2) }} ETB</strong>
                         </div>
                     </div>
@@ -585,50 +577,48 @@
                         <div>
                             <i class="fas {{ $pageSection['icon'] }} me-1"></i>
                             <strong>{{ $pageSection['title_am'] }}</strong>
-                            <span style="font-weight:normal; font-size:9.5px; opacity:0.85;">&bull; {{ $pageSection['title_en'] }}</span>
                         </div>
                         <div>
                             Section Sheet: <strong>{{ $pageData['page_in_section'] }} of {{ $pageData['total_section_pages'] }}</strong>
-                            (Total in Section: {{ count($pageSection['items']) }})
+                            (In-Stock: {{ count($pageSection['items']) }})
                         </div>
                     </div>
 
-                    <!-- Materials Data Table -->
+                    <!-- Materials Data Table (Portrait Optimized) -->
                     <table class="inv-table">
                         <thead>
                             <tr>
-                                <th class="text-center" style="width:30px;">#</th>
+                                <th class="text-center" style="width:26px;">#</th>
                                 <th class="text-start">Product / Material</th>
-                                <th class="text-start" style="width:85px;">SKU / Code</th>
-                                <th class="text-start" style="width:100px;">Classification</th>
-                                <th class="text-center" style="width:40px;">Unit</th>
-                                <th class="text-end" style="width:75px;">On-Hand</th>
-                                <th class="text-end" style="width:65px;">Reserved</th>
-                                <th class="text-end" style="width:75px;">Available</th>
-                                <th class="text-end" style="width:75px;">Unit Cost</th>
-                                <th class="text-end" style="width:95px;">Total Value</th>
-                                <th class="text-center" style="width:65px;">Status</th>
+                                <th class="text-start" style="width:75px;">Code / SKU</th>
+                                <th class="text-start" style="width:75px;">Type</th>
+                                <th class="text-center" style="width:36px;">Unit</th>
+                                <th class="text-end" style="width:65px;">On-Hand</th>
+                                <th class="text-end" style="width:58px;">Reserved</th>
+                                <th class="text-end" style="width:65px;">Available</th>
+                                <th class="text-end" style="width:68px;">Unit Cost</th>
+                                <th class="text-end" style="width:85px;">Total Val (ETB)</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse($pageItems as $subIdx => $itm)
                                 <tr>
-                                    <td class="text-center font-mono text-muted" style="font-size:9px;">{{ $itemOffset + $subIdx + 1 }}</td>
+                                    <td class="text-center font-mono text-muted" style="font-size:8.5px;">{{ $itemOffset + $subIdx + 1 }}</td>
                                     <td class="text-start">
                                         <strong style="color:#0f172a;">{{ $itm['product_name'] }}</strong>
                                     </td>
-                                    <td class="text-start font-mono" style="font-size:9px; color:#475569;">
+                                    <td class="text-start font-mono text-muted" style="font-size:8.5px;">
                                         {{ $itm['sku'] }}
                                     </td>
-                                    <td class="text-start text-muted" style="font-size:9px;">
+                                    <td class="text-start" style="font-size:8.5px;">
                                         @if($itm['is_fixed_asset'])
-                                            <span style="color:#166534; font-weight:600;"><i class="fas fa-tools me-1"></i>Fixed Asset</span>
+                                            <span style="color:#166534; font-weight:600;">Fixed Asset</span>
                                         @else
-                                            <span style="color:#1e40af; font-weight:600;"><i class="fas fa-box me-1"></i>Consumable</span>
+                                            <span style="color:#1e40af; font-weight:600;">Consumable</span>
                                         @endif
                                     </td>
                                     <td class="text-center">
-                                        <span style="background:#f1f5f9; padding:1px 4px; border-radius:3px; font-weight:600; font-size:9px;">{{ $itm['unit'] }}</span>
+                                        <span style="background:#f1f5f9; padding:1px 4px; border-radius:3px; font-weight:600; font-size:8.5px;">{{ $itm['unit'] }}</span>
                                     </td>
                                     <td class="text-end font-mono fw-bold">
                                         {{ number_format($itm['on_hand'], 2) }}
@@ -645,20 +635,11 @@
                                     <td class="text-end font-mono fw-bold" style="color:#1e3a8a;">
                                         {{ number_format($itm['total_value'], 2) }}
                                     </td>
-                                    <td class="text-center">
-                                        @if($itm['status'] === 'Available')
-                                            <span class="badge-status badge-available">In Stock</span>
-                                        @elseif($itm['status'] === 'Low Stock')
-                                            <span class="badge-status badge-low-stock">Low Stock</span>
-                                        @else
-                                            <span class="badge-status badge-out-of-stock">Zero Stock</span>
-                                        @endif
-                                    </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="11" class="text-center" style="padding:20px; color:#94a3b8;">
-                                        No material records found in this category matching current criteria.
+                                    <td colspan="10" class="text-center" style="padding:20px; color:#94a3b8;">
+                                        No active in-stock material records found in this category.
                                     </td>
                                 </tr>
                             @endforelse
@@ -666,15 +647,14 @@
                         @if($pageData['is_last_chunk_of_section'] && count($pageItems) > 0)
                             <tfoot>
                                 <tr>
-                                    <td colspan="5" class="text-end" style="text-transform:uppercase; font-size:9.5px; color:#475569;">
+                                    <td colspan="5" class="text-end" style="text-transform:uppercase; font-size:9px; color:#475569;">
                                         Subtotal ({{ $pageSection['title_en'] }}):
                                     </td>
                                     <td class="text-end font-mono fw-bold">{{ number_format($pageSection['subtotal_qty'], 2) }}</td>
                                     <td class="text-end font-mono text-muted">{{ number_format($pageSection['subtotal_res'], 2) }}</td>
                                     <td class="text-end font-mono fw-bold" style="color:#059669;">{{ number_format($pageSection['subtotal_avl'], 2) }}</td>
                                     <td></td>
-                                    <td class="text-end font-mono fw-bold" style="color:#1e3a8a; font-size:11px;">{{ number_format($pageSection['subtotal_val'], 2) }} ETB</td>
-                                    <td></td>
+                                    <td class="text-end font-mono fw-bold" style="color:#1e3a8a; font-size:10.5px;">{{ number_format($pageSection['subtotal_val'], 2) }} ETB</td>
                                 </tr>
                             </tfoot>
                         @endif
@@ -682,28 +662,28 @@
 
                     <!-- Combined Store Subtotal on the Final Page of that Store -->
                     @if($pageData['is_store_final_page'] && count($structuredStores) > 0)
-                        <div style="background:#f1f5f9; border:1.5px solid #1e293b; border-radius:5px; padding:6px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-                            <div style="font-weight:700; color:#0f172a; font-size:10px; text-transform:uppercase;">
-                                <i class="fas fa-warehouse me-1 text-primary"></i> STORE TOTAL ({{ $currStore->name }} — CONSUMABLES + FIXED ASSETS):
+                        <div style="background:#f1f5f9; border:1.5px solid #1e293b; border-radius:5px; padding:5px 10px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+                            <div style="font-weight:700; color:#0f172a; font-size:9.5px; text-transform:uppercase;">
+                                <i class="fas fa-warehouse me-1 text-primary"></i> STORE TOTAL ({{ $currStore->name }} — IN-STOCK):
                             </div>
-                            <div style="font-size:10px; color:#1e293b;">
+                            <div style="font-size:9.5px; color:#1e293b;">
                                 On-Hand: <strong class="font-mono">{{ number_format($storeTotals['total_on_hand'], 2) }}</strong> &bull;
                                 Available: <strong class="font-mono" style="color:#059669;">{{ number_format($storeTotals['total_available'], 2) }}</strong> &bull;
-                                Store Total Value: <strong class="font-mono" style="color:#1e3a8a; font-size:11px;">{{ number_format($storeTotals['total_value'], 2) }} ETB</strong>
+                                Total Val: <strong class="font-mono" style="color:#1e3a8a; font-size:10.5px;">{{ number_format($storeTotals['total_value'], 2) }} ETB</strong>
                             </div>
                         </div>
                     @endif
 
                     <!-- Grand Summary Box on the Final Page of Report when Multiple Stores -->
                     @if($globalIdx === $totalReportPages - 1 && count($structuredStores) > 1)
-                        <div style="background:#f8fafc; border:1.5px solid #1e3a8a; border-radius:5px; padding:6px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-                            <div style="font-weight:700; color:#1e3a8a; font-size:10px; text-transform:uppercase;">
+                        <div style="background:#f8fafc; border:1.5px solid #1e3a8a; border-radius:5px; padding:5px 10px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+                            <div style="font-weight:700; color:#1e3a8a; font-size:9.5px; text-transform:uppercase;">
                                 <i class="fas fa-calculator me-1"></i> GRAND TOTAL (ALL {{ count($structuredStores) }} STORES):
                             </div>
-                            <div style="font-size:10px; color:#334155;">
+                            <div style="font-size:9.5px; color:#334155;">
                                 Total On-Hand: <strong class="font-mono">{{ number_format($grandTotalOnHand, 2) }}</strong> &bull;
                                 Available: <strong class="font-mono" style="color:#059669;">{{ number_format($grandTotalAvailable, 2) }}</strong> &bull;
-                                Grand Valuation: <strong class="font-mono" style="color:#1e3a8a; font-size:11px;">{{ number_format($grandTotalValue, 2) }} ETB</strong>
+                                Grand Val: <strong class="font-mono" style="color:#1e3a8a; font-size:10.5px;">{{ number_format($grandTotalValue, 2) }} ETB</strong>
                             </div>
                         </div>
                     @endif
@@ -795,17 +775,17 @@
             <div class="pdf-page" style="justify-content:center; align-items:center; text-align:center;">
                 <i class="fas fa-boxes-stacked" style="font-size:42px; color:#94a3b8; margin-bottom:12px; display:block;"></i>
                 <h3 style="color:#334155; font-size:16px; font-weight:700;">No Inventory Records Found</h3>
-                <p style="color:#64748b; font-size:12px; margin-top:5px;">There are no inventory records matching the selected store or filter criteria.</p>
+                <p style="color:#64748b; font-size:12px; margin-top:5px;">There are no in-stock inventory records matching the selected store or filter criteria.</p>
             </div>
         @endforelse
     </div>
 
-    <!-- ── PDF Generation Script ───────────────────────────────────── -->
+    <!-- ── PDF Generation Script (Portrait Mode) ───────────────────── -->
     <script>
         function downloadPdfReport() {
             const btn = document.getElementById('btnDownloadPdf');
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating Portrait PDF...';
             btn.disabled = true;
 
             const element = document.getElementById('pdfReportContent');
@@ -814,7 +794,7 @@
                 filename:     '{{ Str::slug($reportTitle) }}-{{ date("Y-m-d") }}.pdf',
                 image:        { type: 'jpeg', quality: 0.98 },
                 html2canvas:  { scale: 2, useCORS: true, logging: false },
-                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
                 pagebreak:    { mode: ['css', 'legacy'] }
             };
 
