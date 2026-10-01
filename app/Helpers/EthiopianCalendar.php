@@ -230,7 +230,7 @@ class EthiopianCalendar
         $c = $a - intdiv(146097 * $b, 4);
         $d = intdiv(4 * $c + 3, 1461);
         $e = $c - intdiv(1461 * $d, 4);
-        $m = intdiv(5 * e + 2, 153);
+        $m = intdiv(5 * $e + 2, 153);
         $day = $e - intdiv(153 * $m + 2, 5) + 1;
         $month = $m + 3 - 12 * intdiv($m, 10);
         $year = 100 * $b + $d - 4800 + intdiv($m, 10);
