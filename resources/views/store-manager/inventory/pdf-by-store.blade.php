@@ -77,8 +77,8 @@
 
         /* ── PDF Page Physical Sheet (A4 Portrait) ──────────────────── */
         .pdf-page {
-            width: 800px;
-            min-height: 1100px;
+            width: 820px;
+            min-height: auto;
             background: #ffffff;
             margin: 0 auto 25px auto;
             padding: 20px 22px 16px 22px;
@@ -87,7 +87,6 @@
             border: 1px solid #cbd5e1;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
             position: relative;
             page-break-after: always;
             break-after: page;
@@ -212,17 +211,17 @@
             background: #ffffff;
             border: 1px solid var(--border-color);
             border-top: none;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .inv-table th {
             background: #f8fafc;
             color: #334155;
-            font-size: 8.5px;
+            font-size: 9px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.03em;
-            padding: 5px 6px;
+            padding: 5.5px 6px;
             border-bottom: 2px solid #cbd5e1;
             border-right: 1px solid #e2e8f0;
         }
@@ -232,10 +231,11 @@
         }
 
         .inv-table td {
-            padding: 4.5px 6px;
+            padding: 5px 6px;
             border-bottom: 1px solid #e2e8f0;
             border-right: 1px solid #f1f5f9;
             vertical-align: middle;
+            font-size: 9.5px;
         }
 
         .inv-table td:last-child {
@@ -250,7 +250,7 @@
             background-color: #f8fafc;
             font-weight: 700;
             border-top: 2px solid #cbd5e1;
-            padding: 5px 6px;
+            padding: 5.5px 6px;
         }
 
         .text-start  { text-align: left; }
@@ -266,7 +266,7 @@
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 12px;
-            margin-top: auto;
+            margin-top: 14px;
             padding-top: 8px;
             border-top: 1.5px solid #cbd5e1;
             page-break-inside: avoid;
@@ -356,11 +356,10 @@
 
             .pdf-page {
                 width: 100% !important;
-                min-height: 100vh !important;
-                height: 100vh !important;
+                min-height: auto !important;
                 box-shadow: none !important;
                 border: none !important;
-                padding: 5mm 6mm !important;
+                padding: 4mm 5mm !important;
                 margin: 0 !important;
                 page-break-after: always !important;
                 break-after: page !important;
@@ -441,7 +440,7 @@
 
     <!-- ── Flatten and Chunk Store Pages (Portrait Mode, Separating Consumable and Fixed Asset) ── -->
     @php
-        $itemsPerPage = 18; // Optimum rows per A4 portrait page with 3-signature block
+        $itemsPerPage = 26; // Optimum rows per A4 portrait page to use full height with no white space
         $allPages = [];
 
         foreach ($structuredStores as $storeData) {
