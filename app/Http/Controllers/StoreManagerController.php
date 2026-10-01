@@ -307,6 +307,160 @@ class StoreManagerController extends Controller
     }
 
     /**
+     * Export Inventory by Store as a PDF document.
+     */
+    public function exportInventoryPdf(Request $request)
+    {
+        $selectedStoreId = $request->input('store_id');
+        $search          = $request->input('search');
+        $lowStockOnly    = $request->boolean('low_stock');
+
+        $user          = Auth::user();
+        $isStoreKeeper = $user && $user->hasRole('store_keeper');
+        if ($isStoreKeeper) {
+            $assignedStore = $user->store ?? Store::where('manager_id', $user->id)->first();
+            if ($assignedStore) {
+                $selectedStoreId = $assignedStore->id;
+            }
+        }
+
+        $allStores     = Store::where('is_active', true)->orderBy('name')->get();
+        $selectedStore = $selectedStoreId ? Store::find($selectedStoreId) : null;
+
+        // Base query for inventory records
+        $invQuery = Inventory::with(['product', 'store'])
+            ->whereHas('store', fn($q) => $q->where('is_active', true));
+
+        if ($selectedStoreId) {
+            $invQuery->where('store_id', $selectedStoreId);
+        }
+
+        if ($search) {
+            $invQuery->whereHas('product', fn($q) => $q->where('name', 'like', "%{$search}%")
+                ->orWhere('code', 'like', "%{$search}%")
+                ->orWhere('sku', 'like', "%{$search}%"));
+        }
+
+        if ($lowStockOnly) {
+            $invQuery->whereColumn('quantity_on_hand', '<=', 'min_stock');
+        }
+
+        $records = $invQuery->get();
+
+        // Calculate pricing & structure data grouped by store
+        $structuredStores     = [];
+        $grandTotalOnHand     = 0;
+        $grandTotalReserved   = 0;
+        $grandTotalAvailable  = 0;
+        $grandTotalValue      = 0;
+        $grandTotalItemsCount = 0;
+
+        $groupedByStore = $records->groupBy('store_id');
+        $targetStoreList = $selectedStore ? collect([$selectedStore]) : $allStores;
+
+        foreach ($targetStoreList as $st) {
+            $storeItems = $groupedByStore->get($st->id, collect());
+
+            if ($storeItems->isEmpty() && ($selectedStoreId || $search || $lowStockOnly)) {
+                if (!$selectedStoreId) {
+                    continue;
+                }
+            }
+
+            $storeItemsList = [];
+            $storeOnHand    = 0;
+            $storeReserved  = 0;
+            $storeAvailable = 0;
+            $storeValue     = 0;
+
+            foreach ($storeItems as $item) {
+                $prod = $item->product;
+                if (!$prod) continue;
+
+                $effectiveCost = (float) (
+                    $item->unit_cost ?: (
+                        DB::table('material_prices')->where('product_id', $item->product_id)->orderByDesc('effective_date')->orderByDesc('id')->value('price') ?: (
+                            DB::table('purchase_order_items')->where('product_id', $item->product_id)->orderByDesc('id')->value('unit_price') ?: ($prod->unit_price ?? 0)
+                        )
+                    )
+                );
+
+                $onHand    = (float) $item->quantity_on_hand;
+                $reserved  = (float) ($item->quantity_reserved ?? 0);
+                $available = max(0, $onHand - $reserved);
+                $itemVal   = $onHand * $effectiveCost;
+                $minStock  = (float) $item->min_stock;
+
+                $status = 'Available';
+                if ($onHand <= 0) {
+                    $status = 'Out of Stock';
+                } elseif ($onHand <= $minStock) {
+                    $status = 'Low Stock';
+                }
+
+                $storeOnHand    += $onHand;
+                $storeReserved  += $reserved;
+                $storeAvailable += $available;
+                $storeValue     += $itemVal;
+
+                $storeItemsList[] = [
+                    'id'               => $item->id,
+                    'product_id'       => $item->product_id,
+                    'product_name'     => $prod->name,
+                    'sku'              => $prod->sku ?? $prod->code ?? '-',
+                    'category'         => $prod->category ?? 'General Material',
+                    'unit'             => $prod->unit ?? 'pcs',
+                    'on_hand'          => $onHand,
+                    'reserved'         => $reserved,
+                    'available'        => $available,
+                    'min_stock'        => $minStock,
+                    'unit_cost'        => $effectiveCost,
+                    'total_value'      => $itemVal,
+                    'status'           => $status,
+                    'last_movement_at' => $item->last_movement_at,
+                ];
+            }
+
+            usort($storeItemsList, fn($a, $b) => strcmp($a['product_name'], $b['product_name']));
+
+            $structuredStores[] = [
+                'store'           => $st,
+                'items'           => $storeItemsList,
+                'total_items'     => count($storeItemsList),
+                'total_on_hand'   => $storeOnHand,
+                'total_reserved'  => $storeReserved,
+                'total_available' => $storeAvailable,
+                'total_value'     => $storeValue,
+            ];
+
+            $grandTotalOnHand     += $storeOnHand;
+            $grandTotalReserved   += $storeReserved;
+            $grandTotalAvailable  += $storeAvailable;
+            $grandTotalValue      += $storeValue;
+            $grandTotalItemsCount += count($storeItemsList);
+        }
+
+        $reportTitle = $selectedStore 
+            ? "INVENTORY REPORT — {$selectedStore->name}" 
+            : "ALL INVENTORY BY STORE REPORT";
+
+        return view('store-manager.inventory.pdf-by-store', [
+            'structuredStores'     => $structuredStores,
+            'selectedStore'        => $selectedStore,
+            'reportTitle'          => $reportTitle,
+            'search'               => $search,
+            'lowStockOnly'         => $lowStockOnly,
+            'grandTotalOnHand'     => $grandTotalOnHand,
+            'grandTotalReserved'   => $grandTotalReserved,
+            'grandTotalAvailable'  => $grandTotalAvailable,
+            'grandTotalValue'      => $grandTotalValue,
+            'grandTotalItemsCount' => $grandTotalItemsCount,
+            'generatedAt'          => now(),
+            'generatedBy'          => Auth::user()?->name ?? 'Store Manager',
+        ]);
+    }
+
+    /**
      * Create Transfer
      */
     public function createTransfer()

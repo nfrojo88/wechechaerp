@@ -40,6 +40,35 @@
             @endif
         </div>
         <div class="d-flex gap-2">
+            <div class="dropdown">
+                <button class="btn btn-outline-danger fw-semibold dropdown-toggle shadow-xs" type="button" id="exportPdfDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-file-pdf me-1 text-danger"></i> Export to PDF
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="exportPdfDropdown" style="min-width: 250px;">
+                    <li><h6 class="dropdown-header text-uppercase small fw-bold text-muted"><i class="fas fa-file-export me-1 text-danger"></i> Inventory PDF Reports</h6></li>
+                    <li>
+                        <a class="dropdown-item py-2" href="{{ route('store-manager.inventory.export-pdf', request()->query()) }}" target="_blank">
+                            <i class="fas fa-filter text-primary me-2"></i> Current Filtered View (PDF)
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item py-2" href="{{ route('store-manager.inventory.export-pdf', ['by_store' => 1]) }}" target="_blank">
+                            <i class="fas fa-layer-group text-success me-2"></i> All Inventory by Store (Grouped)
+                        </a>
+                    </li>
+                    @if(isset($stores) && $stores->count() > 0)
+                        <li><hr class="dropdown-divider"></li>
+                        <li><h6 class="dropdown-header text-uppercase small fw-bold text-muted"><i class="fas fa-warehouse me-1 text-secondary"></i> Export Single Store PDF</h6></li>
+                        @foreach($stores as $st)
+                            <li>
+                                <a class="dropdown-item py-1 small" href="{{ route('store-manager.inventory.export-pdf', ['store_id' => $st->id]) }}" target="_blank">
+                                    <i class="fas fa-store text-muted me-2"></i> {{ $st->name }}
+                                </a>
+                            </li>
+                        @endforeach
+                    @endif
+                </ul>
+            </div>
             <button class="btn btn-success fw-semibold" data-bs-toggle="modal" data-bs-target="#addStockModal">
                 <i class="fas fa-plus-circle me-1"></i> Add / Adjust Stock
             </button>
@@ -73,6 +102,9 @@
                 </div>
                 <div class="col-md-3 d-flex gap-2">
                     <button type="submit" class="btn btn-primary flex-fill"><i class="fas fa-filter me-1"></i>Filter</button>
+                    <a href="{{ route('store-manager.inventory.export-pdf', request()->query()) }}" target="_blank" class="btn btn-outline-danger" title="Export this view to PDF">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </a>
                     <a href="{{ route('store-manager.inventory.all') }}" class="btn btn-secondary flex-fill">Reset</a>
                 </div>
             </form>
