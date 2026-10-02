@@ -70,18 +70,34 @@ class AttendanceController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        // 2. Fetch active employees with explicit separation of Head Office vs Site Attendance
+        // 2. Fetch active employees with explicit separation of Head Office vs Site vs Driver Attendance
         $authUser = auth()->user();
+        $isGeneralServiceUser = $authUser && ($authUser->hasRole('general_service') || $authUser->hasRole('general_services'));
         $isSiteStaffUser = $authUser && ($authUser->hasRole('site_engineer') || $authUser->hasRole('foreman')) && !$authUser->hasAnyRole(['admin', 'global_admin', 'hr', 'hr_manager', 'hr_officer', 'gm']);
 
-        // Default staffType: Site Staff defaults to 'site_driver_remote'; Office/HR/Admin defaults to 'office'
-        $defaultStaffType = $isSiteStaffUser ? 'site_driver_remote' : 'office';
+        // Default staffType:
+        // - General Service defaults to 'driver'
+        // - Site Staff defaults to 'site'
+        // - Office/HR/Admin defaults to 'office'
+        $defaultStaffType = 'office';
+        if ($isGeneralServiceUser) {
+            $defaultStaffType = 'driver';
+        } elseif ($isSiteStaffUser) {
+            $defaultStaffType = 'site';
+        }
         $staffType = request('staff_type', $defaultStaffType);
         
         $empQuery = Employee::activeRoster()->with('project')->orderBy('full_name');
 
         if ($staffType === 'office') {
             $empQuery->officeStaffOnly();
+        } elseif ($staffType === 'site') {
+            $empQuery->siteOnly();
+            if (request()->filled('project_id')) {
+                $empQuery->where('project_id', request('project_id'));
+            }
+        } elseif ($staffType === 'driver') {
+            $empQuery->driversOnly();
         } elseif ($staffType === 'site_driver_remote') {
             $empQuery->siteDriverRemoteOnly();
             if (request()->filled('project_id')) {
@@ -104,14 +120,18 @@ class AttendanceController extends Controller
             $empQuery->where('department', request('department'));
         }
 
-        if ($staffType !== 'site_driver_remote' && request()->filled('project_id')) {
+        if (!in_array($staffType, ['site', 'site_driver_remote']) && request()->filled('project_id')) {
             $empQuery->where('project_id', request('project_id'));
         }
 
         $allActiveEmployees = Employee::activeRoster()->orderBy('full_name')->get();
         $officeStaffCount = Employee::activeRoster()->officeStaffOnly()->count();
-        $siteStaffCount = Employee::activeRoster()->siteDriverRemoteOnly()->count();
+        $siteStaffCount = Employee::activeRoster()->siteOnly()->count();
+        $driverStaffCount = Employee::activeRoster()->driversOnly()->count();
         $allStaffCount = $allActiveEmployees->count();
+
+        // Also fetch active drivers for the General Service record modal
+        $activeDriversList = Employee::activeRoster()->driversOnly()->orderBy('full_name')->get();
 
         $employees = $empQuery->get();
         $employeeIds = $employees->pluck('id')->toArray();
@@ -300,7 +320,38 @@ class AttendanceController extends Controller
                     $cellClass  = 'cell-holiday';
                     $label      = 'Public Holiday (H)';
                     $empHoliday++;
-                } elseif ($emp->isSiteDriverOrRemote() && ($emp->project_id || $emp->is_project_based || $staffType === 'site_driver_remote')) {
+                } elseif ($emp->isDriver()) {
+                    // Driver Department: Managed & Recorded by General Service
+                    if ($att && $att->status === 'absent') {
+                        $statusCode = 'A';
+                        $cellClass  = 'cell-absent';
+                        $label      = 'Absent (Recorded by General Service)';
+                        $empAbsent++;
+                        $totalBaseAbsentCount++;
+                    } elseif ($att && in_array(strtolower($att->status), ['present', 'p'])) {
+                        $statusCode = 'P';
+                        $cellClass  = 'cell-present-ontime';
+                        $tripNote   = $att->notes ?: 'Driver Fleet Duty';
+                        $label      = "Present (GS: {$tripNote})";
+                        $empPresent++;
+                    } elseif ($att && in_array($att->status, ['S', 'trip', 'site'])) {
+                        $statusCode = 'S';
+                        $cellClass  = 'cell-site';
+                        $tripNote   = $att->site_name ?: ($att->notes ?: 'Field Trip / Transport Duty');
+                        $label      = "On-Trip / Transport (S) [{$tripNote}]";
+                        $empSite++;
+                    } elseif ($greg > $todayDateStr) {
+                        $statusCode = '—';
+                        $cellClass  = 'cell-upcoming';
+                        $label      = 'Upcoming Day';
+                    } else {
+                        // Driver working day managed by General Service - default credited as Fleet/Transport Duty (S)
+                        $statusCode = 'S';
+                        $cellClass  = 'cell-site';
+                        $label      = 'Driver Fleet Duty (General Service)';
+                        $empSite++;
+                    }
+                } elseif ($emp->isSiteDriverOrRemote() && ($emp->project_id || $emp->is_project_based || in_array($staffType, ['site', 'site_driver_remote']))) {
                     // Site / Field / Project Staff: Out on site duty (Status S, non-deductible in payroll)
                     $statusCode = 'S';
                     $cellClass  = 'cell-site';
@@ -308,7 +359,7 @@ class AttendanceController extends Controller
                     $label      = "Site Project Duty (S) [{$projName}]";
                     $empSite++;
                 } else {
-                    // Expected working day with no punch, no site, no leave, no holiday
+                    // Head office staff: Expected working day with no punch, no site deployment, no leave, no holiday
                     if ($greg > $todayDateStr) {
                         $statusCode = '—';
                         $cellClass  = 'cell-upcoming';
@@ -325,19 +376,19 @@ class AttendanceController extends Controller
                 $rawIn  = $att?->morning_in ?: ($att?->afternoon_in ?: $att?->check_in);
                 $rawOut = $att?->afternoon_out ?: ($att?->morning_out ?: $att?->check_out);
 
-                // If on approved site deployment or site duty and no biometric punches exist, credit scheduled session times!
-                if ($hasApprovedSite || $statusCode === 'S') {
+                // If on approved site deployment or site/driver duty and no biometric punches exist, credit scheduled session times!
+                if ($hasApprovedSite || $statusCode === 'S' || ($emp->isDriver() && $statusCode === 'P')) {
                     $siteObj = $siteDepRecord ?: ($hasApprovedSite instanceof \App\Models\SiteDeploymentRequest ? $hasApprovedSite : null);
                     if (!$rawIn && !$rawOut) {
                         if ($siteObj) {
-                            $rawIn  = $siteObj->morning_in ?: ($siteObj->afternoon_in ?: '08:40');
+                            $rawIn  = $siteObj->morning_in ?: ($siteObj->afternoon_in ?: '08:00');
                             $rawOut = $siteObj->afternoon_out ?: ($siteObj->morning_out ?: '17:30');
-                        } elseif ($att && ($att->morning_in || $att->afternoon_out)) {
-                            $rawIn  = $att->morning_in ?: ($att->afternoon_in ?: '08:40');
-                            $rawOut = $att->afternoon_out ?: ($att->morning_out ?: '17:30');
+                        } elseif ($att && ($att->morning_in || $att->afternoon_out || $att->check_in || $att->check_out)) {
+                            $rawIn  = $att->morning_in ?: ($att->afternoon_in ?: ($att->check_in ?: '08:00'));
+                            $rawOut = $att->afternoon_out ?: ($att->morning_out ?: ($att->check_out ?: '17:30'));
                         } else {
-                            $rawIn  = '08:30';
-                            $rawOut = '17:00';
+                            $rawIn  = '08:00';
+                            $rawOut = '17:30';
                         }
                     }
                 }
@@ -472,9 +523,12 @@ class AttendanceController extends Controller
             'allActiveEmployees',
             'officeStaffCount',
             'siteStaffCount',
+            'driverStaffCount',
             'allStaffCount',
+            'activeDriversList',
             'stats',
             'staffType',
+            'isGeneralServiceUser',
             'missingDeviceEmployees',
             'blockedUsers',
             'departments',
@@ -1605,6 +1659,81 @@ class AttendanceController extends Controller
                 ->route($targetRoute)
                 ->with('error', 'Sync failed: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Record Driver Daily Attendance by General Service
+     */
+    public function recordDriverAttendance(Request $request)
+    {
+        $user = auth()->user();
+        $canManageDrivers = $user && ($user->hasAnyRole(['general_service', 'general_services', 'admin', 'global_admin', 'hr', 'hr_manager', 'hr_officer']) || (method_exists($user, 'can') && $user->can('attendance.manage')));
+
+        if (!$canManageDrivers) {
+            abort(403, 'Unauthorized. General Service or HR role required to record driver attendance.');
+        }
+
+        $request->validate([
+            'employee_id'      => 'required|exists:employees,id',
+            'attendance_date'  => 'required|date',
+            'duty_status'      => 'required|in:present,trip,leave,absent',
+            'morning_in'       => 'nullable|string',
+            'afternoon_out'    => 'nullable|string',
+            'trip_destination' => 'nullable|string|max:255',
+            'vehicle_plate'    => 'nullable|string|max:50',
+            'notes'            => 'nullable|string|max:500',
+        ]);
+
+        $emp = Employee::findOrFail($request->employee_id);
+        $date = Carbon::parse($request->attendance_date)->toDateString();
+        $duty = $request->duty_status;
+
+        $inTime = $request->morning_in ?: '08:00';
+        $outTime = $request->afternoon_out ?: '17:30';
+
+        $dbStatus = match ($duty) {
+            'present' => 'present',
+            'trip'    => 'S',
+            'leave'   => 'leave',
+            'absent'  => 'absent',
+            default   => 'present',
+        };
+
+        $notesArray = [];
+        if ($request->filled('trip_destination')) {
+            $notesArray[] = 'Trip: ' . $request->trip_destination;
+        }
+        if ($request->filled('vehicle_plate')) {
+            $notesArray[] = 'Vehicle: ' . $request->vehicle_plate;
+        }
+        if ($request->filled('notes')) {
+            $notesArray[] = $request->notes;
+        }
+        $fullNote = 'Logged by General Service (' . ($user->name ?? 'GS') . ') ' . implode(' | ', $notesArray);
+
+        Attendance::updateOrCreate(
+            [
+                'employee_id'     => $emp->id,
+                'attendance_date' => $date,
+            ],
+            [
+                'morning_in'      => in_array($duty, ['present', 'trip']) ? $inTime : null,
+                'afternoon_out'   => in_array($duty, ['present', 'trip']) ? $outTime : null,
+                'check_in'        => in_array($duty, ['present', 'trip']) ? $inTime : null,
+                'check_out'       => in_array($duty, ['present', 'trip']) ? $outTime : null,
+                'hours_worked'    => in_array($duty, ['present', 'trip']) ? 8.0 : 0,
+                'status'          => $dbStatus,
+                'source'          => 'manual',
+                'site_name'       => $request->trip_destination ?: 'General Service Transport',
+                'notes'           => $fullNote,
+                'is_approved'     => true,
+                'approved_by'     => $user->id,
+                'decided_by'      => $user->name,
+                'decided_by_role' => 'general_service',
+            ]
+        );
+
+        return redirect()->back()->with('success', "Driver attendance for {$emp->full_name} on {$date} recorded by General Service!");
     }
 
     /**

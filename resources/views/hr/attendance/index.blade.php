@@ -290,43 +290,84 @@
         </div>
     </div>
 
-    {{-- Separation of Head Office vs Site & Project Attendance --}}
+    {{-- Separation of Head Office vs Site vs Driver Attendance --}}
     <div class="card border-0 shadow-xs rounded-3 mb-3 bg-white p-2">
-        <div class="nav nav-pills nav-fill gap-2" role="tablist">
+        <div class="row g-2" role="tablist">
             {{-- Tab 1: Head Office Attendance --}}
-            <a class="nav-link py-2 px-3 rounded-3 d-flex align-items-center justify-content-center gap-2 {{ $staffType === 'office' ? 'active bg-primary text-white shadow-xs' : 'bg-light text-dark' }}" 
-               href="{{ route('attendance.index', array_merge(request()->except(['staff_type', 'page']), ['staff_type' => 'office'])) }}">
-                <i class="fa-solid fa-building {{ $staffType === 'office' ? 'text-white' : 'text-primary' }} fs-5"></i>
-                <div class="text-start">
-                    <div class="fw-bold" style="font-size: 0.85rem;">Head Office Attendance (ዋና መስሪያ ቤት)</div>
-                    <div class="{{ $staffType === 'office' ? 'text-white-50' : 'text-muted' }}" style="font-size: 0.68rem;">HQ Biometric Machine &bull; 08:30–17:00 &bull; Late Cutoff</div>
-                </div>
-                <span class="badge {{ $staffType === 'office' ? 'bg-white text-primary' : 'bg-primary text-white' }} rounded-pill ms-2 font-monospace">{{ $officeStaffCount }}</span>
-            </a>
+            <div class="col-md-3 col-6">
+                <a class="nav-link py-2 px-3 rounded-3 d-flex align-items-center gap-2 {{ $staffType === 'office' ? 'active bg-primary text-white shadow-xs' : 'bg-light text-dark' }}" 
+                   href="{{ route('attendance.index', array_merge(request()->except(['staff_type', 'page']), ['staff_type' => 'office'])) }}">
+                    <i class="fa-solid fa-building {{ $staffType === 'office' ? 'text-white' : 'text-primary' }} fs-5"></i>
+                    <div class="flex-grow-1 text-truncate">
+                        <div class="fw-bold text-truncate" style="font-size: 0.82rem;">Head Office (ዋና መስሪያ ቤት)</div>
+                        <div class="{{ $staffType === 'office' ? 'text-white-50' : 'text-muted' }}" style="font-size: 0.65rem;">HQ Biometric Machine</div>
+                    </div>
+                    <span class="badge {{ $staffType === 'office' ? 'bg-white text-primary' : 'bg-primary text-white' }} rounded-pill font-monospace">{{ $officeStaffCount }}</span>
+                </a>
+            </div>
 
             {{-- Tab 2: Site & Project Attendance --}}
-            <a class="nav-link py-2 px-3 rounded-3 d-flex align-items-center justify-content-center gap-2 {{ $staffType === 'site_driver_remote' ? 'active bg-warning text-dark shadow-xs border border-warning' : 'bg-light text-dark' }}" 
-               href="{{ route('attendance.index', array_merge(request()->except(['staff_type', 'page']), ['staff_type' => 'site_driver_remote'])) }}">
-                <i class="fa-solid fa-person-digging {{ $staffType === 'site_driver_remote' ? 'text-dark' : 'text-warning' }} fs-5"></i>
-                <div class="text-start">
-                    <div class="fw-bold" style="font-size: 0.85rem;">Site &amp; Project Attendance (የሳይትና ፕሮጀክት)</div>
-                    <div class="text-muted" style="font-size: 0.68rem;">Site Engineers, Foremen, Drivers &amp; Site Deployed Staff</div>
-                </div>
-                <span class="badge {{ $staffType === 'site_driver_remote' ? 'bg-dark text-white' : 'bg-warning text-dark' }} rounded-pill ms-2 font-monospace">{{ $siteStaffCount }}</span>
-            </a>
+            <div class="col-md-3 col-6">
+                <a class="nav-link py-2 px-3 rounded-3 d-flex align-items-center gap-2 {{ in_array($staffType, ['site', 'site_driver_remote']) ? 'active bg-warning text-dark shadow-xs border border-warning' : 'bg-light text-dark' }}" 
+                   href="{{ route('attendance.index', array_merge(request()->except(['staff_type', 'page']), ['staff_type' => 'site'])) }}">
+                    <i class="fa-solid fa-person-digging {{ in_array($staffType, ['site', 'site_driver_remote']) ? 'text-dark' : 'text-warning' }} fs-5"></i>
+                    <div class="flex-grow-1 text-truncate">
+                        <div class="fw-bold text-truncate" style="font-size: 0.82rem;">Site &amp; Project (ሳይትና ፕሮጀክት)</div>
+                        <div class="text-muted" style="font-size: 0.65rem;">Engineers, Foremen &amp; Field</div>
+                    </div>
+                    <span class="badge {{ in_array($staffType, ['site', 'site_driver_remote']) ? 'bg-dark text-white' : 'bg-warning text-dark' }} rounded-pill font-monospace">{{ $siteStaffCount }}</span>
+                </a>
+            </div>
 
-            {{-- Tab 3: All Employees Combined --}}
-            <a class="nav-link py-2 px-3 rounded-3 d-flex align-items-center justify-content-center gap-2 {{ $staffType === 'all' ? 'active bg-dark text-white shadow-xs' : 'bg-light text-dark' }}" 
-               href="{{ route('attendance.index', array_merge(request()->except(['staff_type', 'page']), ['staff_type' => 'all'])) }}">
-                <i class="fa-solid fa-users {{ $staffType === 'all' ? 'text-white' : 'text-secondary' }} fs-5"></i>
-                <div class="text-start">
-                    <div class="fw-bold" style="font-size: 0.85rem;">Combined All Staff (ሁሉም ሰራተኞች)</div>
-                    <div class="{{ $staffType === 'all' ? 'text-white-50' : 'text-muted' }}" style="font-size: 0.68rem;">Company-wide Roster Audit View</div>
-                </div>
-                <span class="badge {{ $staffType === 'all' ? 'bg-white text-dark' : 'bg-secondary text-white' }} rounded-pill ms-2 font-monospace">{{ $allStaffCount }}</span>
-            </a>
+            {{-- Tab 3: Driver Department Attendance (General Service) --}}
+            <div class="col-md-3 col-6">
+                <a class="nav-link py-2 px-3 rounded-3 d-flex align-items-center gap-2 {{ $staffType === 'driver' ? 'active bg-success text-white shadow-xs' : 'bg-light text-dark' }}" 
+                   href="{{ route('attendance.index', array_merge(request()->except(['staff_type', 'page']), ['staff_type' => 'driver'])) }}">
+                    <i class="fa-solid fa-truck {{ $staffType === 'driver' ? 'text-white' : 'text-success' }} fs-5"></i>
+                    <div class="flex-grow-1 text-truncate">
+                        <div class="fw-bold text-truncate" style="font-size: 0.82rem;">Driver Dept. (ሾፌሮች)</div>
+                        <div class="{{ $staffType === 'driver' ? 'text-white-50' : 'text-muted' }}" style="font-size: 0.65rem;">Added by General Service (GS)</div>
+                    </div>
+                    <span class="badge {{ $staffType === 'driver' ? 'bg-white text-success' : 'bg-success text-white' }} rounded-pill font-monospace">{{ $driverStaffCount }}</span>
+                </a>
+            </div>
+
+            {{-- Tab 4: All Employees Combined --}}
+            <div class="col-md-3 col-6">
+                <a class="nav-link py-2 px-3 rounded-3 d-flex align-items-center gap-2 {{ $staffType === 'all' ? 'active bg-dark text-white shadow-xs' : 'bg-light text-dark' }}" 
+                   href="{{ route('attendance.index', array_merge(request()->except(['staff_type', 'page']), ['staff_type' => 'all'])) }}">
+                    <i class="fa-solid fa-users {{ $staffType === 'all' ? 'text-white' : 'text-secondary' }} fs-5"></i>
+                    <div class="flex-grow-1 text-truncate">
+                        <div class="fw-bold text-truncate" style="font-size: 0.82rem;">All Staff (ሁሉም ሰራተኞች)</div>
+                        <div class="{{ $staffType === 'all' ? 'text-white-50' : 'text-muted' }}" style="font-size: 0.65rem;">Company-wide Audit</div>
+                    </div>
+                    <span class="badge {{ $staffType === 'all' ? 'bg-white text-dark' : 'bg-secondary text-white' }} rounded-pill font-monospace">{{ $allStaffCount }}</span>
+                </a>
+            </div>
         </div>
     </div>
+
+    {{-- General Service Driver Management Banner --}}
+    @if($staffType === 'driver' || (auth()->check() && auth()->user()->hasAnyRole(['general_service', 'general_services', 'admin', 'global_admin'])))
+    <div class="card border-0 shadow-xs rounded-3 mb-3 bg-success bg-opacity-10 border-success border-opacity-25">
+        <div class="card-body py-2 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="fa-solid fa-truck text-success fs-4"></i>
+                <div>
+                    <strong class="text-dark small">Driver Department Attendance Management</strong>
+                    <div class="text-muted" style="font-size: 0.72rem;">
+                        Drivers travel on fleet &amp; site transport trips. Their daily duty, destinations, and hours are managed and logged by <strong>General Service (GS)</strong>.
+                    </div>
+                </div>
+            </div>
+            @if(auth()->check() && auth()->user()->hasAnyRole(['general_service', 'general_services', 'admin', 'global_admin', 'hr', 'hr_manager', 'hr_officer']))
+            <button type="button" class="btn btn-sm btn-success shadow-xs" data-bs-toggle="modal" data-bs-target="#recordDriverModal">
+                <i class="fa-solid fa-plus-circle me-1"></i>Record Driver Attendance (አቴንዳንስ መመዝገብ)
+            </button>
+            @endif
+        </div>
+    </div>
+    @endif
 
     {{-- Filter Bar & Ethiopian Period Selector --}}
     <div class="card border-0 shadow-xs rounded-3 mb-3 bg-white">
@@ -349,7 +390,7 @@
                 </div>
 
                 {{-- Project Filter for Site Staff --}}
-                @if($staffType === 'site_driver_remote' || $staffType === 'all')
+                @if(in_array($staffType, ['site', 'site_driver_remote', 'all']))
                 <div class="col-md-3 col-lg-2">
                     <label class="form-label small fw-bold text-dark mb-1">
                         <i class="fa-solid fa-location-dot text-danger me-1"></i>Project / Site
@@ -456,7 +497,10 @@
         <div class="card-header bg-white py-3 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h6 class="fw-bold text-dark mb-0">
-                    @if($staffType === 'site_driver_remote')
+                    @if($staffType === 'driver')
+                        <i class="fa-solid fa-truck me-1 text-success"></i>
+                        Driver Department Attendance Matrix &bull; {{ $period['full_label'] }} ({{ $period['start_greg'] }} &rarr; {{ $period['end_greg'] }})
+                    @elseif(in_array($staffType, ['site', 'site_driver_remote']))
                         <i class="fa-solid fa-person-digging me-1 text-warning"></i>
                         Site &amp; Project Attendance Matrix &bull; {{ $period['full_label'] }} ({{ $period['start_greg'] }} &rarr; {{ $period['end_greg'] }})
                     @elseif($staffType === 'office')
@@ -468,7 +512,9 @@
                     @endif
                 </h6>
                 <small class="text-muted">
-                    @if($staffType === 'site_driver_remote')
+                    @if($staffType === 'driver')
+                        Showing {{ count($matrix) }} active drivers &bull; Attendance managed and logged by General Service Department
+                    @elseif(in_array($staffType, ['site', 'site_driver_remote']))
                         Showing {{ count($matrix) }} active site &amp; field staff &bull; Evaluated by on-site project duty and deployments (Status S)
                     @elseif($staffType === 'office')
                         Showing {{ count($matrix) }} head office staff &bull; Evaluated by head office biometric machine logs
@@ -547,6 +593,10 @@
                                     @if(!empty($emp->device_user_id))
                                         <span class="badge bg-light text-secondary border font-monospace flex-shrink-0" style="font-size: 0.62rem;" title="Machine PIN: {{ $emp->device_user_id }}">
                                             {{ $emp->device_user_id }}
+                                        </span>
+                                    @elseif($emp->isDriver())
+                                        <span class="badge bg-success text-white font-monospace flex-shrink-0" style="font-size: 0.58rem;" title="Driver Department (Logged by General Service)">
+                                            DRIVER
                                         </span>
                                     @elseif($emp->isSiteDriverOrRemote())
                                         <span class="badge bg-info text-white font-monospace flex-shrink-0" style="font-size: 0.58rem;" title="Site &amp; Field Staff (No Head Office PIN required)">
@@ -1186,5 +1236,85 @@ function openDayDetailModal(cell) {
     modal.show();
 }
 </script>
+
+{{-- MODAL: Record Driver Attendance by General Service --}}
+@if(auth()->check() && auth()->user()->hasAnyRole(['general_service', 'general_services', 'admin', 'global_admin', 'hr', 'hr_manager', 'hr_officer']))
+<div class="modal fade text-start" id="recordDriverModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-3 border-0 shadow">
+            <form action="{{ route('attendance.record-driver') }}" method="POST">
+                @csrf
+                <div class="modal-header bg-success text-white py-2 px-3">
+                    <h6 class="modal-title fw-bold">
+                        <i class="fa-solid fa-truck me-1"></i>Record Driver Attendance (General Service)
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Select Driver <span class="text-danger">*</span></label>
+                        <select name="employee_id" class="form-select form-select-sm" required>
+                            <option value="">Choose Driver...</option>
+                            @foreach($activeDriversList as $drv)
+                            <option value="{{ $drv->id }}">
+                                {{ $drv->full_name }} ({{ $drv->employee_code ?? 'EMP' }} &bull; {{ $drv->role_title ?: 'Driver' }})
+                            </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Attendance Date <span class="text-danger">*</span></label>
+                            <input type="date" name="attendance_date" class="form-control form-control-sm" value="{{ today()->toDateString() }}" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Duty Status <span class="text-danger">*</span></label>
+                            <select name="duty_status" class="form-select form-select-sm" required>
+                                <option value="present">Present (Standard Fleet Duty)</option>
+                                <option value="trip" selected>On-Trip / Field Dispatch (S)</option>
+                                <option value="leave">Approved Leave (L)</option>
+                                <option value="absent">Absent (A)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Morning Check-In</label>
+                            <input type="time" name="morning_in" class="form-control form-control-sm" value="08:00">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Afternoon Check-Out</label>
+                            <input type="time" name="afternoon_out" class="form-control form-control-sm" value="17:30">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Trip Destination / Route</label>
+                        <input type="text" name="trip_destination" class="form-control form-control-sm" placeholder="e.g. Chafe Site material transport, Addis-Mojo run, Staff shuttle">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Vehicle Plate Number (Optional)</label>
+                        <input type="text" name="vehicle_plate" class="form-control form-control-sm" placeholder="e.g. 3-45678 AA or Isuzu NPR">
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">General Service Remarks / Notes</label>
+                        <textarea name="notes" rows="2" class="form-control form-control-sm" placeholder="Fuel, cargo details, or route notes..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-3">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="fa-solid fa-check me-1"></i>Save Attendance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 
 @endsection

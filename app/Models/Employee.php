@@ -320,6 +320,58 @@ class Employee extends Model
         });
     }
 
+    /**
+     * Scope query to Drivers Department only (managed by General Service).
+     */
+    public function scopeDriversOnly($query)
+    {
+        return $query->activeRoster()->where(function ($q) {
+            $q->where(DB::raw('LOWER(department)'), 'like', '%driver%')
+              ->orWhere(DB::raw('LOWER(role_title)'), 'like', '%driver%')
+              ->orWhere(DB::raw('LOWER(department)'), 'like', '%transport%')
+              ->orWhere(DB::raw('LOWER(role_title)'), 'like', '%chauffeur%')
+              ->orWhere(DB::raw('LOWER(department)'), 'like', '%fleet%');
+        });
+    }
+
+    /**
+     * Scope query to Site / Project staff only (excluding Drivers and Head Office).
+     */
+    public function scopeSiteOnly($query)
+    {
+        return $query->activeRoster()
+            ->where(function ($q) {
+                $q->where(DB::raw('LOWER(department)'), 'not like', '%driver%')
+                  ->orWhereNull('department');
+            })
+            ->where(function ($q) {
+                $q->where(DB::raw('LOWER(role_title)'), 'not like', '%driver%')
+                  ->orWhereNull('role_title');
+            })
+            ->where(function ($q) {
+                $q->where('is_project_based', true)
+                  ->orWhereNotNull('project_id')
+                  ->orWhereIn(DB::raw('LOWER(employment_type)'), ['site', 'project', 'field', 'daily'])
+                  ->orWhere(DB::raw('LOWER(role_title)'), 'like', '%site%')
+                  ->orWhere(DB::raw('LOWER(role_title)'), 'like', '%foreman%')
+                  ->orWhere(DB::raw('LOWER(role_title)'), 'like', '%surveyor%')
+                  ->orWhere(DB::raw('LOWER(role_title)'), 'like', '%engineer%')
+                  ->orWhere(DB::raw('LOWER(department)'), 'like', '%site%')
+                  ->orWhere(DB::raw('LOWER(department)'), 'like', '%engineering%')
+                  ->orWhere(DB::raw('LOWER(department)'), 'like', '%project%');
+            });
+    }
+
+    /**
+     * Helper to check if employee is specifically in Driver department / fleet.
+     */
+    public function isDriver(): bool
+    {
+        $dept = strtolower(trim((string)$this->department));
+        $role = strtolower(trim((string)$this->role_title));
+        return str_contains($dept, 'driver') || str_contains($role, 'driver') || str_contains($dept, 'transport') || str_contains($role, 'chauffeur') || str_contains($dept, 'fleet');
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);

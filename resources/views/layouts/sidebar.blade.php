@@ -514,6 +514,7 @@
     <div class="collapse {{ $gsActive ? 'show' : '' }}" id="adminGroupGS">
         <ul class="sidebar-sub-nav">
             <li><a href="{{ route('dashboard.general_service') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.general_service') ? 'active' : '' }}"><i class="fa-solid fa-screwdriver-wrench text-warning"></i><span>GS Dashboard</span></a></li>
+            <li><a href="{{ route('attendance.index', ['staff_type' => 'driver']) }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') && request('staff_type') === 'driver' ? 'active' : '' }}"><i class="fa-solid fa-truck text-success"></i><span>Driver Attendance (ሾፌሮች)</span></a></li>
             <li><a href="{{ route('general-service.maintenance.index') }}" class="sidebar-nav-link {{ request()->routeIs('general-service.maintenance.*') ? 'active' : '' }}"><i class="fa-solid fa-wrench text-danger"></i><span>Maintenance Requests</span></a></li>
             <li><a href="{{ route('store-manager.fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.fixed-assets.*') ? 'active' : '' }}"><i class="fa-solid fa-truck-monster text-primary"></i><span>Workshop & Fixed Assets</span></a></li>
             <li><a href="{{ route('foreman.fixed-assets') }}" class="sidebar-nav-link {{ request()->routeIs('foreman.fixed-assets*') ? 'active' : '' }}"><i class="fa-solid fa-truck-monster text-danger"></i><span>Site Fixed Assets (Foreman)</span></a></li>
@@ -2009,6 +2010,12 @@
             </a>
         </li>
         @endif
+        <li class="sidebar-nav-item">
+            <a href="{{ route('attendance.index', ['staff_type' => 'driver']) }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') && request('staff_type') === 'driver' ? 'active' : '' }}">
+                <i class="fa-solid fa-truck text-success"></i>
+                <span>Driver Attendance (ሾፌሮች)</span>
+            </a>
+        </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('general-service.maintenance.index') }}" class="sidebar-nav-link {{ request()->routeIs('general-service.maintenance.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-wrench text-danger"></i>
