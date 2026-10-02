@@ -356,42 +356,54 @@
         </div>
     </div>
 
-    {{-- Legend & Policy Bar --}}
+    {{-- Legend & View Switcher Bar --}}
     <div class="card border-0 shadow-xs rounded-3 mb-3 bg-light">
         <div class="card-body py-2 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
             <div class="d-flex align-items-center gap-3 flex-wrap small">
-                <span class="fw-bold text-dark"><i class="fa-solid fa-tags me-1 text-primary"></i>Cell Legend:</span>
+                <span class="fw-bold text-dark"><i class="fa-solid fa-tags me-1 text-primary"></i>Legend:</span>
                 <span class="d-flex align-items-center gap-1">
-                    <span class="badge bg-success font-monospace px-1.5 py-0.5">P</span>
+                    <span class="badge border bg-white text-success font-monospace px-1.5 py-0.5 border-success">
+                        <i class="fa-solid fa-arrow-right-to-bracket me-0.5"></i>In / Out
+                    </span>
                     <span class="text-dark">Present (Biometric Punch)</span>
                 </span>
                 <span class="d-flex align-items-center gap-1">
-                    <span class="badge bg-info font-monospace px-1.5 py-0.5">S</span>
+                    <span class="badge bg-warning text-dark font-monospace px-1 py-0.5 border border-dark border-opacity-25">+Late</span>
+                    <span class="text-dark">&gt; 08:40 AM Cutoff (3 Lates = 1 Absent)</span>
+                </span>
+                <span class="d-flex align-items-center gap-1">
+                    <span class="badge bg-info text-white font-monospace px-1.5 py-0.5">S</span>
                     <span class="text-dark">Site Deployment (HR Approved)</span>
                 </span>
                 <span class="d-flex align-items-center gap-1">
-                    <span class="badge bg-primary font-monospace px-1.5 py-0.5">L</span>
+                    <span class="badge bg-primary text-white font-monospace px-1.5 py-0.5">L</span>
                     <span class="text-dark">Approved Leave</span>
                 </span>
                 <span class="d-flex align-items-center gap-1">
                     <span class="badge bg-purple text-white px-1.5 py-0.5 font-monospace">H</span>
-                    <span class="text-dark">Public Holiday</span>
+                    <span class="text-dark">Holiday</span>
                 </span>
                 <span class="d-flex align-items-center gap-1">
-                    <span class="badge bg-danger font-monospace px-1.5 py-0.5">A</span>
-                    <span class="text-dark">Absent (Expected Working Day)</span>
+                    <span class="badge bg-danger text-white font-monospace px-1.5 py-0.5">A</span>
+                    <span class="text-dark">Absent</span>
                 </span>
                 <span class="d-flex align-items-center gap-1">
                     <span class="badge bg-secondary bg-opacity-25 text-muted px-1.5 py-0.5 font-monospace">SUN</span>
-                    <span class="text-muted">Sunday (Rest Day)</span>
-                </span>
-                <span class="d-flex align-items-center gap-1">
-                    <span class="badge bg-warning text-dark font-monospace px-1.5 py-0.5 border border-dark border-opacity-25">Late</span>
-                    <span class="text-dark">&gt; 08:40 AM (3 Lates = 1 Absent Day)</span>
+                    <span class="text-muted">Sunday Rest</span>
                 </span>
             </div>
-            <div class="text-muted small">
-                <i class="fa-solid fa-lock me-1"></i>Read-Only Matrix &bull; Generated from ZKTeco Device Push Logs
+
+            {{-- Mode Switcher Buttons --}}
+            <div class="d-flex align-items-center gap-2">
+                <span class="small text-muted d-none d-md-inline">View Mode:</span>
+                <div class="btn-group btn-group-sm shadow-xs" role="group">
+                    <button type="button" class="btn btn-primary active" id="btnModeTimes" onclick="switchMatrixView('times')">
+                        <i class="fa-solid fa-clock me-1"></i>Clock In / Out Times
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="btnModeCompact" onclick="switchMatrixView('compact')">
+                        <i class="fa-solid fa-table-cells me-1"></i>Compact Status
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -404,7 +416,9 @@
                     <i class="fa-solid fa-table-cells me-1 text-primary"></i>
                     {{ $period['full_label'] }} Attendance Matrix ({{ $period['start_greg'] }} &rarr; {{ $period['end_greg'] }})
                 </h6>
-                <small class="text-muted">Showing {{ count($matrix) }} active staff members &bull; {{ count($periodDays) }} total calendar days</small>
+                <small class="text-muted">
+                    Showing {{ count($matrix) }} active staff &bull; {{ count($periodDays) }} calendar days &bull; Click any cell to view complete punch timeline
+                </small>
             </div>
             <div class="small text-muted font-monospace">
                 Ethiopian Period: {{ $period['label_am'] }}
@@ -412,38 +426,38 @@
         </div>
 
         <div class="card-body p-0">
-            <div class="table-responsive" style="max-height: 720px;">
-                <table class="table table-bordered table-hover align-middle mb-0 text-center small attendance-matrix-table" style="font-size: 0.75rem;">
+            <div class="table-responsive" style="max-height: 740px;">
+                <table class="table table-bordered align-middle mb-0 text-center small attendance-matrix-table mode-times" id="attendanceMatrixTable">
                     <thead class="table-light sticky-top" style="z-index: 5;">
                         {{-- Top Header Row: Ethiopian Dates --}}
                         <tr>
-                            <th class="sticky-col-header text-start align-middle" rowspan="2" style="min-width: 220px; z-index: 6; left: 0;">
+                            <th class="sticky-col-header text-start align-middle" rowspan="2" style="min-width: 210px; z-index: 6; left: 0;">
                                 <div class="fw-bold text-dark">Employee Information</div>
-                                <div class="text-muted" style="font-size: 0.68rem;">Code &bull; Role &bull; Device PIN</div>
+                                <div class="text-muted" style="font-size: 0.68rem;">Code &bull; Dept &bull; Device PIN</div>
                             </th>
 
                             @foreach($periodDays as $day)
-                            <th class="p-1 {{ $day['is_sunday'] ? 'bg-secondary bg-opacity-10 text-muted' : ($day['is_saturday'] ? 'bg-warning bg-opacity-10' : '') }}" style="min-width: 38px;">
-                                <div class="fw-bold text-dark" style="font-size: 0.72rem;">{{ $day['eth_day'] }}</div>
-                                <div class="text-muted" style="font-size: 0.65rem;">{{ substr($day['eth_label_en'], 0, 4) }}</div>
+                            <th class="p-1 date-col-header {{ $day['is_sunday'] ? 'bg-secondary bg-opacity-10 text-muted' : ($day['is_saturday'] ? 'bg-warning bg-opacity-10 text-warning-emphasis' : '') }}">
+                                <div class="fw-bold text-dark" style="font-size: 0.75rem;">{{ $day['eth_day'] }}</div>
+                                <div class="text-muted text-uppercase" style="font-size: 0.62rem;">{{ substr($day['eth_label_en'], 0, 4) }}</div>
                             </th>
                             @endforeach
 
                             {{-- Summary Header Group --}}
-                            <th class="bg-success-subtle text-success fw-bold align-middle" rowspan="2" style="min-width: 48px;" title="Total Present Days (P)">P</th>
-                            <th class="bg-info-subtle text-info fw-bold align-middle" rowspan="2" style="min-width: 48px;" title="Total Site Days (S)">S</th>
-                            <th class="bg-primary-subtle text-primary fw-bold align-middle" rowspan="2" style="min-width: 48px;" title="Approved Leave (L)">L</th>
-                            <th class="bg-purple text-white bg-opacity-25 fw-bold align-middle" rowspan="2" style="min-width: 48px;" title="Public Holidays (H)">H</th>
-                            <th class="bg-danger-subtle text-danger fw-bold align-middle" rowspan="2" style="min-width: 48px;" title="Base Absent Days (A)">A</th>
-                            <th class="bg-warning-subtle text-warning fw-bold align-middle" rowspan="2" style="min-width: 48px;" title="Late Punches (&gt; 08:40 AM)">Late</th>
-                            <th class="bg-danger text-white fw-bold align-middle" rowspan="2" style="min-width: 52px;" title="Penalty Absent Days (floor(Late / 3))">Penalty</th>
-                            <th class="bg-danger text-white fw-bold align-middle" rowspan="2" style="min-width: 56px;" title="Effective Absent = A + Penalty Days">Eff. Abs</th>
+                            <th class="bg-success-subtle text-success fw-bold align-middle" rowspan="2" style="min-width: 44px;" title="Total Present Days (P)">P</th>
+                            <th class="bg-info-subtle text-info fw-bold align-middle" rowspan="2" style="min-width: 44px;" title="Total Site Days (S)">S</th>
+                            <th class="bg-primary-subtle text-primary fw-bold align-middle" rowspan="2" style="min-width: 44px;" title="Approved Leave (L)">L</th>
+                            <th class="bg-purple text-white bg-opacity-25 fw-bold align-middle" rowspan="2" style="min-width: 44px;" title="Public Holidays (H)">H</th>
+                            <th class="bg-danger-subtle text-danger fw-bold align-middle" rowspan="2" style="min-width: 44px;" title="Base Absent Days (A)">A</th>
+                            <th class="bg-warning-subtle text-warning fw-bold align-middle" rowspan="2" style="min-width: 44px;" title="Late Punches (&gt; 08:40 AM)">Late</th>
+                            <th class="bg-danger text-white fw-bold align-middle" rowspan="2" style="min-width: 48px;" title="Penalty Absent Days (floor(Late / 3))">Penalty</th>
+                            <th class="bg-danger text-white fw-bold align-middle" rowspan="2" style="min-width: 52px;" title="Effective Absent = A + Penalty Days">Eff. Abs</th>
                         </tr>
 
                         {{-- Second Header Row: Gregorian Dates & Day of Week --}}
                         <tr>
                             @foreach($periodDays as $day)
-                            <th class="p-1 text-muted {{ $day['is_sunday'] ? 'bg-secondary bg-opacity-10' : ($day['is_saturday'] ? 'bg-warning bg-opacity-10' : '') }}" style="font-size: 0.65rem;">
+                            <th class="p-1 date-col-header text-muted {{ $day['is_sunday'] ? 'bg-secondary bg-opacity-10' : ($day['is_saturday'] ? 'bg-warning bg-opacity-10' : '') }}" style="font-size: 0.65rem;">
                                 <div>{{ $day['greg_day'] }} {{ $day['greg_month'] }}</div>
                                 <div class="fw-semibold text-dark">{{ $day['day_name_en'] }}</div>
                             </th>
@@ -460,16 +474,16 @@
                         <tr>
                             {{-- Sticky Employee Info Column --}}
                             <td class="text-start sticky-col-cell bg-white px-2 py-1.5" style="left: 0; z-index: 4;">
-                                <div class="d-flex align-items-center justify-content-between">
-                                    <div class="text-truncate" style="max-width: 170px;">
-                                        <strong class="text-dark">{{ $emp->full_name }}</strong>
-                                        <div class="text-muted" style="font-size: 0.68rem;">
-                                            <span class="font-monospace text-primary">{{ $emp->employee_code ?? 'EMP' }}</span>
+                                <div class="d-flex align-items-center justify-content-between gap-1">
+                                    <div class="text-truncate" style="max-width: 155px;">
+                                        <strong class="text-dark d-block text-truncate" title="{{ $emp->full_name }}">{{ $emp->full_name }}</strong>
+                                        <div class="text-muted" style="font-size: 0.67rem;">
+                                            <span class="font-monospace text-primary fw-semibold">{{ $emp->employee_code ?? 'EMP' }}</span>
                                             &bull; {{ $emp->department ?? 'General' }}
                                         </div>
                                     </div>
-                                    <span class="badge {{ !empty($emp->device_user_id) ? 'bg-light text-secondary border' : 'bg-danger text-white' }} font-monospace" style="font-size: 0.65rem;" title="{{ !empty($emp->device_user_id) ? 'Machine PIN' : 'Missing Device PIN' }}">
-                                        {{ !empty($emp->device_user_id) ? 'PIN:' . $emp->device_user_id : 'NO PIN' }}
+                                    <span class="badge {{ !empty($emp->device_user_id) ? 'bg-light text-secondary border' : 'bg-danger text-white' }} font-monospace flex-shrink-0" style="font-size: 0.62rem;" title="{{ !empty($emp->device_user_id) ? 'Machine PIN: ' . $emp->device_user_id : 'Missing Device PIN' }}">
+                                        {{ !empty($emp->device_user_id) ? $emp->device_user_id : 'NO PIN' }}
                                     </span>
                                 </div>
                             </td>
@@ -479,19 +493,89 @@
                             @php
                                 $dItem = $days[$day['greg_date']] ?? null;
                                 $code = $dItem['code'] ?? '—';
-                                $cellClass = $dItem['class'] ?? 'bg-light text-muted';
+                                $cellClass = $dItem['class'] ?? 'cell-upcoming';
                                 $isLate = $dItem['is_late'] ?? false;
                                 $lateMin = $dItem['late_minutes'] ?? 0;
+                                $punchIn = $dItem['punch_in'] ?? null;
+                                $punchOut = $dItem['punch_out'] ?? null;
+
                                 $tooltip = $dItem['label'] ?? '';
-                                if ($dItem && ($dItem['punch_in'] || $dItem['punch_out'])) {
-                                    $tooltip .= " (In: " . ($dItem['punch_in'] ?? '—') . " | Out: " . ($dItem['punch_out'] ?? '—') . ")";
+                                if ($punchIn || $punchOut) {
+                                    $tooltip .= " (In: " . ($punchIn ?? '—') . " | Out: " . ($punchOut ?? '—') . ")";
                                 }
                             @endphp
-                            <td class="p-0 position-relative cell-box" style="height: 38px;">
-                                <div class="w-100 h-100 d-flex align-items-center justify-content-center font-monospace fw-bold {{ $cellClass }}" title="{{ $tooltip }}" data-bs-toggle="tooltip">
-                                    {{ $code }}
+                            <td class="p-0 position-relative cell-container {{ $cellClass }}"
+                                onclick="openDayDetailModal(this)"
+                                data-emp-name="{{ $emp->full_name }}"
+                                data-emp-code="{{ $emp->employee_code ?? 'EMP' }}"
+                                data-emp-dept="{{ $emp->department ?? 'General' }}"
+                                data-emp-role="{{ $emp->role_title ?? '' }}"
+                                data-date-greg="{{ $day['greg_date'] }} ({{ $day['day_name_en'] }})"
+                                data-date-eth="{{ $day['eth_day'] }} {{ $day['eth_label_am'] }} ({{ $day['eth_year'] }})"
+                                data-code="{{ $code }}"
+                                data-label="{{ $dItem['label'] ?? '' }}"
+                                data-punch-in="{{ $punchIn ?? '—' }}"
+                                data-punch-out="{{ $punchOut ?? '—' }}"
+                                data-morning-in="{{ $dItem['morning_in'] ?? '—' }}"
+                                data-morning-out="{{ $dItem['morning_out'] ?? '—' }}"
+                                data-afternoon-in="{{ $dItem['afternoon_in'] ?? '—' }}"
+                                data-afternoon-out="{{ $dItem['afternoon_out'] ?? '—' }}"
+                                data-hours="{{ $dItem['hours'] ?? '0' }}"
+                                data-is-late="{{ $isLate ? '1' : '0' }}"
+                                data-late-min="{{ $lateMin }}"
+                                data-device="{{ $emp->device_user_id ?? 'None' }}"
+                                data-site="{{ $dItem['site_name'] ?? '' }}"
+                                data-leave="{{ $dItem['leave_title'] ?? '' }}"
+                                data-holiday="{{ $dItem['holiday_name'] ?? '' }}"
+                                data-notes="{{ $dItem['notes'] ?? '' }}"
+                                title="{{ $tooltip }}">
+
+                                {{-- DETAILED VIEW (Clock In & Clock Out) --}}
+                                <div class="view-times-box d-flex flex-column align-items-center justify-content-center p-1 w-100 h-100">
+                                    @if($code === 'P')
+                                        {{-- Clock In (Green or Warning if late) --}}
+                                        <div class="fw-bold font-monospace text-truncate w-100 text-center {{ $isLate ? 'text-warning-emphasis' : 'text-success' }}" style="font-size: 0.73rem; line-height: 1.15;">
+                                            <i class="fa-solid fa-arrow-right-to-bracket me-0.5 opacity-75" style="font-size: 0.58rem;"></i>{{ $punchIn ?? '—' }}
+                                        </div>
+                                        {{-- Clock Out --}}
+                                        <div class="font-monospace text-truncate w-100 text-center text-secondary" style="font-size: 0.68rem; line-height: 1.15; opacity: 0.85;">
+                                            <i class="fa-solid fa-arrow-right-from-bracket me-0.5 opacity-75" style="font-size: 0.58rem;"></i>{{ $punchOut ?? '—' }}
+                                        </div>
+                                        @if($isLate)
+                                        <span class="badge bg-warning text-dark border border-warning position-absolute top-0 end-0 px-1 py-0 shadow-xs" style="font-size: 0.52rem; transform: scale(0.85); transform-origin: top right;" title="Late by {{ $lateMin }}m">
+                                            +{{ $lateMin }}m
+                                        </span>
+                                        @endif
+                                    @elseif($code === 'S')
+                                        <span class="badge bg-info text-white font-monospace px-1.5 py-0.5" style="font-size: 0.68rem;">S</span>
+                                        <div class="text-info fw-bold" style="font-size: 0.58rem; line-height: 1;">SITE</div>
+                                    @elseif($code === 'L')
+                                        <span class="badge bg-primary text-white font-monospace px-1.5 py-0.5" style="font-size: 0.68rem;">L</span>
+                                        <div class="text-primary fw-bold" style="font-size: 0.58rem; line-height: 1;">LEAVE</div>
+                                    @elseif($code === 'H')
+                                        <span class="badge bg-purple text-white font-monospace px-1.5 py-0.5" style="font-size: 0.68rem;">H</span>
+                                        <div class="text-purple fw-bold" style="font-size: 0.58rem; line-height: 1;">HOLIDAY</div>
+                                    @elseif($code === 'SUN')
+                                        @if(!empty($punchIn))
+                                            <div class="fw-bold font-monospace text-success" style="font-size: 0.72rem; line-height: 1.1;">{{ $punchIn }}</div>
+                                            <div class="font-monospace text-secondary" style="font-size: 0.66rem; line-height: 1.1;">{{ $punchOut ?: '—' }}</div>
+                                            <span class="badge bg-warning text-dark position-absolute top-0 end-0 px-1 py-0" style="font-size: 0.52rem;">OT</span>
+                                        @else
+                                            <span class="text-muted fw-bold font-monospace" style="font-size: 0.68rem;">SUN</span>
+                                        @endif
+                                    @elseif($code === 'A')
+                                        <span class="badge bg-danger text-white font-monospace px-1.5 py-0.5" style="font-size: 0.68rem;">A</span>
+                                        <div class="text-danger fw-bold opacity-75" style="font-size: 0.58rem; line-height: 1;">ABSENT</div>
+                                    @else
+                                        <span class="text-muted" style="font-size: 0.8rem;">—</span>
+                                    @endif
+                                </div>
+
+                                {{-- COMPACT VIEW (Large letter badge only) --}}
+                                <div class="view-compact-box d-none align-items-center justify-content-center w-100 h-100">
+                                    <span class="fw-bold font-monospace badge-letter" style="font-size: 0.85rem;">{{ $code }}</span>
                                     @if($isLate)
-                                    <span class="position-absolute top-0 end-0 p-1" title="Late: {{ $lateMin }}m">
+                                    <span class="position-absolute top-0 end-0 p-1">
                                         <span class="badge rounded-circle p-1 bg-danger"></span>
                                     </span>
                                     @endif
@@ -519,6 +603,87 @@
                         @endforelse
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- MODAL: Interactive Day Punch Detail Modal --}}
+<div class="modal fade" id="dayPunchModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header py-3 px-4 border-bottom bg-light">
+                <div>
+                    <h6 class="modal-title fw-bold text-dark mb-0" id="dpEmpName">Employee Name</h6>
+                    <div class="text-muted small" id="dpEmpMeta">Code &bull; Department</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                {{-- Date & Status Header --}}
+                <div class="d-flex align-items-center justify-content-between p-3 rounded-3 mb-3 bg-light border">
+                    <div>
+                        <div class="text-muted small">Ethiopian Calendar Date:</div>
+                        <strong class="text-dark fs-6" id="dpDateEth">—</strong>
+                        <div class="text-muted small mt-0.5" id="dpDateGreg">—</div>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge fs-6 px-3 py-1.5" id="dpStatusBadge">Status</span>
+                    </div>
+                </div>
+
+                {{-- Time Clock Cards --}}
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <div class="p-3 rounded-3 border bg-white text-center">
+                            <span class="text-muted small text-uppercase fw-semibold d-block mb-1">
+                                <i class="fa-solid fa-arrow-right-to-bracket text-success me-1"></i>Clock In
+                            </span>
+                            <div class="fs-4 fw-bold font-monospace text-dark" id="dpPunchIn">—</div>
+                            <div class="small text-muted" id="dpLateTag">Official Cutoff: 08:40 AM</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3 rounded-3 border bg-white text-center">
+                            <span class="text-muted small text-uppercase fw-semibold d-block mb-1">
+                                <i class="fa-solid fa-arrow-right-from-bracket text-secondary me-1"></i>Clock Out
+                            </span>
+                            <div class="fs-4 fw-bold font-monospace text-dark" id="dpPunchOut">—</div>
+                            <div class="small text-muted" id="dpHoursTag">Hours Worked</div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Shift Sessions Breakdown --}}
+                <div class="border rounded-3 p-3 bg-light mb-3">
+                    <div class="fw-bold small text-dark mb-2">
+                        <i class="fa-solid fa-clock-rotate-left text-primary me-1"></i>Daily Shift Sessions Breakdown
+                    </div>
+                    <div class="row g-2 small font-monospace">
+                        <div class="col-6">
+                            <span class="text-muted">Morning In:</span>
+                            <strong class="text-dark ms-1" id="dpMorningIn">—</strong>
+                        </div>
+                        <div class="col-6">
+                            <span class="text-muted">Morning Out (Lunch):</span>
+                            <strong class="text-dark ms-1" id="dpMorningOut">—</strong>
+                        </div>
+                        <div class="col-6">
+                            <span class="text-muted">Afternoon In:</span>
+                            <strong class="text-dark ms-1" id="dpAfternoonIn">—</strong>
+                        </div>
+                        <div class="col-6">
+                            <span class="text-muted">Day End Out:</span>
+                            <strong class="text-dark ms-1" id="dpAfternoonOut">—</strong>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Metadata / Site / Leave / Notes --}}
+                <div class="small text-muted" id="dpExtraInfo"></div>
+            </div>
+            <div class="modal-footer bg-light py-2 px-3">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -703,18 +868,226 @@
     left: 0;
     z-index: 4;
     background-color: #ffffff;
-    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.06);
 }
-.cell-box {
-    transition: transform 0.1s ease;
+
+/* Date column sizing depending on mode */
+.attendance-matrix-table.mode-times .date-col-header,
+.attendance-matrix-table.mode-times .cell-container {
+    min-width: 66px;
+    height: 48px;
 }
-.cell-box:hover {
-    transform: scale(1.08);
-    z-index: 5;
+.attendance-matrix-table.mode-compact .date-col-header,
+.attendance-matrix-table.mode-compact .cell-container {
+    min-width: 40px;
+    height: 38px;
 }
+
+/* Cell hover interaction */
+.cell-container {
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+}
+.cell-container:hover {
+    transform: scale(1.06);
+    z-index: 10 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Modern, clean semantic cell color themes */
+.cell-present-ontime {
+    background-color: #f0fdf4 !important;
+    border: 1px solid #bbf7d0 !important;
+}
+.cell-present-late {
+    background-color: #fffbeb !important;
+    border: 1px solid #fde68a !important;
+}
+.cell-site {
+    background-color: #f0f9ff !important;
+    border: 1px solid #bae6fd !important;
+}
+.cell-leave {
+    background-color: #eef2ff !important;
+    border: 1px solid #c7d2fe !important;
+}
+.cell-holiday {
+    background-color: #faf5ff !important;
+    border: 1px solid #e9d5ff !important;
+}
+.cell-sunday {
+    background-color: #f9fafb !important;
+    border: 1px solid #e5e7eb !important;
+}
+.cell-sunday-ot {
+    background-color: #ecfdf5 !important;
+    border: 1px solid #6ee7b7 !important;
+}
+.cell-absent {
+    background-color: #fff1f2 !important;
+    border: 1px solid #fecdd3 !important;
+}
+.cell-upcoming {
+    background-color: #ffffff !important;
+    border: 1px solid #f3f4f6 !important;
+}
+
+/* Colors for letters */
+.cell-present-ontime .badge-letter { color: #166534; }
+.cell-present-late .badge-letter   { color: #b45309; }
+.cell-site .badge-letter           { color: #0369a1; }
+.cell-leave .badge-letter          { color: #4338ca; }
+.cell-holiday .badge-letter        { color: #7e22ce; }
+.cell-sunday .badge-letter         { color: #6b7280; }
+.cell-absent .badge-letter         { color: #be123c; }
+.cell-upcoming .badge-letter       { color: #9ca3af; }
+
 .bg-purple {
-    background-color: #6f42c1 !important;
+    background-color: #7e22ce !important;
+}
+.text-purple {
+    color: #7e22ce !important;
 }
 </style>
+
+<script>
+function switchMatrixView(mode) {
+    const table = document.getElementById('attendanceMatrixTable');
+    const btnTimes = document.getElementById('btnModeTimes');
+    const btnCompact = document.getElementById('btnModeCompact');
+
+    if (!table) return;
+
+    if (mode === 'compact') {
+        table.classList.remove('mode-times');
+        table.classList.add('mode-compact');
+
+        document.querySelectorAll('.view-times-box').forEach(el => el.classList.add('d-none'));
+        document.querySelectorAll('.view-compact-box').forEach(el => {
+            el.classList.remove('d-none');
+            el.classList.add('d-flex');
+        });
+
+        btnCompact.classList.add('btn-primary', 'active');
+        btnCompact.classList.remove('btn-outline-secondary');
+        btnTimes.classList.remove('btn-primary', 'active');
+        btnTimes.classList.add('btn-outline-secondary');
+        try { localStorage.setItem('matrix_view_mode', 'compact'); } catch(e){}
+    } else {
+        table.classList.remove('mode-compact');
+        table.classList.add('mode-times');
+
+        document.querySelectorAll('.view-compact-box').forEach(el => {
+            el.classList.remove('d-flex');
+            el.classList.add('d-none');
+        });
+        document.querySelectorAll('.view-times-box').forEach(el => el.classList.remove('d-none'));
+
+        btnTimes.classList.add('btn-primary', 'active');
+        btnTimes.classList.remove('btn-outline-secondary');
+        btnCompact.classList.remove('btn-primary', 'active');
+        btnCompact.classList.add('btn-outline-secondary');
+        try { localStorage.setItem('matrix_view_mode', 'times'); } catch(e){}
+    }
+}
+
+// Restore saved preference on load
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        const saved = localStorage.getItem('matrix_view_mode');
+        if (saved === 'compact') {
+            switchMatrixView('compact');
+        }
+    } catch(e){}
+});
+
+// Open Day Detail Modal with complete punch metadata
+function openDayDetailModal(cell) {
+    if (!cell) return;
+    const empName = cell.getAttribute('data-emp-name') || 'Employee';
+    const empCode = cell.getAttribute('data-emp-code') || '';
+    const empDept = cell.getAttribute('data-emp-dept') || '';
+    const empRole = cell.getAttribute('data-emp-role') || '';
+    const dateEth = cell.getAttribute('data-date-eth') || '';
+    const dateGreg = cell.getAttribute('data-date-greg') || '';
+    const code = cell.getAttribute('data-code') || '—';
+    const label = cell.getAttribute('data-label') || '';
+    const punchIn = cell.getAttribute('data-punch-in') || '—';
+    const punchOut = cell.getAttribute('data-punch-out') || '—';
+    const mIn = cell.getAttribute('data-morning-in') || '—';
+    const mOut = cell.getAttribute('data-morning-out') || '—';
+    const aIn = cell.getAttribute('data-afternoon-in') || '—';
+    const aOut = cell.getAttribute('data-afternoon-out') || '—';
+    const hours = cell.getAttribute('data-hours') || '0';
+    const isLate = cell.getAttribute('data-is-late') === '1';
+    const lateMin = cell.getAttribute('data-late-min') || '0';
+    const device = cell.getAttribute('data-device') || 'None';
+    const site = cell.getAttribute('data-site') || '';
+    const leave = cell.getAttribute('data-leave') || '';
+    const holiday = cell.getAttribute('data-holiday') || '';
+    const notes = cell.getAttribute('data-notes') || '';
+
+    document.getElementById('dpEmpName').textContent = empName;
+    document.getElementById('dpEmpMeta').textContent = `${empCode} • ${empDept} ${empRole ? '• ' + empRole : ''} (Device PIN: ${device})`;
+    document.getElementById('dpDateEth').textContent = dateEth;
+    document.getElementById('dpDateGreg').textContent = dateGreg;
+    document.getElementById('dpPunchIn').textContent = punchIn;
+    document.getElementById('dpPunchOut').textContent = punchOut;
+    document.getElementById('dpMorningIn').textContent = mIn;
+    document.getElementById('dpMorningOut').textContent = mOut;
+    document.getElementById('dpAfternoonIn').textContent = aIn;
+    document.getElementById('dpAfternoonOut').textContent = aOut;
+    document.getElementById('dpHoursTag').textContent = `${hours} Hours Worked`;
+
+    const statusBadge = document.getElementById('dpStatusBadge');
+    statusBadge.className = 'badge fs-6 px-3 py-1.5';
+
+    if (code === 'P') {
+        if (isLate) {
+            statusBadge.classList.add('bg-warning', 'text-dark');
+            statusBadge.textContent = `Present • Late (${lateMin} min)`;
+            document.getElementById('dpLateTag').innerHTML = `<span class="text-danger fw-bold"><i class="fa-solid fa-clock me-1"></i>Late by ${lateMin} min (Cutoff: 08:40 AM)</span>`;
+        } else {
+            statusBadge.classList.add('bg-success', 'text-white');
+            statusBadge.textContent = 'Present (On-Time)';
+            document.getElementById('dpLateTag').innerHTML = `<span class="text-success"><i class="fa-solid fa-check me-1"></i>On-Time Arrival (Before 08:40 AM)</span>`;
+        }
+    } else if (code === 'S') {
+        statusBadge.classList.add('bg-info', 'text-white');
+        statusBadge.textContent = 'On-Site Deployment (Credited)';
+        document.getElementById('dpLateTag').textContent = site ? `Site: ${site}` : 'Field Deployment';
+    } else if (code === 'L') {
+        statusBadge.classList.add('bg-primary', 'text-white');
+        statusBadge.textContent = 'Approved Leave';
+        document.getElementById('dpLateTag').textContent = leave || 'Approved Leave';
+    } else if (code === 'H') {
+        statusBadge.classList.add('bg-purple', 'text-white');
+        statusBadge.textContent = 'Public Holiday';
+        document.getElementById('dpLateTag').textContent = holiday || 'Official Company Holiday';
+    } else if (code === 'SUN') {
+        statusBadge.classList.add('bg-secondary', 'text-white');
+        statusBadge.textContent = punchIn !== '—' ? 'Sunday Overtime Work' : 'Sunday Rest Day';
+        document.getElementById('dpLateTag').textContent = 'Weekly Rest Day';
+    } else if (code === 'A') {
+        statusBadge.classList.add('bg-danger', 'text-white');
+        statusBadge.textContent = 'Absent (No Biometric Punches)';
+        document.getElementById('dpLateTag').innerHTML = `<span class="text-danger fw-bold"><i class="fa-solid fa-circle-exclamation me-1"></i>Expected working day with no punch</span>`;
+    } else {
+        statusBadge.classList.add('bg-light', 'text-muted');
+        statusBadge.textContent = 'Upcoming Calendar Day';
+        document.getElementById('dpLateTag').textContent = 'Not yet reached';
+    }
+
+    let extraHtml = [];
+    if (site) extraHtml.push(`<div><strong>Project Site:</strong> ${site}</div>`);
+    if (leave) extraHtml.push(`<div><strong>Leave Type:</strong> ${leave}</div>`);
+    if (holiday) extraHtml.push(`<div><strong>Holiday:</strong> ${holiday}</div>`);
+    if (notes) extraHtml.push(`<div><strong>Notes:</strong> ${notes}</div>`);
+    document.getElementById('dpExtraInfo').innerHTML = extraHtml.join('');
+
+    const modal = new bootstrap.Modal(document.getElementById('dayPunchModal'));
+    modal.show();
+}
+</script>
 
 @endsection

@@ -227,18 +227,18 @@ class AttendanceController extends Controller
                     // Sunday is rest day (never generate Absent)
                     if ($hasPunch) {
                         $statusCode = 'P';
-                        $cellClass  = 'bg-success text-white';
+                        $cellClass  = 'cell-sunday-ot';
                         $label      = 'Sunday Overtime (P)';
                         $empPresent++;
                     } else {
                         $statusCode = 'SUN';
-                        $cellClass  = 'bg-secondary bg-opacity-25 text-muted';
+                        $cellClass  = 'cell-sunday';
                         $label      = 'Sunday (Rest Day)';
                     }
                 } elseif ($hasPunch) {
                     // Any punch means present!
                     $statusCode = 'P';
-                    $cellClass  = $isLate ? 'bg-warning text-dark border-warning' : 'bg-success text-white';
+                    $cellClass  = $isLate ? 'cell-present-late' : 'cell-present-ontime';
                     $label      = $isLate ? "Present (Late {$lateMinutes}m)" : 'Present (P)';
                     $empPresent++;
                     if ($isLate) {
@@ -248,46 +248,71 @@ class AttendanceController extends Controller
                 } elseif ($hasApprovedSite) {
                     // Approved site deployment: always S (non-deductible)
                     $statusCode = 'S';
-                    $cellClass  = 'bg-info text-white';
+                    $cellClass  = 'cell-site';
                     $label      = 'On-Site Deployment (S)';
                     $empSite++;
                 } elseif ($leaveObj) {
                     // Approved leave
                     $statusCode = 'L';
-                    $cellClass  = 'bg-primary text-white';
+                    $cellClass  = 'cell-leave';
                     $label      = 'Approved Leave (L)';
                     $empLeave++;
                 } elseif ($holidayObj) {
                     // Public holiday
                     $statusCode = 'H';
-                    $cellClass  = 'bg-purple text-white bg-opacity-75';
+                    $cellClass  = 'cell-holiday';
                     $label      = 'Public Holiday (H)';
                     $empHoliday++;
                 } else {
                     // Expected working day with no punch, no site, no leave, no holiday
                     if ($greg > $todayDateStr) {
                         $statusCode = '—';
-                        $cellClass  = 'bg-light text-muted';
+                        $cellClass  = 'cell-upcoming';
                         $label      = 'Upcoming Day';
                     } else {
                         $statusCode = 'A';
-                        $cellClass  = 'bg-danger text-white';
+                        $cellClass  = 'cell-absent';
                         $label      = 'Absent (A)';
                         $empAbsent++;
                         $totalBaseAbsentCount++;
                     }
                 }
 
+                $rawIn  = $att?->morning_in ?: ($att?->afternoon_in ?: $att?->check_in);
+                $rawOut = $att?->afternoon_out ?: ($att?->morning_out ?: $att?->check_out);
+
+                $punchInFormatted = null;
+                $punchOutFormatted = null;
+
+                if ($rawIn) {
+                    $rawIn = trim($rawIn);
+                    $punchInFormatted = strlen($rawIn) >= 5 ? substr($rawIn, 0, 5) : $rawIn;
+                }
+                if ($rawOut) {
+                    $rawOut = trim($rawOut);
+                    $punchOutFormatted = strlen($rawOut) >= 5 ? substr($rawOut, 0, 5) : $rawOut;
+                }
+                if ($punchInFormatted && $punchOutFormatted && $punchInFormatted === $punchOutFormatted && (!$att?->check_out || $att?->check_in === $att?->check_out)) {
+                    $punchOutFormatted = null;
+                }
+
                 $dayStatuses[$greg] = [
-                    'code'         => $statusCode,
-                    'class'        => $cellClass,
-                    'label'        => $label,
-                    'is_late'      => $isLate,
-                    'late_minutes' => $lateMinutes,
-                    'punch_in'     => $att?->morning_in ?: $att?->check_in,
-                    'punch_out'    => $att?->afternoon_out ?: $att?->check_out,
-                    'hours'        => $att?->hours_worked,
-                    'notes'        => $att?->notes,
+                    'code'          => $statusCode,
+                    'class'         => $cellClass,
+                    'label'         => $label,
+                    'is_late'       => $isLate,
+                    'late_minutes'  => $lateMinutes,
+                    'punch_in'      => $punchInFormatted,
+                    'punch_out'     => $punchOutFormatted,
+                    'morning_in'    => $att?->morning_in ? substr(trim($att->morning_in), 0, 5) : null,
+                    'morning_out'   => $att?->morning_out ? substr(trim($att->morning_out), 0, 5) : null,
+                    'afternoon_in'  => $att?->afternoon_in ? substr(trim($att->afternoon_in), 0, 5) : null,
+                    'afternoon_out' => $att?->afternoon_out ? substr(trim($att->afternoon_out), 0, 5) : null,
+                    'hours'         => $att?->hours_worked ? round((float)$att->hours_worked, 1) : null,
+                    'notes'         => $att?->notes,
+                    'site_name'     => $hasApprovedSite ? ($att?->site_name ?? (is_object($hasApprovedSite) && isset($hasApprovedSite->project) ? $hasApprovedSite->project?->name : 'Site Project')) : null,
+                    'leave_title'   => $leaveObj ? (is_object($leaveObj) && isset($leaveObj->leaveType) ? $leaveObj->leaveType?->name : 'Approved Leave') : null,
+                    'holiday_name'  => $holidayObj ? ($holidayObj->title ?? 'Public Holiday') : null,
                 ];
             }
 
