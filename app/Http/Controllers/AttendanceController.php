@@ -55,6 +55,21 @@ class AttendanceController extends Controller
         $endDate    = $period['end_greg'];
         $availablePeriods = \App\Helpers\EthiopianCalendar::getAvailablePayrollPeriods();
 
+        // Auto-guarantee all approved site deployments for this period are synchronized into Attendance with status 'S'
+        try {
+            $approvedSiteDeps = SiteDeploymentRequest::where('status', 'approved')
+                ->where(function($q) use ($startDate, $endDate) {
+                    $q->whereBetween('start_date', [$startDate, $endDate])
+                      ->orWhereBetween('end_date', [$startDate, $endDate])
+                      ->orWhere(function($sq) use ($startDate, $endDate) {
+                          $sq->where('start_date', '<=', $startDate)->where('end_date', '>=', $endDate);
+                      });
+                })->get();
+            foreach ($approvedSiteDeps as $dep) {
+                self::applyDeploymentToAttendance($dep);
+            }
+        } catch (\Throwable $e) {}
+
         // 2. Fetch all active employees (strictly exclude Dead File)
         // Default: Show EVERY active employee (office, site, driver, remote)
         $staffType = request('staff_type', 'all'); // 'all' (default), 'office', or 'site_driver_remote'
@@ -197,18 +212,29 @@ class AttendanceController extends Controller
                 }
 
                 // Check approved site deployment
+                $siteDepRecord = $approvedSiteDeployments->first(function($sd) use ($emp, $greg) {
+                    $sdStart = $sd->start_date ? Carbon::parse($sd->start_date)->toDateString() : null;
+                    $sdEnd   = $sd->end_date ? Carbon::parse($sd->end_date)->toDateString() : null;
+                    return (int)$sd->employee_id === (int)$emp->id 
+                        && $sdStart 
+                        && $sdEnd 
+                        && $sdStart <= $greg 
+                        && $sdEnd >= $greg;
+                });
+
                 $hasApprovedSite = ($att && ($att->status === 'S' || $att->source === 'site_dispatch' || $att->isOnSite()))
-                    || $approvedSiteDeployments->first(function($sd) use ($emp, $greg) {
-                        return $sd->employee_id === $emp->id 
-                            && $sd->start_date <= $greg 
-                            && $sd->end_date >= $greg;
-                    });
+                    ? $att
+                    : $siteDepRecord;
 
                 // Check approved leave
                 $leaveObj = $leaves->first(function($lv) use ($emp, $greg) {
-                    return $lv->employee_id === $emp->id 
-                        && $lv->start_date <= $greg 
-                        && $lv->end_date >= $greg;
+                    $lvStart = $lv->start_date ? Carbon::parse($lv->start_date)->toDateString() : null;
+                    $lvEnd   = $lv->end_date ? Carbon::parse($lv->end_date)->toDateString() : null;
+                    return (int)$lv->employee_id === (int)$emp->id 
+                        && $lvStart 
+                        && $lvEnd 
+                        && $lvStart <= $greg 
+                        && $lvEnd >= $greg;
                 });
 
                 // Check public holiday
@@ -235,6 +261,12 @@ class AttendanceController extends Controller
                         $cellClass  = 'cell-sunday';
                         $label      = 'Sunday (Rest Day)';
                     }
+                } elseif ($hasApprovedSite) {
+                    // Approved site deployment: ALWAYS S (non-deductible, fully credited)
+                    $statusCode = 'S';
+                    $cellClass  = 'cell-site';
+                    $label      = 'On-Site Deployment (S)';
+                    $empSite++;
                 } elseif ($hasPunch) {
                     // Any punch means present!
                     $statusCode = 'P';
@@ -245,12 +277,6 @@ class AttendanceController extends Controller
                         $empLate++;
                         $totalLateCount++;
                     }
-                } elseif ($hasApprovedSite) {
-                    // Approved site deployment: always S (non-deductible)
-                    $statusCode = 'S';
-                    $cellClass  = 'cell-site';
-                    $label      = 'On-Site Deployment (S)';
-                    $empSite++;
                 } elseif ($leaveObj) {
                     // Approved leave
                     $statusCode = 'L';
@@ -281,6 +307,20 @@ class AttendanceController extends Controller
                 $rawIn  = $att?->morning_in ?: ($att?->afternoon_in ?: $att?->check_in);
                 $rawOut = $att?->afternoon_out ?: ($att?->morning_out ?: $att?->check_out);
 
+                // If on approved site deployment and no biometric punches exist, credit scheduled session times!
+                if ($hasApprovedSite) {
+                    $siteObj = $siteDepRecord ?: ($hasApprovedSite instanceof \App\Models\SiteDeploymentRequest ? $hasApprovedSite : null);
+                    if (!$rawIn && !$rawOut) {
+                        if ($siteObj) {
+                            $rawIn  = $siteObj->morning_in ?: ($siteObj->afternoon_in ?: '08:40');
+                            $rawOut = $siteObj->afternoon_out ?: ($siteObj->morning_out ?: '17:30');
+                        } elseif ($att) {
+                            $rawIn  = $att->morning_in ?: ($att->afternoon_in ?: '08:40');
+                            $rawOut = $att->afternoon_out ?: ($att->afternoon_in ?: '17:30');
+                        }
+                    }
+                }
+
                 $to12H = function(?string $time): ?string {
                     if (!$time) return null;
                     $time = trim($time);
@@ -303,6 +343,19 @@ class AttendanceController extends Controller
                     $punchOutFormatted = null;
                 }
 
+                $siteTitle = null;
+                if ($hasApprovedSite) {
+                    $siteObj = $siteDepRecord ?: ($hasApprovedSite instanceof \App\Models\SiteDeploymentRequest ? $hasApprovedSite : null);
+                    $siteTitle = $siteObj?->site_name 
+                        ?: ($siteObj?->siteProject?->name 
+                        ?? ($att?->site_name ?? 'On-Site Project'));
+                }
+
+                $mInVal  = $att?->morning_in ?? ($siteDepRecord?->morning_in ?? ($hasApprovedSite ? '08:40' : null));
+                $mOutVal = $att?->morning_out ?? ($siteDepRecord?->morning_out ?? ($hasApprovedSite ? '12:30' : null));
+                $aInVal  = $att?->afternoon_in ?? ($siteDepRecord?->afternoon_in ?? ($hasApprovedSite ? '13:35' : null));
+                $aOutVal = $att?->afternoon_out ?? ($siteDepRecord?->afternoon_out ?? ($hasApprovedSite ? '17:30' : null));
+
                 $dayStatuses[$greg] = [
                     'code'          => $statusCode,
                     'class'         => $cellClass,
@@ -311,13 +364,13 @@ class AttendanceController extends Controller
                     'late_minutes'  => $lateMinutes,
                     'punch_in'      => $punchInFormatted,
                     'punch_out'     => $punchOutFormatted,
-                    'morning_in'    => $to12H($att?->morning_in),
-                    'morning_out'   => $to12H($att?->morning_out),
-                    'afternoon_in'  => $to12H($att?->afternoon_in),
-                    'afternoon_out' => $to12H($att?->afternoon_out),
-                    'hours'         => $att?->hours_worked ? round((float)$att->hours_worked, 1) : null,
-                    'notes'         => $att?->notes,
-                    'site_name'     => $hasApprovedSite ? ($att?->site_name ?? (is_object($hasApprovedSite) && isset($hasApprovedSite->project) ? $hasApprovedSite->project?->name : 'Site Project')) : null,
+                    'morning_in'    => $to12H($mInVal),
+                    'morning_out'   => $to12H($mOutVal),
+                    'afternoon_in'  => $to12H($aInVal),
+                    'afternoon_out' => $to12H($aOutVal),
+                    'hours'         => $att?->hours_worked ? round((float)$att->hours_worked, 1) : ($siteDepRecord ? (float)$siteDepRecord->hours_worked : ($hasApprovedSite ? 8.0 : null)),
+                    'notes'         => $att?->notes ?? ($siteDepRecord?->task_notes),
+                    'site_name'     => $siteTitle,
                     'leave_title'   => $leaveObj ? (is_object($leaveObj) && isset($leaveObj->leaveType) ? $leaveObj->leaveType?->name : 'Approved Leave') : null,
                     'holiday_name'  => $holidayObj ? ($holidayObj->title ?? 'Public Holiday') : null,
                 ];

@@ -547,8 +547,16 @@
                                         </span>
                                         @endif
                                     @elseif($code === 'S')
-                                        <span class="badge bg-info text-white font-monospace px-1.5 py-0.5" style="font-size: 0.68rem;">S</span>
-                                        <div class="text-info fw-bold" style="font-size: 0.58rem; line-height: 1;">SITE</div>
+                                        {{-- On-Site Credited Hours --}}
+                                        <div class="fw-bold font-monospace text-truncate w-100 text-center text-info" style="font-size: 0.70rem; line-height: 1.2;">
+                                            <i class="fa-solid fa-person-digging me-0.5 opacity-75" style="font-size: 0.55rem;"></i>{{ $punchIn ?? '08:40 AM' }}
+                                        </div>
+                                        <div class="font-monospace text-truncate w-100 text-center text-secondary" style="font-size: 0.67rem; line-height: 1.2; opacity: 0.85;">
+                                            <i class="fa-solid fa-arrow-right-from-bracket me-0.5 opacity-75" style="font-size: 0.55rem;"></i>{{ $punchOut ?? '05:30 PM' }}
+                                        </div>
+                                        <span class="badge bg-info text-white position-absolute top-0 end-0 px-1 py-0 shadow-xs" style="font-size: 0.52rem; transform: scale(0.85); transform-origin: top right;" title="On-Site Deployment">
+                                            S
+                                        </span>
                                     @elseif($code === 'L')
                                         <span class="badge bg-primary text-white font-monospace px-1.5 py-0.5" style="font-size: 0.68rem;">L</span>
                                         <div class="text-primary fw-bold" style="font-size: 0.58rem; line-height: 1;">LEAVE</div>
