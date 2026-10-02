@@ -1902,6 +1902,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('attendance/site-deployments', [App\Http\Controllers\AttendanceController::class, 'siteDeployments'])->name('attendance.site-deployments');
     Route::post('attendance/record-site', [App\Http\Controllers\AttendanceController::class, 'recordSiteAttendance'])->name('attendance.record-site');
     Route::post('attendance/record-driver', [App\Http\Controllers\AttendanceController::class, 'recordDriverAttendance'])->name('attendance.record-driver');
+    Route::post('attendance/record-driver-sheet', [App\Http\Controllers\AttendanceController::class, 'recordBulkDriverSheet'])->name('attendance.record-driver-sheet');
     Route::post('attendance/site-deployments/{deployment}/approve', [App\Http\Controllers\AttendanceController::class, 'approveSiteDeployment'])->name('attendance.site-deployments.approve');
     Route::post('attendance/site-deployments/{deployment}/reject', [App\Http\Controllers\AttendanceController::class, 'rejectSiteDeployment'])->name('attendance.site-deployments.reject');
 

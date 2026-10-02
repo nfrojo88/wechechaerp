@@ -361,9 +361,14 @@
                 </div>
             </div>
             @if(auth()->check() && auth()->user()->hasAnyRole(['general_service', 'general_services', 'admin', 'global_admin', 'hr', 'hr_manager', 'hr_officer']))
-            <button type="button" class="btn btn-sm btn-success shadow-xs" data-bs-toggle="modal" data-bs-target="#recordDriverModal">
-                <i class="fa-solid fa-plus-circle me-1"></i>Record Driver Attendance (አቴንዳንስ መመዝገብ)
-            </button>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-success shadow-xs" data-bs-toggle="modal" data-bs-target="#recordDriverModal">
+                    <i class="fa-solid fa-plus-circle me-1"></i>Record Single Driver
+                </button>
+                <button type="button" class="btn btn-sm btn-success shadow-xs" data-bs-toggle="modal" data-bs-target="#recordDailyDriverSheetModal">
+                    <i class="fa-solid fa-clipboard-list me-1"></i>Daily Driver Sheet (የዕለት ሉህ)
+                </button>
+            </div>
             @endif
         </div>
     </div>
@@ -1309,6 +1314,88 @@ function openDayDetailModal(cell) {
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-sm btn-success">
                         <i class="fa-solid fa-check me-1"></i>Save Attendance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+
+{{-- MODAL: Daily Driver Attendance Sheet Entry (General Service) --}}
+@if(auth()->check() && auth()->user()->hasAnyRole(['general_service', 'general_services', 'admin', 'global_admin', 'hr', 'hr_manager', 'hr_officer']))
+<div class="modal fade text-start" id="recordDailyDriverSheetModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content rounded-3 border-0 shadow">
+            <form action="{{ route('attendance.record-driver-sheet') }}" method="POST">
+                @csrf
+                <div class="modal-header bg-success text-white py-2 px-3">
+                    <h6 class="modal-title fw-bold">
+                        <i class="fa-solid fa-clipboard-list me-2"></i>Daily Driver Attendance Sheet (በጄኔራል ሰርቪስ የዕለት አቴንዳንስ መመዝገቢያ)
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <div class="row align-items-center mb-3 bg-light p-2 rounded-2">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold mb-1"><i class="fa-solid fa-calendar me-1 text-success"></i>Date (ቀን):</label>
+                            <input type="date" name="sheet_date" class="form-control form-control-sm" value="{{ today()->toDateString() }}" required>
+                        </div>
+                        <div class="col-md-8 text-end small text-muted">
+                            <i class="fa-solid fa-circle-info me-1"></i>Set duty status and route/trip for each driver. Unrecorded drivers set to "Skip" will stay blank.
+                        </div>
+                    </div>
+
+                    <div class="table-responsive" style="max-height: 480px;">
+                        <table class="table table-sm table-bordered align-middle mb-0 small">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 22%;">Driver Name</th>
+                                    <th style="width: 20%;">Duty Status</th>
+                                    <th style="width: 15%;">Shift Times</th>
+                                    <th style="width: 23%;">Trip Route / Destination</th>
+                                    <th style="width: 20%;">Vehicle Plate / Remarks</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($activeDriversList as $idx => $drv)
+                                <tr>
+                                    <td>
+                                        <input type="hidden" name="drivers[{{ $idx }}][employee_id]" value="{{ $drv->id }}">
+                                        <strong class="d-block text-dark">{{ $drv->full_name }}</strong>
+                                        <span class="text-muted" style="font-size: 0.7rem;">{{ $drv->employee_code ?? 'EMP' }}</span>
+                                    </td>
+                                    <td>
+                                        <select name="drivers[{{ $idx }}][duty_status]" class="form-select form-select-sm">
+                                            <option value="trip" selected>🚚 On-Trip / Dispatch (S)</option>
+                                            <option value="present">✅ Present (Fleet Duty)</option>
+                                            <option value="leave">🏖️ Approved Leave (L)</option>
+                                            <option value="absent">❌ Absent (A)</option>
+                                            <option value="skip">— Skip (Leave blank)</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex gap-1">
+                                            <input type="time" name="drivers[{{ $idx }}][morning_in]" class="form-control form-control-sm px-1" value="08:00">
+                                            <input type="time" name="drivers[{{ $idx }}][afternoon_out]" class="form-control form-control-sm px-1" value="17:30">
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <input type="text" name="drivers[{{ $idx }}][trip_destination]" class="form-control form-control-sm" placeholder="e.g. Chafe Site, Mojo, City transport">
+                                    </td>
+                                    <td>
+                                        <input type="text" name="drivers[{{ $idx }}][vehicle_plate]" class="form-control form-control-sm" placeholder="e.g. Plate # or notes">
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-3">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>Save All Driver Records
                     </button>
                 </div>
             </form>

@@ -340,16 +340,16 @@ class AttendanceController extends Controller
                         $tripNote   = $att->site_name ?: ($att->notes ?: 'Field Trip / Transport Duty');
                         $label      = "On-Trip / Transport (S) [{$tripNote}]";
                         $empSite++;
-                    } elseif ($greg > $todayDateStr) {
+                    } elseif ($att && in_array($att->status, ['leave'])) {
+                        $statusCode = 'L';
+                        $cellClass  = 'cell-leave';
+                        $label      = 'Approved Leave (L)';
+                        $empLeave++;
+                    } else {
+                        // Driver working day: NOT automatically pre-filled! Left unrecorded until General Service enters it manually.
                         $statusCode = '—';
                         $cellClass  = 'cell-upcoming';
-                        $label      = 'Upcoming Day';
-                    } else {
-                        // Driver working day managed by General Service - default credited as Fleet/Transport Duty (S)
-                        $statusCode = 'S';
-                        $cellClass  = 'cell-site';
-                        $label      = 'Driver Fleet Duty (General Service)';
-                        $empSite++;
+                        $label      = ($greg > $todayDateStr) ? 'Upcoming Day' : 'Not Recorded (Add via General Service)';
                     }
                 } elseif ($emp->isSiteDriverOrRemote() && ($emp->project_id || $emp->is_project_based || in_array($staffType, ['site', 'site_driver_remote']))) {
                     // Site / Field / Project Staff: Out on site duty (Status S, non-deductible in payroll)
@@ -376,8 +376,9 @@ class AttendanceController extends Controller
                 $rawIn  = $att?->morning_in ?: ($att?->afternoon_in ?: $att?->check_in);
                 $rawOut = $att?->afternoon_out ?: ($att?->morning_out ?: $att?->check_out);
 
-                // If on approved site deployment or site/driver duty and no biometric punches exist, credit scheduled session times!
-                if ($hasApprovedSite || $statusCode === 'S' || ($emp->isDriver() && $statusCode === 'P')) {
+                // If on approved site deployment and no biometric punches exist, credit scheduled session times!
+                // For drivers: DO NOT inject automatic times! ONLY use times manually recorded by General Service!
+                if (!$emp->isDriver() && ($hasApprovedSite || $statusCode === 'S')) {
                     $siteObj = $siteDepRecord ?: ($hasApprovedSite instanceof \App\Models\SiteDeploymentRequest ? $hasApprovedSite : null);
                     if (!$rawIn && !$rawOut) {
                         if ($siteObj) {
@@ -387,8 +388,8 @@ class AttendanceController extends Controller
                             $rawIn  = $att->morning_in ?: ($att->afternoon_in ?: ($att->check_in ?: '08:00'));
                             $rawOut = $att->afternoon_out ?: ($att->morning_out ?: ($att->check_out ?: '17:30'));
                         } else {
-                            $rawIn  = '08:00';
-                            $rawOut = '17:30';
+                            $rawIn  = '08:30';
+                            $rawOut = '17:00';
                         }
                     }
                 }
@@ -1734,6 +1735,90 @@ class AttendanceController extends Controller
         );
 
         return redirect()->back()->with('success', "Driver attendance for {$emp->full_name} on {$date} recorded by General Service!");
+    }
+
+    /**
+     * Record Bulk Daily Driver Attendance Sheet by General Service
+     */
+    public function recordBulkDriverSheet(Request $request)
+    {
+        $user = auth()->user();
+        $canManageDrivers = $user && ($user->hasAnyRole(['general_service', 'general_services', 'admin', 'global_admin', 'hr', 'hr_manager', 'hr_officer']) || (method_exists($user, 'can') && $user->can('attendance.manage')));
+
+        if (!$canManageDrivers) {
+            abort(403, 'Unauthorized. General Service or HR role required.');
+        }
+
+        $request->validate([
+            'sheet_date' => 'required|date',
+            'drivers'    => 'required|array',
+            'drivers.*.employee_id' => 'required|exists:employees,id',
+            'drivers.*.duty_status' => 'required|in:present,trip,leave,absent,skip',
+            'drivers.*.morning_in'  => 'nullable|string',
+            'drivers.*.afternoon_out' => 'nullable|string',
+            'drivers.*.trip_destination' => 'nullable|string|max:255',
+            'drivers.*.vehicle_plate' => 'nullable|string|max:50',
+            'drivers.*.notes' => 'nullable|string|max:500',
+        ]);
+
+        $date = Carbon::parse($request->sheet_date)->toDateString();
+        $count = 0;
+
+        foreach ($request->drivers as $item) {
+            $duty = $item['duty_status'] ?? 'skip';
+            if ($duty === 'skip') {
+                continue;
+            }
+
+            $empId = (int)$item['employee_id'];
+            $inTime = $item['morning_in'] ?: '08:00';
+            $outTime = $item['afternoon_out'] ?: '17:30';
+
+            $dbStatus = match ($duty) {
+                'present' => 'present',
+                'trip'    => 'S',
+                'leave'   => 'leave',
+                'absent'  => 'absent',
+                default   => 'present',
+            };
+
+            $notesArray = [];
+            if (!empty($item['trip_destination'])) {
+                $notesArray[] = 'Trip: ' . $item['trip_destination'];
+            }
+            if (!empty($item['vehicle_plate'])) {
+                $notesArray[] = 'Vehicle: ' . $item['vehicle_plate'];
+            }
+            if (!empty($item['notes'])) {
+                $notesArray[] = $item['notes'];
+            }
+            $fullNote = 'Daily Sheet by General Service (' . ($user->name ?? 'GS') . ') ' . implode(' | ', $notesArray);
+
+            Attendance::updateOrCreate(
+                [
+                    'employee_id'     => $empId,
+                    'attendance_date' => $date,
+                ],
+                [
+                    'morning_in'      => in_array($duty, ['present', 'trip']) ? $inTime : null,
+                    'afternoon_out'   => in_array($duty, ['present', 'trip']) ? $outTime : null,
+                    'check_in'        => in_array($duty, ['present', 'trip']) ? $inTime : null,
+                    'check_out'       => in_array($duty, ['present', 'trip']) ? $outTime : null,
+                    'hours_worked'    => in_array($duty, ['present', 'trip']) ? 8.0 : 0,
+                    'status'          => $dbStatus,
+                    'source'          => 'manual',
+                    'site_name'       => $item['trip_destination'] ?? 'General Service Transport',
+                    'notes'           => $fullNote,
+                    'is_approved'     => true,
+                    'approved_by'     => $user->id,
+                    'decided_by'      => $user->name,
+                    'decided_by_role' => 'general_service',
+                ]
+            );
+            $count++;
+        }
+
+        return redirect()->back()->with('success', "Daily driver attendance sheet for {$date} saved successfully! ({$count} driver records updated by General Service)");
     }
 
     /**
