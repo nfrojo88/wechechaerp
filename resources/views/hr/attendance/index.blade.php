@@ -874,8 +874,8 @@
 /* Date column sizing depending on mode */
 .attendance-matrix-table.mode-times .date-col-header,
 .attendance-matrix-table.mode-times .cell-container {
-    min-width: 66px;
-    height: 48px;
+    min-width: 82px;
+    height: 50px;
 }
 .attendance-matrix-table.mode-compact .date-col-header,
 .attendance-matrix-table.mode-compact .cell-container {
@@ -1027,16 +1027,33 @@ function openDayDetailModal(cell) {
     const holiday = cell.getAttribute('data-holiday') || '';
     const notes = cell.getAttribute('data-notes') || '';
 
+    function to12H(timeStr) {
+        if (!timeStr || timeStr === '—' || timeStr === '-' || timeStr.trim() === '') return '—';
+        if (timeStr.includes('AM') || timeStr.includes('PM')) return timeStr;
+        const parts = timeStr.trim().split(':');
+        if (parts.length >= 2) {
+            let h = parseInt(parts[0], 10);
+            let m = parts[1].substring(0, 2);
+            if (isNaN(h)) return timeStr;
+            let ampm = h >= 12 ? 'PM' : 'AM';
+            let h12 = h % 12;
+            if (h12 === 0) h12 = 12;
+            let hPad = String(h12).padStart(2, '0');
+            return `${hPad}:${m} ${ampm}`;
+        }
+        return timeStr;
+    }
+
     document.getElementById('dpEmpName').textContent = empName;
     document.getElementById('dpEmpMeta').textContent = `${empCode} • ${empDept} ${empRole ? '• ' + empRole : ''} (Device PIN: ${device})`;
     document.getElementById('dpDateEth').textContent = dateEth;
     document.getElementById('dpDateGreg').textContent = dateGreg;
-    document.getElementById('dpPunchIn').textContent = punchIn;
-    document.getElementById('dpPunchOut').textContent = punchOut;
-    document.getElementById('dpMorningIn').textContent = mIn;
-    document.getElementById('dpMorningOut').textContent = mOut;
-    document.getElementById('dpAfternoonIn').textContent = aIn;
-    document.getElementById('dpAfternoonOut').textContent = aOut;
+    document.getElementById('dpPunchIn').textContent = to12H(punchIn);
+    document.getElementById('dpPunchOut').textContent = to12H(punchOut);
+    document.getElementById('dpMorningIn').textContent = to12H(mIn);
+    document.getElementById('dpMorningOut').textContent = to12H(mOut);
+    document.getElementById('dpAfternoonIn').textContent = to12H(aIn);
+    document.getElementById('dpAfternoonOut').textContent = to12H(aOut);
     document.getElementById('dpHoursTag').textContent = `${hours} Hours Worked`;
 
     const statusBadge = document.getElementById('dpStatusBadge');

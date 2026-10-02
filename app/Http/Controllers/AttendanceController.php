@@ -281,17 +281,24 @@ class AttendanceController extends Controller
                 $rawIn  = $att?->morning_in ?: ($att?->afternoon_in ?: $att?->check_in);
                 $rawOut = $att?->afternoon_out ?: ($att?->morning_out ?: $att?->check_out);
 
-                $punchInFormatted = null;
-                $punchOutFormatted = null;
+                $to12H = function(?string $time): ?string {
+                    if (!$time) return null;
+                    $time = trim($time);
+                    if ($time === '' || $time === '—' || $time === '-') return null;
+                    try {
+                        return \Carbon\Carbon::createFromFormat('H:i', substr($time, 0, 5))->format('h:i A');
+                    } catch (\Throwable $e) {
+                        try {
+                            return \Carbon\Carbon::parse($time)->format('h:i A');
+                        } catch (\Throwable $e2) {
+                            return $time;
+                        }
+                    }
+                };
 
-                if ($rawIn) {
-                    $rawIn = trim($rawIn);
-                    $punchInFormatted = strlen($rawIn) >= 5 ? substr($rawIn, 0, 5) : $rawIn;
-                }
-                if ($rawOut) {
-                    $rawOut = trim($rawOut);
-                    $punchOutFormatted = strlen($rawOut) >= 5 ? substr($rawOut, 0, 5) : $rawOut;
-                }
+                $punchInFormatted = $to12H($rawIn);
+                $punchOutFormatted = $to12H($rawOut);
+
                 if ($punchInFormatted && $punchOutFormatted && $punchInFormatted === $punchOutFormatted && (!$att?->check_out || $att?->check_in === $att?->check_out)) {
                     $punchOutFormatted = null;
                 }
@@ -304,10 +311,10 @@ class AttendanceController extends Controller
                     'late_minutes'  => $lateMinutes,
                     'punch_in'      => $punchInFormatted,
                     'punch_out'     => $punchOutFormatted,
-                    'morning_in'    => $att?->morning_in ? substr(trim($att->morning_in), 0, 5) : null,
-                    'morning_out'   => $att?->morning_out ? substr(trim($att->morning_out), 0, 5) : null,
-                    'afternoon_in'  => $att?->afternoon_in ? substr(trim($att->afternoon_in), 0, 5) : null,
-                    'afternoon_out' => $att?->afternoon_out ? substr(trim($att->afternoon_out), 0, 5) : null,
+                    'morning_in'    => $to12H($att?->morning_in),
+                    'morning_out'   => $to12H($att?->morning_out),
+                    'afternoon_in'  => $to12H($att?->afternoon_in),
+                    'afternoon_out' => $to12H($att?->afternoon_out),
                     'hours'         => $att?->hours_worked ? round((float)$att->hours_worked, 1) : null,
                     'notes'         => $att?->notes,
                     'site_name'     => $hasApprovedSite ? ($att?->site_name ?? (is_object($hasApprovedSite) && isset($hasApprovedSite->project) ? $hasApprovedSite->project?->name : 'Site Project')) : null,
