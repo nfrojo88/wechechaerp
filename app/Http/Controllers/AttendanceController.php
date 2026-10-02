@@ -70,16 +70,23 @@ class AttendanceController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        // 2. Fetch all active employees (strictly exclude Dead File)
-        // Default: Show EVERY active employee (office, site, driver, remote)
-        $staffType = request('staff_type', 'all'); // 'all' (default), 'office', or 'site_driver_remote'
+        // 2. Fetch active employees with explicit separation of Head Office vs Site Attendance
+        $authUser = auth()->user();
+        $isSiteStaffUser = $authUser && ($authUser->hasRole('site_engineer') || $authUser->hasRole('foreman')) && !$authUser->hasAnyRole(['admin', 'global_admin', 'hr', 'hr_manager', 'hr_officer', 'gm']);
+
+        // Default staffType: Site Staff defaults to 'site_driver_remote'; Office/HR/Admin defaults to 'office'
+        $defaultStaffType = $isSiteStaffUser ? 'site_driver_remote' : 'office';
+        $staffType = request('staff_type', $defaultStaffType);
         
-        $empQuery = Employee::activeRoster()->orderBy('full_name');
+        $empQuery = Employee::activeRoster()->with('project')->orderBy('full_name');
 
         if ($staffType === 'office') {
             $empQuery->officeStaffOnly();
         } elseif ($staffType === 'site_driver_remote') {
             $empQuery->siteDriverRemoteOnly();
+            if (request()->filled('project_id')) {
+                $empQuery->where('project_id', request('project_id'));
+            }
         }
 
         if (request()->filled('search')) {
@@ -97,11 +104,15 @@ class AttendanceController extends Controller
             $empQuery->where('department', request('department'));
         }
 
-        if (request()->filled('project_id')) {
+        if ($staffType !== 'site_driver_remote' && request()->filled('project_id')) {
             $empQuery->where('project_id', request('project_id'));
         }
 
         $allActiveEmployees = Employee::activeRoster()->orderBy('full_name')->get();
+        $officeStaffCount = Employee::activeRoster()->officeStaffOnly()->count();
+        $siteStaffCount = Employee::activeRoster()->siteDriverRemoteOnly()->count();
+        $allStaffCount = $allActiveEmployees->count();
+
         $employees = $empQuery->get();
         $employeeIds = $employees->pluck('id')->toArray();
 
@@ -289,6 +300,13 @@ class AttendanceController extends Controller
                     $cellClass  = 'cell-holiday';
                     $label      = 'Public Holiday (H)';
                     $empHoliday++;
+                } elseif ($emp->isSiteDriverOrRemote() && ($emp->project_id || $emp->is_project_based || $staffType === 'site_driver_remote')) {
+                    // Site / Field / Project Staff: Out on site duty (Status S, non-deductible in payroll)
+                    $statusCode = 'S';
+                    $cellClass  = 'cell-site';
+                    $projName   = $emp->project?->name ?? 'On-Site Construction';
+                    $label      = "Site Project Duty (S) [{$projName}]";
+                    $empSite++;
                 } else {
                     // Expected working day with no punch, no site, no leave, no holiday
                     if ($greg > $todayDateStr) {
@@ -307,16 +325,19 @@ class AttendanceController extends Controller
                 $rawIn  = $att?->morning_in ?: ($att?->afternoon_in ?: $att?->check_in);
                 $rawOut = $att?->afternoon_out ?: ($att?->morning_out ?: $att?->check_out);
 
-                // If on approved site deployment and no biometric punches exist, credit scheduled session times!
-                if ($hasApprovedSite) {
+                // If on approved site deployment or site duty and no biometric punches exist, credit scheduled session times!
+                if ($hasApprovedSite || $statusCode === 'S') {
                     $siteObj = $siteDepRecord ?: ($hasApprovedSite instanceof \App\Models\SiteDeploymentRequest ? $hasApprovedSite : null);
                     if (!$rawIn && !$rawOut) {
                         if ($siteObj) {
                             $rawIn  = $siteObj->morning_in ?: ($siteObj->afternoon_in ?: '08:40');
                             $rawOut = $siteObj->afternoon_out ?: ($siteObj->morning_out ?: '17:30');
-                        } elseif ($att) {
+                        } elseif ($att && ($att->morning_in || $att->afternoon_out)) {
                             $rawIn  = $att->morning_in ?: ($att->afternoon_in ?: '08:40');
-                            $rawOut = $att->afternoon_out ?: ($att->afternoon_in ?: '17:30');
+                            $rawOut = $att->afternoon_out ?: ($att->morning_out ?: '17:30');
+                        } else {
+                            $rawIn  = '08:30';
+                            $rawOut = '17:00';
                         }
                     }
                 }
@@ -427,9 +448,9 @@ class AttendanceController extends Controller
         ];
 
         // 5. Diagnostics for HR warning panels
-        // Missing Device ID panel: active employees with no registered device_user_id
+        // Missing Device ID panel: ONLY active Head Office staff who are required to use the HQ biometric machine
         $missingDeviceEmployees = $allActiveEmployees->filter(function($e) {
-            return empty(trim((string)$e->device_user_id));
+            return !$e->isSiteDriverOrRemote() && empty(trim((string)$e->device_user_id));
         });
 
         // Suspended Access Accounts panel: users with access_blocked_at
@@ -449,6 +470,9 @@ class AttendanceController extends Controller
             'matrix',
             'employees',
             'allActiveEmployees',
+            'officeStaffCount',
+            'siteStaffCount',
+            'allStaffCount',
             'stats',
             'staffType',
             'missingDeviceEmployees',

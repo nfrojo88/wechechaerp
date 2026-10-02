@@ -290,10 +290,50 @@
         </div>
     </div>
 
+    {{-- Separation of Head Office vs Site & Project Attendance --}}
+    <div class="card border-0 shadow-xs rounded-3 mb-3 bg-white p-2">
+        <div class="nav nav-pills nav-fill gap-2" role="tablist">
+            {{-- Tab 1: Head Office Attendance --}}
+            <a class="nav-link py-2 px-3 rounded-3 d-flex align-items-center justify-content-center gap-2 {{ $staffType === 'office' ? 'active bg-primary text-white shadow-xs' : 'bg-light text-dark' }}" 
+               href="{{ route('attendance.index', array_merge(request()->except(['staff_type', 'page']), ['staff_type' => 'office'])) }}">
+                <i class="fa-solid fa-building {{ $staffType === 'office' ? 'text-white' : 'text-primary' }} fs-5"></i>
+                <div class="text-start">
+                    <div class="fw-bold" style="font-size: 0.85rem;">Head Office Attendance (ዋና መስሪያ ቤት)</div>
+                    <div class="{{ $staffType === 'office' ? 'text-white-50' : 'text-muted' }}" style="font-size: 0.68rem;">HQ Biometric Machine &bull; 08:30–17:00 &bull; Late Cutoff</div>
+                </div>
+                <span class="badge {{ $staffType === 'office' ? 'bg-white text-primary' : 'bg-primary text-white' }} rounded-pill ms-2 font-monospace">{{ $officeStaffCount }}</span>
+            </a>
+
+            {{-- Tab 2: Site & Project Attendance --}}
+            <a class="nav-link py-2 px-3 rounded-3 d-flex align-items-center justify-content-center gap-2 {{ $staffType === 'site_driver_remote' ? 'active bg-warning text-dark shadow-xs border border-warning' : 'bg-light text-dark' }}" 
+               href="{{ route('attendance.index', array_merge(request()->except(['staff_type', 'page']), ['staff_type' => 'site_driver_remote'])) }}">
+                <i class="fa-solid fa-person-digging {{ $staffType === 'site_driver_remote' ? 'text-dark' : 'text-warning' }} fs-5"></i>
+                <div class="text-start">
+                    <div class="fw-bold" style="font-size: 0.85rem;">Site &amp; Project Attendance (የሳይትና ፕሮጀክት)</div>
+                    <div class="text-muted" style="font-size: 0.68rem;">Site Engineers, Foremen, Drivers &amp; Site Deployed Staff</div>
+                </div>
+                <span class="badge {{ $staffType === 'site_driver_remote' ? 'bg-dark text-white' : 'bg-warning text-dark' }} rounded-pill ms-2 font-monospace">{{ $siteStaffCount }}</span>
+            </a>
+
+            {{-- Tab 3: All Employees Combined --}}
+            <a class="nav-link py-2 px-3 rounded-3 d-flex align-items-center justify-content-center gap-2 {{ $staffType === 'all' ? 'active bg-dark text-white shadow-xs' : 'bg-light text-dark' }}" 
+               href="{{ route('attendance.index', array_merge(request()->except(['staff_type', 'page']), ['staff_type' => 'all'])) }}">
+                <i class="fa-solid fa-users {{ $staffType === 'all' ? 'text-white' : 'text-secondary' }} fs-5"></i>
+                <div class="text-start">
+                    <div class="fw-bold" style="font-size: 0.85rem;">Combined All Staff (ሁሉም ሰራተኞች)</div>
+                    <div class="{{ $staffType === 'all' ? 'text-white-50' : 'text-muted' }}" style="font-size: 0.68rem;">Company-wide Roster Audit View</div>
+                </div>
+                <span class="badge {{ $staffType === 'all' ? 'bg-white text-dark' : 'bg-secondary text-white' }} rounded-pill ms-2 font-monospace">{{ $allStaffCount }}</span>
+            </a>
+        </div>
+    </div>
+
     {{-- Filter Bar & Ethiopian Period Selector --}}
     <div class="card border-0 shadow-xs rounded-3 mb-3 bg-white">
         <div class="card-body p-3">
             <form action="{{ route('attendance.index') }}" method="GET" class="row g-2 align-items-end">
+                <input type="hidden" name="staff_type" value="{{ $staffType }}">
+
                 {{-- Ethiopian Period Selector --}}
                 <div class="col-md-4 col-lg-3">
                     <label class="form-label small fw-bold text-dark mb-1">
@@ -308,17 +348,20 @@
                     </select>
                 </div>
 
-                {{-- Staff Filter --}}
+                {{-- Project Filter for Site Staff --}}
+                @if($staffType === 'site_driver_remote' || $staffType === 'all')
                 <div class="col-md-3 col-lg-2">
                     <label class="form-label small fw-bold text-dark mb-1">
-                        <i class="fa-solid fa-users-gear text-secondary me-1"></i>Staff Category
+                        <i class="fa-solid fa-location-dot text-danger me-1"></i>Project / Site
                     </label>
-                    <select name="staff_type" class="form-select form-select-sm" onchange="this.form.submit()">
-                        <option value="all" {{ $staffType === 'all' ? 'selected' : '' }}>All Employees (Office + Site + Driver)</option>
-                        <option value="office" {{ $staffType === 'office' ? 'selected' : '' }}>Head Office Staff Only</option>
-                        <option value="site_driver_remote" {{ $staffType === 'site_driver_remote' ? 'selected' : '' }}>Site, Driver &amp; Remote Staff</option>
+                    <select name="project_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="">All Project Sites</option>
+                        @foreach($projects as $p)
+                        <option value="{{ $p->id }}" {{ request('project_id') == $p->id ? 'selected' : '' }}>{{ $p->name }}</option>
+                        @endforeach
                     </select>
                 </div>
+                @endif
 
                 {{-- Department Filter --}}
                 <div class="col-md-3 col-lg-2">
@@ -338,7 +381,7 @@
                     <label class="form-label small fw-bold text-dark mb-1">
                         <i class="fa-solid fa-magnifying-glass text-secondary me-1"></i>Search Employee
                     </label>
-                    <input type="text" name="search" value="{{ request('search') }}" class="form-control form-control-sm" placeholder="Name, Code, Device PIN, Role...">
+                    <input type="text" name="search" value="{{ request('search') }}" class="form-control form-control-sm" placeholder="Name, Code, Role...">
                 </div>
 
                 {{-- Filter Action Buttons --}}
@@ -346,8 +389,8 @@
                     <button type="submit" class="btn btn-sm btn-primary w-100 shadow-xs">
                         <i class="fa-solid fa-filter me-1"></i>Filter
                     </button>
-                    @if(request()->hasAny(['search', 'department', 'staff_type', 'period']))
-                    <a href="{{ route('attendance.index') }}" class="btn btn-sm btn-outline-secondary" title="Reset Filters">
+                    @if(request()->hasAny(['search', 'department', 'project_id', 'period']))
+                    <a href="{{ route('attendance.index', ['staff_type' => $staffType]) }}" class="btn btn-sm btn-outline-secondary" title="Reset Filters">
                         <i class="fa-solid fa-rotate-left"></i>
                     </a>
                     @endif
@@ -413,11 +456,25 @@
         <div class="card-header bg-white py-3 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h6 class="fw-bold text-dark mb-0">
-                    <i class="fa-solid fa-table-cells me-1 text-primary"></i>
-                    {{ $period['full_label'] }} Attendance Matrix ({{ $period['start_greg'] }} &rarr; {{ $period['end_greg'] }})
+                    @if($staffType === 'site_driver_remote')
+                        <i class="fa-solid fa-person-digging me-1 text-warning"></i>
+                        Site &amp; Project Attendance Matrix &bull; {{ $period['full_label'] }} ({{ $period['start_greg'] }} &rarr; {{ $period['end_greg'] }})
+                    @elseif($staffType === 'office')
+                        <i class="fa-solid fa-building me-1 text-primary"></i>
+                        Head Office Biometric Attendance Matrix &bull; {{ $period['full_label'] }} ({{ $period['start_greg'] }} &rarr; {{ $period['end_greg'] }})
+                    @else
+                        <i class="fa-solid fa-table-cells me-1 text-primary"></i>
+                        Company-Wide Attendance Matrix &bull; {{ $period['full_label'] }} ({{ $period['start_greg'] }} &rarr; {{ $period['end_greg'] }})
+                    @endif
                 </h6>
                 <small class="text-muted">
-                    Showing {{ count($matrix) }} active staff &bull; {{ count($periodDays) }} calendar days &bull; Click any cell to view complete punch timeline
+                    @if($staffType === 'site_driver_remote')
+                        Showing {{ count($matrix) }} active site &amp; field staff &bull; Evaluated by on-site project duty and deployments (Status S)
+                    @elseif($staffType === 'office')
+                        Showing {{ count($matrix) }} head office staff &bull; Evaluated by head office biometric machine logs
+                    @else
+                        Showing {{ count($matrix) }} active staff &bull; {{ count($periodDays) }} calendar days
+                    @endif
                 </small>
             </div>
             <div class="small text-muted font-monospace">
@@ -477,14 +534,29 @@
                                 <div class="d-flex align-items-center justify-content-between gap-1">
                                     <div class="text-truncate" style="max-width: 155px;">
                                         <strong class="text-dark d-block text-truncate" title="{{ $emp->full_name }}">{{ $emp->full_name }}</strong>
-                                        <div class="text-muted" style="font-size: 0.67rem;">
+                                        <div class="text-muted text-truncate" style="font-size: 0.67rem;">
                                             <span class="font-monospace text-primary fw-semibold">{{ $emp->employee_code ?? 'EMP' }}</span>
-                                            &bull; {{ $emp->department ?? 'General' }}
+                                            &bull; {{ $emp->role_title ?: ($emp->department ?? 'General') }}
                                         </div>
+                                        @if($emp->project)
+                                        <div class="text-truncate text-info" style="font-size: 0.65rem;" title="{{ $emp->project->name }}">
+                                            <i class="fa-solid fa-location-dot me-0.5"></i>{{ $emp->project->name }}
+                                        </div>
+                                        @endif
                                     </div>
-                                    <span class="badge {{ !empty($emp->device_user_id) ? 'bg-light text-secondary border' : 'bg-danger text-white' }} font-monospace flex-shrink-0" style="font-size: 0.62rem;" title="{{ !empty($emp->device_user_id) ? 'Machine PIN: ' . $emp->device_user_id : 'Missing Device PIN' }}">
-                                        {{ !empty($emp->device_user_id) ? $emp->device_user_id : 'NO PIN' }}
-                                    </span>
+                                    @if(!empty($emp->device_user_id))
+                                        <span class="badge bg-light text-secondary border font-monospace flex-shrink-0" style="font-size: 0.62rem;" title="Machine PIN: {{ $emp->device_user_id }}">
+                                            {{ $emp->device_user_id }}
+                                        </span>
+                                    @elseif($emp->isSiteDriverOrRemote())
+                                        <span class="badge bg-info text-white font-monospace flex-shrink-0" style="font-size: 0.58rem;" title="Site &amp; Field Staff (No Head Office PIN required)">
+                                            SITE
+                                        </span>
+                                    @else
+                                        <span class="badge bg-danger text-white font-monospace flex-shrink-0" style="font-size: 0.58rem;" title="Missing Head Office Device PIN">
+                                            NO PIN
+                                        </span>
+                                    @endif
                                 </div>
                             </td>
 

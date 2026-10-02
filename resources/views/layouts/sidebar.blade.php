@@ -2063,8 +2063,8 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('attendance.index') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-user-check text-warning"></i>
+            <a href="{{ route('attendance.index', ['staff_type' => 'site_driver_remote']) }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-person-digging text-warning"></i>
                 <span>Site Attendance</span>
             </a>
         </li>
