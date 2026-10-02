@@ -1904,6 +1904,50 @@ Route::middleware(['auth'])->group(function () {
     Route::post('attendance/site-deployments/{deployment}/approve', [App\Http\Controllers\AttendanceController::class, 'approveSiteDeployment'])->name('attendance.site-deployments.approve');
     Route::post('attendance/site-deployments/{deployment}/reject', [App\Http\Controllers\AttendanceController::class, 'rejectSiteDeployment'])->name('attendance.site-deployments.reject');
 
+    // ══════════════════════════════════════════════════════════════════
+    // MANPOWER ATTENDANCE APPROVAL MODULE
+    // ══════════════════════════════════════════════════════════════════
+    Route::prefix('manpower-approval')->name('manpower-approval.')->group(function () {
+        Route::get('/', [App\Http\Controllers\ManpowerApprovalController::class, 'index'])->name('index');
+
+        // 1. Site Engineer Routes
+        Route::prefix('site-engineer')->name('site-engineer.')->group(function () {
+            Route::get('/', [App\Http\Controllers\ManpowerApprovalController::class, 'siteEngineerIndex'])->name('index');
+            Route::get('/create', [App\Http\Controllers\ManpowerApprovalController::class, 'createSheet'])->name('create');
+            Route::post('/store', [App\Http\Controllers\ManpowerApprovalController::class, 'storeSheet'])->name('store');
+            Route::get('/{sheet}/edit', [App\Http\Controllers\ManpowerApprovalController::class, 'editSheet'])->name('edit');
+            Route::put('/{sheet}', [App\Http\Controllers\ManpowerApprovalController::class, 'updateSheet'])->name('update');
+        });
+
+        // 2. Review Inbox (Planning Manager, Coordinator, HR)
+        Route::prefix('review')->name('review.')->group(function () {
+            Route::get('/', [App\Http\Controllers\ManpowerApprovalController::class, 'reviewInbox'])->name('inbox');
+            Route::get('/{sheet}', [App\Http\Controllers\ManpowerApprovalController::class, 'showSheet'])->name('show');
+            Route::post('/{sheet}/process', [App\Http\Controllers\ManpowerApprovalController::class, 'processReview'])->name('process');
+        });
+
+        // 3. HR Officer Weekly Collection & Batches
+        Route::prefix('weekly')->name('weekly.')->group(function () {
+            Route::get('/', [App\Http\Controllers\ManpowerApprovalController::class, 'weeklyIndex'])->name('index');
+            Route::post('/create-batch', [App\Http\Controllers\ManpowerApprovalController::class, 'createWeeklyBatch'])->name('create-batch');
+            Route::post('/store-batch', [App\Http\Controllers\ManpowerApprovalController::class, 'storeWeeklyBatch'])->name('store-batch');
+            Route::get('/batch/{batch}', [App\Http\Controllers\ManpowerApprovalController::class, 'showWeeklyBatch'])->name('show');
+            Route::post('/batch/{batch}/gm-process', [App\Http\Controllers\ManpowerApprovalController::class, 'processGmBatch'])->name('gm-process');
+        });
+
+        // 4. Finance Payments
+        Route::prefix('payments')->name('payments.')->group(function () {
+            Route::get('/', [App\Http\Controllers\ManpowerApprovalController::class, 'paymentsIndex'])->name('index');
+            Route::post('/batch/{batch}/pay', [App\Http\Controllers\ManpowerApprovalController::class, 'recordBatchPayment'])->name('pay');
+            Route::post('/batch/{batch}/hold', [App\Http\Controllers\ManpowerApprovalController::class, 'holdBatchPayment'])->name('hold');
+        });
+
+        // 5. Worker & Punch API helpers
+        Route::post('/quick-add-worker', [App\Http\Controllers\ManpowerApprovalController::class, 'quickAddWorker'])->name('quick-add-worker');
+        Route::get('/fetch-punches', [App\Http\Controllers\ManpowerApprovalController::class, 'fetchPunches'])->name('fetch-punches');
+        Route::post('/raw-punch', [App\Http\Controllers\ManpowerApprovalController::class, 'ingestRawPunch'])->name('raw-punch');
+    });
+
     Route::get('employees/pending-approval', [App\Http\Controllers\EmployeeController::class, 'pendingApproval'])->name('employees.pending-approval');
     Route::get('employees/dead-file', [App\Http\Controllers\EmployeeController::class, 'deadFile'])->name('employees.dead-file');
     Route::get('employees/dead_file', [App\Http\Controllers\EmployeeController::class, 'deadFile'])->name('employees.dead_file');

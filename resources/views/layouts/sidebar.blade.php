@@ -30,6 +30,40 @@
     $isPlanningManager = in_array('planning_manager', $rawUserRoles) || in_array('planning', $rawUserRoles) || in_array('technical_manager', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['planning_manager', 'Planning Manager', 'planning', 'technical_manager']));
     $isFinanceHead = in_array('finance_head', $rawUserRoles) || in_array('finance_manager', $rawUserRoles) || in_array('finance', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['finance_head', 'Finance Head', 'Finance head', 'finance_manager', 'finance']));
     $canSendToSiteUser = $isPlanningManager || $isCoordinator || $isFinanceHead || $isHrOfficer || $isHrManager || $isGmUser || in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['planning_manager', 'coordinator', 'Coordinator', 'finance_head', 'Finance head', 'hr', 'hr_manager', 'hr_officer', 'gm', 'general_manager', 'admin', 'global_admin']));
+
+    $sbManpowerPendingBadge = 0;
+    try {
+        if ($isSiteEngineer) {
+            $sbManpowerPendingBadge = \App\Models\DailyManpowerSheet::where('site_engineer_id', $authUser?->id)
+                ->where('status', \App\Services\ManpowerApprovalService::STATUS_REJECTED)->count();
+        } elseif ($isPlanningManager) {
+            $sbManpowerPendingBadge = \App\Models\DailyManpowerSheet::where('current_stage', \App\Services\ManpowerApprovalService::STAGE_PLANNING_MANAGER)->count();
+        } elseif ($isCoordinator) {
+            $sbManpowerPendingBadge = \App\Models\DailyManpowerSheet::where('current_stage', \App\Services\ManpowerApprovalService::STAGE_COORDINATOR)->count();
+        } elseif ($isHrOfficer) {
+            $sbManpowerPendingBadge = \App\Models\DailyManpowerSheet::where('status', \App\Services\ManpowerApprovalService::STATUS_HR_APPROVED)->whereNull('weekly_batch_id')->count();
+        } elseif ($isHrManager) {
+            $sbManpowerPendingBadge = \App\Models\DailyManpowerSheet::where('current_stage', \App\Services\ManpowerApprovalService::STAGE_HR)->count();
+        } elseif ($isGmUser) {
+            $sbManpowerPendingBadge = \App\Models\WeeklyManpowerBatch::where('status', 'Submitted_GM')->count();
+        } elseif ($isFinanceHead || in_array('finance', $rawUserRoles)) {
+            $sbManpowerPendingBadge = \App\Models\WeeklyManpowerBatch::where('status', 'GM_Approved')->count();
+        } elseif ($isAdminOrGmSection) {
+            $sbManpowerPendingBadge = \App\Models\DailyManpowerSheet::whereIn('status', ['Submitted', 'Planning Approved', 'Coordinator Approved'])->count()
+                + \App\Models\WeeklyManpowerBatch::whereIn('status', ['Submitted_GM', 'GM_Approved'])->count();
+        }
+    } catch (\Throwable $e) {}
+
+    $manpowerMenuUrl = route('manpower-approval.index');
+    if ($isSiteEngineer && !$isAdminOrGmSection) {
+        $manpowerMenuUrl = route('manpower-approval.site-engineer.index');
+    } elseif (($isPlanningManager || $isCoordinator) && !$isAdminOrGmSection) {
+        $manpowerMenuUrl = route('manpower-approval.review.inbox');
+    } elseif ($isHrOfficer && !$isAdminOrGmSection) {
+        $manpowerMenuUrl = route('manpower-approval.weekly.index');
+    } elseif (($isFinanceHead || in_array('finance', $rawUserRoles)) && !$isAdminOrGmSection) {
+        $manpowerMenuUrl = route('manpower-approval.payments.index');
+    }
 @endphp
 
 <div class="sidebar-scroll">
@@ -58,6 +92,15 @@
         <i class="fa-solid fa-person-digging text-primary"></i>
         <span>Send to Site (ወደ ሳይት መላክ)</span>
         <span class="badge bg-primary text-white rounded-pill ms-auto" style="font-size:0.6rem;">Status S</span>
+    </a>
+</li>
+<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
+    <a href="{{ $manpowerMenuUrl }}" class="sidebar-nav-link {{ request()->routeIs('manpower-approval.*') ? 'active' : '' }}" style="font-weight:600;">
+        <i class="fa-solid fa-users-viewfinder text-primary"></i>
+        <span>Manpower Approval</span>
+        @if($sbManpowerPendingBadge > 0)
+            <span class="badge bg-danger rounded-pill ms-auto" style="font-size:0.65rem;">{{ $sbManpowerPendingBadge }}</span>
+        @endif
     </a>
 </li>
 <li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
@@ -2023,6 +2066,15 @@
             <a href="{{ route('attendance.index') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-user-check text-warning"></i>
                 <span>Site Attendance</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('manpower-approval.site-engineer.index') }}" class="sidebar-nav-link {{ request()->routeIs('manpower-approval.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-users-viewfinder text-primary"></i>
+                <span>Manpower Approval</span>
+                @if($sbManpowerPendingBadge > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto" style="font-size:0.65rem;">{{ $sbManpowerPendingBadge }}</span>
+                @endif
             </a>
         </li>
         <li class="sidebar-nav-item">
