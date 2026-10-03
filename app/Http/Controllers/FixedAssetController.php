@@ -508,6 +508,16 @@ class FixedAssetController extends Controller
             });
         }
 
+        if ($request->filled('store_id')) {
+            $query->whereHas('parentAsset', fn($pq) => $pq->where('store_id', $request->store_id));
+        }
+        if ($request->filled('product_id')) {
+            $prod = Product::find($request->product_id);
+            if ($prod) {
+                $query->whereHas('parentAsset', fn($pq) => $pq->where('name', $prod->name));
+            }
+        }
+
         $units = $query->orderBy('unit_code')->limit(50)->get()->map(function($u) {
             return [
                 'id'            => $u->id,
@@ -519,11 +529,177 @@ class FixedAssetController extends Controller
                 'serial_number' => $u->serial_number,
                 'plate_number'  => $u->plate_number,
                 'condition'     => $u->condition,
+                'current_store' => $u->current_location ?: ($u->parentAsset->store->name ?? 'Main Store'),
                 'display'       => $u->display_title,
             ];
         });
 
         return response()->json(['units' => $units]);
+    }
+
+    /**
+     * Transfer one or more Fixed Asset Units to another Store / Construction Site.
+     * Transferred by Individual Unit Code(s).
+     */
+    public function transferUnits(Request $request)
+    {
+        $validated = $request->validate([
+            'unit_ids'         => 'required|array|min:1',
+            'unit_ids.*'       => 'required|exists:fixed_asset_units,id',
+            'to_store_id'      => 'required|exists:stores,id',
+            'transfer_reason'  => 'nullable|string|max:500',
+            'waybill_no'       => 'nullable|string|max:100',
+            'driver_name'      => 'nullable|string|max:150',
+            'vehicle_plate'    => 'nullable|string|max:50',
+            'create_slip'      => 'nullable|boolean',
+        ]);
+
+        $toStore = Store::findOrFail($validated['to_store_id']);
+        $units = FixedAssetUnit::with(['parentAsset.store'])->whereIn('id', $validated['unit_ids'])->get();
+
+        if ($units->isEmpty()) {
+            return back()->withErrors(['error' => 'No valid units selected for transfer.']);
+        }
+
+        // Verify none of the units are currently assigned or disposed
+        $invalidUnits = $units->filter(fn($u) => $u->status === FixedAssetUnit::STATUS_ASSIGNED || $u->status === FixedAssetUnit::STATUS_DISPOSED);
+        if ($invalidUnits->isNotEmpty()) {
+            $codes = $invalidUnits->pluck('unit_code')->implode(', ');
+            return back()->withErrors(['error' => "Cannot transfer units ({$codes}) because they are currently assigned or disposed. Please return them to store first."]);
+        }
+
+        // Verify that destination store is different from origin store
+        $firstUnit = $units->first();
+        $fromStoreId = $firstUnit->parentAsset?->store_id;
+        if ((int)$fromStoreId === (int)$toStore->id) {
+            return back()->withErrors(['error' => 'Destination store cannot be the same as the origin store.']);
+        }
+
+        $transferredCount = 0;
+        $transferredCodes = [];
+
+        DB::transaction(function() use ($units, $toStore, $validated, &$transferredCount, &$transferredCodes) {
+            // Group units by their parent asset
+            $groupedByAsset = $units->groupBy('fixed_asset_id');
+
+            foreach ($groupedByAsset as $originAssetId => $assetUnits) {
+                $originAsset = $assetUnits->first()->parentAsset;
+                if (!$originAsset) continue;
+
+                $unitCountToMove = $assetUnits->count();
+                $fromStoreName = $originAsset->store?->name ?? 'Origin Store';
+
+                // 1. Find or create matching FixedAsset at the destination store
+                $destAsset = FixedAsset::where('store_id', $toStore->id)
+                    ->where('name', $originAsset->name)
+                    ->where('category', $originAsset->category)
+                    ->first();
+
+                if (!$destAsset) {
+                    $destAsset = FixedAsset::create([
+                        'name'           => $originAsset->name,
+                        'category'       => $originAsset->category,
+                        'code_prefix'    => $originAsset->code_prefix,
+                        'total_quantity' => $unitCountToMove,
+                        'unit_cost'      => $originAsset->unit_cost,
+                        'purchase_date'  => $originAsset->purchase_date,
+                        'supplier'       => $originAsset->supplier,
+                        'store_id'       => $toStore->id,
+                        'description'    => $originAsset->description,
+                        'created_by'     => auth()->id(),
+                    ]);
+                } else {
+                    $destAsset->increment('total_quantity', $unitCountToMove);
+                }
+
+                // 2. Decrement origin asset quantity
+                $originAsset->decrement('total_quantity', $unitCountToMove);
+
+                // 3. Move each individual unit by code
+                foreach ($assetUnits as $unit) {
+                    $oldLocation = $unit->current_location ?: $fromStoreName;
+                    $historyNote = "[" . now()->format('Y-m-d H:i') . "] Transferred by code {$unit->unit_code} from {$fromStoreName} to {$toStore->name} (Reason: " . ($validated['transfer_reason'] ?? 'Store Transfer') . ")";
+
+                    $unit->update([
+                        'fixed_asset_id'   => $destAsset->id,
+                        'current_location' => $toStore->name,
+                        'status'           => FixedAssetUnit::STATUS_IN_STORE,
+                        'notes'            => $unit->notes ? $unit->notes . "\n" . $historyNote : $historyNote,
+                    ]);
+
+                    // Record assignment/movement history entry
+                    FixedAssetAssignment::create([
+                        'fixed_asset_unit_id'    => $unit->id,
+                        'employee_id'            => null,
+                        'action'                 => 'transferred',
+                        'assigned_date'          => now(),
+                        'condition_on_assignment'=> $unit->condition ?: 'good',
+                        'assigned_by'            => auth()->id(),
+                        'notes'                  => $historyNote,
+                    ]);
+
+                    $transferredCodes[] = $unit->unit_code;
+                    $transferredCount++;
+                }
+
+                // 4. Two-way inventory synchronization for both stores
+                $originAsset->syncWithCatalogAndInventory();
+                $destAsset->syncWithCatalogAndInventory();
+            }
+
+            // Optional: Create an official Transfer waybill record if requested or if waybill number provided
+            if (!empty($validated['waybill_no']) || !empty($validated['create_slip'])) {
+                $transferNo = Transfer::generateUniqueNo();
+                $transfer = Transfer::create([
+                    'transfer_no'        => $transferNo,
+                    'physical_slip_no'   => $validated['waybill_no'] ?? $transferNo,
+                    'outgoing_slip_no'   => $validated['waybill_no'] ?? $transferNo,
+                    'receiving_slip_no'  => $validated['waybill_no'] ?? $transferNo,
+                    'from_store_id'      => $units->first()->parentAsset?->store_id,
+                    'to_store_id'        => $toStore->id,
+                    'requested_by'       => auth()->id(),
+                    'approved_by'        => auth()->id(),
+                    'approved_at'        => now(),
+                    'dispatched_by'      => auth()->id(),
+                    'dispatched_at'      => now(),
+                    'received_by'        => auth()->id(),
+                    'received_at'        => now(),
+                    'status'             => 'completed',
+                    'required_date'      => today(),
+                    'vehicle_plate_no'   => $validated['vehicle_plate'] ?? null,
+                    'reason'             => ($validated['transfer_reason'] ?? 'Fixed Asset Unit Transfer') . ' [Unit Codes: ' . implode(', ', $transferredCodes) . ']',
+                    'dispatch_notes'     => 'Transferred units: ' . implode(', ', $transferredCodes),
+                ]);
+
+                // Create transfer items
+                foreach ($groupedByAsset as $originAssetId => $assetUnits) {
+                    $originAsset = $assetUnits->first()->parentAsset;
+                    $prod = Product::where('name', $originAsset->name)->first();
+                    if ($prod) {
+                        $transfer->items()->create([
+                            'product_id'         => $prod->id,
+                            'requested_quantity' => $assetUnits->count(),
+                            'approved_quantity'  => $assetUnits->count(),
+                            'sent_quantity'      => $assetUnits->count(),
+                            'received_quantity'  => $assetUnits->count(),
+                            'unit'               => 'pcs',
+                        ]);
+                    }
+                }
+            }
+        });
+
+        $codesStr = implode(', ', $transferredCodes);
+        return back()->with('success', "{$transferredCount} Fixed Asset unit(s) successfully transferred by individual code to {$toStore->name}! (Unit codes: {$codesStr})");
+    }
+
+    /**
+     * Transfer a single unit by code (Convenience wrapper)
+     */
+    public function transferUnit(Request $request, FixedAssetUnit $unit)
+    {
+        $request->merge(['unit_ids' => [$unit->id]]);
+        return $this->transferUnits($request);
     }
 
     /**

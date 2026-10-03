@@ -18,6 +18,9 @@
             <p class="text-muted small mb-0">Centralized store inventory with auto-generated unit codes & strict quantity locks.</p>
         </div>
         <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-info btn-sm fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#bulkTransferModal">
+                <i class="fa-solid fa-truck-ramp-box me-1"></i> Transfer by Unit Code
+            </button>
             <a href="{{ route('store-manager.fixed-assets.sync') }}" class="btn btn-outline-success btn-sm fw-semibold shadow-sm" title="Synchronize all matching items from live Store Inventory & Catalog">
                 <i class="fa-solid fa-arrows-rotate me-1"></i> Sync from Inventory
             </a>
@@ -370,6 +373,17 @@
                                                                     <i class="fa-solid fa-pencil"></i>
                                                                 </button>
                                                                 @if($unit->isAvailable())
+                                                                    <button type="button" class="btn btn-outline-info py-0 px-2" 
+                                                                        data-unit-id="{{ $unit->id }}"
+                                                                        data-unit-code="{{ $unit->unit_code }}"
+                                                                        data-asset-name="{{ $asset->name }}"
+                                                                        data-store-id="{{ $asset->store_id }}"
+                                                                        data-store-name="{{ $unitStore }}"
+                                                                        data-specs="{{ trim("{$unit->brand} {$unit->model} {$unit->serial_number}") }}"
+                                                                        onclick="openTransferUnitModalFromBtn(this)" 
+                                                                        title="Transfer by Individual Code to Another Store / Site">
+                                                                        <i class="fa-solid fa-truck-ramp-box"></i>
+                                                                    </button>
                                                                     <button type="button" class="btn btn-outline-primary py-0 px-2" data-unit='@json($unit)' onclick="openAssignUnitModalFromBtn(this)" title="Assign to Staff">
                                                                         <i class="fa-solid fa-user-plus"></i>
                                                                     </button>
@@ -855,6 +869,163 @@
     </div>
 </div>
 
+{{-- 5. MODAL: Transfer Unit by Individual Code --}}
+<div class="modal fade" id="transferUnitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('store-manager.fixed-assets.transfer-units') }}" method="POST">
+                @csrf
+                <input type="hidden" name="unit_ids[]" id="transfer_unit_id">
+                <div class="modal-header bg-info text-white py-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-truck-ramp-box fs-5"></i>
+                        <div>
+                            <h6 class="modal-title fw-bold mb-0">Transfer Unit by Individual Code</h6>
+                            <small class="text-white-50">Transfer equipment to another store or construction site</small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3 text-center bg-light p-3 rounded border">
+                        <div class="small text-muted mb-1">Individual Unit Code to Transfer</div>
+                        <span class="badge bg-dark fs-5 font-monospace px-3 py-1.5" id="transfer_unit_code_badge"></span>
+                        <div class="small text-muted mt-2 fw-semibold" id="transfer_asset_name_label"></div>
+                        <div class="small text-secondary" id="transfer_specs_label"></div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-muted">Current / Origin Store</label>
+                            <input type="text" id="transfer_origin_store" class="form-control form-control-sm bg-light" readonly>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark">Destination Store / Site <span class="text-danger">*</span></label>
+                            <select name="to_store_id" id="transfer_to_store_id" class="form-select form-select-sm" required>
+                                <option value="">Select Destination...</option>
+                                @foreach($stores as $st)
+                                    <option value="{{ $st->id }}">{{ $st->name }} ({{ $st->type ?? 'Store' }})</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Waybill / Slip No. (Optional)</label>
+                            <input type="text" name="waybill_no" class="form-control form-control-sm" placeholder="e.g. TR-2026-001">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Vehicle Plate (Optional)</label>
+                            <input type="text" name="vehicle_plate" class="form-control form-control-sm" placeholder="e.g. 3-45678 AA">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Transfer Reason / Remarks</label>
+                        <textarea name="transfer_reason" class="form-control form-control-sm" rows="2" placeholder="e.g. Deployed to site for excavation / concrete work..."></textarea>
+                    </div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="create_slip" value="1" id="chk_create_slip" checked>
+                        <label class="form-check-label small text-muted" for="chk_create_slip">
+                            Generate official inter-store waybill record in Transfers system
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-info text-white fw-bold">
+                        <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> Confirm Transfer by Code
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- 6. MODAL: Bulk Transfer by Code (Select Origin Store & Multiple Unit Codes) --}}
+<div class="modal fade" id="bulkTransferModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('store-manager.fixed-assets.transfer-units') }}" method="POST">
+                @csrf
+                <div class="modal-header bg-info text-white py-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-truck-ramp-box fs-5"></i>
+                        <div>
+                            <h6 class="modal-title fw-bold mb-0">Transfer Units by Individual Code</h6>
+                            <small class="text-white-50">Select equipment and choose specific unit codes to transfer</small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Select Origin Store <span class="text-danger">*</span></label>
+                            <select id="bulk_from_store_id" class="form-select form-select-sm" onchange="loadAvailableUnitsForTransfer()">
+                                <option value="">Choose Origin Store...</option>
+                                @foreach($stores as $st)
+                                    <option value="{{ $st->id }}">{{ $st->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Destination Store / Site <span class="text-danger">*</span></label>
+                            <select name="to_store_id" class="form-select form-select-sm" required>
+                                <option value="">Choose Destination Store...</option>
+                                @foreach($stores as $st)
+                                    <option value="{{ $st->id }}">{{ $st->name }} ({{ $st->type ?? 'Store' }})</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                            <span>Available Units with Individual Codes <span class="text-danger">*</span></span>
+                            <span class="small text-muted" id="bulk_units_count">0 selected</span>
+                        </label>
+                        <div id="bulk_units_list" class="border rounded p-3 bg-light" style="max-height: 220px; overflow-y: auto;">
+                            <div class="text-muted small text-center py-4">Please select an origin store above to view available unit codes.</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Waybill / Slip No. (Optional)</label>
+                            <input type="text" name="waybill_no" class="form-control form-control-sm" placeholder="e.g. TR-2026-001">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Vehicle Plate (Optional)</label>
+                            <input type="text" name="vehicle_plate" class="form-control form-control-sm" placeholder="e.g. 3-45678 AA">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Transfer Reason</label>
+                        <textarea name="transfer_reason" class="form-control form-control-sm" rows="2" placeholder="Reason for transfer..."></textarea>
+                    </div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="create_slip" value="1" id="chk_bulk_create_slip" checked>
+                        <label class="form-check-label small text-muted" for="chk_bulk_create_slip">
+                            Generate official inter-store waybill in Transfers module
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-info text-white fw-bold">
+                        <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> Transfer Selected Units
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -1020,6 +1191,77 @@ function openEditUnitModalFromBtn(btn) {
 function openAssignUnitModalFromBtn(btn) {
     const unit = JSON.parse(btn.getAttribute('data-unit') || '{}');
     openAssignUnitModal(unit);
+}
+
+function openTransferModalSingle(btn) {
+    const unitId = btn.getAttribute('data-unit-id');
+    const unitCode = btn.getAttribute('data-unit-code');
+    const assetName = btn.getAttribute('data-asset-name');
+    const storeId = btn.getAttribute('data-store-id');
+    const storeName = btn.getAttribute('data-store-name');
+    const specs = btn.getAttribute('data-specs');
+
+    document.getElementById('transfer_unit_id').value = unitId;
+    document.getElementById('transfer_unit_code_badge').textContent = unitCode;
+    document.getElementById('transfer_asset_name_label').textContent = assetName;
+    document.getElementById('transfer_specs_label').textContent = specs || '';
+    document.getElementById('transfer_origin_store').value = storeName || 'Main Store';
+
+    // Disable the origin store in destination dropdown to prevent selecting same store
+    const toSelect = document.getElementById('transfer_to_store_id');
+    Array.from(toSelect.options).forEach(opt => {
+        opt.disabled = (opt.value && opt.value == storeId);
+    });
+    toSelect.value = '';
+
+    new bootstrap.Modal(document.getElementById('transferUnitModal')).show();
+}
+
+function loadAvailableUnitsForTransfer() {
+    const storeId = document.getElementById('bulk_from_store_id').value;
+    const container = document.getElementById('bulk_units_list');
+    if (!storeId) {
+        container.innerHTML = '<div class="text-muted small text-center py-4">Please select an origin store above to view available unit codes.</div>';
+        return;
+    }
+
+    container.innerHTML = '<div class="text-center py-4"><i class="fa-solid fa-spinner fa-spin me-2 text-primary"></i>Loading unit codes...</div>';
+
+    fetch("{{ route('store-manager.fixed-assets.available-ajax') }}?store_id=" + storeId)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.units || data.units.length === 0) {
+                container.innerHTML = '<div class="text-muted small text-center py-4">No available in-store units found in this store.</div>';
+                return;
+            }
+
+            let html = '<div class="row g-2">';
+            data.units.forEach(u => {
+                html += `
+                <div class="col-md-6">
+                    <div class="form-check p-2 border rounded bg-white shadow-xs">
+                        <input class="form-check-input bulk-unit-chk ms-1" type="checkbox" name="unit_ids[]" value="${u.id}" id="bchk_${u.id}" onchange="updateBulkUnitsSelectedCount()">
+                        <label class="form-check-label ps-2 small w-100" for="bchk_${u.id}">
+                            <strong class="d-block text-dark font-monospace">${u.unit_code}</strong>
+                            <span class="text-primary fw-semibold">${u.asset_name}</span>
+                            ${u.brand || u.model ? `<span class="text-muted">&bull; ${u.brand || ''} ${u.model || ''}</span>` : ''}
+                            ${u.serial_number ? `<span class="text-secondary">&bull; SN: ${u.serial_number}</span>` : ''}
+                        </label>
+                    </div>
+                </div>`;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+            updateBulkUnitsSelectedCount();
+        })
+        .catch(err => {
+            container.innerHTML = '<div class="text-danger small text-center py-4">Failed to load units.</div>';
+        });
+}
+
+function updateBulkUnitsSelectedCount() {
+    const count = document.querySelectorAll('.bulk-unit-chk:checked').length;
+    document.getElementById('bulk_units_count').textContent = count + ' unit(s) selected';
 }
 </script>
 @endpush

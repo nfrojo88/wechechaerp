@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', $fixedAsset->name . ' - Fixed Asset Details')
 
@@ -164,16 +164,22 @@
         {{-- Right Column: Units List & Details Grid --}}
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h6 class="m-0 font-weight-bold text-dark">
                         <i class="fa-solid fa-barcode text-primary me-2"></i>Individual Unit Codes ({{ $fixedAsset->units->count() }} Total)
                     </h6>
+                    <button type="button" class="btn btn-outline-info btn-sm fw-semibold shadow-xs" onclick="openBulkTransferForAsset()">
+                        <i class="fa-solid fa-truck-ramp-box me-1"></i> Transfer Selected Units
+                    </button>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light text-muted small text-uppercase">
                                 <tr>
+                                    <th style="width: 38px;" class="ps-3">
+                                        <input type="checkbox" class="form-check-input" id="chk_select_all_units" onchange="toggleSelectAllUnits(this)" title="Select all available units">
+                                    </th>
                                     <th>Unit Code</th>
                                     <th>Available In Store</th>
                                     <th>Specifications</th>
@@ -190,6 +196,13 @@
                                     $storeLocation = $unit->current_location ?: ($fixedAsset->store->name ?? 'Main Store');
                                 @endphp
                                 <tr>
+                                    <td class="ps-3">
+                                        @if($unit->isAvailable())
+                                            <input type="checkbox" class="form-check-input unit-select-chk" value="{{ $unit->id }}" data-code="{{ $unit->unit_code }}">
+                                        @else
+                                            <input type="checkbox" class="form-check-input" disabled title="Only in-store units can be transferred">
+                                        @endif
+                                    </td>
                                     <td>
                                         <span class="badge bg-dark fw-mono px-2 py-1 fs-6">
                                             {{ $unit->unit_code }}
@@ -247,6 +260,18 @@
                                     </td>
                                     <td class="text-end pe-3">
                                         <div class="btn-group btn-group-sm">
+                                            @if($unit->isAvailable())
+                                                <button type="button" class="btn btn-outline-info" title="Transfer Unit by Individual Code"
+                                                    data-unit-id="{{ $unit->id }}"
+                                                    data-unit-code="{{ $unit->unit_code }}"
+                                                    data-asset-name="{{ $fixedAsset->name }}"
+                                                    data-store-id="{{ $fixedAsset->store_id }}"
+                                                    data-store-name="{{ $storeLocation }}"
+                                                    data-specs="{{ trim("{$unit->brand} {$unit->model} {$unit->serial_number}") }}"
+                                                    onclick="openTransferModalSingle(this)">
+                                                    <i class="fa-solid fa-truck-ramp-box"></i>
+                                                </button>
+                                            @endif
                                             {{-- Edit button: uses data attributes, shared modal populated by JS --}}
                                             <button type="button" class="btn btn-outline-secondary btn-edit-unit" title="Edit Specifications"
                                                 data-unit-id="{{ $unit->id }}"
@@ -799,6 +824,83 @@
     </div>
 </div>
 
+{{-- MODAL: Transfer Unit by Individual Code --}}
+<div class="modal fade" id="transferUnitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ route('store-manager.fixed-assets.transfer-units') }}" method="POST" id="transferUnitsForm">
+                @csrf
+                <div id="transfer_units_hidden_inputs"></div>
+                <div class="modal-header bg-info text-white py-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-truck-ramp-box fs-5"></i>
+                        <div>
+                            <h6 class="modal-title fw-bold mb-0">Transfer Unit by Individual Code</h6>
+                            <small class="text-white-50">Transfer equipment to another store or construction site</small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3 text-center bg-light p-3 rounded border">
+                        <div class="small text-muted mb-1">Selected Unit Code(s) to Transfer</div>
+                        <div id="transfer_unit_codes_badges" class="d-flex flex-wrap justify-content-center gap-1"></div>
+                        <div class="small text-muted mt-2 fw-semibold" id="transfer_asset_name_label">{{ $fixedAsset->name }}</div>
+                        <div class="small text-secondary" id="transfer_specs_label"></div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-muted">Current / Origin Store</label>
+                            <input type="text" id="transfer_origin_store" class="form-control form-control-sm bg-light" value="{{ $fixedAsset->store->name ?? 'Main Store' }}" readonly>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark">Destination Store / Site <span class="text-danger">*</span></label>
+                            <select name="to_store_id" id="transfer_to_store_id" class="form-select form-select-sm" required>
+                                <option value="">Select Destination...</option>
+                                @foreach($stores as $st)
+                                    @if($st->id !== $fixedAsset->store_id)
+                                        <option value="{{ $st->id }}">{{ $st->name }} ({{ $st->type ?? 'Store' }})</option>
+                                    @endif
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Waybill / Slip No. (Optional)</label>
+                            <input type="text" name="waybill_no" class="form-control form-control-sm" placeholder="e.g. TR-2026-001">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">Vehicle Plate (Optional)</label>
+                            <input type="text" name="vehicle_plate" class="form-control form-control-sm" placeholder="e.g. 3-45678 AA">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Transfer Reason / Remarks</label>
+                        <textarea name="transfer_reason" class="form-control form-control-sm" rows="2" placeholder="e.g. Deployed to site for excavation / concrete work..."></textarea>
+                    </div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="create_slip" value="1" id="chk_show_create_slip" checked>
+                        <label class="form-check-label small text-muted" for="chk_show_create_slip">
+                            Generate official inter-store waybill record in Transfers system
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-info text-white fw-bold">
+                        <i class="fa-solid fa-arrow-right-arrow-left me-1"></i> Confirm Transfer by Code
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
@@ -995,6 +1097,56 @@
     }
 
 })();
+
+function openTransferModalSingle(btn) {
+    const unitId = btn.getAttribute('data-unit-id');
+    const unitCode = btn.getAttribute('data-unit-code');
+    const assetName = btn.getAttribute('data-asset-name');
+    const storeName = btn.getAttribute('data-store-name');
+    const specs = btn.getAttribute('data-specs');
+
+    const hiddenContainer = document.getElementById('transfer_units_hidden_inputs');
+    hiddenContainer.innerHTML = `<input type="hidden" name="unit_ids[]" value="${unitId}">`;
+
+    const badgeContainer = document.getElementById('transfer_unit_codes_badges');
+    badgeContainer.innerHTML = `<span class="badge bg-dark fs-5 font-monospace px-3 py-1.5">${unitCode}</span>`;
+
+    document.getElementById('transfer_asset_name_label').textContent = assetName;
+    document.getElementById('transfer_specs_label').textContent = specs || '';
+    document.getElementById('transfer_origin_store').value = storeName || 'Main Store';
+    document.getElementById('transfer_to_store_id').value = '';
+
+    new bootstrap.Modal(document.getElementById('transferUnitModal')).show();
+}
+
+function toggleSelectAllUnits(master) {
+    document.querySelectorAll('.unit-select-chk:not(:disabled)').forEach(chk => {
+        chk.checked = master.checked;
+    });
+}
+
+function openBulkTransferForAsset() {
+    const selected = document.querySelectorAll('.unit-select-chk:checked');
+    if (selected.length === 0) {
+        alert('Please select at least one unit using the checkboxes to transfer.');
+        return;
+    }
+
+    const hiddenContainer = document.getElementById('transfer_units_hidden_inputs');
+    hiddenContainer.innerHTML = '';
+    const badgeContainer = document.getElementById('transfer_unit_codes_badges');
+    badgeContainer.innerHTML = '';
+
+    selected.forEach(chk => {
+        hiddenContainer.innerHTML += `<input type="hidden" name="unit_ids[]" value="${chk.value}">`;
+        badgeContainer.innerHTML += `<span class="badge bg-dark fs-6 font-monospace px-2 py-1">${chk.dataset.code}</span> `;
+    });
+
+    document.getElementById('transfer_specs_label').textContent = selected.length + ' unit(s) selected';
+    document.getElementById('transfer_to_store_id').value = '';
+
+    new bootstrap.Modal(document.getElementById('transferUnitModal')).show();
+}
 </script>
 @endpush
 

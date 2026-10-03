@@ -2367,6 +2367,8 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('fixed-assets/units/{unit}', [App\Http\Controllers\FixedAssetController::class, 'destroyUnit'])->name('fixed-assets.units.destroy');
         Route::post('fixed-assets/units/{unit}/assign', [App\Http\Controllers\FixedAssetController::class, 'assignUnit'])->name('fixed-assets.units.assign');
         Route::post('fixed-assets/units/{unit}/return', [App\Http\Controllers\FixedAssetController::class, 'returnUnit'])->name('fixed-assets.units.return');
+        Route::post('fixed-assets/units/{unit}/transfer', [App\Http\Controllers\FixedAssetController::class, 'transferUnit'])->name('fixed-assets.units.transfer');
+        Route::post('fixed-assets/transfer-units', [App\Http\Controllers\FixedAssetController::class, 'transferUnits'])->name('fixed-assets.transfer-units');
         Route::get('fixed-assets/sync-inventory', [App\Http\Controllers\FixedAssetController::class, 'syncInventoryNow'])->name('fixed-assets.sync');
 
         // Fixed Assets (Centralized Unit Codes & Quantity Lock)
