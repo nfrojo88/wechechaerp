@@ -1227,7 +1227,8 @@ function loadAvailableUnitsForTransfer() {
 
     container.innerHTML = '<div class="text-center py-4"><i class="fa-solid fa-spinner fa-spin me-2 text-primary"></i>Loading unit codes...</div>';
 
-    fetch("{{ route('store-manager.fixed-assets.available-ajax') }}?store_id=" + storeId)
+    const ajaxUrl = "{{ Route::has('store-manager.fixed-assets.available-ajax') ? route('store-manager.fixed-assets.available-ajax') : (Route::has('fixed-assets.available-ajax') ? route('fixed-assets.available-ajax') : url('store-manager/fixed-assets/available-ajax')) }}";
+    fetch(ajaxUrl + "?store_id=" + storeId)
         .then(r => r.json())
         .then(data => {
             if (!data.units || data.units.length === 0) {
