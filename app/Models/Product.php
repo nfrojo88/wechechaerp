@@ -230,4 +230,13 @@ class Product extends Model
     {
         return $this->hasOne(MaterialPrice::class, 'product_id')->latestOfMany('effective_date');
     }
+
+    /**
+     * Check if product is a Fixed Asset / Equipment.
+     */
+    public function isFixedAsset(): bool
+    {
+        $cat = strtolower(trim($this->category ?? ''));
+        return str_contains($cat, 'fixed') || str_contains($cat, 'asset') || str_contains($cat, 'equipment') || FixedAsset::where('name', $this->name)->exists();
+    }
 }

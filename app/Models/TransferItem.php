@@ -9,6 +9,11 @@ class TransferItem extends Model
     protected $fillable = [
         'transfer_id', 'product_id', 'requested_quantity',
         'approved_quantity', 'sent_quantity', 'received_quantity', 'unit',
+        'unit_codes',
+    ];
+
+    protected $casts = [
+        'unit_codes' => 'array',
     ];
 
     public function transfer()

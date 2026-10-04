@@ -567,6 +567,22 @@
                                 @if($item->product && $item->product->category)
                                     <div class="text-muted small">{{ $item->product->category->name ?? '' }}</div>
                                 @endif
+                                @if(!empty($item->unit_codes))
+                                    @php
+                                        $uCodes = is_array($item->unit_codes) ? $item->unit_codes : (json_decode($item->unit_codes, true) ?: explode(',', $item->unit_codes));
+                                        $uCodes = array_filter(array_map('trim', (array)$uCodes));
+                                    @endphp
+                                    @if(!empty($uCodes))
+                                    <div class="mt-1 d-flex flex-wrap align-items-center gap-1">
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size:0.68rem;">
+                                            <i class="fa-solid fa-barcode me-1"></i>Units ({{ count($uCodes) }}):
+                                        </span>
+                                        @foreach($uCodes as $uc)
+                                            <span class="badge bg-dark font-monospace" style="font-size:0.7rem;">{{ $uc }}</span>
+                                        @endforeach
+                                    </div>
+                                    @endif
+                                @endif
                             </td>
                             <td>
                                 <span class="font-monospace text-muted small">{{ $item->product->code ?? $item->product->sku ?? '—' }}</span>

@@ -610,7 +610,10 @@ class StoreManagerController extends Controller
         }
 
         $stores = Store::where('is_active', true)->orderBy('name')->get();
-        $products = Product::where('is_active', true)->orderBy('name')->get();
+        $products = Product::where('is_active', true)->orderBy('name')->get()->map(function($p) {
+            $p->is_fixed_asset = $p->isFixedAsset();
+            return $p;
+        });
 
         return view('store-manager.transfers.create', compact('stores', 'products'));
     }
@@ -636,6 +639,7 @@ class StoreManagerController extends Controller
             'items.*.product_id'  => 'required|exists:products,id',
             'items.*.quantity'    => 'required|numeric|min:0.001',
             'items.*.unit'        => 'nullable|string|max:20',
+            'items.*.unit_codes'  => 'nullable|array',
         ]);
 
         DB::transaction(function () use ($request) {
@@ -651,11 +655,26 @@ class StoreManagerController extends Controller
                 'status'        => 'draft',
             ]);
 
+            $faNotes = [];
             foreach ($request->items as $item) {
+                $unitCodes = !empty($item['unit_codes']) ? array_values(array_filter((array)$item['unit_codes'])) : null;
+
                 $transfer->items()->create([
                     'product_id'         => $item['product_id'],
                     'requested_quantity' => $item['quantity'],
                     'unit'               => $item['unit'] ?? 'pcs',
+                    'unit_codes'         => $unitCodes,
+                ]);
+
+                if (!empty($unitCodes)) {
+                    $prod = Product::find($item['product_id']);
+                    $faNotes[] = ($prod->name ?? 'Equipment') . ' Units: [' . implode(', ', $unitCodes) . ']';
+                }
+            }
+
+            if (!empty($faNotes)) {
+                $transfer->update([
+                    'dispatch_notes' => implode(' | ', $faNotes),
                 ]);
             }
         });
@@ -1195,6 +1214,76 @@ class StoreManagerController extends Controller
                         ]);
 
                         $addedCount++;
+                    }
+                }
+
+                // 3. IF FIXED ASSET: MOVE FIXED ASSET UNITS BY INDIVIDUAL CODE
+                if ($isCompleted && !empty($item->unit_codes)) {
+                    $codes = is_array($item->unit_codes) ? $item->unit_codes : (json_decode($item->unit_codes, true) ?: explode(',', $item->unit_codes));
+                    $codes = array_values(array_filter(array_map('trim', (array)$codes)));
+
+                    if (!empty($codes)) {
+                        $units = \App\Models\FixedAssetUnit::with(['parentAsset'])->whereIn('unit_code', $codes)->get();
+                        if ($units->isNotEmpty()) {
+                            $fromStoreName = $transfer->fromStore->name ?? 'Origin Store';
+                            $toStoreName = $transfer->toStore->name ?? 'Destination Store';
+
+                            $groupedByAsset = $units->groupBy('fixed_asset_id');
+                            foreach ($groupedByAsset as $originAssetId => $assetUnits) {
+                                $originAsset = $assetUnits->first()->parentAsset;
+                                if (!$originAsset) continue;
+
+                                $unitCount = $assetUnits->count();
+
+                                // Find or create matching FixedAsset at the destination store
+                                $destAsset = \App\Models\FixedAsset::where('store_id', $transfer->to_store_id)
+                                    ->where('name', $originAsset->name)
+                                    ->where('category', $originAsset->category)
+                                    ->first();
+
+                                if (!$destAsset) {
+                                    $destAsset = \App\Models\FixedAsset::create([
+                                        'name'           => $originAsset->name,
+                                        'category'       => $originAsset->category,
+                                        'code_prefix'    => $originAsset->code_prefix,
+                                        'total_quantity' => $unitCount,
+                                        'unit_cost'      => $originAsset->unit_cost,
+                                        'purchase_date'  => $originAsset->purchase_date,
+                                        'supplier'       => $originAsset->supplier,
+                                        'store_id'       => $transfer->to_store_id,
+                                        'description'    => $originAsset->description,
+                                        'created_by'     => $transfer->requested_by,
+                                    ]);
+                                } else {
+                                    $destAsset->increment('total_quantity', $unitCount);
+                                }
+
+                                $originAsset->decrement('total_quantity', $unitCount);
+
+                                foreach ($assetUnits as $unit) {
+                                    $historyNote = "[" . now()->format('Y-m-d H:i') . "] Transferred via Transfer #{$transfer->transfer_no} from {$fromStoreName} to {$toStoreName}";
+                                    $unit->update([
+                                        'fixed_asset_id'   => $destAsset->id,
+                                        'current_location' => $toStoreName,
+                                        'status'           => \App\Models\FixedAssetUnit::STATUS_IN_STORE,
+                                        'notes'            => $unit->notes ? $unit->notes . "\n" . $historyNote : $historyNote,
+                                    ]);
+
+                                    \App\Models\FixedAssetAssignment::create([
+                                        'fixed_asset_unit_id'    => $unit->id,
+                                        'employee_id'            => null,
+                                        'action'                 => 'transferred',
+                                        'assigned_date'          => now(),
+                                        'condition_on_assignment'=> $unit->condition ?: 'good',
+                                        'assigned_by'            => $transfer->received_by ?? $transfer->requested_by ?? 1,
+                                        'notes'                  => $historyNote,
+                                    ]);
+                                }
+
+                                $originAsset->syncWithCatalogAndInventory();
+                                $destAsset->syncWithCatalogAndInventory();
+                            }
+                        }
                     }
                 }
             }
