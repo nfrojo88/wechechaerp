@@ -139,9 +139,10 @@ class Product extends Model
     /**
      * Check if product is a fixed asset.
      */
-    public function isFixedAsset()
+    public function isFixedAsset(): bool
     {
-        return $this->category === 'Fixed Asset';
+        $cat = strtolower(trim($this->category ?? ''));
+        return str_contains($cat, 'fixed') || str_contains($cat, 'asset') || str_contains($cat, 'equipment') || FixedAsset::where('name', $this->name)->exists();
     }
 
     /**
@@ -229,14 +230,5 @@ class Product extends Model
     public function latestMarketPrice()
     {
         return $this->hasOne(MaterialPrice::class, 'product_id')->latestOfMany('effective_date');
-    }
-
-    /**
-     * Check if product is a Fixed Asset / Equipment.
-     */
-    public function isFixedAsset(): bool
-    {
-        $cat = strtolower(trim($this->category ?? ''));
-        return str_contains($cat, 'fixed') || str_contains($cat, 'asset') || str_contains($cat, 'equipment') || FixedAsset::where('name', $this->name)->exists();
     }
 }
