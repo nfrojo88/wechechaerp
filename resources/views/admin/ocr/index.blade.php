@@ -98,8 +98,14 @@
                 </span>
                 <strong class="text-dark">Live Receipt Upload &amp; Optical Character Recognition (OCR)</strong>
             </div>
-            <div id="ocr-status-badge" class="badge bg-secondary px-3 py-1.5 rounded-pill">
-                <i class="fa-solid fa-circle me-1" style="font-size:0.55rem;"></i> Ready to scan
+            <div class="d-flex align-items-center gap-2">
+                <div class="form-check form-switch mb-0 small" title="Preprocesses photo with contrast stretching and binarization for thermal receipts">
+                    <input class="form-check-input cursor-pointer" type="checkbox" id="toggle-enhance" checked>
+                    <label class="form-check-label small fw-semibold text-muted cursor-pointer" for="toggle-enhance">Enhanced Binarization</label>
+                </div>
+                <div id="ocr-status-badge" class="badge bg-secondary px-3 py-1.5 rounded-pill">
+                    <i class="fa-solid fa-circle me-1" style="font-size:0.55rem;"></i> Ready to scan
+                </div>
             </div>
         </div>
 
@@ -148,12 +154,18 @@
                                     <button type="button" class="btn btn-xs btn-outline-secondary btn-sm" id="btn-rotate-img" title="Rotate 90°">
                                         <i class="fa-solid fa-rotate-right me-1"></i>Rotate
                                     </button>
+                                    <button type="button" class="btn btn-xs btn-outline-primary btn-sm" id="btn-reprocess-img" title="Re-scan OCR">
+                                        <i class="fa-solid fa-bolt me-1"></i>Re-Scan
+                                    </button>
                                     <button type="button" class="btn btn-xs btn-outline-danger btn-sm" id="btn-clear-img" title="Remove Receipt">
                                         <i class="fa-solid fa-trash me-1"></i>Clear
                                     </button>
                                 </div>
                             </div>
                         </div>
+
+                        {{-- Hidden offscreen canvas for preprocessing --}}
+                        <canvas id="offscreen-canvas" class="d-none"></canvas>
 
                         {{-- OCR Progress Indicator --}}
                         <div id="ocr-progress-container" class="mt-3 d-none">
@@ -172,7 +184,7 @@
                         <div class="mt-auto pt-3">
                             <div class="alert alert-light border small text-muted mb-0 py-2">
                                 <i class="fa-solid fa-lightbulb text-warning me-1"></i>
-                                <strong>Pro-Tip:</strong> High contrast, well-lit photos yield 99%+ accuracy on Ethiopian Machine FS receipts (TIN, VAT 15%, Date, Grand Total).
+                                <strong>Pro-Tip:</strong> The OCR engine automatically strips asterisks (<code>*</code>), currency symbols, parses Ethiopian 15% VAT, and separates Supplier and Buyer TINs!
                             </div>
                         </div>
 
@@ -204,7 +216,20 @@
                                     <input type="hidden" id="stored_file_path" name="file_path" value="">
                                     <input type="hidden" id="ocr_raw_text_hidden" name="ocr_raw_text" value="">
 
-                                    <div class="row g-3">
+                                    {{-- Quick-Fill Candidate Chips --}}
+                                    <div id="detected-chips-container" class="mb-3 d-none">
+                                        <div class="p-2.5 rounded-3 border bg-info bg-opacity-10">
+                                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                                <small class="fw-bold text-dark">
+                                                    <i class="fa-solid fa-wand-magic-sparkles text-primary me-1"></i>Detected Values from Receipt (Click to fill):
+                                                </small>
+                                                <small class="text-muted" style="font-size:0.7rem;">Click any chip to insert</small>
+                                            </div>
+                                            <div id="detected-chips-list" class="d-flex flex-wrap gap-1.5"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-2">
 
                                         {{-- Vendor / Merchant --}}
                                         <div class="col-md-7">
@@ -214,28 +239,46 @@
                                             </label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-store text-muted"></i></span>
-                                                <input type="text" class="form-control" id="field_vendor" name="vendor_name" placeholder="e.g. Abyssinia Steel / Total Energy" required>
+                                                <input type="text" class="form-control" id="field_vendor" name="vendor_name" placeholder="e.g. MEWEDISI METEL BUILDING MATERIAL" required>
                                             </div>
                                         </div>
 
-                                        {{-- TIN Number --}}
+                                        {{-- Supplier TIN --}}
                                         <div class="col-md-5">
                                             <label class="form-label small fw-bold text-dark mb-1">
-                                                Supplier TIN #
-                                                <span class="badge bg-light text-muted border ms-1" style="font-size:0.65rem;">10-Digits</span>
+                                                Supplier TIN # *
+                                                <span class="badge bg-light text-muted border ms-1" style="font-size:0.65rem;">Seller</span>
                                             </label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-id-card text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace" id="field_tin" name="vendor_tin" placeholder="e.g. 0012345678">
+                                                <input type="text" class="form-control font-monospace" id="field_tin" name="vendor_tin" placeholder="e.g. 00810724322">
+                                            </div>
+                                        </div>
+
+                                        {{-- Buyer TIN --}}
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-semibold text-muted mb-1">Buyer's TIN</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-user-tag text-muted"></i></span>
+                                                <input type="text" class="form-control font-monospace" id="field_buyer_tin" name="buyer_tin" placeholder="e.g. 0038480010">
                                             </div>
                                         </div>
 
                                         {{-- Receipt / FS Number --}}
                                         <div class="col-md-4">
-                                            <label class="form-label small fw-bold text-dark mb-1">FS / Receipt Number</label>
+                                            <label class="form-label small fw-bold text-dark mb-1">FS / Receipt Number *</label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-hashtag text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace" id="field_fs_no" name="fs_no" placeholder="e.g. FS-48291">
+                                                <input type="text" class="form-control font-monospace fw-bold" id="field_fs_no" name="fs_no" placeholder="e.g. 00002564">
+                                            </div>
+                                        </div>
+
+                                        {{-- Machine / ERCA Number --}}
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-semibold text-muted mb-1">ERCA / Machine #</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-cash-register text-muted"></i></span>
+                                                <input type="text" class="form-control font-monospace" id="field_machine_no" name="machine_no" placeholder="e.g. MFE0097690">
                                             </div>
                                         </div>
 
@@ -259,10 +302,10 @@
                                         </div>
 
                                         {{-- Link to Project --}}
-                                        <div class="col-md-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">Link to Project (Optional)</label>
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">Link to Project</label>
                                             <select class="form-select form-select-sm" id="field_project_id" name="project_id">
-                                                <option value="">— General Head Office Expense —</option>
+                                                <option value="">— Head Office / General —</option>
                                                 @foreach($projects as $p)
                                                     <option value="{{ $p->id }}">{{ $p->name }}</option>
                                                 @endforeach
@@ -270,9 +313,9 @@
                                         </div>
 
                                         {{-- Description / Purpose --}}
-                                        <div class="col-md-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">Purpose / Notes</label>
-                                            <input type="text" class="form-control form-control-sm" id="field_description" name="description" placeholder="e.g. Site concrete reinforcement items">
+                                        <div class="col-12">
+                                            <label class="form-label small fw-semibold text-muted mb-1">Purpose / Notes</label>
+                                            <input type="text" class="form-control form-control-sm" id="field_description" name="description" placeholder="e.g. Metal building materials (Flat bar, Round pipe)">
                                         </div>
 
                                         {{-- FINANCIALS BOX --}}
@@ -280,7 +323,7 @@
                                             <div class="p-3 rounded-3 border bg-light">
                                                 <div class="row g-2 align-items-center">
                                                     <div class="col-md-4">
-                                                        <label class="form-label small fw-semibold text-muted mb-1">Net / Subtotal (ETB)</label>
+                                                        <label class="form-label small fw-semibold text-muted mb-1">Taxable Subtotal (ETB)</label>
                                                         <input type="number" step="0.01" class="form-control form-control-sm font-monospace text-end" id="field_subtotal" name="subtotal" placeholder="0.00" oninput="calculateFromSubtotal()">
                                                     </div>
                                                     <div class="col-md-4">
@@ -297,17 +340,20 @@
 
                                         {{-- Line Items Preview --}}
                                         <div class="col-12" id="line-items-section" style="display:none;">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                <i class="fa-solid fa-basket-shopping me-1 text-primary"></i>Detected Line Items:
-                                            </label>
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <label class="form-label small fw-bold text-dark mb-0">
+                                                    <i class="fa-solid fa-basket-shopping me-1 text-primary"></i>Detected Line Items:
+                                                </label>
+                                                <span class="badge bg-light text-dark border" id="line-items-count">0 items</span>
+                                            </div>
                                             <div class="table-responsive border rounded bg-white">
                                                 <table class="table table-sm table-striped mb-0 small" id="line-items-table">
                                                     <thead class="table-light">
                                                         <tr>
                                                             <th>Item Description</th>
-                                                            <th class="text-end">Qty</th>
-                                                            <th class="text-end">Unit Price</th>
-                                                            <th class="text-end">Total</th>
+                                                            <th class="text-end" style="width:70px;">Qty</th>
+                                                            <th class="text-end" style="width:110px;">Unit Price</th>
+                                                            <th class="text-end" style="width:120px;">Total (ETB)</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody id="line-items-body"></tbody>
@@ -478,6 +524,7 @@
 <script>
 let currentImageRotation = 0;
 let currentImageDataUrl = null;
+let currentImageFile = null;
 
 // File input handlers
 const dropZone = document.getElementById('drop-zone');
@@ -511,6 +558,13 @@ document.getElementById('btn-rotate-img').addEventListener('click', () => {
     previewImg.style.transform = `rotate(${currentImageRotation}deg)`;
 });
 
+// Re-process button
+document.getElementById('btn-reprocess-img').addEventListener('click', () => {
+    if (previewImg.src && !previewImg.classList.contains('d-none')) {
+        runOcrPipeline(previewImg);
+    }
+});
+
 // Clear button
 document.getElementById('btn-clear-img').addEventListener('click', () => {
     resetScanner();
@@ -532,6 +586,7 @@ function resetScanner() {
     dropPrompt.classList.remove('d-none');
     previewImg.src = '';
     currentImageDataUrl = null;
+    currentImageFile = null;
     currentImageRotation = 0;
     previewImg.style.transform = 'none';
     document.getElementById('ocr-progress-container').classList.add('d-none');
@@ -543,10 +598,13 @@ function resetScanner() {
     document.getElementById('raw-lines-count').textContent = '0 lines';
     document.getElementById('line-items-section').style.display = 'none';
     document.getElementById('line-items-body').innerHTML = '';
+    document.getElementById('detected-chips-container').classList.add('d-none');
+    document.getElementById('detected-chips-list').innerHTML = '';
 }
 
 // Main File Handling & OCR Execution
 function handleFileSelected(file) {
+    currentImageFile = file;
     const isPdf = file.type.includes('pdf');
     dropPrompt.classList.add('d-none');
     previewArea.classList.remove('d-none');
@@ -567,12 +625,13 @@ function handleFileSelected(file) {
         // 1. Upload to server to get permanent storage path
         uploadFileToServer(file);
 
-        // 2. Run in-browser Live OCR with Tesseract
+        // 2. Run OCR Pipeline with image enhancement
         if (!isPdf) {
-            runLiveTesseractOcr(file);
+            previewImg.onload = function() {
+                runOcrPipeline(previewImg);
+            };
         } else {
-            // For PDF fallback message
-            updateStatus('PDF Uploaded - Run OCR on receipt image for instant recognition', 'info');
+            updateStatus('PDF Uploaded - Select receipt image for live character extraction', 'info');
         }
     };
     reader.readAsDataURL(file);
@@ -604,8 +663,76 @@ function updateStatus(text, badgeClass) {
     badge.innerHTML = `<i class="fa-solid fa-circle me-1" style="font-size:0.55rem;"></i> ${text}`;
 }
 
-// In-Browser Live OCR via Tesseract.js
-function runLiveTesseractOcr(imageSource) {
+// Image preprocessing via Canvas: Grayscale & Contrast Stretched Binarization
+function preprocessImage(imgElement) {
+    const canvas = document.getElementById('offscreen-canvas');
+    const ctx = canvas.getContext('2d');
+
+    let width = imgElement.naturalWidth || imgElement.width || 1200;
+    let height = imgElement.naturalHeight || imgElement.height || 1600;
+
+    // Scale to standard OCR resolution (~1600px width)
+    const targetW = 1600;
+    if (width > 0) {
+        const ratio = targetW / width;
+        width = targetW;
+        height = Math.round(height * ratio);
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+
+    // Apply rotation if needed
+    ctx.save();
+    if (currentImageRotation > 0) {
+        ctx.translate(width / 2, height / 2);
+        ctx.rotate((currentImageRotation * Math.PI) / 180);
+        ctx.drawImage(imgElement, -width / 2, -height / 2, width, height);
+    } else {
+        ctx.drawImage(imgElement, 0, 0, width, height);
+    }
+    ctx.restore();
+
+    const doEnhance = document.getElementById('toggle-enhance').checked;
+    if (!doEnhance) {
+        return canvas.toDataURL('image/png');
+    }
+
+    // Enhance contrast and binarize
+    try {
+        const imgData = ctx.getImageData(0, 0, width, height);
+        const data = imgData.data;
+
+        // Sample min & max brightness
+        let minLum = 255;
+        let maxLum = 0;
+        for (let i = 0; i < data.length; i += 16) {
+            const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            if (lum < minLum) minLum = lum;
+            if (lum > maxLum) maxLum = lum;
+        }
+
+        const range = Math.max(1, maxLum - minLum);
+        const threshold = minLum + range * 0.52; // Threshold for dark ink
+
+        for (let i = 0; i < data.length; i += 4) {
+            const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            const v = lum > threshold ? 255 : 0;
+            data[i] = v;
+            data[i + 1] = v;
+            data[i + 2] = v;
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+        return canvas.toDataURL('image/png');
+    } catch (e) {
+        console.warn('Canvas pre-processing fallback:', e);
+        return canvas.toDataURL('image/png');
+    }
+}
+
+// In-Browser Live OCR via Tesseract.js with multi-pass recognition
+function runOcrPipeline(imgElement) {
     const progressContainer = document.getElementById('ocr-progress-container');
     const progressBar = document.getElementById('ocr-progress-bar');
     const progressPct = document.getElementById('ocr-progress-pct');
@@ -614,11 +741,13 @@ function runLiveTesseractOcr(imageSource) {
     progressContainer.classList.remove('d-none');
     progressBar.style.width = '10%';
     progressPct.textContent = '10%';
-    progressLabel.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1 text-primary"></i> Initializing OCR Engine...';
-    updateStatus('Scanning Receipt...', 'warning');
+    progressLabel.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i> Pre-processing &amp; Enhancing Receipt...';
+    updateStatus('Enhancing &amp; Scanning...', 'warning');
+
+    const processedDataUrl = preprocessImage(imgElement);
 
     Tesseract.recognize(
-        imageSource,
+        processedDataUrl,
         'eng',
         {
             logger: m => {
@@ -653,91 +782,161 @@ function runLiveTesseractOcr(imageSource) {
     });
 }
 
-// Smart Commercial & Ethiopian FS Receipt Heuristics
+// Smart Commercial & Ethiopian FS Receipt Multi-Pass Parser
 function parseReceiptText(text, lines) {
-    const cleanText = text.replace(/,/g, '');
+    const chips = [];
 
-    // 1. Vendor Name: Usually in first 3 non-empty lines
-    let detectedVendor = '';
-    for (let i = 0; i < Math.min(4, lines.length); i++) {
-        const line = lines[i].trim();
-        // Skip common header noise like "TEL", "TAX INVOICE", "FS"
-        if (!/tax|invoice|receipt|cash|tel|p\.o|tin|date/i.test(line) && line.length > 3) {
-            detectedVendor = line.replace(/[^a-zA-Z0-9\s&.-]/g, '').trim();
-            break;
-        }
-    }
-    if (detectedVendor) {
-        document.getElementById('field_vendor').value = detectedVendor;
-    }
+    // Helper: strip asterisks and currency words from number strings
+    const cleanNum = str => parseFloat(str.replace(/[*,\s]/g, ''));
 
-    // 2. TIN Number: 10 digit number often preceded by TIN or T.I.N.
-    const tinMatch = text.match(/(?:TIN|T\.I\.N|Tax\s*ID)[\s:.\-#]*([0-9]{10})/i) || text.match(/\b([0-9]{10})\b/);
-    if (tinMatch) {
-        document.getElementById('field_tin').value = tinMatch[1];
-    }
-
-    // 3. Receipt / FS Number: (e.g. FS No 12345, Invoice # 9821)
-    const fsMatch = text.match(/(?:FS|INVOICE|REC|RECEIPT|BILL|REF|MEMO)[\s:.\-#]*([A-Za-z0-9\-_]{3,15})/i);
-    if (fsMatch) {
-        document.getElementById('field_fs_no').value = fsMatch[1];
-    }
-
-    // 4. Date extraction: YYYY-MM-DD or DD/MM/YYYY or DD-MM-YYYY
-    const dateMatch = text.match(/\b(20\d{2}[-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12]\d|3[01]))\b/)
-                   || text.match(/\b((?:0[1-9]|[12]\d|3[01])[-/.](?:0[1-9]|1[0-2])[-/.]20\d{2})\b/);
-    if (dateMatch) {
-        let dStr = dateMatch[1].replace(/[./]/g, '-');
-        // If DD-MM-YYYY convert to YYYY-MM-DD
-        const parts = dStr.split('-');
-        if (parts[0].length === 2 && parts[2].length === 4) {
-            dStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
-        }
-        document.getElementById('field_date').value = dStr;
-    }
-
-    // 5. Total Amount: Find "TOTAL", "GRAND TOTAL", "NET AMOUNT", "AMOUNT PAID"
-    const totalMatch = text.match(/(?:TOTAL|GRAND\s*TOTAL|NET\s*TOTAL|TOTAL\s*AMOUNT|AMOUNT\s*DUE|AMOUNT\s*PAID|ጠቅላላ)[\s:.\-A-Za-z]*([0-9]+(?:\.[0-9]{1,2})?)/i);
+    // 1. Grand Total:
+    // Matches "TOTAL: *10,099.99" or "CASH Birr *10,099.99" or "TOTAL * 10,099.99" or "GRAND TOTAL *10099.99"
+    const totalMatch = text.match(/(?:TOTAL|GRAND\s*TOTAL|CASH\s*(?:Birr|BIRR)?|NET\s*TOTAL|AMOUNT\s*PAID|ጠቅላላ)\s*[:.\-]*\s*[*]?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))/i);
     let totalAmt = 0;
     if (totalMatch) {
-        totalAmt = parseFloat(totalMatch[1]);
+        totalAmt = cleanNum(totalMatch[1]);
+        chips.push({ label: 'Total', value: totalAmt.toFixed(2), target: 'field_total' });
     } else {
-        // Fallback: search for numbers with decimals and take max reasonable amount
-        const allNums = cleanText.match(/\b[0-9]+\.[0-9]{2}\b/g);
-        if (allNums && allNums.length > 0) {
-            const floats = allNums.map(n => parseFloat(n)).filter(n => n > 0 && n < 10000000);
-            if (floats.length > 0) totalAmt = Math.max(...floats);
+        // Fallback: search for numbers with decimals and take highest sensible amount
+        const allAmounts = [...text.matchAll(/[*]?\s*([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})\b/g)]
+            .map(m => cleanNum(m[1]))
+            .filter(n => n > 10 && n < 50000000);
+        if (allAmounts.length > 0) {
+            totalAmt = Math.max(...allAmounts);
+            chips.push({ label: 'Total (Estimated)', value: totalAmt.toFixed(2), target: 'field_total' });
         }
     }
     if (totalAmt > 0) {
         document.getElementById('field_total').value = totalAmt.toFixed(2);
     }
 
-    // 6. VAT Amount (15%):
-    const vatMatch = text.match(/(?:VAT|TAX|ታክስ)(?:\s*15%?)?[\s:.\-A-Za-z]*([0-9]+(?:\.[0-9]{1,2})?)/i);
+    // 2. Subtotal / Taxable:
+    // Matches "TAXBL1 *8,782.60" or "TAXABLE *8,782.60" or "SUBTOTAL: *8,782.60"
+    const subtotalMatch = text.match(/(?:TAXBL1|TAXABLE|TAXBL|SUBTOTAL|SUB\s*TOTAL|NET\s*AMOUNT)\s*[:.\-]*\s*[*]?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))/i);
+    let subtotalAmt = 0;
+    if (subtotalMatch) {
+        subtotalAmt = cleanNum(subtotalMatch[1]);
+        chips.push({ label: 'Subtotal', value: subtotalAmt.toFixed(2), target: 'field_subtotal' });
+    } else if (totalAmt > 0) {
+        subtotalAmt = Math.round((totalAmt / 1.15) * 100) / 100;
+    }
+    if (subtotalAmt > 0) {
+        document.getElementById('field_subtotal').value = subtotalAmt.toFixed(2);
+    }
+
+    // 3. VAT Amount (15%):
+    // Matches "TAX1 15.00% *1,317.39" or "VAT 15% *1,317.39" or "TAX 15.00% *1317.39"
+    const vatMatch = text.match(/(?:TAX1\s*15(?:\.00)?%?|TAX\s*15(?:\.00)?%?|VAT\s*15(?:\.00)?%?|ታክስ\s*15%?|VAT\s*AMOUNT|TAX\s*AMOUNT)\s*[:.\-]*\s*[*]?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))/i);
     let vatAmt = 0;
     if (vatMatch) {
-        vatAmt = parseFloat(vatMatch[1]);
-        document.getElementById('field_vat').value = vatAmt.toFixed(2);
-    } else if (totalAmt > 0) {
-        // If VAT not explicitly found, calculate standard 15% VAT component: Total - (Total / 1.15)
-        vatAmt = Math.round((totalAmt - (totalAmt / 1.15)) * 100) / 100;
+        vatAmt = cleanNum(vatMatch[1]);
+        chips.push({ label: 'VAT 15%', value: vatAmt.toFixed(2), target: 'field_vat' });
+    } else if (totalAmt > 0 && subtotalAmt > 0) {
+        vatAmt = Math.round((totalAmt - subtotalAmt) * 100) / 100;
+    }
+    if (vatAmt > 0) {
         document.getElementById('field_vat').value = vatAmt.toFixed(2);
     }
 
-    // 7. Subtotal:
-    const subtotalMatch = text.match(/(?:SUBTOTAL|SUB\s*TOTAL|NET|TAXABLE)[\s:.\-A-Za-z]*([0-9]+(?:\.[0-9]{1,2})?)/i);
-    if (subtotalMatch) {
-        document.getElementById('field_subtotal').value = parseFloat(subtotalMatch[1]).toFixed(2);
-    } else if (totalAmt > 0) {
-        const sub = Math.max(0, totalAmt - vatAmt);
-        document.getElementById('field_subtotal').value = sub.toFixed(2);
+    // 4. FS / Receipt Number:
+    // Matches "FS No. 00002564", "FS NO: 00002564", "FS #00002564", "Invoice No: 12345"
+    const fsMatch = text.match(/(?:FS|INVOICE|RECEIPT|REC|BILL|REF|MEMO)\s*(?:NO\.?|NUMBER|#)?[:.\-\s]*([A-Za-z0-9\-_/]{3,20})/i);
+    if (fsMatch) {
+        const cleanFs = fsMatch[1].replace(/[^A-Za-z0-9\-_/]/g, '').trim();
+        document.getElementById('field_fs_no').value = cleanFs;
+        chips.push({ label: 'FS #', value: cleanFs, target: 'field_fs_no' });
+    } else {
+        // Fallback: 6 to 8 digit number starting with 0000
+        const zeroSeqMatch = text.match(/\b(000[0-9]{4,6})\b/);
+        if (zeroSeqMatch) {
+            document.getElementById('field_fs_no').value = zeroSeqMatch[1];
+            chips.push({ label: 'FS #', value: zeroSeqMatch[1], target: 'field_fs_no' });
+        }
     }
 
-    // 8. Auto category selection based on keywords:
+    // 5. Date extraction (Strict DD/MM/YYYY support for Ethiopia):
+    const dmyMatch = text.match(/\b((?:0[1-9]|[12]\d|3[01])[-/.](?:0[1-9]|1[0-2])[-/.](?:20\d{2}))\b/);
+    const ymdMatch = text.match(/\b((?:20\d{2})[-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12]\d|3[01]))\b/);
+    let detectedDate = '';
+
+    if (dmyMatch) {
+        const parts = dmyMatch[1].replace(/[./]/g, '-').split('-');
+        detectedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    } else if (ymdMatch) {
+        detectedDate = ymdMatch[1].replace(/[./]/g, '-');
+    }
+
+    if (detectedDate) {
+        document.getElementById('field_date').value = detectedDate;
+        chips.push({ label: 'Date', value: detectedDate, target: 'field_date' });
+    }
+
+    // 6. TIN Numbers (Distinguish Supplier TIN vs Buyer TIN):
+    const buyerTinMatch = text.match(/Buyer(?:'s)?\s*TIN[\s:.\-#]*([0-9]{10})/i);
+    let buyerTin = '';
+    if (buyerTinMatch) {
+        buyerTin = buyerTinMatch[1];
+        document.getElementById('field_buyer_tin').value = buyerTin;
+        chips.push({ label: 'Buyer TIN', value: buyerTin, target: 'field_buyer_tin' });
+    }
+
+    // Supplier TIN: look for explicit TIN or non-phone 10-digit number
+    const explicitSellerTinMatch = text.match(/(?:TIN\s*(?:NO\.?|NUMBER)?|የታክስ\s*ከፋይ\s*መለያ\s*ቁ\.?)[\s:.\-#]*([0-9]{10})/i);
+    let sellerTin = '';
+
+    if (explicitSellerTinMatch && explicitSellerTinMatch[1] !== buyerTin) {
+        sellerTin = explicitSellerTinMatch[1];
+    } else {
+        // Find 10-digit number that does not start with 09 or 07 (which are mobile phone numbers in Ethiopia)
+        const all10Digits = [...text.matchAll(/\b(00[0-9]{8}|[1-9][0-9]{9})\b/g)]
+            .map(m => m[1])
+            .filter(t => !t.startsWith('09') && !t.startsWith('07') && t !== buyerTin);
+        if (all10Digits.length > 0) {
+            sellerTin = all10Digits[0];
+        }
+    }
+
+    if (sellerTin) {
+        document.getElementById('field_tin').value = sellerTin;
+        chips.push({ label: 'Supplier TIN', value: sellerTin, target: 'field_tin' });
+    }
+
+    // 7. ERCA / Machine Number:
+    const machineMatch = text.match(/(?:ERCA|MFE)[\s:.\-#]*([A-Za-z0-9]{6,15})/i);
+    if (machineMatch) {
+        document.getElementById('field_machine_no').value = machineMatch[1];
+        chips.push({ label: 'Machine #', value: machineMatch[1], target: 'field_machine_no' });
+    }
+
+    // 8. Vendor / Merchant Name:
+    const strongKw = /TRADE|CONSTRUCTION|BUILDING|MATERIAL|METEL|METAL|ENTERPRISE|PLC|LTD|STORE|SUPPLY|GENERAL|STEEL|PHARMACY|HOTEL|SUPERMARKET/i;
+    let detectedVendor = '';
+
+    for (let i = 0; i < Math.min(8, lines.length); i++) {
+        const line = lines[i].trim();
+        if (strongKw.test(line) && !/TEL|FAX|TIN|FS|DATE|BUYER|ADDRESS|around/i.test(line)) {
+            detectedVendor = line.replace(/[^a-zA-Z0-9\s&.-]/g, '').trim();
+            break;
+        }
+    }
+    if (!detectedVendor) {
+        for (let i = 0; i < Math.min(4, lines.length); i++) {
+            const line = lines[i].trim();
+            if (line.length > 4 && !/TEL|TAX|INVOICE|FS|RECEIPT|DATE|CASH|TIN/i.test(line)) {
+                detectedVendor = line.replace(/[^a-zA-Z0-9\s&.-]/g, '').trim();
+                break;
+            }
+        }
+    }
+    if (detectedVendor) {
+        document.getElementById('field_vendor').value = detectedVendor;
+        chips.push({ label: 'Vendor', value: detectedVendor, target: 'field_vendor' });
+    }
+
+    // 9. Smart Category Selection:
     const lText = text.toLowerCase();
     const catSelect = document.getElementById('field_category');
-    if (/cement|steel|sand|gravel|block|rebar|paint|nails|timber/i.test(lText)) {
+    if (/pipe|bar|steel|metal|metel|building|material|construction|flat bar|round pipe|cement|rebar|paint|nails|timber/i.test(lText)) {
         catSelect.value = 'material';
     } else if (/fuel|diesel|benzine|gasoline|total|oil/i.test(lText)) {
         catSelect.value = 'transport';
@@ -749,45 +948,106 @@ function parseReceiptText(text, lines) {
         catSelect.value = 'equipment';
     }
 
-    // 9. Line Items Detection:
-    detectLineItems(lines);
+    // 10. Extract Line Items:
+    extractLineItems(lines);
+
+    // 11. Render Click-to-Fill Candidate Chips:
+    renderCandidateChips(chips);
 }
 
-function detectLineItems(lines) {
+// Line Items Extractor (handles multi-line "3 x 2434.78 =" and single line "FLAT BAR 40*3 *1,478.26")
+function extractLineItems(lines) {
     const tableBody = document.getElementById('line-items-body');
     const tableSection = document.getElementById('line-items-section');
+    const countBadge = document.getElementById('line-items-count');
     tableBody.innerHTML = '';
 
-    const detected = [];
-    const itemRegex = /^([a-zA-Z\s]{3,30})\s+(\d+)\s+([0-9]+(?:\.[0-9]{1,2})?)\s+([0-9]+(?:\.[0-9]{1,2})?)/;
+    const items = [];
 
-    lines.forEach(l => {
-        const m = l.match(itemRegex);
-        if (m) {
-            detected.push({
-                name: m[1].trim(),
-                qty: m[2],
-                unitPrice: m[3],
-                total: m[4]
-            });
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (/TAXBL|TAX1|TOTAL|CASH|ITEM#|ERCA|TIN|VAT|FS\s*No|TEL|BUYER|ADDRESS|around/i.test(line)) {
+            continue;
         }
-    });
 
-    if (detected.length > 0) {
+        // Case 1: Multi-line "3 x 2434.78 =" followed by item name and total "*7,304.34"
+        const multMatch = line.match(/^([0-9.]+)\s*[xX*]\s*([0-9,.]+)\s*=?$/);
+        if (multMatch && i + 1 < lines.length) {
+            const nextLine = lines[i + 1].trim();
+            const nextMatch = nextLine.match(/^([A-Za-z0-9\s*#+._/-]{3,35})\s*[*]?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))$/);
+            if (nextMatch) {
+                items.push({
+                    name: nextMatch[1].replace(/[*]/g, '').trim(),
+                    qty: parseFloat(multMatch[1]),
+                    unitPrice: parseFloat(multMatch[2].replace(/,/g, '')),
+                    total: parseFloat(nextMatch[2].replace(/,/g, ''))
+                });
+                i++;
+                continue;
+            }
+        }
+
+        // Case 2: Single-line "FLAT BAR 40*3 *1,478.26"
+        const singleMatch = line.match(/^([A-Za-z][A-Za-z0-9\s*#+._/-]{3,35})\s*[*]\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))$/);
+        if (singleMatch) {
+            const tot = parseFloat(singleMatch[2].replace(/,/g, ''));
+            items.push({
+                name: singleMatch[1].replace(/[*]/g, '').trim(),
+                qty: 1,
+                unitPrice: tot,
+                total: tot
+            });
+            continue;
+        }
+    }
+
+    if (items.length > 0) {
         tableSection.style.display = 'block';
-        detected.forEach(item => {
+        countBadge.textContent = `${items.length} items`;
+        items.forEach(itm => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="fw-semibold text-dark">${item.name}</td>
-                <td class="text-end font-monospace">${item.qty}</td>
-                <td class="text-end font-monospace">${item.unitPrice}</td>
-                <td class="text-end font-monospace fw-bold text-success">${item.total}</td>
+                <td class="fw-semibold text-dark">${itm.name}</td>
+                <td class="text-end font-monospace">${itm.qty}</td>
+                <td class="text-end font-monospace">${itm.unitPrice.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                <td class="text-end font-monospace fw-bold text-success">${itm.total.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
             `;
             tableBody.appendChild(tr);
         });
     } else {
         tableSection.style.display = 'none';
     }
+}
+
+// Render Click-to-Fill Quick Chips
+function renderCandidateChips(chips) {
+    const container = document.getElementById('detected-chips-container');
+    const list = document.getElementById('detected-chips-list');
+    list.innerHTML = '';
+
+    if (!chips || chips.length === 0) {
+        container.classList.add('d-none');
+        return;
+    }
+
+    container.classList.remove('d-none');
+    chips.forEach(c => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-xs btn-outline-primary bg-white shadow-xs py-1 px-2 text-start';
+        btn.innerHTML = `<span class="text-muted small">${c.label}:</span> <strong>${c.value}</strong>`;
+        btn.title = `Click to fill into ${c.label}`;
+        btn.onclick = () => {
+            const input = document.getElementById(c.target);
+            if (input) {
+                input.value = c.value;
+                input.classList.add('border-primary');
+                setTimeout(() => input.classList.remove('border-primary'), 1000);
+            }
+        };
+        list.appendChild(btn);
+    });
 }
 
 function calculateFromSubtotal() {
@@ -834,90 +1094,102 @@ document.getElementById('save-receipt-form').addEventListener('submit', function
     });
 });
 
-// Demo / Sample Receipt Generator for testing
+// Demo / Sample Receipt Generator matching the real Ethiopian fiscal format
 document.getElementById('btn-load-sample').addEventListener('click', function() {
     resetScanner();
     dropPrompt.classList.add('d-none');
     previewArea.classList.remove('d-none');
 
-    // Create synthetic canvas sample receipt
+    // Create high-resolution synthetic fiscal receipt
     const canvas = document.createElement('canvas');
-    canvas.width = 600;
-    canvas.height = 780;
+    canvas.width = 650;
+    canvas.height = 920;
     const ctx = canvas.getContext('2d');
 
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 24px monospace';
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 22px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('ETHIOPIAN STEEL & REBAR SUPPLY', 300, 60);
+    ctx.fillText('BERHANU TEKLEHAY ADHENA', 325, 50);
 
     ctx.font = '16px monospace';
-    ctx.fillText('BOLE ROAD, ADDIS ABABA', 300, 95);
-    ctx.fillText('TEL: +251 11 661 2233', 300, 125);
-    ctx.fillText('TIN: 0048192041', 300, 155);
-    ctx.fillText('FS NO: FS-98214', 300, 185);
-    ctx.fillText('DATE: 2026-09-28', 300, 215);
+    ctx.fillText('MEWEDISI METEL BUILDING MATERIAL', 325, 80);
+    ctx.fillText('TRADE AND CONSTRUCTION MATERI', 325, 105);
+    ctx.fillText('A.A. A/KETEMA W.01 HNO-1619 Around TEKLAYMANOT', 325, 130);
+    ctx.fillText('TEL-0911517719 / 0911255119', 325, 155);
+
+    ctx.textAlign = 'left';
+    ctx.fillText('TIN No. : 00810724322', 50, 195);
+    ctx.fillText('VAT Reg. No. 8432120', 50, 220);
+    ctx.fillText('Buyer\'s TIN: 0038480010', 50, 245);
+
+    ctx.fillText('FS No. 00002564', 50, 280);
+    ctx.fillText('01/10/2026 13:25:22', 50, 305);
 
     ctx.beginPath();
-    ctx.setLineDash([5, 5]);
-    ctx.moveTo(40, 240);
-    ctx.lineTo(560, 240);
+    ctx.setLineDash([4, 4]);
+    ctx.moveTo(40, 325);
+    ctx.lineTo(610, 325);
+    ctx.stroke();
+
+    ctx.fillText('FLAT BAR 40*3', 50, 360);
+    ctx.textAlign = 'right';
+    ctx.fillText('*1,478.26', 600, 360);
+
+    ctx.textAlign = 'left';
+    ctx.fillText('3 x 2434.78 =', 50, 395);
+    ctx.fillText('ROUND PIPE 32*2.5', 50, 425);
+    ctx.textAlign = 'right';
+    ctx.fillText('*7,304.34', 600, 425);
+
+    ctx.beginPath();
+    ctx.moveTo(40, 455);
+    ctx.lineTo(610, 455);
     ctx.stroke();
 
     ctx.textAlign = 'left';
-    ctx.font = 'bold 16px monospace';
-    ctx.fillText('DESCRIPTION', 50, 270);
-    ctx.fillText('QTY', 260, 270);
-    ctx.fillText('PRICE', 350, 270);
-    ctx.fillText('TOTAL', 470, 270);
+    ctx.fillText('TAXBL1', 50, 490);
+    ctx.textAlign = 'right';
+    ctx.fillText('*8,782.60', 600, 490);
+
+    ctx.textAlign = 'left';
+    ctx.fillText('TAX1 15.00%', 50, 525);
+    ctx.textAlign = 'right';
+    ctx.fillText('*1,317.39', 600, 525);
+
+    ctx.font = 'bold 22px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('TOTAL:', 50, 575);
+    ctx.textAlign = 'right';
+    ctx.fillText('*10,099.99', 600, 575);
+
+    ctx.font = '18px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('CASH Birr', 50, 615);
+    ctx.textAlign = 'right';
+    ctx.fillText('*10,099.99', 600, 615);
 
     ctx.font = '15px monospace';
-    ctx.fillText('Deformed Bar 14mm', 50, 310);
-    ctx.fillText('20', 270, 310);
-    ctx.fillText('850.00', 350, 310);
-    ctx.fillText('17000.00', 460, 310);
+    ctx.textAlign = 'left';
+    ctx.fillText('ITEM# 2', 50, 660);
+    ctx.fillText('ERCA MFE0097690', 50, 690);
 
-    ctx.fillText('Binding Wire 1.5mm', 50, 350);
-    ctx.fillText('5', 270, 350);
-    ctx.fillText('400.00', 350, 350);
-    ctx.fillText('2000.00', 465, 350);
-
-    ctx.beginPath();
-    ctx.moveTo(40, 400);
-    ctx.lineTo(560, 400);
-    ctx.stroke();
-
-    ctx.font = 'bold 16px monospace';
-    ctx.fillText('SUBTOTAL:', 300, 440);
-    ctx.fillText('19000.00 ETB', 430, 440);
-
-    ctx.fillText('VAT 15%:', 300, 480);
-    ctx.fillText('2850.00 ETB', 430, 480);
-
-    ctx.font = 'bold 20px monospace';
-    ctx.fillText('GRAND TOTAL:', 250, 530);
-    ctx.fillText('21850.00 ETB', 410, 530);
-
-    ctx.font = '14px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('THANK YOU FOR YOUR BUSINESS!', 300, 620);
-    ctx.fillText('TAX CASH SALES RECEIPT', 300, 650);
+    ctx.fillText('THANK YOU FOR YOUR BUSINESS!', 325, 760);
 
     const dataUrl = canvas.toDataURL('image/png');
     previewImg.src = dataUrl;
     previewImg.classList.remove('d-none');
     pdfPreviewBox.classList.add('d-none');
 
-    // Convert dataUrl to blob and simulate file upload
     fetch(dataUrl)
         .then(res => res.blob())
         .then(blob => {
-            const sampleFile = new File([blob], 'sample_receipt.png', { type: 'image/png' });
+            const sampleFile = new File([blob], 'mewedisi_fiscal_sample.png', { type: 'image/png' });
             uploadFileToServer(sampleFile);
-            runLiveTesseractOcr(sampleFile);
+            runOcrPipeline(previewImg);
         });
 });
 
@@ -932,6 +1204,11 @@ function viewReceiptModal(receipt, fileUrl) {
     const subtotal = parseFloat(receipt.subtotal || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
     const vat = parseFloat(receipt.vat_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
     const total = parseFloat(receipt.total_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+
+    const parsed = receipt.parsed_data || {};
+    const fsNo = parsed.fs_no || '—';
+    const buyerTin = parsed.buyer_tin || '—';
+    const machineNo = parsed.machine_no || '—';
 
     modalBody.innerHTML = `
         <div class="row g-3">
@@ -954,7 +1231,10 @@ function viewReceiptModal(receipt, fileUrl) {
                 <h6 class="small fw-bold text-muted mb-2">Extracted Financial Breakdown</h6>
                 <table class="table table-sm table-borderless small mb-3">
                     <tr><td class="text-muted" style="width:40%;">Merchant:</td><td><strong class="text-dark">${receipt.vendor_name || '—'}</strong></td></tr>
-                    <tr><td class="text-muted">TIN Number:</td><td><span class="font-monospace">${receipt.vendor_tin || '—'}</span></td></tr>
+                    <tr><td class="text-muted">Supplier TIN:</td><td><span class="font-monospace">${receipt.vendor_tin || '—'}</span></td></tr>
+                    <tr><td class="text-muted">Buyer's TIN:</td><td><span class="font-monospace">${buyerTin}</span></td></tr>
+                    <tr><td class="text-muted">FS Number:</td><td><span class="font-monospace fw-bold">${fsNo}</span></td></tr>
+                    <tr><td class="text-muted">Machine/ERCA #:</td><td><span class="font-monospace">${machineNo}</span></td></tr>
                     <tr><td class="text-muted">Receipt Date:</td><td>${dateStr}</td></tr>
                     <tr><td class="text-muted">Category:</td><td><span class="badge bg-light text-dark border">${receipt.category || 'other'}</span></td></tr>
                     <tr><td class="text-muted">Project:</td><td>${receipt.project ? receipt.project.name : 'Head Office'}</td></tr>

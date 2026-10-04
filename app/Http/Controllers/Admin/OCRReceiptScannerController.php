@@ -128,6 +128,11 @@ class OCRReceiptScannerController extends Controller
             $subtotal = max(0, $total - $vat);
         }
 
+        $desc = $request->description ?: '';
+        if ($request->filled('fs_no') && !str_contains($desc, $request->fs_no)) {
+            $desc = trim($desc . " (FS No: {$request->fs_no})");
+        }
+
         $receipt = Receipt::create([
             'uploaded_by'  => Auth::id(),
             'project_id'   => $request->project_id,
@@ -139,13 +144,16 @@ class OCRReceiptScannerController extends Controller
             'total_amount' => $total,
             'currency'     => 'ETB',
             'category'     => $request->category ?: 'other',
-            'description'  => $request->description,
+            'description'  => $desc,
             'file_path'    => $request->file_path,
             'file_type'    => $fileType,
             'ocr_raw_text' => $request->ocr_raw_text,
             'parsed_data'  => [
                 'vendor'      => $request->vendor_name,
                 'tin'         => $request->vendor_tin,
+                'buyer_tin'   => $request->buyer_tin,
+                'fs_no'       => $request->fs_no,
+                'machine_no'  => $request->machine_no,
                 'date'        => $request->receipt_date,
                 'subtotal'    => $subtotal,
                 'vat'         => $vat,
@@ -159,7 +167,7 @@ class OCRReceiptScannerController extends Controller
             'status'       => 'approved', // Auto-approved when scanned and confirmed by Global Admin
             'approved_by'  => Auth::id(),
             'approved_at'  => now(),
-            'notes'        => 'Scanned and verified via Global Admin OCR Scanner Studio.',
+            'notes'        => 'Scanned and verified via Global Admin OCR Scanner Studio.' . ($request->fs_no ? " FS: {$request->fs_no}" : ""),
         ]);
 
         return response()->json([
