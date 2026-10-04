@@ -165,6 +165,17 @@
         <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.6rem;">Global Admin</span>
     </a>
 </li>
+{{-- Quick Action: Live OCR Receipt Scanner (Global Admin Only) --}}
+@php
+    $ocrUrl = \Illuminate\Support\Facades\Route::has('admin.ocr.index') ? route('admin.ocr.index') : url('/admin/receipt-ocr');
+@endphp
+<li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
+    <a href="{{ $ocrUrl }}" class="sidebar-nav-link {{ request()->routeIs('admin.ocr.*') || request()->is('admin/receipt-ocr*') ? 'active' : '' }}" style="font-weight:600;">
+        <i class="fa-solid fa-expand text-success"></i>
+        <span>OCR Receipt Scanner</span>
+        <span class="badge bg-success text-white rounded-pill ms-auto" style="font-size:0.6rem;">Global Admin</span>
+    </a>
+</li>
 @endif
 @if(auth()->check() && (auth()->user()->hasRole('global_admin') || auth()->user()->hasRole('admin')))
 {{-- Quick Action: Device Logs & Attendance Reset (Admin / Global Admin) --}}
@@ -2812,6 +2823,15 @@
                 <span>Device Logs &amp; Reset</span>
             </a>
         </li>
+        @if(auth()->check() && auth()->user()->hasRole('global_admin'))
+        <li class="sidebar-nav-item">
+            <a href="{{ \Illuminate\Support\Facades\Route::has('admin.ocr.index') ? route('admin.ocr.index') : url('/admin/receipt-ocr') }}" class="sidebar-nav-link {{ request()->routeIs('admin.ocr.*') || request()->is('admin/receipt-ocr*') ? 'active' : '' }}">
+                <i class="fa-solid fa-expand text-success"></i>
+                <span>OCR Receipt Scanner</span>
+                <span class="badge bg-success text-white rounded-pill ms-auto" style="font-size:0.6rem;">Global Admin</span>
+            </a>
+        </li>
+        @endif
         @endrole
         @endcanany
         @canany(['settings.view', 'settings.*'])

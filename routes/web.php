@@ -2518,6 +2518,15 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{receipt}/reject',               [App\Http\Controllers\ReceiptController::class, 'reject'])->name('reject');
         Route::delete('/{receipt}',                    [App\Http\Controllers\ReceiptController::class, 'destroy'])->name('destroy');
     });
+
+    // ─── Global Admin Exclusive: Live OCR Receipt Scanner Studio ─────────────────
+    Route::prefix('admin/receipt-ocr')->name('admin.ocr.')->group(function () {
+        Route::get('/',              [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'index'])->name('index');
+        Route::post('/upload',       [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'upload'])->name('upload');
+        Route::post('/save',         [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'save'])->name('save');
+        Route::get('/{receipt}',     [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'show'])->name('show');
+        Route::delete('/{receipt}',  [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'destroy'])->name('destroy');
+    });
 });
 
 
