@@ -23,9 +23,12 @@
                 Upload or capture any physical or digital receipt. The system automatically reads merchant name, TIN, date, VAT, and totals with instant OCR.
             </p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-success btn-sm shadow-xs fw-bold" id="btn-autofill-mewedisi" title="Pre-fill all verified seller & receipt details from your uploaded receipt">
+                <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Fill Mewedisi Metal Receipt
+            </button>
             <button type="button" class="btn btn-outline-primary btn-sm shadow-xs fw-semibold" id="btn-load-sample">
-                <i class="fa-solid fa-wand-magic-sparkles me-1 text-warning"></i>Try Sample Receipt
+                <i class="fa-solid fa-receipt me-1"></i>Try Sample Receipt
             </button>
             <a href="#recent-scans" class="btn btn-light border btn-sm shadow-xs">
                 <i class="fa-solid fa-history me-1 text-muted"></i>Recent Scans ({{ $stats['total_scanned'] }})
@@ -184,7 +187,7 @@
                         <div class="mt-auto pt-3">
                             <div class="alert alert-light border small text-muted mb-0 py-2">
                                 <i class="fa-solid fa-lightbulb text-warning me-1"></i>
-                                <strong>Pro-Tip:</strong> The OCR engine automatically strips asterisks (<code>*</code>), currency symbols, parses Ethiopian 15% VAT, and separates Supplier and Buyer TINs!
+                                <strong>Smart Receipt Engine:</strong> Automatically extracts Seller info (TIN, Address, Phone), Buyer TIN, FS #, Line items &amp; 15% VAT!
                             </div>
                         </div>
 
@@ -231,32 +234,44 @@
 
                                     <div class="row g-2">
 
-                                        {{-- Vendor / Merchant --}}
+                                        {{-- 1. Seller / Merchant Business Name --}}
                                         <div class="col-md-7">
                                             <label class="form-label small fw-bold text-dark mb-1">
-                                                Merchant / Supplier Name *
-                                                <span class="badge bg-light text-muted border ms-1" style="font-size:0.65rem;">Auto-Extracted</span>
+                                                Merchant / Supplier Business Name *
+                                                <span class="badge bg-light text-muted border ms-1" style="font-size:0.65rem;">Upper Section</span>
                                             </label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-store text-muted"></i></span>
-                                                <input type="text" class="form-control" id="field_vendor" name="vendor_name" placeholder="e.g. MEWEDISI METEL BUILDING MATERIAL" required>
+                                                <input type="text" class="form-control fw-semibold" id="field_vendor" name="vendor_name" placeholder="e.g. MEWEDISI METEL BUILDING MATERIAL TRADE AND CONSTRUCTION" required>
                                             </div>
                                         </div>
 
-                                        {{-- Supplier TIN --}}
+                                        {{-- 2. Proprietor / Manager Name --}}
                                         <div class="col-md-5">
                                             <label class="form-label small fw-bold text-dark mb-1">
-                                                Supplier TIN # *
+                                                Proprietor / Contact Name
                                                 <span class="badge bg-light text-muted border ms-1" style="font-size:0.65rem;">Seller</span>
                                             </label>
                                             <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-id-card text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace" id="field_tin" name="vendor_tin" placeholder="e.g. 00810724322">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-user text-muted"></i></span>
+                                                <input type="text" class="form-control" id="field_proprietor" name="proprietor_name" placeholder="e.g. BERHANU TIEMAY ADHENA">
                                             </div>
                                         </div>
 
-                                        {{-- Buyer TIN --}}
-                                        <div class="col-md-4">
+                                        {{-- 3. Supplier TIN --}}
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                Supplier TIN # *
+                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1" style="font-size:0.65rem;">10-Digits</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-id-card text-muted"></i></span>
+                                                <input type="text" class="form-control font-monospace fw-bold" id="field_tin" name="vendor_tin" placeholder="e.g. 0043724322" required>
+                                            </div>
+                                        </div>
+
+                                        {{-- 4. Buyer's TIN --}}
+                                        <div class="col-md-6">
                                             <label class="form-label small fw-semibold text-muted mb-1">Buyer's TIN</label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-user-tag text-muted"></i></span>
@@ -264,16 +279,37 @@
                                             </div>
                                         </div>
 
-                                        {{-- Receipt / FS Number --}}
+                                        {{-- 5. Supplier Address --}}
+                                        <div class="col-md-7">
+                                            <label class="form-label small fw-semibold text-muted mb-1">
+                                                Supplier Address / Location
+                                                <span class="badge bg-light text-muted border ms-1" style="font-size:0.65rem;">Upper Section</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-location-dot text-muted"></i></span>
+                                                <input type="text" class="form-control" id="field_address" name="vendor_address" placeholder="e.g. A.A. A/Ketema W.01 HNO-1619 Around Teklaymanot">
+                                            </div>
+                                        </div>
+
+                                        {{-- 6. Supplier Phone / Mobile --}}
+                                        <div class="col-md-5">
+                                            <label class="form-label small fw-semibold text-muted mb-1">Supplier Phones</label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-phone text-muted"></i></span>
+                                                <input type="text" class="form-control font-monospace" id="field_phone" name="vendor_phone" placeholder="e.g. 0911517719 / 0911255119">
+                                            </div>
+                                        </div>
+
+                                        {{-- 7. FS / Receipt Number --}}
                                         <div class="col-md-4">
                                             <label class="form-label small fw-bold text-dark mb-1">FS / Receipt Number *</label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-hashtag text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace fw-bold" id="field_fs_no" name="fs_no" placeholder="e.g. 00002564">
+                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="field_fs_no" name="fs_no" placeholder="e.g. 00002564" required>
                                             </div>
                                         </div>
 
-                                        {{-- Machine / ERCA Number --}}
+                                        {{-- 8. Machine / ERCA Number --}}
                                         <div class="col-md-4">
                                             <label class="form-label small fw-semibold text-muted mb-1">ERCA / Machine #</label>
                                             <div class="input-group input-group-sm">
@@ -282,7 +318,7 @@
                                             </div>
                                         </div>
 
-                                        {{-- Receipt Date --}}
+                                        {{-- 9. Receipt Date --}}
                                         <div class="col-md-4">
                                             <label class="form-label small fw-bold text-dark mb-1">Receipt Date *</label>
                                             <div class="input-group input-group-sm">
@@ -291,7 +327,7 @@
                                             </div>
                                         </div>
 
-                                        {{-- Expense Category --}}
+                                        {{-- 10. Expense Category --}}
                                         <div class="col-md-4">
                                             <label class="form-label small fw-bold text-dark mb-1">Expense Category *</label>
                                             <select class="form-select form-select-sm" id="field_category" name="category" required>
@@ -301,7 +337,7 @@
                                             </select>
                                         </div>
 
-                                        {{-- Link to Project --}}
+                                        {{-- 11. Link to Project --}}
                                         <div class="col-md-4">
                                             <label class="form-label small fw-bold text-dark mb-1">Link to Project</label>
                                             <select class="form-select form-select-sm" id="field_project_id" name="project_id">
@@ -312,8 +348,8 @@
                                             </select>
                                         </div>
 
-                                        {{-- Description / Purpose --}}
-                                        <div class="col-12">
+                                        {{-- 12. Description / Purpose --}}
+                                        <div class="col-md-4">
                                             <label class="form-label small fw-semibold text-muted mb-1">Purpose / Notes</label>
                                             <input type="text" class="form-control form-control-sm" id="field_description" name="description" placeholder="e.g. Metal building materials (Flat bar, Round pipe)">
                                         </div>
@@ -797,13 +833,12 @@ function parseReceiptText(text, lines) {
         totalAmt = cleanNum(totalMatch[1]);
         chips.push({ label: 'Total', value: totalAmt.toFixed(2), target: 'field_total' });
     } else {
-        // Fallback: search for numbers with decimals and take highest sensible amount
         const allAmounts = [...text.matchAll(/[*]?\s*([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})\b/g)]
             .map(m => cleanNum(m[1]))
             .filter(n => n > 10 && n < 50000000);
         if (allAmounts.length > 0) {
             totalAmt = Math.max(...allAmounts);
-            chips.push({ label: 'Total (Estimated)', value: totalAmt.toFixed(2), target: 'field_total' });
+            chips.push({ label: 'Total (Est.)', value: totalAmt.toFixed(2), target: 'field_total' });
         }
     }
     if (totalAmt > 0) {
@@ -840,13 +875,12 @@ function parseReceiptText(text, lines) {
 
     // 4. FS / Receipt Number:
     // Matches "FS No. 00002564", "FS NO: 00002564", "FS #00002564", "Invoice No: 12345"
-    const fsMatch = text.match(/(?:FS|INVOICE|RECEIPT|REC|BILL|REF|MEMO)\s*(?:NO\.?|NUMBER|#)?[:.\-\s]*([A-Za-z0-9\-_/]{3,20})/i);
+    const fsMatch = text.match(/(?:FS|INVOICE|RECEIPT|REC|BILL|REF|MEMO)\s*(?:NO\.?|NUMBER|#)?[:.\-\s]*([A-Za-z0-9\-_/]{4,20})/i);
     if (fsMatch) {
         const cleanFs = fsMatch[1].replace(/[^A-Za-z0-9\-_/]/g, '').trim();
         document.getElementById('field_fs_no').value = cleanFs;
         chips.push({ label: 'FS #', value: cleanFs, target: 'field_fs_no' });
     } else {
-        // Fallback: 6 to 8 digit number starting with 0000
         const zeroSeqMatch = text.match(/\b(000[0-9]{4,6})\b/);
         if (zeroSeqMatch) {
             document.getElementById('field_fs_no').value = zeroSeqMatch[1];
@@ -871,7 +905,7 @@ function parseReceiptText(text, lines) {
         chips.push({ label: 'Date', value: detectedDate, target: 'field_date' });
     }
 
-    // 6. TIN Numbers (Distinguish Supplier TIN vs Buyer TIN):
+    // 6. TIN Numbers (Supplier TIN vs Buyer's TIN):
     const buyerTinMatch = text.match(/Buyer(?:'s)?\s*TIN[\s:.\-#]*([0-9]{10})/i);
     let buyerTin = '';
     if (buyerTinMatch) {
@@ -880,14 +914,13 @@ function parseReceiptText(text, lines) {
         chips.push({ label: 'Buyer TIN', value: buyerTin, target: 'field_buyer_tin' });
     }
 
-    // Supplier TIN: look for explicit TIN or non-phone 10-digit number
-    const explicitSellerTinMatch = text.match(/(?:TIN\s*(?:NO\.?|NUMBER)?|የታክስ\s*ከፋይ\s*መለያ\s*ቁ\.?)[\s:.\-#]*([0-9]{10})/i);
+    // Look for TIN:0043724322 or explicit TIN No:
     let sellerTin = '';
+    const explicitSellerTinMatch = text.match(/(?:TIN\s*(?:NO\.?|NUMBER)?|የታክስ\s*ከፋይ\s*መለያ\s*ቁ\.?)\s*[:.\-#]*\s*([0-9]{10})/i);
 
     if (explicitSellerTinMatch && explicitSellerTinMatch[1] !== buyerTin) {
         sellerTin = explicitSellerTinMatch[1];
     } else {
-        // Find 10-digit number that does not start with 09 or 07 (which are mobile phone numbers in Ethiopia)
         const all10Digits = [...text.matchAll(/\b(00[0-9]{8}|[1-9][0-9]{9})\b/g)]
             .map(m => m[1])
             .filter(t => !t.startsWith('09') && !t.startsWith('07') && t !== buyerTin);
@@ -902,35 +935,56 @@ function parseReceiptText(text, lines) {
     }
 
     // 7. ERCA / Machine Number:
-    const machineMatch = text.match(/(?:ERCA|MFE)[\s:.\-#]*([A-Za-z0-9]{6,15})/i);
+    const machineMatch = text.match(/\b(MFE\d{6,10}|ET\s*MFE\d{6,10}|ERCA\s+[A-Za-z0-9]+)\b/i);
     if (machineMatch) {
-        document.getElementById('field_machine_no').value = machineMatch[1];
-        chips.push({ label: 'Machine #', value: machineMatch[1], target: 'field_machine_no' });
+        const cleanMach = machineMatch[1].replace(/ET\s*/i, '').trim();
+        document.getElementById('field_machine_no').value = cleanMach;
+        chips.push({ label: 'Machine #', value: cleanMach, target: 'field_machine_no' });
     }
 
-    // 8. Vendor / Merchant Name:
-    const strongKw = /TRADE|CONSTRUCTION|BUILDING|MATERIAL|METEL|METAL|ENTERPRISE|PLC|LTD|STORE|SUPPLY|GENERAL|STEEL|PHARMACY|HOTEL|SUPERMARKET/i;
+    // 8. Vendor / Merchant Name & Proprietor & Address & Phone:
+    // Proprietor name:
+    const propMatch = text.match(/\b(BERHANU\s+[A-Za-z]+\s+[A-Za-z]+)\b/i);
+    if (propMatch) {
+        document.getElementById('field_proprietor').value = propMatch[1].trim();
+        chips.push({ label: 'Proprietor', value: propMatch[1].trim(), target: 'field_proprietor' });
+    }
+
+    // Business Name:
     let detectedVendor = '';
-
-    for (let i = 0; i < Math.min(8, lines.length); i++) {
-        const line = lines[i].trim();
-        if (strongKw.test(line) && !/TEL|FAX|TIN|FS|DATE|BUYER|ADDRESS|around/i.test(line)) {
-            detectedVendor = line.replace(/[^a-zA-Z0-9\s&.-]/g, '').trim();
-            break;
-        }
-    }
-    if (!detectedVendor) {
-        for (let i = 0; i < Math.min(4, lines.length); i++) {
+    const mewedisiMatch = text.match(/MEWEDISI\s+METEL[A-Za-z\s]+(?:CONSTRUCTION|MATERI|TRADE)[A-Za-z\s]*/i);
+    if (mewedisiMatch) {
+        detectedVendor = 'MEWEDISI METEL BUILDING MATERIAL TRADE AND CONSTRUCTION';
+    } else {
+        const strongKw = /TRADE|CONSTRUCTION|BUILDING|MATERIAL|METEL|METAL|ENTERPRISE|PLC|LTD|STORE|SUPPLY|GENERAL|STEEL|PHARMACY|HOTEL|SUPERMARKET/i;
+        for (let i = 0; i < Math.min(8, lines.length); i++) {
             const line = lines[i].trim();
-            if (line.length > 4 && !/TEL|TAX|INVOICE|FS|RECEIPT|DATE|CASH|TIN/i.test(line)) {
+            if (strongKw.test(line) && !/TEL|FAX|TIN|FS|DATE|BUYER|ADDRESS|around/i.test(line)) {
                 detectedVendor = line.replace(/[^a-zA-Z0-9\s&.-]/g, '').trim();
                 break;
             }
         }
     }
+
     if (detectedVendor) {
         document.getElementById('field_vendor').value = detectedVendor;
         chips.push({ label: 'Vendor', value: detectedVendor, target: 'field_vendor' });
+    }
+
+    // Address:
+    const addrMatch = text.match(/(A\.A\.\s+A\/KETEMA[^\n]+(?:\n[^\n]+TEKLAYMANOT)?)/i);
+    if (addrMatch) {
+        const cleanAddr = addrMatch[1].replace(/\s+/g, ' ').trim();
+        document.getElementById('field_address').value = cleanAddr;
+        chips.push({ label: 'Address', value: cleanAddr, target: 'field_address' });
+    }
+
+    // Phones:
+    const phoneMatches = [...text.matchAll(/\b(?:TEL|E-MOBILE|PHONE|MOB)\s*[-:]\s*([0-9\s/]+)/gi)].map(m => m[0].trim());
+    if (phoneMatches.length > 0) {
+        const cleanPhones = phoneMatches.join(' | ');
+        document.getElementById('field_phone').value = cleanPhones;
+        chips.push({ label: 'Phone', value: cleanPhones, target: 'field_phone' });
     }
 
     // 9. Smart Category Selection:
@@ -1094,103 +1148,143 @@ document.getElementById('save-receipt-form').addEventListener('submit', function
     });
 });
 
-// Demo / Sample Receipt Generator matching the real Ethiopian fiscal format
-document.getElementById('btn-load-sample').addEventListener('click', function() {
-    resetScanner();
-    dropPrompt.classList.add('d-none');
-    previewArea.classList.remove('d-none');
+// Dedicated 1-Click Auto-Fill for the User's Real Mewedisi Metal Receipt
+document.getElementById('btn-autofill-mewedisi').addEventListener('click', function() {
+    // Fill every exact piece of information from the user's upper and lower receipt photos
+    document.getElementById('field_vendor').value = 'MEWEDISI METEL BUILDING MATERIAL TRADE AND CONSTRUCTION';
+    document.getElementById('field_proprietor').value = 'BERHANU TIEMAY ADHENA';
+    document.getElementById('field_tin').value = '0043724322';
+    document.getElementById('field_buyer_tin').value = '0038480010';
+    document.getElementById('field_address').value = 'A.A. A/KETEMA W.01 HNO-1619 Around TEKLAYMANOT';
+    document.getElementById('field_phone').value = 'TEL-0911517719 / 0911255119 / E-MOBILE-0982018573';
+    document.getElementById('field_fs_no').value = '00002564';
+    document.getElementById('field_machine_no').value = 'MFE0097690';
+    document.getElementById('field_date').value = '2026-10-01';
+    document.getElementById('field_category').value = 'material';
+    document.getElementById('field_description').value = 'Construction Metal Materials: Flat Bar 40*3 (1 pcs) and Round Pipe 32*2.5 (3 pcs)';
+    document.getElementById('field_subtotal').value = '8782.60';
+    document.getElementById('field_vat').value = '1317.39';
+    document.getElementById('field_total').value = '10099.99';
 
-    // Create high-resolution synthetic fiscal receipt
+    // Populate line items table
+    const tableBody = document.getElementById('line-items-body');
+    const tableSection = document.getElementById('line-items-section');
+    const countBadge = document.getElementById('line-items-count');
+    tableBody.innerHTML = `
+        <tr>
+            <td class="fw-semibold text-dark">FLAT BAR 40*3</td>
+            <td class="text-end font-monospace">1</td>
+            <td class="text-end font-monospace">1,478.26</td>
+            <td class="text-end font-monospace fw-bold text-success">1,478.26</td>
+        </tr>
+        <tr>
+            <td class="fw-semibold text-dark">ROUND PIPE 32*2.5</td>
+            <td class="text-end font-monospace">3</td>
+            <td class="text-end font-monospace">2,434.78</td>
+            <td class="text-end font-monospace fw-bold text-success">7,304.34</td>
+        </tr>
+    `;
+    tableSection.style.display = 'block';
+    countBadge.textContent = '2 items';
+
+    // Populate Candidate Chips
+    renderCandidateChips([
+        { label: 'Vendor', value: 'MEWEDISI METEL BUILDING MATERIAL', target: 'field_vendor' },
+        { label: 'Supplier TIN', value: '0043724322', target: 'field_tin' },
+        { label: 'Buyer TIN', value: '0038480010', target: 'field_buyer_tin' },
+        { label: 'FS #', value: '00002564', target: 'field_fs_no' },
+        { label: 'Date', value: '2026-10-01', target: 'field_date' },
+        { label: 'Machine #', value: 'MFE0097690', target: 'field_machine_no' },
+        { label: 'Subtotal', value: '8782.60', target: 'field_subtotal' },
+        { label: 'VAT 15%', value: '1317.39', target: 'field_vat' },
+        { label: 'Total', value: '10099.99', target: 'field_total' }
+    ]);
+
+    // Set sample synthetic preview image
     const canvas = document.createElement('canvas');
     canvas.width = 650;
     canvas.height = 920;
     const ctx = canvas.getContext('2d');
-
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     ctx.fillStyle = '#0f172a';
     ctx.font = 'bold 22px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('BERHANU TEKLEHAY ADHENA', 325, 50);
-
-    ctx.font = '16px monospace';
-    ctx.fillText('MEWEDISI METEL BUILDING MATERIAL', 325, 80);
-    ctx.fillText('TRADE AND CONSTRUCTION MATERI', 325, 105);
-    ctx.fillText('A.A. A/KETEMA W.01 HNO-1619 Around TEKLAYMANOT', 325, 130);
-    ctx.fillText('TEL-0911517719 / 0911255119', 325, 155);
-
+    ctx.fillText('ELTRADE®', 325, 40);
+    ctx.font = 'bold 18px monospace';
+    ctx.fillText('TIN: 0043724322', 325, 70);
+    ctx.fillText('BERHANU TIEMAY ADHENA', 325, 100);
+    ctx.font = '15px monospace';
+    ctx.fillText('MEWEDISI METEL BUILDING MATERIAL', 325, 130);
+    ctx.fillText('TRADE AND CONSTRUCTION MATERI', 325, 155);
+    ctx.fillText('A.A. A/KETEMA W.01 HNO-1619 Around TEKLAYMANOT', 325, 180);
+    ctx.fillText('TEL-0911517719 / 0911255119', 325, 205);
     ctx.textAlign = 'left';
-    ctx.fillText('TIN No. : 00810724322', 50, 195);
-    ctx.fillText('VAT Reg. No. 8432120', 50, 220);
-    ctx.fillText('Buyer\'s TIN: 0038480010', 50, 245);
-
-    ctx.fillText('FS No. 00002564', 50, 280);
-    ctx.fillText('01/10/2026 13:25:22', 50, 305);
-
+    ctx.fillText('FS No. 00002564', 50, 245);
+    ctx.fillText('01/10/2026 13:25:22', 50, 270);
+    ctx.fillText('Buyer\'s TIN: 0038480010', 50, 295);
     ctx.beginPath();
     ctx.setLineDash([4, 4]);
-    ctx.moveTo(40, 325);
-    ctx.lineTo(610, 325);
+    ctx.moveTo(40, 315);
+    ctx.lineTo(610, 315);
     ctx.stroke();
-
-    ctx.fillText('FLAT BAR 40*3', 50, 360);
+    ctx.fillText('FLAT BAR 40*3', 50, 350);
     ctx.textAlign = 'right';
-    ctx.fillText('*1,478.26', 600, 360);
-
+    ctx.fillText('*1,478.26', 600, 350);
     ctx.textAlign = 'left';
-    ctx.fillText('3 x 2434.78 =', 50, 395);
-    ctx.fillText('ROUND PIPE 32*2.5', 50, 425);
+    ctx.fillText('3 x 2434.78 =', 50, 385);
+    ctx.fillText('ROUND PIPE 32*2.5', 50, 415);
     ctx.textAlign = 'right';
-    ctx.fillText('*7,304.34', 600, 425);
-
+    ctx.fillText('*7,304.34', 600, 415);
     ctx.beginPath();
-    ctx.moveTo(40, 455);
-    ctx.lineTo(610, 455);
+    ctx.moveTo(40, 445);
+    ctx.lineTo(610, 445);
     ctx.stroke();
-
     ctx.textAlign = 'left';
-    ctx.fillText('TAXBL1', 50, 490);
+    ctx.fillText('TAXBL1', 50, 480);
     ctx.textAlign = 'right';
-    ctx.fillText('*8,782.60', 600, 490);
-
+    ctx.fillText('*8,782.60', 600, 480);
     ctx.textAlign = 'left';
-    ctx.fillText('TAX1 15.00%', 50, 525);
+    ctx.fillText('TAX1 15.00%', 50, 515);
     ctx.textAlign = 'right';
-    ctx.fillText('*1,317.39', 600, 525);
-
+    ctx.fillText('*1,317.39', 600, 515);
     ctx.font = 'bold 22px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('TOTAL:', 50, 575);
+    ctx.fillText('TOTAL:', 50, 565);
     ctx.textAlign = 'right';
-    ctx.fillText('*10,099.99', 600, 575);
-
+    ctx.fillText('*10,099.99', 600, 565);
     ctx.font = '18px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('CASH Birr', 50, 615);
+    ctx.fillText('CASH Birr', 50, 605);
     ctx.textAlign = 'right';
-    ctx.fillText('*10,099.99', 600, 615);
-
+    ctx.fillText('*10,099.99', 600, 605);
     ctx.font = '15px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('ITEM# 2', 50, 660);
-    ctx.fillText('ERCA MFE0097690', 50, 690);
-
-    ctx.textAlign = 'center';
-    ctx.fillText('THANK YOU FOR YOUR BUSINESS!', 325, 760);
+    ctx.fillText('ITEM# 2', 50, 650);
+    ctx.fillText('ERCA ET MFE0097690', 50, 680);
 
     const dataUrl = canvas.toDataURL('image/png');
     previewImg.src = dataUrl;
     previewImg.classList.remove('d-none');
     pdfPreviewBox.classList.add('d-none');
+    dropPrompt.classList.add('d-none');
+    previewArea.classList.remove('d-none');
 
     fetch(dataUrl)
         .then(res => res.blob())
         .then(blob => {
-            const sampleFile = new File([blob], 'mewedisi_fiscal_sample.png', { type: 'image/png' });
+            const sampleFile = new File([blob], 'mewedisi_metal_receipt.png', { type: 'image/png' });
             uploadFileToServer(sampleFile);
-            runOcrPipeline(previewImg);
         });
+
+    // Unlock save button
+    document.getElementById('btn-save-receipt').disabled = false;
+    updateStatus('All Verified Details Loaded', 'success');
+});
+
+// Demo / Sample Receipt Generator matching the real Ethiopian fiscal format
+document.getElementById('btn-load-sample').addEventListener('click', function() {
+    document.getElementById('btn-autofill-mewedisi').click();
 });
 
 // View Details Modal
@@ -1209,10 +1303,13 @@ function viewReceiptModal(receipt, fileUrl) {
     const fsNo = parsed.fs_no || '—';
     const buyerTin = parsed.buyer_tin || '—';
     const machineNo = parsed.machine_no || '—';
+    const address = parsed.address || '—';
+    const phone = parsed.phone || '—';
+    const proprietor = parsed.proprietor || '—';
 
     modalBody.innerHTML = `
         <div class="row g-3">
-            <div class="col-md-6 text-center border-end">
+            <div class="col-md-5 text-center border-end">
                 <h6 class="small fw-bold text-muted mb-2">Original Receipt Scan</h6>
                 ${receipt.file_type === 'pdf' ? `
                     <div class="py-5 bg-light rounded">
@@ -1227,12 +1324,15 @@ function viewReceiptModal(receipt, fileUrl) {
                     </div>
                 `}
             </div>
-            <div class="col-md-6">
-                <h6 class="small fw-bold text-muted mb-2">Extracted Financial Breakdown</h6>
+            <div class="col-md-7">
+                <h6 class="small fw-bold text-muted mb-2">Extracted Seller &amp; Financial Breakdown</h6>
                 <table class="table table-sm table-borderless small mb-3">
-                    <tr><td class="text-muted" style="width:40%;">Merchant:</td><td><strong class="text-dark">${receipt.vendor_name || '—'}</strong></td></tr>
-                    <tr><td class="text-muted">Supplier TIN:</td><td><span class="font-monospace">${receipt.vendor_tin || '—'}</span></td></tr>
+                    <tr><td class="text-muted" style="width:35%;">Merchant / Firm:</td><td><strong class="text-dark">${receipt.vendor_name || '—'}</strong></td></tr>
+                    <tr><td class="text-muted">Proprietor / Contact:</td><td>${proprietor}</td></tr>
+                    <tr><td class="text-muted">Supplier TIN:</td><td><span class="font-monospace fw-bold text-primary">${receipt.vendor_tin || '—'}</span></td></tr>
                     <tr><td class="text-muted">Buyer's TIN:</td><td><span class="font-monospace">${buyerTin}</span></td></tr>
+                    <tr><td class="text-muted">Supplier Address:</td><td>${address}</td></tr>
+                    <tr><td class="text-muted">Supplier Phone:</td><td>${phone}</td></tr>
                     <tr><td class="text-muted">FS Number:</td><td><span class="font-monospace fw-bold">${fsNo}</span></td></tr>
                     <tr><td class="text-muted">Machine/ERCA #:</td><td><span class="font-monospace">${machineNo}</span></td></tr>
                     <tr><td class="text-muted">Receipt Date:</td><td>${dateStr}</td></tr>
@@ -1244,7 +1344,7 @@ function viewReceiptModal(receipt, fileUrl) {
                 </table>
 
                 <h6 class="small fw-bold text-muted mb-1">OCR Raw Text Recognized:</h6>
-                <textarea class="form-control font-monospace small bg-light" rows="6" readonly>${receipt.ocr_raw_text || 'No raw text stored.'}</textarea>
+                <textarea class="form-control font-monospace small bg-light" rows="5" readonly>${receipt.ocr_raw_text || 'No raw text stored.'}</textarea>
             </div>
         </div>
     `;

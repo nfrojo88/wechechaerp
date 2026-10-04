@@ -150,10 +150,13 @@ class OCRReceiptScannerController extends Controller
             'ocr_raw_text' => $request->ocr_raw_text,
             'parsed_data'  => [
                 'vendor'      => $request->vendor_name,
+                'proprietor'  => $request->proprietor_name,
                 'tin'         => $request->vendor_tin,
                 'buyer_tin'   => $request->buyer_tin,
                 'fs_no'       => $request->fs_no,
                 'machine_no'  => $request->machine_no,
+                'address'     => $request->vendor_address,
+                'phone'       => $request->vendor_phone,
                 'date'        => $request->receipt_date,
                 'subtotal'    => $subtotal,
                 'vat'         => $vat,
