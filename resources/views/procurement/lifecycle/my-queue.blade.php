@@ -361,11 +361,10 @@
                                 <td>{{ $mr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end align-items-center gap-1">
-                                        @if($linkedPr)
-                                            <a href="{{ route('purchase-requests.show', $linkedPr->id) }}" class="btn btn-sm btn-outline-primary shadow-xs">
-                                                <i class="fas fa-route me-1"></i> Track PR Flow
-                                            </a>
-                                        @else
+                                        <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold" title="See full Material Request details">
+                                            <i class="fas fa-eye me-1"></i> See Details
+                                        </a>
+                                        @if(!$linkedPr)
                                             <form action="{{ route('material-requests.convert-to-pr', $mr) }}" method="POST" class="d-inline">
                                                 @csrf
                                                 <button type="submit" class="btn btn-sm btn-primary shadow-xs">
@@ -373,9 +372,6 @@
                                                 </button>
                                             </form>
                                         @endif
-                                        <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-secondary" title="View Material Request Details">
-                                            <i class="fas fa-eye"></i>
-                                        </a>
                                         @if($isGlobalAdmin)
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="Delete MR (Admin Only)" onclick="openDeleteQueueMrModal({{ $mr->id }}, '{{ addslashes($mr->reference_number) }}')">
                                             <i class="fas fa-trash-can"></i>
@@ -487,6 +483,9 @@
                                 <td>{{ $pr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end align-items-center gap-1">
+                                        <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold" title="See full Purchase Request details">
+                                            <i class="fas fa-eye me-1"></i> See Details
+                                        </a>
                                         @if($canActOnThisPr)
                                             @if(!empty($isFinalIntakeStage))
                                                 <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-success fw-bold shadow-sm">
@@ -497,10 +496,6 @@
                                                     <i class="fas fa-bolt me-1"></i> Take Action
                                                 </a>
                                             @endif
-                                        @else
-                                            <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-outline-secondary">
-                                                <i class="fas fa-eye me-1"></i> View Details
-                                            </a>
                                         @endif
                                         @if($isGlobalAdmin)
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="Delete PR (Admin Only)" onclick="openDeleteQueuePrModal({{ $pr->id }}, '{{ addslashes($pr->pr_no) }}')">
@@ -629,8 +624,8 @@
                                 </td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end align-items-center gap-1">
-                                        <a href="{{ route('purchase-requests.show', $cPr->id) }}" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold">
-                                            <i class="fas fa-route me-1"></i> Track Lifecycle
+                                        <a href="{{ route('purchase-requests.show', $cPr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
+                                            <i class="fas fa-eye me-1"></i> See Details
                                         </a>
                                         @if($isGlobalAdmin)
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="Delete PR (Admin Only)" onclick="openDeleteQueuePrModal({{ $cPr->id }}, '{{ addslashes($cPr->pr_no) }}')">
@@ -683,8 +678,8 @@
                                 </td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end align-items-center gap-1">
-                                        <a href="{{ route('material-requests.show', $cMr) }}" class="btn btn-sm btn-outline-info shadow-xs">
-                                            <i class="fas fa-eye me-1"></i> View Requisition
+                                        <a href="{{ route('material-requests.show', $cMr) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
+                                            <i class="fas fa-eye me-1"></i> See Details
                                         </a>
                                         @if($isGlobalAdmin)
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="Delete MR (Admin Only)" onclick="openDeleteQueueMrModal({{ $cMr->id }}, '{{ addslashes($cMr->reference_number) }}')">
@@ -779,7 +774,7 @@
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end align-items-center gap-1">
                                         <a href="{{ route('purchase-requests.show', $compPr->id) }}" class="btn btn-sm btn-outline-success shadow-xs fw-semibold">
-                                            <i class="fas fa-file-invoice me-1"></i> View Record
+                                            <i class="fas fa-eye me-1"></i> See Details
                                         </a>
                                         @if($isGlobalAdmin)
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="Delete PR (Admin Only)" onclick="openDeleteQueuePrModal({{ $compPr->id }}, '{{ addslashes($compPr->pr_no) }}')">
@@ -874,8 +869,8 @@
                                 <td>{{ $aPr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end align-items-center gap-1">
-                                        <a href="{{ route('purchase-requests.show', $aPr->id) }}" class="btn btn-sm btn-outline-primary">
-                                            <i class="fas fa-eye me-1"></i> View
+                                        <a href="{{ route('purchase-requests.show', $aPr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
+                                            <i class="fas fa-eye me-1"></i> See Details
                                         </a>
                                         @if($isGlobalAdmin)
                                         <button type="button" class="btn btn-sm btn-outline-danger" title="Delete PR (Admin Only)" onclick="openDeleteQueuePrModal({{ $aPr->id }}, '{{ addslashes($aPr->pr_no) }}')">
