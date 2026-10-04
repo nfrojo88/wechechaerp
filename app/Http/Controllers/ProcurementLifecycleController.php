@@ -295,10 +295,10 @@ class ProcurementLifecycleController extends Controller
         }
 
         // 4. Material & Maintenance Requisitions (Store & Coordinator Procurement Phase)
-        $prMrIds = $myPrs->pluck('material_request_id')->filter()->toArray();
-
+        // STRICT RULE: Once an MR has been converted or sent to PR, it belongs strictly to PR lifecycle and must NOT show in this pending MR queue.
         $mrQuery = MaterialRequest::with(['project', 'store', 'creator', 'requestedBy', 'maintenanceRequest', 'items.product', 'purchaseRequests'])
-            ->whereNotIn('id', $prMrIds)
+            ->whereNotIn('status', ['sent_to_pr', 'completed', 'approved', 'rejected', 'cancelled'])
+            ->whereDoesntHave('purchaseRequests')
             ->latest();
 
         // Apply strict destination store filter for Store Keeper
@@ -308,15 +308,17 @@ class ProcurementLifecycleController extends Controller
             $mrQuery->where('project_id', $request->project_id);
         }
 
-        // Filter MRs for specific roles (Coordinator sees planning_approved directly)
+        // Filter MRs for specific roles (only truly actionable MR statuses prior to PR creation)
         if (!$isAdmin && !$isAuditor) {
             if ($isCoordinator) {
-                $mrQuery->whereIn('status', ['planning_approved', 'sent_to_store_manager', 'needs_purchase', 'sent_to_pr', 'pending']);
+                $mrQuery->whereIn('status', ['planning_approved', 'sent_to_store_manager', 'needs_purchase', 'pending']);
             } elseif ($isStoreManager) {
-                $mrQuery->whereIn('status', ['sent_to_store_manager', 'planning_approved', 'needs_purchase', 'sent_to_pr', 'pending']);
+                $mrQuery->whereIn('status', ['sent_to_store_manager', 'planning_approved', 'needs_purchase']);
             } else {
-                $mrQuery->whereIn('status', ['sent_to_store_manager', 'needs_purchase', 'sent_to_pr', 'planning_approved', 'pending']);
+                $mrQuery->whereIn('status', ['sent_to_store_manager', 'needs_purchase', 'planning_approved']);
             }
+        } else {
+            $mrQuery->whereIn('status', ['sent_to_store_manager', 'planning_approved', 'needs_purchase', 'pending', 'submitted']);
         }
 
         $materialRequestsQueue = $mrQuery->take(50)->get();

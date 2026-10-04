@@ -333,6 +333,10 @@
                             @php
                                 $linkedPr = $mr->purchaseRequests->first();
                             @endphp
+                            {{-- Never show requests already converted/sent to PR in this queue: they show strictly in PR tables --}}
+                            @if($linkedPr || $mr->status === 'sent_to_pr')
+                                @continue
+                            @endif
                             <tr class="table-light bg-opacity-50">
                                 <td>
                                     <strong class="font-monospace text-primary">{{ $mr->reference_number }}</strong>
