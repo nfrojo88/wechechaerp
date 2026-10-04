@@ -658,39 +658,128 @@ function handleFileSelected(file) {
             previewImg.src = currentImageDataUrl;
         }
 
-        // 1. Upload to server to get permanent storage path
-        uploadFileToServer(file);
-
-        // 2. Run OCR Pipeline with image enhancement
+        // Run Gemini Multimodal AI Vision Scanner with local high-contrast OCR fallback
         if (!isPdf) {
             previewImg.onload = function() {
-                runOcrPipeline(previewImg);
+                runGeminiAiScan(file, previewImg);
             };
         } else {
-            updateStatus('PDF Uploaded - Select receipt image for live character extraction', 'info');
+            runGeminiAiScan(file, previewImg);
         }
     };
     reader.readAsDataURL(file);
 }
 
-function uploadFileToServer(file) {
+// Gemini AI Vision Scanner with automatic Local OCR Fallback
+function runGeminiAiScan(file, imgElement) {
+    const progressContainer = document.getElementById('ocr-progress-container');
+    const progressBar = document.getElementById('ocr-progress-bar');
+    const progressPct = document.getElementById('ocr-progress-pct');
+    const progressLabel = document.getElementById('ocr-progress-label');
+
+    progressContainer.classList.remove('d-none');
+    progressBar.style.width = '30%';
+    progressPct.textContent = '30%';
+    progressLabel.innerHTML = '<i class="fa-solid fa-brain fa-spin me-1 text-primary"></i> Uploading &amp; Calling Gemini AI Vision Engine...';
+    updateStatus('Gemini AI Vision Scanning...', 'warning');
+
     const formData = new FormData();
     formData.append('receipt_file', file);
     formData.append('_token', '{{ csrf_token() }}');
 
-    fetch('{{ route("admin.ocr.upload") }}', {
+    fetch('{{ route("admin.ocr.ai-scan") }}', {
         method: 'POST',
-        body: formData,
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        },
+        body: formData
     })
     .then(r => r.json())
     .then(res => {
-        if (res.success) {
+        if (res.success && res.file_path) {
             document.getElementById('stored_file_path').value = res.file_path;
+        }
+
+        if (res.success && res.ai && res.data) {
+            progressBar.style.width = '100%';
+            progressPct.textContent = '100%';
+            progressLabel.innerHTML = '<i class="fa-solid fa-sparkles me-1 text-success"></i> Gemini AI Vision: Scan Complete!';
+            updateStatus('Gemini AI Vision: 100% Extracted', 'success');
+
+            populateFormFromAi(res.data);
+            document.getElementById('btn-save-receipt').disabled = false;
+        } else {
+            // Local OCR Fallback if AI server is busy or network issue
+            progressBar.style.width = '45%';
+            progressPct.textContent = '45%';
+            progressLabel.innerHTML = '<i class="fa-solid fa-bolt me-1 text-info"></i> Running High-Contrast Local Engine...';
+            updateStatus('Local OCR Fallback Engine...', 'info');
+
+            runOcrPipeline(imgElement);
         }
     })
     .catch(err => {
-        console.warn('Server storage background upload error:', err);
+        console.warn('AI Scan network issue, falling back to local OCR:', err);
+        runOcrPipeline(imgElement);
     });
+}
+
+function populateFormFromAi(data) {
+    if (data.merchant_name) document.getElementById('field_vendor').value = data.merchant_name;
+    if (data.proprietor_name) document.getElementById('field_proprietor').value = data.proprietor_name;
+    if (data.supplier_tin) document.getElementById('field_tin').value = data.supplier_tin;
+    if (data.buyer_tin) document.getElementById('field_buyer_tin').value = data.buyer_tin;
+    if (data.fs_no) document.getElementById('field_fs_no').value = data.fs_no;
+    if (data.machine_no) document.getElementById('field_machine_no').value = data.machine_no;
+    if (data.receipt_date) document.getElementById('field_date').value = data.receipt_date;
+    if (data.supplier_address) document.getElementById('field_address').value = data.supplier_address;
+    if (data.supplier_phone) document.getElementById('field_phone').value = data.supplier_phone;
+    if (data.subtotal) document.getElementById('field_subtotal').value = parseFloat(data.subtotal).toFixed(2);
+    if (data.vat_amount) document.getElementById('field_vat').value = parseFloat(data.vat_amount).toFixed(2);
+    if (data.total_amount) document.getElementById('field_total').value = parseFloat(data.total_amount).toFixed(2);
+    if (data.category) document.getElementById('field_category').value = data.category;
+    if (data.description) document.getElementById('field_description').value = data.description;
+
+    if (data.raw_text) {
+        document.getElementById('raw-ocr-textarea').value = data.raw_text;
+        document.getElementById('ocr_raw_text_hidden').value = data.raw_text;
+        const lines = data.raw_text.split('\n').filter(l => l.trim().length > 0);
+        document.getElementById('raw-lines-count').textContent = `${lines.length} lines`;
+    }
+
+    // Populate line items table
+    if (Array.isArray(data.line_items) && data.line_items.length > 0) {
+        const tableBody = document.getElementById('line-items-body');
+        const tableSection = document.getElementById('line-items-section');
+        const countBadge = document.getElementById('line-items-count');
+        tableBody.innerHTML = '';
+        tableSection.style.display = 'block';
+        countBadge.textContent = `${data.line_items.length} items`;
+
+        data.line_items.forEach(itm => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="fw-semibold text-dark">${itm.name || 'Item'}</td>
+                <td class="text-end font-monospace">${itm.qty || 1}</td>
+                <td class="text-end font-monospace">${parseFloat(itm.unit_price || 0).toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                <td class="text-end font-monospace fw-bold text-success">${parseFloat(itm.total || 0).toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+            `;
+            tableBody.appendChild(tr);
+        });
+    }
+
+    // Populate candidate chips
+    const chips = [];
+    if (data.total_amount) chips.push({ label: 'Total', value: parseFloat(data.total_amount).toFixed(2), target: 'field_total' });
+    if (data.subtotal) chips.push({ label: 'Subtotal', value: parseFloat(data.subtotal).toFixed(2), target: 'field_subtotal' });
+    if (data.vat_amount) chips.push({ label: 'VAT 15%', value: parseFloat(data.vat_amount).toFixed(2), target: 'field_vat' });
+    if (data.supplier_tin) chips.push({ label: 'Supplier TIN', value: data.supplier_tin, target: 'field_tin' });
+    if (data.buyer_tin) chips.push({ label: 'Buyer TIN', value: data.buyer_tin, target: 'field_buyer_tin' });
+    if (data.fs_no) chips.push({ label: 'FS #', value: data.fs_no, target: 'field_fs_no' });
+    if (data.receipt_date) chips.push({ label: 'Date', value: data.receipt_date, target: 'field_date' });
+    if (data.merchant_name) chips.push({ label: 'Vendor', value: data.merchant_name, target: 'field_vendor' });
+    renderCandidateChips(chips);
 }
 
 function updateStatus(text, badgeClass) {

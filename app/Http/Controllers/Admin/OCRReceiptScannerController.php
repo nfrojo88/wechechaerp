@@ -97,6 +97,88 @@ class OCRReceiptScannerController extends Controller
     }
 
     /**
+     * Scan receipt directly using Google Gemini Multimodal Vision API.
+     */
+    public function aiScan(Request $request)
+    {
+        $this->ensureGlobalAdmin();
+
+        $request->validate([
+            'receipt_file' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:15360',
+        ]);
+
+        $file     = $request->file('receipt_file');
+        $mimeType = $file->getMimeType();
+        $ext      = strtolower($file->getClientOriginalExtension());
+        $isPdf    = $ext === 'pdf' || str_contains($mimeType, 'pdf');
+
+        $filename = 'ocr_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $ext;
+        $path     = $file->storeAs('receipts', $filename, 'public');
+        $fileUrl  = asset('storage/' . $path);
+
+        $apiKey = config('services.gemini.api_key') ?: env('GEMINI_API_KEY');
+        $base64 = base64_encode(file_get_contents($file->getRealPath()));
+
+        $prompt = 'You are an expert AI auditor for commercial, fiscal, and machine receipts (especially Ethiopian ERCA / Datecs fiscal cash machine receipts). ' .
+                  'Extract all information from this receipt image with 100% precision. ' .
+                  'Look closely at the merchant header, proprietor/owner name, 10-digit seller TIN (often right below the logo), buyer TIN, FS / invoice number, machine/ERCA code, date (DD/MM/YYYY), taxable subtotal (TAXBL1), 15% VAT, grand total (TOTAL / CASH Birr), address, phone numbers, and all line items. ' .
+                  'Return a strictly valid JSON object with these keys: ' .
+                  'merchant_name (string), proprietor_name (string or null), supplier_tin (10 digits string), buyer_tin (string or null), fs_no (string), machine_no (string or null), receipt_date (YYYY-MM-DD), supplier_address (string), supplier_phone (string), subtotal (float), vat_amount (float), total_amount (float), category (one of: material, transport, food, equipment, overhead, utility, other), description (string), line_items (array of {name: string, qty: float, unit_price: float, total: float}), raw_text (transcription string).';
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(30)->post(
+                'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=' . $apiKey,
+                [
+                    'contents' => [
+                        [
+                            'parts' => [
+                                ['text' => $prompt],
+                                [
+                                    'inlineData' => [
+                                        'mimeType' => $isPdf ? 'application/pdf' : $mimeType,
+                                        'data'     => $base64,
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ],
+                    'generationConfig' => [
+                        'responseMimeType' => 'application/json',
+                    ]
+                ]
+            );
+
+            if ($response->successful()) {
+                $candidates = $response->json('candidates', []);
+                if (!empty($candidates[0]['content']['parts'][0]['text'])) {
+                    $jsonText = $candidates[0]['content']['parts'][0]['text'];
+                    $parsed = json_decode($jsonText, true);
+
+                    if (is_array($parsed) && !empty($parsed['total_amount'])) {
+                        return response()->json([
+                            'success'   => true,
+                            'ai'        => true,
+                            'file_path' => $path,
+                            'file_url'  => $fileUrl,
+                            'data'      => $parsed,
+                        ]);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Gemini OCR API error: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'success'   => true,
+            'ai'        => false,
+            'file_path' => $path,
+            'file_url'  => $fileUrl,
+            'message'   => 'AI Vision temporarily busy; using high-contrast in-browser engine.',
+        ]);
+    }
+
+    /**
      * Save the OCR-extracted data into the receipts database.
      */
     public function save(Request $request)
