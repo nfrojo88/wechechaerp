@@ -1342,7 +1342,7 @@ function populateFormWithExtracted(data, filePath, engine, confidence) {
     document.getElementById('field_tin').value = data.supplier_tin || '';
     document.getElementById('field_fs_no').value = data.fs_no || '';
     document.getElementById('field_machine_no').value = data.machine_no || '';
-    document.getElementById('field_date').value = data.receipt_date || '';
+    document.getElementById('field_date').value = formatDateDisplay(data.receipt_date) || '';
 
     const firstItem = (data.items && data.items[0]) ? data.items[0] : null;
     if (firstItem) {
@@ -1672,11 +1672,36 @@ function appendRowToTable(item, receipt) {
 
 function formatDateDisplay(d) {
     if (!d) return '';
-    if (d.includes('/')) return d;
+    d = String(d).trim();
+
+    // Strip time portion if present (e.g. "T00:00:00.000000Z" or " 00:00:00")
+    if (d.includes('T')) {
+        d = d.split('T')[0];
+    } else if (d.includes(' ')) {
+        d = d.split(' ')[0];
+    }
+
+    // If already in DD/MM/YYYY or YYYY/MM/DD format
+    if (d.includes('/')) {
+        const slashParts = d.split('/');
+        if (slashParts.length === 3) {
+            if (slashParts[0].length === 4) {
+                return `${slashParts[2].padStart(2, '0')}/${slashParts[1].padStart(2, '0')}/${slashParts[0]}`;
+            }
+            return `${slashParts[0].padStart(2, '0')}/${slashParts[1].padStart(2, '0')}/${slashParts[2]}`;
+        }
+        return d;
+    }
+
+    // YYYY-MM-DD
     const parts = d.split('-');
     if (parts.length === 3) {
-        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        const year = parts[0].length === 4 ? parts[0] : parts[2];
+        const month = parts[1].padStart(2, '0');
+        const day = (parts[0].length === 4 ? parts[2] : parts[0]).padStart(2, '0');
+        return `${day}/${month}/${year}`;
     }
+
     return d;
 }
 
@@ -1740,7 +1765,7 @@ function startEditRow(itemId) {
     `;
 
     tr.querySelector('[data-field="receipt_date"]').innerHTML = `
-        <input type="text" class="form-control form-control-sm p-1 text-center font-monospace" id="edit-date-${itemId}" value="${date}" placeholder="DD/MM/YYYY" style="width:95px;" oninput="validateEditRow(${itemId})">
+        <input type="text" class="form-control form-control-sm p-1 text-center font-monospace" id="edit-date-${itemId}" value="${formatDateDisplay(date)}" placeholder="DD/MM/YYYY" style="width:95px;" oninput="validateEditRow(${itemId})">
     `;
 
     tr.querySelector('[data-field="mrc_no"]').innerHTML = `
