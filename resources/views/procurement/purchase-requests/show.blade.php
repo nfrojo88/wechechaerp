@@ -876,7 +876,100 @@
                             </p>
                         </div>
 
+                        {{-- Price Intelligence Panel for GM --}}
+                        @php
+                            $gmVariance    = $purchaseRequest->marketingVariance;
+                            $gmDirectAmt   = (float)($purchaseRequest->direct_buy_amount ?? 0);
+                            $gmMarketAmt   = (float)($gmVariance?->market_price ?? 0);
+                            $gmVarAmt      = (float)($gmVariance?->variance_amount ?? ($gmDirectAmt - $gmMarketAmt));
+                            $gmVarPct      = (float)($gmVariance?->variance_percentage ?? ($gmMarketAmt > 0 ? round(($gmVarAmt / $gmMarketAmt) * 100, 2) : 0));
+                            $gmVarNotes    = $gmVariance?->variance_notes ?? null;
+                            $gmLastPurchase = null;
+                            // Try to get last purchase price from pricing benchmarks
+                            if(isset($pricingBenchmarks['total_last_purchase']) && $pricingBenchmarks['total_last_purchase'] > 0) {
+                                $gmLastPurchase = (float)$pricingBenchmarks['total_last_purchase'];
+                            }
+                        @endphp
+                        @if($gmDirectAmt > 0 || $gmMarketAmt > 0)
+                        <div class="card border-0 shadow-sm rounded-3 mb-3" style="border-left: 4px solid #0d6efd !important; border-left-style: solid !important;">
+                            <div class="card-header bg-primary bg-opacity-10 border-bottom border-primary border-opacity-25 py-2 px-3">
+                                <span class="small fw-bold text-primary">
+                                    <i class="fas fa-chart-bar me-1"></i> Price Intelligence — PM Review Summary
+                                </span>
+                            </div>
+                            <div class="card-body p-3">
+
+                                {{-- Direct Amount Submitted --}}
+                                <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-light mb-1">
+                                    <span class="small text-muted fw-semibold">
+                                        <i class="fas fa-file-invoice me-1 text-secondary"></i> Direct Amount Submitted
+                                    </span>
+                                    <span class="fw-bold text-dark font-monospace small">
+                                        {{ number_format($gmDirectAmt, 2) }} ETB
+                                    </span>
+                                </div>
+
+                                {{-- PM Approved Market Benchmark --}}
+                                <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-light mb-1">
+                                    <span class="small text-muted fw-semibold">
+                                        <i class="fas fa-star text-warning me-1"></i> PM Market Benchmark
+                                    </span>
+                                    <span class="fw-bold text-primary font-monospace small">
+                                        {{ $gmMarketAmt > 0 ? number_format($gmMarketAmt, 2) . ' ETB' : '—' }}
+                                    </span>
+                                </div>
+
+                                {{-- Last Purchase History --}}
+                                @if($gmLastPurchase)
+                                <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-light mb-1">
+                                    <span class="small text-muted fw-semibold">
+                                        <i class="fas fa-receipt text-success me-1"></i> Last Purchase Price
+                                    </span>
+                                    <span class="fw-bold text-success font-monospace small">
+                                        {{ number_format($gmLastPurchase, 2) }} ETB
+                                    </span>
+                                </div>
+                                @endif
+
+                                {{-- Variance --}}
+                                @if($gmMarketAmt > 0)
+                                @php
+                                    $gmOverMarket = $gmDirectAmt > $gmMarketAmt;
+                                    $gmVarDisplay = abs($gmVarAmt);
+                                    $gmVarColor   = $gmOverMarket ? 'danger' : 'success';
+                                    $gmVarIcon    = $gmOverMarket ? 'arrow-up' : 'arrow-down';
+                                    $gmVarLabel   = $gmOverMarket ? 'ABOVE market' : 'BELOW market';
+                                @endphp
+                                <div class="mt-2 p-2 rounded border border-{{ $gmVarColor }} border-opacity-50 bg-{{ $gmVarColor }} bg-opacity-10">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="small fw-bold text-{{ $gmVarColor }}">
+                                            <i class="fas fa-{{ $gmVarIcon }} me-1"></i>
+                                            {{ number_format($gmVarDisplay, 2) }} ETB ({{ abs($gmVarPct) }}%)
+                                            {{ $gmVarLabel }}
+                                        </span>
+                                        @if(abs($gmVarPct) > 20)
+                                        <span class="badge bg-{{ $gmVarColor }} text-white" style="font-size:9px;">HIGH</span>
+                                        @endif
+                                    </div>
+                                </div>
+                                @endif
+
+                                {{-- Variance Notes from PM --}}
+                                @if($gmVarNotes)
+                                <div class="mt-2 p-2 rounded bg-light border" style="font-size: 11px;">
+                                    <strong class="text-muted text-uppercase d-block mb-1" style="font-size:10px;">
+                                        <i class="fas fa-comment-dots me-1"></i> PM Justification:
+                                    </strong>
+                                    <span class="text-dark">{{ $gmVarNotes }}</span>
+                                </div>
+                                @endif
+
+                            </div>
+                        </div>
+                        @endif
+
                         <form action="{{ \Illuminate\Support\Facades\Route::has('purchase-requests.gm-decide') ? route('purchase-requests.gm-decide', $purchaseRequest) : url('/purchase-requests/' . $purchaseRequest->id . '/gm-decide') }}" method="POST" id="gmDecisionForm">
+
                             @csrf
                             <input type="hidden" name="decision" id="gmDecisionHidden" value="pay_and_buy">
                             <input type="hidden" name="payment_method" id="gmPaymentMethodHidden" value="pay_and_buy">

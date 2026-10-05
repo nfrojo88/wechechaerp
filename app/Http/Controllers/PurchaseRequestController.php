@@ -1509,8 +1509,8 @@ class PurchaseRequestController extends Controller
         ]);
         $directBuy       = (float)$purchaseRequest->direct_buy_amount;
         $marketPrice     = (float)$request->market_price;
-        $varianceAmount  = $marketPrice - $directBuy;
-        $variancePct     = $directBuy > 0 ? round(($varianceAmount / $directBuy) * 100, 2) : 0;
+        $varianceAmount  = $directBuy - $marketPrice;
+        $variancePct     = $marketPrice > 0 ? round(($varianceAmount / $marketPrice) * 100, 2) : 0;
 
         $this->lifecycle->addMarketingVariance($purchaseRequest, [
             'market_price'        => $marketPrice,
