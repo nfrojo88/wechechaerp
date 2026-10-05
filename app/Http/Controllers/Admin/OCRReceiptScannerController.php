@@ -134,7 +134,7 @@ class OCRReceiptScannerController extends Controller
         $path     = $file->storeAs('receipts', $filename, 'public');
         $fileUrl  = asset('storage/' . $path);
 
-        $apiKey = config('services.gemini.api_key') ?: env('GEMINI_API_KEY');
+        $apiKey = $request->input('api_key') ?: (config('services.gemini.api_key') ?: env('GEMINI_API_KEY'));
         $base64 = base64_encode(file_get_contents($file->getRealPath()));
 
         $prompt = <<<PROMPT
