@@ -2519,12 +2519,13 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/{receipt}',                    [App\Http\Controllers\ReceiptController::class, 'destroy'])->name('destroy');
     });
 
-    // ─── Global Admin Exclusive: Live OCR Receipt Scanner Studio ─────────────────
+    // ─── Live OCR Receipt Scanner & VAT Report Studio ─────────────────
     Route::prefix('admin/receipt-ocr')->name('admin.ocr.')->group(function () {
         Route::get('/',              [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'index'])->name('index');
         Route::post('/upload',       [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'upload'])->name('upload');
         Route::post('/ai-scan',      [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'aiScan'])->name('ai-scan');
         Route::post('/save',         [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'save'])->name('save');
+        Route::get('/export-vat',    [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'exportVatReport'])->name('export-vat');
         Route::get('/{receipt}',     [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'show'])->name('show');
         Route::delete('/{receipt}',  [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'destroy'])->name('destroy');
     });

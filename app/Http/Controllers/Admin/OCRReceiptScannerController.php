@@ -17,13 +17,31 @@ class OCRReceiptScannerController extends Controller
     }
 
     /**
-     * Check if user is Global Admin.
+     * Check if user is authorized to use the OCR Receipt Scanner.
      */
     private function ensureGlobalAdmin()
     {
         $user = Auth::user();
-        if (!$user || !$user->hasRole('global_admin')) {
-            abort(403, 'Unauthorized access. The OCR Receipt Scanner is reserved for Global Admin only.');
+        if (!$user) {
+            abort(401, 'Unauthenticated.');
+        }
+
+        $allowedRoles = ['global_admin', 'admin', 'finance_officer', 'finance_manager', 'store_keeper', 'store_manager', 'general_manager'];
+
+        $hasRole = false;
+        if (method_exists($user, 'hasAnyRole')) {
+            $hasRole = $user->hasAnyRole($allowedRoles);
+        } elseif (method_exists($user, 'hasRole')) {
+            foreach ($allowedRoles as $role) {
+                if ($user->hasRole($role)) {
+                    $hasRole = true;
+                    break;
+                }
+            }
+        }
+
+        if (!$hasRole && !$user->is_admin && !$user->can('manage_receipts')) {
+            abort(403, 'Unauthorized access. The OCR Receipt Scanner requires admin or finance privileges.');
         }
     }
 
@@ -119,54 +137,150 @@ class OCRReceiptScannerController extends Controller
         $apiKey = config('services.gemini.api_key') ?: env('GEMINI_API_KEY');
         $base64 = base64_encode(file_get_contents($file->getRealPath()));
 
-        $prompt = 'You are an expert AI auditor for commercial, fiscal, and machine receipts (especially Ethiopian ERCA / Datecs fiscal cash machine receipts). ' .
-                  'Extract all information from this receipt image with 100% precision. ' .
-                  'Look closely at the merchant header, proprietor/owner name, 10-digit seller TIN (often right below the logo), buyer TIN, FS / invoice number, machine/ERCA code, date (DD/MM/YYYY), taxable subtotal (TAXBL1), 15% VAT, grand total (TOTAL / CASH Birr), address, phone numbers, and all line items. ' .
-                  'Return a strictly valid JSON object with these keys: ' .
-                  'merchant_name (string), proprietor_name (string or null), supplier_tin (10 digits string), buyer_tin (string or null), fs_no (string), machine_no (string or null), receipt_date (YYYY-MM-DD), supplier_address (string), supplier_phone (string), subtotal (float), vat_amount (float), total_amount (float), category (one of: material, transport, food, equipment, overhead, utility, other), description (string), line_items (array of {name: string, qty: float, unit_price: float, total: float}), raw_text (transcription string).';
+        $prompt = <<<PROMPT
+You are an expert fiscal auditor specialized in Ethiopian ERCA / MOR fiscal cash machine receipts (Datecs, Daisy, Citizen), sales invoices, and commercial cash slips for Ethiopian Ministry of Revenues VAT declaration (Line 100).
+Extract all information from this receipt image with absolute accuracy.
 
-        try {
-            $response = \Illuminate\Support\Facades\Http::timeout(30)->post(
-                'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=' . $apiKey,
-                [
-                    'contents' => [
+CRITICAL INSTRUCTIONS FOR ETHIOPIAN ERCA RECEIPTS:
+1. SUPPLIER TIN vs BUYER TIN:
+   - supplier_tin: 10-digit TIN of the SELLER / MERCHANT / SUPPLIER issuing the receipt (e.g. "0024916531", "0043724322"). This is usually at the top near the merchant name/header. This is MANDATORY. Do NOT confuse with Buyer's TIN!
+   - buyer_tin: 10-digit TIN of the BUYER / CLIENT / CUSTOMER (often "0038480010" or labeled "Buyer's TIN", "Customer TIN").
+2. MERCHANT / SELLER NAME:
+   - merchant_name: Full registered trade name of the SELLER (e.g. "ASTRA GENERAL TRADING", "BERHANU TIEMAY ADHENA", "SEID LIDIA AND FRIENDS", "NEFAS SILK PAINTS").
+   - proprietor_name: Proprietor / manager name if listed.
+3. RECEIPT DATE:
+   - receipt_date: Format as YYYY-MM-DD (e.g. "2026-09-25"). Often printed on receipt as DD/MM/YYYY.
+   - date_formatted: Format as DD/MM/YYYY.
+4. ERCA / MRC MACHINE NUMBER:
+   - machine_no: Cash machine registration code / MRC number (e.g. "TDB0015170", "MFE0097690", "DFA0029991", "BIB0118931", "DDJ0006391"). Often printed next to MRC or at the footer next to ERCA.
+5. FS / FISCAL RECEIPT NUMBER:
+   - fs_no: The fiscal receipt sequence number (e.g. "FS00002674", "FS00002564", "00002674").
+6. DESCRIPTION / ITEMS:
+   - description: Summary of goods/materials purchased (e.g. "WATER PROOF AND WIRE", "ROUND PIPE , FLAT BAR", "SILCON GLUE", "CONSTRUCTION WORK", "WINDOW SILL", "NORMAL NAIL").
+   - line_items: Array of objects with keys: name (string), qty (float), unit_price (float), total (float), uom (string, e.g. "PCS", "KG", "LIT", "OTHER").
+7. FINANCIAL AMOUNTS (ETB):
+   - subtotal: Taxable value before VAT (often labeled TAXBL1 or Taxable Amount, e.g. 44086.97).
+   - vat_amount: 15% VAT (often labeled TAX1 15% or VAT, e.g. 6613.05).
+   - total_amount: Grand total / value after VAT (labeled TOTAL or CASH Birr, e.g. 50700.02).
+8. VAT DECLARATION CLASSIFICATION (Ethiopian ERCA / MOR):
+   - vat_category: "G" for Goods or "S" for Services.
+   - calendar_type: "G" for Gregorian or "E" for Ethiopian.
+   - purchase_type: 3 (Taxable-local Purchase of Inputs - Line No. 100).
+   - uom_id: 7 for PCS, 2 for KG, 5 for LIT, 9 for OTHER.
+
+Return a strictly valid JSON object:
+{
+  "merchant_name": "string",
+  "proprietor_name": "string or null",
+  "supplier_tin": "10 digits string",
+  "buyer_tin": "10 digits string or null",
+  "receipt_date": "YYYY-MM-DD",
+  "date_formatted": "DD/MM/YYYY",
+  "machine_no": "string or null",
+  "fs_no": "string",
+  "description": "string",
+  "subtotal": 0.00,
+  "vat_amount": 0.00,
+  "total_amount": 0.00,
+  "category": "material",
+  "vat_category": "G",
+  "calendar_type": "G",
+  "purchase_type": 3,
+  "uom_id": 9,
+  "supplier_address": "string or null",
+  "supplier_phone": "string or null",
+  "line_items": [
+    {"name": "string", "qty": 1, "unit_price": 0.00, "total": 0.00, "uom": "OTHER"}
+  ],
+  "raw_text": "transcription string"
+}
+PROMPT;
+
+        $models = ['gemini-3.8-flash', 'gemini-2.5-flash'];
+        $lastError = null;
+
+        foreach ($models as $model) {
+            try {
+                $response = \Illuminate\Support\Facades\Http::retry(2, 600)
+                    ->timeout(45)
+                    ->post(
+                        "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . $apiKey,
                         [
-                            'parts' => [
-                                ['text' => $prompt],
+                            'contents' => [
                                 [
-                                    'inlineData' => [
-                                        'mimeType' => $isPdf ? 'application/pdf' : $mimeType,
-                                        'data'     => $base64,
+                                    'parts' => [
+                                        ['text' => $prompt],
+                                        [
+                                            'inlineData' => [
+                                                'mimeType' => $isPdf ? 'application/pdf' : $mimeType,
+                                                'data'     => $base64,
+                                            ]
+                                        ]
                                     ]
                                 ]
+                            ],
+                            'generationConfig' => [
+                                'responseMimeType' => 'application/json',
                             ]
                         ]
-                    ],
-                    'generationConfig' => [
-                        'responseMimeType' => 'application/json',
-                    ]
-                ]
-            );
+                    );
 
-            if ($response->successful()) {
-                $candidates = $response->json('candidates', []);
-                if (!empty($candidates[0]['content']['parts'][0]['text'])) {
-                    $jsonText = $candidates[0]['content']['parts'][0]['text'];
-                    $parsed = json_decode($jsonText, true);
+                if ($response->successful()) {
+                    $candidates = $response->json('candidates', []);
+                    if (!empty($candidates[0]['content']['parts'][0]['text'])) {
+                        $jsonText = $candidates[0]['content']['parts'][0]['text'];
+                        $jsonText = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($jsonText));
+                        $parsed   = json_decode($jsonText, true);
 
-                    if (is_array($parsed) && !empty($parsed['total_amount'])) {
-                        return response()->json([
-                            'success'   => true,
-                            'ai'        => true,
-                            'file_path' => $path,
-                            'file_url'  => $fileUrl,
-                            'data'      => $parsed,
-                        ]);
+                        if (is_array($parsed)) {
+                            // Normalize numeric amounts
+                            $cleanNum = function($v) {
+                                if (is_numeric($v)) return (float)$v;
+                                if (is_string($v)) {
+                                    $c = preg_replace('/[^0-9.]/', '', str_replace(',', '', $v));
+                                    return is_numeric($c) ? (float)$c : 0.0;
+                                }
+                                return 0.0;
+                            };
+
+                            $subtotal = $cleanNum($parsed['subtotal'] ?? 0);
+                            $vat      = $cleanNum($parsed['vat_amount'] ?? 0);
+                            $total    = $cleanNum($parsed['total_amount'] ?? 0);
+
+                            if ($total <= 0 && $subtotal > 0) {
+                                $vat   = $vat > 0 ? $vat : round($subtotal * 0.15, 2);
+                                $total = round($subtotal + $vat, 2);
+                            } elseif ($subtotal <= 0 && $total > 0) {
+                                $subtotal = round($total / 1.15, 2);
+                                $vat      = round($total - $subtotal, 2);
+                            }
+
+                            $parsed['subtotal']     = $subtotal;
+                            $parsed['vat_amount']   = $vat;
+                            $parsed['total_amount'] = $total;
+
+                            // Ensure clean 10-digit TINs
+                            if (!empty($parsed['supplier_tin'])) {
+                                $parsed['supplier_tin'] = preg_replace('/[^0-9]/', '', (string)$parsed['supplier_tin']);
+                            }
+                            if (!empty($parsed['buyer_tin'])) {
+                                $parsed['buyer_tin'] = preg_replace('/[^0-9]/', '', (string)$parsed['buyer_tin']);
+                            }
+
+                            return response()->json([
+                                'success'   => true,
+                                'ai'        => true,
+                                'file_path' => $path,
+                                'file_url'  => $fileUrl,
+                                'data'      => $parsed,
+                            ]);
+                        }
                     }
                 }
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+                \Illuminate\Support\Facades\Log::warning("Gemini OCR ({$model}) API error: " . $lastError);
             }
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('Gemini OCR API error: ' . $e->getMessage());
         }
 
         return response()->json([
@@ -174,7 +288,7 @@ class OCRReceiptScannerController extends Controller
             'ai'        => false,
             'file_path' => $path,
             'file_url'  => $fileUrl,
-            'message'   => 'AI Vision temporarily busy; using high-contrast in-browser engine.',
+            'message'   => 'AI Vision temporarily busy; using high-precision in-browser engine.',
         ]);
     }
 
@@ -231,28 +345,32 @@ class OCRReceiptScannerController extends Controller
             'file_type'    => $fileType,
             'ocr_raw_text' => $request->ocr_raw_text,
             'parsed_data'  => [
-                'vendor'      => $request->vendor_name,
-                'proprietor'  => $request->proprietor_name,
-                'tin'         => $request->vendor_tin,
-                'buyer_tin'   => $request->buyer_tin,
-                'fs_no'       => $request->fs_no,
-                'machine_no'  => $request->machine_no,
-                'address'     => $request->vendor_address,
-                'phone'       => $request->vendor_phone,
-                'date'        => $request->receipt_date,
-                'subtotal'    => $subtotal,
-                'vat'         => $vat,
-                'total'       => $total,
-                'category'    => $request->category,
-                'items'       => $request->input('line_items', []),
-                'scanned_by'  => Auth::user()->name,
-                'scanned_at'  => now()->toIso8601String(),
+                'vendor'        => $request->vendor_name,
+                'proprietor'    => $request->proprietor_name,
+                'tin'           => $request->vendor_tin,
+                'buyer_tin'     => $request->buyer_tin,
+                'fs_no'         => $request->fs_no,
+                'machine_no'    => $request->machine_no,
+                'address'       => $request->vendor_address,
+                'phone'         => $request->vendor_phone,
+                'date'          => $request->receipt_date,
+                'subtotal'      => $subtotal,
+                'vat'           => $vat,
+                'total'         => $total,
+                'category'      => $request->category,
+                'items'         => $request->input('line_items', []),
+                'vat_category'  => $request->input('vat_category', 'G'),
+                'calendar_type' => $request->input('calendar_type', 'G'),
+                'purchase_type' => $request->input('purchase_type', 3),
+                'uom_id'        => $request->input('uom_id', 9),
+                'scanned_by'    => Auth::user()->name,
+                'scanned_at'    => now()->toIso8601String(),
             ],
             'parse_status' => 'parsed',
-            'status'       => 'approved', // Auto-approved when scanned and confirmed by Global Admin
+            'status'       => 'approved', // Auto-approved when scanned and confirmed by Admin/Finance
             'approved_by'  => Auth::id(),
             'approved_at'  => now(),
-            'notes'        => 'Scanned and verified via Global Admin OCR Scanner Studio.' . ($request->fs_no ? " FS: {$request->fs_no}" : ""),
+            'notes'        => 'Scanned and verified via OCR Scanner Studio.' . ($request->fs_no ? " FS: {$request->fs_no}" : ""),
         ]);
 
         return response()->json([
@@ -263,11 +381,114 @@ class OCRReceiptScannerController extends Controller
     }
 
     /**
+     * Export scanned receipts into exact Ethiopian ERCA VAT Report Excel/CSV format (Line 100).
+     * Matches VAT REPORT SEMPTMBER 2026.xlsx exactly.
+     */
+    public function exportVatReport(Request $request)
+    {
+        $this->ensureAuthorized();
+
+        $query = Receipt::with(['project'])->latest();
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+        if ($request->filled('project_id')) {
+            $query->where('project_id', $request->project_id);
+        }
+
+        $receipts = $query->get();
+
+        $filename = 'VAT_REPORT_' . now()->format('Y_m_d_His') . '.csv';
+
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Pragma'              => 'no-cache',
+            'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires'             => '0',
+        ];
+
+        $callback = function () use ($receipts) {
+            $out = fopen('php://output', 'w');
+            
+            // UTF-8 BOM for Microsoft Excel compatibility
+            fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
+
+            // Exact 15 columns matching VAT REPORT SEMPTMBER 2026.xlsx
+            fputcsv($out, [
+                "VAT CATEGORY\n (G=GOODS;S=SERVICES)",
+                "CALENDAR TYPE\n(E=ETHIOPIAN;G=GREGORIAN)",
+                "Types of purchase.\n1 = Taxable-local Purchase of Capital Assets (Line No. 65)\n2 = Taxable-imported Purchase of Capital Assets (Line No. 75)\n3 = Taxable-local Purchase of Inputs (Line No. 100)\n4 = Taxable-imported Purchase of Inputs (Line No. 110)\n5 = Taxable-general Expense Inputs Purchase (Line No. 120)\n6= Tax Exempted-purchase with no vat or uncollectible inputs (Line no. 85 or Line no. 130) \n\n (Please type 1 or 2 or 3 or 4 or 5 or 6).This field is mandatory.",
+                "TIN..This field\n is not mandatory.",
+                "Seller name (if Seller has no TIN or item is not locally purchased)\nThis field is not mandatory.",
+                "Date of purchase/Customs Declaration No.\n Dispatched Date (Please use  dd/mm/yyyy date format). \nThis field is mandatory.",
+                "MRC Number..This field is not mandatory.",
+                "Vat receipt number/ Customs Declaration Number.This field is mandatory.",
+                "Description.This field is mandatory.",
+                "Unit of Measure (type ID 2-10).\n2 KG\n3 ML\n4 GM\n5 LIT\n6 MT\n7 PCS\n8 CT\n9 OTHER\n10 PC\nThis field is mandatory.",
+                "Quantity.\nEnter number.Don't use comma (,) or Quatation (\"\")\nThis field is  mandatory.",
+                "Unit Price.\nEnter number only .Don't use comma (,) or Quatation (\"\")\nThis field is  mandatory.",
+                "Total value",
+                "vat",
+                "value after vat"
+            ]);
+
+            foreach ($receipts as $r) {
+                $p = is_array($r->parsed_data) ? $r->parsed_data : (json_decode($r->parsed_data, true) ?: []);
+                
+                $vatCat = $p['vat_category'] ?? ($r->category === 'transport' || $r->category === 'utility' ? 'S' : 'G');
+                $calType = $p['calendar_type'] ?? 'G';
+                $purchType = $p['purchase_type'] ?? 3;
+                $tin = $r->vendor_tin ?: ($p['tin'] ?? '');
+                $name = $r->vendor_name ?: ($p['vendor'] ?? '');
+                $dateFormatted = $r->receipt_date ? $r->receipt_date->format('d/m/Y') : now()->format('d/m/Y');
+                $mrc = $p['machine_no'] ?? '';
+                $fs = $p['fs_no'] ?? '';
+                if ($fs && !str_starts_with(strtoupper($fs), 'FS') && !str_starts_with(strtoupper($fs), 'M')) {
+                    $fs = 'FS' . $fs;
+                }
+                $desc = $r->description ?: ($p['description'] ?? 'Building materials');
+                $desc = preg_replace('/\(FS No:[^)]+\)/i', '', $desc);
+                $desc = trim($desc) ?: 'MATERIAL';
+
+                $uom = $p['uom_id'] ?? 9;
+                $qty = 1;
+                $subtotal = round((float)$r->subtotal, 2);
+                $vat = round((float)$r->vat_amount, 2);
+                $total = round((float)$r->total_amount, 2);
+
+                fputcsv($out, [
+                    $vatCat,
+                    $calType,
+                    $purchType,
+                    $tin,
+                    $name,
+                    $dateFormatted,
+                    $mrc,
+                    $fs,
+                    $desc,
+                    $uom,
+                    $qty,
+                    $subtotal,
+                    $subtotal,
+                    $vat,
+                    $total,
+                ]);
+            }
+
+            fclose($out);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    /**
      * View details of a specific scanned receipt.
      */
     public function show(Receipt $receipt)
     {
-        $this->ensureGlobalAdmin();
+        $this->ensureAuthorized();
         $receipt->load(['uploader', 'project', 'approver']);
 
         return response()->json([
@@ -282,7 +503,7 @@ class OCRReceiptScannerController extends Controller
      */
     public function destroy(Receipt $receipt)
     {
-        $this->ensureGlobalAdmin();
+        $this->ensureAuthorized();
 
         if ($receipt->file_path && Storage::disk('public')->exists($receipt->file_path)) {
             Storage::disk('public')->delete($receipt->file_path);
