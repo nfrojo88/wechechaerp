@@ -1102,15 +1102,28 @@ body.sidebar-open { overflow-y: hidden !important; }
                     </div>
                 @endif
 
-                @if(isset($errors) && $errors->any())
+                @php
+                    $hasErrors = false;
+                    $errorItems = [];
+                    if (isset($errors)) {
+                        if (is_object($errors) && method_exists($errors, 'any') && $errors->any()) {
+                            $hasErrors = true;
+                            $errorItems = method_exists($errors, 'all') ? $errors->all() : [];
+                        } elseif (is_array($errors) && !empty($errors)) {
+                            $hasErrors = true;
+                            $errorItems = $errors;
+                        }
+                    }
+                @endphp
+                @if($hasErrors)
                     <div class="flash-container">
                         <div class="alert alert-danger alert-dismissible fade show" role="alert">
                             <i class="fa-solid fa-triangle-exclamation"></i>
                             <div>
                                 <strong class="d-block mb-1">Please correct the following before saving:</strong>
                                 <ul class="mb-0 ps-3">
-                                    @foreach($errors->all() as $error)
-                                        <li>{{ $error }}</li>
+                                    @foreach($errorItems as $error)
+                                        <li>{{ is_array($error) ? implode(', ', $error) : $error }}</li>
                                     @endforeach
                                 </ul>
                             </div>

@@ -507,8 +507,8 @@
                         @forelse($items as $item)
                             @php
                                 $r = $item->receipt;
-                                $errors = $item->validateRow();
-                                $isFlagged = !empty($errors) || ($r && $r->needs_review);
+                                $rowErrors = $item->validateRow();
+                                $isFlagged = !empty($rowErrors) || ($r && $r->needs_review);
                                 $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : '';
                             @endphp
                             <tr id="row-{{ $item->id }}" data-id="{{ $item->id }}" data-receipt-id="{{ $r ? $r->id : '' }}" class="{{ $isFlagged ? 'table-warning bg-opacity-25' : '' }}">
@@ -520,7 +520,7 @@
                                 {{-- Status / Validation --}}
                                 <td class="text-center">
                                     @if($isFlagged)
-                                        <span class="badge bg-warning text-dark border border-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ implode('; ', $errors) }}">
+                                        <span class="badge bg-warning text-dark border border-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ implode('; ', $rowErrors) }}">
                                             <i class="fa-solid fa-triangle-exclamation me-1"></i>Review
                                         </span>
                                     @else
