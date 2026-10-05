@@ -2521,13 +2521,23 @@ Route::middleware(['auth'])->group(function () {
 
     // ─── Live OCR Receipt Scanner & VAT Report Studio ─────────────────
     Route::prefix('admin/receipt-ocr')->name('admin.ocr.')->group(function () {
-        Route::get('/',              [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'index'])->name('index');
-        Route::post('/upload',       [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'upload'])->name('upload');
-        Route::post('/ai-scan',      [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'aiScan'])->name('ai-scan');
-        Route::post('/save',         [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'save'])->name('save');
-        Route::get('/export-vat',    [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'exportVatReport'])->name('export-vat');
-        Route::get('/{receipt}',     [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'show'])->name('show');
-        Route::delete('/{receipt}',  [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'destroy'])->name('destroy');
+        Route::get('/',                   [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'index'])->name('index');
+        Route::post('/upload',            [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'upload'])->name('upload');
+        Route::post('/process-file',      [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'processFile'])->name('process-file');
+        Route::post('/ai-scan',           [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'aiScan'])->name('ai-scan');
+        Route::post('/save',              [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'save'])->name('save');
+        Route::post('/save-item',         [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'saveItem'])->name('save-item');
+        Route::post('/save-all',          [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'saveAll'])->name('save-all');
+        Route::delete('/item/{item}',     [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'destroyItem'])->name('destroy-item');
+        Route::post('/replace-duplicate', [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'replaceDuplicate'])->name('replace-duplicate');
+        Route::get('/export-excel',       [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'exportExcel'])->name('export-excel');
+        Route::get('/export-csv',         [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'exportCsv'])->name('export-csv');
+        Route::get('/export-vat',         [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'exportVatReport'])->name('export-vat');
+        Route::get('/settings',           [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'getSettings'])->name('get-settings');
+        Route::post('/settings',          [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'saveSettings'])->name('save-settings');
+        Route::post('/test-key',          [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'testApiKey'])->name('test-key');
+        Route::get('/{receipt}',          [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'show'])->name('show');
+        Route::delete('/{receipt}',       [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'destroy'])->name('destroy');
     });
 });
 

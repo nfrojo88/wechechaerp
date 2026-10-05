@@ -15,6 +15,9 @@ class Receipt extends Model
         'project_id',
         'vendor_name',
         'vendor_tin',
+        'buyer_tin',
+        'fs_no',
+        'mrc_no',
         'receipt_date',
         'subtotal',
         'vat_amount',
@@ -25,6 +28,9 @@ class Receipt extends Model
         'file_path',
         'file_type',
         'ocr_raw_text',
+        'ocr_engine',
+        'confidence',
+        'needs_review',
         'parsed_data',
         'parse_status',
         'parse_error',
@@ -41,6 +47,7 @@ class Receipt extends Model
         'subtotal'     => 'decimal:2',
         'vat_amount'   => 'decimal:2',
         'total_amount' => 'decimal:2',
+        'needs_review' => 'boolean',
     ];
 
     /**
@@ -86,5 +93,10 @@ class Receipt extends Model
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function items()
+    {
+        return $this->hasMany(ReceiptItem::class, 'receipt_id');
     }
 }

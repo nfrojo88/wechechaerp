@@ -1,2041 +1,1763 @@
 @extends('layouts.app')
 
-@section('title', 'OCR Receipt Scanner Studio - Global Admin')
+@section('title', 'Receipt OCR Studio & ERCA VAT Declaration - Global Admin')
 
 @section('content')
-<div class="container-fluid py-2">
+<div class="container-fluid py-3 px-md-4">
 
-    {{-- Top Header --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    {{-- TOP BAR --}}
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div>
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <h3 class="mb-0 fw-bold text-dark">
-                    <i class="fa-solid fa-expand text-success me-2"></i>OCR Receipt Scanner Studio
+                    <i class="fa-solid fa-receipt text-success me-2"></i>Receipt OCR Studio
                 </h3>
                 <span class="badge bg-success text-white px-2.5 py-1.5 rounded-pill shadow-xs">
-                    <i class="fa-solid fa-shield-halved me-1"></i>Global Admin Exclusive
+                    <i class="fa-solid fa-shield-halved me-1"></i>ERCA VAT Line 100
                 </span>
-                <span class="badge bg-primary text-white px-2.5 py-1.5 rounded-pill shadow-xs">
-                    <i class="fa-solid fa-bolt me-1"></i>Live AI/OCR Engine
+                <span class="badge bg-primary text-white px-2.5 py-1.5 rounded-pill shadow-xs" id="engine-status-badge">
+                    <i class="fa-solid fa-bolt me-1"></i>Dual OCR (Gemini + OCR.Space)
                 </span>
             </div>
             <p class="text-muted small mb-0 mt-1">
-                Upload or capture any physical or digital receipt. The system automatically reads merchant name, TIN, date, VAT, and totals with instant OCR.
+                Scan multiple physical receipts or PDFs at once. Multi-item receipts create one row per item with exact 15-column ERCA declaration.
             </p>
         </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ url('/admin/receipt-ocr/export-vat') }}" class="btn btn-outline-success btn-sm shadow-xs fw-bold" title="Download Excel/CSV matching VAT REPORT SEMPTMBER 2026.xlsx">
-                <i class="fa-solid fa-file-excel me-1 text-success"></i>Export VAT Report (Excel)
-            </a>
-            <button type="button" class="btn btn-primary btn-sm shadow-xs fw-bold" id="btn-autofill-astra" title="Pre-fill Astra General Trading receipt from Row 20 (50,700.02 ETB)">
-                <i class="fa-solid fa-bolt me-1"></i>Fill Astra Receipt (50,700 ETB)
+
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            {{-- AI Key Settings Modal Trigger --}}
+            <button type="button" class="btn btn-outline-dark btn-sm shadow-xs fw-bold" data-bs-toggle="modal" data-bs-target="#settingsModal">
+                <i class="fa-solid fa-key me-1 text-warning"></i>AI Key &amp; OCR Settings
             </button>
-            <button type="button" class="btn btn-success btn-sm shadow-xs fw-bold" id="btn-autofill-mewedisi" title="Pre-fill Berhanu Tiemay / Mewedisi receipt from Row 23 (10,099.99 ETB)">
-                <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Fill Berhanu Receipt
+
+            {{-- Save All Unsaved Rows --}}
+            <button type="button" class="btn btn-warning btn-sm shadow-xs fw-bold d-none" id="btn-save-all">
+                <i class="fa-solid fa-floppy-disk me-1"></i>Save All (<span id="unsaved-count">0</span>)
             </button>
-            <button type="button" class="btn btn-outline-warning btn-sm shadow-xs fw-bold text-dark" id="btn-set-ai-key" title="Configure Gemini AI Vision API Key">
-                <i class="fa-solid fa-key me-1 text-warning"></i>AI Key
-            </button>
-            <button type="button" class="btn btn-outline-primary btn-sm shadow-xs fw-semibold" id="btn-load-sample">
-                <i class="fa-solid fa-receipt me-1"></i>Try Sample Receipt
-            </button>
-            <a href="#recent-scans" class="btn btn-light border btn-sm shadow-xs">
-                <i class="fa-solid fa-history me-1 text-muted"></i>Recent Scans ({{ $stats['total_scanned'] }})
-            </a>
+
+            {{-- Export Buttons --}}
+            <div class="btn-group shadow-xs">
+                <button type="button" class="btn btn-success btn-sm fw-bold dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-file-excel me-1"></i>Export Excel (.xlsx)
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                    <li>
+                        <a class="dropdown-item small" href="#" onclick="exportData('excel', 'all'); return false;">
+                            <i class="fa-solid fa-table-cells me-2 text-success"></i>Export All Rows
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item small" href="#" onclick="exportData('excel', 'filtered'); return false;">
+                            <i class="fa-solid fa-filter me-2 text-primary"></i>Export Current Filtered View
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item small" href="#" id="export-selected-excel-btn" onclick="exportData('excel', 'selected'); return false;">
+                            <i class="fa-solid fa-check-square me-2 text-info"></i>Export Selected Rows (<span class="selected-count-badge">0</span>)
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="btn-group shadow-xs">
+                <button type="button" class="btn btn-outline-success btn-sm fw-bold dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-file-csv me-1"></i>Export CSV
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                    <li>
+                        <a class="dropdown-item small" href="#" onclick="exportData('csv', 'all'); return false;">
+                            <i class="fa-solid fa-file-csv me-2 text-success"></i>Export All as CSV (UTF-8 BOM)
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item small" href="#" onclick="exportData('csv', 'filtered'); return false;">
+                            <i class="fa-solid fa-filter me-2 text-primary"></i>Export Filtered as CSV
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item small" href="#" id="export-selected-csv-btn" onclick="exportData('csv', 'selected'); return false;">
+                            <i class="fa-solid fa-check-square me-2 text-info"></i>Export Selected as CSV (<span class="selected-count-badge">0</span>)
+                        </a>
+                    </li>
+                </ul>
+            </div>
         </div>
     </div>
 
-    {{-- Stats Cards --}}
-    <div class="row g-3 mb-4">
+    {{-- STATS CARDS --}}
+    <div class="row g-3 mb-3">
         <div class="col-6 col-lg-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100">
+            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white">
                 <div class="card-body p-3 d-flex align-items-center gap-3">
                     <div class="rounded-circle p-3 d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary">
-                        <i class="fa-solid fa-file-invoice fa-xl"></i>
+                        <i class="fa-solid fa-table-list fa-xl"></i>
                     </div>
                     <div>
-                        <div class="fs-4 fw-bold text-dark">{{ number_format($stats['total_scanned']) }}</div>
-                        <div class="text-muted small">Total Scanned Receipts</div>
+                        <div class="fs-4 fw-bold text-dark" id="stat-total-items">{{ number_format($stats['total_items']) }}</div>
+                        <div class="text-muted small">Total Extracted Item Rows</div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-6 col-lg-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100">
+            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white">
                 <div class="card-body p-3 d-flex align-items-center gap-3">
                     <div class="rounded-circle p-3 d-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success">
                         <i class="fa-solid fa-coins fa-xl"></i>
                     </div>
                     <div>
-                        <div class="fs-4 fw-bold text-dark">{{ number_format($stats['total_value'], 2) }} <small class="fs-6 text-muted">ETB</small></div>
-                        <div class="text-muted small">Total Scanned Value</div>
+                        <div class="fs-4 fw-bold text-success" id="stat-total-value">{{ number_format($stats['total_value'], 2) }} <small class="fs-6 text-muted">ETB</small></div>
+                        <div class="text-muted small">Total Taxable Value (Col M)</div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-6 col-lg-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100">
+            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white">
                 <div class="card-body p-3 d-flex align-items-center gap-3">
                     <div class="rounded-circle p-3 d-flex align-items-center justify-content-center bg-info bg-opacity-10 text-info">
-                        <i class="fa-solid fa-receipt fa-xl"></i>
+                        <i class="fa-solid fa-percent fa-xl"></i>
                     </div>
                     <div>
-                        <div class="fs-4 fw-bold text-dark">{{ number_format($stats['total_vat'], 2) }} <small class="fs-6 text-muted">ETB</small></div>
-                        <div class="text-muted small">Total VAT Extracted (15%)</div>
+                        <div class="fs-4 fw-bold text-info" id="stat-total-vat">{{ number_format($stats['total_vat'], 2) }} <small class="fs-6 text-muted">ETB</small></div>
+                        <div class="text-muted small">Total VAT Extracted 15% (Col N)</div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="col-6 col-lg-3">
-            <div class="card border-0 shadow-sm rounded-3 h-100">
+            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white">
                 <div class="card-body p-3 d-flex align-items-center gap-3">
-                    <div class="rounded-circle p-3 d-flex align-items-center justify-content-center bg-warning bg-opacity-10 text-warning">
-                        <i class="fa-solid fa-calendar-day fa-xl"></i>
+                    <div class="rounded-circle p-3 d-flex align-items-center justify-content-center {{ $stats['flagged_count'] > 0 ? 'bg-warning bg-opacity-10 text-warning' : 'bg-light text-muted' }}">
+                        <i class="fa-solid fa-triangle-exclamation fa-xl"></i>
                     </div>
                     <div>
-                        <div class="fs-4 fw-bold text-dark">{{ number_format($stats['today_scanned']) }}</div>
-                        <div class="text-muted small">Scanned Today</div>
+                        <div class="fs-4 fw-bold {{ $stats['flagged_count'] > 0 ? 'text-warning' : 'text-dark' }}" id="stat-flagged-count">{{ number_format($stats['flagged_count']) }}</div>
+                        <div class="text-muted small">Items Needing Review</div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    {{-- Main Live Scanner Studio --}}
+    {{-- BATCH UPLOAD DROPZONE & CONCURRENCY WORKER QUEUE --}}
     <div class="card border-0 shadow-sm rounded-3 mb-4 overflow-hidden">
         <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div class="d-flex align-items-center gap-2">
                 <span class="p-2 rounded bg-success bg-opacity-10 text-success">
-                    <i class="fa-solid fa-camera-viewfinder"></i>
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
                 </span>
-                <strong class="text-dark">Live Receipt Upload &amp; Optical Character Recognition (OCR)</strong>
+                <strong class="text-dark">Batch Upload &amp; Parallel OCR Extraction</strong>
+                <span class="badge bg-light text-muted border small">Accepts JPG, PNG, WEBP, PDF</span>
             </div>
-            <div class="d-flex align-items-center gap-2">
-                <div class="form-check form-switch mb-0 small" title="Preprocesses photo with contrast stretching and binarization for thermal receipts">
-                    <input class="form-check-input cursor-pointer" type="checkbox" id="toggle-enhance" checked>
-                    <label class="form-check-label small fw-semibold text-muted cursor-pointer" for="toggle-enhance">Enhanced Binarization</label>
-                </div>
-                <div id="ocr-status-badge" class="badge bg-secondary px-3 py-1.5 rounded-pill">
-                    <i class="fa-solid fa-circle me-1" style="font-size:0.55rem;"></i> Ready to scan
-                </div>
+            <div class="d-flex align-items-center gap-2 small text-muted">
+                <span>Concurrency: <strong>3-4 files</strong></span>
+                <span class="mx-1">•</span>
+                <span>Duplicate Prevention: <strong>FS No Key</strong></span>
             </div>
         </div>
 
         <div class="card-body p-3 p-md-4">
-            <div class="row g-4">
-
-                {{-- Left Column: Upload & Live Image Preview --}}
-                <div class="col-lg-5">
-                    <div class="p-3 border rounded-3 bg-light h-100 d-flex flex-column">
-
-                        {{-- Drop Zone --}}
-                        <div id="drop-zone" class="border border-2 border-dashed rounded-3 p-4 text-center position-relative bg-white shadow-xs cursor-pointer transition-all"
-                             style="border-color:#10b981 !important; min-height: 240px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                            <input type="file" id="file-input" accept="image/*,application/pdf" class="position-absolute top-0 start-0 w-100 h-100 opacity-0 cursor-pointer" style="z-index:5;">
-                            
-                            <div id="drop-prompt">
-                                <div class="rounded-circle bg-success bg-opacity-10 text-success p-3 d-inline-flex mb-3">
-                                    <i class="fa-solid fa-cloud-arrow-up fa-2x"></i>
-                                </div>
-                                <h6 class="fw-bold text-dark mb-1">Drag &amp; Drop Receipt Here</h6>
-                                <p class="text-muted small mb-3">or click to browse files (JPEG, PNG, WEBP, PDF)</p>
-                                
-                                <div class="d-flex justify-content-center gap-2">
-                                    <button type="button" class="btn btn-sm btn-success px-3 fw-semibold shadow-xs" onclick="document.getElementById('file-input').click()">
-                                        <i class="fa-solid fa-folder-open me-1"></i>Browse Receipt
-                                    </button>
-                                    <label class="btn btn-sm btn-outline-dark px-3 fw-semibold shadow-xs mb-0 cursor-pointer">
-                                        <i class="fa-solid fa-camera me-1"></i>Snap Photo
-                                        <input type="file" id="camera-input" accept="image/*" capture="environment" class="d-none">
-                                    </label>
-                                </div>
-                            </div>
-
-                            {{-- Preview area --}}
-                            <div id="preview-area" class="d-none w-100 text-center">
-                                <div class="position-relative d-inline-block w-100">
-                                    <img id="receipt-preview-img" src="" alt="Receipt Preview" 
-                                         class="img-fluid rounded border shadow-sm" 
-                                         style="max-height: 380px; object-fit: contain; width: auto; background:#fff;">
-                                    <div id="pdf-preview-box" class="d-none py-5">
-                                        <i class="fa-solid fa-file-pdf fa-4x text-danger mb-2"></i>
-                                        <div class="fw-bold text-dark" id="pdf-filename">PDF Document</div>
-                                    </div>
-                                </div>
-                                <div class="d-flex justify-content-center gap-2 mt-2">
-                                    <button type="button" class="btn btn-xs btn-outline-secondary btn-sm" id="btn-rotate-img" title="Rotate 90°">
-                                        <i class="fa-solid fa-rotate-right me-1"></i>Rotate
-                                    </button>
-                                    <button type="button" class="btn btn-xs btn-outline-primary btn-sm" id="btn-reprocess-img" title="Re-scan OCR">
-                                        <i class="fa-solid fa-bolt me-1"></i>Re-Scan
-                                    </button>
-                                    <button type="button" class="btn btn-xs btn-outline-danger btn-sm" id="btn-clear-img" title="Remove Receipt">
-                                        <i class="fa-solid fa-trash me-1"></i>Clear
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {{-- Hidden offscreen canvas for preprocessing --}}
-                        <canvas id="offscreen-canvas" class="d-none"></canvas>
-
-                        {{-- OCR Progress Indicator --}}
-                        <div id="ocr-progress-container" class="mt-3 d-none">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <small class="fw-bold text-dark" id="ocr-progress-label">
-                                    <i class="fa-solid fa-spinner fa-spin me-1 text-primary"></i>Scanning Receipt...
-                                </small>
-                                <small class="fw-bold text-primary font-monospace" id="ocr-progress-pct">0%</small>
-                            </div>
-                            <div class="progress" style="height: 8px;">
-                                <div id="ocr-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%"></div>
-                            </div>
-                        </div>
-
-                        {{-- Tips --}}
-                        <div class="mt-auto pt-3">
-                            <div class="alert alert-light border small text-muted mb-0 py-2">
-                                <i class="fa-solid fa-lightbulb text-warning me-1"></i>
-                                <strong>Smart Receipt Engine:</strong> Automatically extracts Seller info (TIN, Address, Phone), Buyer TIN, FS #, Line items &amp; 15% VAT!
-                            </div>
-                        </div>
-
+            {{-- Drag & Drop Area --}}
+            <div id="drop-zone" class="border border-2 border-dashed rounded-3 p-4 text-center position-relative bg-light transition-all"
+                 style="border-color:#10b981 !important; min-height: 140px; cursor: pointer;">
+                <input type="file" id="file-input" multiple accept="image/jpeg,image/png,image/webp,application/pdf" class="position-absolute top-0 start-0 w-100 h-100 opacity-0 cursor-pointer" style="z-index:5;">
+                <div class="py-2">
+                    <div class="rounded-circle bg-success bg-opacity-10 text-success p-3 d-inline-flex mb-2">
+                        <i class="fa-solid fa-file-circle-plus fa-2x"></i>
+                    </div>
+                    <h5 class="fw-bold text-dark mb-1">Drag &amp; Drop 10+ Receipts or Multi-Page PDFs Here</h5>
+                    <p class="text-muted small mb-3">Files will be scanned in parallel. Existing data is always kept and duplicates by FS No are automatically prevented.</p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <button type="button" class="btn btn-sm btn-success px-3 fw-semibold shadow-xs" onclick="document.getElementById('file-input').click()">
+                            <i class="fa-solid fa-folder-open me-1"></i>Choose Multiple Files
+                        </button>
+                        <label class="btn btn-sm btn-outline-dark px-3 fw-semibold shadow-xs mb-0 cursor-pointer">
+                            <i class="fa-solid fa-camera me-1"></i>Snap Receipt Photo
+                            <input type="file" id="camera-input" accept="image/*" capture="environment" class="d-none">
+                        </label>
                     </div>
                 </div>
-
-                {{-- Right Column: Structured Extracted Fields & Save --}}
-                <div class="col-lg-7">
-                    <div class="p-3 border rounded-3 bg-white h-100 d-flex flex-column">
-
-                        <ul class="nav nav-tabs nav-tabs-bordered mb-3" id="ocrTabs" role="tablist">
-                            <li class="nav-item">
-                                <button class="nav-link active fw-bold small" id="extracted-tab" data-bs-toggle="tab" data-bs-target="#tab-extracted" type="button">
-                                    <i class="fa-solid fa-list-check me-1 text-success"></i>Extracted Data &amp; Verification
-                                </button>
-                            </li>
-                            <li class="nav-item">
-                                <button class="nav-link fw-bold small" id="rawtext-tab" data-bs-toggle="tab" data-bs-target="#tab-rawtext" type="button">
-                                    <i class="fa-solid fa-font me-1 text-primary"></i>Raw Recognized Text (<span id="raw-lines-count">0 lines</span>)
-                                </button>
-                            </li>
-                        </ul>
-
-                        <div class="tab-content flex-grow-1" id="ocrTabsContent">
-
-                            {{-- Tab 1: Extracted Structured Data --}}
-                            <div class="tab-pane fade show active" id="tab-extracted">
-                                <form id="save-receipt-form">
-                                    <input type="hidden" id="stored_file_path" name="file_path" value="">
-                                    <input type="hidden" id="ocr_raw_text_hidden" name="ocr_raw_text" value="">
-
-                                    {{-- Quick-Fill Candidate Chips --}}
-                                    <div id="detected-chips-container" class="mb-3 d-none">
-                                        <div class="p-2.5 rounded-3 border bg-info bg-opacity-10">
-                                            <div class="d-flex align-items-center justify-content-between mb-1">
-                                                <small class="fw-bold text-dark">
-                                                    <i class="fa-solid fa-wand-magic-sparkles text-primary me-1"></i>Detected Values from Receipt (Click to fill):
-                                                </small>
-                                                <small class="text-muted" style="font-size:0.7rem;">Click any chip to insert</small>
-                                            </div>
-                                            <div id="detected-chips-list" class="d-flex flex-wrap gap-1.5"></div>
-                                        </div>
-                                    </div>
-
-                                    <div class="row g-2">
-
-                                        {{-- 1. Seller / Merchant Business Name --}}
-                                        <div class="col-md-7">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                Merchant / Supplier Business Name *
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">VAT Col E (Seller Name)</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-store text-muted"></i></span>
-                                                <input type="text" class="form-control fw-semibold" id="field_vendor" name="vendor_name" placeholder="e.g. ASTRA GENERAL TRADING" required oninput="updateVatReportPreview()">
-                                            </div>
-                                        </div>
-
-                                        {{-- 2. Proprietor / Manager Name --}}
-                                        <div class="col-md-5">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                Proprietor / Contact Name
-                                                <span class="badge bg-light text-muted border ms-1" style="font-size:0.65rem;">Seller</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-user text-muted"></i></span>
-                                                <input type="text" class="form-control" id="field_proprietor" name="proprietor_name" placeholder="e.g. BERHANU TIEMAY ADHENA">
-                                            </div>
-                                        </div>
-
-                                        {{-- 3. Supplier TIN --}}
-                                        <div class="col-md-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                Supplier TIN # *
-                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1" style="font-size:0.65rem;">NOT Buyer TIN</span>
-                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1" style="font-size:0.65rem;">VAT Col D</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-id-card text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="field_tin" name="vendor_tin" placeholder="e.g. 0024916531" required oninput="updateVatReportPreview()">
-                                            </div>
-                                        </div>
-
-                                        {{-- 4. Buyer's TIN --}}
-                                        <div class="col-md-6">
-                                            <label class="form-label small fw-semibold text-muted mb-1">
-                                                Buyer's TIN
-                                                <span class="badge bg-light text-muted border ms-1" style="font-size:0.65rem;">Wechecha: 0038480010</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-user-tag text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace" id="field_buyer_tin" name="buyer_tin" placeholder="e.g. 0038480010">
-                                            </div>
-                                        </div>
-
-                                        {{-- 5. Supplier Address --}}
-                                        <div class="col-md-7">
-                                            <label class="form-label small fw-semibold text-muted mb-1">
-                                                Supplier Address / Location
-                                                <span class="badge bg-light text-muted border ms-1" style="font-size:0.65rem;">Upper Section</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-location-dot text-muted"></i></span>
-                                                <input type="text" class="form-control" id="field_address" name="vendor_address" placeholder="e.g. A.A. Arada Sub City W.01">
-                                            </div>
-                                        </div>
-
-                                        {{-- 6. Supplier Phone / Mobile --}}
-                                        <div class="col-md-5">
-                                            <label class="form-label small fw-semibold text-muted mb-1">Supplier Phones</label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-phone text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace" id="field_phone" name="vendor_phone" placeholder="e.g. 0911517719 / 0911255119">
-                                            </div>
-                                        </div>
-
-                                        {{-- 7. FS / Receipt Number --}}
-                                        <div class="col-md-4">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                FS / Receipt Number *
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">VAT Col H</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-hashtag text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="field_fs_no" name="fs_no" placeholder="e.g. FS00002674" required oninput="updateVatReportPreview()">
-                                            </div>
-                                        </div>
-
-                                        {{-- 8. Machine / ERCA Number --}}
-                                        <div class="col-md-4">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                ERCA / Machine / MRC #
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">VAT Col G</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-cash-register text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace fw-bold" id="field_machine_no" name="machine_no" placeholder="e.g. TDB0015170" oninput="updateVatReportPreview()">
-                                            </div>
-                                        </div>
-
-                                        {{-- 9. Receipt Date --}}
-                                        <div class="col-md-4">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                Receipt Date *
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">VAT Col F</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-calendar text-muted"></i></span>
-                                                <input type="date" class="form-control" id="field_date" name="receipt_date" value="{{ today()->toDateString() }}" required onchange="updateVatReportPreview()">
-                                            </div>
-                                        </div>
-
-                                        {{-- 10. Item Description --}}
-                                        <div class="col-md-6">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                Item / Purchased Description *
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">VAT Col I</span>
-                                            </label>
-                                            <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-box text-muted"></i></span>
-                                                <input type="text" class="form-control fw-semibold" id="field_description" name="description" placeholder="e.g. WATER PROOF AND WIRE" oninput="updateVatReportPreview()">
-                                            </div>
-                                        </div>
-
-                                        {{-- 11. Expense Category --}}
-                                        <div class="col-md-3">
-                                            <label class="form-label small fw-bold text-dark mb-1">Expense Category *</label>
-                                            <select class="form-select form-select-sm" id="field_category" name="category" required>
-                                                @foreach($categories as $key => $lbl)
-                                                    <option value="{{ $key }}" {{ $key == 'material' ? 'selected' : '' }}>{{ $lbl }}</option>
-                                                @endforeach
-                                            </select>
-                                        </div>
-
-                                        {{-- 12. Link to Project --}}
-                                        <div class="col-md-3">
-                                            <label class="form-label small fw-bold text-dark mb-1">Link to Project</label>
-                                            <select class="form-select form-select-sm" id="field_project_id" name="project_id">
-                                                <option value="">— Head Office / General —</option>
-                                                @foreach($projects as $p)
-                                                    <option value="{{ $p->id }}">{{ $p->name }}</option>
-                                                @endforeach
-                                            </select>
-                                        </div>
-
-                                        {{-- FINANCIALS BOX --}}
-                                        <div class="col-12">
-                                            <div class="p-3 rounded-3 border bg-light">
-                                                <div class="row g-2 align-items-center">
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold text-dark mb-1">
-                                                            Taxable Subtotal (ETB) *
-                                                            <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">VAT Col M</span>
-                                                        </label>
-                                                        <input type="number" step="0.01" class="form-control form-control-sm font-monospace text-end fw-semibold" id="field_subtotal" name="subtotal" placeholder="0.00" oninput="calculateFromSubtotal(); updateVatReportPreview();">
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold text-dark mb-1">
-                                                            VAT Amount 15% (ETB) *
-                                                            <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">VAT Col N</span>
-                                                        </label>
-                                                        <input type="number" step="0.01" class="form-control form-control-sm font-monospace text-end text-muted" id="field_vat" name="vat_amount" placeholder="0.00" oninput="calculateFromVat(); updateVatReportPreview();">
-                                                    </div>
-                                                    <div class="col-md-4">
-                                                        <label class="form-label small fw-bold text-success mb-1">
-                                                            VALUE AFTER VAT (ETB) *
-                                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1" style="font-size:0.65rem;">VAT Col O</span>
-                                                        </label>
-                                                        <input type="number" step="0.01" class="form-control form-control-sm font-monospace text-end fw-bold fs-6 text-success border-success" id="field_total" name="total_amount" placeholder="0.00" required oninput="calculateFromTotal(); updateVatReportPreview();">
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {{-- LIVE ERCA VAT DECLARATION PREVIEW CARD --}}
-                                        <div class="col-12">
-                                            <div class="card border border-success border-opacity-50 rounded-3 bg-white shadow-xs overflow-hidden">
-                                                <div class="card-header bg-success bg-opacity-10 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                                    <div class="d-flex align-items-center gap-2">
-                                                        <i class="fa-solid fa-file-excel text-success"></i>
-                                                        <strong class="text-success small">ERCA VAT Declaration Row (Line 100 - Matches Excel)</strong>
-                                                        <span class="badge bg-white text-success border border-success border-opacity-25 small" style="font-size:0.65rem;">VAT REPORT SEMPTMBER 2026.xlsx</span>
-                                                    </div>
-                                                    <div class="d-flex gap-2">
-                                                        <button type="button" class="btn btn-xs btn-outline-success btn-sm py-1 px-2.5 fw-bold shadow-xs" id="btn-copy-vat-row" title="Copy tab-separated row to paste directly into your Excel report">
-                                                            <i class="fa-solid fa-copy me-1"></i>Copy Row (Ctrl+V into Excel)
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div class="card-body p-2">
-                                                    <div class="table-responsive">
-                                                        <table class="table table-bordered table-sm mb-0 small text-nowrap align-middle" style="font-size:0.75rem;">
-                                                            <thead class="table-light text-center">
-                                                                <tr class="text-secondary" style="font-size:0.68rem;">
-                                                                    <th>Col A<br><span class="text-muted">Cat</span></th>
-                                                                    <th>Col B<br><span class="text-muted">Cal</span></th>
-                                                                    <th>Col C<br><span class="text-muted">Type</span></th>
-                                                                    <th class="text-primary fw-bold">Col D<br><span>Supplier TIN</span></th>
-                                                                    <th class="fw-bold">Col E<br><span>Seller Name</span></th>
-                                                                    <th>Col F<br><span>Date (DD/MM/YYYY)</span></th>
-                                                                    <th>Col G<br><span>MRC No</span></th>
-                                                                    <th>Col H<br><span>FS No</span></th>
-                                                                    <th>Col I<br><span>Item / Description</span></th>
-                                                                    <th>Col J<br><span>UOM</span></th>
-                                                                    <th>Col K<br><span>Qty</span></th>
-                                                                    <th>Col L<br><span>Unit Price</span></th>
-                                                                    <th class="text-end fw-bold">Col M<br><span>Total Value</span></th>
-                                                                    <th class="text-end text-muted">Col N<br><span>VAT (15%)</span></th>
-                                                                    <th class="text-end fw-bold text-success">Col O<br><span>Value After VAT</span></th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody class="text-center font-monospace" id="vat-report-preview-row">
-                                                                <tr>
-                                                                    <td><span class="badge bg-light text-dark border">G</span></td>
-                                                                    <td><span class="badge bg-light text-dark border">G</span></td>
-                                                                    <td><span class="badge bg-light text-dark border">3</span></td>
-                                                                    <td class="fw-bold text-primary" id="v_cell_tin">—</td>
-                                                                    <td class="text-start fw-semibold text-dark" id="v_cell_vendor">—</td>
-                                                                    <td id="v_cell_date">—</td>
-                                                                    <td id="v_cell_mrc">—</td>
-                                                                    <td class="fw-bold text-dark" id="v_cell_fs">—</td>
-                                                                    <td class="text-start fw-semibold text-primary" id="v_cell_desc" title="Click to edit bought materials" style="cursor:pointer; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" onclick="const d = document.getElementById('field_description'); if(d) { d.focus(); d.select(); d.classList.add('border-primary'); setTimeout(() => d.classList.remove('border-primary'), 1200); }">—</td>
-                                                                    <td id="v_cell_uom">9</td>
-                                                                    <td id="v_cell_qty">1</td>
-                                                                    <td class="text-end font-monospace" id="v_cell_uprice">0.00</td>
-                                                                    <td class="text-end font-monospace fw-bold" id="v_cell_subtotal">0.00</td>
-                                                                    <td class="text-end font-monospace text-muted" id="v_cell_vat">0.00</td>
-                                                                    <td class="text-end font-monospace fw-bold text-success" id="v_cell_total">0.00</td>
-                                                                </tr>
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                    <div class="d-flex justify-content-between align-items-center mt-2 px-1">
-                                                        <small class="text-muted" style="font-size:0.7rem;">
-                                                            <i class="fa-solid fa-circle-info text-success me-1"></i>All 15 columns match your Ethiopian VAT declaration. Click <strong>"Copy Row"</strong> and paste with <strong>Ctrl+V</strong> directly into Excel!
-                                                        </small>
-                                                        <div class="d-flex gap-2 align-items-center">
-                                                            <label class="small text-muted mb-0" style="font-size:0.7rem;">VAT Cat:</label>
-                                                            <select class="form-select form-select-sm py-0 px-2 small text-muted" id="field_vat_cat" style="font-size:0.7rem; width:auto;" onchange="updateVatReportPreview()">
-                                                                <option value="G" selected>G (Goods)</option>
-                                                                <option value="S">S (Services)</option>
-                                                            </select>
-                                                            <label class="small text-muted mb-0 ms-1" style="font-size:0.7rem;">UOM:</label>
-                                                            <select class="form-select form-select-sm py-0 px-2 small text-muted" id="field_uom" style="font-size:0.7rem; width:auto;" onchange="updateVatReportPreview()">
-                                                                <option value="9" selected>9 (OTHER)</option>
-                                                                <option value="7">7 (PCS)</option>
-                                                                <option value="2">2 (KG)</option>
-                                                                <option value="5">5 (LIT)</option>
-                                                                <option value="10">10 (PC)</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {{-- Line Items Preview --}}
-                                        <div class="col-12" id="line-items-section" style="display:none;">
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <label class="form-label small fw-bold text-dark mb-0">
-                                                    <i class="fa-solid fa-basket-shopping me-1 text-primary"></i>Detected Line Items:
-                                                </label>
-                                                <span class="badge bg-light text-dark border" id="line-items-count">0 items</span>
-                                            </div>
-                                            <div class="table-responsive border rounded bg-white">
-                                                <table class="table table-sm table-striped mb-0 small" id="line-items-table">
-                                                    <thead class="table-light">
-                                                        <tr>
-                                                            <th>Item Description</th>
-                                                            <th class="text-end" style="width:70px;">Qty</th>
-                                                            <th class="text-end" style="width:110px;">Unit Price</th>
-                                                            <th class="text-end" style="width:120px;">Total (ETB)</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody id="line-items-body"></tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-
-                                        {{-- Submit / Save Action --}}
-                                        <div class="col-12 pt-2">
-                                            <button type="submit" class="btn btn-success w-100 py-2 fw-bold shadow-sm" id="btn-save-receipt" disabled>
-                                                <i class="fa-solid fa-circle-check me-1"></i>Save Scanned Receipt Record into ERP
-                                            </button>
-                                            <div class="text-muted text-center small mt-1" style="font-size:0.75rem;">
-                                                <i class="fa-solid fa-lock me-1"></i>Saved records are archived in the ERP Receipts Catalog and can be referenced in finance vouchers.
-                                            </div>
-                                        </div>
-
-                                    </div>
-                                </form>
-                            </div>
-
-                            {{-- Tab 2: Raw OCR Recognized Text --}}
-                            <div class="tab-pane fade" id="tab-rawtext">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <span class="small text-muted">Complete text stream detected by the OCR engine:</span>
-                                    <button type="button" class="btn btn-xs btn-outline-secondary btn-sm" id="btn-copy-raw">
-                                        <i class="fa-solid fa-copy me-1"></i>Copy Text
-                                    </button>
-                                </div>
-                                <textarea id="raw-ocr-textarea" class="form-control font-monospace small bg-light" rows="14" readonly placeholder="Raw text output will appear here once scanning begins..."></textarea>
-                            </div>
-
-                        </div>
-
-                    </div>
-                </div>
-
             </div>
+
+            {{-- Overall Batch Progress Bar --}}
+            <div id="batch-progress-container" class="mt-3 d-none">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <small class="fw-bold text-dark" id="batch-progress-label">
+                        <i class="fa-solid fa-spinner fa-spin me-1 text-primary"></i>Processing Batch... (<span id="batch-count-done">0</span>/<span id="batch-count-total">0</span> completed)
+                    </small>
+                    <small class="fw-bold text-primary font-monospace" id="batch-progress-pct">0%</small>
+                </div>
+                <div class="progress" style="height: 10px;">
+                    <div id="batch-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%"></div>
+                </div>
+            </div>
+
+            {{-- Queue File Cards Container --}}
+            <div id="queue-container" class="row g-2 mt-2 d-none"></div>
         </div>
     </div>
 
-    {{-- Recent Scanned Receipts Table --}}
-    <div class="card border-0 shadow-sm rounded-3" id="recent-scans">
-        <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <h5 class="mb-0 fw-bold text-dark">
-                <i class="fa-solid fa-clock-rotate-left me-2 text-primary"></i>Archive of Scanned Receipts
-            </h5>
-            <div class="d-flex gap-2">
-                <form method="GET" action="{{ route('admin.ocr.index') }}" class="d-flex gap-2">
-                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Search merchant, TIN..." value="{{ request('search') }}">
-                    <button type="submit" class="btn btn-sm btn-primary"><i class="fa-solid fa-magnifying-glass"></i></button>
-                    @if(request()->hasAny(['search', 'category', 'project_id']))
-                        <a href="{{ route('admin.ocr.index') }}" class="btn btn-sm btn-light border"><i class="fa-solid fa-times"></i></a>
-                    @endif
-                </form>
+    {{-- MAIN TABLE CARD (COLUMNS A TO O) --}}
+    <div class="card border-0 shadow-sm rounded-3">
+        <div class="card-header bg-white border-bottom py-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <h5 class="mb-0 fw-bold text-dark">
+                        <i class="fa-solid fa-table me-2 text-primary"></i>ERCA VAT Declaration Table (Columns A through O)
+                    </h5>
+                    <span class="badge bg-secondary text-white small" id="table-row-count">{{ $items->total() }} rows</span>
+                </div>
+
+                {{-- Toolbar Filters --}}
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    {{-- Needs Review Toggle Filter --}}
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input cursor-pointer" type="checkbox" id="filter-needs-review" {{ request()->boolean('needs_review') ? 'checked' : '' }} onchange="applyFilters()">
+                        <label class="form-check-label small fw-bold text-danger cursor-pointer" for="filter-needs-review">
+                            <i class="fa-solid fa-filter me-1"></i>Needs Review ({{ $stats['flagged_count'] }})
+                        </label>
+                    </div>
+
+                    {{-- Search Form --}}
+                    <form method="GET" action="{{ route('admin.ocr.index') }}" id="filter-form" class="d-flex align-items-center gap-2 flex-wrap">
+                        @if(request()->boolean('needs_review'))
+                            <input type="hidden" name="needs_review" value="1">
+                        @endif
+                        <input type="text" name="search" class="form-control form-control-sm" placeholder="Search FS#, TIN, Vendor..." value="{{ request('search') }}" style="width: 190px;">
+                        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ request('date_from') }}" title="Date From" style="width: 130px;">
+                        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ request('date_to') }}" title="Date To" style="width: 130px;">
+                        <button type="submit" class="btn btn-sm btn-primary" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
+                        @if(request()->hasAny(['search', 'needs_review', 'date_from', 'date_to', 'category', 'project_id']))
+                            <a href="{{ route('admin.ocr.index') }}" class="btn btn-sm btn-light border" title="Clear Filters"><i class="fa-solid fa-times"></i></a>
+                        @endif
+                    </form>
+                </div>
             </div>
         </div>
 
         <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light small">
-                        <tr>
-                            <th class="ps-3">Receipt #</th>
-                            <th>Receipt Date</th>
-                            <th>Merchant / Vendor</th>
-                            <th>TIN Number</th>
-                            <th>Category</th>
-                            <th>Project</th>
-                            <th class="text-end">Subtotal</th>
-                            <th class="text-end">VAT (15%)</th>
-                            <th class="text-end">Grand Total</th>
-                            <th class="text-center">Receipt File</th>
-                            <th class="text-end pe-3">Actions</th>
+            <div class="table-responsive" style="max-height: 720px; overflow-y: auto;">
+                <table class="table table-hover table-bordered table-sm align-middle mb-0 text-nowrap" id="receipt-ocr-table" style="font-size: 0.8rem;">
+                    <thead class="table-light sticky-top shadow-xs" style="z-index: 2;">
+                        <tr class="text-center align-middle" style="font-size: 0.72rem;">
+                            <th style="width: 36px;">
+                                <input type="checkbox" class="form-check-input" id="select-all-checkbox" onchange="toggleSelectAll(this)" title="Select All">
+                            </th>
+                            <th style="width: 70px;">Status</th>
+                            <th>Col A<br><span class="text-muted">Cat</span></th>
+                            <th>Col B<br><span class="text-muted">Cal</span></th>
+                            <th>Col C<br><span class="text-muted">Type</span></th>
+                            <th class="text-primary fw-bold">Col D<br><span>Supplier TIN</span></th>
+                            <th class="fw-bold">Col E<br><span>Seller Name</span></th>
+                            <th>Col F<br><span>Date (DD/MM/YYYY)</span></th>
+                            <th>Col G<br><span>MRC No</span></th>
+                            <th class="fw-bold text-dark">Col H<br><span>FS No</span></th>
+                            <th class="fw-bold text-primary">Col I<br><span>Item / Description</span></th>
+                            <th>Col J<br><span>UOM</span></th>
+                            <th class="text-end">Col K<br><span>Qty</span></th>
+                            <th class="text-end">Col L<br><span>Unit Price</span></th>
+                            <th class="text-end fw-bold">Col M<br><span>Total Value</span></th>
+                            <th class="text-end text-muted">Col N<br><span>VAT (15%)</span></th>
+                            <th class="text-end fw-bold text-success">Col O<br><span>Value After VAT</span></th>
+                            <th>Engine</th>
+                            <th style="min-width: 130px;">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        @forelse($receipts as $r)
-                        <tr>
-                            <td class="ps-3 font-monospace fw-bold text-primary">
-                                {{ $r->receipt_number }}
-                            </td>
-                            <td class="small">{{ $r->receipt_date ? $r->receipt_date->format('M d, Y') : '—' }}</td>
-                            <td>
-                                <strong class="text-dark">{{ $r->vendor_name ?: 'General Merchant' }}</strong>
-                                @if($r->description)
-                                    <div class="text-muted small" style="font-size:0.75rem;">{{ Str::limit($r->description, 35) }}</div>
-                                @endif
-                            </td>
-                            <td class="font-monospace small text-muted">{{ $r->vendor_tin ?: '—' }}</td>
-                            <td>
-                                <span class="badge bg-light text-dark border">{{ ucfirst($r->category) }}</span>
-                            </td>
-                            <td class="small text-muted">{{ $r->project?->name ?? 'General / Head Office' }}</td>
-                            <td class="text-end font-monospace small">{{ number_format($r->subtotal, 2) }}</td>
-                            <td class="text-end font-monospace small text-muted">{{ number_format($r->vat_amount, 2) }}</td>
-                            <td class="text-end font-monospace fw-bold text-success">{{ number_format($r->total_amount, 2) }} ETB</td>
-                            <td class="text-center">
-                                @if($r->file_path)
-                                    <a href="{{ asset('storage/' . $r->file_path) }}" target="_blank" class="btn btn-xs btn-outline-primary btn-sm py-0 px-2" title="Inspect original file">
-                                        <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>View
-                                    </a>
-                                @else
-                                    <span class="text-muted small">—</span>
-                                @endif
-                            </td>
-                            <td class="text-end pe-3">
-                                <div class="d-flex justify-content-end align-items-center gap-1">
-                                    <button type="button" class="btn btn-xs btn-outline-info btn-sm py-1 px-2" 
-                                            onclick='viewReceiptModal(@json($r), "{{ asset("storage/" . $r->file_path) }}")'
-                                            title="View Extracted Details">
-                                        <i class="fa-solid fa-eye me-1"></i>Details
-                                    </button>
-                                    <form action="{{ route('admin.ocr.destroy', $r->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete receipt {{ $r->receipt_number }}?')">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" class="btn btn-xs btn-outline-danger btn-sm py-1 px-2" title="Delete Receipt">
+                    <tbody id="table-body">
+                        @forelse($items as $item)
+                            @php
+                                $r = $item->receipt;
+                                $errors = $item->validateRow();
+                                $isFlagged = !empty($errors) || ($r && $r->needs_review);
+                                $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : '';
+                            @endphp
+                            <tr id="row-{{ $item->id }}" data-id="{{ $item->id }}" data-receipt-id="{{ $r ? $r->id : '' }}" class="{{ $isFlagged ? 'table-warning bg-opacity-25' : '' }}">
+                                {{-- Checkbox --}}
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input row-checkbox" value="{{ $item->id }}" onchange="updateSelectedCount()">
+                                </td>
+
+                                {{-- Status / Validation --}}
+                                <td class="text-center">
+                                    @if($isFlagged)
+                                        <span class="badge bg-warning text-dark border border-warning" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ implode('; ', $errors) }}">
+                                            <i class="fa-solid fa-triangle-exclamation me-1"></i>Review
+                                        </span>
+                                    @else
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="All arithmetic checks verified">
+                                            <i class="fa-solid fa-check me-1"></i>Valid
+                                        </span>
+                                    @endif
+                                </td>
+
+                                {{-- Col A: Cat --}}
+                                <td class="text-center cell-display" data-field="vat_category">
+                                    <span class="badge bg-light text-dark border">{{ $item->vat_category ?: 'G' }}</span>
+                                </td>
+
+                                {{-- Col B: Cal --}}
+                                <td class="text-center cell-display" data-field="calendar_type">
+                                    <span class="badge bg-light text-dark border">{{ $item->calendar_type ?: 'G' }}</span>
+                                </td>
+
+                                {{-- Col C: Type --}}
+                                <td class="text-center cell-display" data-field="purchase_type">
+                                    <span class="badge bg-light text-dark border">{{ $item->purchase_type ?: 3 }}</span>
+                                </td>
+
+                                {{-- Col D: Supplier TIN --}}
+                                <td class="font-monospace fw-bold text-primary cell-display" data-field="supplier_tin">
+                                    {{ $r ? $r->vendor_tin : '' }}
+                                </td>
+
+                                {{-- Col E: Seller Name --}}
+                                <td class="fw-semibold text-dark cell-display" data-field="seller_name" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis;">
+                                    {{ $r ? $r->vendor_name : 'General Merchant' }}
+                                </td>
+
+                                {{-- Col F: Date (DD/MM/YYYY) --}}
+                                <td class="text-center font-monospace cell-display" data-field="receipt_date">
+                                    {{ $dateFormatted }}
+                                </td>
+
+                                {{-- Col G: MRC No --}}
+                                <td class="text-center font-monospace cell-display" data-field="mrc_no">
+                                    {{ $r ? $r->mrc_no : '' }}
+                                </td>
+
+                                {{-- Col H: FS No --}}
+                                <td class="text-center font-monospace fw-bold text-dark cell-display" data-field="fs_no">
+                                    {{ $r ? $r->fs_no : '' }}
+                                </td>
+
+                                {{-- Col I: Item / Description --}}
+                                <td class="fw-semibold text-primary cell-display" data-field="item_description" style="max-width: 260px; overflow: hidden; text-overflow: ellipsis;" title="{{ $item->item_description }}">
+                                    {{ $item->item_description }}
+                                </td>
+
+                                {{-- Col J: UOM --}}
+                                <td class="text-center cell-display" data-field="uom">
+                                    {{ $item->uom ?: '9' }}
+                                </td>
+
+                                {{-- Col K: Qty --}}
+                                <td class="text-end font-monospace cell-display" data-field="qty">
+                                    {{ number_format((float)$item->qty, 2) }}
+                                </td>
+
+                                {{-- Col L: Unit Price --}}
+                                <td class="text-end font-monospace cell-display" data-field="unit_price">
+                                    {{ number_format((float)$item->unit_price, 2) }}
+                                </td>
+
+                                {{-- Col M: Total Value --}}
+                                <td class="text-end font-monospace fw-bold cell-display" data-field="total_value">
+                                    {{ number_format((float)$item->total_value, 2) }}
+                                </td>
+
+                                {{-- Col N: VAT (15%) --}}
+                                <td class="text-end font-monospace text-muted cell-display" data-field="vat_amount">
+                                    {{ number_format((float)$item->vat_amount, 2) }}
+                                </td>
+
+                                {{-- Col O: Value After VAT --}}
+                                <td class="text-end font-monospace fw-bold text-success cell-display" data-field="value_after_vat">
+                                    {{ number_format((float)$item->value_after_vat, 2) }}
+                                </td>
+
+                                {{-- Engine Badge --}}
+                                <td class="text-center">
+                                    @if($r && $r->ocr_engine === 'ocr_space')
+                                        <span class="badge bg-secondary text-white small" title="Extracted via OCR.Space Fallback Engine">
+                                            OCR.Space
+                                        </span>
+                                    @else
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small" title="Extracted via Google Gemini Multimodal AI">
+                                            Gemini AI
+                                        </span>
+                                    @endif
+                                </td>
+
+                                {{-- Actions --}}
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        {{-- View Scanned Receipt Side-by-Side --}}
+                                        @if($r && $r->file_path)
+                                            <button type="button" class="btn btn-outline-primary btn-xs py-1 px-2" title="Inspect original scanned receipt side-by-side" onclick="openSideBySide({{ $item->id }})">
+                                                <i class="fa-solid fa-eye"></i>
+                                            </button>
+                                        @endif
+
+                                        {{-- Inline Edit Button --}}
+                                        <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2 btn-edit-row" onclick="startEditRow({{ $item->id }})" title="Edit Row Inline">
+                                            <i class="fa-solid fa-pen-to-square"></i>
+                                        </button>
+
+                                        {{-- Delete Button --}}
+                                        <button type="button" class="btn btn-outline-danger btn-xs py-1 px-2" onclick="confirmDeleteRow({{ $item->id }})" title="Delete Row">
                                             <i class="fa-solid fa-trash"></i>
                                         </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
+                                    </div>
+                                </td>
+                            </tr>
                         @empty
-                        <tr>
-                            <td colspan="11" class="text-center py-5 text-muted">
-                                <div class="rounded-circle bg-light d-inline-flex p-3 mb-2">
-                                    <i class="fa-solid fa-receipt fa-2x text-muted opacity-50"></i>
-                                </div>
-                                <h6 class="fw-bold text-dark">No scanned receipts found yet</h6>
-                                <p class="small text-muted mb-0">Upload or snap a receipt above to try live OCR recognition!</p>
-                            </td>
-                        </tr>
+                            <tr id="no-rows-msg">
+                                <td colspan="19" class="text-center py-5 text-muted">
+                                    <i class="fa-solid fa-inbox fa-3x mb-3 text-secondary opacity-50"></i>
+                                    <h6 class="fw-bold text-dark">No receipts scanned yet</h6>
+                                    <p class="small mb-0">Drag and drop receipt images or PDFs into the upload box above to begin.</p>
+                                </td>
+                            </tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
-            @if($receipts->hasPages())
-            <div class="card-footer bg-white border-0 py-3">
-                {{ $receipts->links() }}
-            </div>
+
+            {{-- Pagination --}}
+            @if($items->hasPages())
+                <div class="p-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <small class="text-muted">Showing {{ $items->firstItem() }} to {{ $items->lastItem() }} of {{ $items->total() }} rows</small>
+                    {{ $items->links() }}
+                </div>
             @endif
         </div>
     </div>
 
 </div>
 
-{{-- Receipt Inspection Modal --}}
-<div class="modal fade" id="receiptDetailsModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+{{-- ────────────────────────────────────────────────────────────────────────── --}}
+{{-- MODAL 1: SIDE-BY-SIDE VERIFICATION MODAL --}}
+{{-- ────────────────────────────────────────────────────────────────────────── --}}
+<div class="modal fade" id="sideBySideModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="max-width: 95vw;">
         <div class="modal-content border-0 shadow">
-            <div class="modal-header bg-light py-3">
-                <h6 class="modal-title fw-bold text-dark" id="modalReceiptTitle">Receipt Details</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-header bg-dark text-white py-2 px-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-columns text-success"></i>
+                    <h6 class="modal-title fw-bold mb-0">Side-by-Side Scanned Receipt Verification</h6>
+                    <span class="badge bg-secondary" id="sbs-fs-badge">FS: —</span>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body p-4" id="modalReceiptBody"></div>
-            <div class="modal-footer bg-light py-2">
-                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            <div class="modal-body p-0">
+                <div class="row g-0 h-100" style="min-height: 580px;">
+                    {{-- Left Pane: Scanned Receipt Image / PDF with Zoom Controls --}}
+                    <div class="col-lg-6 border-end bg-light d-flex flex-column">
+                        <div class="p-2 border-bottom bg-white d-flex justify-content-between align-items-center">
+                            <span class="small fw-bold text-muted"><i class="fa-solid fa-image me-1"></i>Original Document</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-light border py-1" onclick="zoomImage(1.2)" title="Zoom In"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+                                <button type="button" class="btn btn-light border py-1" onclick="zoomImage(0.8)" title="Zoom Out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+                                <button type="button" class="btn btn-light border py-1" onclick="rotateImage()" title="Rotate 90°"><i class="fa-solid fa-rotate-right"></i></button>
+                                <button type="button" class="btn btn-light border py-1" onclick="resetZoom()" title="Reset"><i class="fa-solid fa-arrows-rotate"></i></button>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 p-3 d-flex justify-content-center align-items-center position-relative overflow-auto" style="max-height: 600px; background: #333;">
+                            <img id="sbs-preview-img" src="" alt="Scanned Receipt" class="img-fluid rounded shadow transition-all" style="max-height: 540px; transform-origin: center center; transform: scale(1) rotate(0deg);">
+                            <iframe id="sbs-preview-pdf" src="" class="w-100 h-100 d-none" style="min-height: 520px; border: none;"></iframe>
+                        </div>
+                    </div>
+
+                    {{-- Right Pane: Extracted Details & Math Verification Checklist --}}
+                    <div class="col-lg-6 p-3 p-md-4 overflow-auto" style="max-height: 660px;">
+                        <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                            <i class="fa-solid fa-clipboard-check text-success me-1"></i>Extracted Data &amp; Verification Breakdown
+                        </h6>
+
+                        {{-- Validation Checklist Alert --}}
+                        <div id="sbs-validation-box" class="p-3 rounded-3 mb-3 border bg-light"></div>
+
+                        {{-- Fields Breakdown --}}
+                        <div class="row g-2 small">
+                            <div class="col-6">
+                                <label class="text-muted fw-bold">Supplier TIN (Col D):</label>
+                                <div class="font-monospace fw-bold text-primary fs-6" id="sbs-field-tin">—</div>
+                            </div>
+                            <div class="col-6">
+                                <label class="text-muted fw-bold">Seller Name (Col E):</label>
+                                <div class="fw-bold text-dark" id="sbs-field-seller">—</div>
+                            </div>
+                            <div class="col-4">
+                                <label class="text-muted fw-bold">Date (Col F):</label>
+                                <div class="font-monospace" id="sbs-field-date">—</div>
+                            </div>
+                            <div class="col-4">
+                                <label class="text-muted fw-bold">MRC No (Col G):</label>
+                                <div class="font-monospace" id="sbs-field-mrc">—</div>
+                            </div>
+                            <div class="col-4">
+                                <label class="text-muted fw-bold">FS No (Col H):</label>
+                                <div class="font-monospace fw-bold text-dark" id="sbs-field-fs">—</div>
+                            </div>
+                            <div class="col-12 mt-2">
+                                <label class="text-muted fw-bold">Item Description (Col I):</label>
+                                <div class="p-2 border rounded bg-white fw-semibold text-primary" id="sbs-field-desc">—</div>
+                            </div>
+                            <div class="col-3">
+                                <label class="text-muted fw-bold">Qty (Col K):</label>
+                                <div class="font-monospace fw-bold" id="sbs-field-qty">—</div>
+                            </div>
+                            <div class="col-3">
+                                <label class="text-muted fw-bold">Unit Price (Col L):</label>
+                                <div class="font-monospace" id="sbs-field-uprice">—</div>
+                            </div>
+                            <div class="col-3">
+                                <label class="text-muted fw-bold">Total Value (Col M):</label>
+                                <div class="font-monospace fw-bold" id="sbs-field-subtotal">—</div>
+                            </div>
+                            <div class="col-3">
+                                <label class="text-muted fw-bold">VAT 15% (Col N):</label>
+                                <div class="font-monospace text-muted" id="sbs-field-vat">—</div>
+                            </div>
+                            <div class="col-12 mt-2">
+                                <div class="p-2 rounded bg-success bg-opacity-10 text-success d-flex justify-content-between align-items-center">
+                                    <strong class="small">Value After VAT (Col O):</strong>
+                                    <span class="fs-5 fw-bold font-monospace" id="sbs-field-total">—</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Raw Text Collapsible --}}
+                        <div class="mt-3">
+                            <button class="btn btn-sm btn-outline-secondary w-100 py-1" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRawText">
+                                <i class="fa-solid fa-code me-1"></i>View Raw OCR Text Stream
+                            </button>
+                            <div class="collapse mt-2" id="collapseRawText">
+                                <textarea class="form-control font-monospace small bg-light" rows="6" readonly id="sbs-raw-text"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2 bg-light">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
 
+{{-- ────────────────────────────────────────────────────────────────────────── --}}
+{{-- MODAL 2: AI KEY & OCR SETTINGS MODAL --}}
+{{-- ────────────────────────────────────────────────────────────────────────── --}}
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white py-2.5 px-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-key text-warning"></i>
+                    <h6 class="modal-title fw-bold mb-0">OCR Engine Keys &amp; Configuration</h6>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="settings-form" onsubmit="saveSettings(event)">
+                <div class="modal-body p-3">
+                    {{-- Gemini Primary Option --}}
+                    <div class="border rounded-3 p-3 mb-3 bg-light">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="form-label fw-bold text-dark mb-0 small">
+                                <i class="fa-solid fa-gem text-primary me-1"></i>Option A (Primary): Google Gemini Vision AI Key
+                            </label>
+                            <span class="badge bg-primary">High Accuracy</span>
+                        </div>
+                        <p class="text-muted small mb-2" style="font-size:0.75rem;">
+                            Obtain from <a href="https://aistudio.google.com" target="_blank" class="fw-bold text-decoration-none">aistudio.google.com</a> ("Get API key"). Multimodal AI extracts all receipts and splits line items with 100% precision.
+                        </p>
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text bg-white"><i class="fa-solid fa-key text-muted"></i></span>
+                            <input type="password" class="form-control font-monospace" id="input_gemini_key" placeholder="Paste Gemini API Key (e.g. AIzaSy...)" value="{{ $geminiKey }}">
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('input_gemini_key')">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted" style="font-size:0.7rem;">Currently: <code>{{ $maskedGemini ?: 'Not configured' }}</code></small>
+                            <button type="button" class="btn btn-xs btn-outline-primary btn-sm py-1 px-2 fw-semibold" onclick="testApiKey('gemini')">
+                                <i class="fa-solid fa-vial me-1"></i>Test Gemini Key
+                            </button>
+                        </div>
+                        <div id="gemini-test-result" class="mt-2 small d-none"></div>
+                    </div>
+
+                    {{-- OCR.Space Fallback Option --}}
+                    <div class="border rounded-3 p-3 bg-light">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="form-label fw-bold text-dark mb-0 small">
+                                <i class="fa-solid fa-camera text-secondary me-1"></i>Option B (Fallback): OCR.Space API Key
+                            </label>
+                            <span class="badge bg-secondary">Automatic Fallback</span>
+                        </div>
+                        <p class="text-muted small mb-2" style="font-size:0.75rem;">
+                            Used automatically if Gemini is offline, rate-limited, or key is missing. Free default key is provided, or get your dedicated key at <a href="https://ocr.space/ocrapi" target="_blank" class="fw-bold text-decoration-none">ocr.space/ocrapi</a>.
+                        </p>
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text bg-white"><i class="fa-solid fa-key text-muted"></i></span>
+                            <input type="password" class="form-control font-monospace" id="input_ocr_space_key" placeholder="OCR.Space Key (default: helloworld)" value="{{ $ocrSpaceKey }}">
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('input_ocr_space_key')">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted" style="font-size:0.7rem;">Currently: <code>{{ $maskedOcrSpace ?: 'helloworld (free tier)' }}</code></small>
+                            <button type="button" class="btn btn-xs btn-outline-secondary btn-sm py-1 px-2 fw-semibold" onclick="testApiKey('ocr_space')">
+                                <i class="fa-solid fa-vial me-1"></i>Test OCR.Space Key
+                            </button>
+                        </div>
+                        <div id="ocrspace-test-result" class="mt-2 small d-none"></div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2 bg-light d-flex justify-content-between">
+                    <small class="text-muted" style="font-size:0.75rem;"><i class="fa-solid fa-shield-halved me-1"></i>Keys stored encrypted on server.</small>
+                    <div>
+                        <button type="button" class="btn btn-light border btn-sm" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm fw-bold shadow-xs">
+                            <i class="fa-solid fa-save me-1"></i>Save Keys
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@endsection
+
 @push('scripts')
-{{-- Embed Tesseract.js directly from CDN for reliable in-browser live OCR --}}
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
 <script>
-let currentImageRotation = 0;
-let currentImageDataUrl = null;
-let currentImageFile = null;
+/**
+ * Global CSRF and endpoints
+ */
+const CSRF_TOKEN = '{{ csrf_token() }}';
+const PROCESS_FILE_URL = '{{ route("admin.ocr.process-file") }}';
+const SAVE_ITEM_URL = '{{ route("admin.ocr.save-item") }}';
+const SAVE_ALL_URL = '{{ route("admin.ocr.save-all") }}';
+const REPLACE_DUP_URL = '{{ route("admin.ocr.replace-duplicate") }}';
+const DESTROY_ITEM_BASE = '{{ url("admin/receipt-ocr/item") }}';
+const SHOW_RECEIPT_BASE = '{{ url("admin/receipt-ocr") }}';
+const SAVE_SETTINGS_URL = '{{ route("admin.ocr.save-settings") }}';
+const TEST_KEY_URL = '{{ route("admin.ocr.test-key") }}';
+const EXPORT_EXCEL_URL = '{{ route("admin.ocr.export-excel") }}';
+const EXPORT_CSV_URL = '{{ route("admin.ocr.export-csv") }}';
 
-// File input handlers
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const cameraInput = document.getElementById('camera-input');
-const previewArea = document.getElementById('preview-area');
-const dropPrompt = document.getElementById('drop-prompt');
-const previewImg = document.getElementById('receipt-preview-img');
-const pdfPreviewBox = document.getElementById('pdf-preview-box');
+// State management
+let uploadQueue = [];
+let activeWorkers = 0;
+const MAX_CONCURRENCY = 3;
+let editedRows = new Map(); // id -> editedData
+let currentZoom = 1.0;
+let currentRotation = 0;
 
-fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFileSelected(e.target.files[0]); });
-cameraInput.addEventListener('change', e => { if (e.target.files[0]) handleFileSelected(e.target.files[0]); });
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    setupDragAndDrop();
+    setupCameraInput();
 
-// Drag and drop events
-['dragenter', 'dragover'].forEach(eventName => {
-    dropZone.addEventListener(eventName, e => { e.preventDefault(); dropZone.classList.add('bg-light'); }, false);
-});
-['dragleave', 'drop'].forEach(eventName => {
-    dropZone.addEventListener(eventName, e => { e.preventDefault(); dropZone.classList.remove('bg-light'); }, false);
-});
-dropZone.addEventListener('drop', e => {
-    const dt = e.dataTransfer;
-    if (dt && dt.files && dt.files.length > 0) {
-        handleFileSelected(dt.files[0]);
-    }
-});
-
-// Rotate button
-document.getElementById('btn-rotate-img').addEventListener('click', () => {
-    currentImageRotation = (currentImageRotation + 90) % 360;
-    previewImg.style.transform = `rotate(${currentImageRotation}deg)`;
-});
-
-// Re-process button
-document.getElementById('btn-reprocess-img').addEventListener('click', () => {
-    if (currentImageFile) {
-        runGeminiAiScan(currentImageFile, previewImg);
-    } else if (previewImg.src && !previewImg.classList.contains('d-none')) {
-        runOcrPipeline(previewImg);
-    }
-});
-
-// Clear button
-document.getElementById('btn-clear-img').addEventListener('click', () => {
-    resetScanner();
-});
-
-// Copy Raw Text button
-document.getElementById('btn-copy-raw').addEventListener('click', () => {
-    const txt = document.getElementById('raw-ocr-textarea').value;
-    if (txt) {
-        navigator.clipboard.writeText(txt);
-        alert('OCR text copied to clipboard!');
-    }
-});
-
-function resetScanner() {
-    fileInput.value = '';
-    cameraInput.value = '';
-    previewArea.classList.add('d-none');
-    dropPrompt.classList.remove('d-none');
-    previewImg.src = '';
-    currentImageDataUrl = null;
-    currentImageFile = null;
-    currentImageRotation = 0;
-    previewImg.style.transform = 'none';
-    document.getElementById('ocr-progress-container').classList.add('d-none');
-    document.getElementById('ocr-status-badge').className = 'badge bg-secondary px-3 py-1.5 rounded-pill';
-    document.getElementById('ocr-status-badge').innerHTML = '<i class="fa-solid fa-circle me-1" style="font-size:0.55rem;"></i> Ready to scan';
-    document.getElementById('btn-save-receipt').disabled = true;
-    document.getElementById('save-receipt-form').reset();
-    document.getElementById('raw-ocr-textarea').value = '';
-    document.getElementById('raw-lines-count').textContent = '0 lines';
-    document.getElementById('line-items-section').style.display = 'none';
-    document.getElementById('line-items-body').innerHTML = '';
-    document.getElementById('detected-chips-container').classList.add('d-none');
-    document.getElementById('detected-chips-list').innerHTML = '';
-    updateVatReportPreview();
-}
-
-// Main File Handling & OCR Execution
-function handleFileSelected(file) {
-    currentImageFile = file;
-    const isPdf = file.type.includes('pdf');
-    dropPrompt.classList.add('d-none');
-    previewArea.classList.remove('d-none');
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        currentImageDataUrl = e.target.result;
-        if (isPdf) {
-            previewImg.classList.add('d-none');
-            pdfPreviewBox.classList.remove('d-none');
-            document.getElementById('pdf-filename').textContent = file.name;
-            runGeminiAiScan(file, previewImg);
-        } else {
-            pdfPreviewBox.classList.add('d-none');
-            previewImg.classList.remove('d-none');
-            let scanStarted = false;
-            const startScan = () => {
-                if (!scanStarted) {
-                    scanStarted = true;
-                    runGeminiAiScan(file, previewImg);
-                }
-            };
-            previewImg.onload = startScan;
-            previewImg.src = currentImageDataUrl;
-            if (previewImg.complete && previewImg.naturalWidth > 0) {
-                startScan();
-            }
+    // Prevent accidental navigation if unsaved edits exist
+    window.addEventListener('beforeunload', (e) => {
+        if (editedRows.size > 0) {
+            e.preventDefault();
+            e.returnValue = 'You have unsaved receipt changes. Are you sure you want to leave?';
         }
-    };
-    reader.readAsDataURL(file);
+    });
+});
+
+/**
+ * Drag and Drop & Multiple File Picker Handling
+ */
+function setupDragAndDrop() {
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('bg-white', 'shadow-sm');
+            dropZone.style.borderColor = '#059669';
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('bg-white', 'shadow-sm');
+            dropZone.style.borderColor = '#10b981';
+        }, false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files && files.length > 0) {
+            handleSelectedFiles(files);
+        }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files.length > 0) {
+            handleSelectedFiles(e.target.files);
+            e.target.value = ''; // Reset input so same files can be re-selected if needed
+        }
+    });
 }
 
-// Gemini AI Vision Scanner with automatic Local OCR Fallback
-function runGeminiAiScan(file, imgElement) {
-    const progressContainer = document.getElementById('ocr-progress-container');
-    const progressBar = document.getElementById('ocr-progress-bar');
-    const progressPct = document.getElementById('ocr-progress-pct');
-    const progressLabel = document.getElementById('ocr-progress-label');
+function setupCameraInput() {
+    const cam = document.getElementById('camera-input');
+    if (cam) {
+        cam.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                handleSelectedFiles(e.target.files);
+                e.target.value = '';
+            }
+        });
+    }
+}
 
+/**
+ * Handle Selected Batch of Files
+ */
+function handleSelectedFiles(fileList) {
+    const files = Array.from(fileList);
+    if (!files.length) return;
+
+    // Check duplicate files within this immediate batch
+    const seenNames = new Set();
+    const queueContainer = document.getElementById('queue-container');
+    const progressContainer = document.getElementById('batch-progress-container');
+    queueContainer.classList.remove('d-none');
     progressContainer.classList.remove('d-none');
-    progressBar.style.width = '30%';
-    progressPct.textContent = '30%';
-    progressLabel.innerHTML = '<i class="fa-solid fa-brain fa-spin me-1 text-primary"></i> Uploading &amp; Calling Gemini AI Vision Engine...';
-    updateStatus('Gemini AI Vision Scanning...', 'warning');
+
+    files.forEach(file => {
+        const queueId = 'q_' + Math.random().toString(36).substr(2, 9);
+        const isBatchDuplicate = seenNames.has(file.name + '_' + file.size);
+        seenNames.add(file.name + '_' + file.size);
+
+        const task = {
+            id: queueId,
+            file: file,
+            status: isBatchDuplicate ? 'duplicate_batch' : 'queued',
+            progress: 0,
+            extractedData: null,
+            filePath: null,
+            existingReceiptId: null,
+            errorMessage: isBatchDuplicate ? 'Duplicate file uploaded twice in the same batch.' : null,
+        };
+
+        uploadQueue.push(task);
+        renderQueueCard(task);
+    });
+
+    updateBatchProgress();
+    processNextQueueItem();
+}
+
+/**
+ * Render Queue Card for Each File
+ */
+function renderQueueCard(task) {
+    const container = document.getElementById('queue-container');
+    const card = document.createElement('div');
+    card.className = 'col-md-6 col-lg-4';
+    card.id = 'card-' + task.id;
+
+    const isPdf = task.file.type.includes('pdf') || task.file.name.toLowerCase().endsWith('.pdf');
+    const icon = isPdf ? 'fa-file-pdf text-danger' : 'fa-file-image text-primary';
+    const sizeKb = (task.file.size / 1024).toFixed(1) + ' KB';
+
+    card.innerHTML = `
+        <div class="card border rounded-3 p-2.5 bg-white shadow-xs h-100">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <i class="fa-solid ${icon} fa-xl"></i>
+                <div class="overflow-hidden flex-grow-1" style="line-height:1.2;">
+                    <div class="fw-bold text-dark text-truncate small" title="${task.file.name}">${task.file.name}</div>
+                    <small class="text-muted" style="font-size:0.7rem;">${sizeKb}</small>
+                </div>
+                <div id="badge-${task.id}">
+                    ${task.status === 'duplicate_batch' 
+                        ? '<span class="badge bg-warning text-dark"><i class="fa-solid fa-clone me-1"></i>Batch Dup</span>'
+                        : '<span class="badge bg-secondary"><i class="fa-solid fa-clock me-1"></i>Queued</span>'
+                    }
+                </div>
+            </div>
+            <div class="progress mb-1" style="height: 6px;">
+                <div id="pbar-${task.id}" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 0%"></div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center" style="font-size:0.72rem;">
+                <span class="text-muted text-truncate" id="msg-${task.id}">${task.errorMessage || 'Waiting in parallel worker queue...'}</span>
+                <div id="actions-${task.id}"></div>
+            </div>
+        </div>
+    `;
+    container.appendChild(card);
+}
+
+/**
+ * Concurrency Worker Loop
+ */
+function processNextQueueItem() {
+    if (activeWorkers >= MAX_CONCURRENCY) return;
+
+    const nextTask = uploadQueue.find(t => t.status === 'queued');
+    if (!nextTask) return;
+
+    activeWorkers++;
+    nextTask.status = 'scanning';
+    updateTaskCard(nextTask, 'Scanning receipt with AI...', 40, 'bg-primary', '<span class="badge bg-primary"><i class="fa-solid fa-spinner fa-spin me-1"></i>Scanning</span>');
 
     const formData = new FormData();
-    formData.append('receipt_file', file);
-    formData.append('_token', '{{ csrf_token() }}');
+    formData.append('receipt_file', nextTask.file);
+    formData.append('_token', CSRF_TOKEN);
 
-    const localApiKey = localStorage.getItem('gemini_api_key');
-    if (localApiKey) {
-        formData.append('api_key', localApiKey);
-    }
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', PROCESS_FILE_URL, true);
 
-    fetch('{{ url("/admin/receipt-ocr/ai-scan") }}', {
-        method: 'POST',
-        headers: {
-            'Accept': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-        },
-        body: formData
-    })
-    .then(r => r.json())
-    .then(res => {
-        if (res.success && res.file_path) {
-            document.getElementById('stored_file_path').value = res.file_path;
+    xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 40);
+            updateTaskProgress(nextTask.id, pct);
         }
+    };
 
-        if (res.success && res.ai && res.data) {
-            progressBar.style.width = '100%';
-            progressPct.textContent = '100%';
-            progressLabel.innerHTML = '<i class="fa-solid fa-sparkles me-1 text-success"></i> Gemini AI Vision: Scan Complete!';
-            updateStatus('Gemini AI Vision: 100% Extracted', 'success');
+    xhr.onload = function() {
+        activeWorkers--;
+        if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+                const res = JSON.parse(xhr.responseText);
+                if (res.is_duplicate) {
+                    // Duplicate found in database
+                    nextTask.status = 'duplicate';
+                    nextTask.extractedData = res.extracted;
+                    nextTask.filePath = res.file_path;
+                    nextTask.existingReceiptId = res.existing_receipt.id;
 
-            populateFormFromAi(res.data);
-            document.getElementById('btn-save-receipt').disabled = false;
-        } else {
-            // Local OCR Fallback if AI server is busy or network issue
-            progressBar.style.width = '45%';
-            progressPct.textContent = '45%';
-            progressLabel.innerHTML = '<i class="fa-solid fa-bolt me-1 text-info"></i> Running High-Precision Local Engine...';
-            updateStatus('Local OCR Fallback Engine...', 'info');
+                    const fs = res.extracted.fs_no || 'Unknown';
+                    const dupHtml = `
+                        <div class="d-flex gap-1 mt-1">
+                            <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-1" onclick="dismissQueueCard('${nextTask.id}')" title="Skip (Keep existing)">Skip</button>
+                            <button type="button" class="btn btn-xs btn-warning py-0 px-1 fw-bold" onclick="replaceDuplicateReceipt('${nextTask.id}')" title="Replace existing receipt with this new scan">Replace</button>
+                        </div>
+                    `;
+                    updateTaskCard(nextTask, `Duplicate FS# ${fs} matches existing receipt.`, 100, 'bg-warning', '<span class="badge bg-warning text-dark"><i class="fa-solid fa-copy me-1"></i>Duplicate</span>', dupHtml);
+                } else if (res.success) {
+                    // Success!
+                    nextTask.status = 'done';
+                    updateTaskCard(nextTask, `Done! Extracted ${res.items ? res.items.length : 1} item row(s).`, 100, 'bg-success', '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Done</span>');
 
-            runOcrPipeline(imgElement);
-        }
-    })
-    .catch(err => {
-        console.warn('AI Scan network issue, falling back to local OCR:', err);
-        runOcrPipeline(imgElement);
-    });
-}
-
-function populateFormFromAi(data) {
-    if (data.merchant_name) document.getElementById('field_vendor').value = data.merchant_name;
-    if (data.proprietor_name) document.getElementById('field_proprietor').value = data.proprietor_name;
-    if (data.supplier_tin) document.getElementById('field_tin').value = data.supplier_tin;
-    if (data.buyer_tin) document.getElementById('field_buyer_tin').value = data.buyer_tin;
-    if (data.fs_no) document.getElementById('field_fs_no').value = data.fs_no;
-    if (data.machine_no) document.getElementById('field_machine_no').value = data.machine_no;
-    if (data.receipt_date) document.getElementById('field_date').value = data.receipt_date;
-    if (data.supplier_address) document.getElementById('field_address').value = data.supplier_address;
-    if (data.supplier_phone) document.getElementById('field_phone').value = data.supplier_phone;
-    if (data.subtotal) document.getElementById('field_subtotal').value = parseFloat(data.subtotal).toFixed(2);
-    if (data.vat_amount) document.getElementById('field_vat').value = parseFloat(data.vat_amount).toFixed(2);
-    if (data.total_amount) document.getElementById('field_total').value = parseFloat(data.total_amount).toFixed(2);
-    if (data.description) {
-        document.getElementById('field_description').value = data.description;
-    } else if (Array.isArray(data.line_items) && data.line_items.length > 0) {
-        const itemNames = data.line_items.map(i => i.name).filter(Boolean).join(', ');
-        if (itemNames) document.getElementById('field_description').value = itemNames;
-    }
-    if (data.vat_category && document.getElementById('field_vat_cat')) document.getElementById('field_vat_cat').value = data.vat_category;
-    if (data.uom_id && document.getElementById('field_uom')) document.getElementById('field_uom').value = data.uom_id;
-
-    if (data.raw_text) {
-        document.getElementById('raw-ocr-textarea').value = data.raw_text;
-        document.getElementById('ocr_raw_text_hidden').value = data.raw_text;
-        const lines = data.raw_text.split('\n').filter(l => l.trim().length > 0);
-        document.getElementById('raw-lines-count').textContent = `${lines.length} lines`;
-    }
-
-    // Populate line items table
-    if (Array.isArray(data.line_items) && data.line_items.length > 0) {
-        const tableBody = document.getElementById('line-items-body');
-        const tableSection = document.getElementById('line-items-section');
-        const countBadge = document.getElementById('line-items-count');
-        tableBody.innerHTML = '';
-        tableSection.style.display = 'block';
-        countBadge.textContent = `${data.line_items.length} items`;
-
-        data.line_items.forEach(itm => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="fw-semibold text-dark">${itm.name || 'Item'}</td>
-                <td class="text-end font-monospace">${itm.qty || 1}</td>
-                <td class="text-end font-monospace">${parseFloat(itm.unit_price || 0).toLocaleString(undefined, {minimumFractionDigits:2})}</td>
-                <td class="text-end font-monospace fw-bold text-success">${parseFloat(itm.total || 0).toLocaleString(undefined, {minimumFractionDigits:2})}</td>
-            `;
-            tableBody.appendChild(tr);
-        });
-    }
-
-    // Populate candidate chips
-    const chips = [];
-    if (data.total_amount) chips.push({ label: 'Total', value: parseFloat(data.total_amount).toFixed(2), target: 'field_total' });
-    if (data.subtotal) chips.push({ label: 'Subtotal', value: parseFloat(data.subtotal).toFixed(2), target: 'field_subtotal' });
-    if (data.vat_amount) chips.push({ label: 'VAT 15%', value: parseFloat(data.vat_amount).toFixed(2), target: 'field_vat' });
-    if (data.supplier_tin) chips.push({ label: 'Supplier TIN', value: data.supplier_tin, target: 'field_tin' });
-    if (data.buyer_tin) chips.push({ label: 'Buyer TIN', value: data.buyer_tin, target: 'field_buyer_tin' });
-    if (data.fs_no) chips.push({ label: 'FS #', value: data.fs_no, target: 'field_fs_no' });
-    if (data.receipt_date) chips.push({ label: 'Date', value: data.receipt_date, target: 'field_date' });
-    if (data.merchant_name) chips.push({ label: 'Vendor', value: data.merchant_name, target: 'field_vendor' });
-    renderCandidateChips(chips);
-
-    updateVatReportPreview();
-}
-
-function updateStatus(text, badgeClass) {
-    const badge = document.getElementById('ocr-status-badge');
-    badge.className = `badge bg-${badgeClass} px-3 py-1.5 rounded-pill`;
-    badge.innerHTML = `<i class="fa-solid fa-circle me-1" style="font-size:0.55rem;"></i> ${text}`;
-}
-
-// Image preprocessing via Canvas: Grayscale & Contrast Stretched Binarization
-function preprocessImage(imgElement) {
-    const canvas = document.getElementById('offscreen-canvas');
-    const ctx = canvas.getContext('2d');
-
-    let width = imgElement.naturalWidth || imgElement.width || 1200;
-    let height = imgElement.naturalHeight || imgElement.height || 1600;
-
-    // Scale to standard OCR resolution (~1600px width)
-    const targetW = 1600;
-    if (width > 0) {
-        const ratio = targetW / width;
-        width = targetW;
-        height = Math.round(height * ratio);
-    }
-
-    canvas.width = width;
-    canvas.height = height;
-
-    // Apply rotation if needed
-    ctx.save();
-    if (currentImageRotation > 0) {
-        ctx.translate(width / 2, height / 2);
-        ctx.rotate((currentImageRotation * Math.PI) / 180);
-        ctx.drawImage(imgElement, -width / 2, -height / 2, width, height);
-    } else {
-        ctx.drawImage(imgElement, 0, 0, width, height);
-    }
-    ctx.restore();
-
-    const doEnhance = document.getElementById('toggle-enhance').checked;
-    if (!doEnhance) {
-        return canvas.toDataURL('image/png');
-    }
-
-    // Enhance contrast and binarize
-    try {
-        const imgData = ctx.getImageData(0, 0, width, height);
-        const data = imgData.data;
-
-        // Sample min & max brightness
-        let minLum = 255;
-        let maxLum = 0;
-        for (let i = 0; i < data.length; i += 16) {
-            const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            if (lum < minLum) minLum = lum;
-            if (lum > maxLum) maxLum = lum;
-        }
-
-        const range = Math.max(1, maxLum - minLum);
-        const threshold = minLum + range * 0.52; // Threshold for dark ink
-
-        for (let i = 0; i < data.length; i += 4) {
-            const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-            const v = lum > threshold ? 255 : 0;
-            data[i] = v;
-            data[i + 1] = v;
-            data[i + 2] = v;
-        }
-
-        ctx.putImageData(imgData, 0, 0);
-        return canvas.toDataURL('image/png');
-    } catch (e) {
-        console.warn('Canvas pre-processing fallback:', e);
-        return canvas.toDataURL('image/png');
-    }
-}
-
-// In-Browser Live OCR via Tesseract.js with multi-pass recognition
-function runOcrPipeline(imgElement) {
-    const progressContainer = document.getElementById('ocr-progress-container');
-    const progressBar = document.getElementById('ocr-progress-bar');
-    const progressPct = document.getElementById('ocr-progress-pct');
-    const progressLabel = document.getElementById('ocr-progress-label');
-
-    progressContainer.classList.remove('d-none');
-    progressBar.style.width = '10%';
-    progressPct.textContent = '10%';
-    progressLabel.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles me-1 text-primary"></i> Pre-processing &amp; Enhancing Receipt...';
-    updateStatus('Enhancing &amp; Scanning...', 'warning');
-
-    const processedDataUrl = preprocessImage(imgElement);
-
-    Tesseract.recognize(
-        processedDataUrl,
-        'eng',
-        {
-            logger: m => {
-                if (m.status === 'recognizing text') {
-                    const pct = Math.round(m.progress * 100);
-                    progressBar.style.width = `${pct}%`;
-                    progressPct.textContent = `${pct}%`;
-                    progressLabel.innerHTML = `<i class="fa-solid fa-bolt fa-spin me-1 text-success"></i> Recognizing Characters (${pct}%)...`;
-                }
-            }
-        }
-    ).then(({ data: { text } }) => {
-        progressBar.style.width = '100%';
-        progressPct.textContent = '100%';
-        progressLabel.innerHTML = '<i class="fa-solid fa-circle-check me-1 text-success"></i> Scan Complete!';
-        updateStatus('Scan Complete &amp; Parsed', 'success');
-
-        // Populate raw text tab
-        document.getElementById('raw-ocr-textarea').value = text;
-        const lines = text.split('\n').filter(l => l.trim().length > 0);
-        document.getElementById('raw-lines-count').textContent = `${lines.length} lines`;
-        document.getElementById('ocr_raw_text_hidden').value = text;
-
-        // Apply Smart Ethiopian & Commercial Receipt Regex Rules
-        parseReceiptText(text, lines);
-
-        // Unlock Save button
-        document.getElementById('btn-save-receipt').disabled = false;
-    }).catch(err => {
-        progressLabel.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-danger me-1"></i> Scan Failed: ${err.message}`;
-        updateStatus('OCR Error', 'danger');
-    });
-}
-
-// Smart Commercial & Ethiopian FS Receipt Multi-Pass Parser
-// Helper: extract all decimal numbers, handling thermal receipt double-dots (44.086.97) and spaces
-function extractCandidateNumbers(rawText) {
-    const list = [];
-    const re = /(?:[*+~«]\s*)?([0-9]{1,3}(?:[,.\s][0-9]{3})+(?:[.,][0-9]{2})|[0-9]{3,}(?:[.,][0-9]{2})|[0-9]{1,3}\.[0-9]{3}\.[0-9]{2})/g;
-    let m;
-    while ((m = re.exec(rawText)) !== null) {
-        let s = m[1].trim();
-        // Handle double dot: 44.086.97 -> 44086.97
-        if (/^\d{1,3}\.\d{3}\.\d{2}$/.test(s)) {
-            s = s.replace('.', '');
-        } else {
-            s = s.replace(/[, \s]/g, '');
-        }
-        const val = parseFloat(s);
-        if (!isNaN(val) && val > 1 && !list.includes(val)) {
-            list.push(val);
-        }
-    }
-    return list;
-}
-
-// Smart Commercial & Ethiopian FS Receipt Multi-Pass Parser
-function parseReceiptText(text, lines) {
-    const chips = [];
-    const cleanNum = str => parseFloat(str.replace(/[*,\s]/g, ''));
-
-    const isAstra = /ASTRA/i.test(text) || /0024916531/.test(text);
-
-    // 1. Subtotal / Taxable:
-    const subtotalMatch = text.match(/(?:TAXBL1|TAXABLE|TAXBL|SUBTOTAL|SUB\s*TOTAL|NET\s*AMOUNT)\s*[:.\-]*\s*[*]?\s*([0-9]{1,3}(?:[,.][0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))/i);
-    let subtotalAmt = 0;
-    if (subtotalMatch) {
-        let s = subtotalMatch[1];
-        if (/^\d{1,3}\.\d{3}\.\d{2}$/.test(s)) s = s.replace('.', '');
-        subtotalAmt = cleanNum(s);
-    }
-
-    // 2. VAT Amount (15%):
-    const vatMatch = text.match(/(?:TAX1\s*15(?:\.00)?%?|TAX\s*15(?:\.00)?%?|VAT\s*15(?:\.00)?%?|ታክስ\s*15%?|VAT\s*AMOUNT|TAX\s*AMOUNT)\s*[:.\-]*\s*[*]?\s*([0-9]{1,3}(?:[,.][0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))/i);
-    let vatAmt = 0;
-    if (vatMatch) {
-        let s = vatMatch[1];
-        if (/^\d{1,3}\.\d{3}\.\d{2}$/.test(s)) s = s.replace('.', '');
-        vatAmt = cleanNum(s);
-    }
-
-    // 3. Grand Total:
-    const totalMatch = text.match(/(?:TOTAL\s*[:.\-]|GRAND\s*TOTAL\s*[:.\-]|CASH\s*Birr|CASH\s*BIRR)\s*[*]?\s*([0-9]{1,3}(?:[,.][0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))/i)
-                    || text.match(/(?:TOTAL|CASH)\s*[:.\-]?\s*[*]?\s*([0-9]{1,3}(?:[,.][0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))/i);
-    let totalAmt = totalMatch ? cleanNum(totalMatch[1]) : 0;
-
-    // Mathematical Triad Solver: Search for decimal triplet A, B, C where B ~= A * 0.15 and C ~= A + B
-    const allNums = extractCandidateNumbers(text);
-    for (let i = 0; i < allNums.length; i++) {
-        const a = allNums[i];
-        for (let j = 0; j < allNums.length; j++) {
-            if (i === j) continue;
-            const b = allNums[j];
-            if (Math.abs(b - (a * 0.15)) <= 0.25) {
-                for (let k = 0; k < allNums.length; k++) {
-                    if (k === i || k === j) continue;
-                    const c = allNums[k];
-                    if (Math.abs(c - (a + b)) <= 0.35) {
-                        subtotalAmt = a;
-                        vatAmt = b;
-                        totalAmt = c;
-                        break;
+                    // Add extracted rows to table immediately (without clearing existing!)
+                    if (res.items && res.items.length > 0) {
+                        res.items.forEach(it => appendRowToTable(it, res.receipt));
                     }
+                    updateStatsDisplay();
+                } else {
+                    handleTaskFailure(nextTask, res.message || 'Extraction failed');
                 }
+            } catch (err) {
+                handleTaskFailure(nextTask, 'Invalid server response');
             }
+        } else {
+            handleTaskFailure(nextTask, `Server error HTTP ${xhr.status}`);
         }
-    }
 
-    // Known receipt fallback for Astra General Trading (Row 20 of VAT Report)
-    if (isAstra && (totalAmt <= 0 || subtotalAmt <= 0)) {
-        subtotalAmt = 44086.97;
-        vatAmt = 6613.05;
-        totalAmt = 50700.02;
-    }
+        updateBatchProgress();
+        processNextQueueItem();
+    };
 
-    if (!vatAmt && subtotalAmt > 0) {
-        vatAmt = Math.round(subtotalAmt * 0.15 * 100) / 100;
-    }
-    const mathTotal = Math.round((subtotalAmt + vatAmt) * 100) / 100;
-    if (totalAmt < subtotalAmt || totalAmt <= 1) {
-        totalAmt = mathTotal > 0 ? mathTotal : totalAmt;
-    }
+    xhr.onerror = function() {
+        activeWorkers--;
+        handleTaskFailure(nextTask, 'Network error reaching server');
+        updateBatchProgress();
+        processNextQueueItem();
+    };
 
-    if (totalAmt > 0) {
-        document.getElementById('field_total').value = totalAmt.toFixed(2);
-        chips.push({ label: 'Total', value: totalAmt.toFixed(2), target: 'field_total' });
-    }
-    if (subtotalAmt > 0) {
-        document.getElementById('field_subtotal').value = subtotalAmt.toFixed(2);
-        chips.push({ label: 'Subtotal', value: subtotalAmt.toFixed(2), target: 'field_subtotal' });
-    }
-    if (vatAmt > 0) {
-        document.getElementById('field_vat').value = vatAmt.toFixed(2);
-        chips.push({ label: 'VAT 15%', value: vatAmt.toFixed(2), target: 'field_vat' });
-    }
-
-    // 4. FS / Receipt Number:
-    let fsNo = '';
-    const fsDigitMatch = text.match(/FS[^\d\n]*(\d{4,12})/i)
-                      || text.match(/\b(000[0-9]{4,6})\b/);
-    if (fsDigitMatch) {
-        let numOnly = fsDigitMatch[1].replace(/\D/g, '');
-        if (numOnly.length < 8) {
-            numOnly = numOnly.padStart(8, '0');
-        }
-        fsNo = 'FS' + numOnly;
-    } else if (isAstra) {
-        fsNo = 'FS00002674';
-    }
-    if (fsNo) {
-        document.getElementById('field_fs_no').value = fsNo;
-        chips.push({ label: 'FS #', value: fsNo, target: 'field_fs_no' });
-    }
-
-    // 5. Date extraction (DD/MM/YYYY or DD/MM/YY or DD-MM-YYYY):
-    let detectedDate = '';
-    const dmyMatch = text.match(/\b(0?[1-9]|[12]\d|3[01])[\s/.-]+(0?[1-9]|1[0-2])[\s/.-]+(20\d{2}|\d{2})\b/);
-    const ymdMatch = text.match(/\b((?:20\d{2})[-/.](?:0[1-9]|1[0-2])[-/.](?:0[1-9]|[12]\d|3[01]))\b/);
-
-    if (dmyMatch) {
-        const day = dmyMatch[1].padStart(2, '0');
-        const month = dmyMatch[2].padStart(2, '0');
-        let year = dmyMatch[3];
-        if (year.length === 2) year = '20' + year;
-        detectedDate = `${year}-${month}-${day}`;
-    } else if (ymdMatch) {
-        detectedDate = ymdMatch[1].replace(/[./]/g, '-');
-    } else if (isAstra) {
-        detectedDate = '2026-09-25';
-    }
-
-    if (detectedDate) {
-        document.getElementById('field_date').value = detectedDate;
-        chips.push({ label: 'Date', value: detectedDate, target: 'field_date' });
-    }
-
-    // 6. TIN Numbers (Supplier TIN vs Buyer's TIN):
-    let buyerTin = '';
-    const buyerTinMatch = text.match(/Buyer(?:'s)?\s*TIN[\s:.\-#]*([0-9\s]{10,14})/i);
-    if (buyerTinMatch) {
-        buyerTin = buyerTinMatch[1].replace(/\s+/g, '');
-    } else if (text.includes('0038480010') || isAstra) {
-        buyerTin = '0038480010';
-    }
-    if (buyerTin) {
-        document.getElementById('field_buyer_tin').value = buyerTin;
-        chips.push({ label: 'Buyer TIN', value: buyerTin, target: 'field_buyer_tin' });
-    }
-
-    // Supplier TIN (Must NOT be Buyer TIN 0038480010):
-    let sellerTin = '';
-    const explicitSellerTinMatch = text.match(/(?:SUPPLIER|SELLER)?\s*TIN\s*[:.\-#]*\s*([0-9]{10})/i);
-    if (explicitSellerTinMatch && explicitSellerTinMatch[1] !== buyerTin && explicitSellerTinMatch[1] !== '0038480010') {
-        sellerTin = explicitSellerTinMatch[1];
-    } else {
-        const all10Digits = [...text.matchAll(/\b(00[0-9]{8}|[1-9][0-9]{9})\b/g)]
-            .map(m => m[1])
-            .filter(t => !t.startsWith('09') && !t.startsWith('07') && t !== buyerTin && t !== '0038480010');
-        if (all10Digits.length > 0) {
-            sellerTin = all10Digits[0];
-        } else if (isAstra) {
-            sellerTin = '0024916531';
-        } else if (/MEWEDISI|EITRADE|ELTRADE|METEL/i.test(text)) {
-            sellerTin = '0043724322';
-        }
-    }
-
-    if (sellerTin) {
-        document.getElementById('field_tin').value = sellerTin;
-        chips.push({ label: 'Supplier TIN', value: sellerTin, target: 'field_tin' });
-    }
-
-    // 7. ERCA / Machine Number (MRC No):
-    let machineNo = '';
-    const machineMatch = text.match(/(?:MRC|ERCA|MACHINE)[\s#:.]*([A-Za-z0-9\s]{6,15})/i)
-                      || text.match(/\b(TDB|MFE|DFA|BIB|DDJ|FPA|BTR|DRA)[\s.:-]*([0-9OIl]{6,10})\b/i)
-                      || text.match(/\b([A-Z]{3}[0-9]{7,8})\b/i);
-    if (machineMatch) {
-        machineNo = machineMatch[1].replace(/[\s.:-]/g, '').toUpperCase();
-    }
-    if (!machineNo && isAstra) {
-        machineNo = 'TDB0015170';
-    }
-    if (machineNo) {
-        document.getElementById('field_machine_no').value = machineNo;
-        chips.push({ label: 'MRC #', value: machineNo, target: 'field_machine_no' });
-    }
-
-    // 8. Vendor / Merchant Name & Proprietor:
-    let detectedVendor = '';
-    let proprietor = '';
-
-    if (isAstra) {
-        detectedVendor = 'ASTRA GENERAL TRADING';
-    } else if (/MEWEDISI|EITRADE|ELTRADE|METEL/i.test(text)) {
-        detectedVendor = 'MEWEDISI METEL BUILDING MATERIAL TRADE AND CONSTRUCTION';
-        proprietor = 'BERHANU TIEMAY ADHENA';
-    } else {
-        const propMatch = text.match(/\b(BERHANU\s+[A-Za-z]+\s+[A-Za-z]+)\b/i);
-        if (propMatch) proprietor = propMatch[1].trim();
-
-        const strongKw = /TRADE|CONSTRUCTION|BUILDING|MATERIAL|METEL|METAL|ENTERPRISE|PLC|LTD|STORE|SUPPLY|GENERAL|STEEL|PHARMACY|HOTEL|SUPERMARKET/i;
-        for (let i = 0; i < Math.min(8, lines.length); i++) {
-            const line = lines[i].trim();
-            if (strongKw.test(line) && !/TEL|FAX|TIN|FS|DATE|BUYER|ADDRESS|around/i.test(line)) {
-                detectedVendor = line.replace(/[^a-zA-Z0-9\s&.-]/g, '').trim();
-                break;
-            }
-        }
-    }
-
-    if (proprietor) {
-        document.getElementById('field_proprietor').value = proprietor;
-        chips.push({ label: 'Proprietor', value: proprietor, target: 'field_proprietor' });
-    }
-    if (detectedVendor) {
-        document.getElementById('field_vendor').value = detectedVendor;
-        chips.push({ label: 'Vendor', value: detectedVendor, target: 'field_vendor' });
-    }
-
-    // 9. Address:
-    let address = '';
-    const addrMatch = text.match(/(A\.A\.\s+A\/KETEMA[^\n]+(?:\n[^\n]+TEKLAYMANOT)?)/i)
-                   || text.match(/(A\.A[^\n]+W\.01[^\n]+)/i);
-    if (addrMatch) {
-        address = addrMatch[1].replace(/\s+/g, ' ').trim();
-    } else if (/MEWEDISI|EITRADE|ELTRADE|TEKLAYMANOT/i.test(text)) {
-        address = 'A.A. A/KETEMA W.01 HNO-1619 Around TEKLAYMANOT';
-    } else if (isAstra) {
-        address = 'A.A. Arada Sub City W.01';
-    }
-    if (address) {
-        document.getElementById('field_address').value = address;
-        chips.push({ label: 'Address', value: address, target: 'field_address' });
-    }
-
-    // 10. Phones:
-    const phoneMatches = [...text.matchAll(/\b(?:TEL|E-MOBILE|PHONE|MOB)\s*[-:]\s*([0-9\s/]+)/gi)].map(m => m[0].trim());
-    let phones = '';
-    if (phoneMatches.length > 0) {
-        phones = phoneMatches.join(' | ');
-    } else if (/MEWEDISI|EITRADE|ELTRADE/i.test(text)) {
-        phones = 'TEL-0911517719/0911255119 | E-MOBILE-0982018573';
-    } else if (isAstra) {
-        phones = 'TEL-0911517719';
-    }
-    if (phones) {
-        document.getElementById('field_phone').value = phones;
-        chips.push({ label: 'Phone', value: phones, target: 'field_phone' });
-    }
-
-    // 11. Smart Category Selection:
-    const lText = text.toLowerCase();
-    const catSelect = document.getElementById('field_category');
-    if (/water proof|wire|pipe|bar|steel|metal|metel|building|material|construction|flat bar|round pipe|cement|rebar|paint|nails|timber/i.test(lText) || isAstra) {
-        catSelect.value = 'material';
-    } else if (/fuel|diesel|benzine|gasoline|total|oil/i.test(lText)) {
-        catSelect.value = 'transport';
-    } else if (/hotel|restaurant|cafe|food|lunch|dinner|water/i.test(lText)) {
-        catSelect.value = 'food';
-    } else if (/paper|pen|toner|cartridge|folder|office/i.test(lText)) {
-        catSelect.value = 'overhead';
-    } else if (/spare|repair|maintenance|mechanic|service/i.test(lText)) {
-        catSelect.value = 'equipment';
-    }
-
-    // 12. Extract Line Items & Bought Materials:
-    const extractedItems = extractLineItems(lines);
-    let boughtMaterials = '';
-    if (extractedItems && extractedItems.length > 0) {
-        boughtMaterials = extractedItems.map(it => it.name).filter(Boolean).join(', ');
-    }
-    if (!boughtMaterials) {
-        boughtMaterials = extractBoughtMaterialsFromText(lines, text);
-    }
-
-    if (boughtMaterials) {
-        document.getElementById('field_description').value = boughtMaterials;
-        chips.push({ label: 'Bought Materials', value: boughtMaterials, target: 'field_description' });
-    }
-
-    // 13. Render Click-to-Fill Candidate Chips:
-    renderCandidateChips(chips);
-
-    // 14. Live Update ERCA VAT Declaration Preview:
-    updateVatReportPreview();
+    xhr.send(formData);
 }
 
-// Helper: Extract actual bought items / materials from the middle body of the receipt
-function extractBoughtMaterialsFromText(lines, text) {
-    const candidateLines = [];
-    let pastHeader = false;
-
-    // Header keywords (marks the receipt top header before items)
-    const headerKeywords = /TIN|BUYER|CUSTOMER|FS\s*NO|FS\s*#|DATE|TIME|CASHIER|WELCOME|INVOICE|TELE|PHONE|BRANCH|HNO|KEBELE/i;
-    // Footer keywords (marks the financial summary after items)
-    const footerKeywords = /TAXBL|TAXABLE|TAX\s*1|TAX\s*15|VAT|TOTAL|SUBTOTAL|CASH\s*BIRR|CASH|CHANGE|ERCA|MRC|MFE|TDB|ITEM#/i;
-
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        if (headerKeywords.test(line)) {
-            pastHeader = true;
-            continue;
-        }
-
-        if (pastHeader && footerKeywords.test(line)) {
-            break;
-        }
-
-        if (pastHeader) {
-            // Ignore pure numeric strings, dates, or lone symbols
-            if (/^[0-9.,\s*xX=+\-]+$/.test(line)) continue;
-            if (/^[0-9]{1,3}\s*[xX*]\s*[0-9,.]+/.test(line)) continue;
-            if (line.length < 3) continue;
-
-            // Strip trailing/leading price noise: e.g. "FLAT BAR 40*3 *1,478.26" -> "FLAT BAR 40*3"
-            const cleanName = line.replace(/[*+~«]\s*[0-9]{1,3}(?:[,.][0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2})$/, '')
-                                  .replace(/^[\d\s*xX=+\-.]+/, '')
-                                  .replace(/[*~«]/g, '')
-                                  .trim();
-
-            if (cleanName.length >= 3 && !headerKeywords.test(cleanName) && !footerKeywords.test(cleanName)) {
-                if (!candidateLines.includes(cleanName)) {
-                    candidateLines.push(cleanName);
-                }
-            }
-        }
-    }
-
-    if (candidateLines.length > 0) {
-        return candidateLines.join(', ');
-    }
-
-    // Material detection across common construction and commercial items
-    const commonMaterials = [
-        'WATER PROOF', 'WATERPROOF', 'WIRE', 'FLAT BAR', 'ROUND PIPE', 'CEMENT', 
-        'REBAR', 'STEEL', 'NAILS', 'PAINT', 'SILICONE', 'GLUE', 'GYPSUM', 
-        'TIMBER', 'SAND', 'GRAVEL', 'CORRUGATED SHEET', 'ELECTRICAL CABLE', 'CERAMIC TILE'
-    ];
-    const detected = [];
-    for (const mat of commonMaterials) {
-        const re = new RegExp('\\b' + mat.replace(' ', '\\s*') + '\\b', 'i');
-        if (re.test(text)) {
-            detected.push(mat);
-        }
-    }
-    return detected.join(', ');
+function handleTaskFailure(task, errMsg) {
+    task.status = 'failed';
+    const retryBtn = `<button type="button" class="btn btn-xs btn-outline-danger py-0 px-1.5 fw-bold" onclick="retryQueueItem('${task.id}')"><i class="fa-solid fa-rotate-right me-1"></i>Retry</button>`;
+    updateTaskCard(task, errMsg, 100, 'bg-danger', '<span class="badge bg-danger"><i class="fa-solid fa-times me-1"></i>Failed</span>', retryBtn);
 }
 
-// Line Items Extractor (handles multi-line "3 x 2434.78 =" and single line "FLAT BAR 40*3 *1,478.26")
-function extractLineItems(lines) {
-    const tableBody = document.getElementById('line-items-body');
-    const tableSection = document.getElementById('line-items-section');
-    const countBadge = document.getElementById('line-items-count');
-    tableBody.innerHTML = '';
-
-    const items = [];
-
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-
-        if (/TAXBL|TAX1|TOTAL|CASH|ITEM#|ERCA|TIN|VAT|FS\s*No|TEL|BUYER|ADDRESS|around/i.test(line)) {
-            continue;
-        }
-
-        // Case 1: Multi-line "3 x 2434.78 =" followed by item name and total "*7,304.34"
-        const multMatch = line.match(/^([0-9.]+)\s*[xX*]\s*([0-9,.]+)\s*=?$/);
-        if (multMatch && i + 1 < lines.length) {
-            const nextLine = lines[i + 1].trim();
-            const nextMatch = nextLine.match(/^([A-Za-z0-9\s*#+._/-]{3,35})\s*[*]?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))$/);
-            if (nextMatch) {
-                items.push({
-                    name: nextMatch[1].replace(/[*]/g, '').trim(),
-                    qty: parseFloat(multMatch[1]),
-                    unitPrice: parseFloat(multMatch[2].replace(/,/g, '')),
-                    total: parseFloat(nextMatch[2].replace(/,/g, ''))
-                });
-                i++;
-                continue;
-            }
-        }
-
-        // Case 2: Single-line "FLAT BAR 40*3 *1,478.26"
-        const singleMatch = line.match(/^([A-Za-z][A-Za-z0-9\s*#+._/-]{3,35})\s*[*]\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))$/);
-        if (singleMatch) {
-            const tot = parseFloat(singleMatch[2].replace(/,/g, ''));
-            items.push({
-                name: singleMatch[1].replace(/[*]/g, '').trim(),
-                qty: 1,
-                unitPrice: tot,
-                total: tot
-            });
-            continue;
-        }
-
-        // Case 3: Line ending with price: "WATER PROOF 44086.97" or "ROUND PIPE 2434.78"
-        const trailingMatch = line.match(/^([A-Za-z][A-Za-z0-9\s*#+._/-]{3,35})\s+([0-9]{1,3}(?:[,.][0-9]{3})*(?:\.[0-9]{2})|[0-9]{3,}(?:\.[0-9]{2}))$/);
-        if (trailingMatch) {
-            let s = trailingMatch[2];
-            if (/^\d{1,3}\.\d{3}\.\d{2}$/.test(s)) s = s.replace('.', '');
-            const tot = parseFloat(s.replace(/[, \s]/g, ''));
-            items.push({
-                name: trailingMatch[1].replace(/[*]/g, '').trim(),
-                qty: 1,
-                unitPrice: tot,
-                total: tot
-            });
-            continue;
-        }
-    }
-
-    if (items.length > 0) {
-        tableSection.style.display = 'block';
-        countBadge.textContent = `${items.length} items`;
-        items.forEach(itm => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td class="fw-semibold text-dark">${itm.name}</td>
-                <td class="text-end font-monospace">${itm.qty}</td>
-                <td class="text-end font-monospace">${itm.unitPrice.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
-                <td class="text-end font-monospace fw-bold text-success">${itm.total.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
-            `;
-            tableBody.appendChild(tr);
-        });
-    } else {
-        tableSection.style.display = 'none';
-    }
-
-    return items;
+function retryQueueItem(taskId) {
+    const task = uploadQueue.find(t => t.id === taskId);
+    if (!task) return;
+    task.status = 'queued';
+    updateTaskCard(task, 'Re-queued for scan...', 0, 'bg-secondary', '<span class="badge bg-secondary">Queued</span>', '');
+    processNextQueueItem();
 }
 
-// Render Click-to-Fill Quick Chips
-function renderCandidateChips(chips) {
-    const container = document.getElementById('detected-chips-container');
-    const list = document.getElementById('detected-chips-list');
-    list.innerHTML = '';
+function updateTaskCard(task, msg, pct, pbarClass, badgeHtml, actionsHtml = '') {
+    const msgEl = document.getElementById('msg-' + task.id);
+    const pbarEl = document.getElementById('pbar-' + task.id);
+    const badgeEl = document.getElementById('badge-' + task.id);
+    const actionsEl = document.getElementById('actions-' + task.id);
 
-    if (!chips || chips.length === 0) {
-        container.classList.add('d-none');
-        return;
+    if (msgEl) msgEl.textContent = msg;
+    if (pbarEl) {
+        pbarEl.style.width = pct + '%';
+        pbarEl.className = 'progress-bar progress-bar-striped progress-bar-animated ' + pbarClass;
     }
-
-    container.classList.remove('d-none');
-    chips.forEach(c => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-xs btn-outline-primary bg-white shadow-xs py-1 px-2 text-start';
-        btn.innerHTML = `<span class="text-muted small">${c.label}:</span> <strong>${c.value}</strong>`;
-        btn.title = `Click to fill into ${c.label}`;
-        btn.onclick = () => {
-            const input = document.getElementById(c.target);
-            if (input) {
-                input.value = c.value;
-                input.classList.add('border-primary');
-                setTimeout(() => input.classList.remove('border-primary'), 1000);
-            }
-        };
-        list.appendChild(btn);
-    });
+    if (badgeEl) badgeEl.innerHTML = badgeHtml;
+    if (actionsEl) actionsEl.innerHTML = actionsHtml;
 }
 
-function calculateFromSubtotal() {
-    const sub = parseFloat(document.getElementById('field_subtotal').value) || 0;
-    const vat = Math.round(sub * 0.15 * 100) / 100;
-    document.getElementById('field_vat').value = vat.toFixed(2);
-    document.getElementById('field_total').value = (sub + vat).toFixed(2);
-    updateVatReportPreview();
+function updateTaskProgress(taskId, pct) {
+    const pbarEl = document.getElementById('pbar-' + taskId);
+    if (pbarEl) pbarEl.style.width = pct + '%';
 }
 
-function calculateFromVat() {
-    const vat = parseFloat(document.getElementById('field_vat').value) || 0;
-    const sub = Math.round((vat / 0.15) * 100) / 100;
-    document.getElementById('field_subtotal').value = sub.toFixed(2);
-    document.getElementById('field_total').value = (sub + vat).toFixed(2);
-    updateVatReportPreview();
+function dismissQueueCard(taskId) {
+    const card = document.getElementById('card-' + taskId);
+    if (card) card.remove();
 }
 
-function calculateFromTotal() {
-    const tot = parseFloat(document.getElementById('field_total').value) || 0;
-    const sub = Math.round((tot / 1.15) * 100) / 100;
-    const vat = Math.round((tot - sub) * 100) / 100;
-    document.getElementById('field_subtotal').value = sub.toFixed(2);
-    document.getElementById('field_vat').value = vat.toFixed(2);
-    updateVatReportPreview();
+function updateBatchProgress() {
+    const total = uploadQueue.length;
+    if (total === 0) return;
+    const completed = uploadQueue.filter(t => t.status === 'done' || t.status === 'duplicate' || t.status === 'failed' || t.status === 'duplicate_batch').length;
+    const pct = Math.round((completed / total) * 100);
+
+    const bar = document.getElementById('batch-progress-bar');
+    const pctEl = document.getElementById('batch-progress-pct');
+    const doneEl = document.getElementById('batch-count-done');
+    const totEl = document.getElementById('batch-count-total');
+
+    if (bar) bar.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '%';
+    if (doneEl) doneEl.textContent = completed;
+    if (totEl) totEl.textContent = total;
 }
 
-// Live update for ERCA VAT Declaration Preview Table matching VAT REPORT SEMPTMBER 2026.xlsx
-function updateVatReportPreview() {
-    const tin = document.getElementById('field_tin')?.value || '';
-    const name = document.getElementById('field_vendor')?.value || '';
-    const dateVal = document.getElementById('field_date')?.value || '';
-    let dateFormatted = '';
-    if (dateVal) {
-        const parts = dateVal.split('-');
-        if (parts.length === 3) dateFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    const mrc = document.getElementById('field_machine_no')?.value || '';
-    let fs = document.getElementById('field_fs_no')?.value || '';
-    if (fs && !fs.toUpperCase().startsWith('FS') && !fs.toUpperCase().startsWith('M')) {
-        fs = 'FS' + fs;
-    }
-    const desc = document.getElementById('field_description')?.value || '';
-    const uom = document.getElementById('field_uom')?.value || '9';
-    const subtotal = parseFloat(document.getElementById('field_subtotal')?.value) || 0;
-    const vat = parseFloat(document.getElementById('field_vat')?.value) || 0;
-    const total = parseFloat(document.getElementById('field_total')?.value) || 0;
+/**
+ * Replace Duplicate Receipt Action
+ */
+function replaceDuplicateReceipt(taskId) {
+    const task = uploadQueue.find(t => t.id === taskId);
+    if (!task) return;
 
-    const elTin = document.getElementById('v_cell_tin');
-    if (elTin) {
-        elTin.textContent = tin || '—';
-        const elVendor = document.getElementById('v_cell_vendor');
-        if (elVendor) elVendor.textContent = name || '—';
-        const elDate = document.getElementById('v_cell_date');
-        if (elDate) elDate.textContent = dateFormatted || '—';
-        const elMrc = document.getElementById('v_cell_mrc');
-        if (elMrc) elMrc.textContent = mrc || '—';
-        const elFs = document.getElementById('v_cell_fs');
-        if (elFs) elFs.textContent = fs || '—';
-        const elDesc = document.getElementById('v_cell_desc');
-        if (elDesc) elDesc.textContent = desc || '—';
-        const elUom = document.getElementById('v_cell_uom');
-        if (elUom) elUom.textContent = uom;
-        const elQty = document.getElementById('v_cell_qty');
-        if (elQty) elQty.textContent = '1';
-        const elUprice = document.getElementById('v_cell_uprice');
-        if (elUprice) elUprice.textContent = subtotal > 0 ? subtotal.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '0.00';
-        const elSubtotal = document.getElementById('v_cell_subtotal');
-        if (elSubtotal) elSubtotal.textContent = subtotal > 0 ? subtotal.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '0.00';
-        const elVat = document.getElementById('v_cell_vat');
-        if (elVat) elVat.textContent = vat > 0 ? vat.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '0.00';
-        const elTotal = document.getElementById('v_cell_total');
-        if (elTotal) elTotal.textContent = total > 0 ? total.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2}) : '0.00';
-    }
-}
+    updateTaskCard(task, 'Replacing existing receipt...', 60, 'bg-warning', '<span class="badge bg-warning text-dark"><i class="fa-solid fa-spinner fa-spin"></i>Replacing</span>');
 
-// 1-Click Copy Tab-Separated Row for Excel Ctrl+V pasting
-document.addEventListener('DOMContentLoaded', function() {
-    const copyBtn = document.getElementById('btn-copy-vat-row');
-    if (copyBtn) {
-        copyBtn.addEventListener('click', function() {
-            const vatCat = document.getElementById('field_vat_cat')?.value || 'G';
-            const calType = 'G';
-            const purchType = '3';
-            const tin = document.getElementById('field_tin')?.value || '';
-            const name = document.getElementById('field_vendor')?.value || '';
-            const dateVal = document.getElementById('field_date')?.value || '';
-            let dateFormatted = '';
-            if (dateVal) {
-                const parts = dateVal.split('-');
-                if (parts.length === 3) dateFormatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
-            }
-            const mrc = document.getElementById('field_machine_no')?.value || '';
-            let fs = document.getElementById('field_fs_no')?.value || '';
-            if (fs && !fs.toUpperCase().startsWith('FS') && !fs.toUpperCase().startsWith('M')) {
-                fs = 'FS' + fs;
-            }
-            const desc = document.getElementById('field_description')?.value || '';
-            const uom = document.getElementById('field_uom')?.value || '9';
-            const qty = '1';
-            const subtotal = parseFloat(document.getElementById('field_subtotal')?.value) || 0;
-            const vat = parseFloat(document.getElementById('field_vat')?.value) || 0;
-            const total = parseFloat(document.getElementById('field_total')?.value) || 0;
-
-            // 15 TSV columns matching VAT REPORT SEMPTMBER 2026.xlsx: Col A through Col O
-            const tsvRow = [
-                vatCat,
-                calType,
-                purchType,
-                tin,
-                name,
-                dateFormatted,
-                mrc,
-                fs,
-                desc,
-                uom,
-                qty,
-                subtotal.toFixed(2),
-                subtotal.toFixed(2),
-                vat.toFixed(2),
-                total.toFixed(2)
-            ].join('\t');
-
-            navigator.clipboard.writeText(tsvRow).then(() => {
-                const oldHtml = copyBtn.innerHTML;
-                copyBtn.innerHTML = '<i class="fa-solid fa-check me-1 text-success"></i> Copied! Paste with Ctrl+V into Excel';
-                copyBtn.classList.add('btn-success', 'text-white');
-                copyBtn.classList.remove('btn-outline-success');
-                setTimeout(() => {
-                    copyBtn.innerHTML = oldHtml;
-                    copyBtn.classList.remove('btn-success', 'text-white');
-                    copyBtn.classList.add('btn-outline-success');
-                }, 2500);
-            }).catch(err => {
-                prompt('Copy this row and paste into Excel:', tsvRow);
-            });
-        });
-    }
-});
-
-// Save Scanned Receipt via AJAX
-document.getElementById('save-receipt-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-
-    const saveBtn = document.getElementById('btn-save-receipt');
-    saveBtn.disabled = true;
-    saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Saving into ERP...';
-
-    const formData = new FormData(this);
-    formData.append('_token', '{{ csrf_token() }}');
-
-    fetch('{{ route("admin.ocr.save") }}', {
+    fetch(REPLACE_DUP_URL, {
         method: 'POST',
         headers: {
-            'Accept': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json'
         },
-        body: formData
+        body: JSON.stringify({
+            existing_id: task.existingReceiptId,
+            file_path: task.filePath,
+            extracted_data: task.extractedData,
+        })
     })
     .then(r => r.json())
     .then(res => {
         if (res.success) {
-            alert(res.message);
-            window.location.reload();
+            updateTaskCard(task, 'Replaced existing receipt successfully!', 100, 'bg-success', '<span class="badge bg-success">Replaced</span>');
+            // Reload page or append updated items
+            setTimeout(() => window.location.reload(), 800);
         } else {
-            alert('Error: ' + (res.message || 'Could not save receipt record.'));
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> Save Scanned Receipt Record into ERP';
+            handleTaskFailure(task, res.message || 'Replace failed');
         }
     })
     .catch(err => {
-        alert('Network/Server Error: ' + err.message);
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i> Save Scanned Receipt Record into ERP';
-    });
-});
-
-// Dedicated 1-Click Auto-Fill for the User's Real Mewedisi Metal Receipt
-document.getElementById('btn-autofill-mewedisi').addEventListener('click', function() {
-    // Fill every exact piece of information from the user's upper and lower receipt photos
-    document.getElementById('field_vendor').value = 'MEWEDISI METEL BUILDING MATERIAL TRADE AND CONSTRUCTION';
-    document.getElementById('field_proprietor').value = 'BERHANU TIEMAY ADHENA';
-    document.getElementById('field_tin').value = '0043724322';
-    document.getElementById('field_buyer_tin').value = '0038480010';
-    document.getElementById('field_address').value = 'A.A. A/KETEMA W.01 HNO-1619 Around TEKLAYMANOT';
-    document.getElementById('field_phone').value = 'TEL-0911517719 / 0911255119 / E-MOBILE-0982018573';
-    document.getElementById('field_fs_no').value = '00002564';
-    document.getElementById('field_machine_no').value = 'MFE0097690';
-    document.getElementById('field_date').value = '2026-10-01';
-    document.getElementById('field_category').value = 'material';
-    document.getElementById('field_description').value = 'Construction Metal Materials: Flat Bar 40*3 (1 pcs) and Round Pipe 32*2.5 (3 pcs)';
-    document.getElementById('field_subtotal').value = '8782.60';
-    document.getElementById('field_vat').value = '1317.39';
-    document.getElementById('field_total').value = '10099.99';
-
-    // Populate line items table
-    const tableBody = document.getElementById('line-items-body');
-    const tableSection = document.getElementById('line-items-section');
-    const countBadge = document.getElementById('line-items-count');
-    tableBody.innerHTML = `
-        <tr>
-            <td class="fw-semibold text-dark">FLAT BAR 40*3</td>
-            <td class="text-end font-monospace">1</td>
-            <td class="text-end font-monospace">1,478.26</td>
-            <td class="text-end font-monospace fw-bold text-success">1,478.26</td>
-        </tr>
-        <tr>
-            <td class="fw-semibold text-dark">ROUND PIPE 32*2.5</td>
-            <td class="text-end font-monospace">3</td>
-            <td class="text-end font-monospace">2,434.78</td>
-            <td class="text-end font-monospace fw-bold text-success">7,304.34</td>
-        </tr>
-    `;
-    tableSection.style.display = 'block';
-    countBadge.textContent = '2 items';
-
-    // Populate Candidate Chips
-    renderCandidateChips([
-        { label: 'Vendor', value: 'MEWEDISI METEL BUILDING MATERIAL', target: 'field_vendor' },
-        { label: 'Supplier TIN', value: '0043724322', target: 'field_tin' },
-        { label: 'Buyer TIN', value: '0038480010', target: 'field_buyer_tin' },
-        { label: 'FS #', value: '00002564', target: 'field_fs_no' },
-        { label: 'Date', value: '2026-10-01', target: 'field_date' },
-        { label: 'Machine #', value: 'MFE0097690', target: 'field_machine_no' },
-        { label: 'Subtotal', value: '8782.60', target: 'field_subtotal' },
-        { label: 'VAT 15%', value: '1317.39', target: 'field_vat' },
-        { label: 'Total', value: '10099.99', target: 'field_total' }
-    ]);
-
-    // Set sample synthetic preview image
-    const canvas = document.createElement('canvas');
-    canvas.width = 650;
-    canvas.height = 920;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 22px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('ELTRADE®', 325, 40);
-    ctx.font = 'bold 18px monospace';
-    ctx.fillText('TIN: 0043724322', 325, 70);
-    ctx.fillText('BERHANU TIEMAY ADHENA', 325, 100);
-    ctx.font = '15px monospace';
-    ctx.fillText('MEWEDISI METEL BUILDING MATERIAL', 325, 130);
-    ctx.fillText('TRADE AND CONSTRUCTION MATERI', 325, 155);
-    ctx.fillText('A.A. A/KETEMA W.01 HNO-1619 Around TEKLAYMANOT', 325, 180);
-    ctx.fillText('TEL-0911517719 / 0911255119', 325, 205);
-    ctx.textAlign = 'left';
-    ctx.fillText('FS No. 00002564', 50, 245);
-    ctx.fillText('01/10/2026 13:25:22', 50, 270);
-    ctx.fillText('Buyer\'s TIN: 0038480010', 50, 295);
-    ctx.beginPath();
-    ctx.setLineDash([4, 4]);
-    ctx.moveTo(40, 315);
-    ctx.lineTo(610, 315);
-    ctx.stroke();
-    ctx.fillText('FLAT BAR 40*3', 50, 350);
-    ctx.textAlign = 'right';
-    ctx.fillText('*1,478.26', 600, 350);
-    ctx.textAlign = 'left';
-    ctx.fillText('3 x 2434.78 =', 50, 385);
-    ctx.fillText('ROUND PIPE 32*2.5', 50, 415);
-    ctx.textAlign = 'right';
-    ctx.fillText('*7,304.34', 600, 415);
-    ctx.beginPath();
-    ctx.moveTo(40, 445);
-    ctx.lineTo(610, 445);
-    ctx.stroke();
-    ctx.textAlign = 'left';
-    ctx.fillText('TAXBL1', 50, 480);
-    ctx.textAlign = 'right';
-    ctx.fillText('*8,782.60', 600, 480);
-    ctx.textAlign = 'left';
-    ctx.fillText('TAX1 15.00%', 50, 515);
-    ctx.textAlign = 'right';
-    ctx.fillText('*1,317.39', 600, 515);
-    ctx.font = 'bold 22px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('TOTAL:', 50, 565);
-    ctx.textAlign = 'right';
-    ctx.fillText('*10,099.99', 600, 565);
-    ctx.font = '18px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('CASH Birr', 50, 605);
-    ctx.textAlign = 'right';
-    ctx.fillText('*10,099.99', 600, 605);
-    ctx.font = '15px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('ITEM# 2', 50, 650);
-    ctx.fillText('ERCA ET MFE0097690', 50, 680);
-
-    const dataUrl = canvas.toDataURL('image/png');
-    previewImg.src = dataUrl;
-    previewImg.classList.remove('d-none');
-    pdfPreviewBox.classList.add('d-none');
-    dropPrompt.classList.add('d-none');
-    previewArea.classList.remove('d-none');
-
-    fetch(dataUrl)
-        .then(res => res.blob())
-        .then(blob => {
-            const sampleFile = new File([blob], 'mewedisi_metal_receipt.png', { type: 'image/png' });
-            uploadFileToServer(sampleFile);
-        });
-
-    // Unlock save button
-    document.getElementById('btn-save-receipt').disabled = false;
-    updateVatReportPreview();
-    updateStatus('All Verified Details Loaded', 'success');
-});
-
-// Dedicated 1-Click Auto-Fill for Astra General Trading Receipt (Row 20 of VAT REPORT SEMPTMBER 2026.xlsx)
-const btnAstra = document.getElementById('btn-autofill-astra');
-if (btnAstra) {
-    btnAstra.addEventListener('click', function() {
-        document.getElementById('field_vendor').value = 'ASTRA GENERAL TRADING';
-        document.getElementById('field_proprietor').value = '';
-        document.getElementById('field_tin').value = '0024916531';
-        document.getElementById('field_buyer_tin').value = '0038480010';
-        document.getElementById('field_address').value = 'A.A. Arada Sub City W.01';
-        document.getElementById('field_phone').value = 'TEL-0911517719';
-        document.getElementById('field_fs_no').value = 'FS00002674';
-        document.getElementById('field_machine_no').value = 'TDB0015170';
-        document.getElementById('field_date').value = '2026-09-25';
-        document.getElementById('field_category').value = 'material';
-        document.getElementById('field_description').value = 'WATER PROOF AND WIRE';
-        document.getElementById('field_subtotal').value = '44086.97';
-        document.getElementById('field_vat').value = '6613.05';
-        document.getElementById('field_total').value = '50700.02';
-        if (document.getElementById('field_vat_cat')) document.getElementById('field_vat_cat').value = 'G';
-        if (document.getElementById('field_uom')) document.getElementById('field_uom').value = '9';
-
-        // Populate line items table
-        const tableBody = document.getElementById('line-items-body');
-        const tableSection = document.getElementById('line-items-section');
-        const countBadge = document.getElementById('line-items-count');
-        tableBody.innerHTML = `
-            <tr>
-                <td class="fw-semibold text-dark">WATER PROOF AND WIRE</td>
-                <td class="text-end font-monospace">1</td>
-                <td class="text-end font-monospace">44,086.97</td>
-                <td class="text-end font-monospace fw-bold text-success">44,086.97</td>
-            </tr>
-        `;
-        tableSection.style.display = 'block';
-        countBadge.textContent = '1 item';
-
-        renderCandidateChips([
-            { label: 'Vendor', value: 'ASTRA GENERAL TRADING', target: 'field_vendor' },
-            { label: 'Supplier TIN', value: '0024916531', target: 'field_tin' },
-            { label: 'Buyer TIN', value: '0038480010', target: 'field_buyer_tin' },
-            { label: 'FS #', value: 'FS00002674', target: 'field_fs_no' },
-            { label: 'MRC #', value: 'TDB0015170', target: 'field_machine_no' },
-            { label: 'Date', value: '2026-09-25', target: 'field_date' },
-            { label: 'Subtotal', value: '44086.97', target: 'field_subtotal' },
-            { label: 'VAT 15%', value: '6613.05', target: 'field_vat' },
-            { label: 'Total', value: '50700.02', target: 'field_total' }
-        ]);
-
-        // Synthesize Astra visual receipt for canvas preview
-        const canvas = document.createElement('canvas');
-        canvas.width = 650;
-        canvas.height = 920;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#0f172a';
-        ctx.font = 'bold 22px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('ASTRA GENERAL TRADING', 325, 40);
-        ctx.font = 'bold 18px monospace';
-        ctx.fillText('TIN: 0024916531', 325, 70);
-        ctx.font = '15px monospace';
-        ctx.fillText('A.A. Arada Sub City W.01', 325, 100);
-        ctx.fillText('TEL-0911517719', 325, 125);
-        ctx.textAlign = 'left';
-        ctx.fillText('BUYER: WECHECHA CONSTRUCTION PLC', 50, 165);
-        ctx.fillText('BUYER\'S TIN: 0038480010', 50, 195);
-        ctx.fillText('DATE: 25/09/2026', 50, 225);
-        ctx.fillText('FS: FS00002674', 50, 255);
-        ctx.beginPath();
-        ctx.setLineDash([4, 4]);
-        ctx.moveTo(40, 280);
-        ctx.lineTo(610, 280);
-        ctx.stroke();
-        ctx.fillText('WATER PROOF AND WIRE', 50, 320);
-        ctx.textAlign = 'right';
-        ctx.fillText('*44,086.97', 600, 320);
-        ctx.beginPath();
-        ctx.moveTo(40, 350);
-        ctx.lineTo(610, 350);
-        ctx.stroke();
-        ctx.textAlign = 'left';
-        ctx.fillText('TAXBL1', 50, 390);
-        ctx.textAlign = 'right';
-        ctx.fillText('*44,086.97', 600, 390);
-        ctx.textAlign = 'left';
-        ctx.fillText('TAX1 15.00%', 50, 425);
-        ctx.textAlign = 'right';
-        ctx.fillText('*6,613.05', 600, 425);
-        ctx.font = 'bold 22px monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText('TOTAL:', 50, 475);
-        ctx.textAlign = 'right';
-        ctx.fillText('*50,700.02', 600, 475);
-        ctx.font = '18px monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText('CASH Birr', 50, 515);
-        ctx.textAlign = 'right';
-        ctx.fillText('*50,700.02', 600, 515);
-        ctx.font = '15px monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText('ERCA TDB0015170', 50, 560);
-
-        const dataUrl = canvas.toDataURL('image/png');
-        previewImg.src = dataUrl;
-        previewImg.classList.remove('d-none');
-        pdfPreviewBox.classList.add('d-none');
-        dropPrompt.classList.add('d-none');
-        previewArea.classList.remove('d-none');
-
-        fetch(dataUrl)
-            .then(res => res.blob())
-            .then(blob => {
-                const sampleFile = new File([blob], 'astra_general_trading_receipt.png', { type: 'image/png' });
-                uploadFileToServer(sampleFile);
-            });
-
-        document.getElementById('btn-save-receipt').disabled = false;
-        updateVatReportPreview();
-        updateStatus('Astra Receipt Loaded & Verified', 'success');
+        handleTaskFailure(task, 'Network error replacing duplicate');
     });
 }
 
-// Configure Gemini Vision API Key
-const btnAiKey = document.getElementById('btn-set-ai-key');
-if (btnAiKey) {
-    btnAiKey.addEventListener('click', function() {
-        const currentKey = localStorage.getItem('gemini_api_key') || '';
-        const newKey = prompt('Enter your Google Gemini API Key (free from https://aistudio.google.com):\nEnables 100% precision multimodal AI reading for any Ethiopian receipt.', currentKey);
-        if (newKey !== null) {
-            const clean = newKey.trim();
-            if (clean) {
-                localStorage.setItem('gemini_api_key', clean);
-                alert('✅ Gemini Vision API Key saved! Any receipt you upload will now be scanned using Google Gemini Multimodal Vision AI.');
-            } else {
-                localStorage.removeItem('gemini_api_key');
-                alert('Gemini API Key removed.');
+/**
+ * Append New Row to Table Dynamically (keeps all previous rows!)
+ */
+function appendRowToTable(item, receipt) {
+    const tbody = document.getElementById('table-body');
+    const noRows = document.getElementById('no-rows-msg');
+    if (noRows) noRows.remove();
+
+    const dateFormatted = receipt && receipt.receipt_date ? formatDateDisplay(receipt.receipt_date) : '';
+    const isFlagged = item.is_flagged || (receipt && receipt.needs_review);
+
+    const tr = document.createElement('tr');
+    tr.id = 'row-' + item.id;
+    tr.setAttribute('data-id', item.id);
+    tr.setAttribute('data-receipt-id', receipt ? receipt.id : '');
+    tr.className = isFlagged ? 'table-warning bg-opacity-25' : '';
+
+    tr.innerHTML = `
+        <td class="text-center">
+            <input type="checkbox" class="form-check-input row-checkbox" value="${item.id}" onchange="updateSelectedCount()">
+        </td>
+        <td class="text-center">
+            ${isFlagged 
+                ? `<span class="badge bg-warning text-dark border border-warning" title="${(item.flag_reasons || []).join('; ')}"><i class="fa-solid fa-triangle-exclamation me-1"></i>Review</span>`
+                : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="fa-solid fa-check me-1"></i>Valid</span>`
             }
-        }
-    });
+        </td>
+        <td class="text-center cell-display" data-field="vat_category"><span class="badge bg-light text-dark border">${item.vat_category || 'G'}</span></td>
+        <td class="text-center cell-display" data-field="calendar_type"><span class="badge bg-light text-dark border">${item.calendar_type || 'G'}</span></td>
+        <td class="text-center cell-display" data-field="purchase_type"><span class="badge bg-light text-dark border">${item.purchase_type || 3}</span></td>
+        <td class="font-monospace fw-bold text-primary cell-display" data-field="supplier_tin">${receipt ? receipt.vendor_tin : ''}</td>
+        <td class="fw-semibold text-dark cell-display" data-field="seller_name">${receipt ? receipt.vendor_name : 'General Merchant'}</td>
+        <td class="text-center font-monospace cell-display" data-field="receipt_date">${dateFormatted}</td>
+        <td class="text-center font-monospace cell-display" data-field="mrc_no">${receipt ? (receipt.mrc_no || '') : ''}</td>
+        <td class="text-center font-monospace fw-bold text-dark cell-display" data-field="fs_no">${receipt ? (receipt.fs_no || '') : ''}</td>
+        <td class="fw-semibold text-primary cell-display" data-field="item_description" title="${item.item_description}">${item.item_description}</td>
+        <td class="text-center cell-display" data-field="uom">${item.uom || '9'}</td>
+        <td class="text-end font-monospace cell-display" data-field="qty">${Number(item.qty).toFixed(2)}</td>
+        <td class="text-end font-monospace cell-display" data-field="unit_price">${Number(item.unit_price).toFixed(2)}</td>
+        <td class="text-end font-monospace fw-bold cell-display" data-field="total_value">${Number(item.total_value).toFixed(2)}</td>
+        <td class="text-end font-monospace text-muted cell-display" data-field="vat_amount">${Number(item.vat_amount).toFixed(2)}</td>
+        <td class="text-end font-monospace fw-bold text-success cell-display" data-field="value_after_vat">${Number(item.value_after_vat).toFixed(2)}</td>
+        <td class="text-center">
+            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small">${receipt && receipt.ocr_engine === 'ocr_space' ? 'OCR.Space' : 'Gemini AI'}</span>
+        </td>
+        <td class="text-center">
+            <div class="btn-group btn-group-sm">
+                ${receipt && receipt.file_path ? `<button type="button" class="btn btn-outline-primary btn-xs py-1 px-2" onclick="openSideBySide(${item.id})"><i class="fa-solid fa-eye"></i></button>` : ''}
+                <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2 btn-edit-row" onclick="startEditRow(${item.id})"><i class="fa-solid fa-pen-to-square"></i></button>
+                <button type="button" class="btn btn-outline-danger btn-xs py-1 px-2" onclick="confirmDeleteRow(${item.id})"><i class="fa-solid fa-trash"></i></button>
+            </div>
+        </td>
+    `;
+    // Insert at top of table
+    tbody.insertBefore(tr, tbody.firstChild);
 }
 
-// Demo / Sample Receipt Generator matching the real Ethiopian fiscal format
-document.getElementById('btn-load-sample').addEventListener('click', function() {
-    document.getElementById('btn-autofill-astra').click();
-});
+/**
+ * Format date display
+ */
+function formatDateDisplay(d) {
+    if (!d) return '';
+    if (d.includes('/')) return d;
+    const parts = d.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return d;
+}
 
-// View Details Modal
-function viewReceiptModal(receipt, fileUrl) {
-    const modalTitle = document.getElementById('modalReceiptTitle');
-    const modalBody = document.getElementById('modalReceiptBody');
+/**
+ * Inline Editing for Rows
+ */
+function startEditRow(itemId) {
+    const tr = document.getElementById('row-' + itemId);
+    if (!tr || tr.classList.contains('row-editing')) return;
 
-    modalTitle.innerHTML = `<i class="fa-solid fa-receipt text-primary me-2"></i>Receipt ${receipt.receipt_number}`;
+    tr.classList.add('row-editing', 'table-info');
 
-    const dateStr = receipt.receipt_date ? new Date(receipt.receipt_date).toLocaleDateString() : 'N/A';
-    const subtotal = parseFloat(receipt.subtotal || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
-    const vat = parseFloat(receipt.vat_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
-    const total = parseFloat(receipt.total_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2});
+    // Save original row state to memory for Cancel action
+    const originalValues = {};
+    tr.querySelectorAll('.cell-display').forEach(td => {
+        const field = td.getAttribute('data-field');
+        originalValues[field] = td.innerText.trim();
+    });
+    editedRows.set(itemId, originalValues);
+    updateUnsavedCounter();
 
-    const parsed = receipt.parsed_data || {};
-    const fsNo = parsed.fs_no || '—';
-    const buyerTin = parsed.buyer_tin || '—';
-    const machineNo = parsed.machine_no || '—';
-    const address = parsed.address || '—';
-    const phone = parsed.phone || '—';
-    const proprietor = parsed.proprietor || '—';
+    // Transform cells into inputs
+    const cat = originalValues.vat_category || 'G';
+    const cal = originalValues.calendar_type || 'G';
+    const type = originalValues.purchase_type || '3';
+    const tin = originalValues.supplier_tin || '';
+    const seller = originalValues.seller_name || '';
+    const date = originalValues.receipt_date || '';
+    const mrc = originalValues.mrc_no || '';
+    const fs = originalValues.fs_no || '';
+    const desc = originalValues.item_description || '';
+    const uom = originalValues.uom || '9';
+    const qty = parseFloat(originalValues.qty.replace(/,/g, '')) || 1.0;
+    const uprice = parseFloat(originalValues.unit_price.replace(/,/g, '')) || 0.0;
+    const total = parseFloat(originalValues.total_value.replace(/,/g, '')) || 0.0;
+    const vat = parseFloat(originalValues.vat_amount.replace(/,/g, '')) || 0.0;
+    const afterVat = parseFloat(originalValues.value_after_vat.replace(/,/g, '')) || 0.0;
 
-    modalBody.innerHTML = `
-        <div class="row g-3">
-            <div class="col-md-5 text-center border-end">
-                <h6 class="small fw-bold text-muted mb-2">Original Receipt Scan</h6>
-                ${receipt.file_type === 'pdf' ? `
-                    <div class="py-5 bg-light rounded">
-                        <i class="fa-solid fa-file-pdf fa-4x text-danger mb-2"></i>
-                        <p class="small text-muted">PDF Document</p>
-                        <a href="${fileUrl}" target="_blank" class="btn btn-sm btn-primary">Open Full PDF</a>
-                    </div>
-                ` : `
-                    <img src="${fileUrl}" class="img-fluid rounded border shadow-sm" style="max-height: 380px;">
-                    <div class="mt-2">
-                        <a href="${fileUrl}" target="_blank" class="btn btn-xs btn-outline-primary btn-sm">Open High-Res</a>
-                    </div>
-                `}
-            </div>
-            <div class="col-md-7">
-                <h6 class="small fw-bold text-muted mb-2">Extracted Seller &amp; Financial Breakdown</h6>
-                <table class="table table-sm table-borderless small mb-3">
-                    <tr><td class="text-muted" style="width:35%;">Merchant / Firm:</td><td><strong class="text-dark">${receipt.vendor_name || '—'}</strong></td></tr>
-                    <tr><td class="text-muted">Proprietor / Contact:</td><td>${proprietor}</td></tr>
-                    <tr><td class="text-muted">Supplier TIN:</td><td><span class="font-monospace fw-bold text-primary">${receipt.vendor_tin || '—'}</span></td></tr>
-                    <tr><td class="text-muted">Buyer's TIN:</td><td><span class="font-monospace">${buyerTin}</span></td></tr>
-                    <tr><td class="text-muted">Supplier Address:</td><td>${address}</td></tr>
-                    <tr><td class="text-muted">Supplier Phone:</td><td>${phone}</td></tr>
-                    <tr><td class="text-muted">FS Number:</td><td><span class="font-monospace fw-bold">${fsNo}</span></td></tr>
-                    <tr><td class="text-muted">Machine/ERCA #:</td><td><span class="font-monospace">${machineNo}</span></td></tr>
-                    <tr><td class="text-muted">Receipt Date:</td><td>${dateStr}</td></tr>
-                    <tr><td class="text-muted">Category:</td><td><span class="badge bg-light text-dark border">${receipt.category || 'other'}</span></td></tr>
-                    <tr><td class="text-muted">Project:</td><td>${receipt.project ? receipt.project.name : 'Head Office'}</td></tr>
-                    <tr class="border-top"><td class="text-muted">Net Subtotal:</td><td class="font-monospace">${subtotal} ETB</td></tr>
-                    <tr><td class="text-muted">VAT (15%):</td><td class="font-monospace text-muted">${vat} ETB</td></tr>
-                    <tr class="border-top"><td class="fw-bold text-success">Grand Total:</td><td class="fw-bold fs-6 font-monospace text-success">${total} ETB</td></tr>
-                </table>
+    tr.querySelector('[data-field="vat_category"]').innerHTML = `
+        <select class="form-select form-select-sm p-0 text-center" id="edit-cat-${itemId}" style="width:50px;">
+            <option value="G" ${cat === 'G' ? 'selected' : ''}>G</option>
+            <option value="S" ${cat === 'S' ? 'selected' : ''}>S</option>
+        </select>
+    `;
 
-                <h6 class="small fw-bold text-muted mb-1">OCR Raw Text Recognized:</h6>
-                <textarea class="form-control font-monospace small bg-light" rows="5" readonly>${receipt.ocr_raw_text || 'No raw text stored.'}</textarea>
-            </div>
+    tr.querySelector('[data-field="calendar_type"]').innerHTML = `
+        <select class="form-select form-select-sm p-0 text-center" id="edit-cal-${itemId}" style="width:50px;">
+            <option value="G" ${cal === 'G' ? 'selected' : ''}>G</option>
+            <option value="E" ${cal === 'E' ? 'selected' : ''}>E</option>
+        </select>
+    `;
+
+    tr.querySelector('[data-field="purchase_type"]').innerHTML = `
+        <input type="number" class="form-control form-control-sm p-1 text-center" id="edit-type-${itemId}" value="${type}" style="width:45px;">
+    `;
+
+    tr.querySelector('[data-field="supplier_tin"]').innerHTML = `
+        <input type="text" class="form-control form-control-sm p-1 font-monospace fw-bold" id="edit-tin-${itemId}" value="${tin}" style="width:110px;" oninput="validateEditRow(${itemId})">
+    `;
+
+    tr.querySelector('[data-field="seller_name"]').innerHTML = `
+        <input type="text" class="form-control form-control-sm p-1" id="edit-seller-${itemId}" value="${seller}" style="width:160px;">
+    `;
+
+    tr.querySelector('[data-field="receipt_date"]').innerHTML = `
+        <input type="text" class="form-control form-control-sm p-1 text-center font-monospace" id="edit-date-${itemId}" value="${date}" placeholder="DD/MM/YYYY" style="width:95px;" oninput="validateEditRow(${itemId})">
+    `;
+
+    tr.querySelector('[data-field="mrc_no"]').innerHTML = `
+        <input type="text" class="form-control form-control-sm p-1 text-center font-monospace" id="edit-mrc-${itemId}" value="${mrc}" style="width:105px;">
+    `;
+
+    tr.querySelector('[data-field="fs_no"]').innerHTML = `
+        <input type="text" class="form-control form-control-sm p-1 text-center font-monospace fw-bold" id="edit-fs-${itemId}" value="${fs}" style="width:115px;" oninput="validateEditRow(${itemId})">
+    `;
+
+    tr.querySelector('[data-field="item_description"]').innerHTML = `
+        <input type="text" class="form-control form-control-sm p-1 fw-semibold text-primary" id="edit-desc-${itemId}" value="${desc}" style="width:180px;">
+    `;
+
+    tr.querySelector('[data-field="uom"]').innerHTML = `
+        <select class="form-select form-select-sm p-0 text-center" id="edit-uom-${itemId}" style="width:55px;">
+            <option value="9" ${uom === '9' ? 'selected' : ''}>9</option>
+            <option value="7" ${uom === '7' ? 'selected' : ''}>7</option>
+            <option value="2" ${uom === '2' ? 'selected' : ''}>2</option>
+            <option value="5" ${uom === '5' ? 'selected' : ''}>5</option>
+            <option value="10" ${uom === '10' ? 'selected' : ''}>10</option>
+        </select>
+    `;
+
+    tr.querySelector('[data-field="qty"]').innerHTML = `
+        <input type="number" step="0.01" class="form-control form-control-sm p-1 text-end font-monospace" id="edit-qty-${itemId}" value="${qty}" style="width:75px;" oninput="recalcEditRow(${itemId})">
+    `;
+
+    tr.querySelector('[data-field="unit_price"]').innerHTML = `
+        <input type="number" step="0.01" class="form-control form-control-sm p-1 text-end font-monospace" id="edit-uprice-${itemId}" value="${uprice}" style="width:90px;" oninput="recalcEditRow(${itemId})">
+    `;
+
+    tr.querySelector('[data-field="total_value"]').innerHTML = `
+        <input type="number" step="0.01" class="form-control form-control-sm p-1 text-end font-monospace fw-bold" id="edit-total-${itemId}" value="${total}" style="width:100px;" oninput="recalcFromTotal(${itemId})">
+    `;
+
+    tr.querySelector('[data-field="vat_amount"]').innerHTML = `
+        <input type="number" step="0.01" class="form-control form-control-sm p-1 text-end font-monospace text-muted" id="edit-vat-${itemId}" value="${vat}" style="width:85px;" oninput="validateEditRow(${itemId})">
+    `;
+
+    tr.querySelector('[data-field="value_after_vat"]').innerHTML = `
+        <input type="number" step="0.01" class="form-control form-control-sm p-1 text-end font-monospace fw-bold text-success" id="edit-aftervat-${itemId}" value="${afterVat}" style="width:105px;" oninput="validateEditRow(${itemId})">
+    `;
+
+    // Swap Actions with Save and Cancel buttons
+    const actionsTd = tr.querySelector('td:last-child');
+    actionsTd.innerHTML = `
+        <div class="btn-group btn-group-sm">
+            <button type="button" class="btn btn-success btn-xs py-1 px-2 fw-bold" onclick="saveEditRow(${itemId})" title="Save only this row">
+                <i class="fa-solid fa-check me-1"></i>Save
+            </button>
+            <button type="button" class="btn btn-secondary btn-xs py-1 px-2" onclick="cancelEditRow(${itemId})" title="Cancel editing">
+                <i class="fa-solid fa-times"></i>
+            </button>
         </div>
     `;
 
-    const bsModal = new bootstrap.Modal(document.getElementById('receiptDetailsModal'));
-    bsModal.show();
+    validateEditRow(itemId);
+}
+
+/**
+ * Live Recalculations while editing
+ */
+function recalcEditRow(itemId) {
+    const qty = parseFloat(document.getElementById(`edit-qty-${itemId}`).value) || 0;
+    const uprice = parseFloat(document.getElementById(`edit-uprice-${itemId}`).value) || 0;
+    const total = Math.round(qty * uprice * 100) / 100;
+    const vat = Math.round(total * 0.15 * 100) / 100;
+    const afterVat = Math.round((total + vat) * 100) / 100;
+
+    document.getElementById(`edit-total-${itemId}`).value = total.toFixed(2);
+    document.getElementById(`edit-vat-${itemId}`).value = vat.toFixed(2);
+    document.getElementById(`edit-aftervat-${itemId}`).value = afterVat.toFixed(2);
+
+    validateEditRow(itemId);
+}
+
+function recalcFromTotal(itemId) {
+    const total = parseFloat(document.getElementById(`edit-total-${itemId}`).value) || 0;
+    const vat = Math.round(total * 0.15 * 100) / 100;
+    const afterVat = Math.round((total + vat) * 100) / 100;
+
+    document.getElementById(`edit-vat-${itemId}`).value = vat.toFixed(2);
+    document.getElementById(`edit-aftervat-${itemId}`).value = afterVat.toFixed(2);
+
+    validateEditRow(itemId);
+}
+
+/**
+ * Live Validation Feedback while editing
+ */
+function validateEditRow(itemId) {
+    const qty = parseFloat(document.getElementById(`edit-qty-${itemId}`).value) || 0;
+    const uprice = parseFloat(document.getElementById(`edit-uprice-${itemId}`).value) || 0;
+    const total = parseFloat(document.getElementById(`edit-total-${itemId}`).value) || 0;
+    const vat = parseFloat(document.getElementById(`edit-vat-${itemId}`).value) || 0;
+    const afterVat = parseFloat(document.getElementById(`edit-aftervat-${itemId}`).value) || 0;
+    const tin = (document.getElementById(`edit-tin-${itemId}`).value || '').replace(/\D/g, '');
+    const fs = document.getElementById(`edit-fs-${itemId}`).value || '';
+
+    const errors = [];
+    if (qty > 0 && uprice > 0 && Math.abs(Math.round(qty * uprice * 100)/100 - total) > 0.05) {
+        errors.push('Qty x Unit Price ≠ Total Value');
+    }
+    if (total > 0 && Math.abs(Math.round(total * 0.15 * 100)/100 - vat) > 0.05) {
+        errors.push('Total Value x 15% ≠ VAT');
+    }
+    if ((total > 0 || vat > 0) && Math.abs(Math.round((total + vat) * 100)/100 - afterVat) > 0.05) {
+        errors.push('Total Value + VAT ≠ Value After VAT');
+    }
+    if (!tin || tin.length !== 10) {
+        errors.push('Supplier TIN must be 10 digits');
+    }
+    if (!fs) {
+        errors.push('FS Number is missing');
+    }
+
+    const tr = document.getElementById('row-' + itemId);
+    const statusTd = tr.querySelector('td:nth-child(2)');
+    if (errors.length > 0) {
+        statusTd.innerHTML = `<span class="badge bg-warning text-dark border border-warning" title="${errors.join('; ')}"><i class="fa-solid fa-triangle-exclamation"></i></span>`;
+    } else {
+        statusTd.innerHTML = `<span class="badge bg-success bg-opacity-10 text-success border border-success"><i class="fa-solid fa-check"></i></span>`;
+    }
+}
+
+/**
+ * Save Single Row Inline (AJAX)
+ */
+function saveEditRow(itemId) {
+    const tr = document.getElementById('row-' + itemId);
+    const payload = {
+        id: itemId,
+        vat_category: document.getElementById(`edit-cat-${itemId}`).value,
+        calendar_type: document.getElementById(`edit-cal-${itemId}`).value,
+        purchase_type: parseInt(document.getElementById(`edit-type-${itemId}`).value) || 3,
+        supplier_tin: document.getElementById(`edit-tin-${itemId}`).value,
+        seller_name: document.getElementById(`edit-seller-${itemId}`).value,
+        receipt_date: document.getElementById(`edit-date-${itemId}`).value,
+        mrc_no: document.getElementById(`edit-mrc-${itemId}`).value,
+        fs_no: document.getElementById(`edit-fs-${itemId}`).value,
+        item_description: document.getElementById(`edit-desc-${itemId}`).value,
+        uom: document.getElementById(`edit-uom-${itemId}`).value,
+        qty: parseFloat(document.getElementById(`edit-qty-${itemId}`).value) || 0,
+        unit_price: parseFloat(document.getElementById(`edit-uprice-${itemId}`).value) || 0,
+        total_value: parseFloat(document.getElementById(`edit-total-${itemId}`).value) || 0,
+        vat_amount: parseFloat(document.getElementById(`edit-vat-${itemId}`).value) || 0,
+        value_after_vat: parseFloat(document.getElementById(`edit-aftervat-${itemId}`).value) || 0,
+    };
+
+    fetch(SAVE_ITEM_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            editedRows.delete(itemId);
+            updateUnsavedCounter();
+            renderRowDisplay(itemId, res.item, res.errors);
+            showToast('Row updated successfully!', 'success');
+        } else {
+            showToast(res.message || 'Error saving row', 'danger');
+        }
+    })
+    .catch(err => {
+        showToast('Network error saving row', 'danger');
+    });
+}
+
+/**
+ * Cancel Row Edit
+ */
+function cancelEditRow(itemId) {
+    const tr = document.getElementById('row-' + itemId);
+    const original = editedRows.get(itemId);
+    if (!original) return;
+
+    tr.querySelector('[data-field="vat_category"]').innerHTML = `<span class="badge bg-light text-dark border">${original.vat_category}</span>`;
+    tr.querySelector('[data-field="calendar_type"]').innerHTML = `<span class="badge bg-light text-dark border">${original.calendar_type}</span>`;
+    tr.querySelector('[data-field="purchase_type"]').innerHTML = `<span class="badge bg-light text-dark border">${original.purchase_type}</span>`;
+    tr.querySelector('[data-field="supplier_tin"]').textContent = original.supplier_tin;
+    tr.querySelector('[data-field="seller_name"]').textContent = original.seller_name;
+    tr.querySelector('[data-field="receipt_date"]').textContent = original.receipt_date;
+    tr.querySelector('[data-field="mrc_no"]').textContent = original.mrc_no;
+    tr.querySelector('[data-field="fs_no"]').textContent = original.fs_no;
+    tr.querySelector('[data-field="item_description"]').textContent = original.item_description;
+    tr.querySelector('[data-field="uom"]').textContent = original.uom;
+    tr.querySelector('[data-field="qty"]').textContent = original.qty;
+    tr.querySelector('[data-field="unit_price"]').textContent = original.unit_price;
+    tr.querySelector('[data-field="total_value"]').textContent = original.total_value;
+    tr.querySelector('[data-field="vat_amount"]').textContent = original.vat_amount;
+    tr.querySelector('[data-field="value_after_vat"]').textContent = original.value_after_vat;
+
+    tr.classList.remove('row-editing', 'table-info');
+
+    // Restore actions
+    const receiptId = tr.getAttribute('data-receipt-id');
+    tr.querySelector('td:last-child').innerHTML = `
+        <div class="btn-group btn-group-sm">
+            ${receiptId ? `<button type="button" class="btn btn-outline-primary btn-xs py-1 px-2" onclick="openSideBySide(${itemId})"><i class="fa-solid fa-eye"></i></button>` : ''}
+            <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2 btn-edit-row" onclick="startEditRow(${itemId})"><i class="fa-solid fa-pen-to-square"></i></button>
+            <button type="button" class="btn btn-outline-danger btn-xs py-1 px-2" onclick="confirmDeleteRow(${itemId})"><i class="fa-solid fa-trash"></i></button>
+        </div>
+    `;
+
+    editedRows.delete(itemId);
+    updateUnsavedCounter();
+}
+
+/**
+ * Re-render row back to clean display cells after Save
+ */
+function renderRowDisplay(itemId, item, errors = []) {
+    const tr = document.getElementById('row-' + itemId);
+    const r = item.receipt;
+    const isFlagged = errors.length > 0 || (r && r.needs_review);
+
+    tr.className = isFlagged ? 'table-warning bg-opacity-25' : '';
+    tr.classList.remove('row-editing', 'table-info');
+
+    // Status
+    tr.querySelector('td:nth-child(2)').innerHTML = isFlagged
+        ? `<span class="badge bg-warning text-dark border border-warning" title="${errors.join('; ')}"><i class="fa-solid fa-triangle-exclamation me-1"></i>Review</span>`
+        : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="fa-solid fa-check me-1"></i>Valid</span>`;
+
+    tr.querySelector('[data-field="vat_category"]').innerHTML = `<span class="badge bg-light text-dark border">${item.vat_category || 'G'}</span>`;
+    tr.querySelector('[data-field="calendar_type"]').innerHTML = `<span class="badge bg-light text-dark border">${item.calendar_type || 'G'}</span>`;
+    tr.querySelector('[data-field="purchase_type"]').innerHTML = `<span class="badge bg-light text-dark border">${item.purchase_type || 3}</span>`;
+    tr.querySelector('[data-field="supplier_tin"]').textContent = r ? r.vendor_tin : '';
+    tr.querySelector('[data-field="seller_name"]').textContent = r ? r.vendor_name : 'General Merchant';
+    tr.querySelector('[data-field="receipt_date"]').textContent = r && r.receipt_date ? formatDateDisplay(r.receipt_date) : '';
+    tr.querySelector('[data-field="mrc_no"]').textContent = r ? (r.mrc_no || '') : '';
+    tr.querySelector('[data-field="fs_no"]').textContent = r ? (r.fs_no || '') : '';
+    tr.querySelector('[data-field="item_description"]').textContent = item.item_description;
+    tr.querySelector('[data-field="uom"]').textContent = item.uom || '9';
+    tr.querySelector('[data-field="qty"]').textContent = Number(item.qty).toFixed(2);
+    tr.querySelector('[data-field="unit_price"]').textContent = Number(item.unit_price).toFixed(2);
+    tr.querySelector('[data-field="total_value"]').textContent = Number(item.total_value).toFixed(2);
+    tr.querySelector('[data-field="vat_amount"]').textContent = Number(item.vat_amount).toFixed(2);
+    tr.querySelector('[data-field="value_after_vat"]').textContent = Number(item.value_after_vat).toFixed(2);
+
+    // Actions
+    tr.querySelector('td:last-child').innerHTML = `
+        <div class="btn-group btn-group-sm">
+            ${r && r.file_path ? `<button type="button" class="btn btn-outline-primary btn-xs py-1 px-2" onclick="openSideBySide(${item.id})"><i class="fa-solid fa-eye"></i></button>` : ''}
+            <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2 btn-edit-row" onclick="startEditRow(${item.id})"><i class="fa-solid fa-pen-to-square"></i></button>
+            <button type="button" class="btn btn-outline-danger btn-xs py-1 px-2" onclick="confirmDeleteRow(${item.id})"><i class="fa-solid fa-trash"></i></button>
+        </div>
+    `;
+}
+
+/**
+ * Confirm and Delete Single Row
+ */
+function confirmDeleteRow(itemId) {
+    if (!confirm('Are you sure you want to delete this row? This action cannot be undone.')) return;
+
+    fetch(`${DESTROY_ITEM_BASE}/${itemId}`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json',
+        }
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            const tr = document.getElementById('row-' + itemId);
+            if (tr) tr.remove();
+            editedRows.delete(itemId);
+            updateUnsavedCounter();
+            updateStatsDisplay();
+            showToast('Row deleted successfully.', 'info');
+        } else {
+            showToast(res.message || 'Error deleting row', 'danger');
+        }
+    })
+    .catch(err => {
+        showToast('Network error deleting row', 'danger');
+    });
+}
+
+/**
+ * Save All Unsaved Rows
+ */
+document.getElementById('btn-save-all').addEventListener('click', () => {
+    if (editedRows.size === 0) return;
+
+    const rowsPayload = [];
+    editedRows.forEach((orig, itemId) => {
+        rowsPayload.push({
+            id: itemId,
+            vat_category: document.getElementById(`edit-cat-${itemId}`) ? document.getElementById(`edit-cat-${itemId}`).value : orig.vat_category,
+            calendar_type: document.getElementById(`edit-cal-${itemId}`) ? document.getElementById(`edit-cal-${itemId}`).value : orig.calendar_type,
+            purchase_type: document.getElementById(`edit-type-${itemId}`) ? parseInt(document.getElementById(`edit-type-${itemId}`).value) : orig.purchase_type,
+            supplier_tin: document.getElementById(`edit-tin-${itemId}`) ? document.getElementById(`edit-tin-${itemId}`).value : orig.supplier_tin,
+            seller_name: document.getElementById(`edit-seller-${itemId}`) ? document.getElementById(`edit-seller-${itemId}`).value : orig.seller_name,
+            receipt_date: document.getElementById(`edit-date-${itemId}`) ? document.getElementById(`edit-date-${itemId}`).value : orig.receipt_date,
+            mrc_no: document.getElementById(`edit-mrc-${itemId}`) ? document.getElementById(`edit-mrc-${itemId}`).value : orig.mrc_no,
+            fs_no: document.getElementById(`edit-fs-${itemId}`) ? document.getElementById(`edit-fs-${itemId}`).value : orig.fs_no,
+            item_description: document.getElementById(`edit-desc-${itemId}`) ? document.getElementById(`edit-desc-${itemId}`).value : orig.item_description,
+            uom: document.getElementById(`edit-uom-${itemId}`) ? document.getElementById(`edit-uom-${itemId}`).value : orig.uom,
+            qty: document.getElementById(`edit-qty-${itemId}`) ? parseFloat(document.getElementById(`edit-qty-${itemId}`).value) : parseFloat(orig.qty),
+            unit_price: document.getElementById(`edit-uprice-${itemId}`) ? parseFloat(document.getElementById(`edit-uprice-${itemId}`).value) : parseFloat(orig.unit_price),
+            total_value: document.getElementById(`edit-total-${itemId}`) ? parseFloat(document.getElementById(`edit-total-${itemId}`).value) : parseFloat(orig.total_value),
+            vat_amount: document.getElementById(`edit-vat-${itemId}`) ? parseFloat(document.getElementById(`edit-vat-${itemId}`).value) : parseFloat(orig.vat_amount),
+            value_after_vat: document.getElementById(`edit-aftervat-${itemId}`) ? parseFloat(document.getElementById(`edit-aftervat-${itemId}`).value) : parseFloat(orig.value_after_vat),
+        });
+    });
+
+    fetch(SAVE_ALL_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({ rows: rowsPayload })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            editedRows.clear();
+            updateUnsavedCounter();
+            showToast(res.message, 'success');
+            setTimeout(() => window.location.reload(), 600);
+        } else {
+            showToast(res.message || 'Error saving rows', 'danger');
+        }
+    })
+    .catch(err => {
+        showToast('Network error saving rows', 'danger');
+    });
+});
+
+function updateUnsavedCounter() {
+    const count = editedRows.size;
+    const btn = document.getElementById('btn-save-all');
+    const badge = document.getElementById('unsaved-count');
+    if (count > 0) {
+        btn.classList.remove('d-none');
+        badge.textContent = count;
+    } else {
+        btn.classList.add('d-none');
+    }
+}
+
+/**
+ * Side-by-Side Modal Preview
+ */
+function openSideBySide(itemId) {
+    const tr = document.getElementById('row-' + itemId);
+    const receiptId = tr ? tr.getAttribute('data-receipt-id') : null;
+    if (!receiptId) return;
+
+    fetch(`${SHOW_RECEIPT_BASE}/${receiptId}`, {
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (!res.success) return;
+        const r = res.receipt;
+        const items = res.items || [];
+        const thisItem = items.find(it => it.id === itemId) || items[0] || {};
+
+        document.getElementById('sbs-fs-badge').textContent = 'FS: ' + (r.fs_no || 'None');
+        document.getElementById('sbs-field-tin').textContent = r.vendor_tin || '—';
+        document.getElementById('sbs-field-seller').textContent = r.vendor_name || '—';
+        document.getElementById('sbs-field-date').textContent = r.receipt_date ? formatDateDisplay(r.receipt_date) : '—';
+        document.getElementById('sbs-field-mrc').textContent = r.mrc_no || '—';
+        document.getElementById('sbs-field-fs').textContent = r.fs_no || '—';
+        document.getElementById('sbs-field-desc').textContent = thisItem.item_description || r.description || '—';
+        document.getElementById('sbs-field-qty').textContent = Number(thisItem.qty || 1).toFixed(2);
+        document.getElementById('sbs-field-uprice').textContent = Number(thisItem.unit_price || 0).toFixed(2);
+        document.getElementById('sbs-field-subtotal').textContent = Number(thisItem.total_value || r.subtotal || 0).toFixed(2) + ' ETB';
+        document.getElementById('sbs-field-vat').textContent = Number(thisItem.vat_amount || r.vat_amount || 0).toFixed(2) + ' ETB';
+        document.getElementById('sbs-field-total').textContent = Number(thisItem.value_after_vat || r.total_amount || 0).toFixed(2) + ' ETB';
+        document.getElementById('sbs-raw-text').value = r.ocr_raw_text || 'No transcribed text available.';
+
+        // Validation Checklist
+        const errors = [];
+        const total = parseFloat(thisItem.total_value || r.subtotal || 0);
+        const vat = parseFloat(thisItem.vat_amount || r.vat_amount || 0);
+        const totalAfter = parseFloat(thisItem.value_after_vat || r.total_amount || 0);
+        const qty = parseFloat(thisItem.qty || 1);
+        const uprice = parseFloat(thisItem.unit_price || 0);
+
+        if (qty > 0 && uprice > 0 && Math.abs(Math.round(qty * uprice * 100)/100 - total) > 0.05) {
+            errors.push('Qty x Unit Price does not equal Total Value');
+        }
+        if (total > 0 && Math.abs(Math.round(total * 0.15 * 100)/100 - vat) > 0.05) {
+            errors.push('Total Value x 15% does not equal VAT amount');
+        }
+        if ((total > 0 || vat > 0) && Math.abs(Math.round((total + vat) * 100)/100 - totalAfter) > 0.05) {
+            errors.push('Total Value + VAT does not equal Value After VAT');
+        }
+        if (!r.vendor_tin || r.vendor_tin.length !== 10) {
+            errors.push('Supplier TIN is not 10 digits');
+        }
+
+        const vBox = document.getElementById('sbs-validation-box');
+        if (errors.length > 0) {
+            vBox.className = 'p-3 rounded-3 mb-3 border border-warning bg-warning bg-opacity-10 text-dark';
+            vBox.innerHTML = `
+                <div class="fw-bold text-danger mb-1"><i class="fa-solid fa-triangle-exclamation me-1"></i>Validation Warnings Detected:</div>
+                <ul class="mb-0 small ps-3">
+                    ${errors.map(e => `<li>${e}</li>`).join('')}
+                </ul>
+            `;
+        } else {
+            vBox.className = 'p-3 rounded-3 mb-3 border border-success bg-success bg-opacity-10 text-success';
+            vBox.innerHTML = `<i class="fa-solid fa-circle-check me-1"></i><strong>All Checks Passed:</strong> Math and fiscal fields verified.`;
+        }
+
+        // Preview File Handling (PDF vs Image)
+        const imgEl = document.getElementById('sbs-preview-img');
+        const pdfEl = document.getElementById('sbs-preview-pdf');
+        resetZoom();
+
+        if (res.file_url.toLowerCase().endsWith('.pdf') || (r.file_type === 'pdf')) {
+            imgEl.classList.add('d-none');
+            pdfEl.classList.remove('d-none');
+            pdfEl.src = res.file_url;
+        } else {
+            pdfEl.classList.add('d-none');
+            imgEl.classList.remove('d-none');
+            imgEl.src = res.file_url;
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('sideBySideModal'));
+        modal.show();
+    });
+}
+
+function zoomImage(factor) {
+    currentZoom = Math.max(0.4, Math.min(4.0, currentZoom * factor));
+    applyImageTransform();
+}
+
+function rotateImage() {
+    currentRotation = (currentRotation + 90) % 360;
+    applyImageTransform();
+}
+
+function resetZoom() {
+    currentZoom = 1.0;
+    currentRotation = 0;
+    applyImageTransform();
+}
+
+function applyImageTransform() {
+    const img = document.getElementById('sbs-preview-img');
+    if (img) {
+        img.style.transform = `scale(${currentZoom}) rotate(${currentRotation}deg)`;
+    }
+}
+
+/**
+ * Export Helper (Excel / CSV)
+ */
+function exportData(format, scope) {
+    const baseUrl = (format === 'excel') ? EXPORT_EXCEL_URL : EXPORT_CSV_URL;
+    const params = new URLSearchParams();
+
+    if (scope === 'selected') {
+        const selectedIds = Array.from(document.querySelectorAll('.row-checkbox:checked')).map(cb => cb.value);
+        if (selectedIds.length === 0) {
+            alert('Please select at least one row using the checkboxes.');
+            return;
+        }
+        params.append('selected_ids', selectedIds.join(','));
+    } else if (scope === 'filtered') {
+        const form = document.getElementById('filter-form');
+        const formData = new FormData(form);
+        for (let [k, v] of formData.entries()) {
+            if (v) params.append(k, v);
+        }
+        if (document.getElementById('filter-needs-review').checked) {
+            params.append('needs_review', '1');
+        }
+    }
+
+    window.location.href = baseUrl + (params.toString() ? '?' + params.toString() : '');
+}
+
+/**
+ * Checkbox & Selection
+ */
+function toggleSelectAll(masterCb) {
+    document.querySelectorAll('.row-checkbox').forEach(cb => {
+        cb.checked = masterCb.checked;
+    });
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checked = document.querySelectorAll('.row-checkbox:checked').length;
+    document.querySelectorAll('.selected-count-badge').forEach(el => el.textContent = checked);
+}
+
+/**
+ * Filter Form Submit on toggle
+ */
+function applyFilters() {
+    const form = document.getElementById('filter-form');
+    if (document.getElementById('filter-needs-review').checked) {
+        let hidden = form.querySelector('input[name="needs_review"]');
+        if (!hidden) {
+            hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = 'needs_review';
+            form.appendChild(hidden);
+        }
+        hidden.value = '1';
+    } else {
+        const hidden = form.querySelector('input[name="needs_review"]');
+        if (hidden) hidden.remove();
+    }
+    form.submit();
+}
+
+/**
+ * Settings Modal Logic
+ */
+function togglePasswordVisibility(inputId) {
+    const input = document.getElementById(inputId);
+    input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function testApiKey(engine) {
+    const inputId = engine === 'gemini' ? 'input_gemini_key' : 'input_ocr_space_key';
+    const resultId = engine === 'gemini' ? 'gemini-test-result' : 'ocrspace-test-result';
+    const key = document.getElementById(inputId).value.trim();
+    const resBox = document.getElementById(resultId);
+
+    resBox.classList.remove('d-none', 'text-success', 'text-danger');
+    resBox.className = 'mt-2 small text-primary';
+    resBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Testing connectivity...';
+
+    fetch(TEST_KEY_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ engine: engine, key: key })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            resBox.className = 'mt-2 small text-success fw-bold';
+            resBox.innerHTML = '<i class="fa-solid fa-check-circle me-1"></i>' + res.message;
+        } else {
+            resBox.className = 'mt-2 small text-danger fw-bold';
+            resBox.innerHTML = '<i class="fa-solid fa-times-circle me-1"></i>' + res.message;
+        }
+    })
+    .catch(err => {
+        resBox.className = 'mt-2 small text-danger fw-bold';
+        resBox.innerHTML = '<i class="fa-solid fa-times-circle me-1"></i>Connection error testing key';
+    });
+}
+
+function saveSettings(e) {
+    e.preventDefault();
+    const geminiKey = document.getElementById('input_gemini_key').value.trim();
+    const ocrSpaceKey = document.getElementById('input_ocr_space_key').value.trim();
+
+    fetch(SAVE_SETTINGS_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            gemini_api_key: geminiKey,
+            ocr_space_api_key: ocrSpaceKey,
+        })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            showToast('API keys saved securely.', 'success');
+            const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+            if (modal) modal.hide();
+        } else {
+            showToast(res.message || 'Error saving keys', 'danger');
+        }
+    })
+    .catch(err => {
+        showToast('Network error saving settings', 'danger');
+    });
+}
+
+/**
+ * Toast Notification Utility
+ */
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'position-fixed bottom-0 end-0 p-3';
+        container.style.zIndex = '9999';
+        document.body.appendChild(container);
+    }
+
+    const toastEl = document.createElement('div');
+    toastEl.className = `toast align-items-center text-white bg-${type} border-0 show shadow-sm mb-2`;
+    toastEl.setAttribute('role', 'alert');
+    toastEl.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body small fw-semibold">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="this.closest('.toast').remove()"></button>
+        </div>
+    `;
+    container.appendChild(toastEl);
+    setTimeout(() => toastEl.remove(), 4000);
+}
+
+/**
+ * Update dynamic summary counters
+ */
+function updateStatsDisplay() {
+    const rows = document.querySelectorAll('#table-body tr[id^="row-"]');
+    const countEl = document.getElementById('stat-total-items');
+    const tableCountEl = document.getElementById('table-row-count');
+    if (countEl) countEl.textContent = rows.length;
+    if (tableCountEl) tableCountEl.textContent = rows.length + ' rows';
+
+    let totalVal = 0;
+    let totalVat = 0;
+    let flagged = 0;
+
+    rows.forEach(tr => {
+        const valTd = tr.querySelector('[data-field="total_value"]');
+        const vatTd = tr.querySelector('[data-field="vat_amount"]');
+        if (valTd) totalVal += parseFloat(valTd.textContent.replace(/,/g, '')) || 0;
+        if (vatTd) totalVat += parseFloat(vatTd.textContent.replace(/,/g, '')) || 0;
+        if (tr.classList.contains('table-warning')) flagged++;
+    });
+
+    const statValEl = document.getElementById('stat-total-value');
+    const statVatEl = document.getElementById('stat-total-vat');
+    const statFlagEl = document.getElementById('stat-flagged-count');
+
+    if (statValEl) statValEl.innerHTML = totalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' <small class="fs-6 text-muted">ETB</small>';
+    if (statVatEl) statVatEl.innerHTML = totalVat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' <small class="fs-6 text-muted">ETB</small>';
+    if (statFlagEl) statFlagEl.textContent = flagged;
 }
 </script>
 @endpush
-@endsection
