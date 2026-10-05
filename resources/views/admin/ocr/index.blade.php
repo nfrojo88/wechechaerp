@@ -446,6 +446,9 @@
                     <button type="button" class="btn btn-xs btn-outline-success btn-sm fw-bold shadow-xs px-2.5 ms-2" id="btn-add-manual-row" onclick="addManualBlankRow()">
                         <i class="fa-solid fa-plus me-1"></i>Add Manual Row
                     </button>
+                    <button type="button" class="btn btn-xs btn-warning btn-sm fw-bold shadow-xs px-2.5 ms-2 d-none" id="btn-bulk-rescan" onclick="rescanBulkSelected()" title="Re-scan selected receipts with Gemini Vision AI">
+                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i>Re-Scan with AI (<span class="selected-count-badge">0</span>)
+                    </button>
                 </div>
 
                 {{-- Toolbar Filters --}}
@@ -625,6 +628,9 @@
                                         @if($r && $r->file_path)
                                             <button type="button" class="btn btn-outline-primary btn-xs py-1 px-2" title="Inspect original scanned receipt side-by-side" onclick="openSideBySide({{ $item->id }})">
                                                 <i class="fa-solid fa-eye"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-outline-warning btn-xs py-1 px-2 btn-rescan-row" id="btn-rescan-{{ $item->id }}" title="Re-scan receipt with Gemini Vision AI to auto-fix Seller Name, FS No & Items" onclick="rescanRowWithAi({{ $item->id }})">
+                                                <i class="fa-solid fa-wand-magic-sparkles"></i>
                                             </button>
                                         @endif
 
@@ -880,6 +886,8 @@ const SAVE_SETTINGS_URL = '{{ url("admin/receipt-ocr/settings") }}';
 const TEST_KEY_URL = '{{ url("admin/receipt-ocr/test-key") }}';
 const EXPORT_EXCEL_URL = '{{ url("admin/receipt-ocr/export-excel") }}';
 const EXPORT_CSV_URL = '{{ url("admin/receipt-ocr/export-csv") }}';
+const RESCAN_ITEM_BASE = '{{ url("admin/receipt-ocr/item") }}';
+const RESCAN_BULK_URL = '{{ url("admin/receipt-ocr/rescan-bulk") }}';
 
 // State management
 let uploadQueue = [];
@@ -1653,6 +1661,7 @@ function appendRowToTable(item, receipt) {
         <td class="text-center">
             <div class="btn-group btn-group-sm">
                 ${receipt && receipt.file_path ? `<button type="button" class="btn btn-outline-primary btn-xs py-1 px-2" onclick="openSideBySide(${item.id})"><i class="fa-solid fa-eye"></i></button>` : ''}
+                ${receipt && receipt.file_path ? `<button type="button" class="btn btn-outline-warning btn-xs py-1 px-2 btn-rescan-row" id="btn-rescan-${item.id}" title="Re-scan with Gemini Vision AI" onclick="rescanRowWithAi(${item.id})"><i class="fa-solid fa-wand-magic-sparkles"></i></button>` : ''}
                 <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2 btn-edit-row" onclick="startEditRow(${item.id})"><i class="fa-solid fa-pen-to-square"></i></button>
                 <button type="button" class="btn btn-outline-danger btn-xs py-1 px-2" onclick="confirmDeleteRow(${item.id})"><i class="fa-solid fa-trash"></i></button>
             </div>
@@ -1963,6 +1972,7 @@ function renderRowDisplay(itemId, item, errors = []) {
     tr.querySelector('td:last-child').innerHTML = `
         <div class="btn-group btn-group-sm">
             ${r && r.file_path ? `<button type="button" class="btn btn-outline-primary btn-xs py-1 px-2" onclick="openSideBySide(${item.id})"><i class="fa-solid fa-eye"></i></button>` : ''}
+            ${r && r.file_path ? `<button type="button" class="btn btn-outline-warning btn-xs py-1 px-2 btn-rescan-row" id="btn-rescan-${item.id}" title="Re-scan with Gemini Vision AI" onclick="rescanRowWithAi(${item.id})"><i class="fa-solid fa-wand-magic-sparkles"></i></button>` : ''}
             <button type="button" class="btn btn-outline-secondary btn-xs py-1 px-2 btn-edit-row" onclick="startEditRow(${item.id})"><i class="fa-solid fa-pen-to-square"></i></button>
             <button type="button" class="btn btn-outline-danger btn-xs py-1 px-2" onclick="confirmDeleteRow(${item.id})"><i class="fa-solid fa-trash"></i></button>
         </div>
@@ -2208,6 +2218,146 @@ function toggleSelectAll(masterCb) {
 function updateSelectedCount() {
     const checked = document.querySelectorAll('.row-checkbox:checked').length;
     document.querySelectorAll('.selected-count-badge').forEach(el => el.textContent = checked);
+    const bulkRescanBtn = document.getElementById('btn-bulk-rescan');
+    if (bulkRescanBtn) {
+        if (checked > 0) {
+            bulkRescanBtn.classList.remove('d-none');
+        } else {
+            bulkRescanBtn.classList.add('d-none');
+        }
+    }
+}
+
+/**
+ * Re-scan individual row with Gemini Vision AI
+ */
+function rescanRowWithAi(itemId) {
+    const btn = document.getElementById(`btn-rescan-${itemId}`);
+    const originalHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    }
+
+    showToast('Re-scanning receipt with Gemini Vision AI...', 'info');
+
+    fetch(`${RESCAN_ITEM_BASE}/${itemId}/rescan`, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+
+        if (!res.success) {
+            showToast(res.message || 'Failed to re-scan receipt', 'danger');
+            return;
+        }
+
+        showToast(res.message || 'Row successfully updated with AI!', 'success');
+
+        const item = res.item;
+        const receipt = res.receipt;
+        const tr = document.getElementById(`row-${itemId}`);
+        if (!tr) return;
+
+        const setCell = (field, val) => {
+            const td = tr.querySelector(`[data-field="${field}"]`);
+            if (td) td.textContent = val;
+        };
+
+        setCell('supplier_tin', receipt ? (receipt.vendor_tin || '') : '');
+        setCell('seller_name', receipt ? (receipt.vendor_name || 'General Merchant') : 'General Merchant');
+        setCell('receipt_date', receipt && receipt.receipt_date ? formatDateDisplay(receipt.receipt_date) : '');
+        setCell('mrc_no', receipt ? (receipt.mrc_no || '') : '');
+        setCell('fs_no', receipt ? (receipt.fs_no || '') : '');
+        setCell('item_description', item.item_description || '');
+        setCell('uom', item.uom || '9');
+        setCell('qty', Number(item.qty || 1).toFixed(2));
+        setCell('unit_price', Number(item.unit_price || 0).toFixed(2));
+        setCell('total_value', Number(item.total_value || 0).toFixed(2));
+        setCell('vat_amount', Number(item.vat_amount || 0).toFixed(2));
+        setCell('value_after_vat', Number(item.value_after_vat || 0).toFixed(2));
+
+        const statusTd = tr.children[1];
+        if (statusTd) {
+            if (res.rowErrors && res.rowErrors.length > 0) {
+                statusTd.innerHTML = `<span class="badge bg-warning text-dark border border-warning" title="${res.rowErrors.join('; ')}"><i class="fa-solid fa-triangle-exclamation me-1"></i>Review</span>`;
+                tr.classList.add('table-warning', 'bg-opacity-25');
+            } else {
+                statusTd.innerHTML = `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" title="All arithmetic checks verified"><i class="fa-solid fa-check me-1"></i>Valid</span>`;
+                tr.classList.remove('table-warning', 'bg-opacity-25');
+            }
+        }
+    })
+    .catch(err => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        }
+        showToast('Error re-scanning receipt: ' + err.message, 'danger');
+    });
+}
+
+/**
+ * Bulk re-scan all selected rows with Gemini Vision AI
+ */
+function rescanBulkSelected() {
+    const checkedBoxes = Array.from(document.querySelectorAll('.row-checkbox:checked'));
+    if (checkedBoxes.length === 0) {
+        showToast('No rows selected to re-scan.', 'warning');
+        return;
+    }
+
+    const itemIds = checkedBoxes.map(cb => cb.value);
+    const btn = document.getElementById('btn-bulk-rescan');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin me-1"></i>Re-Scanning (${itemIds.length})...`;
+    }
+
+    showToast(`Re-scanning ${itemIds.length} receipts with Gemini Vision AI...`, 'info');
+
+    fetch(RESCAN_BULK_URL, {
+        method: 'POST',
+        headers: {
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ item_ids: itemIds })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+        }
+
+        if (res.success) {
+            showToast(res.message, 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1200);
+        } else {
+            showToast(res.message || 'Bulk re-scan failed.', 'danger');
+        }
+    })
+    .catch(err => {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+        }
+        showToast('Bulk re-scan error: ' + err.message, 'danger');
+    });
 }
 
 function applyFilters() {

@@ -2552,6 +2552,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/save-item',         [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'saveItem'])->name('save-item');
         Route::post('/save-all',          [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'saveAll'])->name('save-all');
         Route::delete('/item/{item}',     [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'destroyItem'])->name('destroy-item');
+        Route::post('/item/{item}/rescan', [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'rescanItem'])->name('rescan-item');
+        Route::post('/rescan-bulk',        [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'rescanBulk'])->name('rescan-bulk');
         Route::post('/replace-duplicate', [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'replaceDuplicate'])->name('replace-duplicate');
         Route::get('/export-excel',       [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'exportExcel'])->name('export-excel');
         Route::get('/export-csv',         [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'exportCsv'])->name('export-csv');

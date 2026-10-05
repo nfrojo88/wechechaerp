@@ -1170,6 +1170,218 @@ class OCRReceiptScannerController extends Controller
     }
 
     /**
+     * Re-scan an existing receipt item with Gemini AI to repair/extract Seller Name, FS No & Items.
+     */
+    public function rescanItem($id)
+    {
+        $this->ensureAuthorized();
+
+        $item = ReceiptItem::with('receipt')->findOrFail($id);
+        $receipt = $item->receipt;
+
+        if (!$receipt || empty($receipt->file_path)) {
+            return response()->json(['success' => false, 'message' => 'Original receipt file not found on record.'], 404);
+        }
+
+        $path = $receipt->file_path;
+        if (!Storage::disk('public')->exists($path)) {
+            return response()->json(['success' => false, 'message' => 'Receipt file missing from server storage.'], 404);
+        }
+
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $mimeType = ($ext === 'pdf') ? 'application/pdf' : 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext);
+        $base64 = base64_encode(Storage::disk('public')->get($path));
+
+        $geminiKey = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
+        $extracted = null;
+
+        if (!empty($geminiKey)) {
+            $extracted = $this->scanWithGemini($geminiKey, $base64, $mimeType);
+        }
+
+        if (!$extracted) {
+            $ocrSpaceKey = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
+            $realPath = Storage::disk('public')->path($path);
+            $extracted = $this->scanWithOcrSpace($ocrSpaceKey, $base64, $ext, $realPath);
+        }
+
+        if (!$extracted) {
+            return response()->json(['success' => false, 'message' => 'AI re-scan could not read text from receipt image.'], 422);
+        }
+
+        // Update Receipt with clean details
+        if (!empty($extracted['merchant_name'])) {
+            $receipt->vendor_name = trim($extracted['merchant_name']);
+        }
+        if (!empty($extracted['supplier_tin'])) {
+            $receipt->vendor_tin = preg_replace('/[^0-9]/', '', $extracted['supplier_tin']);
+        }
+        if (!empty($extracted['fs_no'])) {
+            $receipt->fs_no = strtoupper(preg_replace('/\s+/', '', $extracted['fs_no']));
+        }
+        if (!empty($extracted['machine_no'])) {
+            $receipt->mrc_no = strtoupper(preg_replace('/\s+/', '', $extracted['machine_no']));
+        }
+        if (!empty($extracted['receipt_date'])) {
+            $receipt->receipt_date = $this->parseDateToYmd($extracted['receipt_date']);
+        }
+        if (!empty($extracted['subtotal'])) {
+            $receipt->subtotal = (float)$extracted['subtotal'];
+        }
+        if (!empty($extracted['vat_amount'])) {
+            $receipt->vat_amount = (float)$extracted['vat_amount'];
+        }
+        if (!empty($extracted['total_amount'])) {
+            $receipt->total_amount = (float)$extracted['total_amount'];
+        }
+        $receipt->ocr_engine = 'gemini';
+        $receipt->confidence = 'high';
+        $receipt->needs_review = false;
+        $receipt->save();
+
+        // Update Receipt Item
+        $itemsData = $extracted['items'] ?? [];
+        if (!empty($itemsData)) {
+            $first = $itemsData[0];
+            $item->item_description = $first['item_description'] ?? ($receipt->vendor_name . ' Material');
+            $item->uom = (string)($first['uom'] ?? '9');
+            $item->qty = (float)($first['qty'] ?? 1);
+            $item->unit_price = (float)($first['unit_price'] ?? ($item->qty > 0 ? round($receipt->subtotal / $item->qty, 2) : $receipt->subtotal));
+            $item->total_value = (float)($first['total_value'] ?? $receipt->subtotal);
+            $item->vat_amount = (float)($first['vat'] ?? $receipt->vat_amount);
+            $item->value_after_vat = (float)($first['value_after_vat'] ?? $receipt->total_amount);
+            $item->is_flagged = false;
+            $item->save();
+
+            // Create extra line items if multiple were found on this receipt
+            if (count($itemsData) > 1 && ReceiptItem::where('receipt_id', $receipt->id)->count() <= 1) {
+                for ($i = 1; $i < count($itemsData); $i++) {
+                    $extra = $itemsData[$i];
+                    ReceiptItem::create([
+                        'receipt_id'       => $receipt->id,
+                        'item_description' => $extra['item_description'] ?? 'Additional Material',
+                        'vat_category'     => $extracted['vat_category'] ?? 'G',
+                        'calendar_type'    => $extracted['calendar_type'] ?? 'G',
+                        'purchase_type'    => 3,
+                        'uom'              => (string)($extra['uom'] ?? '9'),
+                        'qty'              => (float)($extra['qty'] ?? 1),
+                        'unit_price'       => (float)($extra['unit_price'] ?? 0),
+                        'total_value'      => (float)($extra['total_value'] ?? 0),
+                        'vat_amount'       => (float)($extra['vat'] ?? 0),
+                        'value_after_vat'  => (float)($extra['value_after_vat'] ?? 0),
+                        'is_flagged'       => false,
+                    ]);
+                }
+            }
+        } else {
+            $item->item_description = $extracted['description'] ?? ($receipt->vendor_name . ' Supplies');
+            $item->total_value = (float)$receipt->subtotal;
+            $item->vat_amount = (float)$receipt->vat_amount;
+            $item->value_after_vat = (float)$receipt->total_amount;
+            $item->unit_price = (float)$receipt->subtotal;
+            $item->qty = 1.00;
+            $item->is_flagged = false;
+            $item->save();
+        }
+
+        $item->load('receipt');
+        $rowErrors = $item->validateRow();
+
+        return response()->json([
+            'success'   => true,
+            'message'   => "Row #{$item->id} rescanned with Gemini AI! Seller, FS No & Items updated.",
+            'item'      => $item,
+            'receipt'   => $receipt,
+            'rowErrors' => $rowErrors,
+        ]);
+    }
+
+    /**
+     * Bulk re-scan multiple items with AI.
+     */
+    public function rescanBulk(Request $request)
+    {
+        $this->ensureAuthorized();
+
+        $itemIds = $request->input('item_ids', []);
+        if (empty($itemIds)) {
+            return response()->json(['success' => false, 'message' => 'No items selected to re-scan.'], 422);
+        }
+
+        $updatedCount = 0;
+        $failedCount = 0;
+        $items = ReceiptItem::with('receipt')->whereIn('id', $itemIds)->get();
+
+        foreach ($items as $item) {
+            $receipt = $item->receipt;
+            if (!$receipt || empty($receipt->file_path) || !Storage::disk('public')->exists($receipt->file_path)) {
+                $failedCount++;
+                continue;
+            }
+
+            try {
+                $path = $receipt->file_path;
+                $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+                $mimeType = ($ext === 'pdf') ? 'application/pdf' : 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext);
+                $base64 = base64_encode(Storage::disk('public')->get($path));
+
+                $geminiKey = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
+                $extracted = null;
+                if (!empty($geminiKey)) {
+                    $extracted = $this->scanWithGemini($geminiKey, $base64, $mimeType);
+                }
+                if (!$extracted) {
+                    $ocrSpaceKey = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
+                    $extracted = $this->scanWithOcrSpace($ocrSpaceKey, $base64, $ext, Storage::disk('public')->path($path));
+                }
+
+                if ($extracted) {
+                    if (!empty($extracted['merchant_name'])) $receipt->vendor_name = trim($extracted['merchant_name']);
+                    if (!empty($extracted['supplier_tin']))  $receipt->vendor_tin = preg_replace('/[^0-9]/', '', $extracted['supplier_tin']);
+                    if (!empty($extracted['fs_no']))         $receipt->fs_no = strtoupper(preg_replace('/\s+/', '', $extracted['fs_no']));
+                    if (!empty($extracted['machine_no']))    $receipt->mrc_no = strtoupper(preg_replace('/\s+/', '', $extracted['machine_no']));
+                    if (!empty($extracted['receipt_date']))  $receipt->receipt_date = $this->parseDateToYmd($extracted['receipt_date']);
+                    if (!empty($extracted['subtotal']))      $receipt->subtotal = (float)$extracted['subtotal'];
+                    if (!empty($extracted['vat_amount']))    $receipt->vat_amount = (float)$extracted['vat_amount'];
+                    if (!empty($extracted['total_amount']))  $receipt->total_amount = (float)$extracted['total_amount'];
+                    $receipt->ocr_engine = 'gemini';
+                    $receipt->confidence = 'high';
+                    $receipt->needs_review = false;
+                    $receipt->save();
+
+                    $itemsData = $extracted['items'] ?? [];
+                    if (!empty($itemsData)) {
+                        $first = $itemsData[0];
+                        $item->item_description = $first['item_description'] ?? ($receipt->vendor_name . ' Material');
+                        $item->qty = (float)($first['qty'] ?? 1);
+                        $item->unit_price = (float)($first['unit_price'] ?? ($item->qty > 0 ? round($receipt->subtotal / $item->qty, 2) : $receipt->subtotal));
+                        $item->total_value = (float)($first['total_value'] ?? $receipt->subtotal);
+                        $item->vat_amount = (float)($first['vat'] ?? $receipt->vat_amount);
+                        $item->value_after_vat = (float)($first['value_after_vat'] ?? $receipt->total_amount);
+                    } else {
+                        $item->item_description = $extracted['description'] ?? ($receipt->vendor_name . ' Supplies');
+                        $item->total_value = (float)$receipt->subtotal;
+                        $item->vat_amount = (float)$receipt->vat_amount;
+                        $item->value_after_vat = (float)$receipt->total_amount;
+                    }
+                    $item->is_flagged = false;
+                    $item->save();
+                    $updatedCount++;
+                } else {
+                    $failedCount++;
+                }
+            } catch (\Throwable $e) {
+                $failedCount++;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Re-scanned {$updatedCount} receipts with AI" . ($failedCount > 0 ? " ({$failedCount} failed or had no image file)." : "."),
+        ]);
+    }
+
+    /**
      * Export table into Excel (.xlsx) with exact column order A to O.
      * Uses OpenSpout for true numeric cells and proper formats.
      */
