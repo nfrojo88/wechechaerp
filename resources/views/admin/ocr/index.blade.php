@@ -140,65 +140,301 @@
         </div>
     </div>
 
-    {{-- BATCH UPLOAD DROPZONE & CONCURRENCY WORKER QUEUE --}}
+    {{-- MAIN SCANNER & UPLOAD STUDIO (WITH LIVE PREVIEW AND ADD BUTTON) --}}
     <div class="card border-0 shadow-sm rounded-3 mb-4 overflow-hidden">
         <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div class="d-flex align-items-center gap-2">
                 <span class="p-2 rounded bg-success bg-opacity-10 text-success">
-                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <i class="fa-solid fa-camera-viewfinder"></i>
                 </span>
-                <strong class="text-dark">Batch Upload &amp; Parallel OCR Extraction</strong>
-                <span class="badge bg-light text-muted border small">Accepts JPG, PNG, WEBP, PDF</span>
+                <strong class="text-dark">Live Receipt Upload &amp; Optical Character Recognition (OCR)</strong>
             </div>
-            <div class="d-flex align-items-center gap-2 small text-muted">
-                <span>Concurrency: <strong>3-4 files</strong></span>
-                <span class="mx-1">•</span>
-                <span>Duplicate Prevention: <strong>FS No Key</strong></span>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-light text-muted border small">Accepts Multiple Images (JPG, PNG, WEBP) &amp; PDFs</span>
+                <span class="badge bg-primary text-white small" id="ocr-status-badge">
+                    <i class="fa-solid fa-circle me-1" style="font-size:0.55rem;"></i>Ready to scan
+                </span>
             </div>
         </div>
 
         <div class="card-body p-3 p-md-4">
-            {{-- Drag & Drop Area --}}
-            <div id="drop-zone" class="border border-2 border-dashed rounded-3 p-4 text-center position-relative bg-light transition-all"
-                 style="border-color:#10b981 !important; min-height: 140px; cursor: pointer;">
-                <input type="file" id="file-input" multiple accept="image/jpeg,image/png,image/webp,application/pdf" class="position-absolute top-0 start-0 w-100 h-100 opacity-0 cursor-pointer" style="z-index:5;">
-                <div class="py-2">
-                    <div class="rounded-circle bg-success bg-opacity-10 text-success p-3 d-inline-flex mb-2">
-                        <i class="fa-solid fa-file-circle-plus fa-2x"></i>
-                    </div>
-                    <h5 class="fw-bold text-dark mb-1">Drag &amp; Drop 10+ Receipts or Multi-Page PDFs Here</h5>
-                    <p class="text-muted small mb-3">Files will be scanned in parallel. Existing data is always kept and duplicates by FS No are automatically prevented.</p>
-                    <div class="d-flex justify-content-center gap-2">
-                        <button type="button" class="btn btn-sm btn-success px-3 fw-semibold shadow-xs" onclick="document.getElementById('file-input').click()">
-                            <i class="fa-solid fa-folder-open me-1"></i>Choose Multiple Files
-                        </button>
-                        <label class="btn btn-sm btn-outline-dark px-3 fw-semibold shadow-xs mb-0 cursor-pointer">
-                            <i class="fa-solid fa-camera me-1"></i>Snap Receipt Photo
-                            <input type="file" id="camera-input" accept="image/*" capture="environment" class="d-none">
-                        </label>
-                    </div>
-                </div>
-            </div>
+            <div class="row g-4">
 
-            {{-- Overall Batch Progress Bar --}}
-            <div id="batch-progress-container" class="mt-3 d-none">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <small class="fw-bold text-dark" id="batch-progress-label">
-                        <i class="fa-solid fa-spinner fa-spin me-1 text-primary"></i>Processing Batch... (<span id="batch-count-done">0</span>/<span id="batch-count-total">0</span> completed)
-                    </small>
-                    <small class="fw-bold text-primary font-monospace" id="batch-progress-pct">0%</small>
-                </div>
-                <div class="progress" style="height: 10px;">
-                    <div id="batch-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%"></div>
-                </div>
-            </div>
+                {{-- Left Column: Receipt Dropzone & Live Image Preview with Action Buttons --}}
+                <div class="col-lg-5">
+                    <div class="p-3 border rounded-3 bg-light h-100 d-flex flex-column">
 
-            {{-- Queue File Cards Container --}}
-            <div id="queue-container" class="row g-2 mt-2 d-none"></div>
+                        {{-- DROP ZONE & PREVIEW BOX (WITH GREEN BORDER) --}}
+                        <div id="drop-zone" class="border border-2 border-dashed rounded-3 p-3 text-center position-relative bg-white shadow-xs transition-all"
+                             style="border-color:#10b981 !important; min-height: 280px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+                            <input type="file" id="file-input" multiple accept="image/jpeg,image/png,image/webp,application/pdf" class="position-absolute top-0 start-0 w-100 h-100 opacity-0 cursor-pointer" style="z-index:5;">
+
+                            {{-- Drop Prompt when empty --}}
+                            <div id="drop-prompt" class="py-3">
+                                <div class="rounded-circle bg-success bg-opacity-10 text-success p-3 d-inline-flex mb-3">
+                                    <i class="fa-solid fa-cloud-arrow-up fa-2x"></i>
+                                </div>
+                                <h6 class="fw-bold text-dark mb-1">Drag &amp; Drop Receipt(s) or PDF Here</h6>
+                                <p class="text-muted small mb-3">Single receipt or 10+ files at once (JPEG, PNG, WEBP, PDF)</p>
+                                
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button type="button" class="btn btn-sm btn-success px-3 fw-semibold shadow-xs" onclick="document.getElementById('file-input').click()">
+                                        <i class="fa-solid fa-folder-open me-1"></i>Browse Files
+                                    </button>
+                                    <label class="btn btn-sm btn-outline-dark px-3 fw-semibold shadow-xs mb-0 cursor-pointer">
+                                        <i class="fa-solid fa-camera me-1"></i>Snap Photo
+                                        <input type="file" id="camera-input" accept="image/*" capture="environment" class="d-none">
+                                    </label>
+                                </div>
+                            </div>
+
+                            {{-- PREVIEW AREA WHEN FILE IS SELECTED / SCANNED --}}
+                            <div id="preview-area" class="d-none w-100 text-center">
+                                <div class="position-relative d-inline-block w-100">
+                                    <img id="receipt-preview-img" src="" alt="Receipt Preview" 
+                                         class="img-fluid rounded border shadow-sm transition-all" 
+                                         style="max-height: 380px; object-fit: contain; width: auto; background:#fff; transform-origin: center center; transform: rotate(0deg);">
+                                    <div id="pdf-preview-box" class="d-none py-5">
+                                        <i class="fa-solid fa-file-pdf fa-4x text-danger mb-2"></i>
+                                        <div class="fw-bold text-dark" id="pdf-filename">PDF Document</div>
+                                    </div>
+                                </div>
+
+                                {{-- ACTION BUTTONS ROW: ADD BUTTON, ROTATE, RE-SCAN, CLEAR --}}
+                                <div class="d-flex justify-content-center align-items-center gap-2 mt-3 flex-wrap" id="preview-actions-bar">
+                                    {{-- THE ADD BUTTON REQUESTED BY USER --}}
+                                    <button type="button" class="btn btn-success btn-sm fw-bold shadow-xs px-3" id="btn-add-to-table" title="Add this scanned receipt to the table and save to database">
+                                        <i class="fa-solid fa-plus-circle me-1"></i>Add to Table
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-rotate-img" title="Rotate 90°">
+                                        <i class="fa-solid fa-rotate-right me-1"></i>Rotate
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-reprocess-img" title="Re-scan OCR">
+                                        <i class="fa-solid fa-bolt me-1"></i>Re-Scan
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" id="btn-clear-img" title="Clear Receipt">
+                                        <i class="fa-solid fa-trash me-1"></i>Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- OCR PROGRESS INDICATOR (WITH "Scan Complete! 100%") --}}
+                        <div id="ocr-progress-container" class="mt-3 d-none">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="fw-bold text-dark" id="ocr-progress-label">
+                                    <i class="fa-solid fa-spinner fa-spin me-1 text-primary"></i>Scanning Receipt...
+                                </small>
+                                <small class="fw-bold text-primary font-monospace" id="ocr-progress-pct">0%</small>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div id="ocr-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        {{-- Batch Queue Container if multiple files are selected --}}
+                        <div id="batch-progress-container" class="mt-3 d-none">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="fw-bold text-dark" id="batch-progress-label">
+                                    <i class="fa-solid fa-spinner fa-spin me-1 text-primary"></i>Parallel Queue: <span id="batch-count-done">0</span>/<span id="batch-count-total">0</span> completed
+                                </small>
+                                <small class="fw-bold text-primary font-monospace" id="batch-progress-pct">0%</small>
+                            </div>
+                            <div class="progress" style="height: 6px;">
+                                <div id="batch-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div id="queue-container" class="row g-2 mt-2 d-none" style="max-height: 220px; overflow-y: auto;"></div>
+
+                        <div class="mt-auto pt-3">
+                            <div class="alert alert-light border small text-muted mb-0 py-2">
+                                <i class="fa-solid fa-lightbulb text-warning me-1"></i>
+                                <strong>Automatic Dual OCR:</strong> Gemini Multimodal AI extracts all fields and line items. If Gemini is unavailable, OCR.Space automatically takes over.
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                {{-- Right Column: Extracted Receipt Fields & Direct Add Action --}}
+                <div class="col-lg-7">
+                    <div class="p-3 border rounded-3 bg-white h-100 d-flex flex-column">
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <ul class="nav nav-tabs nav-tabs-bordered mb-0" id="ocrTabs" role="tablist">
+                                <li class="nav-item">
+                                    <button class="nav-link active fw-bold small" id="extracted-tab" data-bs-toggle="tab" data-bs-target="#tab-extracted" type="button">
+                                        <i class="fa-solid fa-list-check me-1 text-success"></i>Extracted Receipt Fields
+                                    </button>
+                                </li>
+                                <li class="nav-item">
+                                    <button class="nav-link fw-bold small" id="rawtext-tab" data-bs-toggle="tab" data-bs-target="#tab-rawtext" type="button">
+                                        <i class="fa-solid fa-font me-1 text-primary"></i>Raw OCR Text
+                                    </button>
+                                </li>
+                            </ul>
+                            <button type="button" class="btn btn-sm btn-success fw-bold shadow-xs px-3" id="btn-add-form-to-table">
+                                <i class="fa-solid fa-plus-circle me-1"></i>Add to Table
+                            </button>
+                        </div>
+
+                        <div class="tab-content flex-grow-1" id="ocrTabsContent">
+
+                            {{-- Tab 1: Extracted Fields Form --}}
+                            <div class="tab-pane fade show active" id="tab-extracted">
+                                <form id="save-receipt-form" onsubmit="event.preventDefault(); document.getElementById('btn-add-to-table').click();">
+                                    <input type="hidden" id="stored_file_path" name="file_path" value="">
+                                    <input type="hidden" id="ocr_raw_text_hidden" name="ocr_raw_text" value="">
+                                    <input type="hidden" id="ocr_engine_hidden" name="engine" value="gemini">
+                                    <input type="hidden" id="ocr_confidence_hidden" name="confidence" value="high">
+
+                                    <div class="row g-2">
+                                        {{-- Seller Name --}}
+                                        <div class="col-md-7">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                Merchant / Supplier Name *
+                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">Col E</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-store text-muted"></i></span>
+                                                <input type="text" class="form-control fw-semibold" id="field_vendor" name="vendor_name" placeholder="e.g. HAST ENTERPRISE" required>
+                                            </div>
+                                        </div>
+
+                                        {{-- Supplier TIN --}}
+                                        <div class="col-md-5">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                Supplier TIN *
+                                                <span class="badge bg-success bg-opacity-10 text-success border ms-1" style="font-size:0.65rem;">Col D (10 digits)</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-id-card text-muted"></i></span>
+                                                <input type="text" class="form-control font-monospace fw-bold text-primary" id="field_tin" name="vendor_tin" placeholder="e.g. 0000005201" required>
+                                            </div>
+                                        </div>
+
+                                        {{-- FS No --}}
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                FS / Receipt # *
+                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">Col H</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-hashtag text-muted"></i></span>
+                                                <input type="text" class="form-control font-monospace fw-bold text-dark" id="field_fs_no" name="fs_no" placeholder="e.g. FS00005049" required>
+                                            </div>
+                                        </div>
+
+                                        {{-- MRC No --}}
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                Machine / MRC #
+                                                <span class="badge bg-light text-muted border ms-1" style="font-size:0.65rem;">Col G</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-cash-register text-muted"></i></span>
+                                                <input type="text" class="form-control font-monospace" id="field_machine_no" name="machine_no" placeholder="e.g. DDB0000032">
+                                            </div>
+                                        </div>
+
+                                        {{-- Receipt Date --}}
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                Receipt Date *
+                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">Col F (DD/MM/YYYY)</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-calendar text-muted"></i></span>
+                                                <input type="text" class="form-control font-monospace" id="field_date" name="receipt_date" placeholder="DD/MM/YYYY" value="{{ date('d/m/Y') }}" required>
+                                            </div>
+                                        </div>
+
+                                        {{-- Item Description --}}
+                                        <div class="col-md-8">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                Item / Purchased Description *
+                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">Col I</span>
+                                            </label>
+                                            <div class="input-group input-group-sm">
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-box text-muted"></i></span>
+                                                <input type="text" class="form-control fw-semibold" id="field_description" name="description" placeholder="e.g. 32 X 2.0 MM ROUND PIPE" required>
+                                            </div>
+                                        </div>
+
+                                        {{-- UOM --}}
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                UOM (Col J)
+                                            </label>
+                                            <select class="form-select form-select-sm" id="field_uom" name="uom_id">
+                                                <option value="9" selected>9 (OTHER)</option>
+                                                <option value="7">7 (PCS)</option>
+                                                <option value="2">2 (KG)</option>
+                                                <option value="5">5 (LIT)</option>
+                                                <option value="10">10 (PC)</option>
+                                            </select>
+                                        </div>
+
+                                        {{-- Amounts Breakdown --}}
+                                        <div class="col-12 mt-2">
+                                            <div class="p-3 rounded-3 border bg-light">
+                                                <div class="row g-2 align-items-center">
+                                                    <div class="col-md-3">
+                                                        <label class="form-label small fw-bold text-dark mb-1">Qty (Col K)</label>
+                                                        <input type="number" step="0.01" class="form-control form-control-sm font-monospace text-end" id="field_qty" value="1.00" oninput="calcPreviewMath()">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label small fw-bold text-dark mb-1">Unit Price (Col L)</label>
+                                                        <input type="number" step="0.01" class="form-control form-control-sm font-monospace text-end" id="field_unit_price" value="0.00" oninput="calcPreviewMath()">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label small fw-bold text-dark mb-1">Total Value (Col M)</label>
+                                                        <input type="number" step="0.01" class="form-control form-control-sm font-monospace text-end fw-bold" id="field_subtotal" name="subtotal" value="0.00" oninput="calcPreviewFromTotal()">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="form-label small fw-bold text-dark mb-1">VAT 15% (Col N)</label>
+                                                        <input type="number" step="0.01" class="form-control form-control-sm font-monospace text-end text-muted" id="field_vat" name="vat_amount" value="0.00">
+                                                    </div>
+                                                    <div class="col-12 mt-2">
+                                                        <div class="p-2 rounded bg-success bg-opacity-10 text-success d-flex justify-content-between align-items-center">
+                                                            <strong class="small">Value After VAT (Col O):</strong>
+                                                            <div class="d-flex align-items-center gap-2">
+                                                                <input type="number" step="0.01" class="form-control form-control-sm font-monospace text-end fw-bold fs-6 text-success border-success bg-white" style="width:160px;" id="field_total" name="total_amount" value="0.00" required>
+                                                                <span class="fw-bold">ETB</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {{-- Big Add Button in Form --}}
+                                        <div class="col-12 mt-3">
+                                            <button type="button" class="btn btn-success w-100 py-2 fw-bold shadow-sm" id="btn-add-primary-action" onclick="document.getElementById('btn-add-to-table').click()">
+                                                <i class="fa-solid fa-plus-circle me-1"></i>Add This Receipt to ERCA Table &amp; Save
+                                            </button>
+                                        </div>
+
+                                    </div>
+                                </form>
+                            </div>
+
+                            {{-- Tab 2: Raw OCR Text --}}
+                            <div class="tab-pane fade" id="tab-rawtext">
+                                <textarea id="raw-ocr-textarea" class="form-control font-monospace small bg-light" rows="12" readonly placeholder="Raw text output will appear here once scanning begins..."></textarea>
+                            </div>
+
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 
-    {{-- MAIN TABLE CARD (COLUMNS A TO O) --}}
+    {{-- MAIN 15-COLUMN ERCA VAT DECLARATION TABLE (COLUMNS A TO O) --}}
     <div class="card border-0 shadow-sm rounded-3">
         <div class="card-header bg-white border-bottom py-3">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -207,6 +443,9 @@
                         <i class="fa-solid fa-table me-2 text-primary"></i>ERCA VAT Declaration Table (Columns A through O)
                     </h5>
                     <span class="badge bg-secondary text-white small" id="table-row-count">{{ $items->total() }} rows</span>
+                    <button type="button" class="btn btn-xs btn-outline-success btn-sm fw-bold shadow-xs px-2.5 ms-2" id="btn-add-manual-row" onclick="addManualBlankRow()">
+                        <i class="fa-solid fa-plus me-1"></i>Add Manual Row
+                    </button>
                 </div>
 
                 {{-- Toolbar Filters --}}
@@ -629,9 +868,12 @@
  */
 const CSRF_TOKEN = '{{ csrf_token() }}';
 const PROCESS_FILE_URL = '{{ route("admin.ocr.process-file") }}';
+const AI_SCAN_URL = '{{ route("admin.ocr.ai-scan") }}';
+const SAVE_RECEIPT_URL = '{{ route("admin.ocr.save") }}';
 const SAVE_ITEM_URL = '{{ route("admin.ocr.save-item") }}';
 const SAVE_ALL_URL = '{{ route("admin.ocr.save-all") }}';
 const REPLACE_DUP_URL = '{{ route("admin.ocr.replace-duplicate") }}';
+const CREATE_MANUAL_ROW_URL = '{{ route("admin.ocr.create-manual-row") }}';
 const DESTROY_ITEM_BASE = '{{ url("admin/receipt-ocr/item") }}';
 const SHOW_RECEIPT_BASE = '{{ url("admin/receipt-ocr") }}';
 const SAVE_SETTINGS_URL = '{{ route("admin.ocr.save-settings") }}';
@@ -646,11 +888,18 @@ const MAX_CONCURRENCY = 3;
 let editedRows = new Map(); // id -> editedData
 let currentZoom = 1.0;
 let currentRotation = 0;
+let currentPreviewRotation = 0;
+let currentActiveFile = null;
+let currentExtractedData = null;
+let currentUploadedFilePath = null;
+let currentEngineUsed = 'gemini';
+let currentConfidence = 'high';
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     setupDragAndDrop();
     setupCameraInput();
+    setupPreviewButtons();
 
     // Prevent accidental navigation if unsaved edits exist
     window.addEventListener('beforeunload', (e) => {
@@ -660,6 +909,181 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+/**
+ * Setup Buttons inside Preview Area (Add to Table, Rotate, Re-Scan, Clear)
+ */
+function setupPreviewButtons() {
+    const addBtn = document.getElementById('btn-add-to-table');
+    const addFormBtn = document.getElementById('btn-add-form-to-table');
+    const rotateBtn = document.getElementById('btn-rotate-img');
+    const rescanBtn = document.getElementById('btn-reprocess-img');
+    const clearBtn = document.getElementById('btn-clear-img');
+
+    // ADD BUTTON IN THE SECTION (Main user request)
+    const handleAddToTable = () => {
+        if (!currentExtractedData && !currentUploadedFilePath) {
+            showToast('Please upload or scan a receipt first.', 'warning');
+            return;
+        }
+
+        const subtotal = parseFloat(document.getElementById('field_subtotal').value) || 0;
+        const vat = parseFloat(document.getElementById('field_vat').value) || 0;
+        const total = parseFloat(document.getElementById('field_total').value) || 0;
+
+        const payload = {
+            file_path: currentUploadedFilePath || (currentExtractedData ? currentExtractedData.file_path : ''),
+            vendor_name: document.getElementById('field_vendor').value.trim() || 'General Merchant',
+            vendor_tin: document.getElementById('field_tin').value.trim(),
+            buyer_tin: '0038480010',
+            fs_no: document.getElementById('field_fs_no').value.trim(),
+            machine_no: document.getElementById('field_machine_no').value.trim(),
+            receipt_date: document.getElementById('field_date').value.trim(),
+            description: document.getElementById('field_description').value.trim() || 'Purchased Material',
+            uom_id: document.getElementById('field_uom').value,
+            subtotal: subtotal,
+            vat_amount: vat,
+            total_amount: total,
+            engine: currentEngineUsed,
+            confidence: currentConfidence,
+            line_items: (currentExtractedData && currentExtractedData.items && currentExtractedData.items.length > 0) 
+                ? currentExtractedData.items 
+                : [
+                    {
+                        item_description: document.getElementById('field_description').value.trim() || 'Purchased Material',
+                        uom: document.getElementById('field_uom').value,
+                        qty: parseFloat(document.getElementById('field_qty').value) || 1,
+                        unit_price: parseFloat(document.getElementById('field_unit_price').value) || subtotal,
+                        total_value: subtotal,
+                        vat_amount: vat,
+                        value_after_vat: total
+                    }
+                ]
+        };
+
+        addBtn.disabled = true;
+        addBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Adding...';
+
+        fetch(SAVE_RECEIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': CSRF_TOKEN,
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(r => r.json())
+        .then(res => {
+            addBtn.disabled = false;
+            addBtn.innerHTML = '<i class="fa-solid fa-plus-circle me-1"></i>Add to Table';
+
+            if (res.is_duplicate) {
+                if (confirm(`${res.duplicate_message}\n\nWould you like to Replace the existing receipt with this new scan?`)) {
+                    replaceDuplicateReceiptDirect(res.existing_receipt.id, payload);
+                }
+                return;
+            }
+
+            if (res.success) {
+                showToast(res.message, 'success');
+                if (res.items && res.items.length > 0) {
+                    res.items.forEach(it => appendRowToTable(it, res.receipt));
+                }
+                updateStatsDisplay();
+
+                // Highlight newly added row
+                if (res.items && res.items[0]) {
+                    const tr = document.getElementById('row-' + res.items[0].id);
+                    if (tr) {
+                        tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        tr.classList.add('table-success');
+                        setTimeout(() => tr.classList.remove('table-success'), 2000);
+                    }
+                }
+            } else {
+                showToast(res.message || 'Error saving receipt', 'danger');
+            }
+        })
+        .catch(err => {
+            addBtn.disabled = false;
+            addBtn.innerHTML = '<i class="fa-solid fa-plus-circle me-1"></i>Add to Table';
+            showToast('Network error adding receipt to table', 'danger');
+        });
+    };
+
+    if (addBtn) addBtn.addEventListener('click', handleAddToTable);
+    if (addFormBtn) addFormBtn.addEventListener('click', handleAddToTable);
+
+    // ROTATE BUTTON
+    if (rotateBtn) {
+        rotateBtn.addEventListener('click', () => {
+            currentPreviewRotation = (currentPreviewRotation + 90) % 360;
+            const img = document.getElementById('receipt-preview-img');
+            if (img) img.style.transform = `rotate(${currentPreviewRotation}deg)`;
+        });
+    }
+
+    // RE-SCAN BUTTON
+    if (rescanBtn) {
+        rescanBtn.addEventListener('click', () => {
+            if (currentActiveFile) {
+                scanSingleFile(currentActiveFile);
+            } else if (currentUploadedFilePath) {
+                scanExistingPath(currentUploadedFilePath);
+            } else {
+                showToast('No receipt file loaded to re-scan.', 'info');
+            }
+        });
+    }
+
+    // CLEAR BUTTON
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            resetPreviewArea();
+        });
+    }
+}
+
+function resetPreviewArea() {
+    currentActiveFile = null;
+    currentExtractedData = null;
+    currentUploadedFilePath = null;
+    currentPreviewRotation = 0;
+
+    const previewArea = document.getElementById('preview-area');
+    const dropPrompt = document.getElementById('drop-prompt');
+    const pbar = document.getElementById('ocr-progress-container');
+
+    if (previewArea) previewArea.classList.add('d-none');
+    if (dropPrompt) dropPrompt.classList.remove('d-none');
+    if (pbar) pbar.classList.add('d-none');
+
+    const img = document.getElementById('receipt-preview-img');
+    if (img) {
+        img.src = '';
+        img.style.transform = 'rotate(0deg)';
+    }
+
+    // Reset Form Fields
+    document.getElementById('field_vendor').value = '';
+    document.getElementById('field_tin').value = '';
+    document.getElementById('field_fs_no').value = '';
+    document.getElementById('field_machine_no').value = '';
+    document.getElementById('field_description').value = '';
+    document.getElementById('field_qty').value = '1.00';
+    document.getElementById('field_unit_price').value = '0.00';
+    document.getElementById('field_subtotal').value = '0.00';
+    document.getElementById('field_vat').value = '0.00';
+    document.getElementById('field_total').value = '0.00';
+    document.getElementById('raw-ocr-textarea').value = '';
+
+    const badge = document.getElementById('ocr-status-badge');
+    if (badge) {
+        badge.className = 'badge bg-primary text-white small';
+        badge.innerHTML = '<i class="fa-solid fa-circle me-1" style="font-size:0.55rem;"></i>Ready to scan';
+    }
+}
 
 /**
  * Drag and Drop & Multiple File Picker Handling
@@ -697,7 +1121,7 @@ function setupDragAndDrop() {
     fileInput.addEventListener('change', (e) => {
         if (e.target.files && e.target.files.length > 0) {
             handleSelectedFiles(e.target.files);
-            e.target.value = ''; // Reset input so same files can be re-selected if needed
+            e.target.value = '';
         }
     });
 }
@@ -715,19 +1139,30 @@ function setupCameraInput() {
 }
 
 /**
- * Handle Selected Batch of Files
+ * Handle Selected Files (Single Receipt or Batch)
  */
 function handleSelectedFiles(fileList) {
     const files = Array.from(fileList);
     if (!files.length) return;
 
-    // Check duplicate files within this immediate batch
-    const seenNames = new Set();
+    // Load first file into the Live Image Preview Box immediately
+    const firstFile = files[0];
+    currentActiveFile = firstFile;
+    showFileInPreview(firstFile);
+
+    // If only 1 file: direct scan with live progress
+    if (files.length === 1) {
+        scanSingleFile(firstFile);
+        return;
+    }
+
+    // If multiple files: run parallel worker batch queue
     const queueContainer = document.getElementById('queue-container');
     const progressContainer = document.getElementById('batch-progress-container');
     queueContainer.classList.remove('d-none');
     progressContainer.classList.remove('d-none');
 
+    const seenNames = new Set();
     files.forEach(file => {
         const queueId = 'q_' + Math.random().toString(36).substr(2, 9);
         const isBatchDuplicate = seenNames.has(file.name + '_' + file.size);
@@ -753,47 +1188,257 @@ function handleSelectedFiles(fileList) {
 }
 
 /**
- * Render Queue Card for Each File
+ * Show File in Preview Area
  */
-function renderQueueCard(task) {
-    const container = document.getElementById('queue-container');
-    const card = document.createElement('div');
-    card.className = 'col-md-6 col-lg-4';
-    card.id = 'card-' + task.id;
+function showFileInPreview(file) {
+    const dropPrompt = document.getElementById('drop-prompt');
+    const previewArea = document.getElementById('preview-area');
+    const imgEl = document.getElementById('receipt-preview-img');
+    const pdfEl = document.getElementById('pdf-preview-box');
 
-    const isPdf = task.file.type.includes('pdf') || task.file.name.toLowerCase().endsWith('.pdf');
-    const icon = isPdf ? 'fa-file-pdf text-danger' : 'fa-file-image text-primary';
-    const sizeKb = (task.file.size / 1024).toFixed(1) + ' KB';
+    dropPrompt.classList.add('d-none');
+    previewArea.classList.remove('d-none');
 
-    card.innerHTML = `
-        <div class="card border rounded-3 p-2.5 bg-white shadow-xs h-100">
-            <div class="d-flex align-items-center gap-2 mb-2">
-                <i class="fa-solid ${icon} fa-xl"></i>
-                <div class="overflow-hidden flex-grow-1" style="line-height:1.2;">
-                    <div class="fw-bold text-dark text-truncate small" title="${task.file.name}">${task.file.name}</div>
-                    <small class="text-muted" style="font-size:0.7rem;">${sizeKb}</small>
-                </div>
-                <div id="badge-${task.id}">
-                    ${task.status === 'duplicate_batch' 
-                        ? '<span class="badge bg-warning text-dark"><i class="fa-solid fa-clone me-1"></i>Batch Dup</span>'
-                        : '<span class="badge bg-secondary"><i class="fa-solid fa-clock me-1"></i>Queued</span>'
-                    }
-                </div>
-            </div>
-            <div class="progress mb-1" style="height: 6px;">
-                <div id="pbar-${task.id}" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 0%"></div>
-            </div>
-            <div class="d-flex justify-content-between align-items-center" style="font-size:0.72rem;">
-                <span class="text-muted text-truncate" id="msg-${task.id}">${task.errorMessage || 'Waiting in parallel worker queue...'}</span>
-                <div id="actions-${task.id}"></div>
-            </div>
-        </div>
-    `;
-    container.appendChild(card);
+    const isPdf = file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
+    if (isPdf) {
+        imgEl.classList.add('d-none');
+        pdfEl.classList.remove('d-none');
+        document.getElementById('pdf-filename').textContent = file.name;
+    } else {
+        pdfEl.classList.add('d-none');
+        imgEl.classList.remove('d-none');
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            imgEl.src = e.target.result;
+            imgEl.style.transform = 'rotate(0deg)';
+            currentPreviewRotation = 0;
+        };
+        reader.readAsDataURL(file);
+    }
 }
 
 /**
- * Concurrency Worker Loop
+ * Scan a Single File with Progress
+ */
+function scanSingleFile(file) {
+    const pbarContainer = document.getElementById('ocr-progress-container');
+    const pbar = document.getElementById('ocr-progress-bar');
+    const pctEl = document.getElementById('ocr-progress-pct');
+    const labelEl = document.getElementById('ocr-progress-label');
+    const badge = document.getElementById('ocr-status-badge');
+
+    pbarContainer.classList.remove('d-none');
+    pbar.style.width = '25%';
+    pctEl.textContent = '25%';
+    labelEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1 text-primary"></i>Uploading &amp; Scanning...';
+    badge.className = 'badge bg-warning text-dark small';
+    badge.innerHTML = '<i class="fa-solid fa-bolt me-1"></i>Scanning';
+
+    const formData = new FormData();
+    formData.append('receipt_file', file);
+    formData.append('_token', CSRF_TOKEN);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', PROCESS_FILE_URL, true);
+
+    xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+            const p = Math.round((e.loaded / e.total) * 40);
+            pbar.style.width = p + '%';
+            pctEl.textContent = p + '%';
+        }
+    };
+
+    xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+                const res = JSON.parse(xhr.responseText);
+                pbar.style.width = '100%';
+                pctEl.textContent = '100%';
+                labelEl.innerHTML = '<i class="fa-solid fa-circle-check text-success me-1"></i>Scan Complete!';
+                pbar.className = 'progress-bar bg-success';
+
+                badge.className = 'badge bg-success text-white small';
+                badge.innerHTML = '<i class="fa-solid fa-check me-1"></i>Scan Complete';
+
+                if (res.is_duplicate) {
+                    showToast(res.duplicate_message, 'warning');
+                    populateFormWithExtracted(res.extracted, res.file_path, res.engine, res.confidence);
+                    currentExtractedData = res.extracted;
+                    currentUploadedFilePath = res.file_path;
+                    currentEngineUsed = res.engine || 'gemini';
+                    currentConfidence = res.confidence || 'high';
+
+                    if (confirm(`${res.duplicate_message}\n\nWould you like to Replace the existing receipt with this new scan?`)) {
+                        replaceDuplicateReceiptDirect(res.existing_receipt.id, {
+                            file_path: res.file_path,
+                            extracted_data: res.extracted,
+                            engine: res.engine
+                        });
+                    }
+                } else if (res.success) {
+                    currentExtractedData = res.receipt.parsed_data || {};
+                    currentUploadedFilePath = res.receipt.file_path;
+                    currentEngineUsed = res.engine || 'gemini';
+                    currentConfidence = res.confidence || 'high';
+
+                    populateFormWithExtracted(res.receipt.parsed_data, res.receipt.file_path, res.engine, res.confidence);
+
+                    // Add items into table automatically
+                    if (res.items && res.items.length > 0) {
+                        res.items.forEach(it => appendRowToTable(it, res.receipt));
+                    }
+                    updateStatsDisplay();
+                    showToast(res.message, 'success');
+                }
+            } catch (err) {
+                handleSingleScanError('Error parsing server response');
+            }
+        } else {
+            handleSingleScanError(`Server error HTTP ${xhr.status}`);
+        }
+    };
+
+    xhr.onerror = function() {
+        handleSingleScanError('Network connection error');
+    };
+
+    xhr.send(formData);
+}
+
+function handleSingleScanError(msg) {
+    const labelEl = document.getElementById('ocr-progress-label');
+    const pbar = document.getElementById('ocr-progress-bar');
+    const badge = document.getElementById('ocr-status-badge');
+
+    if (labelEl) labelEl.innerHTML = `<i class="fa-solid fa-times text-danger me-1"></i>Scan failed: ${msg}`;
+    if (pbar) pbar.className = 'progress-bar bg-danger';
+    if (badge) {
+        badge.className = 'badge bg-danger text-white small';
+        badge.innerHTML = '<i class="fa-solid fa-times me-1"></i>Failed';
+    }
+    showToast(msg, 'danger');
+}
+
+/**
+ * Populate Form Fields with Extracted Data
+ */
+function populateFormWithExtracted(data, filePath, engine, confidence) {
+    if (!data) return;
+
+    if (filePath) document.getElementById('stored_file_path').value = filePath;
+    if (engine) document.getElementById('ocr_engine_hidden').value = engine;
+    if (confidence) document.getElementById('ocr_confidence_hidden').value = confidence;
+
+    document.getElementById('field_vendor').value = data.merchant_name || '';
+    document.getElementById('field_tin').value = data.supplier_tin || '';
+    document.getElementById('field_fs_no').value = data.fs_no || '';
+    document.getElementById('field_machine_no').value = data.machine_no || '';
+    document.getElementById('field_date').value = data.receipt_date || '';
+
+    const firstItem = (data.items && data.items[0]) ? data.items[0] : null;
+    if (firstItem) {
+        document.getElementById('field_description').value = firstItem.item_description || data.description || '';
+        document.getElementById('field_qty').value = Number(firstItem.qty || 1).toFixed(2);
+        document.getElementById('field_unit_price').value = Number(firstItem.unit_price || 0).toFixed(2);
+        document.getElementById('field_subtotal').value = Number(firstItem.total_value || data.subtotal || 0).toFixed(2);
+        document.getElementById('field_vat').value = Number(firstItem.vat || data.vat_amount || 0).toFixed(2);
+        document.getElementById('field_total').value = Number(firstItem.value_after_vat || data.total_amount || 0).toFixed(2);
+    } else {
+        document.getElementById('field_description').value = data.description || 'Purchased Material';
+        document.getElementById('field_subtotal').value = Number(data.subtotal || 0).toFixed(2);
+        document.getElementById('field_vat').value = Number(data.vat_amount || 0).toFixed(2);
+        document.getElementById('field_total').value = Number(data.total_amount || 0).toFixed(2);
+    }
+
+    if (data.raw_text) {
+        document.getElementById('raw-ocr-textarea').value = data.raw_text;
+    }
+}
+
+/**
+ * Math Calculations on Form
+ */
+function calcPreviewMath() {
+    const qty = parseFloat(document.getElementById('field_qty').value) || 0;
+    const uprice = parseFloat(document.getElementById('field_unit_price').value) || 0;
+    const total = Math.round(qty * uprice * 100) / 100;
+    const vat = Math.round(total * 0.15 * 100) / 100;
+    const afterVat = Math.round((total + vat) * 100) / 100;
+
+    document.getElementById('field_subtotal').value = total.toFixed(2);
+    document.getElementById('field_vat').value = vat.toFixed(2);
+    document.getElementById('field_total').value = afterVat.toFixed(2);
+}
+
+function calcPreviewFromTotal() {
+    const total = parseFloat(document.getElementById('field_subtotal').value) || 0;
+    const vat = Math.round(total * 0.15 * 100) / 100;
+    const afterVat = Math.round((total + vat) * 100) / 100;
+
+    document.getElementById('field_vat').value = vat.toFixed(2);
+    document.getElementById('field_total').value = afterVat.toFixed(2);
+}
+
+/**
+ * Replace Duplicate Direct Helper
+ */
+function replaceDuplicateReceiptDirect(existingId, payload) {
+    fetch(REPLACE_DUP_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            existing_id: existingId,
+            file_path: payload.file_path,
+            extracted_data: payload.extracted_data || payload,
+        })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            showToast(res.message, 'success');
+            setTimeout(() => window.location.reload(), 800);
+        } else {
+            showToast(res.message || 'Replace failed', 'danger');
+        }
+    })
+    .catch(err => {
+        showToast('Network error replacing duplicate', 'danger');
+    });
+}
+
+/**
+ * Add Manual Blank Row directly to table
+ */
+function addManualBlankRow() {
+    fetch(CREATE_MANUAL_ROW_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json'
+        }
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            appendRowToTable(res.item, res.receipt);
+            updateStatsDisplay();
+            startEditRow(res.item.id);
+            showToast('New blank row added. Enter details and click Save.', 'info');
+        }
+    })
+    .catch(err => {
+        showToast('Error creating manual row', 'danger');
+    });
+}
+
+/**
+ * Concurrency Worker Loop for Batch Upload
  */
 function processNextQueueItem() {
     if (activeWorkers >= MAX_CONCURRENCY) return;
@@ -825,7 +1470,6 @@ function processNextQueueItem() {
             try {
                 const res = JSON.parse(xhr.responseText);
                 if (res.is_duplicate) {
-                    // Duplicate found in database
                     nextTask.status = 'duplicate';
                     nextTask.extractedData = res.extracted;
                     nextTask.filePath = res.file_path;
@@ -840,11 +1484,9 @@ function processNextQueueItem() {
                     `;
                     updateTaskCard(nextTask, `Duplicate FS# ${fs} matches existing receipt.`, 100, 'bg-warning', '<span class="badge bg-warning text-dark"><i class="fa-solid fa-copy me-1"></i>Duplicate</span>', dupHtml);
                 } else if (res.success) {
-                    // Success!
                     nextTask.status = 'done';
                     updateTaskCard(nextTask, `Done! Extracted ${res.items ? res.items.length : 1} item row(s).`, 100, 'bg-success', '<span class="badge bg-success"><i class="fa-solid fa-check me-1"></i>Done</span>');
 
-                    // Add extracted rows to table immediately (without clearing existing!)
                     if (res.items && res.items.length > 0) {
                         res.items.forEach(it => appendRowToTable(it, res.receipt));
                     }
@@ -929,41 +1571,38 @@ function updateBatchProgress() {
     if (totEl) totEl.textContent = total;
 }
 
-/**
- * Replace Duplicate Receipt Action
- */
-function replaceDuplicateReceipt(taskId) {
-    const task = uploadQueue.find(t => t.id === taskId);
-    if (!task) return;
+function renderQueueCard(task) {
+    const container = document.getElementById('queue-container');
+    const card = document.createElement('div');
+    card.className = 'col-md-6';
+    card.id = 'card-' + task.id;
 
-    updateTaskCard(task, 'Replacing existing receipt...', 60, 'bg-warning', '<span class="badge bg-warning text-dark"><i class="fa-solid fa-spinner fa-spin"></i>Replacing</span>');
+    const isPdf = task.file.type.includes('pdf') || task.file.name.toLowerCase().endsWith('.pdf');
+    const icon = isPdf ? 'fa-file-pdf text-danger' : 'fa-file-image text-primary';
+    const sizeKb = (task.file.size / 1024).toFixed(1) + ' KB';
 
-    fetch(REPLACE_DUP_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': CSRF_TOKEN,
-            'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-            existing_id: task.existingReceiptId,
-            file_path: task.filePath,
-            extracted_data: task.extractedData,
-        })
-    })
-    .then(r => r.json())
-    .then(res => {
-        if (res.success) {
-            updateTaskCard(task, 'Replaced existing receipt successfully!', 100, 'bg-success', '<span class="badge bg-success">Replaced</span>');
-            // Reload page or append updated items
-            setTimeout(() => window.location.reload(), 800);
-        } else {
-            handleTaskFailure(task, res.message || 'Replace failed');
-        }
-    })
-    .catch(err => {
-        handleTaskFailure(task, 'Network error replacing duplicate');
-    });
+    card.innerHTML = `
+        <div class="card border rounded-3 p-2 bg-white shadow-xs h-100">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <i class="fa-solid ${icon}"></i>
+                <div class="overflow-hidden flex-grow-1" style="line-height:1.2;">
+                    <div class="fw-bold text-dark text-truncate small" title="${task.file.name}">${task.file.name}</div>
+                    <small class="text-muted" style="font-size:0.65rem;">${sizeKb}</small>
+                </div>
+                <div id="badge-${task.id}">
+                    <span class="badge bg-secondary">Queued</span>
+                </div>
+            </div>
+            <div class="progress mb-1" style="height: 5px;">
+                <div id="pbar-${task.id}" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 0%"></div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center" style="font-size:0.7rem;">
+                <span class="text-muted text-truncate" id="msg-${task.id}">${task.errorMessage || 'Queued...'}</span>
+                <div id="actions-${task.id}"></div>
+            </div>
+        </div>
+    `;
+    container.appendChild(card);
 }
 
 /**
@@ -1019,13 +1658,9 @@ function appendRowToTable(item, receipt) {
             </div>
         </td>
     `;
-    // Insert at top of table
     tbody.insertBefore(tr, tbody.firstChild);
 }
 
-/**
- * Format date display
- */
 function formatDateDisplay(d) {
     if (!d) return '';
     if (d.includes('/')) return d;
@@ -1037,7 +1672,7 @@ function formatDateDisplay(d) {
 }
 
 /**
- * Inline Editing for Rows
+ * Inline Row Editing
  */
 function startEditRow(itemId) {
     const tr = document.getElementById('row-' + itemId);
@@ -1045,7 +1680,6 @@ function startEditRow(itemId) {
 
     tr.classList.add('row-editing', 'table-info');
 
-    // Save original row state to memory for Cancel action
     const originalValues = {};
     tr.querySelectorAll('.cell-display').forEach(td => {
         const field = td.getAttribute('data-field');
@@ -1054,7 +1688,6 @@ function startEditRow(itemId) {
     editedRows.set(itemId, originalValues);
     updateUnsavedCounter();
 
-    // Transform cells into inputs
     const cat = originalValues.vat_category || 'G';
     const cal = originalValues.calendar_type || 'G';
     const type = originalValues.purchase_type || '3';
@@ -1143,7 +1776,6 @@ function startEditRow(itemId) {
         <input type="number" step="0.01" class="form-control form-control-sm p-1 text-end font-monospace fw-bold text-success" id="edit-aftervat-${itemId}" value="${afterVat}" style="width:105px;" oninput="validateEditRow(${itemId})">
     `;
 
-    // Swap Actions with Save and Cancel buttons
     const actionsTd = tr.querySelector('td:last-child');
     actionsTd.innerHTML = `
         <div class="btn-group btn-group-sm">
@@ -1159,9 +1791,6 @@ function startEditRow(itemId) {
     validateEditRow(itemId);
 }
 
-/**
- * Live Recalculations while editing
- */
 function recalcEditRow(itemId) {
     const qty = parseFloat(document.getElementById(`edit-qty-${itemId}`).value) || 0;
     const uprice = parseFloat(document.getElementById(`edit-uprice-${itemId}`).value) || 0;
@@ -1187,9 +1816,6 @@ function recalcFromTotal(itemId) {
     validateEditRow(itemId);
 }
 
-/**
- * Live Validation Feedback while editing
- */
 function validateEditRow(itemId) {
     const qty = parseFloat(document.getElementById(`edit-qty-${itemId}`).value) || 0;
     const uprice = parseFloat(document.getElementById(`edit-uprice-${itemId}`).value) || 0;
@@ -1225,11 +1851,7 @@ function validateEditRow(itemId) {
     }
 }
 
-/**
- * Save Single Row Inline (AJAX)
- */
 function saveEditRow(itemId) {
-    const tr = document.getElementById('row-' + itemId);
     const payload = {
         id: itemId,
         vat_category: document.getElementById(`edit-cat-${itemId}`).value,
@@ -1274,9 +1896,6 @@ function saveEditRow(itemId) {
     });
 }
 
-/**
- * Cancel Row Edit
- */
 function cancelEditRow(itemId) {
     const tr = document.getElementById('row-' + itemId);
     const original = editedRows.get(itemId);
@@ -1300,7 +1919,6 @@ function cancelEditRow(itemId) {
 
     tr.classList.remove('row-editing', 'table-info');
 
-    // Restore actions
     const receiptId = tr.getAttribute('data-receipt-id');
     tr.querySelector('td:last-child').innerHTML = `
         <div class="btn-group btn-group-sm">
@@ -1314,9 +1932,6 @@ function cancelEditRow(itemId) {
     updateUnsavedCounter();
 }
 
-/**
- * Re-render row back to clean display cells after Save
- */
 function renderRowDisplay(itemId, item, errors = []) {
     const tr = document.getElementById('row-' + itemId);
     const r = item.receipt;
@@ -1325,7 +1940,6 @@ function renderRowDisplay(itemId, item, errors = []) {
     tr.className = isFlagged ? 'table-warning bg-opacity-25' : '';
     tr.classList.remove('row-editing', 'table-info');
 
-    // Status
     tr.querySelector('td:nth-child(2)').innerHTML = isFlagged
         ? `<span class="badge bg-warning text-dark border border-warning" title="${errors.join('; ')}"><i class="fa-solid fa-triangle-exclamation me-1"></i>Review</span>`
         : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="fa-solid fa-check me-1"></i>Valid</span>`;
@@ -1346,7 +1960,6 @@ function renderRowDisplay(itemId, item, errors = []) {
     tr.querySelector('[data-field="vat_amount"]').textContent = Number(item.vat_amount).toFixed(2);
     tr.querySelector('[data-field="value_after_vat"]').textContent = Number(item.value_after_vat).toFixed(2);
 
-    // Actions
     tr.querySelector('td:last-child').innerHTML = `
         <div class="btn-group btn-group-sm">
             ${r && r.file_path ? `<button type="button" class="btn btn-outline-primary btn-xs py-1 px-2" onclick="openSideBySide(${item.id})"><i class="fa-solid fa-eye"></i></button>` : ''}
@@ -1356,9 +1969,6 @@ function renderRowDisplay(itemId, item, errors = []) {
     `;
 }
 
-/**
- * Confirm and Delete Single Row
- */
 function confirmDeleteRow(itemId) {
     if (!confirm('Are you sure you want to delete this row? This action cannot be undone.')) return;
 
@@ -1388,7 +1998,7 @@ function confirmDeleteRow(itemId) {
 }
 
 /**
- * Save All Unsaved Rows
+ * Save All Dirty Rows
  */
 document.getElementById('btn-save-all').addEventListener('click', () => {
     if (editedRows.size === 0) return;
@@ -1484,7 +2094,6 @@ function openSideBySide(itemId) {
         document.getElementById('sbs-field-total').textContent = Number(thisItem.value_after_vat || r.total_amount || 0).toFixed(2) + ' ETB';
         document.getElementById('sbs-raw-text').value = r.ocr_raw_text || 'No transcribed text available.';
 
-        // Validation Checklist
         const errors = [];
         const total = parseFloat(thisItem.total_value || r.subtotal || 0);
         const vat = parseFloat(thisItem.vat_amount || r.vat_amount || 0);
@@ -1519,7 +2128,6 @@ function openSideBySide(itemId) {
             vBox.innerHTML = `<i class="fa-solid fa-circle-check me-1"></i><strong>All Checks Passed:</strong> Math and fiscal fields verified.`;
         }
 
-        // Preview File Handling (PDF vs Image)
         const imgEl = document.getElementById('sbs-preview-img');
         const pdfEl = document.getElementById('sbs-preview-pdf');
         resetZoom();
@@ -1590,9 +2198,6 @@ function exportData(format, scope) {
     window.location.href = baseUrl + (params.toString() ? '?' + params.toString() : '');
 }
 
-/**
- * Checkbox & Selection
- */
 function toggleSelectAll(masterCb) {
     document.querySelectorAll('.row-checkbox').forEach(cb => {
         cb.checked = masterCb.checked;
@@ -1605,9 +2210,6 @@ function updateSelectedCount() {
     document.querySelectorAll('.selected-count-badge').forEach(el => el.textContent = checked);
 }
 
-/**
- * Filter Form Submit on toggle
- */
 function applyFilters() {
     const form = document.getElementById('filter-form');
     if (document.getElementById('filter-needs-review').checked) {
@@ -1626,9 +2228,6 @@ function applyFilters() {
     form.submit();
 }
 
-/**
- * Settings Modal Logic
- */
 function togglePasswordVisibility(inputId) {
     const input = document.getElementById(inputId);
     input.type = input.type === 'password' ? 'text' : 'password';
@@ -1701,9 +2300,6 @@ function saveSettings(e) {
     });
 }
 
-/**
- * Toast Notification Utility
- */
 function showToast(message, type = 'info') {
     let container = document.getElementById('toast-container');
     if (!container) {
@@ -1729,9 +2325,6 @@ function showToast(message, type = 'info') {
     setTimeout(() => toastEl.remove(), 4000);
 }
 
-/**
- * Update dynamic summary counters
- */
 function updateStatsDisplay() {
     const rows = document.querySelectorAll('#table-body tr[id^="row-"]');
     const countEl = document.getElementById('stat-total-items');

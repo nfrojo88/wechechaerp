@@ -289,6 +289,308 @@ class OCRReceiptScannerController extends Controller
     }
 
     /**
+     * Upload receipt file and return preview URL.
+     */
+    public function upload(Request $request)
+    {
+        $this->ensureAuthorized();
+
+        $request->validate([
+            'receipt_file' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+        ]);
+
+        $file     = $request->file('receipt_file');
+        $mimeType = $file->getMimeType();
+        $ext      = strtolower($file->getClientOriginalExtension());
+        $isPdf    = $ext === 'pdf' || str_contains($mimeType, 'pdf');
+
+        $filename = 'ocr_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $ext;
+        $path     = $file->storeAs('receipts', $filename, 'public');
+        $fileUrl  = asset('storage/' . $path);
+
+        return response()->json([
+            'success'   => true,
+            'file_path' => $path,
+            'file_url'  => $fileUrl,
+            'file_type' => $isPdf ? 'pdf' : 'image',
+            'file_name' => $file->getClientOriginalName(),
+            'file_size' => round($file->getSize() / 1024, 1) . ' KB',
+        ]);
+    }
+
+    /**
+     * Direct single-receipt AI scan.
+     */
+    public function aiScan(Request $request)
+    {
+        $this->ensureAuthorized();
+
+        $path = $request->input('file_path');
+        $fileUrl = null;
+        $mimeType = 'image/jpeg';
+        $ext = 'jpg';
+        $base64 = null;
+
+        if ($request->hasFile('receipt_file')) {
+            $file = $request->file('receipt_file');
+            $mimeType = $file->getMimeType();
+            $ext = strtolower($file->getClientOriginalExtension());
+            $filename = 'ocr_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $ext;
+            $path = $file->storeAs('receipts', $filename, 'public');
+            $fileUrl = asset('storage/' . $path);
+            $base64 = base64_encode(file_get_contents($file->getRealPath()));
+        } elseif (!empty($path) && Storage::disk('public')->exists($path)) {
+            $fileUrl = asset('storage/' . $path);
+            $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+            $mimeType = ($ext === 'pdf') ? 'application/pdf' : 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext);
+            $base64 = base64_encode(Storage::disk('public')->get($path));
+        } else {
+            return response()->json(['success' => false, 'message' => 'No receipt file provided to scan.'], 422);
+        }
+
+        $geminiKey = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
+        $extracted = null;
+        $engine = 'gemini';
+        $confidence = 'high';
+
+        if (!empty($geminiKey)) {
+            $extracted = $this->scanWithGemini($geminiKey, $base64, $mimeType);
+        }
+
+        if (!$extracted) {
+            $ocrSpaceKey = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
+            $realPath = Storage::disk('public')->path($path);
+            $extracted = $this->scanWithOcrSpace($ocrSpaceKey, $base64, $ext, $realPath);
+            $engine = 'ocr_space';
+            $confidence = 'review';
+        }
+
+        if (!$extracted) {
+            return response()->json([
+                'success'   => false,
+                'message'   => 'Could not extract text with OCR engines. Please fill manually.',
+                'file_path' => $path,
+                'file_url'  => $fileUrl,
+            ], 422);
+        }
+
+        return response()->json([
+            'success'    => true,
+            'ai'         => true,
+            'data'       => $extracted,
+            'engine'     => $engine,
+            'confidence' => $confidence,
+            'file_path'  => $path,
+            'file_url'   => $fileUrl,
+        ]);
+    }
+
+    /**
+     * Save receipt & line items into database from the frontend "Add to Table" action.
+     */
+    public function save(Request $request)
+    {
+        $this->ensureAuthorized();
+        $this->ensureSchema();
+
+        $request->validate([
+            'file_path'    => 'required|string',
+            'vendor_name'  => 'nullable|string',
+            'vendor_tin'   => 'nullable|string',
+            'buyer_tin'    => 'nullable|string',
+            'fs_no'        => 'nullable|string',
+            'machine_no'   => 'nullable|string',
+            'receipt_date' => 'nullable|string',
+            'subtotal'     => 'nullable|numeric|min:0',
+            'vat_amount'   => 'nullable|numeric|min:0',
+            'total_amount' => 'required|numeric|min:0',
+            'description'  => 'nullable|string',
+            'category'     => 'nullable|string',
+            'project_id'   => 'nullable|exists:projects,id',
+            'line_items'   => 'nullable|array',
+        ]);
+
+        $fsNo = strtoupper(preg_replace('/\s+/', '', (string)($request->fs_no ?? '')));
+        $supplierTin = preg_replace('/[^0-9]/', '', (string)($request->vendor_tin ?? ''));
+        $dbDate = $this->parseDateToYmd($request->receipt_date);
+
+        // Check for duplicate FS No
+        if (!empty($fsNo) && !$request->boolean('force_save')) {
+            $existing = Receipt::where('fs_no', $fsNo)->orWhere('parsed_data->fs_no', $fsNo)->first();
+            if ($existing) {
+                return response()->json([
+                    'success'           => true,
+                    'is_duplicate'      => true,
+                    'duplicate_message' => "Receipt with FS No {$fsNo} already exists in ERP (#{$existing->receipt_number} - {$existing->vendor_name}).",
+                    'existing_receipt'  => $existing,
+                ]);
+            }
+        }
+
+        $ext = strtolower(pathinfo($request->file_path, PATHINFO_EXTENSION));
+        $fileType = ($ext === 'pdf') ? 'pdf' : 'image';
+
+        $subtotal = (float)($request->subtotal ?: 0);
+        $vat = (float)($request->vat_amount ?: 0);
+        $total = (float)($request->total_amount ?: 0);
+
+        if ($subtotal == 0 && $total > 0 && $vat > 0) {
+            $subtotal = max(0, round($total - $vat, 2));
+        }
+
+        $receipt = Receipt::create([
+            'uploaded_by'  => Auth::id() ?: 1,
+            'project_id'   => $request->project_id,
+            'vendor_name'  => $request->vendor_name ?: 'General Merchant',
+            'vendor_tin'   => $supplierTin,
+            'buyer_tin'    => $request->buyer_tin ?: '0038480010',
+            'fs_no'        => $fsNo,
+            'mrc_no'       => $request->machine_no,
+            'receipt_date' => $dbDate ?: now()->toDateString(),
+            'subtotal'     => $subtotal,
+            'vat_amount'   => $vat,
+            'total_amount' => $total,
+            'currency'     => 'ETB',
+            'category'     => $request->category ?: 'material',
+            'description'  => $request->description ?: 'Purchased Goods',
+            'file_path'    => $request->file_path,
+            'file_type'    => $fileType,
+            'ocr_raw_text' => $request->ocr_raw_text,
+            'ocr_engine'   => $request->engine ?: 'gemini',
+            'confidence'   => $request->confidence ?: 'high',
+            'needs_review' => false,
+            'parsed_data'  => $request->all(),
+            'parse_status' => 'parsed',
+            'status'       => 'approved',
+            'approved_by'  => Auth::id() ?: 1,
+            'approved_at'  => now(),
+            'notes'        => 'Added to table via OCR Receipt Scanner Studio.',
+        ]);
+
+        $lineItems = $request->input('line_items', []);
+        if (empty($lineItems)) {
+            $lineItems = [
+                [
+                    'item_description' => $request->description ?: 'Purchased Material',
+                    'uom'              => (string)($request->uom_id ?? '9'),
+                    'qty'              => 1.00,
+                    'unit_price'       => $subtotal,
+                    'total_value'      => $subtotal,
+                    'vat_amount'       => $vat,
+                    'value_after_vat'  => $total,
+                ]
+            ];
+        }
+
+        $createdItems = [];
+        $hasFlagged = false;
+
+        foreach ($lineItems as $it) {
+            $qty = (float)($it['qty'] ?? 1);
+            $unitPrice = (float)($it['unit_price'] ?? 0);
+            $totalVal = (float)($it['total_value'] ?? ($it['total'] ?? round($qty * $unitPrice, 2)));
+            $vatAmt = (float)($it['vat_amount'] ?? ($it['vat'] ?? round($totalVal * 0.15, 2)));
+            $valAfter = (float)($it['value_after_vat'] ?? round($totalVal + $vatAmt, 2));
+
+            $rItem = new ReceiptItem([
+                'receipt_id'       => $receipt->id,
+                'item_description' => $it['item_description'] ?? ($it['name'] ?? 'Material'),
+                'vat_category'     => $request->input('vat_category', 'G'),
+                'calendar_type'    => $request->input('calendar_type', 'G'),
+                'purchase_type'    => (int)($request->input('purchase_type', 3)),
+                'uom'              => (string)($it['uom'] ?? ($request->uom_id ?? '9')),
+                'qty'              => $qty,
+                'unit_price'       => $unitPrice,
+                'total_value'      => $totalVal,
+                'vat_amount'       => $vatAmt,
+                'value_after_vat'  => $valAfter,
+            ]);
+
+            $errors = [];
+            if ($qty > 0 && $unitPrice > 0 && abs(round($qty * $unitPrice, 2) - $totalVal) > 0.05) {
+                $errors[] = "Qty x Unit Price ≠ Total Value";
+            }
+            if ($totalVal > 0 && abs(round($totalVal * 0.15, 2) - $vatAmt) > 0.05) {
+                $errors[] = "Total Value x 15% ≠ VAT";
+            }
+            if (($totalVal > 0 || $vatAmt > 0) && abs(round($totalVal + $vatAmt, 2) - $valAfter) > 0.05) {
+                $errors[] = "Total Value + VAT ≠ Value After VAT";
+            }
+
+            if (!empty($errors)) {
+                $rItem->is_flagged = true;
+                $rItem->flag_reasons = $errors;
+                $hasFlagged = true;
+            }
+
+            $rItem->save();
+            $rItem->setRelation('receipt', $receipt);
+            $createdItems[] = $rItem;
+        }
+
+        if ($hasFlagged) {
+            $receipt->update(['needs_review' => true]);
+        }
+
+        return response()->json([
+            'success'   => true,
+            'message'   => "Receipt {$receipt->receipt_number} added to table with " . count($createdItems) . " item row(s)!",
+            'receipt'   => $receipt,
+            'items'     => $createdItems,
+        ]);
+    }
+
+    /**
+     * Create a new blank or manual row directly in the table.
+     */
+    public function createManualRow(Request $request)
+    {
+        $this->ensureAuthorized();
+        $this->ensureSchema();
+
+        $receipt = Receipt::create([
+            'uploaded_by'  => Auth::id() ?: 1,
+            'vendor_name'  => 'New Merchant',
+            'vendor_tin'   => '0000000000',
+            'receipt_date' => now()->toDateString(),
+            'subtotal'     => 0.00,
+            'vat_amount'   => 0.00,
+            'total_amount' => 0.00,
+            'file_path'    => '',
+            'file_type'    => 'image',
+            'status'       => 'approved',
+            'approved_by'  => Auth::id() ?: 1,
+            'approved_at'  => now(),
+            'notes'        => 'Manually created table row.',
+        ]);
+
+        $item = ReceiptItem::create([
+            'receipt_id'       => $receipt->id,
+            'item_description' => 'New Item',
+            'vat_category'     => 'G',
+            'calendar_type'    => 'G',
+            'purchase_type'    => 3,
+            'uom'              => '9',
+            'qty'              => 1.00,
+            'unit_price'       => 0.00,
+            'total_value'      => 0.00,
+            'vat_amount'       => 0.00,
+            'value_after_vat'  => 0.00,
+            'is_flagged'       => true,
+            'flag_reasons'     => ['New row - enter receipt details'],
+        ]);
+
+        $item->setRelation('receipt', $receipt);
+
+        return response()->json([
+            'success' => true,
+            'item'    => $item,
+            'receipt' => $receipt,
+            'message' => 'New row added to table.',
+        ]);
+    }
+
+    /**
      * Process an uploaded receipt file (Image or PDF).
      * Dual Engine OCR Pipeline: Gemini Multimodal AI -> fallback to OCR.Space.
      * Duplicate check on FS No.

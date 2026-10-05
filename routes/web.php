@@ -2526,6 +2526,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/process-file',      [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'processFile'])->name('process-file');
         Route::post('/ai-scan',           [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'aiScan'])->name('ai-scan');
         Route::post('/save',              [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'save'])->name('save');
+        Route::post('/create-manual-row', [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'createManualRow'])->name('create-manual-row');
         Route::post('/save-item',         [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'saveItem'])->name('save-item');
         Route::post('/save-all',          [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'saveAll'])->name('save-all');
         Route::delete('/item/{item}',     [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'destroyItem'])->name('destroy-item');
