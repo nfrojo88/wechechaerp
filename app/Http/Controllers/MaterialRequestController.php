@@ -245,6 +245,22 @@ class MaterialRequestController extends Controller
             \Log::error("Failed to auto-create companion PR for MR #{$mr->reference_number}: " . $e->getMessage());
         }
 
+        // Trigger Instant SMS Handoff: Site Engineer -> Planning
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'mr_submitted',
+                $mr,
+                [
+                    'sender_user' => auth()->user(),
+                    'sender_role' => 'site_engineer',
+                    'project_id'  => $mr->project_id,
+                    'store_id'    => $mr->destination_store_id,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Log::error("MR Submitted SMS trigger failed: " . $e->getMessage());
+        }
+
         if ($request->filled('redirect_back')) {
             $msg = "Material Request #{$mr->reference_number} submitted to Procurement Queue";
             if ($linkedPr) {
@@ -348,6 +364,21 @@ class MaterialRequestController extends Controller
             \Log::error("Failed to forward companion PRs to coordinator for MR #{$materialRequest->reference_number}: " . $e->getMessage());
         }
 
+        // Trigger Instant SMS Handoff: Planning -> Coordinator
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'planning_forwarded',
+                $materialRequest,
+                [
+                    'sender_user' => auth()->user(),
+                    'sender_role' => 'planning',
+                    'project_id'  => $materialRequest->project_id,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Log::error("Planning Forwarded SMS trigger failed: " . $e->getMessage());
+        }
+
         return back()->with('success', 'Material Request approved by Planning Team and sent to Coordinator.');
     }
 
@@ -388,6 +419,21 @@ class MaterialRequestController extends Controller
             }
         } catch (\Throwable $e) {
             \Log::error("Failed to reject companion PRs for MR #{$materialRequest->reference_number}: " . $e->getMessage());
+        }
+
+        // Trigger Instant SMS Handoff: Planning Rejects -> Requester (Site Engineer)
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'planning_rejected',
+                $materialRequest,
+                [
+                    'sender_user' => auth()->user(),
+                    'sender_role' => 'planning',
+                    'project_id'  => $materialRequest->project_id,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Log::error("Planning Rejected SMS trigger failed: " . $e->getMessage());
         }
 
         return back()->with('success', 'Material Request rejected by Planning Team.');
@@ -442,6 +488,22 @@ class MaterialRequestController extends Controller
             \Log::error("Failed to dispatch companion PRs to store for MR #{$materialRequest->reference_number}: " . $e->getMessage());
         }
 
+        // Trigger Instant SMS Handoff: Coordinator -> Store Manager
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'coordinator_forwarded',
+                $materialRequest,
+                [
+                    'sender_user' => auth()->user(),
+                    'sender_role' => 'coordinator',
+                    'project_id'  => $materialRequest->project_id,
+                    'store_id'    => $materialRequest->destination_store_id,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Log::error("Coordinator Dispatched SMS trigger failed: " . $e->getMessage());
+        }
+
         return back()->with('success', 'Material Request sent to Store Manager.');
     }
 
@@ -451,6 +513,22 @@ class MaterialRequestController extends Controller
         Gate::authorize('actionStoreManager', $materialRequest);
         $pr = $materialRequest->createOrGetPurchaseRequest(auth()->id());
 
+        // Trigger Instant SMS Handoff: Store Manager -> Procurement Manager
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'store_converted_to_pr',
+                $pr,
+                [
+                    'sender_user' => auth()->user(),
+                    'sender_role' => 'store_manager',
+                    'project_id'  => $pr->project_id,
+                    'store_id'    => $pr->store_id,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Log::error("Store Manager to PR SMS trigger failed: " . $e->getMessage());
+        }
+
         return redirect()->route('purchase-requests.show', $pr)
             ->with('success', "Material Request #{$materialRequest->reference_number} successfully routed to Purchase Request #{$pr->pr_no} in the Procurement Lifecycle.");
     }
@@ -458,6 +536,22 @@ class MaterialRequestController extends Controller
     public function convertToPr(MaterialRequest $materialRequest)
     {
         $pr = $materialRequest->createOrGetPurchaseRequest(auth()->id());
+
+        // Trigger Instant SMS Handoff: Store Manager -> Procurement Manager
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'store_converted_to_pr',
+                $pr,
+                [
+                    'sender_user' => auth()->user(),
+                    'sender_role' => 'store_manager',
+                    'project_id'  => $pr->project_id,
+                    'store_id'    => $pr->store_id,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Log::error("Store Manager convertToPr SMS trigger failed: " . $e->getMessage());
+        }
 
         return redirect()->route('purchase-requests.show', $pr)
             ->with('success', "Material Request #{$materialRequest->reference_number} is now active in the Procurement Lifecycle as Purchase Request #{$pr->pr_no}.");
@@ -467,6 +561,22 @@ class MaterialRequestController extends Controller
     {
         Gate::authorize('actionStoreManager', $materialRequest);
         $materialRequest->update(['status' => 'transfer_created']);
+
+        // Trigger Instant SMS Handoff: Store Manager -> Requester + Coordinator (SIV Issued)
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'store_issued_siv',
+                $materialRequest,
+                [
+                    'sender_user' => auth()->user(),
+                    'sender_role' => 'store_manager',
+                    'project_id'  => $materialRequest->project_id,
+                    'store_id'    => $materialRequest->destination_store_id,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Log::error("Store Manager SIV SMS trigger failed: " . $e->getMessage());
+        }
 
         return redirect()->route('transfers.create', [
             'material_request_id' => $materialRequest->id,

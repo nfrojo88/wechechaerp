@@ -152,6 +152,22 @@ class TransferController extends Controller
             }
         }
 
+        // Instant SMS Handoff: Logistics / Origin Store -> Driver + Destination Store Keeper
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'logistics_dispatched_driver',
+                $transfer,
+                [
+                    'sender_user'          => Auth::user(),
+                    'sender_role'          => 'general_service',
+                    'target_roles'         => ['driver', 'store_keeper'],
+                    'assigned_employee_id' => $transfer->driver_id,
+                    'store_id'             => $transfer->to_store_id,
+                    'project_id'           => $transfer->project_id,
+                ]
+            );
+        } catch (\Throwable $e) {}
+
         // Deduct from origin store
         \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
 

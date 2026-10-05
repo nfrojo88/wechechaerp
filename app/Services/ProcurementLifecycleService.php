@@ -38,7 +38,14 @@ use Illuminate\Support\Facades\DB;
  */
 class ProcurementLifecycleService
 {
-    public function __construct(private ProcurementSmsService $sms) {}
+    private ProcurementHandoffNotificationService $handoffSms;
+
+    public function __construct(
+        private ProcurementSmsService $sms,
+        ?ProcurementHandoffNotificationService $handoffSms = null
+    ) {
+        $this->handoffSms = $handoffSms ?? app(ProcurementHandoffNotificationService::class);
+    }
 
     /**
      * Send notification SMS to a role for a specific PR stage transition.
@@ -184,6 +191,19 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_PROC_MANAGER, 'send_to_procurement_manager', 'store_manager', $notes);
         $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_PROC_MANAGER, 'Review PR & Assign Sourcing Method');
+
+        // Instant SMS Handoff: Store Manager -> Procurement Manager
+        try {
+            $this->handoffSms->triggerHandoff('store_converted_to_pr', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'store_manager',
+                'target_roles' => ['purchase_manager'],
+                'project_id'   => $pr->project_id,
+                'store_id'     => $pr->store_id,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Store Manager to PR SMS trigger failed: " . $e->getMessage());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -218,6 +238,17 @@ class ProcurementLifecycleService
         
         $methodLabel = $sourcingMethod === 'direct_buy' ? 'Direct Buy (add material prices)' : 'Proforma Sourcing (collect quotes)';
         $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_PROC_TEAM, "Sourcing: {$methodLabel}");
+
+        // Instant SMS Handoff: Procurement Manager -> Procurement Officer (Proforma/Direct) or GM (Credit)
+        try {
+            $this->handoffSms->triggerHandoff('proc_manager_assigned_sourcing', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'purchase_manager',
+                'target_roles' => [$sourcingMethod === 'credit' ? 'gm' : 'purchase'],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Proc Manager Sourcing SMS trigger failed: " . $e->getMessage());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -258,6 +289,17 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_MARKETING, 'submit_direct_buy_pricing', 'purchase', $notes);
         $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_MARKETING, 'Direct Buy Pricing Review (' . number_format($amount, 2) . ' ETB)');
+
+        // Instant SMS Handoff: Procurement Officer -> General Manager (Direct Buy)
+        try {
+            $this->handoffSms->triggerHandoff('proc_officer_submitted_direct', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'purchase',
+                'target_roles' => ['gm'],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Direct Buy Pricing SMS trigger failed: " . $e->getMessage());
+        }
     }
 
     public function submitProformas(PurchaseRequest $pr, string $notes = null): void
@@ -272,6 +314,17 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION, 'submit_proformas', 'purchase', $notes);
         $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION, 'Review & Select Submitted Proformas');
+
+        // Instant SMS Handoff: Procurement Officer -> Market Research Team (Proforma Route)
+        try {
+            $this->handoffSms->triggerHandoff('proc_officer_submitted_proforma', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'purchase',
+                'target_roles' => ['market_research'],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Proformas Submitted SMS trigger failed: " . $e->getMessage());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -296,6 +349,17 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_GM, 'add_marketing_variance', 'purchase_manager', $data['variance_notes'] ?? null);
         $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_GM, 'GM Decision on Direct Buy with Pricing Variance');
+
+        // Instant SMS Handoff: Market Research Team -> General Manager
+        try {
+            $this->handoffSms->triggerHandoff('market_research_variance', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'market_research',
+                'target_roles' => ['gm'],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Marketing Variance SMS trigger failed: " . $e->getMessage());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -359,6 +423,15 @@ class ProcurementLifecycleService
                 $pr->store_id
             );
 
+            // Instant SMS Handoff: GM -> Procurement Manager (Rejected)
+            try {
+                $this->handoffSms->triggerHandoff('gm_rejected', $pr, [
+                    'sender_user'  => Auth::user(),
+                    'sender_role'  => 'gm',
+                    'target_roles' => ['purchase_manager'],
+                ]);
+            } catch (\Throwable $e) {}
+
         } elseif ($decision === 'send_back') {
             $pr->update([
                 'status'             => PurchaseRequest::STATUS_PENDING_PROC_MANAGER,
@@ -367,6 +440,15 @@ class ProcurementLifecycleService
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_PROC_MANAGER, 'gm_send_back', 'gm', $notes);
             $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_PROC_MANAGER, "Returned by GM for Revision: {$notes}");
+
+            // Instant SMS Handoff: GM -> Procurement Manager (Countered/Returned)
+            try {
+                $this->handoffSms->triggerHandoff('gm_rejected', $pr, [
+                    'sender_user'  => Auth::user(),
+                    'sender_role'  => 'gm',
+                    'target_roles' => ['purchase_manager'],
+                ]);
+            } catch (\Throwable $e) {}
         } elseif ($decision === 'approve') {
             // 1. Handle Selected Proforma Quote
             $chosenProforma = null;
@@ -529,6 +611,17 @@ class ProcurementLifecycleService
                 $pr->project_id,
                 $pr->store_id
             );
+
+            // Instant SMS Handoff: GM -> Finance Head (Approved)
+            try {
+                $this->handoffSms->triggerHandoff('gm_approved', $pr, [
+                    'sender_user'  => Auth::user(),
+                    'sender_role'  => 'gm',
+                    'target_roles' => ['finance_head'],
+                ]);
+            } catch (\Throwable $e) {
+                Log::error("GM Approved SMS trigger failed: " . $e->getMessage());
+            }
         }
     }
 
@@ -668,6 +761,18 @@ class ProcurementLifecycleService
 
         // SMS directly to the assigned finance staff member (falls back to finance role / global_admin)
         $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_PAYMENT, 'Disburse Cash Payment of ' . number_format($amount, 2) . ' ETB', $staffUserId);
+
+        // Instant SMS Handoff: Finance Head -> Cashier / Assigned Finance Staff
+        try {
+            $this->handoffSms->triggerHandoff('finance_approved_payment', $pr, [
+                'sender_user'      => Auth::user(),
+                'sender_role'      => 'finance_head',
+                'target_roles'     => ['finance'],
+                'assigned_user_id' => $staffUserId,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Finance Head Payment Assigned SMS trigger failed: " . $e->getMessage());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -770,6 +875,17 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD, 'finance_staff_paid', 'finance', $notes);
         $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD, 'Payment Disbursed (' . number_format($disbursedAmount, 2) . ' ETB) — Upload Vendor Receipt');
+
+        // Instant SMS Handoff: Cashier / Finance Staff -> Procurement Officer / Purchaser
+        try {
+            $this->handoffSms->triggerHandoff('cashier_disbursed_cash', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'finance',
+                'target_roles' => ['purchase'],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Cashier Disbursed SMS trigger failed: " . $e->getMessage());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -807,6 +923,17 @@ class ProcurementLifecycleService
             ]);
             $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY, 'receipt_uploaded', 'purchase', $notes);
             $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY, 'Verify Vendor Purchase Receipt');
+        }
+
+        // Instant SMS Handoff: Purchaser -> Logistics Coordinator (General Service)
+        try {
+            $this->handoffSms->triggerHandoff('purchaser_uploaded_receipt', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'purchase',
+                'target_roles' => ['general_service'],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Purchaser Uploaded Receipt SMS trigger failed: " . $e->getMessage());
         }
     }
 
@@ -867,6 +994,19 @@ class ProcurementLifecycleService
         ]);
         $this->log($pr, $from, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'driver_booked', 'general_service', $notes);
         $this->notifyNextOwner($pr, PurchaseRequest::STATUS_PENDING_STORE_REVIEW, 'Driver Booked — Material Intake on Delivery', null, $driverEmployeeId);
+
+        // Instant SMS Handoff: Logistics Coordinator -> Driver + Site Store Keeper
+        try {
+            $this->handoffSms->triggerHandoff('logistics_dispatched_driver', $pr, [
+                'sender_user'          => Auth::user(),
+                'sender_role'          => 'general_service',
+                'target_roles'         => ['driver', 'store_keeper'],
+                'assigned_employee_id' => $driverEmployeeId,
+                'store_id'             => $pr->store_id,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Logistics Dispatched Driver SMS trigger failed: " . $e->getMessage());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1140,7 +1280,75 @@ class ProcurementLifecycleService
             $storeId
         );
 
+        // Instant SMS Handoff: Store Keeper -> Procurement Officer + Finance Head (GRN Completed)
+        try {
+            $this->handoffSms->triggerHandoff('store_keeper_grn', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'store_keeper',
+                'target_roles' => ['purchase', 'finance_head'],
+                'store_id'     => $storeId,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Store Keeper GRN SMS trigger failed: " . $e->getMessage());
+        }
+
         return $intakeResult;
+    }
+
+    /**
+     * Mark materials delivered by Driver to the project/store site.
+     * Triggers instant SMS handoff: Driver -> Site Store Keeper.
+     */
+    public function markDriverDelivered(PurchaseRequest $pr, ?string $notes = null): void
+    {
+        $driverBooking = $pr->driverBooking;
+        if ($driverBooking) {
+            $driverBooking->update([
+                'delivered_at'   => now(),
+                'delivery_notes' => $notes,
+            ]);
+        }
+
+        $this->log($pr, $pr->status, $pr->status, 'driver_marked_delivered', 'driver', $notes ?: 'Driver marked materials arrived and delivered to site gate');
+
+        try {
+            $this->handoffSms->triggerHandoff('driver_delivered', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'driver',
+                'target_roles' => ['store_keeper'],
+                'store_id'     => $pr->store_id,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Driver Delivered SMS trigger failed: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Confirm 3-Way Match & Close Purchase Request (Finance Head action).
+     * Verifies Purchase Order, Delivery Intake (GRN), and Fiscal Invoice/Payment match.
+     * Triggers instant SMS handoff: Finance Head -> Requester (Site Engineer) + Procurement Manager.
+     */
+    public function closeThreeWayMatch(PurchaseRequest $pr, ?string $notes = null): void
+    {
+        $from = $pr->status;
+        $pr->update([
+            'status'               => PurchaseRequest::STATUS_COMPLETED,
+            'three_way_matched_at' => now(),
+            'three_way_matched_by' => Auth::id(),
+            'current_owner_role'   => null,
+        ]);
+
+        $this->log($pr, $from, PurchaseRequest::STATUS_COMPLETED, 'three_way_match_closed', 'finance_head', $notes ?: '3-way match verified (PO, Store Intake GRN, Fiscal Receipt) and request closed.');
+
+        try {
+            $this->handoffSms->triggerHandoff('finance_3way_closed', $pr, [
+                'sender_user'  => Auth::user(),
+                'sender_role'  => 'finance_head',
+                'target_roles' => ['site_engineer', 'purchase_manager'],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error("Finance 3-Way Match SMS trigger failed: " . $e->getMessage());
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════

@@ -1978,6 +1978,21 @@ class PurchaseRequestController extends Controller
             );
         } catch (\Throwable $e) {}
 
+        // Instant SMS Handoff: Planning -> Coordinator
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'planning_forwarded',
+                $purchaseRequest,
+                [
+                    'sender_user' => Auth::user(),
+                    'sender_role' => 'planning',
+                    'project_id'  => $purchaseRequest->project_id,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("PR Planning Forwarded SMS trigger failed: " . $e->getMessage());
+        }
+
         return back()->with('success', 'Purchase Request approved by Planning and sent to Coordinator.');
     }
 
@@ -2013,6 +2028,21 @@ class PurchaseRequestController extends Controller
                 'created_at'          => now(),
             ]);
         } catch (\Throwable $e) {}
+
+        // Instant SMS Handoff: Planning Rejects -> Requester (Site Engineer)
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'planning_rejected',
+                $purchaseRequest,
+                [
+                    'sender_user' => Auth::user(),
+                    'sender_role' => 'planning',
+                    'project_id'  => $purchaseRequest->project_id,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("PR Planning Rejected SMS trigger failed: " . $e->getMessage());
+        }
 
         return back()->with('success', 'Purchase Request rejected by Planning.');
     }
@@ -2058,6 +2088,22 @@ class PurchaseRequestController extends Controller
                 $purchaseRequest->store_id
             );
         } catch (\Throwable $e) {}
+
+        // Instant SMS Handoff: Coordinator -> Store Manager
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                'coordinator_forwarded',
+                $purchaseRequest,
+                [
+                    'sender_user' => Auth::user(),
+                    'sender_role' => 'coordinator',
+                    'project_id'  => $purchaseRequest->project_id,
+                    'store_id'    => $purchaseRequest->store_id,
+                ]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error("PR Coordinator Forwarded SMS trigger failed: " . $e->getMessage());
+        }
 
         return back()->with('success', 'Purchase Request approved by Coordinator and dispatched to Store Manager.');
     }
@@ -2435,5 +2481,35 @@ class PurchaseRequestController extends Controller
         $this->lifecycle->financeHeadSendBackToGm($purchaseRequest, $request->reason);
 
         return back()->with('success', 'Purchase Request returned to General Manager successfully.');
+    }
+
+    /**
+     * Driver Marks Materials Delivered (Driver / Logistics Coordinator action).
+     * Triggers instant SMS handoff: Driver -> Site Store Keeper.
+     */
+    public function markDriverDelivered(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $user = Auth::user();
+        $isDriverOrAdmin = $user && ($user->hasAnyRole(['driver', 'general_service', 'admin', 'global_admin']) || ($purchaseRequest->driverBooking && (int)$purchaseRequest->driverBooking->driver_employee_id === (int)$user->employee?->id));
+        if (!$isDriverOrAdmin) {
+            abort(403, 'Unauthorized: Only assigned Driver or Logistics Coordinator can confirm delivery arrival.');
+        }
+
+        $this->lifecycle->markDriverDelivered($purchaseRequest, $request->input('notes'));
+
+        return back()->with('success', 'Delivery arrival confirmed! Store Keeper has been notified via instant SMS for inspection & intake.');
+    }
+
+    /**
+     * Confirm 3-Way Match & Close Purchase Request (Finance Head action).
+     * Triggers instant SMS handoff: Finance Head -> Requester (Site Engineer) + Procurement Manager.
+     */
+    public function confirmThreeWayMatch(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $this->authorizeStageRole($purchaseRequest, ['finance_head', 'finance_manager', 'cfo', 'admin', 'global_admin']);
+
+        $this->lifecycle->closeThreeWayMatch($purchaseRequest, $request->input('notes'));
+
+        return back()->with('success', '3-Way Match verified and PR closed! Requester and Procurement Manager have been notified via instant SMS.');
     }
 }

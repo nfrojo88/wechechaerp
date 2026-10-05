@@ -1812,6 +1812,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/verify-receipt', [App\Http\Controllers\PurchaseRequestController::class, 'verifyReceipt'])->name('purchase-requests.verify-receipt');
     Route::post('purchase-requests/{purchaseRequest}/book-driver', [App\Http\Controllers\PurchaseRequestController::class, 'bookDriver'])->name('purchase-requests.book-driver');
     Route::post('purchase-requests/{purchaseRequest}/store-intake', [App\Http\Controllers\PurchaseRequestController::class, 'storeIntake'])->name('purchase-requests.store-intake');
+    Route::post('purchase-requests/{purchaseRequest}/mark-driver-delivered', [App\Http\Controllers\PurchaseRequestController::class, 'markDriverDelivered'])->name('purchase-requests.mark-driver-delivered');
+    Route::post('purchase-requests/{purchaseRequest}/confirm-three-way-match', [App\Http\Controllers\PurchaseRequestController::class, 'confirmThreeWayMatch'])->name('purchase-requests.confirm-three-way-match');
     Route::post('purchase-requests/{purchaseRequest}/reactivate', [App\Http\Controllers\PurchaseRequestController::class, 'reactivate'])->name('purchase-requests.reactivate');
     Route::post('purchase-requests/{purchaseRequest}/send-to-finance-direct', [App\Http\Controllers\PurchaseRequestController::class, 'sendToFinanceDirect'])->name('purchase-requests.send-to-finance-direct');
     Route::post('purchase-requests/{purchaseRequest}/items', [App\Http\Controllers\PurchaseRequestController::class, 'addItem'])->name('purchase-requests.add-item');
@@ -2514,6 +2516,13 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{letter}/close',                   [App\Http\Controllers\LetterController::class, 'closeLetter'])->name('close');
         Route::get('/attachments/{attachment}/preview',  [App\Http\Controllers\LetterController::class, 'previewAttachment'])->name('attachments.preview');
         Route::get('/attachments/{attachment}/download', [App\Http\Controllers\LetterController::class, 'downloadAttachment'])->name('attachments.download');
+    });
+
+    // ─── Admin: Procurement SMS Handoff Settings ───────────────────────────────
+    Route::prefix('admin/procurement/sms-settings')->name('admin.procurement.sms-settings.')->group(function () {
+        Route::get('/',          [App\Http\Controllers\Admin\ProcurementSmsSettingsController::class, 'index'])->name('index');
+        Route::post('/',         [App\Http\Controllers\Admin\ProcurementSmsSettingsController::class, 'update'])->name('update');
+        Route::post('/test-sms', [App\Http\Controllers\Admin\ProcurementSmsSettingsController::class, 'testSms'])->name('test-sms');
     });
 
     // ─── Global Admin: Announcements & Bulk SMS (Restricted strictly to Global Admin) ─────────

@@ -20,6 +20,15 @@ class AppServiceProvider extends ServiceProvider
         if (file_exists(app_path('Helpers/helpers.php'))) {
             require_once app_path('Helpers/helpers.php');
         }
+
+        $this->app->bind(\App\Contracts\SmsProviderInterface::class, function ($app) {
+            $driver = config('procurement_handoffs.default_provider', env('SMS_DRIVER', 'afromessage'));
+            return match (strtolower($driver)) {
+                'africastalking', 'at'       => new \App\Services\Sms\AfricasTalkingProvider(),
+                'log', 'simulate', 'testing' => new \App\Services\Sms\LogSmsProvider(),
+                default                      => new \App\Services\Sms\AfroMessageProvider(),
+            };
+        });
     }
 
     /**
@@ -82,6 +91,10 @@ class AppServiceProvider extends ServiceProvider
                 ]);
                 Artisan::call('db:seed', [
                     '--class' => 'Database\Seeders\AdminUserSeeder',
+                    '--force' => true,
+                ]);
+                Artisan::call('db:seed', [
+                    '--class' => 'Database\Seeders\ProcurementSmsSettingsSeeder',
                     '--force' => true,
                 ]);
 

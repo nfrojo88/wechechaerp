@@ -105,6 +105,25 @@ class ProcurementSmsService
         } catch (\Throwable $e) {
             Log::error("ProcurementSMS DB log insert failed: " . $e->getMessage());
         }
+
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('notification_log')) {
+                \App\Models\NotificationLog::create([
+                    'request_type'   => 'purchase_request',
+                    'request_id'     => $purchaseRequestId,
+                    'action'         => 'lifecycle_stage_transition',
+                    'sender_user_id' => \Illuminate\Support\Facades\Auth::id(),
+                    'role'           => $recipientRole,
+                    'phone'          => $formattedPhone,
+                    'message'        => $message,
+                    'status'         => $status,
+                    'error'          => $error,
+                    'retries'        => 0,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::error("ProcurementSMS notification_log insert failed: " . $e->getMessage());
+        }
     }
 
     /**
