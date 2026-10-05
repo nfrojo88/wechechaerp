@@ -458,7 +458,7 @@
                                                                     <td id="v_cell_date">—</td>
                                                                     <td id="v_cell_mrc">—</td>
                                                                     <td class="fw-bold text-dark" id="v_cell_fs">—</td>
-                                                                    <td class="text-start text-dark" id="v_cell_desc">—</td>
+                                                                    <td class="text-start fw-semibold text-primary" id="v_cell_desc" title="Click to edit bought materials" style="cursor:pointer; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" onclick="const d = document.getElementById('field_description'); if(d) { d.focus(); d.select(); d.classList.add('border-primary'); setTimeout(() => d.classList.remove('border-primary'), 1200); }">—</td>
                                                                     <td id="v_cell_uom">9</td>
                                                                     <td id="v_cell_qty">1</td>
                                                                     <td class="text-end font-monospace" id="v_cell_uprice">0.00</td>
@@ -868,8 +868,12 @@ function populateFormFromAi(data) {
     if (data.subtotal) document.getElementById('field_subtotal').value = parseFloat(data.subtotal).toFixed(2);
     if (data.vat_amount) document.getElementById('field_vat').value = parseFloat(data.vat_amount).toFixed(2);
     if (data.total_amount) document.getElementById('field_total').value = parseFloat(data.total_amount).toFixed(2);
-    if (data.category) document.getElementById('field_category').value = data.category;
-    if (data.description) document.getElementById('field_description').value = data.description;
+    if (data.description) {
+        document.getElementById('field_description').value = data.description;
+    } else if (Array.isArray(data.line_items) && data.line_items.length > 0) {
+        const itemNames = data.line_items.map(i => i.name).filter(Boolean).join(', ');
+        if (itemNames) document.getElementById('field_description').value = itemNames;
+    }
     if (data.vat_category && document.getElementById('field_vat_cat')) document.getElementById('field_vat_cat').value = data.vat_category;
     if (data.uom_id && document.getElementById('field_uom')) document.getElementById('field_uom').value = data.uom_id;
 
@@ -1313,40 +1317,89 @@ function parseReceiptText(text, lines) {
         catSelect.value = 'equipment';
     }
 
-    // 12. Check for Specific Items (e.g. WATER PROOF AND WIRE):
-    let itemDesc = '';
-    if (/water\s*proof/i.test(text) || /wire/i.test(text) || isAstra) {
-        itemDesc = 'WATER PROOF AND WIRE';
+    // 12. Extract Line Items & Bought Materials:
+    const extractedItems = extractLineItems(lines);
+    let boughtMaterials = '';
+    if (extractedItems && extractedItems.length > 0) {
+        boughtMaterials = extractedItems.map(it => it.name).filter(Boolean).join(', ');
     }
-    if (itemDesc) {
-        document.getElementById('field_description').value = itemDesc;
-    }
-
-    // 13. Extract Line Items:
-    extractLineItems(lines);
-
-    // If no line items extracted but isAstra, populate line item
-    if (isAstra && document.getElementById('line-items-body').children.length === 0) {
-        const tableBody = document.getElementById('line-items-body');
-        const tableSection = document.getElementById('line-items-section');
-        const countBadge = document.getElementById('line-items-count');
-        tableBody.innerHTML = `
-            <tr>
-                <td class="fw-semibold text-dark">WATER PROOF AND WIRE</td>
-                <td class="text-end font-monospace">1</td>
-                <td class="text-end font-monospace">44,086.97</td>
-                <td class="text-end font-monospace fw-bold text-success">44,086.97</td>
-            </tr>
-        `;
-        tableSection.style.display = 'block';
-        countBadge.textContent = '1 item';
+    if (!boughtMaterials) {
+        boughtMaterials = extractBoughtMaterialsFromText(lines, text);
     }
 
-    // 14. Render Click-to-Fill Candidate Chips:
+    if (boughtMaterials) {
+        document.getElementById('field_description').value = boughtMaterials;
+        chips.push({ label: 'Bought Materials', value: boughtMaterials, target: 'field_description' });
+    }
+
+    // 13. Render Click-to-Fill Candidate Chips:
     renderCandidateChips(chips);
 
-    // 15. Live Update ERCA VAT Declaration Preview:
+    // 14. Live Update ERCA VAT Declaration Preview:
     updateVatReportPreview();
+}
+
+// Helper: Extract actual bought items / materials from the middle body of the receipt
+function extractBoughtMaterialsFromText(lines, text) {
+    const candidateLines = [];
+    let pastHeader = false;
+
+    // Header keywords (marks the receipt top header before items)
+    const headerKeywords = /TIN|BUYER|CUSTOMER|FS\s*NO|FS\s*#|DATE|TIME|CASHIER|WELCOME|INVOICE|TELE|PHONE|BRANCH|HNO|KEBELE/i;
+    // Footer keywords (marks the financial summary after items)
+    const footerKeywords = /TAXBL|TAXABLE|TAX\s*1|TAX\s*15|VAT|TOTAL|SUBTOTAL|CASH\s*BIRR|CASH|CHANGE|ERCA|MRC|MFE|TDB|ITEM#/i;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        if (headerKeywords.test(line)) {
+            pastHeader = true;
+            continue;
+        }
+
+        if (pastHeader && footerKeywords.test(line)) {
+            break;
+        }
+
+        if (pastHeader) {
+            // Ignore pure numeric strings, dates, or lone symbols
+            if (/^[0-9.,\s*xX=+\-]+$/.test(line)) continue;
+            if (/^[0-9]{1,3}\s*[xX*]\s*[0-9,.]+/.test(line)) continue;
+            if (line.length < 3) continue;
+
+            // Strip trailing/leading price noise: e.g. "FLAT BAR 40*3 *1,478.26" -> "FLAT BAR 40*3"
+            const cleanName = line.replace(/[*+~«]\s*[0-9]{1,3}(?:[,.][0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2})$/, '')
+                                  .replace(/^[\d\s*xX=+\-.]+/, '')
+                                  .replace(/[*~«]/g, '')
+                                  .trim();
+
+            if (cleanName.length >= 3 && !headerKeywords.test(cleanName) && !footerKeywords.test(cleanName)) {
+                if (!candidateLines.includes(cleanName)) {
+                    candidateLines.push(cleanName);
+                }
+            }
+        }
+    }
+
+    if (candidateLines.length > 0) {
+        return candidateLines.join(', ');
+    }
+
+    // Material detection across common construction and commercial items
+    const commonMaterials = [
+        'WATER PROOF', 'WATERPROOF', 'WIRE', 'FLAT BAR', 'ROUND PIPE', 'CEMENT', 
+        'REBAR', 'STEEL', 'NAILS', 'PAINT', 'SILICONE', 'GLUE', 'GYPSUM', 
+        'TIMBER', 'SAND', 'GRAVEL', 'CORRUGATED SHEET', 'ELECTRICAL CABLE', 'CERAMIC TILE'
+    ];
+    const detected = [];
+    for (const mat of commonMaterials) {
+        const re = new RegExp('\\b' + mat.replace(' ', '\\s*') + '\\b', 'i');
+        if (re.test(text)) {
+            detected.push(mat);
+        }
+    }
+    return detected.join(', ');
 }
 
 // Line Items Extractor (handles multi-line "3 x 2434.78 =" and single line "FLAT BAR 40*3 *1,478.26")
@@ -1394,6 +1447,21 @@ function extractLineItems(lines) {
             });
             continue;
         }
+
+        // Case 3: Line ending with price: "WATER PROOF 44086.97" or "ROUND PIPE 2434.78"
+        const trailingMatch = line.match(/^([A-Za-z][A-Za-z0-9\s*#+._/-]{3,35})\s+([0-9]{1,3}(?:[,.][0-9]{3})*(?:\.[0-9]{2})|[0-9]{3,}(?:\.[0-9]{2}))$/);
+        if (trailingMatch) {
+            let s = trailingMatch[2];
+            if (/^\d{1,3}\.\d{3}\.\d{2}$/.test(s)) s = s.replace('.', '');
+            const tot = parseFloat(s.replace(/[, \s]/g, ''));
+            items.push({
+                name: trailingMatch[1].replace(/[*]/g, '').trim(),
+                qty: 1,
+                unitPrice: tot,
+                total: tot
+            });
+            continue;
+        }
     }
 
     if (items.length > 0) {
@@ -1412,6 +1480,8 @@ function extractLineItems(lines) {
     } else {
         tableSection.style.display = 'none';
     }
+
+    return items;
 }
 
 // Render Click-to-Fill Quick Chips
