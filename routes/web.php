@@ -174,12 +174,34 @@ Route::get('/deploy-from-github', function () {
 });
 
 
+// Quick cache clear route for production deployment
+Route::get('/clear-cache', function () {
+    try {
+        \Illuminate\Support\Facades\Artisan::call('route:clear');
+        \Illuminate\Support\Facades\Artisan::call('config:clear');
+        \Illuminate\Support\Facades\Artisan::call('view:clear');
+        \Illuminate\Support\Facades\Artisan::call('cache:clear');
+        return "<div style='font-family:sans-serif;padding:40px;text-align:center;'>
+            <h1 style='color:#16a34a;'>✅ Route, Config, View & Cache Cleared!</h1>
+            <p style='color:#4b5563;margin:20px 0;'>All Laravel caches have been successfully purged.</p>
+            <a href='/admin/receipt-ocr' style='background:#2563eb;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;display:inline-block;'>👉 Go to Receipt OCR</a>
+        </div>";
+    } catch (\Throwable $e) {
+        return "<div style='color:red;padding:20px;'>Error: " . htmlspecialchars($e->getMessage()) . "</div>";
+    }
+});
+
 // One-click migration route for all pending migrations
 Route::get('/run-migrations', function () {
     try {
         // Run ALL pending migrations with --force (for production)
         \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
         $output = \Illuminate\Support\Facades\Artisan::output();
+
+        // Clear route, view, and config caches to prevent stale cache errors
+        \Illuminate\Support\Facades\Artisan::call('route:clear');
+        \Illuminate\Support\Facades\Artisan::call('view:clear');
+        \Illuminate\Support\Facades\Artisan::call('config:clear');
 
         // Direct guarantee for payrolls columns (company_pension, taxable_income, loan_deduction, absence_deduction, absent_days)
         if (\Illuminate\Support\Facades\Schema::hasTable('payrolls')) {

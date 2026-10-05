@@ -459,7 +459,7 @@
                     </div>
 
                     {{-- Search Form --}}
-                    <form method="GET" action="{{ route('admin.ocr.index') }}" id="filter-form" class="d-flex align-items-center gap-2 flex-wrap">
+                    <form method="GET" action="{{ url('admin/receipt-ocr') }}" id="filter-form" class="d-flex align-items-center gap-2 flex-wrap">
                         @if(request()->boolean('needs_review'))
                             <input type="hidden" name="needs_review" value="1">
                         @endif
@@ -468,7 +468,7 @@
                         <input type="date" name="date_to" class="form-control form-control-sm" value="{{ request('date_to') }}" title="Date To" style="width: 130px;">
                         <button type="submit" class="btn btn-sm btn-primary" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
                         @if(request()->hasAny(['search', 'needs_review', 'date_from', 'date_to', 'category', 'project_id']))
-                            <a href="{{ route('admin.ocr.index') }}" class="btn btn-sm btn-light border" title="Clear Filters"><i class="fa-solid fa-times"></i></a>
+                            <a href="{{ url('admin/receipt-ocr') }}" class="btn btn-sm btn-light border" title="Clear Filters"><i class="fa-solid fa-times"></i></a>
                         @endif
                     </form>
                 </div>
@@ -867,19 +867,19 @@
  * Global CSRF and endpoints
  */
 const CSRF_TOKEN = '{{ csrf_token() }}';
-const PROCESS_FILE_URL = '{{ route("admin.ocr.process-file") }}';
-const AI_SCAN_URL = '{{ route("admin.ocr.ai-scan") }}';
-const SAVE_RECEIPT_URL = '{{ route("admin.ocr.save") }}';
-const SAVE_ITEM_URL = '{{ route("admin.ocr.save-item") }}';
-const SAVE_ALL_URL = '{{ route("admin.ocr.save-all") }}';
-const REPLACE_DUP_URL = '{{ route("admin.ocr.replace-duplicate") }}';
-const CREATE_MANUAL_ROW_URL = '{{ route("admin.ocr.create-manual-row") }}';
+const PROCESS_FILE_URL = '{{ url("admin/receipt-ocr/process-file") }}';
+const AI_SCAN_URL = '{{ url("admin/receipt-ocr/ai-scan") }}';
+const SAVE_RECEIPT_URL = '{{ url("admin/receipt-ocr/save") }}';
+const SAVE_ITEM_URL = '{{ url("admin/receipt-ocr/save-item") }}';
+const SAVE_ALL_URL = '{{ url("admin/receipt-ocr/save-all") }}';
+const REPLACE_DUP_URL = '{{ url("admin/receipt-ocr/replace-duplicate") }}';
+const CREATE_MANUAL_ROW_URL = '{{ url("admin/receipt-ocr/create-manual-row") }}';
 const DESTROY_ITEM_BASE = '{{ url("admin/receipt-ocr/item") }}';
 const SHOW_RECEIPT_BASE = '{{ url("admin/receipt-ocr") }}';
-const SAVE_SETTINGS_URL = '{{ route("admin.ocr.save-settings") }}';
-const TEST_KEY_URL = '{{ route("admin.ocr.test-key") }}';
-const EXPORT_EXCEL_URL = '{{ route("admin.ocr.export-excel") }}';
-const EXPORT_CSV_URL = '{{ route("admin.ocr.export-csv") }}';
+const SAVE_SETTINGS_URL = '{{ url("admin/receipt-ocr/settings") }}';
+const TEST_KEY_URL = '{{ url("admin/receipt-ocr/test-key") }}';
+const EXPORT_EXCEL_URL = '{{ url("admin/receipt-ocr/export-excel") }}';
+const EXPORT_CSV_URL = '{{ url("admin/receipt-ocr/export-csv") }}';
 
 // State management
 let uploadQueue = [];
