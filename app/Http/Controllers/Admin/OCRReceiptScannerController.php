@@ -1449,30 +1449,35 @@ class OCRReceiptScannerController extends Controller
                 return response()->json(['success' => false, 'message' => 'No Gemini API key provided to test.'], 422);
             }
 
-            try {
-                $response = Http::timeout(10)->post(
-                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" . $apiKey,
-                    [
-                        'contents' => [
-                            ['parts' => [['text' => 'Respond with {"status":"ok"}']]]
-                        ],
-                        'generationConfig' => ['responseMimeType' => 'application/json']
-                    ]
-                );
+            $models = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash'];
+            $lastErr = '';
 
-                if ($response->successful()) {
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Gemini Multimodal AI is connected and working perfectly!',
-                    ]);
+            foreach ($models as $model) {
+                try {
+                    $response = Http::timeout(10)->post(
+                        "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . $apiKey,
+                        [
+                            'contents' => [
+                                ['parts' => [['text' => 'Respond with {"status":"ok"}']]]
+                            ],
+                            'generationConfig' => ['responseMimeType' => 'application/json']
+                        ]
+                    );
+
+                    if ($response->successful()) {
+                        return response()->json([
+                            'success' => true,
+                            'message' => "Gemini Multimodal AI ({$model}) is connected and working perfectly!",
+                        ]);
+                    }
+
+                    $lastErr = $response->json('error.message', 'HTTP ' . $response->status());
+                } catch (\Throwable $e) {
+                    $lastErr = $e->getMessage();
                 }
-
-                $err = $response->json('error.message', 'Gemini returned HTTP ' . $response->status());
-                return response()->json(['success' => false, 'message' => 'Gemini test failed: ' . $err], 400);
-
-            } catch (\Throwable $e) {
-                return response()->json(['success' => false, 'message' => 'Gemini connection error: ' . $e->getMessage()], 500);
             }
+
+            return response()->json(['success' => false, 'message' => 'Gemini test failed: ' . $lastErr], 400);
         }
 
         // Test OCR.Space
@@ -1556,34 +1561,46 @@ class OCRReceiptScannerController extends Controller
     {
         $prompt = <<<PROMPT
 You are an expert fiscal auditor specialized in Ethiopian ERCA / Ministry of Revenues fiscal cash machine receipts (Datecs, Daisy, Citizen), sales invoices, and commercial cash slips for Ethiopian Ministry of Revenues VAT declaration (Line 100).
-Extract ALL details from this receipt image with absolute accuracy.
+Extract ALL details from this receipt image with absolute precision. Read every detail on the receipt, including small printed text, folded or skewed slips, and phone photos.
 
-CRITICAL INSTRUCTIONS:
-1. SUPPLIER TIN vs BUYER TIN:
-   - supplier_tin: 10-digit TIN of the SELLER / MERCHANT / SUPPLIER issuing the receipt (e.g. "0024916531", "0043724322"). Usually at the top near merchant name. This is MANDATORY. Do NOT confuse with Buyer's TIN!
-   - buyer_tin: 10-digit TIN of the BUYER / CLIENT / CUSTOMER (often "0038480010" or labeled "Buyer's TIN").
-2. MERCHANT / SELLER NAME:
-   - merchant_name: Full registered trade name of the SELLER (e.g. "ASTRA GENERAL TRADING", "BERHANU TIEMAY ADHENA", "SEID LIDIA AND FRIENDS").
-3. RECEIPT DATE:
-   - receipt_date: Normalize to DD/MM/YYYY (e.g. "25/09/2026").
-4. ERCA / MRC MACHINE NUMBER:
-   - machine_no: Cash machine registration code / MRC number (e.g. "TDB0015170", "MFE0097690", "DFA0029991").
-5. FS / FISCAL RECEIPT NUMBER:
-   - fs_no: The fiscal receipt sequence number (e.g. "FS00002674", "FS00002564").
-6. ITEMS / PURCHASED MATERIALS:
-   - If multiple items are purchased, create one object in "items" array for each item!
-   - item_description: Description of the bought material for that item.
-   - uom: "9" for OTHER, "7" for PCS, "2" for KG, "5" for LIT, "10" for PC.
-   - qty: Numeric value with 2 decimals.
-   - unit_price: Numeric unit price before VAT with 2 decimals.
-   - total_value: Total value before VAT (qty * unit_price) with 2 decimals.
-   - vat: 15% VAT for this item with 2 decimals.
-   - value_after_vat: Total including VAT (total_value + vat) with 2 decimals.
-7. FINANCIAL TOTALS ACROSS RECEIPT:
+CRITICAL EXTRACTION RULES:
+1. ORIENTATION & IMAGE SKEW:
+   - Carefully inspect the image even if rotated, tilted, taken at an angle with a smartphone camera, with shadows, or on folded/wrinkled thermal paper. Read all numbers and letters meticulously.
+
+2. SUPPLIER TIN vs BUYER TIN:
+   - supplier_tin: 10-digit TIN of the SELLER / MERCHANT / SUPPLIER issuing the receipt (e.g. "0024916531", "0000005201", "0097826684"). Usually printed near the merchant name at top. This is MANDATORY. Do NOT confuse with Buyer TIN!
+   - buyer_tin: 10-digit TIN of the BUYER / CLIENT / CUSTOMER (often "0038480010" or labeled "Buyer's TIN / TIN").
+
+3. MERCHANT / SELLER NAME:
+   - merchant_name: Full registered trade name of the SELLER (e.g. "ASTRA GENERAL TRADING PLC", "ABDULKERIM STRAJ AHMED", "ENTERPRISE ..."). Do NOT truncate or cut words in half.
+
+4. RECEIPT DATE:
+   - receipt_date: Normalize to DD/MM/YYYY (e.g. "25/09/2026", "24/09/2026", "23/09/2026").
+
+5. ERCA / MRC MACHINE NUMBER:
+   - machine_no: Cash machine registration code / MRC number (e.g. "TDB0015170", "DDB0000032", "TDB0016310", "MFE0097690"). Usually 3 capital letters followed by 7 digits.
+
+6. FS / FISCAL RECEIPT NUMBER:
+   - fs_no: The fiscal receipt sequence number (e.g. "FS0002674", "FS00002674", "FS0001980"). Look for "FS", "FS NO", "FS No.", "FS#", "F/S", or the fiscal sequential receipt number. Include "FS" prefix followed by the digits (e.g. "FS0002674"). This is MANDATORY. Do NOT leave empty!
+
+7. ITEMS / PURCHASED MATERIALS (COL I, J, K, L, M, N, O):
+   - You MUST read the ACTUAL bought materials/items listed on the slip!
+   - Examples: "REBAR 16MM", "CEMENT OPC 42.5", "RIVER SAND", "BASALT GRAVEL 02", "TIMBER 4X4", "HOLLOW CONCRETE BLOCKS", "PVC PIPE 50MM", "FUEL DIESEL", etc.
+   - NEVER use generic placeholders like "Purchased Material" or "Item" if the product name or material description is printed on the receipt!
+   - If multiple items are printed, create an object in the "items" array for EACH individual item! Header details repeat for all rows.
+   - uom: Ethiopian VAT UOM code ("9" for OTHER, "7" for PCS, "2" for KG, "5" for LIT, "10" for PC, "1" for M, "4" for M3).
+   - qty: Numeric quantity (2 decimals).
+   - unit_price: Numeric unit price before VAT (2 decimals).
+   - total_value: Total value before VAT (qty * unit_price, 2 decimals).
+   - vat: 15% VAT for this item (2 decimals).
+   - value_after_vat: Total including VAT (total_value + vat, 2 decimals).
+
+8. TOTALS ACROSS RECEIPT:
    - subtotal: Taxable value before VAT across entire receipt.
    - vat_amount: 15% VAT across entire receipt.
-   - total_amount: Grand total / value after VAT.
-8. VAT DECLARATION CLASSIFICATION:
+   - total_amount: Grand total / cash paid.
+
+9. VAT DECLARATION CLASSIFICATION:
    - vat_category: "G" for Goods or "S" for Services.
    - calendar_type: "G" for Gregorian or "E" for Ethiopian.
    - purchase_type: 3 (Taxable-local Purchase of Inputs - Line No. 100).
@@ -1620,7 +1637,7 @@ Return STRICT JSON matching this schema:
 }
 PROMPT;
 
-        $models = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+        $models = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash'];
 
         foreach ($models as $model) {
             try {
@@ -1660,6 +1677,19 @@ PROMPT;
                             }
                             if (!empty($parsed['buyer_tin'])) {
                                 $parsed['buyer_tin'] = preg_replace('/[^0-9]/', '', (string)$parsed['buyer_tin']);
+                            }
+                            // Normalize FS No
+                            if (!empty($parsed['fs_no'])) {
+                                $rawFs = strtoupper(trim((string)$parsed['fs_no']));
+                                if (!str_starts_with($rawFs, 'FS') && preg_match('/^[0-9]+$/', $rawFs)) {
+                                    $parsed['fs_no'] = 'FS' . str_pad($rawFs, 7, '0', STR_PAD_LEFT);
+                                } else {
+                                    $parsed['fs_no'] = preg_replace('/\s+/', '', $rawFs);
+                                }
+                            }
+                            // Normalize MRC No
+                            if (!empty($parsed['machine_no'])) {
+                                $parsed['machine_no'] = strtoupper(trim(preg_replace('/\s+/', '', (string)$parsed['machine_no'])));
                             }
                             return $parsed;
                         }
@@ -1750,11 +1780,12 @@ PROMPT;
             }
         }
 
-        // 2. Find FS Number
-        if (preg_match('/\bFS\s*0*([0-9]{4,10})\b/i', $text, $m)) {
-            $fsNo = 'FS' . str_pad($m[1], 8, '0', STR_PAD_LEFT);
-        } elseif (preg_match('/\b(FS[0-9]{5,10})\b/i', $text, $m)) {
-            $fsNo = strtoupper($m[1]);
+        // 2. Find FS Number (FS0002674, FS: 0002674, FS NO: 0002674, FS#0002674, F/S 0002674, FISCAL NO 0002674)
+        if (preg_match('/(?:FS|F\/S|FISCAL\s*NO|FISCAL\s*RECEIPT\s*NO|FS\s*NO|FS\s*\#)[\s\:\.\#\-\_]*0*([0-9]{1,10})/i', $text, $m)) {
+            $num = $m[1];
+            $fsNo = 'FS' . str_pad($num, 7, '0', STR_PAD_LEFT);
+        } elseif (preg_match('/\bFS\s*0*([0-9]{3,10})\b/i', $text, $m)) {
+            $fsNo = 'FS' . str_pad($m[1], 7, '0', STR_PAD_LEFT);
         }
 
         // 3. Find MRC Number (typically 3 letters followed by 7 digits)
@@ -1774,14 +1805,22 @@ PROMPT;
         }
 
         // 5. Merchant Name from first few non-header lines
+        $vendorNameCandidates = [];
         foreach ($cleanLines as $line) {
             $upper = strtoupper($line);
-            if (str_contains($upper, 'RECEIPT') || str_contains($upper, 'ERCA') || str_contains($upper, 'TIN') || str_contains($upper, 'TEL') || str_contains($upper, 'DATE') || is_numeric($line)) {
+            if (str_contains($upper, 'RECEIPT') || str_contains($upper, 'ERCA') || str_contains($upper, 'TIN') || str_contains($upper, 'TEL') || str_contains($upper, 'DATE') || str_contains($upper, 'MRC') || str_contains($upper, 'FS') || is_numeric($line)) {
                 continue;
             }
-            if (strlen($line) >= 4 && preg_match('/[A-Za-z]/', $line)) {
-                $vendorName = $line;
-                break;
+            if (strlen($line) >= 3 && preg_match('/[A-Za-z]/', $line)) {
+                $vendorNameCandidates[] = $line;
+                if (count($vendorNameCandidates) >= 2) break;
+            }
+        }
+        if (!empty($vendorNameCandidates)) {
+            if (count($vendorNameCandidates) > 1 && strlen($vendorNameCandidates[0]) < 12) {
+                $vendorName = trim($vendorNameCandidates[0] . ' ' . $vendorNameCandidates[1]);
+            } else {
+                $vendorName = $vendorNameCandidates[0];
             }
         }
 
@@ -1808,18 +1847,86 @@ PROMPT;
             $totalVal = round($subtotalVal + $vatVal, 2);
         }
 
-        // Single fallback item
-        $items = [
-            [
-                'item_description' => 'Purchased Material',
-                'uom'              => '9',
-                'qty'              => 1.00,
-                'unit_price'       => $subtotalVal,
-                'total_value'      => $subtotalVal,
-                'vat'              => $vatVal,
-                'value_after_vat'  => $totalVal,
-            ]
-        ];
+        // 7. Extract actual items / materials from slip lines
+        $detectedItems = [];
+        $skipKeywords = ['RECEIPT', 'ERCA', 'TIN', 'TEL', 'DATE', 'MRC', 'FS', 'TOTAL', 'CASH', 'SUBTOTAL', 'TAXBL', 'TAX1', 'VAT', 'CHANGE', 'THANK', 'CLIENT', 'BUYER'];
+
+        foreach ($cleanLines as $line) {
+            $upper = strtoupper($line);
+            $shouldSkip = false;
+            foreach ($skipKeywords as $sk) {
+                if (str_contains($upper, $sk)) {
+                    $shouldSkip = true;
+                    break;
+                }
+            }
+            if ($shouldSkip || strlen($line) < 3 || is_numeric($line)) {
+                continue;
+            }
+
+            // Line with description, qty, unit price, total
+            if (preg_match('/^([A-Za-z0-9\s\/\-\_\.\#]+?)\s+([0-9]+\.?[0-9]*)\s+([0-9]+\.[0-9]{2})\s+([0-9]+\.[0-9]{2})$/', $line, $m)) {
+                $desc = trim($m[1]);
+                $q = (float)$m[2];
+                $p = (float)$m[3];
+                $t = (float)$m[4];
+                $v = round($t * 0.15, 2);
+                $detectedItems[] = [
+                    'item_description' => $desc,
+                    'uom'              => '9',
+                    'qty'              => $q,
+                    'unit_price'       => $p,
+                    'total_value'      => $t,
+                    'vat'              => $v,
+                    'value_after_vat'  => round($t + $v, 2),
+                ];
+            } elseif (preg_match('/^([A-Za-z0-9\s\/\-\_\.\#]+?)\s+([0-9,]+\.[0-9]{2})$/', $line, $m)) {
+                $desc = trim($m[1]);
+                $t = (float)str_replace(',', '', $m[2]);
+                if ($t > 0 && strlen($desc) >= 3 && !preg_match('/^(?:SUBTOTAL|TAXBL|TOTAL|VAT|CASH)$/i', $desc)) {
+                    $v = round($t * 0.15, 2);
+                    $detectedItems[] = [
+                        'item_description' => $desc,
+                        'uom'              => '9',
+                        'qty'              => 1.00,
+                        'unit_price'       => $t,
+                        'total_value'      => $t,
+                        'vat'              => $v,
+                        'value_after_vat'  => round($t + $v, 2),
+                    ];
+                }
+            }
+        }
+
+        if (!empty($detectedItems)) {
+            $items = $detectedItems;
+        } else {
+            // Find first plausible material description from non-header lines
+            $firstDesc = '';
+            foreach ($cleanLines as $line) {
+                $upper = strtoupper($line);
+                $isMeta = false;
+                foreach ($skipKeywords as $sk) {
+                    if (str_contains($upper, $sk)) { $isMeta = true; break; }
+                }
+                if (!$isMeta && strlen($line) >= 4 && preg_match('/[A-Za-z]/', $line) && !in_array($line, $vendorNameCandidates)) {
+                    $firstDesc = $line;
+                    break;
+                }
+            }
+
+            $items = [
+                [
+                    'item_description' => $firstDesc ?: (!empty($vendorName) ? ($vendorName . ' Supplies') : 'Construction Material'),
+                    'uom'              => '9',
+                    'qty'              => 1.00,
+                    'unit_price'       => $subtotalVal,
+                    'total_value'      => $subtotalVal,
+                    'vat'              => $vatVal,
+                    'value_after_vat'  => $totalVal,
+                ]
+            ];
+        }
 
         return [
             'merchant_name' => $vendorName ?: 'Merchant',

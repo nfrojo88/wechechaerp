@@ -946,11 +946,11 @@ function setupPreviewButtons() {
             total_amount: total,
             engine: currentEngineUsed,
             confidence: currentConfidence,
-            line_items: (currentExtractedData && currentExtractedData.items && currentExtractedData.items.length > 0) 
+            line_items: (currentExtractedData && currentExtractedData.items && currentExtractedData.items.length > 1) 
                 ? currentExtractedData.items 
                 : [
                     {
-                        item_description: document.getElementById('field_description').value.trim() || 'Purchased Material',
+                        item_description: document.getElementById('field_description').value.trim() || (currentExtractedData && currentExtractedData.items && currentExtractedData.items[0] ? currentExtractedData.items[0].item_description : 'Purchased Material'),
                         uom: document.getElementById('field_uom').value,
                         qty: parseFloat(document.getElementById('field_qty').value) || 1,
                         unit_price: parseFloat(document.getElementById('field_unit_price').value) || subtotal,
