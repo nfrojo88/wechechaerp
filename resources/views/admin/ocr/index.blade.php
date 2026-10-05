@@ -24,7 +24,7 @@
             </p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ route('admin.ocr.export-vat') }}" class="btn btn-outline-success btn-sm shadow-xs fw-bold" title="Download Excel/CSV matching VAT REPORT SEMPTMBER 2026.xlsx">
+            <a href="{{ url('/admin/receipt-ocr/export-vat') }}" class="btn btn-outline-success btn-sm shadow-xs fw-bold" title="Download Excel/CSV matching VAT REPORT SEMPTMBER 2026.xlsx">
                 <i class="fa-solid fa-file-excel me-1 text-success"></i>Export VAT Report (Excel)
             </a>
             <button type="button" class="btn btn-primary btn-sm shadow-xs fw-bold" id="btn-autofill-astra" title="Pre-fill Astra General Trading receipt from Row 20 (50,700.02 ETB)">
