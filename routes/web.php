@@ -1407,6 +1407,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/admin/tickets/{ticket}/reply', [AdminTicketController::class, 'reply'])->name('admin.tickets.reply');
         Route::post('/admin/tickets/{ticket}/status', [AdminTicketController::class, 'updateStatus'])->name('admin.tickets.status');
         Route::post('/admin/tickets/{ticket}/assign', [AdminTicketController::class, 'assign'])->name('admin.tickets.assign');
+        Route::post('/admin/tickets/{ticket}/it-section', [AdminTicketController::class, 'updateItSection'])->name('admin.tickets.it-section');
+        Route::post('/admin/tickets/{ticket}/resend-sms', [AdminTicketController::class, 'resendSms'])->name('admin.tickets.resend-sms');
+        Route::get('/admin/tickets/{ticket}/print', [SupportTicketController::class, 'print'])->name('admin.tickets.print');
 
         // Scratch Material Procurement Requisitions (Global Admin Only)
         Route::get('/admin/procurement/scratch-requests', [App\Http\Controllers\Admin\ScratchMaterialRequestController::class, 'index'])
@@ -1430,6 +1433,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/tickets/create', [SupportTicketController::class, 'create'])->name('tickets.create');
     Route::post('/tickets', [SupportTicketController::class, 'store'])->name('tickets.store');
     Route::get('/tickets/{ticket}', [SupportTicketController::class, 'show'])->name('tickets.show');
+    Route::get('/tickets/{ticket}/print', [SupportTicketController::class, 'print'])->name('tickets.print');
     Route::post('/tickets/{ticket}/reply', [SupportTicketController::class, 'reply'])->name('tickets.reply');
 
     // Maintenance Requests (Employee — report from profile page)

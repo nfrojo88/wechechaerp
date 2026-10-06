@@ -548,7 +548,7 @@
     <div class="collapse" id="adminGroupComm">
         <ul class="sidebar-sub-nav">
             <li><a href="{{ route('messages.index') }}" class="sidebar-nav-link {{ request()->routeIs('messages.*') ? 'active' : '' }}"><i class="fa-solid fa-envelope"></i><span>Messages</span></a></li>
-            <li><a href="{{ route('tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('tickets.*') && !request()->routeIs('admin.tickets.*') ? 'active' : '' }}"><i class="fa-solid fa-headset text-warning"></i><span>My Support Tickets</span></a></li>
+            <li><a href="{{ route('tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('tickets.*') && !request()->routeIs('admin.tickets.*') ? 'active' : '' }}"><i class="fa-solid fa-laptop-medical text-warning"></i><span>IT Reports &amp; Tickets</span></a></li>
             @if(auth()->check() && auth()->user()->hasRole('global_admin'))
                 <li><a href="{{ \Illuminate\Support\Facades\Route::has('admin.announcements.index') ? route('admin.announcements.index') : url('/admin/announcements') }}" class="sidebar-nav-link {{ request()->routeIs('admin.announcements.*') || request()->is('admin/announcements*') ? 'active' : '' }}"><i class="fa-solid fa-bullhorn text-warning"></i><span>Announcements &amp; SMS</span></a></li>
             @endif
@@ -584,7 +584,7 @@
             <li><a href="{{ route('users.index') }}" class="sidebar-nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}"><i class="fa-solid fa-user-shield"></i><span>User Management</span></a></li>
             <li><a href="{{ route('admin.role-assignment.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.role-assignment.*') ? 'active' : '' }}"><i class="fa-solid fa-user-tag text-info"></i><span>Role Assignment</span>@if($noRoleCount > 0)<span class="badge bg-warning text-dark ms-auto" style="font-size:0.6rem;">{{ $noRoleCount }}</span>@endif</a></li>
             <li><a href="{{ route('admin.employee-ratings.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.employee-ratings.*') ? 'active' : '' }}"><i class="fa-solid fa-star text-warning"></i><span>Employee Ratings</span></a></li>
-            <li><a href="{{ route('admin.tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.tickets.*') ? 'active' : '' }}"><i class="fa-solid fa-ticket text-danger"></i><span>Support Tickets</span></a></li>
+            <li><a href="{{ route('admin.tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.tickets.*') ? 'active' : '' }}"><i class="fa-solid fa-laptop-medical text-danger"></i><span>IT Reports &amp; Support</span></a></li>
             <li><a href="{{ route('settings.index') }}" class="sidebar-nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}"><i class="fa-solid fa-cogs"></i><span>System Settings</span></a></li>
             <hr class="sidebar-section-divider" style="margin: 0.3rem 0.5rem;">
             <li style="padding-top:0.1rem;"><small style="color:#475569; font-size:0.65rem; padding: 0 0.75rem; text-transform:uppercase; letter-spacing:0.05em;">Audit & Compliance</small></li>
@@ -2760,8 +2760,8 @@
         </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('tickets.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-headset text-warning"></i>
-                <span>My Support Tickets</span>
+                <i class="fa-solid fa-laptop-medical text-warning"></i>
+                <span>IT Reports &amp; Tickets</span>
                 @php
                     $openTickets = 0;
                     try {
@@ -2813,8 +2813,8 @@
 
         <li class="sidebar-nav-item">
             <a href="{{ route('admin.tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.tickets.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-ticket text-danger"></i>
-                <span>Support Tickets</span>
+                <i class="fa-solid fa-laptop-medical text-danger"></i>
+                <span>IT Reports &amp; Support</span>
             </a>
         </li>
         <li class="sidebar-nav-item">

@@ -4,6 +4,11 @@ namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Throwable;
+use App\Services\ItIncidentAlertService;
+use Illuminate\Validation\ValidationException;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Auth\Access\AuthorizationException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class Handler extends ExceptionHandler
 {
@@ -35,7 +40,25 @@ class Handler extends ExceptionHandler
     public function register()
     {
         $this->reportable(function (Throwable $e) {
-            //
+            // Automatically alert GM or Global Admin if a severe unhandled 500 error occurs
+            if (
+                !($e instanceof ValidationException) &&
+                !($e instanceof AuthenticationException) &&
+                !($e instanceof AuthorizationException) &&
+                !($e instanceof HttpException)
+            ) {
+                try {
+                    $alertService = app(ItIncidentAlertService::class);
+                    $url = request()->fullUrl() ?? 'Background/CLI';
+                    $alertService->sendDirectSystemErrorAlert(
+                        class_basename($e),
+                        $e->getMessage(),
+                        $url
+                    );
+                } catch (\Throwable $ignored) {
+                    // Suppress alert service failure to preserve standard error reporting
+                }
+            }
         });
     }
 }

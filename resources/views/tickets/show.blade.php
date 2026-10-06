@@ -1,123 +1,347 @@
 @extends('layouts.app')
-@section('title', 'Ticket Details')
+@section('title', 'Ticket Details - ' . $ticket->ticket_no)
 @section('content')
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3 mb-0 text-gray-800"><i class="fa-solid fa-ticket me-2"></i>Ticket {{ $ticket->ticket_no }}</h1>
-        <a href="{{ route('tickets.index') }}" class="btn btn-sm btn-secondary"><i class="fa-solid fa-arrow-left me-1"></i> Back to My Tickets</a>
+<div class="container-fluid py-3">
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge bg-dark fs-6">{{ $ticket->ticket_no }}</span>
+                {!! $ticket->submission_type_badge !!}
+                {!! $ticket->priority_badge !!}
+                {!! $ticket->status_badge !!}
+            </div>
+            <h1 class="h3 mb-0 text-gray-800 font-weight-bold">{{ $ticket->subject }}</h1>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ route('tickets.print', $ticket) }}" target="_blank" class="btn btn-outline-dark">
+                <i class="fa-solid fa-print me-1"></i> Print Official Form
+            </a>
+            <a href="{{ route('tickets.index') }}" class="btn btn-outline-secondary">
+                <i class="fa-solid fa-arrow-left me-1"></i> Back to My Reports
+            </a>
+        </div>
     </div>
 
     @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            {{ session('success') }}
+        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i>{{ session('success') }}
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     @endif
 
     <div class="row">
-        <!-- Ticket Conversation -->
-        <div class="col-lg-8 mb-4">
-            <div class="card shadow mb-4">
-                <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="m-0 font-weight-bold text-primary">{{ $ticket->subject }}</h6>
-                    <div>{!! $ticket->priority_badge !!} {!! $ticket->status_badge !!}</div>
+        <!-- Main Content Column -->
+        <div class="col-lg-8">
+
+            <!-- Section 1 & 2: Submitter & Type Overview -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fa-solid fa-file-lines me-2"></i>Report Overview
+                    </h6>
+                    <small class="text-muted">Submitted {{ $ticket->created_at->format('M d, Y h:i A') }}</small>
                 </div>
                 <div class="card-body">
-                    <!-- Original Message -->
-                    <div class="d-flex mb-4 pb-3 border-bottom">
-                        <div class="flex-shrink-0">
-                            <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center shadow" style="width: 45px; height: 45px; font-size: 18px;">
-                                {{ strtoupper(substr(auth()->user()->name ?? 'Y', 0, 1)) }}
-                            </div>
+                    <div class="row g-3">
+                        <div class="col-sm-6 col-md-3">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Submitter</span>
+                            <span class="font-weight-bold text-dark">{{ $ticket->submitter_name ?: ($ticket->user->name ?? 'Staff') }}</span>
                         </div>
-                        <div class="flex-grow-1 ms-3">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <h6 class="mb-0 font-weight-bold">You</h6>
-                                <small class="text-muted">{{ $ticket->created_at->format('M d, Y h:i A') }}</small>
-                            </div>
-                            <div class="text-xs text-muted mb-2">Category: {{ ucfirst(str_replace('_', ' ', $ticket->category)) }}</div>
-                            <div class="p-3 bg-light rounded text-dark" style="white-space: pre-wrap;">{{ $ticket->description }}</div>
+                        <div class="col-sm-6 col-md-3">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Employee ID</span>
+                            <span>{{ $ticket->employee_code ?: ($ticket->user->employee->employee_code ?? '—') }}</span>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Department</span>
+                            <span>{{ $ticket->department ?: ($ticket->user->employee->department ?? 'General') }}</span>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Contact</span>
+                            <span>{{ $ticket->contact_phone ?: '—' }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Problem Report (If Problem or Both) -->
+            @if(in_array($ticket->submission_type, ['problem', 'both']) || !empty($ticket->description))
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h6 class="m-0 font-weight-bold text-danger">
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i>Problem Report Details
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3 pb-3 border-bottom">
+                        <div class="col-md-4">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Category</span>
+                            <span class="badge bg-light text-dark border">{{ $ticket->category }}</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Affected System / Device</span>
+                            <strong>{{ $ticket->affected_system ?: 'General System' }}</strong>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Location</span>
+                            <span>{{ $ticket->location ?: 'Not specified' }}</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">When it started</span>
+                            <span>{{ $ticket->incident_started_at ?: $ticket->created_at->format('M d, Y') }}</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Frequency</span>
+                            <span class="badge bg-secondary">{{ $ticket->frequency ?: 'Once' }}</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Impact / Urgency</span>
+                            {!! $ticket->priority_badge !!}
                         </div>
                     </div>
 
-                    <!-- Replies -->
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold mb-1">Problem Description</span>
+                        <div class="p-3 bg-light rounded text-dark" style="white-space: pre-wrap;">{{ $ticket->description }}</div>
+                    </div>
+
+                    @if($ticket->steps_to_reproduce)
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold mb-1">Steps to Reproduce</span>
+                        <div class="p-3 bg-light rounded text-dark" style="white-space: pre-wrap;">{{ $ticket->steps_to_reproduce }}</div>
+                    </div>
+                    @endif
+
+                    @if($ticket->error_message)
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold mb-1">Error Message</span>
+                        <pre class="p-3 bg-dark text-white rounded small" style="white-space: pre-wrap;">{{ $ticket->error_message }}</pre>
+                    </div>
+                    @endif
+
+                    @if($ticket->already_tried)
+                    <div class="mb-2">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold mb-1">What Was Already Tried</span>
+                        <div class="p-2 border rounded text-muted small">{{ $ticket->already_tried }}</div>
+                    </div>
+                    @endif
+                </div>
+            </div>
+            @endif
+
+            <!-- Section 4: Suggestion / Improvement Idea (If Suggestion or Both) -->
+            @if(in_array($ticket->submission_type, ['suggestion', 'both']) || !empty($ticket->suggestion_title))
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h6 class="m-0 font-weight-bold text-warning text-dark">
+                        <i class="fa-solid fa-lightbulb text-warning me-2"></i>Suggestion / Improvement Idea
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Suggestion Title</span>
+                        <h5 class="font-weight-bold text-dark mt-1">{{ $ticket->suggestion_title ?: $ticket->subject }}</h5>
+                        <span class="badge bg-info text-dark">Area: {{ $ticket->suggestion_area ?: 'Tools & Software' }}</span>
+                    </div>
+
+                    @if($ticket->current_situation)
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold mb-1">Current Situation / Limitation</span>
+                        <div class="p-3 bg-light rounded text-dark" style="white-space: pre-wrap;">{{ $ticket->current_situation }}</div>
+                    </div>
+                    @endif
+
+                    @if($ticket->suggested_change)
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold mb-1">Proposed Suggestion / Change</span>
+                        <div class="p-3 bg-light rounded text-dark" style="white-space: pre-wrap;">{{ $ticket->suggested_change }}</div>
+                    </div>
+                    @endif
+
+                    @php
+                        $bens = is_array($ticket->expected_benefits) ? $ticket->expected_benefits : [];
+                    @endphp
+                    @if(!empty($bens) || $ticket->expected_benefits_other)
+                    <div>
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold mb-2">Expected Benefits</span>
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach($bens as $b)
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">✓ {{ $b }}</span>
+                            @endforeach
+                            @if($ticket->expected_benefits_other)
+                                <span class="badge bg-info-subtle text-info border border-info-subtle px-3 py-2">Other: {{ $ticket->expected_benefits_other }}</span>
+                            @endif
+                        </div>
+                    </div>
+                    @endif
+                </div>
+            </div>
+            @endif
+
+            <!-- Section 5: Attachments -->
+            @if($ticket->attachment_path || $ticket->attachments_notes)
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h6 class="m-0 font-weight-bold text-dark">
+                        <i class="fa-solid fa-paperclip me-2 text-secondary"></i>Attachments
+                    </h6>
+                </div>
+                <div class="card-body">
+                    @if($ticket->attachment_path)
+                        <div class="d-flex align-items-center justify-content-between p-3 border rounded bg-light mb-2">
+                            <div class="d-flex align-items-center">
+                                <i class="fa-solid fa-file text-primary fs-3 me-3"></i>
+                                <div>
+                                    <div class="font-weight-bold text-dark">{{ $ticket->attachment_name ?: basename($ticket->attachment_path) }}</div>
+                                    <small class="text-muted">Uploaded Attachment</small>
+                                </div>
+                            </div>
+                            <a href="{{ asset('storage/' . $ticket->attachment_path) }}" target="_blank" class="btn btn-sm btn-primary">
+                                <i class="fa-solid fa-download me-1"></i> View / Download
+                            </a>
+                        </div>
+                    @endif
+                    @if($ticket->attachments_notes)
+                        <div class="text-muted small mt-2">
+                            <strong>Notes:</strong> {{ $ticket->attachments_notes }}
+                        </div>
+                    @endif
+                </div>
+            </div>
+            @endif
+
+            <!-- Conversation Replies -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fa-solid fa-comments me-2"></i>Activity & Discussion ({{ $ticket->replies->count() }})
+                    </h6>
+                </div>
+                <div class="card-body">
+                    @if($ticket->replies->count() == 0)
+                        <p class="text-muted text-center py-3 mb-0 small">No messages exchanged yet.</p>
+                    @endif
+
                     @foreach($ticket->replies as $reply)
-                        <div class="d-flex mb-4">
+                        <div class="d-flex mb-3 pb-3 border-bottom">
                             <div class="flex-shrink-0">
-                                @if($reply->is_admin_reply)
-                                    <div class="bg-dark text-white rounded-circle d-flex align-items-center justify-content-center shadow" style="width: 45px; height: 45px; font-size: 18px;">
-                                        <i class="fa-solid fa-user-shield"></i>
-                                    </div>
-                                @else
-                                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center shadow" style="width: 45px; height: 45px; font-size: 18px;">
-                                        {{ strtoupper(substr($reply->user->name ?? 'Y', 0, 1)) }}
-                                    </div>
-                                @endif
+                                <div class="{{ $reply->is_admin_reply ? 'bg-dark' : 'bg-primary' }} text-white rounded-circle d-flex align-items-center justify-content-center shadow-sm" style="width: 40px; height: 40px;">
+                                    <i class="fa-solid {{ $reply->is_admin_reply ? 'fa-user-shield' : 'fa-user' }}"></i>
+                                </div>
                             </div>
                             <div class="flex-grow-1 ms-3">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <h6 class="mb-0 font-weight-bold">
+                                    <strong class="text-dark">
+                                        {{ $reply->user->name ?? 'User' }}
                                         @if($reply->is_admin_reply)
-                                            System Support
-                                        @else
-                                            You
+                                            <span class="badge bg-secondary ms-1">IT Admin</span>
                                         @endif
-                                    </h6>
+                                    </strong>
                                     <small class="text-muted">{{ $reply->created_at->format('M d, Y h:i A') }}</small>
                                 </div>
-                                <div class="p-3 rounded text-dark {{ $reply->is_admin_reply ? 'bg-white border shadow-sm' : 'bg-light' }}" style="white-space: pre-wrap;">{{ $reply->message }}</div>
+                                <div class="p-3 rounded text-dark {{ $reply->is_admin_reply ? 'bg-light border' : 'bg-light' }}" style="white-space: pre-wrap;">{{ $reply->message }}</div>
                             </div>
                         </div>
                     @endforeach
-                </div>
-            </div>
 
-            <!-- Reply Form -->
-            <div class="card shadow">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Post a Reply</h6>
-                </div>
-                <div class="card-body">
-                    <form action="{{ route('tickets.reply', $ticket) }}" method="POST">
+                    <!-- Post Reply Form -->
+                    <form action="{{ route('tickets.reply', $ticket) }}" method="POST" class="mt-4">
                         @csrf
-                        <div class="mb-3">
-                            <textarea name="message" rows="4" class="form-control" placeholder="Type your response here..." required></textarea>
+                        <label class="form-label font-weight-bold text-dark small">Send a Message or Update to IT Team</label>
+                        <textarea name="message" rows="3" class="form-control mb-2" placeholder="Write your reply or additional details here..." required></textarea>
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-paper-plane me-1"></i> Send Message
+                            </button>
                         </div>
-                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-paper-plane me-1"></i> Send Reply</button>
                     </form>
                 </div>
             </div>
+
         </div>
 
-        <!-- Sidebar / Ticket Info -->
+        <!-- Sidebar Column -->
         <div class="col-lg-4">
-            <div class="card shadow mb-4 border-left-{{ $ticket->status == 'resolved' ? 'success' : ($ticket->status == 'closed' ? 'secondary' : 'primary') }}">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Ticket Information</h6>
+
+            <!-- Section 6: IT Department Resolution Status -->
+            <div class="card shadow-sm border-0 mb-4 border-top border-4 border-primary">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h6 class="m-0 font-weight-bold text-dark">
+                        <i class="fa-solid fa-clipboard-check text-primary me-2"></i>IT Department Status
+                    </h6>
                 </div>
                 <div class="card-body">
-                    <div class="text-sm">
-                        <div class="mb-3">
-                            <span class="font-weight-bold d-block text-muted text-xs text-uppercase">Ticket Number</span>
-                            <span class="fs-5">{{ $ticket->ticket_no }}</span>
-                        </div>
-                        <div class="mb-3">
-                            <span class="font-weight-bold d-block text-muted text-xs text-uppercase">Current Status</span>
-                            <div class="mt-1">{!! $ticket->status_badge !!}</div>
-                        </div>
-                        <div class="mb-3">
-                            <span class="font-weight-bold d-block text-muted text-xs text-uppercase">Priority Level</span>
-                            <div class="mt-1">{!! $ticket->priority_badge !!}</div>
-                        </div>
-                        <hr>
-                        <div class="mb-2"><span class="font-weight-bold">Created:</span> <span class="float-end">{{ $ticket->created_at->format('M d, Y h:i A') }}</span></div>
-                        <div class="mb-2"><span class="font-weight-bold">Last Update:</span> <span class="float-end">{{ $ticket->updated_at->format('M d, Y h:i A') }}</span></div>
-                        @if($ticket->resolved_at)
-                        <div class="mb-2 text-success"><span class="font-weight-bold">Resolved At:</span> <span class="float-end">{{ $ticket->resolved_at->format('M d, Y h:i A') }}</span></div>
-                        @endif
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Current Status</span>
+                        <div class="mt-1">{!! $ticket->status_badge !!}</div>
                     </div>
+
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Assigned Specialist</span>
+                        <strong class="text-dark">{{ $ticket->assignedTo->name ?? 'Unassigned (In Queue)' }}</strong>
+                    </div>
+
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Target Resolution Date</span>
+                        <span>{{ $ticket->target_resolution_date ? $ticket->target_resolution_date->format('M d, Y') : 'Per SLA Policy' }}</span>
+                    </div>
+
+                    @if($ticket->actions_taken || $ticket->root_cause)
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Actions Taken / Root Cause</span>
+                        <div class="p-2 bg-light rounded text-dark small">{{ $ticket->actions_taken ?: $ticket->root_cause }}</div>
+                    </div>
+                    @endif
+
+                    @if($ticket->resolution_decision)
+                    <div class="mb-3">
+                        <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Resolution / Decision</span>
+                        <div class="p-2 bg-success-subtle text-success border border-success-subtle rounded small">{{ $ticket->resolution_decision }}</div>
+                    </div>
+                    @endif
+
+                    @if($ticket->resolved_at)
+                    <div class="mb-2 text-success">
+                        <span class="text-xs text-uppercase d-block font-weight-bold">Resolved On</span>
+                        <strong>{{ $ticket->resolved_at->format('M d, Y h:i A') }}</strong>
+                    </div>
+                    @endif
                 </div>
             </div>
+
+            <!-- Escalation & SLA Info Card -->
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h6 class="m-0 font-weight-bold text-dark">
+                        <i class="fa-solid fa-clock me-2 text-warning"></i>SLA Response Time Guide
+                    </h6>
+                </div>
+                <div class="card-body">
+                    @php $sla = $ticket->sla_details; @endphp
+                    <div class="p-3 rounded bg-light border mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="small font-weight-bold">First Response Target:</span>
+                            <span class="badge bg-primary">{{ $sla['first_response'] }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="small font-weight-bold">Target Resolution:</span>
+                            <span class="badge bg-success">{{ $sla['target_resolution'] }}</span>
+                        </div>
+                        <small class="text-muted d-block mt-2 border-top pt-2">{{ $sla['description'] }}</small>
+                    </div>
+
+                    @if($ticket->sms_alert_sent)
+                    <div class="alert alert-success p-2 small mb-0 d-flex align-items-center">
+                        <i class="fa-solid fa-check-circle me-2 fs-5"></i>
+                        <div>
+                            <strong>SMS Escalation Dispatched</strong><br>
+                            GM & Global Admin notified via SMS.
+                        </div>
+                    </div>
+                    @endif
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
