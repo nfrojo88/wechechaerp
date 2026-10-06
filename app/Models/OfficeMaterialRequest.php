@@ -79,6 +79,14 @@ class OfficeMaterialRequest extends Model
         return $this->belongsTo(User::class, 'hr_reviewer_id');
     }
 
+    /**
+     * Alias for hrReviewer (approver) to satisfy eager-loading in receipt & audit queries
+     */
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'hr_reviewer_id');
+    }
+
     public function financeHead(): BelongsTo
     {
         return $this->belongsTo(User::class, 'finance_head_id');

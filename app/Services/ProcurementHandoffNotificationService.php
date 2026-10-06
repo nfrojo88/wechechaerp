@@ -70,7 +70,15 @@ class ProcurementHandoffNotificationService
         }
 
         // Check if handoff is enabled in DB settings (or fallback to true)
-        $dbSetting = ProcurementSmsSetting::where('handoff_key', $handoffKey)->first();
+        $dbSetting = null;
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('procurement_sms_settings')) {
+                $dbSetting = ProcurementSmsSetting::where('handoff_key', $handoffKey)->first();
+            }
+        } catch (\Throwable $e) {
+            // DB table might not exist yet, fallback to config
+        }
+
         if ($dbSetting && !$dbSetting->is_enabled) {
             Log::info("Procurement SMS handoff [{$handoffKey}] is disabled in admin settings.");
             return [];
@@ -555,19 +563,25 @@ class ProcurementHandoffNotificationService
         return !empty($phone) ? $this->normalizePhone($phone) : null;
     }
 
-    /**
-     * Normalize to E.164 (+251...).
-     */
     public function normalizePhone(string $phone): string
     {
         $phone = preg_replace('/[^0-9+]/', '', $phone);
-        if ((str_starts_with($phone, '09') || str_starts_with($phone, '07')) && strlen($phone) === 10) {
-            $phone = '+251' . substr($phone, 1);
-        } elseif (str_starts_with($phone, '251') && strlen($phone) === 12) {
-            $phone = '+' . $phone;
-        } elseif (!str_starts_with($phone, '+')) {
+        $phone = ltrim($phone, '+');
+
+        // 09XXXXXXXX or 07XXXXXXXX (10 digits) => 2519... / 2517...
+        if (str_starts_with($phone, '0') && (str_starts_with($phone, '09') || str_starts_with($phone, '07'))) {
+            $phone = '251' . substr($phone, 1);
+        }
+
+        // 9XXXXXXXX or 7XXXXXXXX (9 digits without leading 0) => 2519... / 2517...
+        if (strlen($phone) === 9 && (str_starts_with($phone, '9') || str_starts_with($phone, '7'))) {
+            $phone = '251' . $phone;
+        }
+
+        if (!str_starts_with($phone, '+')) {
             $phone = '+' . $phone;
         }
+
         return $phone;
     }
 

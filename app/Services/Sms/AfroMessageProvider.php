@@ -62,9 +62,17 @@ class AfroMessageProvider implements SmsProviderInterface
             if ($response->successful()) {
                 $ack = is_array($body) ? ($body['acknowledge'] ?? '') : '';
                 if ($ack === 'success' || $response->status() === 200) {
+                    $msgId = null;
+                    if (is_array($body)) {
+                        $msgId = $body['response']['message_id'] 
+                            ?? $body['response']['id'] 
+                            ?? $body['message_id'] 
+                            ?? $body['id'] 
+                            ?? null;
+                    }
                     return [
                         'success'      => true,
-                        'message_id'   => is_array($body) ? ($body['response']['id'] ?? ($body['id'] ?? null)) : null,
+                        'message_id'   => $msgId,
                         'error'        => null,
                         'raw_response' => $raw,
                     ];
@@ -94,17 +102,27 @@ class AfroMessageProvider implements SmsProviderInterface
 
     /**
      * Normalize to E.164 (+251...).
+     * Handles 09..., 07..., 9..., 7..., 251..., +251...
      */
     public function normalizePhone(string $phone): string
     {
         $phone = preg_replace('/[^0-9+]/', '', $phone);
-        if ((str_starts_with($phone, '09') || str_starts_with($phone, '07')) && strlen($phone) === 10) {
-            $phone = '+251' . substr($phone, 1);
-        } elseif (str_starts_with($phone, '251') && strlen($phone) === 12) {
-            $phone = '+' . $phone;
-        } elseif (!str_starts_with($phone, '+')) {
+        $phone = ltrim($phone, '+');
+
+        // 09XXXXXXXX or 07XXXXXXXX (10 digits) => 2519... / 2517...
+        if (str_starts_with($phone, '0') && (str_starts_with($phone, '09') || str_starts_with($phone, '07'))) {
+            $phone = '251' . substr($phone, 1);
+        }
+
+        // 9XXXXXXXX or 7XXXXXXXX (9 digits without leading 0) => 2519... / 2517...
+        if (strlen($phone) === 9 && (str_starts_with($phone, '9') || str_starts_with($phone, '7'))) {
+            $phone = '251' . $phone;
+        }
+
+        if (!str_starts_with($phone, '+')) {
             $phone = '+' . $phone;
         }
+
         return $phone;
     }
 }
