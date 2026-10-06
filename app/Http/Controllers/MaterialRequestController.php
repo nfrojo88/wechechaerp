@@ -677,30 +677,37 @@ class MaterialRequestController extends Controller
         );
 
         $sentRecipients = [];
+        $isEscalatedToAdmin = false;
+        $targetRoleTitle = ucfirst(str_replace('_', ' ', $targetRole));
         $message = "ConstructPro: MR #{$materialRequest->reference_number} (" . ($materialRequest->project?->name ?? 'Project') . ") needs your review. Open: " . url("/material-requests/{$materialRequest->id}");
 
         if (!empty($phones)) {
+            // 1. Employee assigned to that role found -> send to their phone
             foreach ($phones as $p) {
                 app(\App\Services\ProcurementSmsService::class)->send($materialRequest->id, $p, $targetRole, $message);
                 $sentRecipients[] = $p;
             }
         } else {
-            $adminPhones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole('global_admin');
-            $envPhone = config('procurement_handoffs.fallback_phone') ?: env('ADMIN_PHONE');
-            if ($envPhone) $adminPhones[] = $envPhone;
-            $adminPhones = array_unique(array_filter($adminPhones));
+            // 2. If NO employee is assigned to that role, route to Global / General Admin
+            $isEscalatedToAdmin = true;
+            $adminPhones = app(\App\Services\ProcurementSmsService::class)->getGlobalAdminPhoneNumbers();
+            $escalatedMessage = "[Role '{$targetRoleTitle}' Unassigned — Global Admin Action Required] " . $message;
+
             foreach ($adminPhones as $p) {
-                app(\App\Services\ProcurementSmsService::class)->send($materialRequest->id, $p, 'global_admin', "[{$targetRole} unassigned] " . $message);
-                $sentRecipients[] = "Admin ({$p})";
+                app(\App\Services\ProcurementSmsService::class)->send($materialRequest->id, $p, 'global_admin', $escalatedMessage);
+                $sentRecipients[] = "Global Admin ({$p})";
             }
         }
 
         if (!empty($sentRecipients)) {
             $dest = implode(', ', $sentRecipients);
-            return back()->with('success', "SMS alert sent for MR #{$materialRequest->reference_number} to assigned " . ucfirst(str_replace('_', ' ', $targetRole)) . ": {$dest}");
+            if ($isEscalatedToAdmin) {
+                return back()->with('info', "No employee assigned to '{$targetRoleTitle}'. SMS alert successfully routed to General Admin: {$dest}");
+            }
+            return back()->with('success', "SMS alert sent for MR #{$materialRequest->reference_number} to assigned {$targetRoleTitle}: {$dest}");
         }
 
-        return back()->with('warning', "No phone numbers found for role '" . ucfirst(str_replace('_', ' ', $targetRole)) . "'. Please update employee phone records.");
+        return back()->with('warning', "No phone numbers found for role '{$targetRoleTitle}' or Global Admin. Please configure ADMIN_PHONE in .env.");
     }
 }
 

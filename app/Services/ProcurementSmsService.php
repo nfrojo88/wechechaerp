@@ -151,35 +151,26 @@ class ProcurementSmsService
     public function notifyRole(int $purchaseRequestId, string $roleName, string $message, ?int $projectId = null, ?int $storeId = null): void
     {
         try {
-            // 1. Find phones for users assigned to this role
+            // 1. First check if an employee is assigned to this role
             $targetPhones = $this->getPhoneNumbersForRole($roleName, $projectId, $storeId);
 
             if (!empty($targetPhones)) {
-                // Someone is assigned to that role -> send to their phone
+                // Employee assigned to that role found -> send to their phone
                 foreach ($targetPhones as $phone) {
                     $this->send($purchaseRequestId, $phone, $roleName, $message);
                 }
                 return;
             }
 
-            // 2. If NO ONE is assigned to that role (or no phone), route to global_admin
-            if (!in_array($roleName, ['global_admin', 'admin'])) {
-                Log::info("ProcurementSMS: No assigned user with phone for role [{$roleName}] on PR #{$purchaseRequestId}. Escalating SMS to Global Admin.");
+            // 2. If NO employee is assigned to that role (or no phone found), send to Global Admin
+            Log::info("ProcurementSMS: No assigned employee with phone for role [{$roleName}] on PR #{$purchaseRequestId}. Escalating SMS to Global Admin.");
 
-                $adminPhones = $this->getPhoneNumbersForRole('global_admin');
+            $adminPhones = $this->getGlobalAdminPhoneNumbers();
+            $roleTitle = ucfirst(str_replace('_', ' ', $roleName));
+            $escalatedMessage = "[Role '{$roleTitle}' Unassigned — Global Admin Action Required] " . $message;
 
-                // Check env / config fallback for admin phone if none found in DB
-                if (empty($adminPhones)) {
-                    $envPhone = config('services.sms.admin_phone') ?: env('ADMIN_PHONE');
-                    if ($envPhone) {
-                        $adminPhones[] = $this->normalizePhone($envPhone);
-                    }
-                }
-
-                $escalatedMessage = "[Role '{$roleName}' unassigned] " . $message;
-                foreach ($adminPhones as $adminPhone) {
-                    $this->send($purchaseRequestId, $adminPhone, 'global_admin', $escalatedMessage);
-                }
+            foreach ($adminPhones as $adminPhone) {
+                $this->send($purchaseRequestId, $adminPhone, 'global_admin', $escalatedMessage);
             }
         } catch (\Throwable $e) {
             Log::error("ProcurementSMS notifyRole failed: " . $e->getMessage());
@@ -281,11 +272,103 @@ class ProcurementSmsService
                 }
             }
 
+            // D. Check Employee table directly by role_title if Spatie roles produced no phones
+            if (empty($phones)) {
+                $employeeQuery = Employee::whereNotNull('phone')
+                    ->where('phone', '!=', '')
+                    ->where(function ($q) use ($rolesToCheck) {
+                        foreach ($rolesToCheck as $r) {
+                            $cleanRole = str_replace('_', ' ', $r);
+                            $q->orWhere('role_title', 'LIKE', '%' . $cleanRole . '%')
+                              ->orWhere('role_title', 'LIKE', '%' . $r . '%');
+                        }
+                    });
+
+                if ($projectId) {
+                    $employeeQuery->where('project_id', $projectId);
+                }
+
+                $empPhones = $employeeQuery->pluck('phone')->toArray();
+                foreach ($empPhones as $ep) {
+                    $norm = $this->normalizePhone($ep);
+                    if ($norm) $phones[] = $norm;
+                }
+            }
+
             return array_values(array_unique(array_filter($phones)));
         } catch (\Throwable $e) {
             Log::error("ProcurementSMS getPhoneNumbersForRole error: " . $e->getMessage());
             return [];
         }
+    }
+
+    /**
+     * Get phone numbers of Global / General Administrators.
+     * Checks users with global_admin/admin roles, employees with Admin role title,
+     * super-user #1, and configured fallback phones.
+     */
+    public function getGlobalAdminPhoneNumbers(): array
+    {
+        $phones = [];
+
+        try {
+            // 1. Spatie users with global_admin / admin roles
+            $adminRoles = ['global_admin', 'admin', 'Global Admin', 'Admin', 'general_admin', 'General Admin'];
+            $users = User::whereHas('roles', fn($q) => $q->whereIn('name', $adminRoles))
+                ->with('employee')
+                ->get();
+
+            foreach ($users as $user) {
+                $p = $this->resolveUserPhone($user);
+                if ($p) $phones[] = $p;
+            }
+
+            // 2. Employees with admin role title
+            $adminEmps = Employee::whereNotNull('phone')
+                ->where('phone', '!=', '')
+                ->where(function ($q) {
+                    $q->where('role_title', 'LIKE', '%Admin%')
+                      ->orWhere('role_title', 'LIKE', '%Administrator%')
+                      ->orWhere('role_title', 'LIKE', '%General Manager%');
+                })
+                ->get();
+
+            foreach ($adminEmps as $emp) {
+                if (!empty($emp->phone)) {
+                    $norm = $this->normalizePhone($emp->phone);
+                    if ($norm) $phones[] = $norm;
+                }
+            }
+
+            // 3. User ID 1 fallback if still empty
+            if (empty($phones)) {
+                $super = User::with('employee')->find(1);
+                if ($super) {
+                    $p = $this->resolveUserPhone($super);
+                    if ($p) $phones[] = $p;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error("ProcurementSMS getGlobalAdminPhoneNumbers error: " . $e->getMessage());
+        }
+
+        // 4. Config & .env fallback phone numbers
+        $envPhones = [
+            config('procurement_handoffs.fallback_phone'),
+            config('services.sms.admin_phone'),
+            env('ADMIN_PHONE'),
+            env('AFROMESSAGE_BACKUP_PHONE'),
+            env('GLOBAL_ADMIN_PHONE'),
+            env('ADMIN_MOBILE'),
+        ];
+
+        foreach ($envPhones as $ep) {
+            if (!empty($ep)) {
+                $phones[] = $this->normalizePhone($ep);
+            }
+        }
+
+        return array_values(array_unique(array_filter($phones)));
     }
 
     /**

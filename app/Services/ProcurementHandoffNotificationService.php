@@ -391,18 +391,52 @@ class ProcurementHandoffNotificationService
             } catch (\Throwable $e) {}
         }
 
+        // D. Check Employee table directly by role_title if Spatie roles produced no recipients
+        if (empty($recipients)) {
+            try {
+                $employeeQuery = Employee::whereNotNull('phone')
+                    ->where('phone', '!=', '')
+                    ->where(function ($q) use ($rolesToCheck) {
+                        foreach ($rolesToCheck as $r) {
+                            $cleanRole = str_replace('_', ' ', $r);
+                            $q->orWhere('role_title', 'LIKE', '%' . $cleanRole . '%')
+                              ->orWhere('role_title', 'LIKE', '%' . $r . '%');
+                        }
+                    });
+
+                if ($projectId) {
+                    $employeeQuery->where('project_id', $projectId);
+                }
+
+                $employees = $employeeQuery->get();
+                foreach ($employees as $emp) {
+                    $normPhone = $this->normalizePhone($emp->phone);
+                    if ($normPhone) {
+                        $recipients[] = [
+                            'user_id'     => $emp->user_id,
+                            'employee_id' => $emp->id,
+                            'role'        => $roleName,
+                            'phone'       => $normPhone,
+                            'name'        => $emp->full_name ?: ($emp->first_name . ' ' . $emp->last_name),
+                        ];
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+
         return $recipients;
     }
 
     /**
      * Resolve fallback recipients when target role has no users or valid phone numbers.
+     * Escalates to Global Admin / General Admin.
      */
     protected function resolveFallbackRecipients(string $fallbackRole, array $context = []): array
     {
         $recipients = [];
 
         try {
-            $adminUsers = User::whereHas('roles', fn($q) => $q->whereIn('name', ['global_admin', 'admin']))
+            $adminUsers = User::whereHas('roles', fn($q) => $q->whereIn('name', ['global_admin', 'admin', 'Global Admin', 'Admin', 'general_admin', 'General Admin']))
                 ->with('employee')
                 ->get();
 
@@ -418,20 +452,64 @@ class ProcurementHandoffNotificationService
                     ];
                 }
             }
+
+            // Employees with Admin role title
+            if (empty($recipients)) {
+                $adminEmps = Employee::whereNotNull('phone')
+                    ->where('phone', '!=', '')
+                    ->where(function ($q) {
+                        $q->where('role_title', 'LIKE', '%Admin%')
+                          ->orWhere('role_title', 'LIKE', '%Administrator%')
+                          ->orWhere('role_title', 'LIKE', '%General Manager%');
+                    })
+                    ->get();
+
+                foreach ($adminEmps as $emp) {
+                    $normPhone = $this->normalizePhone($emp->phone);
+                    if ($normPhone) {
+                        $recipients[] = [
+                            'user_id'     => $emp->user_id,
+                            'employee_id' => $emp->id,
+                            'role'        => 'global_admin',
+                            'phone'       => $normPhone,
+                            'name'        => $emp->full_name ?: ($emp->first_name . ' ' . $emp->last_name),
+                        ];
+                    }
+                }
+            }
+
+            // User #1 fallback
+            if (empty($recipients)) {
+                $super = User::with('employee')->find(1);
+                if ($super) {
+                    $phone = $this->resolveUserPhone($super);
+                    if ($phone) {
+                        $recipients[] = [
+                            'user_id'     => $super->id,
+                            'employee_id' => $super->employee?->id,
+                            'role'        => 'global_admin',
+                            'phone'       => $phone,
+                            'name'        => $super->name,
+                        ];
+                    }
+                }
+            }
         } catch (\Throwable $e) {}
 
         // Fallback to configured ADMIN_PHONE if no DB user phone found
         if (empty($recipients)) {
             $envPhone = config('procurement_handoffs.fallback_phone')
                 ?: config('services.sms.admin_phone')
-                ?: env('ADMIN_PHONE');
+                ?: env('ADMIN_PHONE')
+                ?: env('AFROMESSAGE_BACKUP_PHONE')
+                ?: env('GLOBAL_ADMIN_PHONE');
 
             if (!empty($envPhone)) {
                 $recipients[] = [
                     'user_id'     => null,
                     'employee_id' => null,
                     'role'        => 'global_admin',
-                    'phone'       => $envPhone,
+                    'phone'       => $this->normalizePhone($envPhone),
                     'name'        => 'Global Admin',
                 ];
             }

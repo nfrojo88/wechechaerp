@@ -2587,30 +2587,34 @@ class PurchaseRequestController extends Controller
         );
 
         $sentRecipients = [];
+        $isEscalatedToAdmin = false;
+
         if (!empty($phones)) {
+            // 1. Employee assigned to that role found -> send to their phone
             foreach ($phones as $p) {
                 app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, $ownerRole, $message);
                 $sentRecipients[] = $p;
             }
         } else {
-            // Escalate to admin phone if unassigned or no phone registered
-            $adminPhones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole('global_admin');
-            $envPhone = config('procurement_handoffs.fallback_phone') ?: env('ADMIN_PHONE');
-            if ($envPhone) {
-                $adminPhones[] = $envPhone;
-            }
-            $adminPhones = array_unique(array_filter($adminPhones));
+            // 2. If NO employee is assigned to that role (or no phone registered), send to Global Admin
+            $isEscalatedToAdmin = true;
+            $adminPhones = app(\App\Services\ProcurementSmsService::class)->getGlobalAdminPhoneNumbers();
+            $escalatedMessage = "[Role '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "' Unassigned — Global Admin Action Required] " . $message;
+
             foreach ($adminPhones as $p) {
-                app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, 'global_admin', "[{$ownerRole} unassigned] " . $message);
-                $sentRecipients[] = "Admin ({$p})";
+                app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, 'global_admin', $escalatedMessage);
+                $sentRecipients[] = "Global Admin ({$p})";
             }
         }
 
         if (!empty($sentRecipients)) {
             $destStr = implode(', ', $sentRecipients);
-            return back()->with('success', "SMS dispatched for PR #{$prNo} ({$statusLabel}) to assigned " . ucfirst(str_replace('_', ' ', $ownerRole)) . ": {$destStr}");
+            if ($isEscalatedToAdmin) {
+                return back()->with('info', "No employee assigned to '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "'. SMS alert successfully routed to General Admin: {$destStr}");
+            }
+            return back()->with('success', "SMS alert sent for PR #{$prNo} ({$statusLabel}) to assigned " . ucfirst(str_replace('_', ' ', $ownerRole)) . ": {$destStr}");
         }
 
-        return back()->with('warning', "No phone numbers found for role '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "'. Please update employee phone records or set ADMIN_PHONE in .env.");
+        return back()->with('warning', "No phone numbers found for role '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "' or Global Admin. Please configure ADMIN_PHONE in .env.");
     }
 }
