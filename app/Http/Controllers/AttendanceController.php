@@ -32,28 +32,122 @@ class AttendanceController extends Controller
 
         self::ensureAttendanceSchemaReady();
 
-        // 1. Determine Ethiopian Payroll Period (26th of previous month to 25th of current month)
-        $selectedPeriodKey = request('period'); // e.g. "2019-1" or "2019-2"
-        $ey = request('eth_year');
-        $em = request('eth_month');
+        $data = $this->getAttendanceMatrixData(request());
 
-        if ($selectedPeriodKey && str_contains($selectedPeriodKey, '-')) {
-            [$ey, $em] = explode('-', $selectedPeriodKey);
-            $ey = (int)$ey;
-            $em = (int)$em;
-        }
+        return view('hr.attendance.index', $data);
+    }
 
-        if ($ey && $em && $em >= 1 && $em <= 13) {
-            $period = \App\Helpers\EthiopianCalendar::getPayrollPeriod((int)$ey, (int)$em);
+    /**
+     * Export the Attendance Matrix with all Clock In and Clock Out times as a printable PDF report.
+     */
+    public function exportPdf(Request $request)
+    {
+        self::ensureAttendanceSchemaReady();
+
+        $data = $this->getAttendanceMatrixData($request);
+
+        $staffTypeLabel = match($data['staffType']) {
+            'driver' => 'Driver Department (General Service)',
+            'site', 'site_driver_remote' => 'Site & Project Staff',
+            'office' => 'Head Office Staff',
+            default => 'All Staff'
+        };
+
+        $data['staffTypeLabel'] = $staffTypeLabel;
+        $data['reportTitle'] = "{$staffTypeLabel} Biometric Attendance & Clock In / Out Times Report - " . ($data['period']['full_label'] ?? '');
+
+        return view('hr.attendance.pdf', $data);
+    }
+
+    /**
+     * Build attendance matrix and period statistics for index and PDF export.
+     * Supports both Ethiopian Payroll Periods (26th-25th) and custom Gregorian date ranges.
+     */
+    public function getAttendanceMatrixData(Request $request): array
+    {
+        // 1. Determine Period: Custom Date Range (Date Option) OR Ethiopian Payroll Period (26th to 25th)
+        $selectedPeriodKey = $request->input('period'); // e.g. "2019-1" or "2019-2"
+        $ey = $request->input('eth_year');
+        $em = $request->input('eth_month');
+        $startDate = $request->input('start_date');
+        $endDate   = $request->input('end_date');
+
+        $isCustomDate = !empty($startDate) && !empty($endDate);
+
+        if ($isCustomDate) {
+            $startCarbon = Carbon::parse($startDate)->startOfDay();
+            $endCarbon   = Carbon::parse($endDate)->startOfDay();
+            if ($startCarbon->gt($endCarbon)) {
+                $temp = $startCarbon;
+                $startCarbon = $endCarbon;
+                $endCarbon = $temp;
+                $startDate = $startCarbon->toDateString();
+                $endDate = $endCarbon->toDateString();
+            }
+
+            $curr = $startCarbon->copy();
+            $periodDays = [];
+            while ($curr->lte($endCarbon)) {
+                $greg = $curr->toDateString();
+                $et = EthiopianCalendar::toEthiopian($curr);
+                $periodDays[] = [
+                    'greg_date'    => $greg,
+                    'greg_day'     => $curr->format('d'),
+                    'greg_month'   => $curr->format('M'),
+                    'greg_label'   => $curr->format('M d'),
+                    'day_of_week'  => $curr->dayOfWeek,
+                    'day_name_en'  => $curr->format('D'),
+                    'is_sunday'    => $curr->isSunday(),
+                    'is_saturday'  => $curr->isSaturday(),
+                    'eth_year'     => $et['year'] ?? null,
+                    'eth_month'    => $et['month'] ?? null,
+                    'eth_day'      => $et['day'] ?? null,
+                    'eth_label_am' => $et['short_am'] ?? '',
+                    'eth_label_en' => $et['short_en'] ?? '',
+                    'display_label'=> ($et['day'] ?? '') . ' ' . ($et['month_en'] ?? ''),
+                ];
+                $curr->addDay();
+            }
+
+            $firstEth = EthiopianCalendar::toEthiopian($startCarbon);
+            $lastEth  = EthiopianCalendar::toEthiopian($endCarbon);
+
+            $period = [
+                'eth_year'       => $firstEth['year'] ?? null,
+                'eth_month'      => $firstEth['month'] ?? null,
+                'month_am'       => ($firstEth['month_am'] ?? '') . (($firstEth['month_am'] ?? '') !== ($lastEth['month_am'] ?? '') ? ' - ' . ($lastEth['month_am'] ?? '') : ''),
+                'month_en'       => ($firstEth['month_en'] ?? '') . (($firstEth['month_en'] ?? '') !== ($lastEth['month_en'] ?? '') ? ' - ' . ($lastEth['month_en'] ?? '') : ''),
+                'period_key'     => 'custom',
+                'label_am'       => "ብጁ ቀን ({$startDate} እስከ {$endDate})",
+                'label_en'       => "Custom Range ({$startDate} to {$endDate})",
+                'full_label'     => Carbon::parse($startDate)->format('M d, Y') . ' — ' . Carbon::parse($endDate)->format('M d, Y'),
+                'start_greg'     => $startDate,
+                'end_greg'       => $endDate,
+                'total_days'     => count($periodDays),
+                'days'           => $periodDays,
+                'is_custom'      => true,
+            ];
+            $selectedPeriodKey = 'custom';
         } else {
-            $period = \App\Helpers\EthiopianCalendar::getCurrentPayrollPeriod();
+            if ($selectedPeriodKey && str_contains($selectedPeriodKey, '-')) {
+                [$ey, $em] = explode('-', $selectedPeriodKey);
+                $ey = (int)$ey;
+                $em = (int)$em;
+            }
+
+            if ($ey && $em && $em >= 1 && $em <= 13) {
+                $period = EthiopianCalendar::getPayrollPeriod((int)$ey, (int)$em);
+            } else {
+                $period = EthiopianCalendar::getCurrentPayrollPeriod();
+            }
+
+            $selectedPeriodKey = $period['period_key'];
+            $periodDays = $period['days'];
+            $startDate  = $period['start_greg'];
+            $endDate    = $period['end_greg'];
         }
 
-        $selectedPeriodKey = $period['period_key'];
-        $periodDays = $period['days'];
-        $startDate  = $period['start_greg'];
-        $endDate    = $period['end_greg'];
-        $availablePeriods = \App\Helpers\EthiopianCalendar::getAvailablePayrollPeriods();
+        $availablePeriods = EthiopianCalendar::getAvailablePayrollPeriods();
 
         // Auto-guarantee all approved site deployments for this period are synchronized into Attendance with status 'S'
         try {
@@ -75,17 +169,13 @@ class AttendanceController extends Controller
         $isGeneralServiceUser = $authUser && ($authUser->hasRole('general_service') || $authUser->hasRole('general_services'));
         $isSiteStaffUser = $authUser && ($authUser->hasRole('site_engineer') || $authUser->hasRole('foreman')) && !$authUser->hasAnyRole(['admin', 'global_admin', 'hr', 'hr_manager', 'hr_officer', 'gm']);
 
-        // Default staffType:
-        // - General Service defaults to 'driver'
-        // - Site Staff defaults to 'site'
-        // - Office/HR/Admin defaults to 'office'
         $defaultStaffType = 'office';
         if ($isGeneralServiceUser) {
             $defaultStaffType = 'driver';
         } elseif ($isSiteStaffUser) {
             $defaultStaffType = 'site';
         }
-        $staffType = request('staff_type', $defaultStaffType);
+        $staffType = $request->input('staff_type', $defaultStaffType);
         
         $empQuery = Employee::activeRoster()->with('project')->orderBy('full_name');
 
@@ -93,20 +183,20 @@ class AttendanceController extends Controller
             $empQuery->officeStaffOnly();
         } elseif ($staffType === 'site') {
             $empQuery->siteOnly();
-            if (request()->filled('project_id')) {
-                $empQuery->where('project_id', request('project_id'));
+            if ($request->filled('project_id')) {
+                $empQuery->where('project_id', $request->input('project_id'));
             }
         } elseif ($staffType === 'driver') {
             $empQuery->driversOnly();
         } elseif ($staffType === 'site_driver_remote') {
             $empQuery->siteDriverRemoteOnly();
-            if (request()->filled('project_id')) {
-                $empQuery->where('project_id', request('project_id'));
+            if ($request->filled('project_id')) {
+                $empQuery->where('project_id', $request->input('project_id'));
             }
         }
 
-        if (request()->filled('search')) {
-            $search = trim(request('search'));
+        if ($request->filled('search')) {
+            $search = trim($request->input('search'));
             $empQuery->where(function($q) use ($search) {
                 $q->where('full_name', 'like', "%{$search}%")
                   ->orWhere('employee_code', 'like', "%{$search}%")
@@ -116,12 +206,12 @@ class AttendanceController extends Controller
             });
         }
 
-        if (request()->filled('department')) {
-            $empQuery->where('department', request('department'));
+        if ($request->filled('department')) {
+            $empQuery->where('department', $request->input('department'));
         }
 
-        if (!in_array($staffType, ['site', 'site_driver_remote']) && request()->filled('project_id')) {
-            $empQuery->where('project_id', request('project_id'));
+        if (!in_array($staffType, ['site', 'site_driver_remote']) && $request->filled('project_id')) {
+            $empQuery->where('project_id', $request->input('project_id'));
         }
 
         $allActiveEmployees = Employee::activeRoster()->orderBy('full_name')->get();
@@ -137,7 +227,6 @@ class AttendanceController extends Controller
         $employeeIds = $employees->pluck('id')->toArray();
 
         // 3. Batch query period records for efficiency (READ-ONLY)
-        // Attendance records (Biometric punches and approved site deployments)
         $attendances = Attendance::whereIn('employee_id', $employeeIds)
             ->whereBetween('attendance_date', [$startDate, $endDate])
             ->get()
@@ -215,6 +304,7 @@ class AttendanceController extends Controller
             $empLate = 0;
             $empLeave = 0;
             $empHoliday = 0;
+            $empTotalHours = 0.0;
 
             foreach ($periodDays as $dayItem) {
                 $greg = $dayItem['greg_date'];
@@ -281,7 +371,6 @@ class AttendanceController extends Controller
 
                 // Determine cellular code
                 if ($isSunday) {
-                    // Sunday is rest day (never generate Absent)
                     if ($hasPunch) {
                         $statusCode = 'P';
                         $cellClass  = 'cell-sunday-ot';
@@ -293,13 +382,11 @@ class AttendanceController extends Controller
                         $label      = 'Sunday (Rest Day)';
                     }
                 } elseif ($hasApprovedSite) {
-                    // Approved site deployment: ALWAYS S (non-deductible, fully credited)
                     $statusCode = 'S';
                     $cellClass  = 'cell-site';
                     $label      = 'On-Site Deployment (S)';
                     $empSite++;
                 } elseif ($hasPunch) {
-                    // Any punch means present!
                     $statusCode = 'P';
                     $cellClass  = $isLate ? 'cell-present-late' : 'cell-present-ontime';
                     $label      = $isLate ? "Present (Late {$lateMinutes}m)" : 'Present (P)';
@@ -309,19 +396,16 @@ class AttendanceController extends Controller
                         $totalLateCount++;
                     }
                 } elseif ($leaveObj) {
-                    // Approved leave
                     $statusCode = 'L';
                     $cellClass  = 'cell-leave';
                     $label      = 'Approved Leave (L)';
                     $empLeave++;
                 } elseif ($holidayObj) {
-                    // Public holiday
                     $statusCode = 'H';
                     $cellClass  = 'cell-holiday';
                     $label      = 'Public Holiday (H)';
                     $empHoliday++;
                 } elseif ($emp->isDriver()) {
-                    // Driver Department: Managed & Recorded by General Service
                     if ($att && $att->status === 'absent') {
                         $statusCode = 'A';
                         $cellClass  = 'cell-absent';
@@ -346,20 +430,17 @@ class AttendanceController extends Controller
                         $label      = 'Approved Leave (L)';
                         $empLeave++;
                     } else {
-                        // Driver working day: NOT automatically pre-filled! Left unrecorded until General Service enters it manually.
                         $statusCode = '—';
                         $cellClass  = 'cell-upcoming';
                         $label      = ($greg > $todayDateStr) ? 'Upcoming Day' : 'Not Recorded (Add via General Service)';
                     }
                 } elseif ($emp->isSiteDriverOrRemote() && ($emp->project_id || $emp->is_project_based || in_array($staffType, ['site', 'site_driver_remote']))) {
-                    // Site / Field / Project Staff: Out on site duty (Status S, non-deductible in payroll)
                     $statusCode = 'S';
                     $cellClass  = 'cell-site';
                     $projName   = $emp->project?->name ?? 'On-Site Construction';
                     $label      = "Site Project Duty (S) [{$projName}]";
                     $empSite++;
                 } else {
-                    // Head office staff: Expected working day with no punch, no site deployment, no leave, no holiday
                     if ($greg > $todayDateStr) {
                         $statusCode = '—';
                         $cellClass  = 'cell-upcoming';
@@ -376,8 +457,6 @@ class AttendanceController extends Controller
                 $rawIn  = $att?->morning_in ?: ($att?->afternoon_in ?: $att?->check_in);
                 $rawOut = $att?->afternoon_out ?: ($att?->morning_out ?: $att?->check_out);
 
-                // If on approved site deployment and no biometric punches exist, credit scheduled session times!
-                // For drivers: DO NOT inject automatic times! ONLY use times manually recorded by General Service!
                 if (!$emp->isDriver() && ($hasApprovedSite || $statusCode === 'S')) {
                     $siteObj = $siteDepRecord ?: ($hasApprovedSite instanceof \App\Models\SiteDeploymentRequest ? $hasApprovedSite : null);
                     if (!$rawIn && !$rawOut) {
@@ -429,6 +508,11 @@ class AttendanceController extends Controller
                 $aInVal  = $att?->afternoon_in ?? ($siteDepRecord?->afternoon_in ?? ($hasApprovedSite ? '13:35' : null));
                 $aOutVal = $att?->afternoon_out ?? ($siteDepRecord?->afternoon_out ?? ($hasApprovedSite ? '17:30' : null));
 
+                $cellHours = $att?->hours_worked ? round((float)$att->hours_worked, 1) : ($siteDepRecord ? (float)$siteDepRecord->hours_worked : ($hasApprovedSite ? 8.0 : null));
+                if ($cellHours) {
+                    $empTotalHours += (float)$cellHours;
+                }
+
                 $dayStatuses[$greg] = [
                     'code'          => $statusCode,
                     'class'         => $cellClass,
@@ -441,7 +525,7 @@ class AttendanceController extends Controller
                     'morning_out'   => $to12H($mOutVal),
                     'afternoon_in'  => $to12H($aInVal),
                     'afternoon_out' => $to12H($aOutVal),
-                    'hours'         => $att?->hours_worked ? round((float)$att->hours_worked, 1) : ($siteDepRecord ? (float)$siteDepRecord->hours_worked : ($hasApprovedSite ? 8.0 : null)),
+                    'hours'         => $cellHours,
                     'notes'         => $att?->notes ?? ($siteDepRecord?->task_notes),
                     'site_name'     => $siteTitle,
                     'leave_title'   => $leaveObj ? (is_object($leaveObj) && isset($leaveObj->leaveType) ? $leaveObj->leaveType?->name : 'Approved Leave') : null,
@@ -475,6 +559,7 @@ class AttendanceController extends Controller
                     'penalty_days'      => $empPenaltyDays,
                     'effective_absent'  => $effectiveAbsent,
                     'effective_present' => $effectivePresent,
+                    'total_hours'       => round($empTotalHours, 1),
                 ],
             ];
         }
@@ -500,21 +585,19 @@ class AttendanceController extends Controller
         ];
 
         // 5. Diagnostics for HR warning panels
-        // Missing Device ID panel: ONLY active Head Office staff who are required to use the HQ biometric machine
         $missingDeviceEmployees = $allActiveEmployees->filter(function($e) {
             return !$e->isSiteDriverOrRemote() && empty(trim((string)$e->device_user_id));
         });
 
-        // Suspended Access Accounts panel: users with access_blocked_at
         $blockedUsers = User::whereNotNull('access_blocked_at')
             ->with(['employee', 'roles', 'accessUnblockedByUser'])
             ->get();
 
         $departments  = Employee::activeRoster()->distinct()->pluck('department')->filter()->values();
         $projects     = \App\Models\Project::orderBy('name')->get();
-        $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
+        $workSchedule = EthiopianCalendar::getWorkSchedule();
 
-        return view('hr.attendance.index', compact(
+        return compact(
             'period',
             'periodDays',
             'selectedPeriodKey',
@@ -535,7 +618,7 @@ class AttendanceController extends Controller
             'departments',
             'projects',
             'workSchedule'
-        ));
+        );
     }
 
     /**

@@ -1915,6 +1915,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::resource('departments', App\Http\Controllers\DepartmentController::class)->except(['show', 'destroy']);
     Route::resource('attendance', App\Http\Controllers\AttendanceController::class)->only(['index']);
+    Route::get('attendance/export-pdf', [App\Http\Controllers\AttendanceController::class, 'exportPdf'])->name('attendance.export-pdf');
     Route::post('attendance/update-schedule', [App\Http\Controllers\AttendanceController::class, 'updateSchedule'])->name('attendance.updateSchedule');
     Route::post('attendance/restore-access/{user}', [App\Http\Controllers\AttendanceController::class, 'restoreUserAccess'])->name('admin.attendance.restore-access');
     Route::post('attendance/clear-history', [App\Http\Controllers\AttendanceController::class, 'clearHistory'])->name('attendance.clearHistory');

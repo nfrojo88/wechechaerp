@@ -44,6 +44,11 @@
                 <i class="fa-solid fa-list-check text-primary me-1"></i>Deployments
             </a>
 
+            {{-- Export as PDF Button --}}
+            <button type="button" class="btn btn-sm btn-outline-danger shadow-xs" data-bs-toggle="modal" data-bs-target="#exportAttendancePdfModal" title="Export monthly clock in / out attendance matrix as PDF">
+                <i class="fa-solid fa-file-pdf me-1"></i>Export as PDF
+            </button>
+
             {{-- More Actions Dropdown --}}
             <div class="dropdown">
                 <button class="btn btn-sm btn-outline-secondary dropdown-toggle shadow-xs" type="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -482,7 +487,7 @@
                 </span>
             </div>
 
-            {{-- Mode Switcher Buttons --}}
+            {{-- Mode Switcher Buttons & PDF Export --}}
             <div class="d-flex align-items-center gap-2">
                 <span class="small text-muted d-none d-md-inline">View Mode:</span>
                 <div class="btn-group btn-group-sm shadow-xs" role="group">
@@ -493,6 +498,9 @@
                         <i class="fa-solid fa-table-cells me-1"></i>Compact Status
                     </button>
                 </div>
+                <a href="{{ route('attendance.export-pdf', request()->all()) }}" target="_blank" class="btn btn-sm btn-outline-danger shadow-xs" title="Export this month's Clock In / Out Times matrix as PDF">
+                    <i class="fa-solid fa-file-pdf me-1"></i>PDF
+                </a>
             </div>
         </div>
     </div>
@@ -1403,5 +1411,149 @@ function openDayDetailModal(cell) {
     </div>
 </div>
 @endif
+
+{{-- Modal: Export Attendance Matrix as PDF with Date Option --}}
+<div class="modal fade" id="exportAttendancePdfModal" tabindex="-1" aria-labelledby="exportAttendancePdfModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <form action="{{ route('attendance.export-pdf') }}" method="GET" target="_blank">
+                <div class="modal-header bg-danger text-white py-2 px-3">
+                    <h6 class="modal-title fw-bold" id="exportAttendancePdfModalLabel">
+                        <i class="fa-solid fa-file-pdf me-1.5"></i>Export Attendance Matrix as PDF (Clock In &amp; Out Times)
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <div class="alert alert-info py-2 small mb-3">
+                        <i class="fa-solid fa-circle-info me-1"></i>
+                        Generates a comprehensive landscape executive PDF matrix showing <strong>every employee's daily Clock In and Clock Out times</strong>, verified biometric punches, late penalties, on-site deployments, and period summary totals.
+                    </div>
+
+                    <div class="row g-3 mb-2">
+                        {{-- Date Option Choice: Month vs Custom Dates --}}
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-dark mb-1">Date Option / Range Mode:</label>
+                            <div class="d-flex gap-3 align-items-center">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="date_mode" id="dateModeMonth" value="month" checked onchange="togglePdfDateMode()">
+                                    <label class="form-check-label small fw-semibold" for="dateModeMonth">
+                                        Ethiopian Payroll Month (26th &ndash; 25th)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="date_mode" id="dateModeCustom" value="custom" onchange="togglePdfDateMode()">
+                                    <label class="form-check-label small fw-semibold" for="dateModeCustom">
+                                        Custom Date Option (Specific Date Range)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Section A: Ethiopian Month / Period --}}
+                        <div class="col-12" id="pdfMonthSelectionBox">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-calendar-days text-primary me-1"></i>Select Ethiopian Month (Payroll Period):
+                            </label>
+                            <select name="period" class="form-select form-select-sm" id="pdfPeriodInput">
+                                @foreach($availablePeriods as $p)
+                                <option value="{{ $p['period_key'] }}" {{ $p['period_key'] === $selectedPeriodKey ? 'selected' : '' }}>
+                                    {{ $p['full_label'] }} ({{ $p['label_en'] }}) &bull; [{{ $p['start_greg'] }} &rarr; {{ $p['end_greg'] }}]
+                                </option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        {{-- Section B: Custom Date Range Option --}}
+                        <div class="col-12 d-none" id="pdfCustomDateSelectionBox">
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold text-dark mb-1">
+                                        <i class="fa-regular fa-calendar text-danger me-1"></i>From Date (Start):
+                                    </label>
+                                    <input type="date" name="start_date" id="pdfStartDateInput" value="{{ $period['start_greg'] }}" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold text-dark mb-1">
+                                        <i class="fa-regular fa-calendar text-danger me-1"></i>To Date (End):
+                                    </label>
+                                    <input type="date" name="end_date" id="pdfEndDateInput" value="{{ $period['end_greg'] }}" class="form-control form-control-sm">
+                                </div>
+                            </div>
+                            <small class="text-muted mt-1 d-block" style="font-size: 0.72rem;">
+                                Select any date range within or across months. Both Gregorian and Ethiopian calendar headers will be displayed.
+                            </small>
+                        </div>
+
+                        {{-- Staff Category --}}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-users text-secondary me-1"></i>Staff Category:
+                            </label>
+                            <select name="staff_type" class="form-select form-select-sm">
+                                <option value="office" {{ $staffType === 'office' ? 'selected' : '' }}>Head Office Staff (HQ Biometrics)</option>
+                                <option value="site" {{ $staffType === 'site' ? 'selected' : '' }}>Site &amp; Project Staff (Deployments)</option>
+                                <option value="driver" {{ $staffType === 'driver' ? 'selected' : '' }}>Driver Dept (General Service)</option>
+                                <option value="all" {{ $staffType === 'all' ? 'selected' : '' }}>All Employees Combined</option>
+                            </select>
+                        </div>
+
+                        {{-- Department --}}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-building text-secondary me-1"></i>Department:
+                            </label>
+                            <select name="department" class="form-select form-select-sm">
+                                <option value="">All Departments</option>
+                                @foreach($departments as $dept)
+                                <option value="{{ $dept }}" {{ request('department') === $dept ? 'selected' : '' }}>{{ $dept }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        {{-- Project Site Filter --}}
+                        @if($projects && $projects->isNotEmpty())
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-location-dot text-danger me-1"></i>Project Site Filter (Optional):
+                            </label>
+                            <select name="project_id" class="form-select form-select-sm">
+                                <option value="">All Project Sites</option>
+                                @foreach($projects as $p)
+                                <option value="{{ $p->id }}" {{ request('project_id') == $p->id ? 'selected' : '' }}>{{ $p->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        @endif
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2 px-3 justify-content-between">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-danger shadow-xs">
+                        <i class="fa-solid fa-file-pdf me-1"></i>Generate PDF Report
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function togglePdfDateMode() {
+    const isCustom = document.getElementById('dateModeCustom').checked;
+    const monthBox = document.getElementById('pdfMonthSelectionBox');
+    const customBox = document.getElementById('pdfCustomDateSelectionBox');
+    const periodInput = document.getElementById('pdfPeriodInput');
+
+    if (isCustom) {
+        monthBox.classList.add('d-none');
+        customBox.classList.remove('d-none');
+        if (periodInput) periodInput.disabled = true;
+    } else {
+        monthBox.classList.remove('d-none');
+        customBox.classList.add('d-none');
+        if (periodInput) periodInput.disabled = false;
+    }
+}
+</script>
 
 @endsection
