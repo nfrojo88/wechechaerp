@@ -109,11 +109,14 @@ class SupportTicketController extends Controller
 
         $validated = $request->validate($rules);
 
-        // Map priority
-        $priority = 'medium';
-        if (in_array($submissionType, ['problem', 'both'])) {
-            $priority = $request->impact_urgency ?? 'medium';
-        }
+        // Map priority safely for legacy ENUM('low', 'medium', 'high', 'urgent')
+        $urgency = strtolower($request->impact_urgency ?? 'medium');
+        $priority = match($urgency) {
+            'critical' => 'urgent',
+            'high'     => 'high',
+            'low'      => 'low',
+            default    => 'medium',
+        };
 
         // Handle attachment file upload
         $attachmentPath = null;
@@ -141,7 +144,7 @@ class SupportTicketController extends Controller
             'subject'                 => $subject,
             'description'             => $request->description ?? ($request->suggested_change ?? 'No description provided'),
             'priority'                => $priority,
-            'impact_urgency'          => $request->impact_urgency,
+            'impact_urgency'          => $request->impact_urgency ?? $urgency,
             'affected_system'         => $request->affected_system,
             'location'                => $request->location,
             'incident_started_at'     => $request->incident_started_at,
@@ -163,7 +166,7 @@ class SupportTicketController extends Controller
             'attachment_name'         => $attachmentName,
             'attachments_notes'       => $request->attachments_notes,
 
-            'status'                  => 'new',
+            'status'                  => 'open',
             'date_received'           => now()->toDateString(),
             'user_confirmed_resolved' => 'pending',
         ]);

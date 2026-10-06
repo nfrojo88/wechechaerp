@@ -11,6 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
+        try {
+            \Illuminate\Support\Facades\DB::statement("ALTER TABLE `support_tickets` MODIFY COLUMN `status` VARCHAR(50) NOT NULL DEFAULT 'open'");
+            \Illuminate\Support\Facades\DB::statement("ALTER TABLE `support_tickets` MODIFY COLUMN `priority` VARCHAR(50) NOT NULL DEFAULT 'medium'");
+        } catch (\Throwable $e) {}
+
         Schema::table('support_tickets', function (Blueprint $table) {
             // 1. Submitter Information
             if (!Schema::hasColumn('support_tickets', 'submitter_name')) {

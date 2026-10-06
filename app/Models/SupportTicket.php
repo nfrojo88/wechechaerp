@@ -70,8 +70,8 @@ class SupportTicket extends Model
                 $ticket->submitted_date = now()->toDateString();
             }
 
-            if (empty($ticket->status)) {
-                $ticket->status = 'new';
+            if (empty($ticket->status) || $ticket->status === 'new') {
+                $ticket->status = 'open';
             }
         });
     }
@@ -84,6 +84,14 @@ class SupportTicket extends Model
         try {
             if (!Schema::hasTable('support_tickets')) {
                 return;
+            }
+
+            // Convert legacy MySQL ENUM columns to VARCHAR so all statuses and priorities are accepted without truncation
+            try {
+                \Illuminate\Support\Facades\DB::statement("ALTER TABLE `support_tickets` MODIFY COLUMN `status` VARCHAR(50) NOT NULL DEFAULT 'open'");
+                \Illuminate\Support\Facades\DB::statement("ALTER TABLE `support_tickets` MODIFY COLUMN `priority` VARCHAR(50) NOT NULL DEFAULT 'medium'");
+            } catch (\Throwable $e) {
+                // Suppress if DB user has no ALTER privileges
             }
 
             Schema::table('support_tickets', function (Blueprint $table) {

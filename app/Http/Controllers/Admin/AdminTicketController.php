@@ -120,9 +120,17 @@ class AdminTicketController extends Controller
             'user_confirmed_resolved'  => 'nullable|in:yes,no,pending',
         ]);
 
+        $status = $request->status === 'new' ? 'open' : $request->status;
+        $priority = match(strtolower($request->priority)) {
+            'critical' => 'urgent',
+            'high'     => 'high',
+            'low'      => 'low',
+            default    => 'medium',
+        };
+
         $data = [
-            'status'                  => $request->status,
-            'priority'                => $request->priority,
+            'status'                  => $status,
+            'priority'                => $priority,
             'impact_urgency'          => $request->priority,
             'assigned_to'             => $request->assigned_to,
             'received_by_id'          => $request->received_by_id ?: auth()->id(),
@@ -135,7 +143,7 @@ class AdminTicketController extends Controller
             'user_confirmed_resolved' => $request->user_confirmed_resolved ?? 'pending',
         ];
 
-        if ($request->status === 'resolved' && empty($ticket->resolved_at)) {
+        if (in_array($status, ['resolved', 'closed']) && empty($ticket->resolved_at)) {
             $data['resolved_at'] = now();
             if (empty($data['date_closed'])) {
                 $data['date_closed'] = now()->toDateString();
