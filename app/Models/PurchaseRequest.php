@@ -115,6 +115,87 @@ class PurchaseRequest extends Model
         };
     }
 
+    public static function resolveDefaultOwnerRoleForStatus(?string $status): ?string
+    {
+        return match ($status) {
+            self::STATUS_PENDING_PLANNING           => 'planning',
+            self::STATUS_PENDING_HR_APPROVAL        => 'coordinator',
+            self::STATUS_PENDING_STORE_REVIEW       => 'store_manager',
+            self::STATUS_PENDING_PROC_MANAGER       => 'purchase_manager',
+            self::STATUS_PENDING_PROC_TEAM          => 'purchase',
+            self::STATUS_PENDING_MARKETING          => 'purchase_manager',
+            self::STATUS_PENDING_PROFORMA_SELECTION => 'purchase_manager',
+            self::STATUS_PENDING_GM                 => 'gm',
+            self::STATUS_PENDING_FINANCE            => 'finance_head',
+            self::STATUS_PENDING_PAYMENT            => 'finance',
+            self::STATUS_PENDING_RECEIPT_UPLOAD     => 'purchase',
+            self::STATUS_PENDING_RECEIPT_VERIFY     => 'store_keeper',
+            self::STATUS_PENDING_DRIVER             => 'general_service',
+            self::STATUS_INTAKE_COMPLETE            => 'store_keeper',
+            self::STATUS_COMPLETED, self::STATUS_CANCELLED => null,
+            default                                 => null,
+        };
+    }
+
+    protected static function booted()
+    {
+        static::updating(function (PurchaseRequest $pr) {
+            if ($pr->isDirty('status') && !$pr->isDirty('current_owner_role')) {
+                $newRole = static::resolveDefaultOwnerRoleForStatus($pr->status);
+                if ($newRole !== null) {
+                    $pr->current_owner_role = $newRole;
+                }
+            }
+        });
+
+        static::created(function (PurchaseRequest $pr) {
+            if ($pr->status !== self::STATUS_DRAFT) {
+                try {
+                    $ownerRole = $pr->current_owner_role ?: static::resolveDefaultOwnerRoleForStatus($pr->status);
+                    if ($ownerRole) {
+                        $actor = \Illuminate\Support\Facades\Auth::user();
+                        $actorName = $actor ? $actor->name : 'System';
+                        $statusLabel = $pr->status_label;
+                        $actionDesc = "New request entered '{$statusLabel}' by {$actorName}";
+
+                        app(\App\Services\ProcurementLifecycleService::class)->notifyNextOwner(
+                            $pr,
+                            $pr->status,
+                            $actionDesc
+                        );
+                    }
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error("PurchaseRequest auto initial-owner SMS failed on PR #{$pr->id}: " . $e->getMessage());
+                }
+            }
+        });
+
+        static::updated(function (PurchaseRequest $pr) {
+            $statusChanged = $pr->wasChanged('status');
+            $roleChanged   = $pr->wasChanged('current_owner_role');
+
+            if (($statusChanged || $roleChanged) && !in_array($pr->status, [self::STATUS_DRAFT])) {
+                try {
+                    $ownerRole = $pr->current_owner_role ?: static::resolveDefaultOwnerRoleForStatus($pr->status);
+                    if ($ownerRole) {
+                        $actor = \Illuminate\Support\Facades\Auth::user();
+                        $actorName = $actor ? $actor->name : 'System';
+                        $statusLabel = $pr->status_label;
+                        $actionDesc = "Stage updated to '{$statusLabel}' by {$actorName}";
+
+                        app(\App\Services\ProcurementLifecycleService::class)->notifyNextOwner(
+                            $pr,
+                            $pr->status,
+                            $actionDesc
+                        );
+                    }
+                } catch (\Throwable $e) {
+                    \Illuminate\Support\Facades\Log::error("PurchaseRequest auto next-owner SMS failed on PR #{$pr->id}: " . $e->getMessage());
+                }
+            }
+        });
+    }
+
     protected $fillable = [
         'pr_no', 'project_id', 'store_id', 'requested_by', 'material_request_id',
         'priority', 'type', 'is_office_request', 'office_purpose', 'required_date', 'justification', 'status',

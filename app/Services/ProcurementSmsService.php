@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\Store;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Procurement SMS Service
@@ -50,6 +51,15 @@ class ProcurementSmsService
         }
 
         $formattedPhone = $this->normalizePhone($phone);
+
+        // Deduplication: prevent duplicate SMS to same phone for same PR within 30s
+        $cacheKey = "proc_sms_sent_{$purchaseRequestId}_{$formattedPhone}";
+        if (Cache::has($cacheKey)) {
+            Log::info("ProcurementSMS deduplicated (already sent within 30s) to {$formattedPhone} on PR #{$purchaseRequestId}");
+            return;
+        }
+        Cache::put($cacheKey, true, now()->addSeconds(30));
+
         $status = 'failed';
         $error  = null;
 

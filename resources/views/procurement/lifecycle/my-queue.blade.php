@@ -354,9 +354,17 @@
                                     <span class="badge bg-warning text-dark">{{ ucfirst(str_replace('_', ' ', $mr->status)) }}</span>
                                 </td>
                                 <td>
-                                    <span class="badge bg-secondary bg-opacity-10 text-dark">
-                                        {{ ucfirst(str_replace('_', ' ', $linkedPr?->current_owner_role ?? 'Store Manager')) }}
-                                    </span>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="badge bg-secondary bg-opacity-10 text-dark">
+                                            {{ ucfirst(str_replace('_', ' ', $linkedPr?->current_owner_role ?? 'Store Manager')) }}
+                                        </span>
+                                        <form action="{{ route('material-requests.send-stage-sms', $mr) }}" method="POST" class="d-inline" onsubmit="this.querySelector('button').disabled = true;">
+                                            @csrf
+                                            <button type="submit" class="btn btn-xs btn-outline-success border-0 px-1 py-0 shadow-none" title="Send SMS to Current Owner">
+                                                <i class="fas fa-paper-plane text-success"></i>
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                                 <td>{{ $mr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
@@ -476,15 +484,23 @@
                                     </span>
                                 </td>
                                 <td>
-                                    @if(!empty($isFinalIntakeStage))
-                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-semibold">
-                                            <i class="fas fa-boxes-packing me-1"></i> Store Keeper
-                                        </span>
-                                    @else
-                                        <span class="badge bg-secondary bg-opacity-10 text-dark">
-                                            <i class="fas fa-user-tag me-1"></i> {{ ucfirst(str_replace('_', ' ', $pr->current_owner_role ?? 'None')) }}
-                                        </span>
-                                    @endif
+                                    <div class="d-flex align-items-center gap-1 flex-wrap">
+                                        @if(!empty($isFinalIntakeStage))
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 fw-semibold">
+                                                <i class="fas fa-boxes-packing me-1"></i> Store Keeper
+                                            </span>
+                                        @else
+                                            <span class="badge bg-secondary bg-opacity-10 text-dark">
+                                                <i class="fas fa-user-tag me-1"></i> {{ ucfirst(str_replace('_', ' ', $pr->current_owner_role ?? 'None')) }}
+                                            </span>
+                                        @endif
+                                        <form action="{{ route('purchase-requests.send-stage-sms', $pr->id) }}" method="POST" class="d-inline" onsubmit="this.querySelector('button').disabled = true;">
+                                            @csrf
+                                            <button type="submit" class="btn btn-xs btn-outline-success border-0 px-1 py-0 shadow-none" title="Send SMS to Current Owner ({{ ucfirst(str_replace('_', ' ', $pr->current_owner_role ?? 'Owner')) }})">
+                                                <i class="fas fa-paper-plane text-success"></i>
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                                 <td>{{ $pr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
@@ -874,13 +890,27 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <span class="badge bg-secondary bg-opacity-10 text-dark">
-                                        {{ ucfirst(str_replace('_', ' ', $aPr->current_owner_role ?? 'None')) }}
-                                    </span>
+                                    <div class="d-flex align-items-center gap-1 flex-wrap">
+                                        <span class="badge bg-secondary bg-opacity-10 text-dark">
+                                            {{ ucfirst(str_replace('_', ' ', $aPr->current_owner_role ?? 'None')) }}
+                                        </span>
+                                        <form action="{{ route('purchase-requests.send-stage-sms', $aPr->id) }}" method="POST" class="d-inline" onsubmit="this.querySelector('button').disabled = true;">
+                                            @csrf
+                                            <button type="submit" class="btn btn-xs btn-outline-success border-0 px-1 py-0 shadow-none" title="Send SMS to Current Owner ({{ ucfirst(str_replace('_', ' ', $aPr->current_owner_role ?? 'Owner')) }})">
+                                                <i class="fas fa-paper-plane text-success"></i>
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                                 <td>{{ $aPr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end align-items-center gap-1">
+                                        <form action="{{ route('purchase-requests.send-stage-sms', $aPr->id) }}" method="POST" class="d-inline" onsubmit="this.querySelector('button').disabled = true;">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold" title="Send instant SMS alert to assigned {{ ucfirst(str_replace('_', ' ', $aPr->current_owner_role ?? 'owner')) }}">
+                                                <i class="fas fa-paper-plane me-1"></i> Send SMS
+                                            </button>
+                                        </form>
                                         <a href="{{ route('purchase-requests.show', $aPr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold">
                                             <i class="fas fa-eye me-1"></i> See Details
                                         </a>
