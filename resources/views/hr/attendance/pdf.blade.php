@@ -44,14 +44,14 @@
         body {
             background-color: #475569;
             color: var(--text-main);
-            padding: 18px 0;
+            padding: 16px 0;
             font-size: 10px;
-            line-height: 1.3;
+            line-height: 1.35;
         }
 
         /* ── Top Floating Action Toolbar (Non-Print) ─────────────────── */
         .no-print-toolbar {
-            max-width: 98%;
+            max-width: 1200px;
             margin: 0 auto 16px auto;
             background: #ffffff;
             padding: 12px 18px;
@@ -95,7 +95,7 @@
             gap: 6px;
             font-size: 12px;
             font-weight: 600;
-            padding: 7px 14px;
+            padding: 7px 13px;
             border-radius: 6px;
             border: none;
             cursor: pointer;
@@ -111,350 +111,244 @@
         .btn-outline:hover { background: #f1f5f9; }
         .btn-dark { background: #0f172a; color: #ffffff; }
 
-        /* ── Sheet Container (Landscape A3/A4) ───────────────────────── */
-        .sheet-container {
-            width: 98%;
-            max-width: 1750px;
-            margin: 0 auto;
+        .btn-toggle-active {
+            background-color: #1e3a8a !important;
+            color: #ffffff !important;
+            border-color: #1e3a8a !important;
+        }
+
+        /* ── Standard A4 Page Container ───────────────────────────────── */
+        .a4-page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto 20px auto;
             background: #ffffff;
-            padding: 16px 20px;
-            border-radius: 6px;
+            padding: 14mm 12mm 12mm 12mm;
+            border-radius: 4px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .a4-landscape-page {
+            width: 297mm;
+            min-height: 210mm;
+            margin: 0 auto 20px auto;
+            background: #ffffff;
+            padding: 10mm 10mm 10mm 10mm;
+            border-radius: 4px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
         }
 
-        /* ── Report Header ───────────────────────────────────────────── */
-        .report-header {
+        /* ── Header Styling ──────────────────────────────────────────── */
+        .timesheet-header {
+            border-bottom: 2px solid var(--primary);
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+        .header-top {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            border-bottom: 2px solid var(--primary);
-            padding-bottom: 12px;
-            margin-bottom: 12px;
-            gap: 16px;
+            gap: 12px;
         }
 
-        .company-brand {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .company-name {
-            font-size: 16px;
-            font-weight: 800;
-            color: var(--primary);
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-        }
-
-        .company-sub {
-            font-size: 10px;
-            font-weight: 600;
-            color: var(--text-muted);
-            margin-top: 1px;
-        }
-
-        .report-title-box {
-            text-align: center;
-            flex-grow: 1;
-        }
-
-        .report-title {
+        .company-title {
             font-size: 15px;
             font-weight: 800;
-            color: #0f172a;
-            margin-bottom: 3px;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .report-subtitle {
-            font-size: 11px;
-            color: #334155;
-            font-weight: 600;
-        }
-
-        .report-meta-box {
-            text-align: right;
+        .company-subtitle {
             font-size: 9.5px;
-            color: var(--text-muted);
-            line-height: 1.4;
-        }
-
-        /* ── KPI Summary Strip ───────────────────────────────────────── */
-        .kpi-strip {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background: var(--bg-light);
-            border: 1px solid var(--border-light);
-            border-radius: 6px;
-            padding: 8px 14px;
-            margin-bottom: 12px;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .kpi-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 0 8px;
-            border-right: 1px solid var(--border-light);
-        }
-
-        .kpi-item:last-child {
-            border-right: none;
-        }
-
-        .kpi-val {
-            font-size: 13px;
-            font-weight: 800;
-            font-family: monospace;
-        }
-
-        .kpi-lbl {
-            font-size: 8.5px;
             font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .doc-title-badge {
+            background: #0f172a;
+            color: #ffffff;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+            text-align: right;
+            text-transform: uppercase;
+        }
+
+        /* ── Employee Profile Info Card (A4 Header) ───────────────────── */
+        .emp-profile-card {
+            background: #f8fafc;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-top: 8px;
+            display: grid;
+            grid-template-columns: 2fr 1.3fr 1.3fr 1.4fr;
+            gap: 10px;
+            font-size: 9.5px;
+        }
+
+        .profile-field label {
+            display: block;
+            font-size: 8px;
+            font-weight: 700;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.4px;
+            margin-bottom: 1px;
         }
 
-        /* ── Matrix Table Styling ────────────────────────────────────── */
-        .table-wrapper {
-            overflow-x: auto;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            margin-bottom: 14px;
+        .profile-field span {
+            font-weight: 700;
+            color: #0f172a;
+            font-size: 10.5px;
         }
 
-        table.attendance-matrix {
+        /* ── 4-Punch Detailed Table (A4 Size) ────────────────────────── */
+        table.timesheet-table {
             width: 100%;
             border-collapse: collapse;
             font-size: 9px;
             text-align: center;
             background: #ffffff;
+            margin-top: 8px;
         }
 
-        table.attendance-matrix th,
-        table.attendance-matrix td {
-            border: 1px solid var(--border-color);
-            padding: 3px 2px;
+        table.timesheet-table th,
+        table.timesheet-table td {
+            border: 1px solid #cbd5e1;
+            padding: 3.5px 3px;
             vertical-align: middle;
         }
 
-        table.attendance-matrix thead tr:first-child th {
+        table.timesheet-table thead tr:first-child th {
             background-color: #0f172a;
             color: #ffffff;
+            font-size: 8.5px;
             font-weight: 700;
-            font-size: 9px;
-            padding: 5px 2px;
+            padding: 5px 3px;
         }
 
-        table.attendance-matrix thead tr:nth-child(2) th {
+        table.timesheet-table thead tr:nth-child(2) th {
             background-color: #f1f5f9;
             color: #1e293b;
-            font-weight: 600;
-            font-size: 8.5px;
+            font-size: 8px;
+            font-weight: 700;
             padding: 4px 2px;
         }
 
-        .col-emp {
-            width: 160px;
-            min-width: 160px;
-            max-width: 160px;
-            text-align: left !important;
-            padding: 4px 6px !important;
-            background-color: #ffffff;
-        }
+        .th-morning { background-color: #e0f2fe !important; color: #0369a1 !important; }
+        .th-afternoon { background-color: #fef3c7 !important; color: #92400e !important; }
 
-        .emp-name {
+        .time-cell {
+            font-family: monospace;
             font-weight: 700;
-            color: #0f172a;
-            font-size: 9.5px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .emp-meta {
-            font-size: 8px;
-            color: var(--text-muted);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .emp-pin {
-            font-family: monospace;
-            font-size: 7.5px;
-            background: #f1f5f9;
-            padding: 1px 3px;
-            border-radius: 3px;
-            border: 1px solid #cbd5e1;
-            display: inline-block;
-        }
-
-        /* ── Daily Cell Content ──────────────────────────────────────── */
-        .day-cell {
-            padding: 2px 1px !important;
-            height: 34px;
-            position: relative;
-        }
-
-        .time-box {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 1px;
-            line-height: 1.1;
-        }
-
-        .time-in {
-            font-weight: 700;
-            font-family: monospace;
-            font-size: 8.2px;
-            color: var(--present-green);
+            font-size: 8.5px;
             white-space: nowrap;
         }
 
-        .time-in.is-late {
-            color: var(--late-orange);
-            font-weight: 800;
-        }
+        .time-in-text { color: var(--present-green); }
+        .time-in-late { color: var(--late-orange); font-weight: 800; }
+        .time-out-text { color: #475569; }
 
-        .time-out {
-            font-family: monospace;
-            font-size: 7.8px;
-            color: #475569;
-            white-space: nowrap;
-        }
-
-        .badge-late {
-            background-color: #fed7aa;
+        .late-pill {
+            background: #fed7aa;
             color: #9a3412;
             font-size: 6.5px;
-            font-weight: 700;
+            font-weight: 800;
             padding: 0.5px 2px;
             border-radius: 2px;
-            display: inline-block;
-            margin-top: 0.5px;
+            margin-left: 2px;
         }
 
-        .badge-s {
-            background-color: #e0f2fe;
-            color: #0369a1;
-            font-size: 8.5px;
-            font-weight: 800;
-            padding: 1px 3px;
-            border-radius: 3px;
-        }
+        /* ── Row State Highlighting ─────────────────────────────────── */
+        tr.row-sun { background-color: #f8fafc; color: #94a3b8; }
+        tr.row-site { background-color: #f0f9ff; }
+        tr.row-leave { background-color: #eff6ff; }
+        tr.row-holiday { background-color: #faf5ff; }
+        tr.row-absent { background-color: #fef2f2; }
 
-        .badge-a {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            font-size: 8.5px;
-            font-weight: 800;
-            padding: 1px 3px;
-            border-radius: 3px;
-        }
-
-        .badge-l {
-            background-color: #dbeafe;
-            color: #1d4ed8;
-            font-size: 8.5px;
-            font-weight: 800;
-            padding: 1px 3px;
-            border-radius: 3px;
-        }
-
-        .badge-h {
-            background-color: #f3e8ff;
-            color: #7e22ce;
-            font-size: 8.5px;
-            font-weight: 800;
-            padding: 1px 3px;
-            border-radius: 3px;
-        }
-
-        .badge-sun {
-            color: #94a3b8;
-            font-size: 8px;
-            font-weight: 700;
-        }
-
-        /* ── Cell Backgrounds ────────────────────────────────────────── */
-        .cell-p { background-color: var(--present-bg); }
-        .cell-p-late { background-color: var(--late-bg); }
-        .cell-s { background-color: var(--site-bg); }
-        .cell-a { background-color: var(--absent-bg); }
-        .cell-l { background-color: #eff6ff; }
-        .cell-h { background-color: #faf5ff; }
-        .cell-sun { background-color: var(--sun-bg); color: #94a3b8; }
-        .cell-dash { background-color: #ffffff; color: #cbd5e1; }
-
-        /* ── Summary Columns ─────────────────────────────────────────── */
-        .col-sum {
-            font-weight: 700;
-            font-family: monospace;
-            font-size: 9px;
-            width: 28px;
-            min-width: 28px;
-        }
-
-        .col-sum-p { background-color: #f0fdf4; color: #166534; }
-        .col-sum-s { background-color: #f0f9ff; color: #075985; }
-        .col-sum-l { background-color: #eff6ff; color: #1e40af; }
-        .col-sum-h { background-color: #faf5ff; color: #6b21a8; }
-        .col-sum-a { background-color: #fef2f2; color: #991b1b; }
-        .col-sum-late { background-color: #fff7ed; color: #9a3412; }
-        .col-sum-pen { background-color: #fee2e2; color: #b91c1c; }
-        .col-sum-eff { background-color: #b91c1c; color: #ffffff; }
-        .col-sum-hrs { background-color: #f8fafc; color: #0f172a; }
-
-        /* ── Legend & Signatures ─────────────────────────────────────── */
-        .report-footer {
+        /* ── Monthly Summary Footer Box ──────────────────────────────── */
+        .summary-box {
+            background: #f8fafc;
+            border: 1.5px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 12px;
             margin-top: 10px;
-        }
-
-        .legend-row {
             display: flex;
-            align-items: center;
             justify-content: space-between;
+            align-items: center;
             flex-wrap: wrap;
             gap: 8px;
-            font-size: 8px;
-            color: #475569;
-            border-top: 1px dashed var(--border-color);
-            padding-top: 6px;
-            margin-bottom: 16px;
         }
 
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 4px;
+        .summary-item {
+            text-align: center;
+            padding: 0 6px;
         }
 
-        .sign-grid {
+        .summary-val {
+            font-family: monospace;
+            font-size: 13px;
+            font-weight: 800;
+            display: block;
+        }
+
+        .summary-lbl {
+            font-size: 7.8px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        /* ── Official 3-Signoff Block ────────────────────────────────── */
+        .signature-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-top: 24px;
-            padding-top: 10px;
+            gap: 16px;
+            margin-top: 14px;
+            padding-top: 6px;
         }
 
-        .sign-box {
+        .sign-card {
             border-top: 1.5px solid #0f172a;
-            padding-top: 6px;
-            font-size: 8.5px;
+            padding-top: 5px;
+            font-size: 8px;
             color: #334155;
         }
 
-        .sign-role {
+        .sign-title {
             font-weight: 800;
             color: #0f172a;
-            font-size: 9.5px;
+            font-size: 9px;
             text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        /* ── Matrix Layout Specific ──────────────────────────────────── */
+        .matrix-table-wrap {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            margin-top: 10px;
+        }
+
+        table.matrix-view-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8px;
+            text-align: center;
+        }
+
+        table.matrix-view-table th, table.matrix-view-table td {
+            border: 1px solid #cbd5e1;
+            padding: 2px 1px;
+            vertical-align: middle;
         }
 
         /* ── Print Media Optimization ────────────────────────────────── */
@@ -469,33 +363,35 @@
                 display: none !important;
             }
 
-            .sheet-container {
+            .a4-page {
                 width: 100% !important;
-                max-width: 100% !important;
-                padding: 0 !important;
+                min-height: 297mm !important;
+                padding: 6mm 6mm !important;
+                margin: 0 !important;
                 box-shadow: none !important;
                 border-radius: 0 !important;
+                page-break-after: always !important;
+                page-break-inside: avoid !important;
+            }
+
+            .a4-page:last-child {
+                page-break-after: auto !important;
+            }
+
+            .a4-landscape-page {
+                width: 100% !important;
+                padding: 4mm !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                page-break-after: auto !important;
             }
 
             @page {
-                size: landscape;
-                margin: 6mm 4mm;
+                size: A4 portrait;
+                margin: 6mm;
             }
 
-            table.attendance-matrix {
-                page-break-inside: auto;
-            }
-
-            table.attendance-matrix tr {
-                page-break-inside: avoid;
-                page-break-after: auto;
-            }
-
-            table.attendance-matrix thead {
-                display: table-header-group;
-            }
-
-            .sign-grid {
+            .signature-grid {
                 page-break-inside: avoid;
             }
         }
@@ -510,13 +406,26 @@
                 <i class="fas fa-arrow-left"></i> Back to Roster
             </a>
 
-            <!-- Quick Filter Form for Month / Date Option -->
-            <form action="{{ route('attendance.export-pdf') }}" method="GET" class="filter-form">
+            <!-- View Layout Switcher: A4 Detailed Timesheet vs Matrix -->
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline {{ request('layout', 'timesheet') === 'timesheet' ? 'btn-toggle-active' : '' }}" onclick="switchReportLayout('timesheet')">
+                    <i class="fas fa-file-invoice"></i> A4 Detailed Timesheets (4 Sessions)
+                </button>
+                <button type="button" class="btn btn-outline {{ request('layout') === 'matrix' ? 'btn-toggle-active' : '' }}" onclick="switchReportLayout('matrix')">
+                    <i class="fas fa-table-cells"></i> Master Matrix
+                </button>
+            </div>
+        </div>
+
+        <div class="toolbar-group">
+            <!-- Filter Form for Month / Date Option / Employee -->
+            <form action="{{ route('attendance.export-pdf') }}" method="GET" class="filter-form" id="reportFilterForm">
+                <input type="hidden" name="layout" id="layoutInput" value="{{ request('layout', 'timesheet') }}">
                 <input type="hidden" name="staff_type" value="{{ $staffType }}">
 
-                <!-- Date Option Mode: Period vs Custom -->
-                <select name="period" class="form-select-sm" id="periodSelect" onchange="this.form.submit()">
-                    <optgroup label="Ethiopian Payroll Periods (26th–25th)">
+                <!-- Month / Ethiopian Payroll Period -->
+                <select name="period" class="form-select-sm" onchange="this.form.submit()" title="Ethiopian Payroll Month">
+                    <optgroup label="Ethiopian Payroll Months (26th–25th)">
                         @foreach($availablePeriods as $p)
                         <option value="{{ $p['period_key'] }}" {{ (!$period['is_custom'] ?? false) && $p['period_key'] === $selectedPeriodKey ? 'selected' : '' }}>
                             {{ $p['full_label'] }} ({{ $p['label_en'] }})
@@ -525,29 +434,22 @@
                     </optgroup>
                 </select>
 
-                <!-- Custom Gregorian Date Range Option -->
-                <span class="text-muted small" style="font-size: 11px;">or Dates:</span>
+                <!-- Custom Date Option -->
                 <input type="date" name="start_date" value="{{ request('start_date', $period['start_greg']) }}" class="form-control-sm" title="Start Date">
                 <span class="text-muted" style="font-size: 10px;">&rarr;</span>
                 <input type="date" name="end_date" value="{{ request('end_date', $period['end_greg']) }}" class="form-control-sm" title="End Date">
 
-                <!-- Staff Type -->
-                <select name="staff_type" class="form-select-sm" onchange="this.form.submit()">
-                    <option value="office" {{ $staffType === 'office' ? 'selected' : '' }}>Head Office</option>
-                    <option value="site" {{ $staffType === 'site' ? 'selected' : '' }}>Site &amp; Project</option>
-                    <option value="driver" {{ $staffType === 'driver' ? 'selected' : '' }}>Driver Dept (GS)</option>
-                    <option value="all" {{ $staffType === 'all' ? 'selected' : '' }}>All Staff</option>
-                </select>
-
-                <!-- Department Filter -->
-                <select name="department" class="form-select-sm" onchange="this.form.submit()">
-                    <option value="">All Departments</option>
-                    @foreach($departments as $dept)
-                    <option value="{{ $dept }}" {{ request('department') === $dept ? 'selected' : '' }}>{{ $dept }}</option>
+                <!-- Filter Single Employee or All -->
+                <select name="employee_id" class="form-select-sm" onchange="this.form.submit()" title="Filter specific employee or all staff">
+                    <option value="">All Staff ({{ count($employees) }} Sheets)</option>
+                    @foreach($employees as $e)
+                    <option value="{{ $e->id }}" {{ request('employee_id') == $e->id ? 'selected' : '' }}>
+                        {{ $e->full_name }} ({{ $e->employee_code ?? 'EMP' }})
+                    </option>
                     @endforeach
                 </select>
 
-                <button type="submit" class="btn btn-primary" title="Apply custom dates and filters">
+                <button type="submit" class="btn btn-primary" title="Apply filter">
                     <i class="fas fa-filter"></i> Apply
                 </button>
             </form>
@@ -558,308 +460,420 @@
                 <i class="fas fa-file-pdf"></i> Download PDF
             </button>
             <button onclick="window.print()" class="btn btn-dark">
-                <i class="fas fa-print"></i> Print / Save as PDF
+                <i class="fas fa-print"></i> Print (A4 Size)
             </button>
         </div>
     </div>
 
-    <!-- ── Report Container for Print / PDF Export ───────────────────── -->
-    <div class="sheet-container" id="pdfReportContent">
+    @php
+        $selectedEmpId = request('employee_id');
+        $activeLayout  = request('layout', 'timesheet');
+        $filteredRows  = $selectedEmpId ? collect($matrix)->filter(fn($r, $k) => $k == $selectedEmpId) : collect($matrix);
+    @endphp
 
-        <!-- Executive Header -->
-        <div class="report-header">
-            <div class="company-brand">
-                <div class="company-name">Wechecha Construction P.L.C</div>
-                <div class="company-sub">ConstructPro ERP &bull; Human Resources &amp; Biometric Attendance System</div>
-            </div>
+    <!-- ── Container For Export Content ──────────────────────────────── -->
+    <div id="pdfReportContent">
 
-            <div class="report-title-box">
-                <div class="report-title">
-                    {{ $staffTypeLabel }} Attendance Matrix &bull; Clock In &amp; Out Times
+        @if($activeLayout === 'timesheet')
+        <!-- ══════════════════════════════════════════════════════════════════
+             MODE 1: A4 DETAILED TIMESHEET (PER EMPLOYEE, FULL 4-PUNCH SESSIONS)
+             Morning Clock In & Out, Afternoon Clock In & Out Section
+             ══════════════════════════════════════════════════════════════════ -->
+        @forelse($filteredRows as $empId => $row)
+        @php
+            $emp = $row['employee'];
+            $summary = $row['summary'];
+            $days = $row['days'];
+        @endphp
+        <div class="a4-page">
+            <div>
+                <!-- Timesheet Top Header -->
+                <div class="timesheet-header">
+                    <div class="header-top">
+                        <div>
+                            <div class="company-title">Wechecha Construction P.L.C</div>
+                            <div class="company-subtitle">ConstructPro ERP &bull; Biometric Attendance &amp; Payroll Timesheet (A4)</div>
+                        </div>
+                        <div class="doc-title-badge">
+                            Monthly Attendance Log &bull; የሰዓት ምዝገባ
+                        </div>
+                    </div>
+
+                    <!-- Employee Profile Summary Card -->
+                    <div class="emp-profile-card">
+                        <div class="profile-field">
+                            <label>Employee Name / የሰራተኛው ስም</label>
+                            <span>{{ $emp->full_name }}</span>
+                        </div>
+                        <div class="profile-field">
+                            <label>Employee Code / ID</label>
+                            <span>{{ $emp->employee_code ?? 'EMP-' . $emp->id }}</span>
+                        </div>
+                        <div class="profile-field">
+                            <label>Department / Role</label>
+                            <span>{{ $emp->role_title ?: ($emp->department ?? 'General') }}</span>
+                        </div>
+                        <div class="profile-field">
+                            <label>Period / ወር (Ethiopian)</label>
+                            <span>{{ $period['full_label'] }}</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="report-subtitle">
-                    Period: <strong>{{ $period['full_label'] }}</strong>
-                    @if(!empty($period['label_am']))
-                        &bull; {{ $period['label_am'] }}
-                    @endif
-                    &bull; ({{ $period['start_greg'] }} &rarr; {{ $period['end_greg'] }})
-                </div>
-            </div>
 
-            <div class="report-meta-box">
-                <div><strong>Export Date:</strong> {{ now()->format('M d, Y h:i A') }}</div>
-                <div><strong>Ethiopian:</strong> {{ \App\Helpers\EthiopianCalendar::format(today(), 'am') }}</div>
-                <div><strong>Generated By:</strong> {{ auth()->user()->name ?? 'System Admin' }}</div>
-            </div>
-        </div>
-
-        <!-- KPI Summary Strip -->
-        <div class="kpi-strip">
-            <div class="kpi-item">
-                <span class="kpi-val text-dark">{{ number_format($stats['total_staff']) }}</span>
-                <span class="kpi-lbl">Total Staff</span>
-            </div>
-            <div class="kpi-item">
-                <span class="kpi-val text-success">{{ number_format($stats['total_present']) }}</span>
-                <span class="kpi-lbl">Present Punches</span>
-            </div>
-            <div class="kpi-item">
-                <span class="kpi-val text-info">{{ number_format($stats['total_site']) }}</span>
-                <span class="kpi-lbl">Site Deploy (S)</span>
-            </div>
-            <div class="kpi-item">
-                <span class="kpi-val text-warning">{{ number_format($stats['total_late']) }}</span>
-                <span class="kpi-lbl">Late Punches (&gt;08:40)</span>
-            </div>
-            <div class="kpi-item">
-                <span class="kpi-val text-danger">{{ number_format($stats['total_absent']) }}</span>
-                <span class="kpi-lbl">Base Absent</span>
-            </div>
-            <div class="kpi-item">
-                <span class="kpi-val text-danger">{{ number_format($stats['total_penalty_days']) }}</span>
-                <span class="kpi-lbl">Late Penalty Days (3:1)</span>
-            </div>
-            <div class="kpi-item">
-                <span class="kpi-val text-danger" style="color: #b91c1c;">{{ number_format($stats['total_effective_absent']) }}</span>
-                <span class="kpi-lbl">Effective Absent Days</span>
-            </div>
-            <div class="kpi-item">
-                <span class="kpi-val text-secondary">{{ count($periodDays) }}</span>
-                <span class="kpi-lbl">Period Days</span>
-            </div>
-        </div>
-
-        <!-- Matrix Table -->
-        <div class="table-wrapper">
-            <table class="attendance-matrix">
-                <thead>
-                    <!-- Row 1: Ethiopian Dates -->
-                    <tr>
-                        <th class="col-emp" rowspan="2">
-                            <div>EMPLOYEE INFORMATION</div>
-                            <div style="font-size: 7.5px; opacity: 0.8; font-weight: normal;">CODE &bull; DEPT &bull; DEVICE PIN</div>
-                        </th>
-
-                        @foreach($periodDays as $day)
-                        <th style="min-width: 36px; {{ $day['is_sunday'] ? 'background-color: #334155;' : '' }}">
-                            <div>{{ $day['eth_day'] }}</div>
-                            <div style="font-size: 6.8px; opacity: 0.85;">{{ substr($day['eth_label_en'], 0, 4) }}</div>
-                        </th>
-                        @endforeach
-
-                        <!-- Summary Group -->
-                        <th class="col-sum col-sum-p" rowspan="2" title="Total Present Days">P</th>
-                        <th class="col-sum col-sum-s" rowspan="2" title="Total Site Days">S</th>
-                        <th class="col-sum col-sum-l" rowspan="2" title="Approved Leave">L</th>
-                        <th class="col-sum col-sum-h" rowspan="2" title="Public Holiday">H</th>
-                        <th class="col-sum col-sum-a" rowspan="2" title="Base Absent Days">A</th>
-                        <th class="col-sum col-sum-late" rowspan="2" title="Late Punches">Late</th>
-                        <th class="col-sum col-sum-pen" rowspan="2" title="Penalty Days">Pen.</th>
-                        <th class="col-sum col-sum-eff" rowspan="2" title="Effective Absent = A + Penalty">Eff. Abs</th>
-                        <th class="col-sum col-sum-hrs" rowspan="2" title="Total Credited Hours">Hrs</th>
-                    </tr>
-
-                    <!-- Row 2: Gregorian Dates & Weekday -->
-                    <tr>
-                        @foreach($periodDays as $day)
-                        <th style="font-size: 7.5px; {{ $day['is_sunday'] ? 'background-color: #e2e8f0; color: #475569;' : '' }}">
-                            <div>{{ $day['greg_day'] }} {{ $day['greg_month'] }}</div>
-                            <div style="font-weight: 700;">{{ $day['day_name_en'] }}</div>
-                        </th>
-                        @endforeach
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($matrix as $empId => $row)
-                    @php
-                        $emp = $row['employee'];
-                        $summary = $row['summary'];
-                        $days = $row['days'];
-                    @endphp
-                    <tr>
-                        <!-- Left Employee Column -->
-                        <td class="col-emp">
-                            <div class="emp-name" title="{{ $emp->full_name }}">{{ $emp->full_name }}</div>
-                            <div class="emp-meta">
-                                <strong>{{ $emp->employee_code ?? 'EMP' }}</strong> &bull; {{ $emp->role_title ?: ($emp->department ?? 'General') }}
-                            </div>
-                            <div style="margin-top: 1px;">
-                                @if(!empty($emp->device_user_id))
-                                    <span class="emp-pin" title="Machine PIN">PIN: {{ $emp->device_user_id }}</span>
-                                @elseif($emp->isDriver())
-                                    <span class="emp-pin" style="color: #15803d;">DRIVER</span>
-                                @elseif($emp->isSiteDriverOrRemote())
-                                    <span class="emp-pin" style="color: #0369a1;">SITE</span>
-                                @else
-                                    <span class="emp-pin" style="color: #b91c1c;">NO PIN</span>
-                                @endif
-                                @if($emp->project)
-                                    <span style="font-size: 7.2px; color: #0284c7; margin-left: 2px;">{{ $emp->project->name }}</span>
-                                @endif
-                            </div>
-                        </td>
-
-                        <!-- Daily Status & Clock In/Out Cells -->
+                <!-- 4-PUNCH DETAILED TABLE -->
+                <table class="timesheet-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" style="width: 28px;">#</th>
+                            <th rowspan="2" style="width: 105px;">DATE (ETH / GREG)</th>
+                            <th rowspan="2" style="width: 44px;">DAY</th>
+                            <th colspan="2" class="th-morning">MORNING SESSION (ጠዋት)</th>
+                            <th colspan="2" class="th-afternoon">AFTERNOON SESSION (ከሰዓት)</th>
+                            <th rowspan="2" style="width: 46px;">HOURS</th>
+                            <th rowspan="2" style="width: 65px;">STATUS</th>
+                            <th rowspan="2">DUTY / SITE / REMARKS</th>
+                        </tr>
+                        <tr>
+                            <th class="th-morning" style="width: 68px;">CLOCK IN (መግቢያ)</th>
+                            <th class="th-morning" style="width: 68px;">CLOCK OUT (መውጫ)</th>
+                            <th class="th-afternoon" style="width: 68px;">CLOCK IN (መግቢያ)</th>
+                            <th class="th-afternoon" style="width: 68px;">CLOCK OUT (መውጫ)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @php $dayIndex = 1; @endphp
                         @foreach($periodDays as $day)
                         @php
                             $dItem = $days[$day['greg_date']] ?? null;
                             $code = $dItem['code'] ?? '—';
                             $isLate = $dItem['is_late'] ?? false;
                             $lateMin = $dItem['late_minutes'] ?? 0;
-                            $punchIn = $dItem['punch_in'] ?? null;
-                            $punchOut = $dItem['punch_out'] ?? null;
+                            $mIn = $dItem['morning_in'] ?? null;
+                            $mOut = $dItem['morning_out'] ?? null;
+                            $aIn = $dItem['afternoon_in'] ?? null;
+                            $aOut = $dItem['afternoon_out'] ?? null;
+                            $hours = $dItem['hours'] ?? null;
+                            $notes = $dItem['notes'] ?? ($dItem['site_name'] ?? ($dItem['leave_title'] ?? ($dItem['holiday_name'] ?? '')));
 
-                            $cellBgClass = match($code) {
-                                'P' => $isLate ? 'cell-p-late' : 'cell-p',
-                                'S' => 'cell-s',
-                                'A' => 'cell-a',
-                                'L' => 'cell-l',
-                                'H' => 'cell-h',
-                                'SUN' => 'cell-sun',
-                                default => 'cell-dash'
+                            $rowClass = match($code) {
+                                'SUN' => 'row-sun',
+                                'S'   => 'row-site',
+                                'L'   => 'row-leave',
+                                'H'   => 'row-holiday',
+                                'A'   => 'row-absent',
+                                default => ''
                             };
                         @endphp
-                        <td class="day-cell {{ $cellBgClass }}">
-                            @if($code === 'P')
-                                <div class="time-box">
-                                    <span class="time-in {{ $isLate ? 'is-late' : '' }}">
-                                        &rarr;| {{ $punchIn ?? '—' }}
-                                    </span>
-                                    <span class="time-out">
-                                        [&rarr; {{ $punchOut ?? '—' }}]
-                                    </span>
+                        <tr class="{{ $rowClass }}">
+                            <td style="color: #64748b; font-family: monospace;">{{ $dayIndex++ }}</td>
+                            <td style="text-align: left; padding-left: 6px;">
+                                <strong>{{ $day['eth_day'] }} {{ substr($day['eth_label_en'], 0, 4) }}</strong>
+                                <span style="color: #64748b; font-size: 8px;">({{ $day['greg_day'] }} {{ $day['greg_month'] }})</span>
+                            </td>
+                            <td style="font-weight: 600;">
+                                {{ $day['day_name_en'] }}
+                            </td>
+
+                            <!-- 1. MORNING CLOCK IN -->
+                            <td class="time-cell">
+                                @if(!empty($mIn))
+                                    <span class="{{ $isLate ? 'time-in-late' : 'time-in-text' }}">{{ $mIn }}</span>
                                     @if($isLate)
-                                        <span class="badge-late">+{{ $lateMin }}m</span>
+                                        <span class="late-pill">+{{ $lateMin }}m</span>
                                     @endif
-                                </div>
-                            @elseif($code === 'S')
-                                <div class="time-box">
-                                    <span class="time-in" style="color: #0369a1;">
-                                        &rarr;| {{ $punchIn ?? '08:40 AM' }}
-                                    </span>
-                                    <span class="time-out">
-                                        [&rarr; {{ $punchOut ?? '05:30 PM' }}]
-                                    </span>
-                                    <span class="badge-s">S</span>
-                                </div>
-                            @elseif($code === 'L')
-                                <span class="badge-l">L</span>
-                            @elseif($code === 'H')
-                                <span class="badge-h">H</span>
-                            @elseif($code === 'A')
-                                <span class="badge-a">A</span>
-                            @elseif($code === 'SUN')
-                                @if(!empty($punchIn))
-                                    <div class="time-box">
-                                        <span class="time-in">&rarr;| {{ $punchIn }}</span>
-                                        <span class="time-out">OT</span>
-                                    </div>
                                 @else
-                                    <span class="badge-sun">SUN</span>
+                                    <span style="color: #cbd5e1;">—</span>
                                 @endif
-                            @else
-                                <span style="color: #cbd5e1;">—</span>
-                            @endif
-                        </td>
+                            </td>
+
+                            <!-- 2. MORNING CLOCK OUT (Lunch Departure) -->
+                            <td class="time-cell">
+                                @if(!empty($mOut))
+                                    <span class="time-out-text">{{ $mOut }}</span>
+                                @else
+                                    <span style="color: #cbd5e1;">—</span>
+                                @endif
+                            </td>
+
+                            <!-- 3. AFTERNOON CLOCK IN (Lunch Return) -->
+                            <td class="time-cell">
+                                @if(!empty($aIn))
+                                    <span class="time-in-text">{{ $aIn }}</span>
+                                @else
+                                    <span style="color: #cbd5e1;">—</span>
+                                @endif
+                            </td>
+
+                            <!-- 4. AFTERNOON CLOCK OUT (End of Shift) -->
+                            <td class="time-cell">
+                                @if(!empty($aOut))
+                                    <span class="time-out-text">{{ $aOut }}</span>
+                                @else
+                                    <span style="color: #cbd5e1;">—</span>
+                                @endif
+                            </td>
+
+                            <!-- TOTAL HOURS WORKED -->
+                            <td style="font-family: monospace; font-weight: 700;">
+                                {{ $hours ? number_format($hours, 1) . 'h' : '—' }}
+                            </td>
+
+                            <!-- STATUS BADGE -->
+                            <td>
+                                @if($code === 'P')
+                                    <span style="color: #15803d; font-weight: 800;">PRESENT</span>
+                                @elseif($code === 'S')
+                                    <span style="color: #0369a1; font-weight: 800;">SITE (S)</span>
+                                @elseif($code === 'L')
+                                    <span style="color: #1d4ed8; font-weight: 800;">LEAVE (L)</span>
+                                @elseif($code === 'H')
+                                    <span style="color: #7e22ce; font-weight: 800;">HOLIDAY (H)</span>
+                                @elseif($code === 'A')
+                                    <span style="color: #b91c1c; font-weight: 800;">ABSENT (A)</span>
+                                @elseif($code === 'SUN')
+                                    <span style="color: #64748b;">SUNDAY</span>
+                                @else
+                                    <span style="color: #cbd5e1;">—</span>
+                                @endif
+                            </td>
+
+                            <!-- REMARKS / NOTES -->
+                            <td style="text-align: left; font-size: 8px; color: #475569; padding-left: 5px;">
+                                {{ $notes ?: '—' }}
+                            </td>
+                        </tr>
                         @endforeach
-
-                        <!-- Summary Column Values -->
-                        <td class="col-sum col-sum-p">{{ $summary['present_days'] }}</td>
-                        <td class="col-sum col-sum-s">{{ $summary['site_days'] }}</td>
-                        <td class="col-sum col-sum-l">{{ $summary['leave_days'] }}</td>
-                        <td class="col-sum col-sum-h">{{ $summary['holiday_days'] }}</td>
-                        <td class="col-sum col-sum-a">{{ $summary['absent_days'] }}</td>
-                        <td class="col-sum col-sum-late">{{ $summary['late_days'] }}</td>
-                        <td class="col-sum col-sum-pen">{{ $summary['penalty_days'] }}</td>
-                        <td class="col-sum col-sum-eff">{{ $summary['effective_absent'] }}</td>
-                        <td class="col-sum col-sum-hrs">{{ $summary['total_hours'] ?? '0' }}</td>
-                    </tr>
-                    @empty
-                    <tr>
-                        <td colspan="{{ count($periodDays) + 10 }}" style="padding: 20px; color: #64748b; font-size: 11px;">
-                            No active employee records matched the selected criteria for this period.
-                        </td>
-                    </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Footer: Legend & Official Signatures -->
-        <div class="report-footer">
-            <div class="legend-row">
-                <div class="legend-item">
-                    <strong>Legend:</strong>
-                </div>
-                <div class="legend-item">
-                    <span class="badge-s" style="background:#f0fdf4; color:#15803d; border:1px solid #15803d;">&rarr;| In / Out</span>
-                    <span>Present (Biometric Punch)</span>
-                </div>
-                <div class="legend-item">
-                    <span class="badge-late">+Late</span>
-                    <span>&gt; 08:40 AM Cutoff (3 Lates = 1 Absent Day)</span>
-                </div>
-                <div class="legend-item">
-                    <span class="badge-s">S</span>
-                    <span>Site Deployment / Trip (Credited)</span>
-                </div>
-                <div class="legend-item">
-                    <span class="badge-l">L</span>
-                    <span>Approved Leave</span>
-                </div>
-                <div class="legend-item">
-                    <span class="badge-h">H</span>
-                    <span>Public Holiday</span>
-                </div>
-                <div class="legend-item">
-                    <span class="badge-a">A</span>
-                    <span>Absent (Unexcused)</span>
-                </div>
-                <div class="legend-item">
-                    <span class="badge-sun">SUN</span>
-                    <span>Sunday Rest Day</span>
-                </div>
+                    </tbody>
+                </table>
             </div>
 
-            <!-- Executive Signature Block -->
-            <div class="sign-grid">
-                <div class="sign-box">
-                    <div class="sign-role">Prepared By: HR Officer / Timekeeper</div>
-                    <div style="margin-top: 24px;">Name: __________________________________</div>
-                    <div style="margin-top: 6px;">Sign &amp; Date: ___________________________</div>
+            <!-- Page Bottom: Summary & Signatures -->
+            <div>
+                <!-- Monthly Summary Totals -->
+                <div class="summary-box">
+                    <div class="summary-item">
+                        <span class="summary-val text-success">{{ $summary['present_days'] }}</span>
+                        <span class="summary-lbl">Present (P)</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-val text-info">{{ $summary['site_days'] }}</span>
+                        <span class="summary-lbl">Site Work (S)</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-val text-primary">{{ $summary['leave_days'] }}</span>
+                        <span class="summary-lbl">Approved Leave</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-val" style="color: #7e22ce;">{{ $summary['holiday_days'] }}</span>
+                        <span class="summary-lbl">Holidays</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-val text-warning">{{ $summary['late_days'] }}</span>
+                        <span class="summary-lbl">Lates (&gt;08:40)</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-val text-danger">{{ $summary['penalty_days'] }}</span>
+                        <span class="summary-lbl">Penalty (3:1)</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-val text-danger">{{ $summary['effective_absent'] }}</span>
+                        <span class="summary-lbl">Eff. Absent</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-val text-dark">{{ $summary['total_hours'] }}h</span>
+                        <span class="summary-lbl">Total Hours</span>
+                    </div>
                 </div>
 
-                <div class="sign-box">
-                    <div class="sign-role">Verified By: HR Manager</div>
-                    <div style="margin-top: 24px;">Name: __________________________________</div>
-                    <div style="margin-top: 6px;">Sign &amp; Date: ___________________________</div>
-                </div>
-
-                <div class="sign-box">
-                    <div class="sign-role">Approved By: General Manager</div>
-                    <div style="margin-top: 24px;">Name: __________________________________</div>
-                    <div style="margin-top: 6px;">Sign &amp; Date: ___________________________</div>
+                <!-- 3-Column Formal Verification Signatures -->
+                <div class="signature-grid">
+                    <div class="sign-card">
+                        <div class="sign-title">Employee Signature / የሰራተኛው ፊርማ</div>
+                        <div>Name: <strong>{{ $emp->full_name }}</strong></div>
+                        <div style="margin-top: 14px;">Signature: ___________________________</div>
+                    </div>
+                    <div class="sign-card">
+                        <div class="sign-title">Verified By: HR / Timekeeper</div>
+                        <div>Name: _________________________________</div>
+                        <div style="margin-top: 14px;">Signature: ___________________________</div>
+                    </div>
+                    <div class="sign-card">
+                        <div class="sign-title">Approved By: Department Head / GM</div>
+                        <div>Name: _________________________________</div>
+                        <div style="margin-top: 14px;">Signature: ___________________________</div>
+                    </div>
                 </div>
             </div>
         </div>
+        @empty
+        <div class="a4-page" style="text-align: center; padding-top: 40px; color: #64748b;">
+            <h5>No employee attendance records found for this period.</h5>
+        </div>
+        @endforelse
+
+        @else
+        <!-- ══════════════════════════════════════════════════════════════════
+             MODE 2: MASTER MONTHLY 4-PUNCH MATRIX (LANDSCAPE A4/A3)
+             ══════════════════════════════════════════════════════════════════ -->
+        <div class="a4-landscape-page">
+            <div class="timesheet-header">
+                <div class="header-top">
+                    <div>
+                        <div class="company-title">Wechecha Construction P.L.C</div>
+                        <div class="company-subtitle">Master Biometric Attendance Matrix &bull; Clock In &amp; Out Times (4 Sessions)</div>
+                    </div>
+                    <div class="doc-title-badge">
+                        {{ $period['full_label'] }} ({{ $period['start_greg'] }} &rarr; {{ $period['end_greg'] }})
+                    </div>
+                </div>
+            </div>
+
+            <div class="matrix-table-wrap">
+                <table class="matrix-view-table">
+                    <thead>
+                        <tr style="background:#0f172a; color:#fff;">
+                            <th rowspan="2" style="width: 140px; text-align: left; padding: 4px;">EMPLOYEE</th>
+                            @foreach($periodDays as $day)
+                            <th style="min-width: 38px; {{ $day['is_sunday'] ? 'background:#334155;' : '' }}">
+                                <div>{{ $day['eth_day'] }}</div>
+                                <div style="font-size: 6.5px;">{{ substr($day['eth_label_en'], 0, 4) }}</div>
+                            </th>
+                            @endforeach
+                            <th rowspan="2">P</th>
+                            <th rowspan="2">S</th>
+                            <th rowspan="2">L</th>
+                            <th rowspan="2">H</th>
+                            <th rowspan="2">A</th>
+                            <th rowspan="2">Late</th>
+                            <th rowspan="2">Pen</th>
+                            <th rowspan="2">Eff.Abs</th>
+                            <th rowspan="2">Hrs</th>
+                        </tr>
+                        <tr style="background:#f1f5f9; color:#1e293b;">
+                            @foreach($periodDays as $day)
+                            <th style="font-size: 7px; {{ $day['is_sunday'] ? 'background:#e2e8f0;' : '' }}">
+                                {{ $day['greg_day'] }} {{ $day['day_name_en'] }}
+                            </th>
+                            @endforeach
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($matrix as $empId => $row)
+                        @php
+                            $emp = $row['employee'];
+                            $summary = $row['summary'];
+                            $days = $row['days'];
+                        @endphp
+                        <tr>
+                            <td style="text-align: left; padding: 2px 4px;">
+                                <strong style="font-size: 8.5px;">{{ $emp->full_name }}</strong>
+                                <div style="font-size: 7px; color: #64748b;">{{ $emp->employee_code ?? 'EMP' }} &bull; {{ $emp->role_title ?: ($emp->department ?? 'General') }}</div>
+                            </td>
+
+                            @foreach($periodDays as $day)
+                            @php
+                                $dItem = $days[$day['greg_date']] ?? null;
+                                $code = $dItem['code'] ?? '—';
+                                $isLate = $dItem['is_late'] ?? false;
+                                $lateMin = $dItem['late_minutes'] ?? 0;
+                                $mIn = $dItem['morning_in'] ?? null;
+                                $mOut = $dItem['morning_out'] ?? null;
+                                $aIn = $dItem['afternoon_in'] ?? null;
+                                $aOut = $dItem['afternoon_out'] ?? null;
+
+                                $bg = match($code) {
+                                    'P' => $isLate ? '#fff7ed' : '#f0fdf4',
+                                    'S' => '#f0f9ff',
+                                    'A' => '#fef2f2',
+                                    'L' => '#eff6ff',
+                                    'H' => '#faf5ff',
+                                    'SUN' => '#f1f5f9',
+                                    default => '#ffffff'
+                                };
+                            @endphp
+                            <td style="background-color: {{ $bg }};">
+                                @if($code === 'P')
+                                    <div style="font-size: 7px; line-height: 1.1; font-family: monospace;">
+                                        <div style="color: {{ $isLate ? '#c2410c' : '#15803d' }}; font-weight: 700;">
+                                            M: {{ $mIn ? substr($mIn, 0, 5) : '—' }} &bull; {{ $mOut ? substr($mOut, 0, 5) : '—' }}
+                                        </div>
+                                        <div style="color: #475569;">
+                                            A: {{ $aIn ? substr($aIn, 0, 5) : '—' }} &bull; {{ $aOut ? substr($aOut, 0, 5) : '—' }}
+                                        </div>
+                                    </div>
+                                @elseif($code === 'S')
+                                    <span style="color:#0369a1; font-weight:800; font-size:7.5px;">S (Site)</span>
+                                @elseif($code === 'L')
+                                    <span style="color:#1d4ed8; font-weight:800; font-size:7.5px;">L</span>
+                                @elseif($code === 'H')
+                                    <span style="color:#7e22ce; font-weight:800; font-size:7.5px;">H</span>
+                                @elseif($code === 'A')
+                                    <span style="color:#b91c1c; font-weight:800; font-size:7.5px;">A</span>
+                                @elseif($code === 'SUN')
+                                    <span style="color:#94a3b8; font-size:7px;">SUN</span>
+                                @else
+                                    <span style="color:#cbd5e1;">—</span>
+                                @endif
+                            </td>
+                            @endforeach
+
+                            <td style="font-weight:700; color:#15803d;">{{ $summary['present_days'] }}</td>
+                            <td style="font-weight:700; color:#0369a1;">{{ $summary['site_days'] }}</td>
+                            <td style="font-weight:700; color:#1d4ed8;">{{ $summary['leave_days'] }}</td>
+                            <td style="font-weight:700; color:#7e22ce;">{{ $summary['holiday_days'] }}</td>
+                            <td style="font-weight:700; color:#b91c1c;">{{ $summary['absent_days'] }}</td>
+                            <td style="font-weight:700; color:#c2410c;">{{ $summary['late_days'] }}</td>
+                            <td style="font-weight:700; color:#b91c1c;">{{ $summary['penalty_days'] }}</td>
+                            <td style="font-weight:800; background:#b91c1c; color:#fff;">{{ $summary['effective_absent'] }}</td>
+                            <td style="font-weight:700;">{{ $summary['total_hours'] }}h</td>
+                        </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Signature block -->
+            <div class="signature-grid" style="margin-top: 20px;">
+                <div class="sign-card">
+                    <div class="sign-title">Prepared By: HR Officer / Timekeeper</div>
+                    <div style="margin-top: 14px;">Signature: ___________________________</div>
+                </div>
+                <div class="sign-card">
+                    <div class="sign-title">Verified By: HR Manager</div>
+                    <div style="margin-top: 14px;">Signature: ___________________________</div>
+                </div>
+                <div class="sign-card">
+                    <div class="sign-title">Approved By: General Manager</div>
+                    <div style="margin-top: 14px;">Signature: ___________________________</div>
+                </div>
+            </div>
+        </div>
+        @endif
 
     </div>
 
-    <!-- ── Client-Side PDF Generation Script ─────────────────────────── -->
+    <!-- ── JavaScript for Layout Switching & PDF Generation ──────────── -->
     <script>
+        function switchReportLayout(mode) {
+            document.getElementById('layoutInput').value = mode;
+            document.getElementById('reportFilterForm').submit();
+        }
+
         function downloadPdfReport() {
             const btn = document.getElementById('btnDownloadPdf');
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating Landscape PDF...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating A4 PDF...';
             btn.disabled = true;
 
             const element = document.getElementById('pdfReportContent');
+            const isTimesheet = '{{ $activeLayout }}' === 'timesheet';
+
             const opt = {
                 margin:       [4, 4, 4, 4],
-                filename:     'Attendance-ClockInOut-{{ Str::slug($period["full_label"]) }}-{{ date("Y-m-d") }}.pdf',
+                filename:     'Attendance-Timesheet-A4-{{ Str::slug($period["full_label"]) }}-{{ date("Y-m-d") }}.pdf',
                 image:        { type: 'jpeg', quality: 0.98 },
                 html2canvas:  { scale: 2, useCORS: true, logging: false },
-                jsPDF:        { unit: 'mm', format: 'a3', orientation: 'landscape' },
+                jsPDF:        { unit: 'mm', format: 'a4', orientation: isTimesheet ? 'portrait' : 'landscape' },
                 pagebreak:    { mode: ['css', 'legacy'] }
             };
 

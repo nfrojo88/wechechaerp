@@ -508,6 +508,24 @@ class AttendanceController extends Controller
                 $aInVal  = $att?->afternoon_in ?? ($siteDepRecord?->afternoon_in ?? ($hasApprovedSite ? '13:35' : null));
                 $aOutVal = $att?->afternoon_out ?? ($siteDepRecord?->afternoon_out ?? ($hasApprovedSite ? '17:30' : null));
 
+                // Smart fallback if biometric device only logged general check_in and check_out
+                if (!$mInVal && $att?->check_in) {
+                    $cIn = substr(trim($att->check_in), 0, 5);
+                    if ($cIn < '12:30') {
+                        $mInVal = $att->check_in;
+                    } else {
+                        $aInVal = $aInVal ?: $att->check_in;
+                    }
+                }
+                if (!$aOutVal && $att?->check_out) {
+                    $cOut = substr(trim($att->check_out), 0, 5);
+                    if ($cOut >= '13:00') {
+                        $aOutVal = $att->check_out;
+                    } else {
+                        $mOutVal = $mOutVal ?: $att->check_out;
+                    }
+                }
+
                 $cellHours = $att?->hours_worked ? round((float)$att->hours_worked, 1) : ($siteDepRecord ? (float)$siteDepRecord->hours_worked : ($hasApprovedSite ? 8.0 : null));
                 if ($cellHours) {
                     $empTotalHours += (float)$cellHours;

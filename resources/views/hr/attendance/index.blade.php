@@ -1484,6 +1484,30 @@ function openDayDetailModal(cell) {
                             </small>
                         </div>
 
+                        {{-- Report Format Option --}}
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-file-invoice text-danger me-1"></i>Report Format / Layout:
+                            </label>
+                            <select name="layout" class="form-select form-select-sm">
+                                <option value="timesheet" selected>📄 A4 Detailed Timesheet (Morning In/Out &amp; Afternoon In/Out Sections)</option>
+                                <option value="matrix">📊 Master Monthly Attendance Matrix (All Employees Grid)</option>
+                            </select>
+                        </div>
+
+                        {{-- Specific Employee Filter (Optional) --}}
+                        <div class="col-12">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-user-tag text-primary me-1"></i>Employee Selection:
+                            </label>
+                            <select name="employee_id" class="form-select form-select-sm">
+                                <option value="">All Active Staff (Generates Individual A4 Sheets for All)</option>
+                                @foreach($employees as $e)
+                                <option value="{{ $e->id }}">{{ $e->full_name }} ({{ $e->employee_code ?? 'EMP' }}) &bull; {{ $e->role_title ?: ($e->department ?? 'General') }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
                         {{-- Staff Category --}}
                         <div class="col-md-6">
                             <label class="form-label small fw-bold text-dark mb-1">
