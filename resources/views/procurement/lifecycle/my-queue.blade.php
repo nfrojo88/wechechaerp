@@ -361,6 +361,12 @@
                                 <td>{{ $mr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end align-items-center gap-1">
+                                        <form action="{{ route('material-requests.send-stage-sms', $mr) }}" method="POST" class="d-inline" onsubmit="this.querySelector('button').disabled = true;">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold" title="Send instant SMS alert to assigned reviewer">
+                                                <i class="fas fa-paper-plane me-1"></i> Send SMS
+                                            </button>
+                                        </form>
                                         <a href="{{ route('material-requests.show', $mr) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold" title="See full Material Request details">
                                             <i class="fas fa-eye me-1"></i> See Details
                                         </a>
@@ -483,6 +489,12 @@
                                 <td>{{ $pr->created_at->format('M d, Y') }}</td>
                                 <td class="text-end">
                                     <div class="d-flex justify-content-end align-items-center gap-1">
+                                        <form action="{{ route('purchase-requests.send-stage-sms', $pr->id) }}" method="POST" class="d-inline" onsubmit="this.querySelector('button').disabled = true;">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-primary shadow-xs fw-semibold" title="Send instant SMS alert to assigned {{ ucfirst(str_replace('_', ' ', $pr->current_owner_role ?? 'owner')) }}">
+                                                <i class="fas fa-paper-plane me-1"></i> Send SMS
+                                            </button>
+                                        </form>
                                         <a href="{{ route('purchase-requests.show', $pr->id) }}" class="btn btn-sm btn-outline-info shadow-xs fw-semibold" title="See full Purchase Request details">
                                             <i class="fas fa-eye me-1"></i> See Details
                                         </a>

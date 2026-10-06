@@ -1819,6 +1819,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('purchase-requests/{purchaseRequest}/items', [App\Http\Controllers\PurchaseRequestController::class, 'addItem'])->name('purchase-requests.add-item');
     Route::put('purchase-requests/{purchaseRequest}/items/{item}', [App\Http\Controllers\PurchaseRequestController::class, 'updateItem'])->name('purchase-requests.update-item');
     Route::delete('purchase-requests/{purchaseRequest}/items/{item}', [App\Http\Controllers\PurchaseRequestController::class, 'removeItem'])->name('purchase-requests.remove-item');
+    Route::post('purchase-requests/{purchaseRequest}/send-stage-sms', [App\Http\Controllers\PurchaseRequestController::class, 'sendStageSms'])->name('purchase-requests.send-stage-sms');
 
     // ── Office Material Requests (Secretary -> HR Money Approval -> Finance Assign -> Finance Pay) ──
     Route::get('office-requests', [App\Http\Controllers\OfficeSupplyRequestController::class, 'index'])->name('office-requests.index');
@@ -1849,6 +1850,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('material-requests/{materialRequest}/send-to-pr', [App\Http\Controllers\MaterialRequestController::class, 'sendToPr'])->name('material-requests.send-to-pr');
     Route::post('material-requests/{materialRequest}/convert-to-pr', [App\Http\Controllers\MaterialRequestController::class, 'convertToPr'])->name('material-requests.convert-to-pr');
     Route::post('material-requests/{materialRequest}/create-transfer', [App\Http\Controllers\MaterialRequestController::class, 'createTransfer'])->name('material-requests.create-transfer');
+    Route::post('material-requests/{materialRequest}/send-stage-sms', [App\Http\Controllers\MaterialRequestController::class, 'sendStageSms'])->name('material-requests.send-stage-sms');
 
 
     Route::get('price-intelligence', [App\Http\Controllers\ProcurementController::class, 'priceIntelligence'])->name('price-intelligence.index');

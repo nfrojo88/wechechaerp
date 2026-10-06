@@ -173,6 +173,20 @@ class MaterialRequest extends Model
                 ]);
             } catch (\Throwable $e) {}
 
+            try {
+                app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                    'store_converted_to_pr',
+                    $pr,
+                    [
+                        'sender_user'  => \Illuminate\Support\Facades\Auth::user() ?: $pr->creator,
+                        'sender_role'  => 'store_manager',
+                        'target_roles' => [$initialOwner],
+                        'project_id'   => $pr->project_id,
+                        'store_id'     => $pr->store_id,
+                    ]
+                );
+            } catch (\Throwable $e) {}
+
             return $pr;
         });
     }

@@ -2512,4 +2512,105 @@ class PurchaseRequestController extends Controller
 
         return back()->with('success', '3-Way Match verified and PR closed! Requester and Procurement Manager have been notified via instant SMS.');
     }
+
+    /**
+     * Send Instant SMS notification to the person assigned to the Current Stage / Status.
+     */
+    public function sendStageSms(Request $request, PurchaseRequest $purchaseRequest)
+    {
+        $ownerRole = $purchaseRequest->current_owner_role;
+        if (empty($ownerRole)) {
+            $ownerRole = match ($purchaseRequest->status) {
+                PurchaseRequest::STATUS_PENDING_PLANNING           => 'planning',
+                PurchaseRequest::STATUS_PENDING_HR_APPROVAL        => 'coordinator',
+                PurchaseRequest::STATUS_PENDING_STORE_REVIEW       => 'store_manager',
+                PurchaseRequest::STATUS_PENDING_PROC_MANAGER       => 'purchase_manager',
+                PurchaseRequest::STATUS_PENDING_PROC_TEAM          => 'purchase',
+                PurchaseRequest::STATUS_PENDING_MARKETING          => 'purchase_manager',
+                PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION => 'purchase_manager',
+                PurchaseRequest::STATUS_PENDING_GM                 => 'gm',
+                PurchaseRequest::STATUS_PENDING_FINANCE            => 'finance_head',
+                PurchaseRequest::STATUS_PENDING_PAYMENT            => 'finance',
+                PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD     => 'purchase',
+                PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY     => 'store_keeper',
+                PurchaseRequest::STATUS_PENDING_DRIVER             => 'general_service',
+                PurchaseRequest::STATUS_INTAKE_COMPLETE            => 'store_keeper',
+                default                                            => 'purchase_manager',
+            };
+        }
+
+        $statusLabel = $purchaseRequest->status_label;
+        $prNo        = $purchaseRequest->pr_no;
+        $projectName = $purchaseRequest->project?->name ?? 'General / Head Office';
+        $actorName   = Auth::user()?->name ?? 'Management';
+
+        $message = "ConstructPro: PR #{$prNo} ({$projectName}) is in '{$statusLabel}'. Action required by " . ucfirst(str_replace('_', ' ', $ownerRole)) . " ({$actorName}). Open: " . url("/purchase-requests/{$purchaseRequest->id}");
+
+        // 1. Trigger handoff notification with template formatting & logging
+        $handoffMap = [
+            PurchaseRequest::STATUS_PENDING_PLANNING           => 'mr_submitted',
+            PurchaseRequest::STATUS_PENDING_HR_APPROVAL        => 'planning_forwarded',
+            PurchaseRequest::STATUS_PENDING_STORE_REVIEW       => 'coordinator_forwarded',
+            PurchaseRequest::STATUS_PENDING_PROC_MANAGER       => 'store_converted_to_pr',
+            PurchaseRequest::STATUS_PENDING_PROC_TEAM          => 'proc_manager_assigned_sourcing',
+            PurchaseRequest::STATUS_PENDING_MARKETING          => 'store_converted_to_pr',
+            PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION => 'proc_officer_submitted_proforma',
+            PurchaseRequest::STATUS_PENDING_GM                 => 'market_research_variance',
+            PurchaseRequest::STATUS_PENDING_FINANCE            => 'gm_approved',
+            PurchaseRequest::STATUS_PENDING_PAYMENT            => 'finance_approved_payment',
+            PurchaseRequest::STATUS_PENDING_RECEIPT_UPLOAD     => 'cashier_disbursed_cash',
+            PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY     => 'purchaser_uploaded_receipt',
+            PurchaseRequest::STATUS_PENDING_DRIVER             => 'purchaser_uploaded_receipt',
+            PurchaseRequest::STATUS_INTAKE_COMPLETE            => 'driver_delivered',
+            PurchaseRequest::STATUS_COMPLETED                  => 'store_keeper_grn',
+        ];
+        $handoffKey = $handoffMap[$purchaseRequest->status] ?? 'store_converted_to_pr';
+
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                $handoffKey,
+                $purchaseRequest,
+                [
+                    'sender_user'  => Auth::user(),
+                    'sender_role'  => 'admin',
+                    'target_roles' => [$ownerRole],
+                    'action_label' => "take action on {$statusLabel}",
+                ]
+            );
+        } catch (\Throwable $e) {}
+
+        // 2. Direct lookup of phone numbers for the role
+        $phones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole(
+            $ownerRole,
+            $purchaseRequest->project_id,
+            $purchaseRequest->store_id
+        );
+
+        $sentRecipients = [];
+        if (!empty($phones)) {
+            foreach ($phones as $p) {
+                app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, $ownerRole, $message);
+                $sentRecipients[] = $p;
+            }
+        } else {
+            // Escalate to admin phone if unassigned or no phone registered
+            $adminPhones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole('global_admin');
+            $envPhone = config('procurement_handoffs.fallback_phone') ?: env('ADMIN_PHONE');
+            if ($envPhone) {
+                $adminPhones[] = $envPhone;
+            }
+            $adminPhones = array_unique(array_filter($adminPhones));
+            foreach ($adminPhones as $p) {
+                app(\App\Services\ProcurementSmsService::class)->send($purchaseRequest->id, $p, 'global_admin', "[{$ownerRole} unassigned] " . $message);
+                $sentRecipients[] = "Admin ({$p})";
+            }
+        }
+
+        if (!empty($sentRecipients)) {
+            $destStr = implode(', ', $sentRecipients);
+            return back()->with('success', "SMS dispatched for PR #{$prNo} ({$statusLabel}) to assigned " . ucfirst(str_replace('_', ' ', $ownerRole)) . ": {$destStr}");
+        }
+
+        return back()->with('warning', "No phone numbers found for role '" . ucfirst(str_replace('_', ' ', $ownerRole)) . "'. Please update employee phone records or set ADMIN_PHONE in .env.");
+    }
 }

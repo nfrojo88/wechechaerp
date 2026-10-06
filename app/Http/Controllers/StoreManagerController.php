@@ -2049,6 +2049,17 @@ class StoreManagerController extends Controller
                     'status' => \App\Models\PurchaseRequest::STATUS_PENDING_MARKETING,
                     'current_owner_role' => 'purchase_manager',
                 ]);
+                try {
+                    app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                        'store_converted_to_pr',
+                        $pr,
+                        [
+                            'sender_user'  => Auth::user(),
+                            'sender_role'  => 'store_manager',
+                            'target_roles' => ['purchase_manager'],
+                        ]
+                    );
+                } catch (\Throwable $e) {}
             }
             
             return back()->with('warning', 'Materials not available in store (' . implode(', ', $unavailableItems) . '). Request routed into Procurement Lifecycle as PR #' . ($pr?->pr_no ?? $materialRequest->reference_number) . ' for Purchase Manager price review.');

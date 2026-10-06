@@ -632,5 +632,75 @@ class MaterialRequestController extends Controller
             return back()->with('error', 'Failed to delete Material Request: ' . $e->getMessage());
         }
     }
+
+    /**
+     * Send Instant SMS notification for Material Request current stage.
+     */
+    public function sendStageSms(Request $request, MaterialRequest $materialRequest)
+    {
+        $linkedPr = $materialRequest->purchaseRequests()->first();
+        if ($linkedPr) {
+            return app(PurchaseRequestController::class)->sendStageSms($request, $linkedPr);
+        }
+
+        $status = $materialRequest->status;
+        $targetRole = match ($status) {
+            'pending', 'submitted' => 'planning',
+            'planning_approved'    => 'coordinator',
+            default                => 'store_manager',
+        };
+
+        $handoffKey = match ($status) {
+            'pending', 'submitted' => 'mr_submitted',
+            'planning_approved'    => 'planning_forwarded',
+            default                => 'coordinator_forwarded',
+        };
+
+        try {
+            app(\App\Services\ProcurementHandoffNotificationService::class)->triggerHandoff(
+                $handoffKey,
+                $materialRequest,
+                [
+                    'sender_user'  => auth()->user(),
+                    'sender_role'  => 'admin',
+                    'target_roles' => [$targetRole],
+                    'project_id'   => $materialRequest->project_id,
+                    'store_id'     => $materialRequest->destination_store_id,
+                ]
+            );
+        } catch (\Throwable $e) {}
+
+        $phones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole(
+            $targetRole,
+            $materialRequest->project_id,
+            $materialRequest->destination_store_id
+        );
+
+        $sentRecipients = [];
+        $message = "ConstructPro: MR #{$materialRequest->reference_number} (" . ($materialRequest->project?->name ?? 'Project') . ") needs your review. Open: " . url("/material-requests/{$materialRequest->id}");
+
+        if (!empty($phones)) {
+            foreach ($phones as $p) {
+                app(\App\Services\ProcurementSmsService::class)->send($materialRequest->id, $p, $targetRole, $message);
+                $sentRecipients[] = $p;
+            }
+        } else {
+            $adminPhones = app(\App\Services\ProcurementSmsService::class)->getPhoneNumbersForRole('global_admin');
+            $envPhone = config('procurement_handoffs.fallback_phone') ?: env('ADMIN_PHONE');
+            if ($envPhone) $adminPhones[] = $envPhone;
+            $adminPhones = array_unique(array_filter($adminPhones));
+            foreach ($adminPhones as $p) {
+                app(\App\Services\ProcurementSmsService::class)->send($materialRequest->id, $p, 'global_admin', "[{$targetRole} unassigned] " . $message);
+                $sentRecipients[] = "Admin ({$p})";
+            }
+        }
+
+        if (!empty($sentRecipients)) {
+            $dest = implode(', ', $sentRecipients);
+            return back()->with('success', "SMS alert sent for MR #{$materialRequest->reference_number} to assigned " . ucfirst(str_replace('_', ' ', $targetRole)) . ": {$dest}");
+        }
+
+        return back()->with('warning', "No phone numbers found for role '" . ucfirst(str_replace('_', ' ', $targetRole)) . "'. Please update employee phone records.");
+    }
 }
 

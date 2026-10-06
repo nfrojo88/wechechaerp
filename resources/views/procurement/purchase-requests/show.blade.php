@@ -34,6 +34,12 @@
             <p class="text-muted small mb-0 mt-1">Project: <strong>{{ $purchaseRequest->project?->name ?? 'N/A' }}</strong> | Channel: <strong>{{ $purchaseRequest->materialRequest?->source ?? 'Direct PR' }}</strong></p>
         </div>
         <div class="d-flex align-items-center gap-2 flex-wrap">
+            <form action="{{ route('purchase-requests.send-stage-sms', $purchaseRequest) }}" method="POST" class="d-inline" onsubmit="this.querySelector('button').disabled = true;">
+                @csrf
+                <button type="submit" class="btn btn-outline-success shadow-sm fw-semibold" title="Send SMS alert to assigned {{ ucfirst(str_replace('_', ' ', $purchaseRequest->current_owner_role ?? 'owner')) }}">
+                    <i class="fas fa-paper-plane me-1"></i> Send SMS to {{ ucfirst(str_replace('_', ' ', $purchaseRequest->current_owner_role ?? 'Owner')) }}
+                </button>
+            </form>
             @if($isGlobalAdmin)
             <button type="button" class="btn btn-outline-danger shadow-sm fw-semibold" data-bs-toggle="modal" data-bs-target="#deletePrModal">
                 <i class="fas fa-trash-can me-1"></i> Delete PR (Admin Only)
