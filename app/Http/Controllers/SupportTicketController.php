@@ -55,10 +55,12 @@ class SupportTicketController extends Controller
         $contactPhone  = $employee?->phone ?? $user->phone ?? '';
         $contactEmail  = $employee?->email ?? $user->email ?? '';
         $submittedDate = now()->format('Y-m-d');
+        $products = \App\Models\Product::orderBy('name')->get(['id', 'name', 'unit', 'category']);
 
         return view('tickets.create', compact(
             'submitterName', 'employeeCode', 'department',
-            'contactPhone', 'contactEmail', 'submittedDate'
+            'contactPhone', 'contactEmail', 'submittedDate',
+            'products'
         ));
     }
 
@@ -182,10 +184,14 @@ class SupportTicketController extends Controller
         // Save material request line items
         if ($request->boolean('has_material_request') && $request->filled('mr_items')) {
             foreach ($request->mr_items as $item) {
-                if (!empty($item['item_name'])) {
+                $itemName = trim($item['item_name'] ?? '');
+                if ($itemName === '__CUSTOM__' && !empty($item['custom_item_name'])) {
+                    $itemName = trim($item['custom_item_name']);
+                }
+                if (!empty($itemName)) {
                     ItMaterialRequestItem::create([
                         'support_ticket_id' => $ticket->id,
-                        'item_name'         => $item['item_name'],
+                        'item_name'         => $itemName,
                         'quantity'          => $item['quantity'] ?? 1,
                         'unit'              => $item['unit'] ?? null,
                         'purpose'           => $item['purpose'] ?? null,

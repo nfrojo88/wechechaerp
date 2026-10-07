@@ -412,25 +412,96 @@
                                 </button>
                             </div>
 
+                            {{-- Hidden template for material options --}}
+                            <template id="mrSelectTemplate">
+                                <option value="" disabled selected>— Select Material / Item (እቃ ይምረጡ) —</option>
+                                <option value="__CUSTOM__" style="font-weight:600; color:#2563eb;">✏️ [ + Other / Custom Item (ሌላ እቃ ጻፍ) ]</option>
+                                <optgroup label="💻 IT Hardware, Equipment & Supplies">
+                                    <option value="Desktop Computer / PC" data-unit="pcs">Desktop Computer / PC</option>
+                                    <option value="Laptop / Notebook" data-unit="pcs">Laptop / Notebook</option>
+                                    <option value="Monitor / Display Screen" data-unit="pcs">Monitor / Display Screen</option>
+                                    <option value="UPS Battery Backup" data-unit="pcs">UPS Battery Backup</option>
+                                    <option value="UPS Replacement Battery" data-unit="pcs">UPS Replacement Battery</option>
+                                    <option value="Keyboard & Mouse Set" data-unit="set">Keyboard &amp; Mouse Set</option>
+                                    <option value="Ethernet Cable (Cat6)" data-unit="m">Ethernet Cable (Cat6)</option>
+                                    <option value="RJ45 Network Connectors" data-unit="box">RJ45 Network Connectors</option>
+                                    <option value="Network Switch" data-unit="pcs">Network Switch</option>
+                                    <option value="Wi-Fi Router / Access Point" data-unit="pcs">Wi-Fi Router / Access Point</option>
+                                    <option value="Printer / Multifunction" data-unit="pcs">Printer / Multifunction</option>
+                                    <option value="Printer Toner / Cartridge" data-unit="pcs">Printer Toner / Cartridge</option>
+                                    <option value="External SSD / Hard Drive" data-unit="pcs">External SSD / Hard Drive</option>
+                                    <option value="RAM Memory (DDR4/DDR5)" data-unit="pcs">RAM Memory</option>
+                                    <option value="Power Extension / Surge Strip" data-unit="pcs">Power Extension / Surge Strip</option>
+                                    <option value="HDMI / Display Cable" data-unit="pcs">HDMI / Display Cable</option>
+                                    <option value="USB Flash Drive" data-unit="pcs">USB Flash Drive</option>
+                                    <option value="Server Patch Cord" data-unit="pcs">Server Patch Cord</option>
+                                </optgroup>
+                                @if(isset($products) && $products->isNotEmpty())
+                                <optgroup label="📦 Company Material / Inventory Catalog">
+                                    @foreach($products as $prod)
+                                        <option value="{{ $prod->name }}" data-unit="{{ strtolower($prod->unit ?? 'pcs') }}">
+                                            {{ $prod->name }} {{ $prod->unit ? "({$prod->unit})" : '' }}
+                                        </option>
+                                    @endforeach
+                                </optgroup>
+                                @endif
+                            </template>
+
                             <div class="table-responsive">
                                 <table class="table table-bordered table-sm align-middle" id="mrItemsTable">
                                     <thead class="table-warning">
                                         <tr>
-                                            <th style="width:35%">Item Name / Description <span class="text-danger">*</span></th>
+                                            <th style="width:38%">Select Material / Item <span class="text-danger">*</span></th>
                                             <th style="width:10%">Qty <span class="text-danger">*</span></th>
                                             <th style="width:12%">Unit</th>
-                                            <th style="width:25%">Purpose / Use</th>
-                                            <th style="width:10%">Urgency</th>
-                                            <th style="width:8%"></th>
+                                            <th style="width:23%">Purpose / Use</th>
+                                            <th style="width:11%">Urgency</th>
+                                            <th style="width:6%"></th>
                                         </tr>
                                     </thead>
                                     <tbody id="mrItemsBody">
                                         @if(old('mr_items'))
                                             @foreach(old('mr_items') as $i => $item)
-                                            <tr class="mr-item-row">
-                                                <td><input type="text" name="mr_items[{{ $i }}][item_name]" class="form-control form-control-sm" value="{{ $item['item_name'] ?? '' }}" required placeholder="e.g. UPS Battery"></td>
-                                                <td><input type="number" name="mr_items[{{ $i }}][quantity]" class="form-control form-control-sm" value="{{ $item['quantity'] ?? 1 }}" min="1" step="0.5" required></td>
-                                                <td><input type="text" name="mr_items[{{ $i }}][unit]" class="form-control form-control-sm" value="{{ $item['unit'] ?? '' }}" placeholder="pcs / box / m"></td>
+                                            <tr class="mr-item-row" id="mrRow{{ $i }}">
+                                                <td>
+                                                    <select class="form-select form-select-sm mr-material-select" onchange="onMrMaterialSelect(this)" required>
+                                                        <option value="" disabled selected>— Select Material / Item —</option>
+                                                        <option value="__CUSTOM__" style="font-weight:600; color:#2563eb;">✏️ [ + Other / Custom Item ]</option>
+                                                        <optgroup label="💻 IT Hardware, Equipment & Supplies">
+                                                            <option value="Desktop Computer / PC" data-unit="pcs">Desktop Computer / PC</option>
+                                                            <option value="Laptop / Notebook" data-unit="pcs">Laptop / Notebook</option>
+                                                            <option value="Monitor / Display Screen" data-unit="pcs">Monitor / Display Screen</option>
+                                                            <option value="UPS Battery Backup" data-unit="pcs">UPS Battery Backup</option>
+                                                            <option value="UPS Replacement Battery" data-unit="pcs">UPS Replacement Battery</option>
+                                                            <option value="Keyboard & Mouse Set" data-unit="set">Keyboard &amp; Mouse Set</option>
+                                                            <option value="Ethernet Cable (Cat6)" data-unit="m">Ethernet Cable (Cat6)</option>
+                                                            <option value="RJ45 Network Connectors" data-unit="box">RJ45 Network Connectors</option>
+                                                            <option value="Network Switch" data-unit="pcs">Network Switch</option>
+                                                            <option value="Wi-Fi Router / Access Point" data-unit="pcs">Wi-Fi Router / Access Point</option>
+                                                            <option value="Printer / Multifunction" data-unit="pcs">Printer / Multifunction</option>
+                                                            <option value="Printer Toner / Cartridge" data-unit="pcs">Printer Toner / Cartridge</option>
+                                                            <option value="External SSD / Hard Drive" data-unit="pcs">External SSD / Hard Drive</option>
+                                                            <option value="RAM Memory (DDR4/DDR5)" data-unit="pcs">RAM Memory</option>
+                                                            <option value="Power Extension / Surge Strip" data-unit="pcs">Power Extension / Surge Strip</option>
+                                                            <option value="HDMI / Display Cable" data-unit="pcs">HDMI / Display Cable</option>
+                                                            <option value="USB Flash Drive" data-unit="pcs">USB Flash Drive</option>
+                                                            <option value="Server Patch Cord" data-unit="pcs">Server Patch Cord</option>
+                                                        </optgroup>
+                                                        @if(isset($products) && $products->isNotEmpty())
+                                                        <optgroup label="📦 Company Material / Inventory Catalog">
+                                                            @foreach($products as $prod)
+                                                                <option value="{{ $prod->name }}" data-unit="{{ strtolower($prod->unit ?? 'pcs') }}">
+                                                                    {{ $prod->name }} {{ $prod->unit ? "({$prod->unit})" : '' }}
+                                                                </option>
+                                                            @endforeach
+                                                        </optgroup>
+                                                        @endif
+                                                    </select>
+                                                    <input type="hidden" name="mr_items[{{ $i }}][item_name]" class="mr-item-name-value" value="{{ $item['item_name'] ?? '' }}">
+                                                    <input type="text" class="form-control form-control-sm mt-1 mr-custom-text d-none" placeholder="Type custom material name..." oninput="onMrCustomText(this)">
+                                                </td>
+                                                <td><input type="number" name="mr_items[{{ $i }}][quantity]" class="form-control form-control-sm text-end" value="{{ $item['quantity'] ?? 1 }}" min="1" step="0.5" required></td>
+                                                <td><input type="text" name="mr_items[{{ $i }}][unit]" class="form-control form-control-sm mr-unit-input" value="{{ $item['unit'] ?? 'pcs' }}" placeholder="pcs"></td>
                                                 <td><input type="text" name="mr_items[{{ $i }}][purpose]" class="form-control form-control-sm" value="{{ $item['purpose'] ?? '' }}" placeholder="What it solves"></td>
                                                 <td>
                                                     <select name="mr_items[{{ $i }}][urgency_level]" class="form-select form-select-sm">
@@ -440,14 +511,50 @@
                                                         <option value="critical" {{ ($item['urgency_level'] ?? '') == 'critical' ? 'selected' : '' }}>Critical</option>
                                                     </select>
                                                 </td>
-                                                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash"></i></button></td>
+                                                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeMrRow(this)"><i class="fa-solid fa-trash"></i></button></td>
                                             </tr>
                                             @endforeach
                                         @else
                                             <tr class="mr-item-row" id="mrRow0">
-                                                <td><input type="text" name="mr_items[0][item_name]" class="form-control form-control-sm" placeholder="e.g. UPS Battery, Ethernet Cable" required></td>
-                                                <td><input type="number" name="mr_items[0][quantity]" class="form-control form-control-sm" value="1" min="1" step="0.5" required></td>
-                                                <td><input type="text" name="mr_items[0][unit]" class="form-control form-control-sm" placeholder="pcs"></td>
+                                                <td>
+                                                    <select class="form-select form-select-sm mr-material-select" onchange="onMrMaterialSelect(this)" required>
+                                                        <option value="" disabled selected>— Select Material / Item —</option>
+                                                        <option value="__CUSTOM__" style="font-weight:600; color:#2563eb;">✏️ [ + Other / Custom Item ]</option>
+                                                        <optgroup label="💻 IT Hardware, Equipment & Supplies">
+                                                            <option value="Desktop Computer / PC" data-unit="pcs">Desktop Computer / PC</option>
+                                                            <option value="Laptop / Notebook" data-unit="pcs">Laptop / Notebook</option>
+                                                            <option value="Monitor / Display Screen" data-unit="pcs">Monitor / Display Screen</option>
+                                                            <option value="UPS Battery Backup" data-unit="pcs">UPS Battery Backup</option>
+                                                            <option value="UPS Replacement Battery" data-unit="pcs">UPS Replacement Battery</option>
+                                                            <option value="Keyboard & Mouse Set" data-unit="set">Keyboard &amp; Mouse Set</option>
+                                                            <option value="Ethernet Cable (Cat6)" data-unit="m">Ethernet Cable (Cat6)</option>
+                                                            <option value="RJ45 Network Connectors" data-unit="box">RJ45 Network Connectors</option>
+                                                            <option value="Network Switch" data-unit="pcs">Network Switch</option>
+                                                            <option value="Wi-Fi Router / Access Point" data-unit="pcs">Wi-Fi Router / Access Point</option>
+                                                            <option value="Printer / Multifunction" data-unit="pcs">Printer / Multifunction</option>
+                                                            <option value="Printer Toner / Cartridge" data-unit="pcs">Printer Toner / Cartridge</option>
+                                                            <option value="External SSD / Hard Drive" data-unit="pcs">External SSD / Hard Drive</option>
+                                                            <option value="RAM Memory (DDR4/DDR5)" data-unit="pcs">RAM Memory</option>
+                                                            <option value="Power Extension / Surge Strip" data-unit="pcs">Power Extension / Surge Strip</option>
+                                                            <option value="HDMI / Display Cable" data-unit="pcs">HDMI / Display Cable</option>
+                                                            <option value="USB Flash Drive" data-unit="pcs">USB Flash Drive</option>
+                                                            <option value="Server Patch Cord" data-unit="pcs">Server Patch Cord</option>
+                                                        </optgroup>
+                                                        @if(isset($products) && $products->isNotEmpty())
+                                                        <optgroup label="📦 Company Material / Inventory Catalog">
+                                                            @foreach($products as $prod)
+                                                                <option value="{{ $prod->name }}" data-unit="{{ strtolower($prod->unit ?? 'pcs') }}">
+                                                                    {{ $prod->name }} {{ $prod->unit ? "({$prod->unit})" : '' }}
+                                                                </option>
+                                                            @endforeach
+                                                        </optgroup>
+                                                        @endif
+                                                    </select>
+                                                    <input type="hidden" name="mr_items[0][item_name]" class="mr-item-name-value" value="">
+                                                    <input type="text" class="form-control form-control-sm mt-1 mr-custom-text d-none" placeholder="Type custom material name..." oninput="onMrCustomText(this)">
+                                                </td>
+                                                <td><input type="number" name="mr_items[0][quantity]" class="form-control form-control-sm text-end" value="1" min="1" step="0.5" required></td>
+                                                <td><input type="text" name="mr_items[0][unit]" class="form-control form-control-sm mr-unit-input" value="pcs" placeholder="pcs"></td>
                                                 <td><input type="text" name="mr_items[0][purpose]" class="form-control form-control-sm" placeholder="e.g. Replace dead UPS"></td>
                                                 <td>
                                                     <select name="mr_items[0][urgency_level]" class="form-select form-select-sm">
@@ -457,7 +564,7 @@
                                                         <option value="critical">Critical</option>
                                                     </select>
                                                 </td>
-                                                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash"></i></button></td>
+                                                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeMrRow(this)"><i class="fa-solid fa-trash"></i></button></td>
                                             </tr>
                                         @endif
                                     </tbody>
@@ -545,20 +652,83 @@ function toggleMaterialRequest() {
     const cb = document.getElementById('hasMaterialRequest');
     document.getElementById('materialRequestBody').style.display = cb.checked ? 'block' : 'none';
     // Toggle required on items
-    document.querySelectorAll('#mrItemsBody input[required]').forEach(el => {
+    document.querySelectorAll('#mrItemsBody input[required], #mrItemsBody select[required]').forEach(el => {
         el.required = cb.checked;
     });
+}
+
+function onMrMaterialSelect(selectEl) {
+    const row = selectEl.closest('.mr-item-row');
+    if (!row) return;
+    const hiddenNameInput = row.querySelector('.mr-item-name-value');
+    const customInput = row.querySelector('.mr-custom-text');
+    const unitInput = row.querySelector('.mr-unit-input');
+    
+    const val = selectEl.value;
+    if (val === '__CUSTOM__') {
+        customInput.classList.remove('d-none');
+        customInput.focus();
+        hiddenNameInput.value = customInput.value;
+    } else {
+        customInput.classList.add('d-none');
+        hiddenNameInput.value = val;
+        const opt = selectEl.options[selectEl.selectedIndex];
+        if (opt && opt.dataset.unit && unitInput) {
+            unitInput.value = opt.dataset.unit;
+        }
+    }
+}
+
+function onMrCustomText(inputEl) {
+    const row = inputEl.closest('.mr-item-row');
+    if (!row) return;
+    const hiddenNameInput = row.querySelector('.mr-item-name-value');
+    if (hiddenNameInput) {
+        hiddenNameInput.value = inputEl.value;
+    }
+}
+
+function removeMrRow(btn) {
+    const tbody = document.getElementById('mrItemsBody');
+    const rows = tbody.querySelectorAll('.mr-item-row');
+    if (rows.length > 1) {
+        btn.closest('tr').remove();
+    } else {
+        // If only 1 row, clear its fields
+        const row = btn.closest('tr');
+        const sel = row.querySelector('.mr-material-select');
+        if (sel) sel.selectedIndex = 0;
+        row.querySelector('.mr-item-name-value').value = '';
+        const custom = row.querySelector('.mr-custom-text');
+        if (custom) {
+            custom.value = '';
+            custom.classList.add('d-none');
+        }
+        row.querySelector('input[type="number"]').value = 1;
+        row.querySelector('.mr-unit-input').value = 'pcs';
+        row.querySelector('input[name*="[purpose]"]').value = '';
+    }
 }
 
 function addMrItem() {
     const tbody = document.getElementById('mrItemsBody');
     const row = document.createElement('tr');
     row.className = 'mr-item-row';
+    row.id = `mrRow${mrRowIndex}`;
+
+    const templateOptions = document.getElementById('mrSelectTemplate')?.innerHTML || '<option value="">-- Select Material --</option>';
+
     row.innerHTML = `
-        <td><input type="text" name="mr_items[${mrRowIndex}][item_name]" class="form-control form-control-sm" placeholder="Item name" required></td>
-        <td><input type="number" name="mr_items[${mrRowIndex}][quantity]" class="form-control form-control-sm" value="1" min="1" step="0.5" required></td>
-        <td><input type="text" name="mr_items[${mrRowIndex}][unit]" class="form-control form-control-sm" placeholder="pcs"></td>
-        <td><input type="text" name="mr_items[${mrRowIndex}][purpose]" class="form-control form-control-sm" placeholder="Purpose"></td>
+        <td>
+            <select class="form-select form-select-sm mr-material-select" onchange="onMrMaterialSelect(this)" required>
+                ${templateOptions}
+            </select>
+            <input type="hidden" name="mr_items[${mrRowIndex}][item_name]" class="mr-item-name-value" value="">
+            <input type="text" class="form-control form-control-sm mt-1 mr-custom-text d-none" placeholder="Type custom material name..." oninput="onMrCustomText(this)">
+        </td>
+        <td><input type="number" name="mr_items[${mrRowIndex}][quantity]" class="form-control form-control-sm text-end" value="1" min="1" step="0.5" required></td>
+        <td><input type="text" name="mr_items[${mrRowIndex}][unit]" class="form-control form-control-sm mr-unit-input" value="pcs" placeholder="pcs"></td>
+        <td><input type="text" name="mr_items[${mrRowIndex}][purpose]" class="form-control form-control-sm" placeholder="e.g. Replace damaged cable"></td>
         <td>
             <select name="mr_items[${mrRowIndex}][urgency_level]" class="form-select form-select-sm">
                 <option value="medium" selected>Medium</option>
@@ -567,10 +737,16 @@ function addMrItem() {
                 <option value="critical">Critical</option>
             </select>
         </td>
-        <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash"></i></button></td>
+        <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeMrRow(this)"><i class="fa-solid fa-trash"></i></button></td>
     `;
     tbody.appendChild(row);
     mrRowIndex++;
+
+    // Sync required if MR is unchecked
+    const cb = document.getElementById('hasMaterialRequest');
+    if (cb && !cb.checked) {
+        row.querySelectorAll('input[required], select[required]').forEach(el => el.required = false);
+    }
 }
 
 function toggleSections() {
@@ -606,6 +782,30 @@ function toggleSections() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Sync pre-selected material dropdowns
+    document.querySelectorAll('.mr-item-row').forEach(row => {
+        const select = row.querySelector('.mr-material-select');
+        const hiddenVal = row.querySelector('.mr-item-name-value')?.value;
+        const customInput = row.querySelector('.mr-custom-text');
+        if (select && hiddenVal) {
+            let matched = false;
+            for (let i = 0; i < select.options.length; i++) {
+                if (select.options[i].value === hiddenVal) {
+                    select.selectedIndex = i;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched && hiddenVal !== '') {
+                select.value = '__CUSTOM__';
+                if (customInput) {
+                    customInput.value = hiddenVal;
+                    customInput.classList.remove('d-none');
+                }
+            }
+        }
+    });
+
     toggleSections();
     toggleMaterialRequest();
 
