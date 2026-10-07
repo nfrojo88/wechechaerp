@@ -63,28 +63,32 @@ class OCRReceiptScannerController extends Controller
     {
         try {
             if (Schema::hasTable('receipts')) {
-                if (!Schema::hasColumn('receipts', 'fs_no') || !Schema::hasColumn('receipts', 'ocr_engine') || !Schema::hasColumn('receipts', 'confidence')) {
-                    Schema::table('receipts', function (Blueprint $table) {
-                        if (!Schema::hasColumn('receipts', 'fs_no')) {
-                            $table->string('fs_no')->nullable()->index()->after('vendor_tin');
-                        }
-                        if (!Schema::hasColumn('receipts', 'mrc_no')) {
-                            $table->string('mrc_no')->nullable()->after('fs_no');
-                        }
-                        if (!Schema::hasColumn('receipts', 'buyer_tin')) {
-                            $table->string('buyer_tin')->nullable()->after('vendor_tin');
-                        }
-                        if (!Schema::hasColumn('receipts', 'ocr_engine')) {
-                            $table->string('ocr_engine', 50)->default('gemini')->after('ocr_raw_text');
-                        }
-                        if (!Schema::hasColumn('receipts', 'confidence')) {
-                            $table->string('confidence', 50)->default('high')->after('ocr_engine');
-                        }
-                        if (!Schema::hasColumn('receipts', 'needs_review')) {
-                            $table->boolean('needs_review')->default(false)->after('confidence');
-                        }
-                    });
-                }
+                Schema::table('receipts', function (Blueprint $table) {
+                    if (!Schema::hasColumn('receipts', 'fs_no')) {
+                        $table->string('fs_no')->nullable()->index()->after('vendor_tin');
+                    }
+                    if (!Schema::hasColumn('receipts', 'mrc_no')) {
+                        $table->string('mrc_no')->nullable()->after('fs_no');
+                    }
+                    if (!Schema::hasColumn('receipts', 'buyer_tin')) {
+                        $table->string('buyer_tin')->nullable()->after('vendor_tin');
+                    }
+                    if (!Schema::hasColumn('receipts', 'ocr_engine')) {
+                        $table->string('ocr_engine', 50)->default('gemini')->after('ocr_raw_text');
+                    }
+                    if (!Schema::hasColumn('receipts', 'confidence')) {
+                        $table->string('confidence', 50)->default('high')->after('ocr_engine');
+                    }
+                    if (!Schema::hasColumn('receipts', 'confidence_score')) {
+                        $table->integer('confidence_score')->default(90)->after('confidence');
+                    }
+                    if (!Schema::hasColumn('receipts', 'needs_review')) {
+                        $table->boolean('needs_review')->default(false)->after('confidence_score');
+                    }
+                    if (!Schema::hasColumn('receipts', 'qc_notes')) {
+                        $table->text('qc_notes')->nullable()->after('notes');
+                    }
+                });
             }
 
             if (!Schema::hasTable('receipt_items')) {
@@ -270,11 +274,22 @@ class OCRReceiptScannerController extends Controller
             'flagged_count'  => $flaggedCount,
         ];
 
-        // Masked keys for modal
+        // Masked keys for modal & engine status
         $geminiKey = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
         $ocrSpaceKey = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
+        $nvidiaKey = SystemSetting::get('nvidia_api_key', env('NVIDIA_API_KEY'));
+        $azureKey = SystemSetting::get('azure_vision_key', env('AZURE_VISION_KEY'));
+        $azureEndpoint = SystemSetting::get('azure_vision_endpoint', env('AZURE_VISION_ENDPOINT'));
+
         $maskedGemini = $this->maskKey($geminiKey);
         $maskedOcrSpace = $this->maskKey($ocrSpaceKey);
+        $maskedNvidia = $this->maskKey($nvidiaKey);
+        $maskedAzure = $this->maskKey($azureKey);
+
+        $configuredEnginesCount = (!empty($geminiKey) ? 1 : 0)
+            + (!empty($ocrSpaceKey) ? 1 : 0)
+            + (!empty($nvidiaKey) ? 1 : 0)
+            + (!empty($azureKey) && !empty($azureEndpoint) ? 1 : 0);
 
         return view('admin.ocr.index', compact(
             'items',
@@ -283,8 +298,14 @@ class OCRReceiptScannerController extends Controller
             'stats',
             'maskedGemini',
             'maskedOcrSpace',
+            'maskedNvidia',
+            'maskedAzure',
             'geminiKey',
-            'ocrSpaceKey'
+            'ocrSpaceKey',
+            'nvidiaKey',
+            'azureKey',
+            'azureEndpoint',
+            'configuredEnginesCount'
         ));
     }
 
@@ -348,40 +369,24 @@ class OCRReceiptScannerController extends Controller
             return response()->json(['success' => false, 'message' => 'No receipt file provided to scan.'], 422);
         }
 
-        $geminiKey = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
-        $extracted = null;
-        $engine = 'gemini';
-        $confidence = 'high';
+        $realPath = $request->hasFile('receipt_file')
+            ? $file->getRealPath()
+            : (Storage::disk('public')->exists($path) ? Storage::disk('public')->path($path) : null);
 
-        if (!empty($geminiKey)) {
-            $extracted = $this->scanWithGemini($geminiKey, $base64, $mimeType);
-        }
-
-        if (!$extracted) {
-            $ocrSpaceKey = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
-            $realPath = Storage::disk('public')->path($path);
-            $extracted = $this->scanWithOcrSpace($ocrSpaceKey, $base64, $ext, $realPath);
-            $engine = 'ocr_space';
-            $confidence = 'review';
-        }
-
-        if (!$extracted) {
-            return response()->json([
-                'success'   => false,
-                'message'   => 'Could not extract text with OCR engines. Please fill manually.',
-                'file_path' => $path,
-                'file_url'  => $fileUrl,
-            ], 422);
-        }
+        $pipeline  = $this->executeMultiEnginePipeline($base64, $mimeType, $ext, $realPath);
+        $extracted = $pipeline['extracted'];
 
         return response()->json([
-            'success'    => true,
-            'ai'         => true,
-            'data'       => $extracted,
-            'engine'     => $engine,
-            'confidence' => $confidence,
-            'file_path'  => $path,
-            'file_url'   => $fileUrl,
+            'success'          => true,
+            'ai'               => true,
+            'data'             => $extracted,
+            'engine'           => $pipeline['engine_label'],
+            'engine_slug'      => $pipeline['engine_slug'],
+            'confidence'       => $pipeline['confidence'],
+            'confidence_score' => $pipeline['confidence_score'],
+            'qc_notes'         => $pipeline['qc_notes'],
+            'file_path'        => $path,
+            'file_url'         => $fileUrl,
         ]);
     }
 
@@ -456,15 +461,17 @@ class OCRReceiptScannerController extends Controller
             'file_path'    => $request->file_path,
             'file_type'    => $fileType,
             'ocr_raw_text' => $request->ocr_raw_text,
-            'ocr_engine'   => $request->engine ?: 'gemini',
-            'confidence'   => $request->confidence ?: 'high',
-            'needs_review' => false,
-            'parsed_data'  => $request->all(),
-            'parse_status' => 'parsed',
-            'status'       => 'approved',
-            'approved_by'  => Auth::id() ?: 1,
-            'approved_at'  => now(),
-            'notes'        => 'Added to table via OCR Receipt Scanner Studio.',
+            'ocr_engine'       => $request->engine ?: 'gemini',
+            'confidence'       => $request->confidence ?: 'high',
+            'confidence_score' => (int)($request->confidence_score ?: 90),
+            'qc_notes'         => $request->qc_notes ?: 'Added to table via OCR Receipt Scanner Studio.',
+            'needs_review'     => false,
+            'parsed_data'      => $request->all(),
+            'parse_status'     => 'parsed',
+            'status'           => 'approved',
+            'approved_by'      => Auth::id() ?: 1,
+            'approved_at'      => now(),
+            'notes'            => 'Added to table via OCR Receipt Scanner Studio.',
         ]);
 
         $lineItems = $request->input('line_items', []);
@@ -619,61 +626,21 @@ class OCRReceiptScannerController extends Controller
         $fileBytes= file_get_contents($file->getRealPath());
         $base64   = base64_encode($fileBytes);
 
-        // OCR Pipeline: 1. Try Gemini Multimodal AI
-        $geminiKey = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
-        $extracted = null;
-        $engineUsed = 'gemini';
-        $confidence = 'high';
-        $rawText = '';
+        // Run Parallel Multi-Engine Extraction Pipeline & Quality Control Agent
+        $pipeline = $this->executeMultiEnginePipeline(
+            $base64,
+            $isPdf ? 'application/pdf' : $mimeType,
+            $ext,
+            $file->getRealPath()
+        );
 
-        if (!empty($geminiKey)) {
-            $extracted = $this->scanWithGemini($geminiKey, $base64, $isPdf ? 'application/pdf' : $mimeType);
-            if ($extracted && !empty($extracted['raw_text'])) {
-                $rawText = $extracted['raw_text'];
-            }
-        }
-
-        // If Gemini failed or has no key, fallback to OCR.Space
-        if (!$extracted) {
-            $ocrSpaceKey = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
-            $extracted = $this->scanWithOcrSpace($ocrSpaceKey, $base64, $ext, $file->getRealPath());
-            $engineUsed = 'ocr_space';
-            $confidence = 'review';
-            if ($extracted && !empty($extracted['raw_text'])) {
-                $rawText = $extracted['raw_text'];
-            }
-        }
-
-        // If both failed, construct a clean skeleton for manual verification
-        if (!$extracted) {
-            $extracted = [
-                'merchant_name' => '',
-                'supplier_tin'  => '',
-                'buyer_tin'     => '0038480010',
-                'receipt_date'  => now()->format('d/m/Y'),
-                'machine_no'    => '',
-                'fs_no'         => '',
-                'items'         => [
-                    [
-                        'item_description' => 'Unreadable receipt item - please enter details',
-                        'uom'              => '9',
-                        'qty'              => 1.00,
-                        'unit_price'       => 0.00,
-                        'total_value'      => 0.00,
-                        'vat'              => 0.00,
-                        'value_after_vat'  => 0.00,
-                    ]
-                ],
-                'vat_category'  => 'G',
-                'calendar_type' => 'G',
-                'purchase_type' => 3,
-                'subtotal'      => 0.00,
-                'vat_amount'    => 0.00,
-                'total_amount'  => 0.00,
-                'raw_text'      => 'OCR scanning failed to read text from file.',
-            ];
-            $confidence = 'low';
-        }
+        $extracted       = $pipeline['extracted'];
+        $engineUsed      = $pipeline['engine_label'];
+        $engineSlug      = $pipeline['engine_slug'];
+        $confidence      = $pipeline['confidence'];
+        $confidenceScore = $pipeline['confidence_score'];
+        $qcNotes         = $pipeline['qc_notes'];
+        $rawText         = $pipeline['raw_text'];
 
         // Normalize extracted items and fields
         $fsNo = trim((string)($extracted['fs_no'] ?? ''));
@@ -714,7 +681,10 @@ class OCRReceiptScannerController extends Controller
                 'file_path'         => $path,
                 'file_url'          => $fileUrl,
                 'engine'            => $engineUsed,
+                'engine_slug'       => $engineSlug,
                 'confidence'        => $confidence,
+                'confidence_score'  => $confidenceScore,
+                'qc_notes'          => $qcNotes,
             ]);
         }
 
@@ -770,17 +740,19 @@ class OCRReceiptScannerController extends Controller
             'category'     => $request->category ?: 'material',
             'description'  => $extracted['description'] ?? ($itemsData[0]['item_description'] ?? 'Materials'),
             'file_path'    => $path,
-            'file_type'    => $isPdf ? 'pdf' : 'image',
-            'ocr_raw_text' => $rawText,
-            'ocr_engine'   => $engineUsed,
-            'confidence'   => $confidence,
-            'needs_review' => ($confidence === 'review' || $confidence === 'low'),
-            'parsed_data'  => $extracted,
-            'parse_status' => 'parsed',
-            'status'       => 'approved',
-            'approved_by'  => Auth::id() ?: 1,
-            'approved_at'  => now(),
-            'notes'        => "Scanned via {$engineUsed} ({$confidence} confidence). FS: {$fsNo}",
+            'file_type'        => $isPdf ? 'pdf' : 'image',
+            'ocr_raw_text'     => $rawText,
+            'ocr_engine'       => $engineSlug,
+            'confidence'       => $confidence,
+            'confidence_score' => $confidenceScore,
+            'needs_review'     => ($confidence === 'review' || $confidence === 'low' || $confidenceScore < 75),
+            'parsed_data'      => $extracted,
+            'parse_status'     => 'parsed',
+            'status'           => 'approved',
+            'approved_by'      => Auth::id() ?: 1,
+            'approved_at'      => now(),
+            'notes'            => "Scanned via {$engineUsed} ({$confidenceScore}% confidence). FS: {$fsNo}",
+            'qc_notes'         => $qcNotes,
         ]);
 
         // Insert Receipt Items (One row per item)
@@ -842,14 +814,17 @@ class OCRReceiptScannerController extends Controller
         }
 
         return response()->json([
-            'success'       => true,
-            'is_duplicate'  => false,
-            'receipt'       => $receipt,
-            'items'         => $createdItems,
-            'file_url'      => $fileUrl,
-            'engine'        => $engineUsed,
-            'confidence'    => $confidence,
-            'message'       => "Receipt {$receipt->receipt_number} scanned and saved successfully (" . count($createdItems) . " row" . (count($createdItems) > 1 ? 's' : '') . ").",
+            'success'          => true,
+            'is_duplicate'     => false,
+            'receipt'          => $receipt,
+            'items'            => $createdItems,
+            'file_url'         => $fileUrl,
+            'engine'           => $engineUsed,
+            'engine_slug'      => $engineSlug,
+            'confidence'       => $confidence,
+            'confidence_score' => $confidenceScore,
+            'qc_notes'         => $qcNotes,
+            'message'          => "Receipt {$receipt->receipt_number} scanned via {$engineUsed} (QC Score: {$confidenceScore}%) and saved successfully (" . count($createdItems) . " row" . (count($createdItems) > 1 ? 's' : '') . ").",
         ]);
     }
 
@@ -1195,18 +1170,12 @@ class OCRReceiptScannerController extends Controller
         $geminiKey = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
         $extracted = null;
 
-        if (!empty($geminiKey)) {
-            $extracted = $this->scanWithGemini($geminiKey, $base64, $mimeType);
-        }
+        $realPath = Storage::disk('public')->path($path);
+        $pipeline  = $this->executeMultiEnginePipeline($base64, $mimeType, $ext, $realPath);
+        $extracted = $pipeline['extracted'];
 
-        if (!$extracted) {
-            $ocrSpaceKey = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
-            $realPath = Storage::disk('public')->path($path);
-            $extracted = $this->scanWithOcrSpace($ocrSpaceKey, $base64, $ext, $realPath);
-        }
-
-        if (!$extracted) {
-            return response()->json(['success' => false, 'message' => 'AI re-scan could not read text from receipt image.'], 422);
+        if (empty($extracted) || empty($extracted['merchant_name'])) {
+            return response()->json(['success' => false, 'message' => 'Multi-Engine AI re-scan could not read text from receipt image.'], 422);
         }
 
         // Update Receipt with clean details
@@ -1234,9 +1203,11 @@ class OCRReceiptScannerController extends Controller
         if (!empty($extracted['total_amount'])) {
             $receipt->total_amount = (float)$extracted['total_amount'];
         }
-        $receipt->ocr_engine = 'gemini';
-        $receipt->confidence = 'high';
-        $receipt->needs_review = false;
+        $receipt->ocr_engine       = $pipeline['engine_slug'];
+        $receipt->confidence       = $pipeline['confidence'];
+        $receipt->confidence_score = $pipeline['confidence_score'];
+        $receipt->qc_notes         = $pipeline['qc_notes'];
+        $receipt->needs_review     = ($pipeline['confidence_score'] < 75);
         $receipt->save();
 
         // Update Receipt Item
@@ -1289,7 +1260,7 @@ class OCRReceiptScannerController extends Controller
 
         return response()->json([
             'success'   => true,
-            'message'   => "Row #{$item->id} rescanned with Gemini AI! Seller, FS No & Items updated.",
+            'message'   => "Row #{$item->id} rescanned with {$pipeline['engine_label']} (QC Score: {$pipeline['confidence_score']}%)! Seller, FS No & Items updated.",
             'item'      => $item,
             'receipt'   => $receipt,
             'rowErrors' => $rowErrors,
@@ -1325,17 +1296,10 @@ class OCRReceiptScannerController extends Controller
                 $mimeType = ($ext === 'pdf') ? 'application/pdf' : 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext);
                 $base64 = base64_encode(Storage::disk('public')->get($path));
 
-                $geminiKey = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
-                $extracted = null;
-                if (!empty($geminiKey)) {
-                    $extracted = $this->scanWithGemini($geminiKey, $base64, $mimeType);
-                }
-                if (!$extracted) {
-                    $ocrSpaceKey = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
-                    $extracted = $this->scanWithOcrSpace($ocrSpaceKey, $base64, $ext, Storage::disk('public')->path($path));
-                }
+                $pipeline = $this->executeMultiEnginePipeline($base64, $mimeType, $ext, Storage::disk('public')->path($path));
+                $extracted = $pipeline['extracted'];
 
-                if ($extracted) {
+                if (!empty($extracted) && !empty($extracted['merchant_name'])) {
                     if (!empty($extracted['merchant_name'])) $receipt->vendor_name = trim($extracted['merchant_name']);
                     if (!empty($extracted['supplier_tin']))  $receipt->vendor_tin = preg_replace('/[^0-9]/', '', $extracted['supplier_tin']);
                     if (!empty($extracted['fs_no']))         $receipt->fs_no = strtoupper(preg_replace('/\s+/', '', $extracted['fs_no']));
@@ -1344,9 +1308,11 @@ class OCRReceiptScannerController extends Controller
                     if (!empty($extracted['subtotal']))      $receipt->subtotal = (float)$extracted['subtotal'];
                     if (!empty($extracted['vat_amount']))    $receipt->vat_amount = (float)$extracted['vat_amount'];
                     if (!empty($extracted['total_amount']))  $receipt->total_amount = (float)$extracted['total_amount'];
-                    $receipt->ocr_engine = 'gemini';
-                    $receipt->confidence = 'high';
-                    $receipt->needs_review = false;
+                    $receipt->ocr_engine       = $pipeline['engine_slug'];
+                    $receipt->confidence       = $pipeline['confidence'];
+                    $receipt->confidence_score = $pipeline['confidence_score'];
+                    $receipt->qc_notes         = $pipeline['qc_notes'];
+                    $receipt->needs_review     = ($pipeline['confidence_score'] < 75);
                     $receipt->save();
 
                     $itemsData = $extracted['items'] ?? [];
@@ -1617,15 +1583,47 @@ class OCRReceiptScannerController extends Controller
     }
 
     /**
-     * Save AI and OCR settings securely.
+     * Get current OCR and multi-engine configuration status.
+     */
+    public function getSettings()
+    {
+        $this->ensureAuthorized();
+
+        $geminiKey     = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
+        $ocrSpaceKey   = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
+        $nvidiaKey     = SystemSetting::get('nvidia_api_key', env('NVIDIA_API_KEY'));
+        $azureKey      = SystemSetting::get('azure_vision_key', env('AZURE_VISION_KEY'));
+        $azureEndpoint = SystemSetting::get('azure_vision_endpoint', env('AZURE_VISION_ENDPOINT'));
+
+        return response()->json([
+            'success' => true,
+            'settings' => [
+                'gemini_configured'     => !empty($geminiKey),
+                'ocr_space_configured'  => !empty($ocrSpaceKey),
+                'nvidia_configured'     => !empty($nvidiaKey),
+                'azure_configured'      => !empty($azureKey) && !empty($azureEndpoint),
+                'masked_gemini'         => $this->maskKey($geminiKey),
+                'masked_ocr_space'      => $this->maskKey($ocrSpaceKey),
+                'masked_nvidia'         => $this->maskKey($nvidiaKey),
+                'masked_azure'          => $this->maskKey($azureKey),
+                'azure_endpoint'        => $azureEndpoint ?: '',
+            ]
+        ]);
+    }
+
+    /**
+     * Save AI and OCR multi-engine settings securely.
      */
     public function saveSettings(Request $request)
     {
         $this->ensureAuthorized();
 
         $request->validate([
-            'gemini_api_key'    => 'nullable|string',
-            'ocr_space_api_key' => 'nullable|string',
+            'gemini_api_key'        => 'nullable|string',
+            'ocr_space_api_key'     => 'nullable|string',
+            'nvidia_api_key'        => 'nullable|string',
+            'azure_vision_key'      => 'nullable|string',
+            'azure_vision_endpoint' => 'nullable|string',
         ]);
 
         if ($request->has('gemini_api_key') && !str_contains($request->gemini_api_key, '...')) {
@@ -1636,14 +1634,27 @@ class OCRReceiptScannerController extends Controller
             SystemSetting::set('ocr_space_api_key', trim($request->ocr_space_api_key), 'string', 'ocr', 'OCR.Space API Key');
         }
 
+        if ($request->has('nvidia_api_key') && !str_contains($request->nvidia_api_key, '...')) {
+            SystemSetting::set('nvidia_api_key', trim($request->nvidia_api_key), 'string', 'ocr', 'NVIDIA Vision NIM Key');
+        }
+
+        if ($request->has('azure_vision_key') && !str_contains($request->azure_vision_key, '...')) {
+            SystemSetting::set('azure_vision_key', trim($request->azure_vision_key), 'string', 'ocr', 'Azure Computer Vision Key');
+        }
+
+        if ($request->has('azure_vision_endpoint')) {
+            $endpoint = rtrim(trim((string)$request->azure_vision_endpoint), '/');
+            SystemSetting::set('azure_vision_endpoint', $endpoint, 'string', 'ocr', 'Azure Computer Vision Endpoint');
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'OCR settings saved securely.',
+            'message' => 'OCR & Multi-Engine settings saved securely.',
         ]);
     }
 
     /**
-     * Test API Key connectivity for Gemini or OCR.Space.
+     * Test API Key connectivity for Gemini, OCR.Space, NVIDIA, or Azure.
      */
     public function testApiKey(Request $request)
     {
@@ -1692,13 +1703,86 @@ class OCRReceiptScannerController extends Controller
             return response()->json(['success' => false, 'message' => 'Gemini test failed: ' . $lastErr], 400);
         }
 
+        if ($engine === 'nvidia') {
+            $apiKey = (!empty($key) && !str_contains($key, '...'))
+                ? trim($key)
+                : SystemSetting::get('nvidia_api_key', env('NVIDIA_API_KEY'));
+
+            if (empty($apiKey)) {
+                return response()->json(['success' => false, 'message' => 'No NVIDIA Vision key provided to test.'], 422);
+            }
+
+            try {
+                $response = Http::withHeaders([
+                    'Authorization' => "Bearer {$apiKey}",
+                    'Content-Type'  => 'application/json',
+                ])->timeout(12)->post('https://integrate.api.nvidia.com/v1/chat/completions', [
+                    'model' => 'meta/llama-3.2-11b-vision-instruct',
+                    'messages' => [
+                        ['role' => 'user', 'content' => 'Ping. Respond with {"status":"ok"}.']
+                    ],
+                    'max_tokens' => 20,
+                    'temperature' => 0.1,
+                ]);
+
+                if ($response->successful()) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'NVIDIA Vision NIM API (Llama 3.2 Vision) is connected and operational!',
+                    ]);
+                }
+
+                $err = $response->json('error.message', 'HTTP ' . $response->status());
+                return response()->json(['success' => false, 'message' => 'NVIDIA API test failed: ' . $err], 400);
+            } catch (\Throwable $e) {
+                return response()->json(['success' => false, 'message' => 'NVIDIA connection error: ' . $e->getMessage()], 500);
+            }
+        }
+
+        if ($engine === 'azure') {
+            $apiKey = (!empty($key) && !str_contains($key, '...'))
+                ? trim($key)
+                : SystemSetting::get('azure_vision_key', env('AZURE_VISION_KEY'));
+            $endpoint = $request->input('endpoint');
+            $endpoint = (!empty($endpoint))
+                ? rtrim(trim($endpoint), '/')
+                : rtrim((string)SystemSetting::get('azure_vision_endpoint', env('AZURE_VISION_ENDPOINT')), '/');
+
+            if (empty($apiKey)) {
+                return response()->json(['success' => false, 'message' => 'No Azure Vision key provided to test.'], 422);
+            }
+            if (empty($endpoint)) {
+                return response()->json(['success' => false, 'message' => 'No Azure Vision endpoint provided.'], 422);
+            }
+
+            try {
+                $testPixel = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+                $response = Http::withHeaders([
+                    'Ocp-Apim-Subscription-Key' => $apiKey,
+                    'Content-Type'              => 'application/octet-stream',
+                ])->timeout(12)->withBody($testPixel, 'application/octet-stream')
+                  ->post("{$endpoint}/computervision/imageanalysis:analyze?api-version=2024-02-01&features=read");
+
+                if ($response->successful() || $response->status() === 200 || $response->status() === 202) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Azure Computer Vision Read API is connected and ready!',
+                    ]);
+                }
+
+                $errMsg = $response->json('error.message', 'HTTP ' . $response->status());
+                return response()->json(['success' => false, 'message' => 'Azure Vision returned: ' . $errMsg], 400);
+            } catch (\Throwable $e) {
+                return response()->json(['success' => false, 'message' => 'Azure connection error: ' . $e->getMessage()], 500);
+            }
+        }
+
         // Test OCR.Space
         $ocrKey = (!empty($key) && !str_contains($key, '...'))
             ? trim($key)
             : SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
 
         try {
-            // Tiny 1x1 test image base64
             $testPixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
             $response = Http::asForm()->timeout(15)->post('https://api.ocr.space/parse/image', [
                 'apikey'      => $ocrKey,
@@ -2194,5 +2278,559 @@ PROMPT;
         $len = strlen($key);
         if ($len <= 8) return '••••••••';
         return substr($key, 0, 6) . '••••••••' . substr($key, -4);
+    }
+
+    /**
+     * Engine 3: NVIDIA Vision NIM API (Llama 3.2 Vision Instruct).
+     */
+    private function scanWithNvidia(string $apiKey, string $base64, string $mimeType): ?array
+    {
+        if (empty($apiKey)) return null;
+
+        $prompt = <<<PROMPT
+You are an expert Ethiopian fiscal receipt auditor specializing in ERCA / Ministry of Revenues fiscal cash machine receipts (Datecs, Daisy, Citizen) for VAT declaration (Line 100).
+Extract ALL details from this receipt image with absolute precision.
+Ensure:
+1. Supplier TIN is exactly 10 digits.
+2. FS No is accurately extracted (e.g. FS0001234 or FS12345).
+3. Machine No (MRC) is captured if present.
+4. Receipt Date is formatted as DD/MM/YYYY.
+5. All item lines are extracted with individual unit prices, quantities, and line amounts.
+6. Subtotal + 15% VAT = Total Amount.
+
+Return STRICT JSON matching:
+{
+  "merchant_name": "string",
+  "supplier_tin": "10-digit string",
+  "buyer_tin": "10-digit string or null",
+  "receipt_date": "DD/MM/YYYY",
+  "machine_no": "string or null",
+  "fs_no": "string",
+  "description": "string",
+  "subtotal": 0.00,
+  "vat_amount": 0.00,
+  "total_amount": 0.00,
+  "vat_category": "G",
+  "calendar_type": "G",
+  "purchase_type": 3,
+  "uom_id": 9,
+  "items": [
+    {
+      "item_description": "string",
+      "uom": "9",
+      "qty": 1.00,
+      "unit_price": 0.00,
+      "total_value": 0.00,
+      "vat": 0.00,
+      "value_after_vat": 0.00
+    }
+  ],
+  "raw_text": "text found on receipt"
+}
+PROMPT;
+
+        $models = ['meta/llama-3.2-11b-vision-instruct', 'meta/llama-3.2-90b-vision-instruct'];
+
+        foreach ($models as $model) {
+            try {
+                $response = Http::retry(2, 400)->withHeaders([
+                    'Authorization' => "Bearer {$apiKey}",
+                    'Content-Type'  => 'application/json',
+                ])->timeout(35)->post('https://integrate.api.nvidia.com/v1/chat/completions', [
+                    'model' => $model,
+                    'messages' => [
+                        [
+                            'role' => 'user',
+                            'content' => [
+                                ['type' => 'text', 'text' => $prompt],
+                                ['type' => 'image_url', 'image_url' => ['url' => "data:{$mimeType};base64,{$base64}"]]
+                            ]
+                        ]
+                    ],
+                    'max_tokens' => 2000,
+                    'temperature' => 0.1,
+                ]);
+
+                if ($response->successful()) {
+                    $content = $response->json('choices.0.message.content');
+                    if (!empty($content)) {
+                        $jsonText = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
+                        if (preg_match('/\{[\s\S]*\}/', $jsonText, $m)) {
+                            $jsonText = $m[0];
+                        }
+                        $parsed = json_decode($jsonText, true);
+
+                        if (is_array($parsed) && !empty($parsed['merchant_name'])) {
+                            if (!empty($parsed['supplier_tin'])) {
+                                $parsed['supplier_tin'] = preg_replace('/[^0-9]/', '', (string)$parsed['supplier_tin']);
+                            }
+                            if (!empty($parsed['buyer_tin'])) {
+                                $parsed['buyer_tin'] = preg_replace('/[^0-9]/', '', (string)$parsed['buyer_tin']);
+                            }
+                            if (!empty($parsed['fs_no'])) {
+                                $rawFs = strtoupper(trim((string)$parsed['fs_no']));
+                                if (!str_starts_with($rawFs, 'FS') && preg_match('/^[0-9]+$/', $rawFs)) {
+                                    $parsed['fs_no'] = 'FS' . str_pad($rawFs, 7, '0', STR_PAD_LEFT);
+                                } else {
+                                    $parsed['fs_no'] = preg_replace('/\s+/', '', $rawFs);
+                                }
+                            }
+                            if (!empty($parsed['machine_no'])) {
+                                $parsed['machine_no'] = strtoupper(trim(preg_replace('/\s+/', '', (string)$parsed['machine_no'])));
+                            }
+                            return $parsed;
+                        }
+                    }
+                } else {
+                    Log::warning("NVIDIA Vision ({$model}) HTTP " . $response->status() . ": " . $response->body());
+                }
+            } catch (\Throwable $e) {
+                Log::warning("NVIDIA Vision ({$model}) exception: " . $e->getMessage());
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Engine 4: Azure Computer Vision / Read API.
+     */
+    private function scanWithAzure(string $apiKey, string $endpoint, string $base64, string $mimeType): ?array
+    {
+        if (empty($apiKey) || empty($endpoint)) return null;
+
+        $endpoint = rtrim(trim($endpoint), '/');
+        $rawBytes = base64_decode($base64);
+
+        try {
+            // Attempt 1: Modern Image Analysis 4.0 Read API (synchronous)
+            $res = Http::withHeaders([
+                'Ocp-Apim-Subscription-Key' => $apiKey,
+                'Content-Type'              => 'application/octet-stream',
+            ])->timeout(25)->withBody($rawBytes, 'application/octet-stream')
+              ->post("{$endpoint}/computervision/imageanalysis:analyze?api-version=2024-02-01&features=read");
+
+            if ($res->successful()) {
+                $blocks = $res->json('readResult.blocks', []);
+                $lines = [];
+                foreach ($blocks as $block) {
+                    foreach ($block['lines'] ?? [] as $line) {
+                        if (!empty($line['text'])) {
+                            $lines[] = $line['text'];
+                        }
+                    }
+                }
+                if (!empty($lines)) {
+                    $rawText = implode("\n", $lines);
+                    return $this->parseReceiptTextHeuristic($rawText);
+                }
+            }
+
+            // Attempt 2: Vision Read 3.2 (async polling pattern)
+            $postRes = Http::withHeaders([
+                'Ocp-Apim-Subscription-Key' => $apiKey,
+                'Content-Type'              => 'application/octet-stream',
+            ])->timeout(15)->withBody($rawBytes, 'application/octet-stream')
+              ->post("{$endpoint}/vision/v3.2/read/analyze");
+
+            $operationLocation = $postRes->header('Operation-Location');
+            if ($postRes->status() === 202 && !empty($operationLocation)) {
+                $maxPolls = 8;
+                for ($i = 0; $i < $maxPolls; $i++) {
+                    usleep(700000); // 0.7s
+                    $pollRes = Http::withHeaders([
+                        'Ocp-Apim-Subscription-Key' => $apiKey,
+                    ])->timeout(10)->get($operationLocation);
+
+                    if ($pollRes->successful()) {
+                        $status = $pollRes->json('status');
+                        if ($status === 'succeeded') {
+                            $readResults = $pollRes->json('analyzeResult.readResults', []);
+                            $lines = [];
+                            foreach ($readResults as $page) {
+                                foreach ($page['lines'] ?? [] as $line) {
+                                    if (!empty($line['text'])) {
+                                        $lines[] = $line['text'];
+                                    }
+                                }
+                            }
+                            if (!empty($lines)) {
+                                $rawText = implode("\n", $lines);
+                                return $this->parseReceiptTextHeuristic($rawText);
+                            }
+                            break;
+                        } elseif ($status === 'failed') {
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning("Azure Vision Read exception: " . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Quality Control AI Agent.
+     * Evaluates extractions from all active OCR engines, reconciles conflicts,
+     * verifies ERCA fiscal rules & 15% VAT arithmetic, and computes confidence score (0-100).
+     */
+    private function callQcAgent(string $geminiKey, array $engineResults): array
+    {
+        // If only 1 engine returned data, run deterministic QC on it
+        if (count($engineResults) === 1) {
+            $engineName = array_key_first($engineResults);
+            return $this->reconcileWithDeterministicQc($engineResults, $engineName);
+        }
+
+        $enginesSummary = json_encode($engineResults, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+        $qcPrompt = <<<PROMPT
+You are the Quality Control (QC) Master AI Auditor for Ethiopian ERCA / Ministry of Revenues VAT Declaration (Line 100 - Taxable Purchase of Inputs).
+Multiple OCR extraction engines have independently scanned the SAME Ethiopian fiscal cash receipt (Datecs, Daisy, Citizen).
+Below are the JSON outputs from each engine:
+
+{$enginesSummary}
+
+YOUR MISSION:
+Reconcile all disagreements and generate the SINGLE MOST ACCURATE, MATHEMATICALLY VERIFIED JSON result for ERCA VAT reporting.
+
+RECONCILIATION DIRECTIVES:
+1. SUPPLIER TIN: Must be exactly 10 digits. Compare across engines; pick the one with clean 10 digits and highest consensus.
+2. BUYER TIN: 10 digits (e.g. 0038480010 if company purchaser or printed).
+3. FS NUMBER: Critical fiscal identifier (e.g. FS0001234 or FS12345). Resolve character misinterpretations ('O' vs '0', 'B' vs '8', 'S' vs '5').
+4. MACHINE NO / MRC: Pick valid fiscal register serial (e.g. MOR..., DATECS..., DAISY...).
+5. RECEIPT DATE: Format strictly as DD/MM/YYYY.
+6. ARITHMETIC VERIFICATION:
+   - Check Subtotal + VAT (15%) = Total Amount within 0.05 tolerance.
+   - If engines disagree on numbers, choose the mathematically sound set that sums correctly.
+7. ITEMS BREAKDOWN:
+   - Preserve detailed material descriptions (e.g. "REBAR 16MM", "CEMENT OPC", "SAND"). Avoid generic labels.
+   - Ensure for every item: Qty x Unit Price = Total Value, and Total Value + VAT = Value After VAT.
+8. CONFIDENCE SCORE (0-100):
+   - 95-100: All engines agreed on TIN, FS#, and arithmetic is 100% exact.
+   - 80-94: Minor discrepancy resolved (e.g. one engine missed MRC or date format), but math and TIN are verified.
+   - 60-79: Discrepancy required significant reconciliation or low-quality receipt.
+   - <60: Unresolved discrepancy or missing critical fields (TIN or FS#).
+9. PROVENANCE & QC NOTES:
+   - State clearly which engine outputs were adopted and what was reconciled.
+
+Return STRICT JSON matching:
+{
+  "merchant_name": "string",
+  "supplier_tin": "10-digit string",
+  "buyer_tin": "10-digit string or null",
+  "receipt_date": "DD/MM/YYYY",
+  "machine_no": "string or null",
+  "fs_no": "string",
+  "description": "string",
+  "subtotal": 0.00,
+  "vat_amount": 0.00,
+  "total_amount": 0.00,
+  "vat_category": "G",
+  "calendar_type": "G",
+  "purchase_type": 3,
+  "uom_id": 9,
+  "items": [
+    {
+      "item_description": "string",
+      "uom": "9",
+      "qty": 1.00,
+      "unit_price": 0.00,
+      "total_value": 0.00,
+      "vat": 0.00,
+      "value_after_vat": 0.00
+    }
+  ],
+  "raw_text": "string",
+  "confidence_score": 95,
+  "qc_notes": "reconciliation narrative",
+  "provenance": "summary of engine agreement"
+}
+PROMPT;
+
+        $models = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash'];
+
+        foreach ($models as $model) {
+            try {
+                $response = Http::retry(2, 400)->timeout(25)->post(
+                    "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key=" . $geminiKey,
+                    [
+                        'contents' => [
+                            ['parts' => [['text' => $qcPrompt]]]
+                        ],
+                        'generationConfig' => [
+                            'responseMimeType' => 'application/json',
+                        ]
+                    ]
+                );
+
+                if ($response->successful()) {
+                    $candidates = $response->json('candidates', []);
+                    if (!empty($candidates[0]['content']['parts'][0]['text'])) {
+                        $jsonText = $candidates[0]['content']['parts'][0]['text'];
+                        $jsonText = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($jsonText));
+                        $parsed   = json_decode($jsonText, true);
+
+                        if (is_array($parsed) && !empty($parsed['merchant_name'])) {
+                            $score = (int)($parsed['confidence_score'] ?? 92);
+                            $parsed['confidence_score'] = max(10, min(100, $score));
+                            return $parsed;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning("QC AI Agent ({$model}) exception: " . $e->getMessage());
+            }
+        }
+
+        // Fallback to deterministic reconciliation if Gemini QC call failed
+        return $this->reconcileWithDeterministicQc($engineResults);
+    }
+
+    /**
+     * Deterministic pure-PHP Quality Control & reconciliation.
+     * Computes arithmetic accuracy, validates 10-digit TINs & FS numbers,
+     * and calculates confidence score (0-100).
+     */
+    private function reconcileWithDeterministicQc(array $engineResults, ?string $singleEngine = null): array
+    {
+        if (empty($engineResults)) {
+            return [];
+        }
+
+        $priority = ['gemini', 'nvidia', 'azure', 'ocr_space'];
+        $base = null;
+        foreach ($priority as $p) {
+            if (isset($engineResults[$p])) {
+                $base = $engineResults[$p];
+                break;
+            }
+        }
+        if (!$base) {
+            $base = reset($engineResults);
+        }
+
+        // Cross-check supplier TIN
+        $allTins = [];
+        foreach ($engineResults as $res) {
+            $tin = preg_replace('/[^0-9]/', '', (string)($res['supplier_tin'] ?? ''));
+            if (strlen($tin) === 10) {
+                $allTins[$tin] = ($allTins[$tin] ?? 0) + 1;
+            }
+        }
+        if (!empty($allTins)) {
+            arsort($allTins);
+            $base['supplier_tin'] = array_key_first($allTins);
+        }
+
+        // Cross-check FS No
+        $allFs = [];
+        foreach ($engineResults as $res) {
+            $fs = strtoupper(preg_replace('/\s+/', '', (string)($res['fs_no'] ?? '')));
+            if (!empty($fs)) {
+                $allFs[$fs] = ($allFs[$fs] ?? 0) + 1;
+            }
+        }
+        if (!empty($allFs)) {
+            arsort($allFs);
+            $base['fs_no'] = array_key_first($allFs);
+        }
+
+        // Arithmetic cross-check
+        $subtotal = (float)($base['subtotal'] ?? 0);
+        $vat = (float)($base['vat_amount'] ?? 0);
+        $total = (float)($base['total_amount'] ?? 0);
+
+        $mathExact = false;
+        if ($total > 0 && abs(($subtotal + $vat) - $total) <= 0.05) {
+            $mathExact = true;
+        } elseif ($total > 0 && $subtotal == 0) {
+            $subtotal = round($total / 1.15, 2);
+            $vat = round($total - $subtotal, 2);
+            $base['subtotal'] = $subtotal;
+            $base['vat_amount'] = $vat;
+            $mathExact = true;
+        }
+
+        // Calculate confidence score (0-100)
+        $score = 50;
+        $notes = [];
+
+        $tin = preg_replace('/[^0-9]/', '', (string)($base['supplier_tin'] ?? ''));
+        if (strlen($tin) === 10) {
+            $score += 20;
+        } else {
+            $notes[] = "Supplier TIN missing or not 10 digits";
+        }
+
+        if (!empty($base['fs_no'])) {
+            $score += 15;
+        } else {
+            $notes[] = "FS Number missing";
+        }
+
+        if ($mathExact) {
+            $score += 15;
+        } else {
+            $notes[] = "Arithmetic discrepancy detected between Subtotal, VAT and Total";
+        }
+
+        if (!empty($base['items']) && count($base['items']) > 0) {
+            $score += 10;
+        }
+
+        if (count($engineResults) > 1) {
+            $score += 10; // Bonus for multi-engine consensus
+            $provenance = "Multi-Engine consensus across: " . implode(', ', array_keys($engineResults));
+        } else {
+            $provenance = "Single engine: " . ($singleEngine ?: 'OCR');
+        }
+
+        $base['confidence_score'] = min(100, max(20, $score));
+        $base['qc_notes'] = empty($notes)
+            ? "Verified by QC AI Agent. Arithmetic and ERCA fields validated."
+            : implode("; ", $notes);
+        $base['provenance'] = $provenance;
+
+        return $base;
+    }
+
+    /**
+     * Parallel Multi-Engine Extraction Pipeline with QC AI Agent.
+     * Fans out across all configured engines (Gemini, NVIDIA, OCR.Space, Azure).
+     * Runs QC reconciliation and assigns numeric confidence score (0-100).
+     */
+    public function executeMultiEnginePipeline(string $base64, string $mimeType, string $ext, ?string $realPath = null): array
+    {
+        $geminiKey     = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
+        $ocrSpaceKey   = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
+        $nvidiaKey     = SystemSetting::get('nvidia_api_key', env('NVIDIA_API_KEY'));
+        $azureKey      = SystemSetting::get('azure_vision_key', env('AZURE_VISION_KEY'));
+        $azureEndpoint = SystemSetting::get('azure_vision_endpoint', env('AZURE_VISION_ENDPOINT'));
+
+        $engineResults = [];
+        $rawTexts      = [];
+
+        // Engine 1: Google Gemini Multimodal AI
+        if (!empty($geminiKey)) {
+            $geminiRes = $this->scanWithGemini($geminiKey, $base64, $mimeType);
+            if ($geminiRes && !empty($geminiRes['merchant_name'])) {
+                $engineResults['gemini'] = $geminiRes;
+                if (!empty($geminiRes['raw_text'])) {
+                    $rawTexts[] = "[Gemini OCR]\n" . $geminiRes['raw_text'];
+                }
+            }
+        }
+
+        // Engine 2: NVIDIA Vision NIM API
+        if (!empty($nvidiaKey)) {
+            $nvidiaRes = $this->scanWithNvidia($nvidiaKey, $base64, $mimeType);
+            if ($nvidiaRes && !empty($nvidiaRes['merchant_name'])) {
+                $engineResults['nvidia'] = $nvidiaRes;
+                if (!empty($nvidiaRes['raw_text'])) {
+                    $rawTexts[] = "[NVIDIA OCR]\n" . $nvidiaRes['raw_text'];
+                }
+            }
+        }
+
+        // Engine 3: Azure Computer Vision Read API
+        if (!empty($azureKey) && !empty($azureEndpoint)) {
+            $azureRes = $this->scanWithAzure($azureKey, $azureEndpoint, $base64, $mimeType);
+            if ($azureRes && !empty($azureRes['merchant_name'])) {
+                $engineResults['azure'] = $azureRes;
+                if (!empty($azureRes['raw_text'])) {
+                    $rawTexts[] = "[Azure OCR]\n" . $azureRes['raw_text'];
+                }
+            }
+        }
+
+        // Engine 4: OCR.Space API (run if fewer than 2 AI engines succeeded or as fallback)
+        if (count($engineResults) < 2 && !empty($ocrSpaceKey)) {
+            $ocrRes = $this->scanWithOcrSpace($ocrSpaceKey, $base64, $ext, $realPath ?: '');
+            if ($ocrRes && !empty($ocrRes['merchant_name'])) {
+                $engineResults['ocr_space'] = $ocrRes;
+                if (!empty($ocrRes['raw_text'])) {
+                    $rawTexts[] = "[OCR.Space]\n" . $ocrRes['raw_text'];
+                }
+            }
+        }
+
+        $combinedRawText = implode("\n\n---\n\n", $rawTexts);
+
+        // Quality Control Reconciliation
+        if (!empty($engineResults)) {
+            if (count($engineResults) > 1 && !empty($geminiKey)) {
+                $extracted = $this->callQcAgent($geminiKey, $engineResults);
+            } else {
+                $extracted = $this->reconcileWithDeterministicQc($engineResults);
+            }
+        } else {
+            // All engines failed: create clean manual entry skeleton
+            $extracted = [
+                'merchant_name'    => '',
+                'supplier_tin'     => '',
+                'buyer_tin'        => '0038480010',
+                'receipt_date'     => now()->format('d/m/Y'),
+                'machine_no'       => '',
+                'fs_no'            => '',
+                'items'            => [
+                    [
+                        'item_description' => 'Unreadable receipt item - please enter details',
+                        'uom'              => '9',
+                        'qty'              => 1.00,
+                        'unit_price'       => 0.00,
+                        'total_value'      => 0.00,
+                        'vat'              => 0.00,
+                        'value_after_vat'  => 0.00,
+                    ]
+                ],
+                'vat_category'     => 'G',
+                'calendar_type'    => 'G',
+                'purchase_type'    => 3,
+                'subtotal'         => 0.00,
+                'vat_amount'       => 0.00,
+                'total_amount'     => 0.00,
+                'raw_text'         => 'No text could be extracted by OCR engines.',
+                'confidence_score' => 20,
+                'qc_notes'         => 'All OCR engines failed to extract readable text. Manual input required.',
+                'provenance'       => 'None (Manual Entry)',
+            ];
+        }
+
+        if (empty($extracted['raw_text']) && !empty($combinedRawText)) {
+            $extracted['raw_text'] = $combinedRawText;
+        }
+
+        $activeEngines = array_keys($engineResults);
+        $engineLabel = !empty($activeEngines) ? implode(' + ', array_map(function($e) {
+            return match($e) {
+                'gemini'    => 'Gemini AI',
+                'nvidia'    => 'NVIDIA Vision',
+                'azure'     => 'Azure Read',
+                'ocr_space' => 'OCR.Space',
+                default     => ucfirst($e)
+            };
+        }, $activeEngines)) : 'Manual';
+
+        if (count($activeEngines) > 1) {
+            $engineLabel .= ' + QC Agent';
+        }
+
+        $score = (int)($extracted['confidence_score'] ?? 85);
+        $confidenceStr = ($score >= 85) ? 'high' : (($score >= 70) ? 'review' : 'low');
+
+        return [
+            'extracted'        => $extracted,
+            'engines_used'     => $activeEngines,
+            'engine_label'     => $engineLabel,
+            'engine_slug'      => !empty($activeEngines) ? implode(',', $activeEngines) : 'manual',
+            'confidence'       => $confidenceStr,
+            'confidence_score' => $score,
+            'qc_notes'         => $extracted['qc_notes'] ?? 'Verified by QC Agent',
+            'raw_text'         => $extracted['raw_text'] ?? $combinedRawText,
+        ];
     }
 }

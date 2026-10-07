@@ -15,8 +15,9 @@
                 <span class="badge bg-success text-white px-2.5 py-1.5 rounded-pill shadow-xs">
                     <i class="fa-solid fa-shield-halved me-1"></i>ERCA VAT Line 100
                 </span>
-                <span class="badge bg-primary text-white px-2.5 py-1.5 rounded-pill shadow-xs" id="engine-status-badge">
-                    <i class="fa-solid fa-bolt me-1"></i>Dual OCR (Gemini + OCR.Space)
+                <span class="badge bg-primary text-white px-2.5 py-1.5 rounded-pill shadow-xs" id="engine-status-badge" title="Multi-Engine Parallel Extraction: Google Gemini, NVIDIA Vision NIM, OCR.Space, Azure Read + QC AI Agent">
+                    <i class="fa-solid fa-microchip me-1"></i>Multi-Engine AI &amp; QC Agent
+                    <span class="badge bg-light text-primary ms-1 px-1.5 py-0.5 rounded-pill">{{ $configuredEnginesCount ?? 2 }} Active</span>
                 </span>
             </div>
             <p class="text-muted small mb-0 mt-1">
@@ -249,8 +250,8 @@
 
                         <div class="mt-auto pt-3">
                             <div class="alert alert-light border small text-muted mb-0 py-2">
-                                <i class="fa-solid fa-lightbulb text-warning me-1"></i>
-                                <strong>Automatic Dual OCR:</strong> Gemini Multimodal AI extracts all fields and line items. If Gemini is unavailable, OCR.Space automatically takes over.
+                                <i class="fa-solid fa-microchip text-primary me-1"></i>
+                                <strong>Multi-Engine Pipeline + QC Agent:</strong> Google Gemini, NVIDIA Vision NIM, Azure Read, and OCR.Space run extraction in parallel. The QC AI Agent cross-checks and reconciles discrepancies into validated 15-column ERCA declaration records.
                             </div>
                         </div>
 
@@ -288,6 +289,8 @@
                                     <input type="hidden" id="ocr_raw_text_hidden" name="ocr_raw_text" value="">
                                     <input type="hidden" id="ocr_engine_hidden" name="engine" value="gemini">
                                     <input type="hidden" id="ocr_confidence_hidden" name="confidence" value="high">
+                                    <input type="hidden" id="ocr_confidence_score_hidden" name="confidence_score" value="95">
+                                    <input type="hidden" id="ocr_qc_notes_hidden" name="qc_notes" value="">
 
                                     <div class="row g-2">
                                         {{-- Seller Name --}}
@@ -608,15 +611,32 @@
                                     {{ number_format((float)$item->value_after_vat, 2) }}
                                 </td>
 
-                                {{-- Engine Badge --}}
+                                {{-- Engine & QC Badge --}}
                                 <td class="text-center">
-                                    @if($r && $r->ocr_engine === 'ocr_space')
-                                        <span class="badge bg-secondary text-white small" title="Extracted via OCR.Space Fallback Engine">
-                                            OCR.Space
+                                    @php
+                                        $eng = $r ? (string)$r->ocr_engine : 'gemini';
+                                        $sc = $r && isset($r->confidence_score) ? (int)$r->confidence_score : 90;
+                                        $qcN = $r && !empty($r->qc_notes) ? $r->qc_notes : '';
+                                    @endphp
+                                    @if(str_contains($eng, 'ocr_space') && !str_contains($eng, 'gemini') && !str_contains($eng, 'nvidia'))
+                                        <span class="badge bg-secondary text-white small" data-bs-toggle="tooltip" title="{{ $qcN ?: 'Extracted via OCR.Space Fallback Engine' }}">
+                                            OCR.Space ({{ $sc }}%)
+                                        </span>
+                                    @elseif(str_contains($eng, ',') || str_contains($eng, '+'))
+                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small fw-semibold" data-bs-toggle="tooltip" title="{{ $qcN ?: 'Multi-Engine Consensus + QC Agent Verification' }}">
+                                            <i class="fa-solid fa-microchip me-1"></i>Multi-Engine ({{ $sc }}%)
+                                        </span>
+                                    @elseif(str_contains($eng, 'nvidia'))
+                                        <span class="badge bg-dark bg-opacity-10 text-dark border border-dark border-opacity-25 small fw-semibold" data-bs-toggle="tooltip" title="{{ $qcN ?: 'Extracted via NVIDIA Vision NIM API' }}">
+                                            NVIDIA ({{ $sc }}%)
+                                        </span>
+                                    @elseif(str_contains($eng, 'azure'))
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 small fw-semibold" data-bs-toggle="tooltip" title="{{ $qcN ?: 'Extracted via Azure Read API' }}">
+                                            Azure ({{ $sc }}%)
                                         </span>
                                     @else
-                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small" title="Extracted via Google Gemini Multimodal AI">
-                                            Gemini AI
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small fw-semibold" data-bs-toggle="tooltip" title="{{ $qcN ?: 'Extracted via Google Gemini Multimodal AI & Verified by QC Agent' }}">
+                                            Gemini AI ({{ $sc }}%)
                                         </span>
                                     @endif
                                 </td>
@@ -797,16 +817,30 @@
             </div>
             <form id="settings-form" onsubmit="saveSettings(event)">
                 <div class="modal-body p-3">
-                    {{-- Gemini Primary Option --}}
+                    {{-- QC Master Agent Banner --}}
+                    <div class="border border-primary border-opacity-25 rounded-3 p-3 mb-3 bg-primary bg-opacity-10">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="fa-solid fa-brain text-primary fs-5"></i>
+                                <span class="fw-bold text-dark small">Autonomous Quality Control (QC) AI Agent</span>
+                            </div>
+                            <span class="badge bg-primary">Auto-Reconciling</span>
+                        </div>
+                        <p class="text-muted small mb-0" style="font-size:0.75rem;">
+                            All active vision engines execute concurrently on each uploaded receipt. The QC Master AI compares vendor TINs (10 digits), FS numbers, MRC machine IDs, validates line-item mathematics (Subtotal + 15% VAT = Total), and outputs the authoritative 15-column ERCA record with a confidence score (0–100%).
+                        </p>
+                    </div>
+
+                    {{-- Option A: Google Gemini Multimodal AI --}}
                     <div class="border rounded-3 p-3 mb-3 bg-light">
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <label class="form-label fw-bold text-dark mb-0 small">
-                                <i class="fa-solid fa-gem text-primary me-1"></i>Option A (Primary): Google Gemini Vision AI Key
+                                <i class="fa-solid fa-gem text-primary me-1"></i>Option A: Google Gemini Multimodal AI Key
                             </label>
-                            <span class="badge bg-primary">High Accuracy</span>
+                            <span class="badge bg-primary">Primary Multimodal</span>
                         </div>
                         <p class="text-muted small mb-2" style="font-size:0.75rem;">
-                            Obtain from <a href="https://aistudio.google.com" target="_blank" class="fw-bold text-decoration-none">aistudio.google.com</a> ("Get API key"). Multimodal AI extracts all receipts and splits line items with 100% precision.
+                            From <a href="https://aistudio.google.com" target="_blank" class="fw-bold text-decoration-none">aistudio.google.com</a>. Extracts skewed, folded receipts and splits multi-item receipts with extreme precision. Also powers the QC AI reconciliation step.
                         </p>
                         <div class="input-group input-group-sm mb-2">
                             <span class="input-group-text bg-white"><i class="fa-solid fa-key text-muted"></i></span>
@@ -824,16 +858,74 @@
                         <div id="gemini-test-result" class="mt-2 small d-none"></div>
                     </div>
 
-                    {{-- OCR.Space Fallback Option --}}
+                    {{-- Option B: NVIDIA Vision NIM --}}
+                    <div class="border rounded-3 p-3 mb-3 bg-light">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="form-label fw-bold text-dark mb-0 small">
+                                <i class="fa-solid fa-microchip text-success me-1"></i>Option B: NVIDIA Vision NIM API Key
+                            </label>
+                            <span class="badge bg-success">GPU VLM (Llama 3.2 Vision)</span>
+                        </div>
+                        <p class="text-muted small mb-2" style="font-size:0.75rem;">
+                            From <a href="https://build.nvidia.com" target="_blank" class="fw-bold text-decoration-none">build.nvidia.com</a>. Fast GPU-accelerated vision model for instant parallel optical character and table structure extraction.
+                        </p>
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text bg-white"><i class="fa-solid fa-key text-muted"></i></span>
+                            <input type="password" class="form-control font-monospace" id="input_nvidia_key" placeholder="Paste NVIDIA API Key (e.g. nvapi-...)" value="{{ $nvidiaKey ?? '' }}">
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('input_nvidia_key')">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted" style="font-size:0.7rem;">Currently: <code>{{ $maskedNvidia ?: 'Not configured' }}</code></small>
+                            <button type="button" class="btn btn-xs btn-outline-success btn-sm py-1 px-2 fw-semibold" onclick="testApiKey('nvidia')">
+                                <i class="fa-solid fa-vial me-1"></i>Test NVIDIA Key
+                            </button>
+                        </div>
+                        <div id="nvidia-test-result" class="mt-2 small d-none"></div>
+                    </div>
+
+                    {{-- Option C: Azure Computer Vision --}}
+                    <div class="border rounded-3 p-3 mb-3 bg-light">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <label class="form-label fw-bold text-dark mb-0 small">
+                                <i class="fa-brands fa-microsoft text-info me-1"></i>Option C: Azure Computer Vision Read API
+                            </label>
+                            <span class="badge bg-info text-dark">Enterprise OCR</span>
+                        </div>
+                        <p class="text-muted small mb-2" style="font-size:0.75rem;">
+                            Azure AI Vision Read service. Industrial-grade OCR text recognition for printed Ethiopian thermal receipts.
+                        </p>
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text bg-white"><i class="fa-solid fa-key text-muted"></i></span>
+                            <input type="password" class="form-control font-monospace" id="input_azure_key" placeholder="Azure Cognitive Services Key" value="{{ $azureKey ?? '' }}">
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility('input_azure_key')">
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                        <div class="input-group input-group-sm mb-2">
+                            <span class="input-group-text bg-white"><i class="fa-solid fa-globe text-muted"></i></span>
+                            <input type="text" class="form-control font-monospace" id="input_azure_endpoint" placeholder="Endpoint (e.g. https://my-ocr.cognitiveservices.azure.com)" value="{{ $azureEndpoint ?? '' }}">
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted" style="font-size:0.7rem;">Currently: <code>{{ $maskedAzure ?: 'Not configured' }}</code></small>
+                            <button type="button" class="btn btn-xs btn-outline-info btn-sm py-1 px-2 fw-semibold" onclick="testApiKey('azure')">
+                                <i class="fa-solid fa-vial me-1"></i>Test Azure Vision
+                            </button>
+                        </div>
+                        <div id="azure-test-result" class="mt-2 small d-none"></div>
+                    </div>
+
+                    {{-- Option D: OCR.Space Fallback Option --}}
                     <div class="border rounded-3 p-3 bg-light">
                         <div class="d-flex align-items-center justify-content-between mb-2">
                             <label class="form-label fw-bold text-dark mb-0 small">
-                                <i class="fa-solid fa-camera text-secondary me-1"></i>Option B (Fallback): OCR.Space API Key
+                                <i class="fa-solid fa-camera text-secondary me-1"></i>Option D: OCR.Space API Key
                             </label>
-                            <span class="badge bg-secondary">Automatic Fallback</span>
+                            <span class="badge bg-secondary">Fallback Engine</span>
                         </div>
                         <p class="text-muted small mb-2" style="font-size:0.75rem;">
-                            Used automatically if Gemini is offline, rate-limited, or key is missing. Free default key is provided, or get your dedicated key at <a href="https://ocr.space/ocrapi" target="_blank" class="fw-bold text-decoration-none">ocr.space/ocrapi</a>.
+                            High-speed OCR engine used concurrently or as backup. Free tier default key is provided, or get your dedicated key at <a href="https://ocr.space/ocrapi" target="_blank" class="fw-bold text-decoration-none">ocr.space/ocrapi</a>.
                         </p>
                         <div class="input-group input-group-sm mb-2">
                             <span class="input-group-text bg-white"><i class="fa-solid fa-key text-muted"></i></span>
@@ -1337,6 +1429,12 @@ function populateFormWithExtracted(data, filePath, engine, confidence) {
     if (filePath) document.getElementById('stored_file_path').value = filePath;
     if (engine) document.getElementById('ocr_engine_hidden').value = engine;
     if (confidence) document.getElementById('ocr_confidence_hidden').value = confidence;
+    if (data.confidence_score && document.getElementById('ocr_confidence_score_hidden')) {
+        document.getElementById('ocr_confidence_score_hidden').value = data.confidence_score;
+    }
+    if (data.qc_notes && document.getElementById('ocr_qc_notes_hidden')) {
+        document.getElementById('ocr_qc_notes_hidden').value = data.qc_notes;
+    }
 
     document.getElementById('field_vendor').value = data.merchant_name || '';
     document.getElementById('field_tin').value = data.supplier_tin || '';
@@ -1656,7 +1754,9 @@ function appendRowToTable(item, receipt) {
         <td class="text-end font-monospace text-muted cell-display" data-field="vat_amount">${Number(item.vat_amount).toFixed(2)}</td>
         <td class="text-end font-monospace fw-bold text-success cell-display" data-field="value_after_vat">${Number(item.value_after_vat).toFixed(2)}</td>
         <td class="text-center">
-            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 small">${receipt && receipt.ocr_engine === 'ocr_space' ? 'OCR.Space' : 'Gemini AI'}</span>
+            <span class="badge ${receipt && (receipt.confidence_score >= 85 || !receipt.confidence_score) ? 'bg-success bg-opacity-10 text-success border border-success' : (receipt && receipt.confidence_score >= 70 ? 'bg-primary bg-opacity-10 text-primary border border-primary' : 'bg-warning bg-opacity-10 text-warning border border-warning')} border-opacity-25 small fw-semibold" title="${receipt ? (receipt.qc_notes || 'Verified by QC Agent') : ''}">
+                ${receipt && receipt.ocr_engine ? (receipt.ocr_engine.includes(',') || receipt.ocr_engine.includes('+') ? 'Multi-Engine' : (receipt.ocr_engine === 'ocr_space' ? 'OCR.Space' : (receipt.ocr_engine === 'nvidia' ? 'NVIDIA' : (receipt.ocr_engine === 'azure' ? 'Azure' : 'Gemini AI')))) : 'AI Scanned'} (${receipt && receipt.confidence_score ? receipt.confidence_score : 95}%)
+            </span>
         </td>
         <td class="text-center">
             <div class="btn-group btn-group-sm">
@@ -2409,14 +2509,37 @@ function togglePasswordVisibility(inputId) {
 }
 
 function testApiKey(engine) {
-    const inputId = engine === 'gemini' ? 'input_gemini_key' : 'input_ocr_space_key';
-    const resultId = engine === 'gemini' ? 'gemini-test-result' : 'ocrspace-test-result';
-    const key = document.getElementById(inputId).value.trim();
+    let inputId = 'input_gemini_key';
+    let resultId = 'gemini-test-result';
+    let endpoint = null;
+
+    if (engine === 'gemini') {
+        inputId = 'input_gemini_key';
+        resultId = 'gemini-test-result';
+    } else if (engine === 'nvidia') {
+        inputId = 'input_nvidia_key';
+        resultId = 'nvidia-test-result';
+    } else if (engine === 'azure') {
+        inputId = 'input_azure_key';
+        resultId = 'azure-test-result';
+        endpoint = document.getElementById('input_azure_endpoint') ? document.getElementById('input_azure_endpoint').value.trim() : null;
+    } else if (engine === 'ocr_space') {
+        inputId = 'input_ocr_space_key';
+        resultId = 'ocrspace-test-result';
+    }
+
+    const key = document.getElementById(inputId) ? document.getElementById(inputId).value.trim() : '';
     const resBox = document.getElementById(resultId);
+    if (!resBox) return;
 
     resBox.classList.remove('d-none', 'text-success', 'text-danger');
     resBox.className = 'mt-2 small text-primary';
     resBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Testing connectivity...';
+
+    const payload = { engine: engine, key: key };
+    if (endpoint) {
+        payload.endpoint = endpoint;
+    }
 
     fetch(TEST_KEY_URL, {
         method: 'POST',
@@ -2425,7 +2548,7 @@ function testApiKey(engine) {
             'X-CSRF-TOKEN': CSRF_TOKEN,
             'Accept': 'application/json'
         },
-        body: JSON.stringify({ engine: engine, key: key })
+        body: JSON.stringify(payload)
     })
     .then(r => r.json())
     .then(res => {
@@ -2445,8 +2568,11 @@ function testApiKey(engine) {
 
 function saveSettings(e) {
     e.preventDefault();
-    const geminiKey = document.getElementById('input_gemini_key').value.trim();
-    const ocrSpaceKey = document.getElementById('input_ocr_space_key').value.trim();
+    const geminiKey = document.getElementById('input_gemini_key') ? document.getElementById('input_gemini_key').value.trim() : '';
+    const nvidiaKey = document.getElementById('input_nvidia_key') ? document.getElementById('input_nvidia_key').value.trim() : '';
+    const azureKey = document.getElementById('input_azure_key') ? document.getElementById('input_azure_key').value.trim() : '';
+    const azureEndpoint = document.getElementById('input_azure_endpoint') ? document.getElementById('input_azure_endpoint').value.trim() : '';
+    const ocrSpaceKey = document.getElementById('input_ocr_space_key') ? document.getElementById('input_ocr_space_key').value.trim() : '';
 
     fetch(SAVE_SETTINGS_URL, {
         method: 'POST',
@@ -2457,15 +2583,19 @@ function saveSettings(e) {
         },
         body: JSON.stringify({
             gemini_api_key: geminiKey,
+            nvidia_api_key: nvidiaKey,
+            azure_vision_key: azureKey,
+            azure_vision_endpoint: azureEndpoint,
             ocr_space_api_key: ocrSpaceKey,
         })
     })
     .then(r => r.json())
     .then(res => {
         if (res.success) {
-            showToast('API keys saved securely.', 'success');
+            showToast('All multi-engine API keys & settings saved securely.', 'success');
             const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
             if (modal) modal.hide();
+            setTimeout(() => window.location.reload(), 900);
         } else {
             showToast(res.message || 'Error saving keys', 'danger');
         }

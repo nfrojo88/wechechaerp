@@ -30,6 +30,7 @@ class Receipt extends Model
         'ocr_raw_text',
         'ocr_engine',
         'confidence',
+        'confidence_score',
         'needs_review',
         'parsed_data',
         'parse_status',
@@ -38,16 +39,18 @@ class Receipt extends Model
         'approved_by',
         'approved_at',
         'notes',
+        'qc_notes',
     ];
 
     protected $casts = [
-        'parsed_data'  => 'array',
-        'receipt_date' => 'date',
-        'approved_at'  => 'datetime',
-        'subtotal'     => 'decimal:2',
-        'vat_amount'   => 'decimal:2',
-        'total_amount' => 'decimal:2',
-        'needs_review' => 'boolean',
+        'parsed_data'      => 'array',
+        'receipt_date'     => 'date',
+        'approved_at'      => 'datetime',
+        'subtotal'         => 'decimal:2',
+        'vat_amount'       => 'decimal:2',
+        'total_amount'     => 'decimal:2',
+        'confidence_score' => 'integer',
+        'needs_review'     => 'boolean',
     ];
 
     /**
