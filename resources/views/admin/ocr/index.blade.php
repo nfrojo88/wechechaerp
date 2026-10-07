@@ -41,25 +41,37 @@
                 <button type="button" class="btn btn-success btn-sm fw-bold dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="fa-solid fa-file-excel me-1"></i>Export Excel (.xlsx)
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 260px;">
+                    <li class="dropdown-header small text-uppercase fw-bold text-success">
+                        <i class="fa-solid fa-file-invoice me-1"></i>Purchase Declaration (8 Columns)
+                    </li>
                     <li>
-                        <a class="dropdown-item small" href="#" onclick="exportData('excel', 'all'); return false;">
+                        <a class="dropdown-item small fw-semibold" href="#" onclick="exportData('excel', 'all', 'etax'); return false;">
                             <i class="fa-solid fa-table-cells me-2 text-success"></i>Export All Rows
                         </a>
                     </li>
                     <li>
-                        <a class="dropdown-item small fw-semibold text-success" href="#" onclick="exportData('excel', 'valid_only'); return false;">
+                        <a class="dropdown-item small text-success" href="#" onclick="exportData('excel', 'valid_only', 'etax'); return false;">
                             <i class="fa-solid fa-circle-check me-2 text-success"></i>Export Only Valid Rows (.xlsx)
                         </a>
                     </li>
                     <li>
-                        <a class="dropdown-item small" href="#" onclick="exportData('excel', 'filtered'); return false;">
+                        <a class="dropdown-item small" href="#" onclick="exportData('excel', 'filtered', 'etax'); return false;">
                             <i class="fa-solid fa-filter me-2 text-primary"></i>Export Current Filtered View
                         </a>
                     </li>
                     <li>
-                        <a class="dropdown-item small" href="#" id="export-selected-excel-btn" onclick="exportData('excel', 'selected'); return false;">
+                        <a class="dropdown-item small" href="#" id="export-selected-excel-btn" onclick="exportData('excel', 'selected', 'etax'); return false;">
                             <i class="fa-solid fa-check-square me-2 text-info"></i>Export Selected Rows (<span class="selected-count-badge">0</span>)
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li class="dropdown-header small text-uppercase fw-bold text-muted">
+                        <i class="fa-solid fa-table-columns me-1"></i>ERCA Detailed Worksheet
+                    </li>
+                    <li>
+                        <a class="dropdown-item small text-muted" href="#" onclick="exportData('excel', 'all', 'erca_15'); return false;">
+                            <i class="fa-solid fa-sheet-plastic me-2"></i>Full 15-Column ERCA Report
                         </a>
                     </li>
                 </ul>
@@ -69,25 +81,37 @@
                 <button type="button" class="btn btn-outline-success btn-sm fw-bold dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="fa-solid fa-file-csv me-1"></i>Export CSV
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 260px;">
+                    <li class="dropdown-header small text-uppercase fw-bold text-success">
+                        <i class="fa-solid fa-file-invoice me-1"></i>Purchase Declaration (8 Columns)
+                    </li>
                     <li>
-                        <a class="dropdown-item small" href="#" onclick="exportData('csv', 'all'); return false;">
+                        <a class="dropdown-item small fw-semibold" href="#" onclick="exportData('csv', 'all', 'etax'); return false;">
                             <i class="fa-solid fa-file-csv me-2 text-success"></i>Export All as CSV (UTF-8 BOM)
                         </a>
                     </li>
                     <li>
-                        <a class="dropdown-item small fw-semibold text-success" href="#" onclick="exportData('csv', 'valid_only'); return false;">
+                        <a class="dropdown-item small text-success" href="#" onclick="exportData('csv', 'valid_only', 'etax'); return false;">
                             <i class="fa-solid fa-circle-check me-2 text-success"></i>Export Only Valid Rows (.csv)
                         </a>
                     </li>
                     <li>
-                        <a class="dropdown-item small" href="#" onclick="exportData('csv', 'filtered'); return false;">
+                        <a class="dropdown-item small" href="#" onclick="exportData('csv', 'filtered', 'etax'); return false;">
                             <i class="fa-solid fa-filter me-2 text-primary"></i>Export Filtered as CSV
                         </a>
                     </li>
                     <li>
-                        <a class="dropdown-item small" href="#" id="export-selected-csv-btn" onclick="exportData('csv', 'selected'); return false;">
+                        <a class="dropdown-item small" href="#" id="export-selected-csv-btn" onclick="exportData('csv', 'selected', 'etax'); return false;">
                             <i class="fa-solid fa-check-square me-2 text-info"></i>Export Selected as CSV (<span class="selected-count-badge">0</span>)
+                        </a>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li class="dropdown-header small text-uppercase fw-bold text-muted">
+                        <i class="fa-solid fa-table-columns me-1"></i>ERCA Detailed Worksheet
+                    </li>
+                    <li>
+                        <a class="dropdown-item small text-muted" href="#" onclick="exportData('csv', 'all', 'erca_15'); return false;">
+                            <i class="fa-solid fa-sheet-plastic me-2"></i>Full 15-Column ERCA CSV
                         </a>
                     </li>
                 </ul>
@@ -2614,9 +2638,12 @@ function applyImageTransform() {
 /**
  * Export Helper (Excel / CSV)
  */
-function exportData(format, scope) {
+function exportData(format, scope, template = 'etax') {
     const baseUrl = (format === 'excel') ? EXPORT_EXCEL_URL : EXPORT_CSV_URL;
     const params = new URLSearchParams();
+    if (template) {
+        params.append('template', template);
+    }
 
     if (scope === 'valid_only') {
         params.append('valid_only', '1');

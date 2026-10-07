@@ -1512,67 +1512,150 @@ class OCRReceiptScannerController extends Controller
         }
 
         $items = $query->get();
-        $filename = 'VAT_RECEIPT_REPORT_' . now()->format('Y_m_d_His') . '.xlsx';
+        $template = $request->input('template', 'etax');
+        $items = $query->get();
         $tempPath = storage_path('app/temp_' . uniqid() . '.xlsx');
+
+        if ($template === 'erca_15') {
+            $filename = 'VAT_RECEIPT_REPORT_' . now()->format('Y_m_d_His') . '.xlsx';
+        } else {
+            $filename = 'Purchase_Declaration_' . now()->format('Y_m_d_His') . '.xlsx';
+        }
 
         try {
             $writer = new XlsxWriter();
             $writer->openToFile($tempPath);
 
-            // Header row with exact ERCA descriptions
-            $headerCells = [
-                Cell::fromValue("VAT CATEGORY\n(G=GOODS;S=SERVICES)"),
-                Cell::fromValue("CALENDAR TYPE\n(E=ETHIOPIAN;G=GREGORIAN)"),
-                Cell::fromValue("Types of purchase.\n1 = Taxable-local Purchase of Capital Assets (Line No. 65)\n2 = Taxable-imported Purchase of Capital Assets (Line No. 75)\n3 = Taxable-local Purchase of Inputs (Line No. 100)\n4 = Taxable-imported Purchase of Inputs (Line No. 110)\n5 = Taxable-general Expense Inputs Purchase (Line No. 120)\n6 = Tax Exempted-purchase with no vat or uncollectible inputs\n(Please type 1-6). Mandatory."),
-                Cell::fromValue("TIN\nMandatory for local VAT"),
-                Cell::fromValue("Seller name\nRegistered Business Trade Name"),
-                Cell::fromValue("Date of purchase\nDispatched Date (DD/MM/YYYY)"),
-                Cell::fromValue("MRC Number\nMachine Registration Code"),
-                Cell::fromValue("Vat receipt number / FS No\nFiscal Receipt Number"),
-                Cell::fromValue("Description / Item\nExact purchased material"),
-                Cell::fromValue("Unit of Measure\n(2 KG, 5 LIT, 7 PCS, 9 OTHER, 10 PC)"),
-                Cell::fromValue("Quantity\nNumeric only"),
-                Cell::fromValue("Unit Price\nNumeric only"),
-                Cell::fromValue("Total value\nTaxable Subtotal"),
-                Cell::fromValue("VAT (15%)\nValue Added Tax"),
-                Cell::fromValue("Value after vat\nGrand Total"),
-            ];
-            $writer->addRow(new Row($headerCells));
-
-            foreach ($items as $item) {
-                $r = $item->receipt;
-                $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : now()->format('d/m/Y');
-                $rawTin = $r ? (string)$r->vendor_tin : '';
-                $rawFs  = $r ? (string)$r->fs_no : '';
-                $seller = $r ? (string)$r->vendor_name : '';
-                $mrc    = $r ? (string)$r->mrc_no : '';
-
-                // Column D: Supplier TIN written as text string preserving leading zeros
-                $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
-                $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
-
-                // Column H: FS No written as 8-digit text string preserving leading zeros
-                $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
-                $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
-
-                $rowCells = [
-                    Cell::fromValue((string)($item->vat_category ?: 'G')),
-                    Cell::fromValue((string)($item->calendar_type ?: 'G')),
-                    Cell::fromValue((int)($item->purchase_type ?: 3)),
-                    Cell::fromValue((string)$tinText),
-                    Cell::fromValue($seller),
-                    Cell::fromValue($dateFormatted),
-                    Cell::fromValue($mrc),
-                    Cell::fromValue((string)$fsText),
-                    Cell::fromValue((string)($item->item_description ?: 'Material')),
-                    Cell::fromValue((string)($item->uom ?: '9')),
-                    Cell::fromValue((float)$item->qty),
-                    Cell::fromValue((float)$item->unit_price),
-                    Cell::fromValue((float)$item->total_value),
-                    Cell::fromValue((float)$item->vat_amount),
-                    Cell::fromValue((float)$item->value_after_vat),
+            if ($template === 'erca_15') {
+                // Header row with exact ERCA descriptions
+                $headerCells = [
+                    Cell::fromValue("VAT CATEGORY\n(G=GOODS;S=SERVICES)"),
+                    Cell::fromValue("CALENDAR TYPE\n(E=ETHIOPIAN;G=GREGORIAN)"),
+                    Cell::fromValue("Types of purchase.\n1 = Taxable-local Purchase of Capital Assets (Line No. 65)\n2 = Taxable-imported Purchase of Capital Assets (Line No. 75)\n3 = Taxable-local Purchase of Inputs (Line No. 100)\n4 = Taxable-imported Purchase of Inputs (Line No. 110)\n5 = Taxable-general Expense Inputs Purchase (Line No. 120)\n6 = Tax Exempted-purchase with no vat or uncollectible inputs\n(Please type 1-6). Mandatory."),
+                    Cell::fromValue("TIN\nMandatory for local VAT"),
+                    Cell::fromValue("Seller name\nRegistered Business Trade Name"),
+                    Cell::fromValue("Date of purchase\nDispatched Date (DD/MM/YYYY)"),
+                    Cell::fromValue("MRC Number\nMachine Registration Code"),
+                    Cell::fromValue("Vat receipt number / FS No\nFiscal Receipt Number"),
+                    Cell::fromValue("Description / Item\nExact purchased material"),
+                    Cell::fromValue("Unit of Measure\n(2 KG, 5 LIT, 7 PCS, 9 OTHER, 10 PC)"),
+                    Cell::fromValue("Quantity\nNumeric only"),
+                    Cell::fromValue("Unit Price\nNumeric only"),
+                    Cell::fromValue("Total value\nTaxable Subtotal"),
+                    Cell::fromValue("VAT (15%)\nValue Added Tax"),
+                    Cell::fromValue("Value after vat\nGrand Total"),
                 ];
-                $writer->addRow(new Row($rowCells));
+                $writer->addRow(new Row($headerCells));
+
+                foreach ($items as $item) {
+                    $r = $item->receipt;
+                    $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : now()->format('d/m/Y');
+                    $rawTin = $r ? (string)$r->vendor_tin : '';
+                    $rawFs  = $r ? (string)$r->fs_no : '';
+                    $seller = $r ? (string)$r->vendor_name : '';
+                    $mrc    = $r ? (string)$r->mrc_no : '';
+
+                    $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
+                    $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
+
+                    $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
+                    $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
+
+                    $rowCells = [
+                        Cell::fromValue((string)($item->vat_category ?: 'G')),
+                        Cell::fromValue((string)($item->calendar_type ?: 'G')),
+                        Cell::fromValue((int)($item->purchase_type ?: 3)),
+                        Cell::fromValue((string)$tinText),
+                        Cell::fromValue($seller),
+                        Cell::fromValue($dateFormatted),
+                        Cell::fromValue($mrc),
+                        Cell::fromValue((string)$fsText),
+                        Cell::fromValue((string)($item->item_description ?: 'Material')),
+                        Cell::fromValue((string)($item->uom ?: '9')),
+                        Cell::fromValue((float)$item->qty),
+                        Cell::fromValue((float)$item->unit_price),
+                        Cell::fromValue((float)$item->total_value),
+                        Cell::fromValue((float)$item->vat_amount),
+                        Cell::fromValue((float)$item->value_after_vat),
+                    ];
+                    $writer->addRow(new Row($rowCells));
+                }
+            } else {
+                // e-Tax Purchase Declaration Form (Exact 8 Columns requested by User)
+                // A: Purchaser TIN | B: Seller TIN | C: Amount | D: Receipt No | E: Receipt Date | F: Encoding Date | G: MRC | H: PurcType
+                $headerCells = [
+                    Cell::fromValue('Purchaser TIN'),
+                    Cell::fromValue('Seller TIN'),
+                    Cell::fromValue('Amount'),
+                    Cell::fromValue('Receipt No'),
+                    Cell::fromValue('Receipt Date'),
+                    Cell::fromValue('Encoding Date'),
+                    Cell::fromValue('MRC'),
+                    Cell::fromValue('PurcType'),
+                ];
+                $writer->addRow(new Row($headerCells));
+
+                foreach ($items as $item) {
+                    $r = $item->receipt;
+
+                    // Col A: Purchaser TIN (e.g. 38480010)
+                    $buyerTin = $r ? ($r->buyer_tin ?: SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '0038480010'))) : '0038480010';
+                    $buyerDigits = preg_replace('/[^0-9]/', '', (string)$buyerTin);
+                    $purchaserTinVal = ($buyerDigits !== '') ? (int)$buyerDigits : (is_numeric($buyerTin) ? (int)$buyerTin : $buyerTin);
+
+                    // Col B: Seller TIN (e.g. 5201, 6870105, 60440)
+                    $rawTin = $r ? (string)$r->vendor_tin : '';
+                    $sellerDigits = preg_replace('/[^0-9]/', '', $rawTin);
+                    $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : '';
+
+                    // Col C: Amount (Receipt gross total / value after vat)
+                    $amountVal = (float)($item->value_after_vat > 0 ? $item->value_after_vat : ($item->total_value > 0 ? $item->total_value : ($r ? $r->total_amount : 0)));
+                    $amountVal = round($amountVal, 2);
+
+                    // Col D: Receipt No (e.g. FS00003898, DHN638Y2E0, 539)
+                    $receiptNo = '';
+                    if ($r) {
+                        if (!empty($r->fs_no_raw)) {
+                            $receiptNo = trim($r->fs_no_raw);
+                        } elseif (!empty($r->fs_no)) {
+                            $cleanFs = trim($r->fs_no);
+                            if (preg_match('/^\d{8}$/', $cleanFs)) {
+                                $receiptNo = 'FS' . $cleanFs;
+                            } else {
+                                $receiptNo = $cleanFs;
+                            }
+                        } else {
+                            $receiptNo = trim((string)$r->receipt_number);
+                        }
+                    }
+
+                    // Col E: Receipt Date (Format: DD-MM-YYYY, e.g. 15-08-2026)
+                    $receiptDate = $r && $r->receipt_date ? $r->receipt_date->format('d-m-Y') : now()->format('d-m-Y');
+
+                    // Col F: Encoding Date (Format: DD-MM-YYYY, e.g. 26-08-2026)
+                    $encodingDate = ($r && $r->created_at) ? $r->created_at->format('d-m-Y') : now()->format('d-m-Y');
+
+                    // Col G: MRC (Machine Registration Code, e.g. DDB0000032 or blank)
+                    $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : '';
+
+                    // Col H: PurcType (PUR_GD = Goods, PUR_SER = Services)
+                    $isService = ($item->vat_category === 'S') ||
+                                 (strtolower((string)($r->category ?? '')) === 'service') ||
+                                 (stripos((string)($item->item_description ?? ''), 'service') !== false);
+                    $purcType = $isService ? 'PUR_SER' : 'PUR_GD';
+
+                    $rowCells = [
+                        Cell::fromValue($purchaserTinVal),
+                        Cell::fromValue($sellerTinVal),
+                        Cell::fromValue($amountVal),
+                        Cell::fromValue($receiptNo),
+                        Cell::fromValue($receiptDate),
+                        Cell::fromValue($encodingDate),
+                        Cell::fromValue($mrc),
+                        Cell::fromValue($purcType),
+                    ];
+                    $writer->addRow(new Row($rowCells));
+                }
             }
 
             $writer->close();
@@ -1589,7 +1672,8 @@ class OCRReceiptScannerController extends Controller
     }
 
     /**
-     * Export table into CSV matching exact columns A to O with UTF-8 BOM.
+     * Export table into CSV.
+     * Defaults to e-Tax Purchase Declaration (8 columns), supports template=erca_15 for 15 columns.
      */
     public function exportCsv(Request $request)
     {
@@ -1641,8 +1725,14 @@ class OCRReceiptScannerController extends Controller
             });
         }
 
+        $template = $request->input('template', 'etax');
         $items = $query->get();
-        $filename = 'VAT_REPORT_' . now()->format('Y_m_d_His') . '.csv';
+
+        if ($template === 'erca_15') {
+            $filename = 'VAT_REPORT_' . now()->format('Y_m_d_His') . '.csv';
+        } else {
+            $filename = 'Purchase_Declaration_' . now()->format('Y_m_d_His') . '.csv';
+        }
 
         $headers = [
             'Content-Type'        => 'text/csv; charset=UTF-8',
@@ -1652,65 +1742,137 @@ class OCRReceiptScannerController extends Controller
             'Expires'             => '0',
         ];
 
-        $callback = function () use ($items) {
+        $callback = function () use ($items, $template) {
             $out = fopen('php://output', 'w');
             fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF)); // UTF-8 BOM
 
-            fputcsv($out, [
-                "VAT CATEGORY\n (G=GOODS;S=SERVICES)",
-                "CALENDAR TYPE\n(E=ETHIOPIAN;G=GREGORIAN)",
-                "Types of purchase.\n1 = Taxable-local Purchase of Capital Assets (Line No. 65)\n2 = Taxable-imported Purchase of Capital Assets (Line No. 75)\n3 = Taxable-local Purchase of Inputs (Line No. 100)\n4 = Taxable-imported Purchase of Inputs (Line No. 110)\n5 = Taxable-general Expense Inputs Purchase (Line No. 120)\n6= Tax Exempted-purchase with no vat or uncollectible inputs (Line no. 85 or Line no. 130)",
-                "TIN",
-                "Seller name",
-                "Date of purchase\nDispatched Date (dd/mm/yyyy)",
-                "MRC Number",
-                "Vat receipt number / FS No",
-                "Description",
-                "Unit of Measure (type ID 2-10)",
-                "Quantity",
-                "Unit Price",
-                "Total value",
-                "vat",
-                "value after vat"
-            ]);
-
-            foreach ($items as $item) {
-                $r = $item->receipt;
-                $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : now()->format('d/m/Y');
-                $rawTin = $r ? (string)$r->vendor_tin : '';
-                $rawFs  = $r ? (string)$r->fs_no : '';
-                $seller = $r ? (string)$r->vendor_name : '';
-                $mrc    = $r ? (string)$r->mrc_no : '';
-
-                $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
-                $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
-
-                $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
-                $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
-
+            if ($template === 'erca_15') {
                 fputcsv($out, [
-                    $item->vat_category ?: 'G',
-                    $item->calendar_type ?: 'G',
-                    $item->purchase_type ?: 3,
-                    (string)$tinText,
-                    $seller,
-                    $dateFormatted,
-                    $mrc,
-                    (string)$fsText,
-                    $item->item_description ?: 'Material',
-                    $item->uom ?: '9',
-                    number_format((float)$item->qty, 2, '.', ''),
-                    number_format((float)$item->unit_price, 2, '.', ''),
-                    number_format((float)$item->total_value, 2, '.', ''),
-                    number_format((float)$item->vat_amount, 2, '.', ''),
-                    number_format((float)$item->value_after_vat, 2, '.', ''),
+                    "VAT CATEGORY\n (G=GOODS;S=SERVICES)",
+                    "CALENDAR TYPE\n(E=ETHIOPIAN;G=GREGORIAN)",
+                    "Types of purchase.\n1 = Taxable-local Purchase of Capital Assets (Line No. 65)\n2 = Taxable-imported Purchase of Capital Assets (Line No. 75)\n3 = Taxable-local Purchase of Inputs (Line No. 100)\n4 = Taxable-imported Purchase of Inputs (Line No. 110)\n5 = Taxable-general Expense Inputs Purchase (Line No. 120)\n6= Tax Exempted-purchase with no vat or uncollectible inputs (Line no. 85 or Line no. 130)",
+                    "TIN",
+                    "Seller name",
+                    "Date of purchase\nDispatched Date (dd/mm/yyyy)",
+                    "MRC Number",
+                    "Vat receipt number / FS No",
+                    "Description",
+                    "Unit of Measure (type ID 2-10)",
+                    "Quantity",
+                    "Unit Price",
+                    "Total value",
+                    "vat",
+                    "value after vat"
                 ]);
+
+                foreach ($items as $item) {
+                    $r = $item->receipt;
+                    $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : now()->format('d/m/Y');
+                    $rawTin = $r ? (string)$r->vendor_tin : '';
+                    $rawFs  = $r ? (string)$r->fs_no : '';
+                    $seller = $r ? (string)$r->vendor_name : '';
+                    $mrc    = $r ? (string)$r->mrc_no : '';
+
+                    $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
+                    $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
+
+                    $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
+                    $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
+
+                    fputcsv($out, [
+                        $item->vat_category ?: 'G',
+                        $item->calendar_type ?: 'G',
+                        $item->purchase_type ?: 3,
+                        (string)$tinText,
+                        $seller,
+                        $dateFormatted,
+                        $mrc,
+                        (string)$fsText,
+                        $item->item_description ?: 'Material',
+                        $item->uom ?: '9',
+                        number_format((float)$item->qty, 2, '.', ''),
+                        number_format((float)$item->unit_price, 2, '.', ''),
+                        number_format((float)$item->total_value, 2, '.', ''),
+                        number_format((float)$item->vat_amount, 2, '.', ''),
+                        number_format((float)$item->value_after_vat, 2, '.', ''),
+                    ]);
+                }
+            } else {
+                // e-Tax 8-column format: Purchaser TIN, Seller TIN, Amount, Receipt No, Receipt Date, Encoding Date, MRC, PurcType
+                fputcsv($out, [
+                    'Purchaser TIN',
+                    'Seller TIN',
+                    'Amount',
+                    'Receipt No',
+                    'Receipt Date',
+                    'Encoding Date',
+                    'MRC',
+                    'PurcType',
+                ]);
+
+                foreach ($items as $item) {
+                    $r = $item->receipt;
+
+                    $buyerTin = $r ? ($r->buyer_tin ?: SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '0038480010'))) : '0038480010';
+                    $buyerDigits = preg_replace('/[^0-9]/', '', (string)$buyerTin);
+                    $purchaserTin = ($buyerDigits !== '') ? $buyerDigits : '38480010';
+
+                    $rawTin = $r ? (string)$r->vendor_tin : '';
+                    $sellerDigits = preg_replace('/[^0-9]/', '', $rawTin);
+                    $sellerTin = ($sellerDigits !== '') ? $sellerDigits : '';
+
+                    $amount = (float)($item->value_after_vat > 0 ? $item->value_after_vat : ($item->total_value > 0 ? $item->total_value : ($r ? $r->total_amount : 0)));
+
+                    $receiptNo = '';
+                    if ($r) {
+                        if (!empty($r->fs_no_raw)) {
+                            $receiptNo = trim($r->fs_no_raw);
+                        } elseif (!empty($r->fs_no)) {
+                            $cleanFs = trim($r->fs_no);
+                            if (preg_match('/^\d{8}$/', $cleanFs)) {
+                                $receiptNo = 'FS' . $cleanFs;
+                            } else {
+                                $receiptNo = $cleanFs;
+                            }
+                        } else {
+                            $receiptNo = trim((string)$r->receipt_number);
+                        }
+                    }
+
+                    $receiptDate = $r && $r->receipt_date ? $r->receipt_date->format('d-m-Y') : now()->format('d-m-Y');
+                    $encodingDate = ($r && $r->created_at) ? $r->created_at->format('d-m-Y') : now()->format('d-m-Y');
+                    $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : '';
+
+                    $isService = ($item->vat_category === 'S') ||
+                                 (strtolower((string)($r->category ?? '')) === 'service') ||
+                                 (stripos((string)($item->item_description ?? ''), 'service') !== false);
+                    $purcType = $isService ? 'PUR_SER' : 'PUR_GD';
+
+                    fputcsv($out, [
+                        $purchaserTin,
+                        $sellerTin,
+                        number_format($amount, 2, '.', ''),
+                        $receiptNo,
+                        $receiptDate,
+                        $encodingDate,
+                        $mrc,
+                        $purcType,
+                    ]);
+                }
             }
 
             fclose($out);
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * Alias for exportExcel: Export VAT Report.
+     */
+    public function exportVatReport(Request $request)
+    {
+        return $this->exportExcel($request);
     }
 
     /**
