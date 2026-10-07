@@ -1867,13 +1867,6 @@ class OCRReceiptScannerController extends Controller
         return response()->stream($callback, 200, $headers);
     }
 
-    /**
-     * Alias for exportExcel: Export VAT Report.
-     */
-    public function exportVatReport(Request $request)
-    {
-        return $this->exportExcel($request);
-    }
 
     /**
      * AI Chat Agent for Receipt OCR Studio.
