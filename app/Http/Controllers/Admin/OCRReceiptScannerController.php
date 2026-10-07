@@ -859,6 +859,9 @@ class OCRReceiptScannerController extends Controller
 
         $needsReview = (!$tinValid || !$fsNoValid || $confidence === 'review' || $confidence === 'low' || $confidenceScore < 75);
 
+        $allItemNames = array_filter(array_map(fn($it) => trim((string)($it['item_description'] ?? ($it['name'] ?? ''))), $itemsData));
+        $materialListSummary = !empty($allItemNames) ? implode(', ', $allItemNames) : ($extracted['description'] ?? 'Materials');
+
         // Persist Receipt
         $receipt = Receipt::create([
             'uploaded_by'  => Auth::id() ?: 1,
@@ -877,7 +880,7 @@ class OCRReceiptScannerController extends Controller
             'total_amount' => round($calcTotal, 2),
             'currency'     => 'ETB',
             'category'     => $request->category ?: 'material',
-            'description'  => $extracted['description'] ?? ($itemsData[0]['item_description'] ?? 'Materials'),
+            'description'  => $materialListSummary,
             'file_path'    => $path,
             'file_type'        => $isPdf ? 'pdf' : 'image',
             'ocr_raw_text'     => $rawText,
@@ -2333,10 +2336,11 @@ CRITICAL EXTRACTION RULES:
    - fs_no: Return digits only, exactly as printed on the receipt (must be exactly 8 digits, e.g. "00002674"). If printed with "FS" prefix, return digits only. Do NOT pad with zeros, do NOT truncate, and do NOT guess. If missing, blurry, or low confidence, return an empty string "" instead of guessing.
 
 7. ITEMS / PURCHASED MATERIALS (COL I, J, K, L, M, N, O):
-   - You MUST read the ACTUAL bought materials/items listed on the slip!
-   - Examples: "REBAR 16MM", "CEMENT OPC 42.5", "RIVER SAND", "BASALT GRAVEL 02", "TIMBER 4X4", "HOLLOW CONCRETE BLOCKS", "PVC PIPE 50MM", "FUEL DIESEL", etc.
-   - NEVER use generic placeholders like "Purchased Material" or "Item" if the product name or material description is printed on the receipt!
-   - If multiple items are printed, create an object in the "items" array for EACH individual item! Header details repeat for all rows.
+   - You MUST read the EXACT bought materials/items listed on the receipt under DESCRIPTION!
+   - Every single line item (e.g. "H07V-U 1X2.5mm2", "RG 6 DISH", "9uroro conduit 20(100m)", "CEMENT OPC 42.5", "REBAR 16MM", "TIMBER", "FUEL DIESEL", etc.) must be extracted with its full printed description in "item_description".
+   - NEVER use generic placeholders like "Purchased Material", "Goods", or "Item" when actual material/product names are printed on the receipt!
+   - If multiple items are printed, create an object in the "items" array for EACH individual item with its own qty, unit_price, total_value, vat, and value_after_vat!
+   - For "description": return a clean comma-separated list of ALL bought materials extracted from the receipt (e.g. "H07V-U 1X2.5mm2, RG 6 DISH, 9uroro conduit 20(100m)").
    - uom: Ethiopian VAT UOM code ("9" for OTHER, "7" for PCS, "2" for KG, "5" for LIT, "10" for PC, "1" for M, "4" for M3).
    - qty: Numeric quantity (2 decimals).
    - unit_price: Numeric unit price before VAT (2 decimals).
@@ -2363,7 +2367,7 @@ Return STRICT JSON matching this schema:
   "receipt_date": "DD/MM/YYYY",
   "machine_no": "string or null",
   "fs_no": "8 digits numeric string or empty",
-  "description": "string summary",
+  "description": "string comma-separated list of all bought materials",
   "subtotal": 0.00,
   "vat_amount": 0.00,
   "total_amount": 0.00,

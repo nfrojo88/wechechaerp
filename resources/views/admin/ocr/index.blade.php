@@ -402,15 +402,27 @@
                                             </div>
                                         </div>
 
-                                        {{-- Item Description --}}
+                                        {{-- Item Description / Bought Materials List --}}
                                         <div class="col-md-8">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                Item / Purchased Description *
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">Col I</span>
-                                            </label>
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <label class="form-label small fw-bold text-dark mb-0">
+                                                    Item / Purchased Material Description *
+                                                    <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">Col I (Goods/Services)</span>
+                                                </label>
+                                                <span class="badge bg-primary text-white d-none" id="materials-count-badge" style="font-size:0.7rem;">0 Items</span>
+                                            </div>
                                             <div class="input-group input-group-sm">
-                                                <span class="input-group-text bg-light"><i class="fa-solid fa-box text-muted"></i></span>
-                                                <input type="text" class="form-control fw-semibold" id="field_description" name="description" placeholder="e.g. 32 X 2.0 MM ROUND PIPE" required>
+                                                <span class="input-group-text bg-light"><i class="fa-solid fa-boxes-stacked text-muted"></i></span>
+                                                <input type="text" class="form-control fw-semibold" id="field_description" name="description" placeholder="e.g. H07V-U 1X2.5mm2, RG 6 DISH, 9uroro conduit" required>
+                                            </div>
+
+                                            {{-- Dynamic Multi-Item List of Bought Materials --}}
+                                            <div id="materials-list-wrapper" class="d-none mt-2">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <small class="fw-bold text-dark" style="font-size: 0.75rem;"><i class="fa-solid fa-list-check text-success me-1"></i>List of Bought Materials from Receipt:</small>
+                                                    <span class="badge bg-success bg-opacity-10 text-success border border-success" style="font-size: 0.68rem;">Verified Items</span>
+                                                </div>
+                                                <div class="list-group list-group-flush rounded border bg-white shadow-xs" id="materials-list-container" style="max-height: 160px; overflow-y: auto;"></div>
                                             </div>
                                         </div>
 
@@ -1658,6 +1670,14 @@ function resetPreviewArea() {
     const chkAllow = document.getElementById('chk_allow_invalid_identifiers');
     if (chkAllow) chkAllow.checked = false;
 
+    // Reset Materials Breakdown List
+    const matWrapper = document.getElementById('materials-list-wrapper');
+    const matContainer = document.getElementById('materials-list-container');
+    const matBadge = document.getElementById('materials-count-badge');
+    if (matWrapper) matWrapper.classList.add('d-none');
+    if (matContainer) matContainer.innerHTML = '';
+    if (matBadge) { matBadge.classList.add('d-none'); matBadge.textContent = '0 Items'; }
+
     showToast('Preview and form cleared. Ready for next receipt.', 'info');
 }
 
@@ -1934,26 +1954,88 @@ function populateFormWithExtracted(data, filePath, engine, confidence) {
     document.getElementById('field_machine_no').value = data.machine_no || '';
     document.getElementById('field_date').value = formatDateDisplay(data.receipt_date) || '';
 
-    const firstItem = (data.items && data.items[0]) ? data.items[0] : null;
-    if (firstItem) {
-        document.getElementById('field_description').value = firstItem.item_description || data.description || '';
+    const itemsList = (data.items && Array.isArray(data.items)) ? data.items : [];
+    const itemNames = itemsList.map(it => (it.item_description || it.name || '').trim()).filter(Boolean);
+
+    // Show complete list of bought materials in description
+    let descriptionText = '';
+    if (itemNames.length > 0) {
+        descriptionText = itemNames.join(', ');
+    } else {
+        descriptionText = data.description || 'Purchased Material';
+    }
+    document.getElementById('field_description').value = descriptionText;
+
+    const firstItem = itemsList[0] || null;
+    if (firstItem && itemsList.length === 1) {
         document.getElementById('field_qty').value = Number(firstItem.qty || 1).toFixed(2);
         document.getElementById('field_unit_price').value = Number(firstItem.unit_price || 0).toFixed(2);
         document.getElementById('field_subtotal').value = Number(firstItem.total_value || data.subtotal || 0).toFixed(2);
         document.getElementById('field_vat').value = Number(firstItem.vat || data.vat_amount || 0).toFixed(2);
         document.getElementById('field_total').value = Number(firstItem.value_after_vat || data.total_amount || 0).toFixed(2);
     } else {
-        document.getElementById('field_description').value = data.description || 'Purchased Material';
+        const totalQty = itemsList.length > 1 ? itemsList.reduce((acc, it) => acc + (parseFloat(it.qty) || 1), 0) : 1;
+        document.getElementById('field_qty').value = Number(totalQty).toFixed(2);
+        document.getElementById('field_unit_price').value = itemsList.length === 1 ? Number(firstItem ? firstItem.unit_price : 0).toFixed(2) : Number(data.subtotal || 0).toFixed(2);
         document.getElementById('field_subtotal').value = Number(data.subtotal || 0).toFixed(2);
         document.getElementById('field_vat').value = Number(data.vat_amount || 0).toFixed(2);
         document.getElementById('field_total').value = Number(data.total_amount || 0).toFixed(2);
     }
+
+    // Render interactive list of bought materials
+    renderExtractedMaterialsList(itemsList);
 
     if (data.raw_text) {
         document.getElementById('raw-ocr-textarea').value = data.raw_text;
     }
 
     runLiveValidation();
+}
+
+/**
+ * Render Extracted Bought Materials List in Form
+ */
+function renderExtractedMaterialsList(itemsList) {
+    const wrapper = document.getElementById('materials-list-wrapper');
+    const container = document.getElementById('materials-list-container');
+    const countBadge = document.getElementById('materials-count-badge');
+    if (!wrapper || !container) return;
+
+    if (!itemsList || itemsList.length === 0) {
+        wrapper.classList.add('d-none');
+        container.innerHTML = '';
+        if (countBadge) countBadge.classList.add('d-none');
+        return;
+    }
+
+    wrapper.classList.remove('d-none');
+    if (countBadge) {
+        countBadge.classList.remove('d-none');
+        countBadge.textContent = `${itemsList.length} Material${itemsList.length > 1 ? 's' : ''}`;
+    }
+
+    let html = '';
+    itemsList.forEach((it, idx) => {
+        const desc = it.item_description || it.name || `Material #${idx + 1}`;
+        const qty = Number(it.qty || 1).toFixed(2);
+        const price = Number(it.unit_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const total = Number(it.total_value || (it.qty * it.unit_price) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        html += `
+            <div class="list-group-item py-1.5 px-2.5 d-flex justify-content-between align-items-center">
+                <div class="text-truncate me-2" style="font-size: 0.8rem;">
+                    <span class="badge bg-secondary text-white font-monospace me-1">${idx + 1}</span>
+                    <strong class="text-dark">${escapeHtml(desc)}</strong>
+                </div>
+                <div class="text-end text-nowrap font-monospace" style="font-size: 0.76rem;">
+                    <span class="text-muted">Qty: ${qty} &times; ${price} =</span>
+                    <strong class="text-success ms-1">${total} ETB</strong>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
 }
 
 /**
