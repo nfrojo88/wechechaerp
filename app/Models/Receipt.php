@@ -15,8 +15,11 @@ class Receipt extends Model
         'project_id',
         'vendor_name',
         'vendor_tin',
+        'tin_valid',
         'buyer_tin',
         'fs_no',
+        'fs_no_raw',
+        'fs_no_valid',
         'mrc_no',
         'receipt_date',
         'subtotal',
@@ -50,6 +53,8 @@ class Receipt extends Model
         'vat_amount'       => 'decimal:2',
         'total_amount'     => 'decimal:2',
         'confidence_score' => 'integer',
+        'tin_valid'        => 'boolean',
+        'fs_no_valid'      => 'boolean',
         'needs_review'     => 'boolean',
     ];
 

@@ -48,6 +48,11 @@
                         </a>
                     </li>
                     <li>
+                        <a class="dropdown-item small fw-semibold text-success" href="#" onclick="exportData('excel', 'valid_only'); return false;">
+                            <i class="fa-solid fa-circle-check me-2 text-success"></i>Export Only Valid Rows (.xlsx)
+                        </a>
+                    </li>
+                    <li>
                         <a class="dropdown-item small" href="#" onclick="exportData('excel', 'filtered'); return false;">
                             <i class="fa-solid fa-filter me-2 text-primary"></i>Export Current Filtered View
                         </a>
@@ -71,6 +76,11 @@
                         </a>
                     </li>
                     <li>
+                        <a class="dropdown-item small fw-semibold text-success" href="#" onclick="exportData('csv', 'valid_only'); return false;">
+                            <i class="fa-solid fa-circle-check me-2 text-success"></i>Export Only Valid Rows (.csv)
+                        </a>
+                    </li>
+                    <li>
                         <a class="dropdown-item small" href="#" onclick="exportData('csv', 'filtered'); return false;">
                             <i class="fa-solid fa-filter me-2 text-primary"></i>Export Filtered as CSV
                         </a>
@@ -82,6 +92,11 @@
                     </li>
                 </ul>
             </div>
+
+            {{-- Ask QC AI Assistant Button --}}
+            <button type="button" class="btn btn-primary btn-sm fw-bold shadow-xs" data-bs-toggle="modal" data-bs-target="#aiChatModal">
+                <i class="fa-solid fa-robot me-1"></i>Ask QC AI
+            </button>
         </div>
     </div>
 
@@ -307,9 +322,14 @@
 
                                         {{-- Supplier TIN --}}
                                         <div class="col-md-5">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                Supplier TIN *
-                                                <span class="badge bg-success bg-opacity-10 text-success border ms-1" style="font-size:0.65rem;">Col D (10 digits)</span>
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex align-items-center justify-content-between">
+                                                <span>
+                                                    Supplier TIN *
+                                                    <span class="badge bg-success bg-opacity-10 text-success border ms-1" style="font-size:0.65rem;">Col D (10 digits)</span>
+                                                </span>
+                                                <span id="tin-validation-badge" class="badge bg-danger d-none" data-bs-toggle="tooltip" data-bs-placement="top" title="">
+                                                    <i class="fa-solid fa-triangle-exclamation me-1"></i>Invalid TIN
+                                                </span>
                                             </label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-id-card text-muted"></i></span>
@@ -319,13 +339,18 @@
 
                                         {{-- FS No --}}
                                         <div class="col-md-4">
-                                            <label class="form-label small fw-bold text-dark mb-1">
-                                                FS / Receipt # *
-                                                <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">Col H</span>
+                                            <label class="form-label small fw-bold text-dark mb-1 d-flex align-items-center justify-content-between">
+                                                <span>
+                                                    FS / Receipt # *
+                                                    <span class="badge bg-primary bg-opacity-10 text-primary border ms-1" style="font-size:0.65rem;">Col H (8 digits)</span>
+                                                </span>
+                                                <span id="fs-validation-badge" class="badge bg-danger d-none" data-bs-toggle="tooltip" data-bs-placement="top" title="">
+                                                    <i class="fa-solid fa-triangle-exclamation me-1"></i>Invalid FS
+                                                </span>
                                             </label>
                                             <div class="input-group input-group-sm">
                                                 <span class="input-group-text bg-light"><i class="fa-solid fa-hashtag text-muted"></i></span>
-                                                <input type="text" class="form-control font-monospace fw-bold text-dark" id="field_fs_no" name="fs_no" placeholder="e.g. FS00005049" required>
+                                                <input type="text" class="form-control font-monospace fw-bold text-dark" id="field_fs_no" name="fs_no" placeholder="e.g. 00005049" required>
                                             </div>
                                         </div>
 
@@ -409,6 +434,17 @@
                                                         </div>
                                                     </div>
                                                 </div>
+                                            </div>
+                                        </div>
+
+                                        {{-- Save Anyway / Needs Review Checkbox Override --}}
+                                        <div class="col-12 mt-2">
+                                            <div class="form-check form-switch p-2 bg-light rounded border d-flex align-items-center gap-2">
+                                                <input class="form-check-input ms-0 mt-0" type="checkbox" id="chk_allow_invalid_identifiers">
+                                                <label class="form-check-label small fw-bold text-dark mb-0" for="chk_allow_invalid_identifiers">
+                                                    <i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Save anyway (mark as Needs Review)
+                                                </label>
+                                                <span class="text-muted ms-auto" style="font-size:0.75rem;">Allows saving if TIN ≠ 10 digits or FS ≠ 8 digits</span>
                                             </div>
                                         </div>
 
@@ -516,8 +552,17 @@
                                 $rowErrors = $item->validateRow();
                                 $isFlagged = !empty($rowErrors) || ($r && $r->needs_review);
                                 $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : '';
+                                $rawTin = $r ? (string)$r->vendor_tin : '';
+                                $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
+                                $isTinValid = $r ? ($r->tin_valid ?? (strlen($tinDigits) === 10)) : false;
+                                $rawFs = $r ? (string)$r->fs_no : '';
+                                $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
+                                $isFsValid = $r ? ($r->fs_no_valid ?? (strlen($fsDigits) === 8)) : false;
                             @endphp
-                            <tr id="row-{{ $item->id }}" data-id="{{ $item->id }}" data-receipt-id="{{ $r ? $r->id : '' }}" class="{{ $isFlagged ? 'table-warning bg-opacity-25' : '' }}">
+                            <tr id="row-{{ $item->id }}" data-id="{{ $item->id }}" data-receipt-id="{{ $r ? $r->id : '' }}"
+                                data-tin-valid="{{ $isTinValid ? '1' : '0' }}"
+                                data-fs-valid="{{ $isFsValid ? '1' : '0' }}"
+                                class="{{ $isFlagged ? 'table-warning bg-opacity-25' : '' }}">
                                 {{-- Checkbox --}}
                                 <td class="text-center">
                                     <input type="checkbox" class="form-check-input row-checkbox" value="{{ $item->id }}" onchange="updateSelectedCount()">
@@ -553,7 +598,14 @@
 
                                 {{-- Col D: Supplier TIN --}}
                                 <td class="font-monospace fw-bold text-primary cell-display" data-field="supplier_tin">
-                                    {{ $r ? $r->vendor_tin : '' }}
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span>{{ $rawTin }}</span>
+                                        @if(!$isTinValid && !empty($rawTin))
+                                            <span class="badge bg-danger p-1" style="font-size:0.6rem;" data-bs-toggle="tooltip" data-bs-placement="top" title="TIN must be exactly 10 digits (found {{ strlen($tinDigits) }})">
+                                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                            </span>
+                                        @endif
+                                    </div>
                                 </td>
 
                                 {{-- Col E: Seller Name --}}
@@ -573,7 +625,14 @@
 
                                 {{-- Col H: FS No --}}
                                 <td class="text-center font-monospace fw-bold text-dark cell-display" data-field="fs_no">
-                                    {{ $r ? $r->fs_no : '' }}
+                                    <div class="d-flex align-items-center justify-content-center gap-1">
+                                        <span>{{ $rawFs }}</span>
+                                        @if(!$isFsValid && !empty($rawFs))
+                                            <span class="badge bg-danger p-1" style="font-size:0.6rem;" data-bs-toggle="tooltip" data-bs-placement="top" title="FS No must be exactly 8 digits (found {{ strlen($fsDigits) }})">
+                                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                            </span>
+                                        @endif
+                                    </div>
                                 </td>
 
                                 {{-- Col I: Item / Description --}}
@@ -955,6 +1014,72 @@
             </form>
         </div>
     </div>
+{{-- AI QC CHAT ASSISTANT MODAL --}}
+<div class="modal fade" id="aiChatModal" tabindex="-1" aria-labelledby="aiChatModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-primary text-white py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="rounded-circle bg-white bg-opacity-20 p-2 d-flex align-items-center justify-content-center" style="width:38px;height:38px;">
+                        <i class="fa-solid fa-robot text-white fs-5"></i>
+                    </div>
+                    <div>
+                        <h6 class="modal-title fw-bold text-white mb-0" id="aiChatModalLabel">Receipt QC AI Copilot</h6>
+                        <small class="text-white text-opacity-75" style="font-size:0.75rem;">Natural Language Fiscal & Identifier Assistant</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 bg-light">
+                {{-- Quick Prompt Suggestions --}}
+                <div class="mb-3">
+                    <small class="text-muted fw-bold text-uppercase d-block mb-1" style="font-size:0.7rem;">Quick Queries:</small>
+                    <div class="d-flex flex-wrap gap-1">
+                        <button type="button" class="btn btn-xs btn-outline-primary rounded-pill py-1 px-2.5 small" onclick="sendQuickChat('show receipts with invalid TIN or FS number')">
+                            <i class="fa-solid fa-triangle-exclamation text-danger me-1"></i>Invalid TIN or FS No
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill py-1 px-2.5 small" onclick="sendQuickChat('show receipts with invalid TIN')">
+                            <i class="fa-solid fa-id-card me-1"></i>Invalid TIN (10 digits)
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill py-1 px-2.5 small" onclick="sendQuickChat('show receipts with invalid FS number')">
+                            <i class="fa-solid fa-receipt me-1"></i>Invalid FS (8 digits)
+                        </button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary rounded-pill py-1 px-2.5 small" onclick="sendQuickChat('show receipts needing review')">
+                            <i class="fa-solid fa-flag me-1"></i>Needs Review
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Chat Messages Log --}}
+                <div id="chat-messages-container" class="rounded-3 border bg-white p-3 mb-3 overflow-y-auto" style="height: 320px; font-size: 0.85rem;">
+                    <div class="d-flex align-items-start gap-2 mb-3">
+                        <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-2 flex-shrink-0" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
+                            <i class="fa-solid fa-robot"></i>
+                        </div>
+                        <div class="bg-light p-3 rounded-3 text-dark flex-grow-1 border">
+                            <div class="fw-semibold text-primary mb-1">QC AI Agent</div>
+                            <div>Hello! I can answer questions about your scanned receipts, identify invalid Supplier TINs (must be exactly 10 digits), check 8-digit FS numbers, and filter receipts for review. What would you like to check?</div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Input Form --}}
+                <form id="chat-input-form" onsubmit="handleChatSubmit(event)" class="d-flex gap-2">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white"><i class="fa-solid fa-comment-dots text-muted"></i></span>
+                        <input type="text" class="form-control" id="chat-input-text" placeholder="Ask e.g. 'show receipts with invalid TIN or FS number'..." autocomplete="off">
+                    </div>
+                    <button type="submit" class="btn btn-primary px-3 fw-bold" id="btn-chat-send">
+                        <i class="fa-solid fa-paper-plane me-1"></i>Ask
+                    </button>
+                </form>
+            </div>
+            <div class="modal-footer py-2 bg-white border-top d-flex justify-content-between">
+                <small class="text-muted" style="font-size:0.75rem;"><i class="fa-solid fa-shield-halved me-1"></i>ERCA VAT Line 100 validation rules applied</small>
+                <button type="button" class="btn btn-light border btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 @endsection
@@ -980,6 +1105,7 @@ const EXPORT_EXCEL_URL = '{{ url("admin/receipt-ocr/export-excel") }}';
 const EXPORT_CSV_URL = '{{ url("admin/receipt-ocr/export-csv") }}';
 const RESCAN_ITEM_BASE = '{{ url("admin/receipt-ocr/item") }}';
 const RESCAN_BULK_URL = '{{ url("admin/receipt-ocr/rescan-bulk") }}';
+const CHAT_URL = '{{ url("admin/receipt-ocr/chat") }}';
 
 // State management
 let uploadQueue = [];
@@ -995,11 +1121,128 @@ let currentUploadedFilePath = null;
 let currentEngineUsed = 'gemini';
 let currentConfidence = 'high';
 
+/**
+ * Identifier Validation Helpers (strict: 10 digits for TIN, 8 digits for FS)
+ */
+function validateTinInput(val) {
+    if (!val) return { valid: false, clean: '', error: 'Supplier TIN is missing (must be exactly 10 digits)' };
+    let raw = String(val).trim();
+    let clean = raw.replace(/^(?:TIN|TIN\s*NO|TIN\s*#|T\.I\.N\.)[\s\:\-\.]*/i, '');
+    clean = clean.replace(/[\s\-\.\,\/\#]/g, '');
+
+    if (/^\d{10}$/.test(clean)) {
+        return { valid: true, clean: clean, error: null };
+    }
+
+    // Fix OCR character confusions ONLY when resulting length is exactly 10 digits
+    const map = { 'O': '0', 'o': '0', 'I': '1', 'l': '1', '|': '1', 'S': '5', 's': '5', 'B': '8' };
+    let fixed = clean.split('').map(c => map[c] !== undefined ? map[c] : c).join('');
+    if (/^\d{10}$/.test(fixed)) {
+        return { valid: true, clean: fixed, error: null };
+    }
+
+    const digitsOnly = clean.replace(/[^0-9]/g, '');
+    return {
+        valid: false,
+        clean: digitsOnly || clean,
+        error: `TIN must be exactly 10 digits (found ${digitsOnly.length})`
+    };
+}
+
+function validateFsInput(val) {
+    if (!val) return { valid: false, clean: '', error: 'FS No is missing (must be exactly 8 digits)' };
+    let raw = String(val).trim();
+    let clean = raw.replace(/^(?:FS|F\.S\.)[\s\:\-\.]*/i, '');
+    clean = clean.replace(/[\s\-\.\,\/\#]/g, '');
+
+    if (/^\d{8}$/.test(clean)) {
+        return { valid: true, clean: clean, error: null };
+    }
+
+    // Fix OCR character confusions ONLY when resulting length is exactly 8 digits
+    const map = { 'O': '0', 'o': '0', 'I': '1', 'l': '1', '|': '1', 'S': '5', 's': '5', 'B': '8' };
+    let fixed = clean.split('').map(c => map[c] !== undefined ? map[c] : c).join('');
+    if (/^\d{8}$/.test(fixed)) {
+        return { valid: true, clean: fixed, error: null };
+    }
+
+    const digitsOnly = clean.replace(/[^0-9]/g, '');
+    return {
+        valid: false,
+        clean: digitsOnly || clean,
+        error: `FS No must be exactly 8 digits (found ${digitsOnly.length})`
+    };
+}
+
+function runLiveValidation() {
+    const tinEl = document.getElementById('field_tin');
+    const fsEl  = document.getElementById('field_fs_no');
+    const tinBadge = document.getElementById('tin-validation-badge');
+    const fsBadge  = document.getElementById('fs-validation-badge');
+
+    if (!tinEl || !fsEl) return { tinValid: true, fsValid: true };
+
+    const tinRes = validateTinInput(tinEl.value);
+    const fsRes  = validateFsInput(fsEl.value);
+
+    // Update TIN badge
+    if (tinBadge) {
+        if (!tinEl.value.trim()) {
+            tinBadge.className = 'badge bg-secondary d-none';
+            tinBadge.textContent = '';
+            tinBadge.removeAttribute('title');
+        } else if (!tinRes.valid) {
+            tinBadge.className = 'badge bg-danger text-white';
+            tinBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation me-1"></i>${tinRes.error}`;
+            tinBadge.setAttribute('title', tinRes.error);
+            tinBadge.classList.remove('d-none');
+        } else {
+            tinBadge.className = 'badge bg-success bg-opacity-25 text-success border border-success';
+            tinBadge.innerHTML = `<i class="fa-solid fa-check me-1"></i>10 Digits Valid`;
+            tinBadge.setAttribute('title', 'TIN format valid (10 digits)');
+            tinBadge.classList.remove('d-none');
+        }
+    }
+
+    // Update FS badge
+    if (fsBadge) {
+        if (!fsEl.value.trim()) {
+            fsBadge.className = 'badge bg-secondary d-none';
+            fsBadge.textContent = '';
+            fsBadge.removeAttribute('title');
+        } else if (!fsRes.valid) {
+            fsBadge.className = 'badge bg-danger text-white';
+            fsBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation me-1"></i>${fsRes.error}`;
+            fsBadge.setAttribute('title', fsRes.error);
+            fsBadge.classList.remove('d-none');
+        } else {
+            fsBadge.className = 'badge bg-success bg-opacity-25 text-success border border-success';
+            fsBadge.innerHTML = `<i class="fa-solid fa-check me-1"></i>8 Digits Valid`;
+            fsBadge.setAttribute('title', 'FS number valid (8 digits)');
+            fsBadge.classList.remove('d-none');
+        }
+    }
+
+    return { tinValid: tinRes.valid, fsValid: fsRes.valid, tinError: tinRes.error, fsError: fsRes.error };
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     setupDragAndDrop();
     setupCameraInput();
     setupPreviewButtons();
+
+    // Bind Live Identifier Validation
+    const tinIn = document.getElementById('field_tin');
+    const fsIn  = document.getElementById('field_fs_no');
+    if (tinIn) {
+        tinIn.addEventListener('input', runLiveValidation);
+        tinIn.addEventListener('change', runLiveValidation);
+    }
+    if (fsIn) {
+        fsIn.addEventListener('input', runLiveValidation);
+        fsIn.addEventListener('change', runLiveValidation);
+    }
 
     // Prevent accidental navigation if unsaved edits exist
     window.addEventListener('beforeunload', (e) => {
@@ -1027,6 +1270,19 @@ function setupPreviewButtons() {
             return;
         }
 
+        const vResult = runLiveValidation();
+        const allowInvalid = document.getElementById('chk_allow_invalid_identifiers')?.checked;
+
+        if ((!vResult.tinValid || !vResult.fsValid) && !allowInvalid) {
+            const errs = [];
+            if (!vResult.tinValid) errs.push(vResult.tinError);
+            if (!vResult.fsValid) errs.push(vResult.fsError);
+            showToast(errs.join(' & ') + '. Tick "Save anyway (mark as Needs Review)" to bypass.', 'danger');
+            if (!vResult.tinValid) document.getElementById('field_tin')?.focus();
+            else document.getElementById('field_fs_no')?.focus();
+            return;
+        }
+
         const subtotal = parseFloat(document.getElementById('field_subtotal').value) || 0;
         const vat = parseFloat(document.getElementById('field_vat').value) || 0;
         const total = parseFloat(document.getElementById('field_total').value) || 0;
@@ -1046,6 +1302,7 @@ function setupPreviewButtons() {
             total_amount: total,
             engine: currentEngineUsed,
             confidence: currentConfidence,
+            allow_invalid_identifiers: !!allowInvalid,
             line_items: (currentExtractedData && currentExtractedData.items && currentExtractedData.items.length > 1) 
                 ? currentExtractedData.items 
                 : [
@@ -1183,6 +1440,13 @@ function resetPreviewArea() {
         badge.className = 'badge bg-primary text-white small';
         badge.innerHTML = '<i class="fa-solid fa-circle me-1" style="font-size:0.55rem;"></i>Ready to scan';
     }
+
+    const tinBadge = document.getElementById('tin-validation-badge');
+    const fsBadge  = document.getElementById('fs-validation-badge');
+    if (tinBadge) { tinBadge.className = 'badge bg-secondary d-none'; tinBadge.textContent = ''; }
+    if (fsBadge)  { fsBadge.className = 'badge bg-secondary d-none'; fsBadge.textContent = ''; }
+    const chkAllow = document.getElementById('chk_allow_invalid_identifiers');
+    if (chkAllow) chkAllow.checked = false;
 }
 
 /**
@@ -1460,6 +1724,8 @@ function populateFormWithExtracted(data, filePath, engine, confidence) {
     if (data.raw_text) {
         document.getElementById('raw-ocr-textarea').value = data.raw_text;
     }
+
+    runLiveValidation();
 }
 
 /**
@@ -1722,10 +1988,15 @@ function appendRowToTable(item, receipt) {
     const dateFormatted = receipt && receipt.receipt_date ? formatDateDisplay(receipt.receipt_date) : '';
     const isFlagged = item.is_flagged || (receipt && receipt.needs_review);
 
+    const isTinValid = receipt ? (receipt.tin_valid !== false) : true;
+    const isFsValid = receipt ? (receipt.fs_no_valid !== false) : true;
+
     const tr = document.createElement('tr');
     tr.id = 'row-' + item.id;
     tr.setAttribute('data-id', item.id);
     tr.setAttribute('data-receipt-id', receipt ? receipt.id : '');
+    tr.setAttribute('data-tin-valid', isTinValid ? '1' : '0');
+    tr.setAttribute('data-fs-valid', isFsValid ? '1' : '0');
     tr.className = isFlagged ? 'table-warning bg-opacity-25' : '';
 
     tr.innerHTML = `
@@ -1741,11 +2012,17 @@ function appendRowToTable(item, receipt) {
         <td class="text-center cell-display" data-field="vat_category"><span class="badge bg-light text-dark border">${item.vat_category || 'G'}</span></td>
         <td class="text-center cell-display" data-field="calendar_type"><span class="badge bg-light text-dark border">${item.calendar_type || 'G'}</span></td>
         <td class="text-center cell-display" data-field="purchase_type"><span class="badge bg-light text-dark border">${item.purchase_type || 3}</span></td>
-        <td class="font-monospace fw-bold text-primary cell-display" data-field="supplier_tin">${receipt ? receipt.vendor_tin : ''}</td>
+        <td class="font-monospace fw-bold cell-display ${isTinValid ? 'text-primary' : 'text-danger'}" data-field="supplier_tin">
+            ${receipt ? (receipt.vendor_tin || '') : ''}
+            ${!isTinValid ? `<span class="badge bg-danger text-white ms-1" title="TIN must be exactly 10 digits"><i class="fa-solid fa-triangle-exclamation"></i> Invalid</span>` : ''}
+        </td>
         <td class="fw-semibold text-dark cell-display" data-field="seller_name">${receipt ? receipt.vendor_name : 'General Merchant'}</td>
         <td class="text-center font-monospace cell-display" data-field="receipt_date">${dateFormatted}</td>
         <td class="text-center font-monospace cell-display" data-field="mrc_no">${receipt ? (receipt.mrc_no || '') : ''}</td>
-        <td class="text-center font-monospace fw-bold text-dark cell-display" data-field="fs_no">${receipt ? (receipt.fs_no || '') : ''}</td>
+        <td class="text-center font-monospace fw-bold cell-display ${isFsValid ? 'text-dark' : 'text-danger'}" data-field="fs_no">
+            ${receipt ? (receipt.fs_no || '') : ''}
+            ${!isFsValid ? `<span class="badge bg-danger text-white ms-1" title="FS No must be exactly 8 digits"><i class="fa-solid fa-triangle-exclamation"></i> Invalid</span>` : ''}
+        </td>
         <td class="fw-semibold text-primary cell-display" data-field="item_description" title="${item.item_description}">${item.item_description}</td>
         <td class="text-center cell-display" data-field="uom">${item.uom || '9'}</td>
         <td class="text-end font-monospace cell-display" data-field="qty">${Number(item.qty).toFixed(2)}</td>
@@ -2312,12 +2589,40 @@ function exportData(format, scope) {
     const baseUrl = (format === 'excel') ? EXPORT_EXCEL_URL : EXPORT_CSV_URL;
     const params = new URLSearchParams();
 
-    if (scope === 'selected') {
-        const selectedIds = Array.from(document.querySelectorAll('.row-checkbox:checked')).map(cb => cb.value);
-        if (selectedIds.length === 0) {
+    if (scope === 'valid_only') {
+        params.append('valid_only', '1');
+    } else if (scope === 'selected') {
+        const selectedCheckboxes = Array.from(document.querySelectorAll('.row-checkbox:checked'));
+        if (selectedCheckboxes.length === 0) {
             alert('Please select at least one row using the checkboxes.');
             return;
         }
+
+        // Check if any selected row has invalid TIN or FS No
+        let invalidCount = 0;
+        selectedCheckboxes.forEach(cb => {
+            const tr = document.getElementById('row-' + cb.value);
+            if (tr) {
+                const tinValid = tr.getAttribute('data-tin-valid');
+                const fsValid = tr.getAttribute('data-fs-valid');
+                if (tinValid === '0' || fsValid === '0') {
+                    invalidCount++;
+                }
+            }
+        });
+
+        if (invalidCount > 0) {
+            const exportValidOnly = confirm(
+                `${invalidCount} selected rows have an invalid TIN/FS No.\n\n` +
+                `Click OK to "Export only valid rows" (recommended for ERCA),\n` +
+                `or Cancel to export all selected rows anyway.`
+            );
+            if (exportValidOnly) {
+                params.append('valid_only', '1');
+            }
+        }
+
+        const selectedIds = selectedCheckboxes.map(cb => cb.value);
         params.append('selected_ids', selectedIds.join(','));
     } else if (scope === 'filtered') {
         const form = document.getElementById('filter-form');
@@ -2656,6 +2961,144 @@ function updateStatsDisplay() {
     if (statValEl) statValEl.innerHTML = totalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' <small class="fs-6 text-muted">ETB</small>';
     if (statVatEl) statVatEl.innerHTML = totalVat.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' <small class="fs-6 text-muted">ETB</small>';
     if (statFlagEl) statFlagEl.textContent = flagged;
+}
+
+/**
+ * AI QC Copilot Chat Handlers
+ */
+function handleChatSubmit(e) {
+    if (e) e.preventDefault();
+    const inputEl = document.getElementById('chat-input-text');
+    const msg = inputEl ? inputEl.value.trim() : '';
+    if (!msg) return;
+    inputEl.value = '';
+    sendChatMessage(msg);
+}
+
+function sendQuickChat(query) {
+    const inputEl = document.getElementById('chat-input-text');
+    if (inputEl) inputEl.value = query;
+    sendChatMessage(query);
+}
+
+function sendChatMessage(message) {
+    const chatContainer = document.getElementById('chat-messages-container');
+    const sendBtn = document.getElementById('btn-chat-send');
+
+    // Append User Message
+    const userMsgHtml = `
+        <div class="d-flex align-items-start gap-2 mb-3 justify-content-end">
+            <div class="bg-primary text-white p-2.5 rounded-3 border" style="max-width: 80%;">
+                <div class="fw-semibold text-white-50 mb-0.5" style="font-size:0.7rem;">You</div>
+                <div>${escapeHtml(message)}</div>
+            </div>
+            <div class="rounded-circle bg-secondary bg-opacity-25 text-dark p-2 flex-shrink-0" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
+                <i class="fa-solid fa-user small"></i>
+            </div>
+        </div>
+    `;
+    chatContainer.insertAdjacentHTML('beforeend', userMsgHtml);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    // Append Typing Indicator
+    const typingId = 'typing_' + Date.now();
+    const typingHtml = `
+        <div class="d-flex align-items-start gap-2 mb-3" id="${typingId}">
+            <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-2 flex-shrink-0" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
+                <i class="fa-solid fa-robot"></i>
+            </div>
+            <div class="bg-light p-2.5 rounded-3 text-muted border">
+                <i class="fa-solid fa-spinner fa-spin me-1"></i>Analyzing receipts & fiscal identifiers...
+            </div>
+        </div>
+    `;
+    chatContainer.insertAdjacentHTML('beforeend', typingHtml);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    if (sendBtn) sendBtn.disabled = true;
+
+    fetch(CHAT_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': CSRF_TOKEN,
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ message: message })
+    })
+    .then(r => r.json())
+    .then(res => {
+        document.getElementById(typingId)?.remove();
+        if (sendBtn) sendBtn.disabled = false;
+
+        let replyHtml = '';
+        if (res.success) {
+            let formattedReply = escapeHtml(res.reply)
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n/g, '<br>');
+
+            let actionBtn = '';
+            if (res.filter_search) {
+                actionBtn = `
+                    <div class="mt-2">
+                        <a href="{{ url('admin/receipt-ocr') }}?search=${encodeURIComponent(res.filter_search)}" class="btn btn-xs btn-primary py-1 px-2 fw-semibold">
+                            <i class="fa-solid fa-filter me-1"></i>${res.action_label || 'View Matching Receipts in Table'}
+                        </a>
+                    </div>
+                `;
+            }
+
+            replyHtml = `
+                <div class="d-flex align-items-start gap-2 mb-3">
+                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-2 flex-shrink-0" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div class="bg-light p-3 rounded-3 text-dark flex-grow-1 border">
+                        <div class="fw-semibold text-primary mb-1">QC AI Agent</div>
+                        <div>${formattedReply}</div>
+                        ${actionBtn}
+                    </div>
+                </div>
+            `;
+        } else {
+            replyHtml = `
+                <div class="d-flex align-items-start gap-2 mb-3">
+                    <div class="rounded-circle bg-danger bg-opacity-10 text-danger p-2 flex-shrink-0" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div class="bg-light p-3 rounded-3 text-danger flex-grow-1 border">
+                        <div class="fw-semibold mb-1"><i class="fa-solid fa-triangle-exclamation me-1"></i>Error</div>
+                        <div>${escapeHtml(res.message || 'Unable to process query')}</div>
+                    </div>
+                </div>
+            `;
+        }
+        chatContainer.insertAdjacentHTML('beforeend', replyHtml);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    })
+    .catch(err => {
+        document.getElementById(typingId)?.remove();
+        if (sendBtn) sendBtn.disabled = false;
+        const errHtml = `
+            <div class="d-flex align-items-start gap-2 mb-3">
+                <div class="rounded-circle bg-danger bg-opacity-10 text-danger p-2 flex-shrink-0" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+                <div class="bg-light p-3 rounded-3 text-danger flex-grow-1 border">
+                    <div class="fw-semibold mb-1">Network Error</div>
+                    <div>Unable to connect to QC AI Agent. Please try again.</div>
+                </div>
+            </div>
+        `;
+        chatContainer.insertAdjacentHTML('beforeend', errHtml);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    });
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 </script>
 @endpush

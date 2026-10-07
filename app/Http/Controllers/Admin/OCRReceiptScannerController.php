@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\Receipt;
 use App\Models\ReceiptItem;
 use App\Models\SystemSetting;
+use App\Services\QcService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -64,11 +65,20 @@ class OCRReceiptScannerController extends Controller
         try {
             if (Schema::hasTable('receipts')) {
                 Schema::table('receipts', function (Blueprint $table) {
+                    if (!Schema::hasColumn('receipts', 'tin_valid')) {
+                        $table->boolean('tin_valid')->default(true)->after('vendor_tin');
+                    }
                     if (!Schema::hasColumn('receipts', 'fs_no')) {
-                        $table->string('fs_no')->nullable()->index()->after('vendor_tin');
+                        $table->string('fs_no')->nullable()->index()->after('tin_valid');
+                    }
+                    if (!Schema::hasColumn('receipts', 'fs_no_raw')) {
+                        $table->string('fs_no_raw')->nullable()->after('fs_no');
+                    }
+                    if (!Schema::hasColumn('receipts', 'fs_no_valid')) {
+                        $table->boolean('fs_no_valid')->default(true)->after('fs_no_raw');
                     }
                     if (!Schema::hasColumn('receipts', 'mrc_no')) {
-                        $table->string('mrc_no')->nullable()->after('fs_no');
+                        $table->string('mrc_no')->nullable()->after('fs_no_valid');
                     }
                     if (!Schema::hasColumn('receipts', 'buyer_tin')) {
                         $table->string('buyer_tin')->nullable()->after('vendor_tin');
@@ -89,6 +99,18 @@ class OCRReceiptScannerController extends Controller
                         $table->text('qc_notes')->nullable()->after('notes');
                     }
                 });
+
+                // Ensure indexes on fs_no and vendor_tin
+                try {
+                    Schema::table('receipts', function (Blueprint $table) {
+                        $table->index('fs_no');
+                    });
+                } catch (\Throwable $e) {}
+                try {
+                    Schema::table('receipts', function (Blueprint $table) {
+                        $table->index('vendor_tin');
+                    });
+                } catch (\Throwable $e) {}
             }
 
             if (!Schema::hasTable('receipt_items')) {
@@ -233,19 +255,47 @@ class OCRReceiptScannerController extends Controller
             });
         }
 
-        // Filter: Search query (FS No, TIN, Vendor name, Description, MRC)
+        // Filter: Search query (FS No, TIN, Vendor name, Description, MRC, or Natural language queries)
         if ($request->filled('search')) {
             $s = trim($request->search);
-            $query->where(function($q) use ($s) {
-                $q->where('item_description', 'like', "%{$s}%")
-                  ->orWhereHas('receipt', function($rq) use ($s) {
-                      $rq->where('fs_no', 'like', "%{$s}%")
-                         ->orWhere('vendor_name', 'like', "%{$s}%")
-                         ->orWhere('vendor_tin', 'like', "%{$s}%")
-                         ->orWhere('mrc_no', 'like', "%{$s}%")
-                         ->orWhere('receipt_number', 'like', "%{$s}%");
-                  });
-            });
+            $lower = strtolower($s);
+
+            if ((str_contains($lower, 'invalid tin') && str_contains($lower, 'fs')) || str_contains($lower, 'invalid identifier') || str_contains($lower, 'invalid tin or fs')) {
+                // e.g. "show receipts with invalid TIN or FS number"
+                $query->whereHas('receipt', function($rq) {
+                    $rq->where('tin_valid', false)
+                       ->orWhere('fs_no_valid', false);
+                });
+            } elseif (str_contains($lower, 'invalid tin')) {
+                // e.g. "show receipts with invalid TIN"
+                $query->whereHas('receipt', function($rq) {
+                    $rq->where('tin_valid', false);
+                });
+            } elseif (str_contains($lower, 'invalid fs')) {
+                // e.g. "show receipts with invalid FS number"
+                $query->whereHas('receipt', function($rq) {
+                    $rq->where('fs_no_valid', false);
+                });
+            } elseif (str_contains($lower, 'needs review')) {
+                $query->where(function($q) {
+                    $q->where('is_flagged', true)
+                      ->orWhereHas('receipt', function($rq) {
+                          $rq->where('needs_review', true);
+                      });
+                });
+            } else {
+                $query->where(function($q) use ($s) {
+                    $q->where('item_description', 'like', "%{$s}%")
+                      ->orWhereHas('receipt', function($rq) use ($s) {
+                          $rq->where('fs_no', 'like', "%{$s}%")
+                             ->orWhere('fs_no_raw', 'like', "%{$s}%")
+                             ->orWhere('vendor_name', 'like', "%{$s}%")
+                             ->orWhere('vendor_tin', 'like', "%{$s}%")
+                             ->orWhere('mrc_no', 'like', "%{$s}%")
+                             ->orWhere('receipt_number', 'like', "%{$s}%");
+                      });
+                });
+            }
         }
 
         $items = $query->paginate(25)->withQueryString();
@@ -415,13 +465,42 @@ class OCRReceiptScannerController extends Controller
             'line_items'   => 'nullable|array',
         ]);
 
-        $fsNo = strtoupper(preg_replace('/\s+/', '', (string)($request->fs_no ?? '')));
-        $supplierTin = preg_replace('/[^0-9]/', '', (string)($request->vendor_tin ?? ''));
+        $rawFs = trim((string)($request->fs_no ?? ''));
+        $rawTin = trim((string)($request->vendor_tin ?? ''));
+        $fsNorm = QcService::normalizeFsNo($rawFs);
+        $tinNorm = QcService::normalizeTin($rawTin);
+
+        $fsNo = $fsNorm['value'];
+        $fsNoRaw = $rawFs;
+        $fsNoValid = $fsNorm['is_valid'];
+        $supplierTin = $tinNorm['value'];
+        $tinValid = $tinNorm['is_valid'];
+
         $dbDate = $this->parseDateToYmd($request->receipt_date);
 
-        // Check for duplicate FS No
+        // Validation gate: block invalid values unless user checked "Save anyway (mark as Needs Review)"
+        $allowInvalid = $request->boolean('allow_invalid_identifiers') || $request->boolean('force_save');
+        if ((!$tinValid || !$fsNoValid) && !$allowInvalid) {
+            $errs = [];
+            if (!$tinValid) $errs[] = $tinNorm['error'];
+            if (!$fsNoValid) $errs[] = $fsNorm['error'];
+            return response()->json([
+                'success'               => false,
+                'is_invalid_identifier' => true,
+                'message'               => implode('; ', $errs) . '. Tick "Save anyway (mark as Needs Review)" to add.',
+                'tin_error'             => $tinNorm['error'],
+                'fs_error'              => $fsNorm['error'],
+            ], 422);
+        }
+
+        // Check for duplicate FS No using normalized 8-digit FS No
         if (!empty($fsNo) && !$request->boolean('force_save')) {
-            $existing = Receipt::where('fs_no', $fsNo)->orWhere('parsed_data->fs_no', $fsNo)->first();
+            $existing = Receipt::where('fs_no', $fsNo)
+                ->orWhere('fs_no_raw', $fsNo)
+                ->orWhere('fs_no_raw', 'FS' . $fsNo)
+                ->orWhere('parsed_data->fs_no', $fsNo)
+                ->orWhere('parsed_data->fs_no', 'FS' . $fsNo)
+                ->first();
             if ($existing) {
                 return response()->json([
                     'success'           => true,
@@ -448,8 +527,11 @@ class OCRReceiptScannerController extends Controller
             'project_id'   => $request->project_id,
             'vendor_name'  => $request->vendor_name ?: 'General Merchant',
             'vendor_tin'   => $supplierTin,
+            'tin_valid'    => $tinValid,
             'buyer_tin'    => $request->buyer_tin ?: '0038480010',
             'fs_no'        => $fsNo,
+            'fs_no_raw'    => $fsNoRaw,
+            'fs_no_valid'  => $fsNoValid,
             'mrc_no'       => $request->machine_no,
             'receipt_date' => $dbDate ?: now()->toDateString(),
             'subtotal'     => $subtotal,
@@ -465,7 +547,7 @@ class OCRReceiptScannerController extends Controller
             'confidence'       => $request->confidence ?: 'high',
             'confidence_score' => (int)($request->confidence_score ?: 90),
             'qc_notes'         => $request->qc_notes ?: 'Added to table via OCR Receipt Scanner Studio.',
-            'needs_review'     => false,
+            'needs_review'     => (!$tinValid || !$fsNoValid || $request->boolean('needs_review')),
             'parsed_data'      => $request->all(),
             'parse_status'     => 'parsed',
             'status'           => 'approved',
@@ -642,23 +724,29 @@ class OCRReceiptScannerController extends Controller
         $qcNotes         = $pipeline['qc_notes'];
         $rawText         = $pipeline['raw_text'];
 
-        // Normalize extracted items and fields
-        $fsNo = trim((string)($extracted['fs_no'] ?? ''));
-        if (!empty($fsNo)) {
-            $fsNo = strtoupper(preg_replace('/\s+/', '', $fsNo));
-        }
+        // Normalize extracted items and fields using strict QcService
+        $rawFs = trim((string)($extracted['fs_no'] ?? ''));
+        $rawTin = trim((string)($extracted['supplier_tin'] ?? ''));
+        $fsNorm = QcService::normalizeFsNo($rawFs);
+        $tinNorm = QcService::normalizeTin($rawTin);
 
-        $supplierTin = trim((string)($extracted['supplier_tin'] ?? ''));
-        $supplierTin = preg_replace('/[^0-9]/', '', $supplierTin);
+        $fsNo = $fsNorm['value'];
+        $fsNoRaw = $rawFs;
+        $fsNoValid = $fsNorm['is_valid'];
+        $supplierTin = $tinNorm['value'];
+        $tinValid = $tinNorm['is_valid'];
 
         $merchantName = trim((string)($extracted['merchant_name'] ?? ''));
         $mrcNo = trim((string)($extracted['machine_no'] ?? ($extracted['mrc_no'] ?? '')));
 
-        // Check for duplicate FS No
+        // Check for duplicate FS No using normalized 8-digit FS No
         $existingReceipt = null;
         if (!empty($fsNo)) {
             $existingReceipt = Receipt::where('fs_no', $fsNo)
+                ->orWhere('fs_no_raw', $fsNo)
+                ->orWhere('fs_no_raw', 'FS' . $fsNo)
                 ->orWhere('parsed_data->fs_no', $fsNo)
+                ->orWhere('parsed_data->fs_no', 'FS' . $fsNo)
                 ->first();
         }
 
@@ -723,14 +811,19 @@ class OCRReceiptScannerController extends Controller
             $calcTotal    = (float)$extracted['total_amount'];
         }
 
+        $needsReview = (!$tinValid || !$fsNoValid || $confidence === 'review' || $confidence === 'low' || $confidenceScore < 75);
+
         // Persist Receipt
         $receipt = Receipt::create([
             'uploaded_by'  => Auth::id() ?: 1,
             'project_id'   => $request->project_id,
             'vendor_name'  => $merchantName ?: 'General Merchant',
             'vendor_tin'   => $supplierTin,
+            'tin_valid'    => $tinValid,
             'buyer_tin'    => $extracted['buyer_tin'] ?? '0038480010',
             'fs_no'        => $fsNo,
+            'fs_no_raw'    => $fsNoRaw,
+            'fs_no_valid'  => $fsNoValid,
             'mrc_no'       => $mrcNo,
             'receipt_date' => $dbDate,
             'subtotal'     => round($calcSubtotal, 2),
@@ -745,7 +838,7 @@ class OCRReceiptScannerController extends Controller
             'ocr_engine'       => $engineSlug,
             'confidence'       => $confidence,
             'confidence_score' => $confidenceScore,
-            'needs_review'     => ($confidence === 'review' || $confidence === 'low' || $confidenceScore < 75),
+            'needs_review'     => $needsReview,
             'parsed_data'      => $extracted,
             'parse_status'     => 'parsed',
             'status'           => 'approved',
@@ -1002,15 +1095,22 @@ class OCRReceiptScannerController extends Controller
         ]);
 
         // Update Parent Receipt Header fields
-        $tin = preg_replace('/[^0-9]/', '', (string)$request->supplier_tin);
-        $fs  = strtoupper(preg_replace('/\s+/', '', (string)$request->fs_no));
         $date = $this->parseDateToYmd($request->receipt_date);
 
         $receiptUpdates = [];
         if ($request->has('seller_name'))  $receiptUpdates['vendor_name'] = $request->seller_name;
-        if ($request->has('supplier_tin')) $receiptUpdates['vendor_tin']  = $tin;
-        if ($request->has('mrc_no'))       $receiptUpdates['mrc_no']       = $request->mrc_no;
-        if ($request->has('fs_no'))        $receiptUpdates['fs_no']        = $fs;
+        if ($request->has('supplier_tin')) {
+            $tinNorm = QcService::normalizeTin($request->supplier_tin);
+            $receiptUpdates['vendor_tin'] = $tinNorm['value'];
+            $receiptUpdates['tin_valid']  = $tinNorm['is_valid'];
+        }
+        if ($request->has('mrc_no'))       $receiptUpdates['mrc_no'] = $request->mrc_no;
+        if ($request->has('fs_no')) {
+            $fsNorm = QcService::normalizeFsNo($request->fs_no);
+            $receiptUpdates['fs_no']       = $fsNorm['value'];
+            $receiptUpdates['fs_no_raw']   = (string)$request->fs_no;
+            $receiptUpdates['fs_no_valid'] = $fsNorm['is_valid'];
+        }
         if ($date)                         $receiptUpdates['receipt_date'] = $date;
 
         if (!empty($receiptUpdates)) {
@@ -1081,9 +1181,18 @@ class OCRReceiptScannerController extends Controller
                 if ($item->receipt) {
                     $rUpdates = [];
                     if (!empty($row['seller_name']))  $rUpdates['vendor_name'] = $row['seller_name'];
-                    if (!empty($row['supplier_tin'])) $rUpdates['vendor_tin']  = preg_replace('/[^0-9]/', '', (string)$row['supplier_tin']);
-                    if (!empty($row['mrc_no']))       $rUpdates['mrc_no']       = $row['mrc_no'];
-                    if (!empty($row['fs_no']))        $rUpdates['fs_no']        = strtoupper(preg_replace('/\s+/', '', (string)$row['fs_no']));
+                    if (!empty($row['supplier_tin'])) {
+                        $tinNorm = QcService::normalizeTin($row['supplier_tin']);
+                        $rUpdates['vendor_tin'] = $tinNorm['value'];
+                        $rUpdates['tin_valid']  = $tinNorm['is_valid'];
+                    }
+                    if (!empty($row['mrc_no']))       $rUpdates['mrc_no'] = $row['mrc_no'];
+                    if (!empty($row['fs_no'])) {
+                        $fsNorm = QcService::normalizeFsNo($row['fs_no']);
+                        $rUpdates['fs_no']       = $fsNorm['value'];
+                        $rUpdates['fs_no_raw']   = (string)$row['fs_no'];
+                        $rUpdates['fs_no_valid'] = $fsNorm['is_valid'];
+                    }
                     if (!empty($row['receipt_date'])) {
                         $parsedDate = $this->parseDateToYmd($row['receipt_date']);
                         if ($parsedDate) $rUpdates['receipt_date'] = $parsedDate;
@@ -1394,6 +1503,14 @@ class OCRReceiptScannerController extends Controller
             }
         }
 
+        // Filter: Valid only
+        if ($request->boolean('valid_only')) {
+            $query->whereHas('receipt', function($rq) {
+                $rq->where('tin_valid', true)
+                   ->where('fs_no_valid', true);
+            });
+        }
+
         $items = $query->get();
         $filename = 'VAT_RECEIPT_REPORT_' . now()->format('Y_m_d_His') . '.xlsx';
         $tempPath = storage_path('app/temp_' . uniqid() . '.xlsx');
@@ -1425,20 +1542,28 @@ class OCRReceiptScannerController extends Controller
             foreach ($items as $item) {
                 $r = $item->receipt;
                 $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : now()->format('d/m/Y');
-                $tin = $r ? (string)$r->vendor_tin : '';
+                $rawTin = $r ? (string)$r->vendor_tin : '';
+                $rawFs  = $r ? (string)$r->fs_no : '';
                 $seller = $r ? (string)$r->vendor_name : '';
-                $mrc = $r ? (string)$r->mrc_no : '';
-                $fs = $r ? (string)$r->fs_no : '';
+                $mrc    = $r ? (string)$r->mrc_no : '';
+
+                // Column D: Supplier TIN written as text string preserving leading zeros
+                $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
+                $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
+
+                // Column H: FS No written as 8-digit text string preserving leading zeros
+                $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
+                $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
 
                 $rowCells = [
                     Cell::fromValue((string)($item->vat_category ?: 'G')),
                     Cell::fromValue((string)($item->calendar_type ?: 'G')),
                     Cell::fromValue((int)($item->purchase_type ?: 3)),
-                    Cell::fromValue($tin),
+                    Cell::fromValue((string)$tinText),
                     Cell::fromValue($seller),
                     Cell::fromValue($dateFormatted),
                     Cell::fromValue($mrc),
-                    Cell::fromValue($fs),
+                    Cell::fromValue((string)$fsText),
                     Cell::fromValue((string)($item->item_description ?: 'Material')),
                     Cell::fromValue((string)($item->uom ?: '9')),
                     Cell::fromValue((float)$item->qty),
@@ -1508,6 +1633,14 @@ class OCRReceiptScannerController extends Controller
             }
         }
 
+        // Filter: Valid only
+        if ($request->boolean('valid_only')) {
+            $query->whereHas('receipt', function($rq) {
+                $rq->where('tin_valid', true)
+                   ->where('fs_no_valid', true);
+            });
+        }
+
         $items = $query->get();
         $filename = 'VAT_REPORT_' . now()->format('Y_m_d_His') . '.csv';
 
@@ -1544,20 +1677,26 @@ class OCRReceiptScannerController extends Controller
             foreach ($items as $item) {
                 $r = $item->receipt;
                 $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : now()->format('d/m/Y');
-                $tin = $r ? (string)$r->vendor_tin : '';
+                $rawTin = $r ? (string)$r->vendor_tin : '';
+                $rawFs  = $r ? (string)$r->fs_no : '';
                 $seller = $r ? (string)$r->vendor_name : '';
-                $mrc = $r ? (string)$r->mrc_no : '';
-                $fs = $r ? (string)$r->fs_no : '';
+                $mrc    = $r ? (string)$r->mrc_no : '';
+
+                $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
+                $tinText = (strlen($tinDigits) === 10) ? $tinDigits : $rawTin;
+
+                $fsDigits = preg_replace('/[^0-9]/', '', $rawFs);
+                $fsText = (strlen($fsDigits) === 8) ? $fsDigits : $rawFs;
 
                 fputcsv($out, [
                     $item->vat_category ?: 'G',
                     $item->calendar_type ?: 'G',
                     $item->purchase_type ?: 3,
-                    $tin,
+                    (string)$tinText,
                     $seller,
                     $dateFormatted,
                     $mrc,
-                    $fs,
+                    (string)$fsText,
                     $item->item_description ?: 'Material',
                     $item->uom ?: '9',
                     number_format((float)$item->qty, 2, '.', ''),
@@ -1572,6 +1711,103 @@ class OCRReceiptScannerController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * AI Chat Agent for Receipt OCR Studio.
+     * Answers queries like "show receipts with invalid TIN or FS number".
+     */
+    public function chatAgent(Request $request)
+    {
+        $this->ensureAuthorized();
+        $this->ensureSchema();
+
+        $queryStr = trim((string)$request->input('message', $request->input('query', '')));
+        if (empty($queryStr)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please ask a question, e.g. "show receipts with invalid TIN or FS number".',
+            ], 422);
+        }
+
+        $lower = strtolower($queryStr);
+
+        $isInvalidTinFs = (str_contains($lower, 'invalid tin') && str_contains($lower, 'fs'))
+            || str_contains($lower, 'invalid identifier')
+            || str_contains($lower, 'invalid tin or fs')
+            || (str_contains($lower, 'invalid') && (str_contains($lower, 'tin') || str_contains($lower, 'fs')));
+
+        $isInvalidTinOnly = str_contains($lower, 'invalid tin') || (str_contains($lower, 'tin') && (str_contains($lower, 'wrong') || str_contains($lower, 'error')));
+        $isInvalidFsOnly  = str_contains($lower, 'invalid fs') || (str_contains($lower, 'fs') && (str_contains($lower, 'wrong') || str_contains($lower, 'error')));
+        $isNeedsReview    = str_contains($lower, 'review') || str_contains($lower, 'flagged');
+
+        $totalReceipts    = Receipt::count();
+        $invalidTinCount  = Receipt::where('tin_valid', false)->count();
+        $invalidFsCount   = Receipt::where('fs_no_valid', false)->count();
+        $bothInvalidCount = Receipt::where(function($q) {
+            $q->where('tin_valid', false)->orWhere('fs_no_valid', false);
+        })->count();
+        $needsReviewCount = Receipt::where('needs_review', true)->count();
+
+        if ($isInvalidTinFs) {
+            $reply = "I found **{$bothInvalidCount} receipt(s)** with an invalid TIN or FS number out of {$totalReceipts} total receipts.\n\n"
+                   . "- **Invalid TINs (must be exactly 10 digits):** {$invalidTinCount}\n"
+                   . "- **Invalid FS Numbers (must be exactly 8 digits):** {$invalidFsCount}\n\n"
+                   . "You can review and correct them directly in the table.";
+
+            return response()->json([
+                'success'       => true,
+                'reply'         => $reply,
+                'filter_search' => 'show receipts with invalid TIN or FS number',
+                'count'         => $bothInvalidCount,
+                'action_label'  => 'Filter Invalid TIN & FS in Table',
+            ]);
+        }
+
+        if ($isInvalidTinOnly) {
+            $reply = "There are **{$invalidTinCount} receipt(s)** where the Supplier TIN is invalid (must be exactly 10 digits).";
+            return response()->json([
+                'success'       => true,
+                'reply'         => $reply,
+                'filter_search' => 'invalid tin',
+                'count'         => $invalidTinCount,
+                'action_label'  => 'Show Receipts with Invalid TIN',
+            ]);
+        }
+
+        if ($isInvalidFsOnly) {
+            $reply = "There are **{$invalidFsCount} receipt(s)** where the FS Number is invalid (must be exactly 8 digits).";
+            return response()->json([
+                'success'       => true,
+                'reply'         => $reply,
+                'filter_search' => 'invalid fs',
+                'count'         => $invalidFsCount,
+                'action_label'  => 'Show Receipts with Invalid FS No',
+            ]);
+        }
+
+        if ($isNeedsReview) {
+            $reply = "There are **{$needsReviewCount} receipt(s)** currently flagged as 'Needs Review' requiring manual attention.";
+            return response()->json([
+                'success'       => true,
+                'reply'         => $reply,
+                'filter_search' => 'needs review',
+                'count'         => $needsReviewCount,
+                'action_label'  => 'Show All Needs Review Receipts',
+            ]);
+        }
+
+        $reply = "Receipt OCR Studio status:\n"
+               . "- Total receipts: {$totalReceipts}\n"
+               . "- Needs Review: {$needsReviewCount}\n"
+               . "- Invalid TINs: {$invalidTinCount}\n"
+               . "- Invalid FS Numbers: {$invalidFsCount}\n\n"
+               . "Try asking: *\"show receipts with invalid TIN or FS number\"* or *\"show receipts needing review\"*.";
+
+        return response()->json([
+            'success' => true,
+            'reply'   => $reply,
+        ]);
     }
 
     /**
@@ -1594,6 +1830,8 @@ class OCRReceiptScannerController extends Controller
         $nvidiaKey     = SystemSetting::get('nvidia_api_key', env('NVIDIA_API_KEY'));
         $azureKey      = SystemSetting::get('azure_vision_key', env('AZURE_VISION_KEY'));
         $azureEndpoint = SystemSetting::get('azure_vision_endpoint', env('AZURE_VISION_ENDPOINT'));
+        $fsNoLength    = (int)SystemSetting::get('fs_no_length', env('FS_NO_LENGTH', 8));
+        $fsNoAllowPrefix = (bool)SystemSetting::get('fs_no_allow_prefix', env('FS_NO_ALLOW_PREFIX', true));
 
         return response()->json([
             'success' => true,
@@ -1607,6 +1845,8 @@ class OCRReceiptScannerController extends Controller
                 'masked_nvidia'         => $this->maskKey($nvidiaKey),
                 'masked_azure'          => $this->maskKey($azureKey),
                 'azure_endpoint'        => $azureEndpoint ?: '',
+                'fs_no_length'          => $fsNoLength > 0 ? $fsNoLength : 8,
+                'fs_no_allow_prefix'    => $fsNoAllowPrefix,
             ]
         ]);
     }
@@ -1624,6 +1864,8 @@ class OCRReceiptScannerController extends Controller
             'nvidia_api_key'        => 'nullable|string',
             'azure_vision_key'      => 'nullable|string',
             'azure_vision_endpoint' => 'nullable|string',
+            'fs_no_length'          => 'nullable|integer|min:1|max:20',
+            'fs_no_allow_prefix'    => 'nullable|boolean',
         ]);
 
         if ($request->has('gemini_api_key') && !str_contains($request->gemini_api_key, '...')) {
@@ -1645,6 +1887,16 @@ class OCRReceiptScannerController extends Controller
         if ($request->has('azure_vision_endpoint')) {
             $endpoint = rtrim(trim((string)$request->azure_vision_endpoint), '/');
             SystemSetting::set('azure_vision_endpoint', $endpoint, 'string', 'ocr', 'Azure Computer Vision Endpoint');
+        }
+
+        if ($request->has('fs_no_length')) {
+            $fsLen = max(1, min(20, (int)$request->fs_no_length));
+            SystemSetting::set('fs_no_length', $fsLen, 'integer', 'ocr', 'Fiscal Sales (FS) number digit length');
+        }
+
+        if ($request->has('fs_no_allow_prefix')) {
+            $allowPrefix = $request->boolean('fs_no_allow_prefix');
+            SystemSetting::set('fs_no_allow_prefix', $allowPrefix, 'boolean', 'ocr', 'Allow and strip FS prefix during normalization');
         }
 
         return response()->json([
@@ -1864,8 +2116,8 @@ CRITICAL EXTRACTION RULES:
    - Carefully inspect the image even if rotated, tilted, taken at an angle with a smartphone camera, with shadows, or on folded/wrinkled thermal paper. Read all numbers and letters meticulously.
 
 2. SUPPLIER TIN vs BUYER TIN:
-   - supplier_tin: 10-digit TIN of the SELLER / MERCHANT / SUPPLIER issuing the receipt (e.g. "0024916531", "0000005201", "0097826684"). Usually printed near the merchant name at top. This is MANDATORY. Do NOT confuse with Buyer TIN!
-   - buyer_tin: 10-digit TIN of the BUYER / CLIENT / CUSTOMER (often "0038480010" or labeled "Buyer's TIN / TIN").
+   - supplier_tin: Return digits only, exactly as printed on the receipt (must be exactly 10 digits, e.g. "0024916531"). Strip all labels ("TIN:", "TIN No") and return digits only. If missing, blurry, or low confidence, return an empty string "" instead of guessing or padding.
+   - buyer_tin: 10-digit TIN of BUYER / CLIENT / CUSTOMER (often "0038480010"). Return digits only.
 
 3. MERCHANT / SELLER NAME:
    - merchant_name: Full registered trade name of the SELLER (e.g. "ASTRA GENERAL TRADING PLC", "ABDULKERIM STRAJ AHMED", "ENTERPRISE ..."). Do NOT truncate or cut words in half.
@@ -1877,7 +2129,7 @@ CRITICAL EXTRACTION RULES:
    - machine_no: Cash machine registration code / MRC number (e.g. "TDB0015170", "DDB0000032", "TDB0016310", "MFE0097690"). Usually 3 capital letters followed by 7 digits.
 
 6. FS / FISCAL RECEIPT NUMBER:
-   - fs_no: The fiscal receipt sequence number (e.g. "FS0002674", "FS00002674", "FS0001980"). Look for "FS", "FS NO", "FS No.", "FS#", "F/S", or the fiscal sequential receipt number. Include "FS" prefix followed by the digits (e.g. "FS0002674"). This is MANDATORY. Do NOT leave empty!
+   - fs_no: Return digits only, exactly as printed on the receipt (must be exactly 8 digits, e.g. "00002674"). If printed with "FS" prefix, return digits only. Do NOT pad with zeros, do NOT truncate, and do NOT guess. If missing, blurry, or low confidence, return an empty string "" instead of guessing.
 
 7. ITEMS / PURCHASED MATERIALS (COL I, J, K, L, M, N, O):
    - You MUST read the ACTUAL bought materials/items listed on the slip!
@@ -1905,11 +2157,11 @@ CRITICAL EXTRACTION RULES:
 Return STRICT JSON matching this schema:
 {
   "merchant_name": "string",
-  "supplier_tin": "10 digits string",
-  "buyer_tin": "10 digits string or null",
+  "supplier_tin": "10 digits numeric string or empty",
+  "buyer_tin": "10 digits numeric string or null",
   "receipt_date": "DD/MM/YYYY",
   "machine_no": "string or null",
-  "fs_no": "string",
+  "fs_no": "8 digits numeric string or empty",
   "description": "string summary",
   "subtotal": 0.00,
   "vat_amount": 0.00,
@@ -1967,23 +2219,19 @@ PROMPT;
                         $parsed   = json_decode($jsonText, true);
 
                         if (is_array($parsed)) {
-                            // Ensure clean 10-digit TINs
-                            if (!empty($parsed['supplier_tin'])) {
-                                $parsed['supplier_tin'] = preg_replace('/[^0-9]/', '', (string)$parsed['supplier_tin']);
-                            }
+                            // Strict normalization with QcService - never guess or pad
+                            $tinNorm = QcService::normalizeTin($parsed['supplier_tin'] ?? null);
+                            $fsNorm  = QcService::normalizeFsNo($parsed['fs_no'] ?? null);
+
+                            $parsed['supplier_tin'] = $tinNorm['value'];
+                            $parsed['tin_valid']    = $tinNorm['is_valid'];
+                            $parsed['fs_no']        = $fsNorm['value'];
+                            $parsed['fs_no_raw']    = (string)($parsed['fs_no'] ?? '');
+                            $parsed['fs_no_valid']  = $fsNorm['is_valid'];
+
                             if (!empty($parsed['buyer_tin'])) {
                                 $parsed['buyer_tin'] = preg_replace('/[^0-9]/', '', (string)$parsed['buyer_tin']);
                             }
-                            // Normalize FS No
-                            if (!empty($parsed['fs_no'])) {
-                                $rawFs = strtoupper(trim((string)$parsed['fs_no']));
-                                if (!str_starts_with($rawFs, 'FS') && preg_match('/^[0-9]+$/', $rawFs)) {
-                                    $parsed['fs_no'] = 'FS' . str_pad($rawFs, 7, '0', STR_PAD_LEFT);
-                                } else {
-                                    $parsed['fs_no'] = preg_replace('/\s+/', '', $rawFs);
-                                }
-                            }
-                            // Normalize MRC No
                             if (!empty($parsed['machine_no'])) {
                                 $parsed['machine_no'] = strtoupper(trim(preg_replace('/\s+/', '', (string)$parsed['machine_no'])));
                             }
@@ -2071,17 +2319,19 @@ PROMPT;
                 if ($t === '0038480010') {
                     $buyerTin = $t;
                 } elseif (empty($supplierTin)) {
-                    $supplierTin = $t;
+                    $tinNorm = QcService::normalizeTin($t);
+                    $supplierTin = $tinNorm['value'];
                 }
             }
         }
 
-        // 2. Find FS Number (FS0002674, FS: 0002674, FS NO: 0002674, FS#0002674, F/S 0002674, FISCAL NO 0002674)
-        if (preg_match('/(?:FS|F\/S|FISCAL\s*NO|FISCAL\s*RECEIPT\s*NO|FS\s*NO|FS\s*\#)[\s\:\.\#\-\_]*0*([0-9]{1,10})/i', $text, $m)) {
-            $num = $m[1];
-            $fsNo = 'FS' . str_pad($num, 7, '0', STR_PAD_LEFT);
-        } elseif (preg_match('/\bFS\s*0*([0-9]{3,10})\b/i', $text, $m)) {
-            $fsNo = 'FS' . str_pad($m[1], 7, '0', STR_PAD_LEFT);
+        // 2. Find FS Number (normalize without guessing or auto-padding)
+        if (preg_match('/(?:FS|F\/S|FISCAL\s*NO|FISCAL\s*RECEIPT\s*NO|FS\s*NO|FS\s*\#)[\s\:\.\#\-\_]*([0-9]{1,12})/i', $text, $m)) {
+            $fsNorm = QcService::normalizeFsNo($m[1]);
+            $fsNo = $fsNorm['value'];
+        } elseif (preg_match('/\bFS\s*([0-9]{3,12})\b/i', $text, $m)) {
+            $fsNorm = QcService::normalizeFsNo($m[1]);
+            $fsNo = $fsNorm['value'];
         }
 
         // 3. Find MRC Number (typically 3 letters followed by 7 digits)
@@ -2291,8 +2541,8 @@ PROMPT;
 You are an expert Ethiopian fiscal receipt auditor specializing in ERCA / Ministry of Revenues fiscal cash machine receipts (Datecs, Daisy, Citizen) for VAT declaration (Line 100).
 Extract ALL details from this receipt image with absolute precision.
 Ensure:
-1. Supplier TIN is exactly 10 digits.
-2. FS No is accurately extracted (e.g. FS0001234 or FS12345).
+1. Supplier TIN: return digits only, exactly as printed (must be exactly 10 digits). Return empty string if missing or low confidence instead of guessing.
+2. FS No: return digits only, exactly as printed (must be exactly 8 digits). Return empty string if missing or low confidence instead of guessing. Do NOT auto-pad with zeros or guess.
 3. Machine No (MRC) is captured if present.
 4. Receipt Date is formatted as DD/MM/YYYY.
 5. All item lines are extracted with individual unit prices, quantities, and line amounts.
@@ -2301,11 +2551,11 @@ Ensure:
 Return STRICT JSON matching:
 {
   "merchant_name": "string",
-  "supplier_tin": "10-digit string",
-  "buyer_tin": "10-digit string or null",
+  "supplier_tin": "10-digit numeric string or empty",
+  "buyer_tin": "10-digit numeric string or null",
   "receipt_date": "DD/MM/YYYY",
   "machine_no": "string or null",
-  "fs_no": "string",
+  "fs_no": "8-digit numeric string or empty",
   "description": "string",
   "subtotal": 0.00,
   "vat_amount": 0.00,
@@ -2361,19 +2611,18 @@ PROMPT;
                         $parsed = json_decode($jsonText, true);
 
                         if (is_array($parsed) && !empty($parsed['merchant_name'])) {
-                            if (!empty($parsed['supplier_tin'])) {
-                                $parsed['supplier_tin'] = preg_replace('/[^0-9]/', '', (string)$parsed['supplier_tin']);
-                            }
+                            // Strict normalization with QcService - never guess or pad
+                            $tinNorm = QcService::normalizeTin($parsed['supplier_tin'] ?? null);
+                            $fsNorm  = QcService::normalizeFsNo($parsed['fs_no'] ?? null);
+
+                            $parsed['supplier_tin'] = $tinNorm['value'];
+                            $parsed['tin_valid']    = $tinNorm['is_valid'];
+                            $parsed['fs_no']        = $fsNorm['value'];
+                            $parsed['fs_no_raw']    = (string)($parsed['fs_no'] ?? '');
+                            $parsed['fs_no_valid']  = $fsNorm['is_valid'];
+
                             if (!empty($parsed['buyer_tin'])) {
                                 $parsed['buyer_tin'] = preg_replace('/[^0-9]/', '', (string)$parsed['buyer_tin']);
-                            }
-                            if (!empty($parsed['fs_no'])) {
-                                $rawFs = strtoupper(trim((string)$parsed['fs_no']));
-                                if (!str_starts_with($rawFs, 'FS') && preg_match('/^[0-9]+$/', $rawFs)) {
-                                    $parsed['fs_no'] = 'FS' . str_pad($rawFs, 7, '0', STR_PAD_LEFT);
-                                } else {
-                                    $parsed['fs_no'] = preg_replace('/\s+/', '', $rawFs);
-                                }
                             }
                             if (!empty($parsed['machine_no'])) {
                                 $parsed['machine_no'] = strtoupper(trim(preg_replace('/\s+/', '', (string)$parsed['machine_no'])));
@@ -2497,25 +2746,34 @@ Below are the JSON outputs from each engine:
 YOUR MISSION:
 Reconcile all disagreements and generate the SINGLE MOST ACCURATE, MATHEMATICALLY VERIFIED JSON result for ERCA VAT reporting.
 
-RECONCILIATION DIRECTIVES:
-1. SUPPLIER TIN: Must be exactly 10 digits. Compare across engines; pick the one with clean 10 digits and highest consensus.
-2. BUYER TIN: 10 digits (e.g. 0038480010 if company purchaser or printed).
-3. FS NUMBER: Critical fiscal identifier (e.g. FS0001234 or FS12345). Resolve character misinterpretations ('O' vs '0', 'B' vs '8', 'S' vs '5').
-4. MACHINE NO / MRC: Pick valid fiscal register serial (e.g. MOR..., DATECS..., DAISY...).
-5. RECEIPT DATE: Format strictly as DD/MM/YYYY.
-6. ARITHMETIC VERIFICATION:
+CRITICAL IDENTIFIER RULES (STRICT - NEVER GUESS OR FORCE DIGIT COUNT):
+1. SUPPLIER TIN:
+   - Must be EXACTLY 10 digits, numeric only.
+   - You may resolve common OCR character confusions (O/o->0, I/l/|->1, S/s->5, B->8) ONLY IF the resulting value becomes exactly 10 digits.
+   - You must NEVER add, remove, guess, or pad digits to force validity.
+   - If still not exactly 10 digits, output the raw extracted digits and state it is invalid in qc_notes.
+2. FS NUMBER:
+   - Must be EXACTLY 8 digits, numeric only (strip "FS" prefix).
+   - You may resolve common OCR character confusions (O/o->0, I/l->1, S/s->5, B->8) ONLY IF the resulting value becomes exactly 8 digits.
+   - You must NEVER add, remove, guess, or pad digits to force validity (e.g. 7 digits like 0002674 must NOT be padded to 8 digits).
+   - If fewer or more than 8 digits, output the raw value without padding and flag as invalid in qc_notes.
+3. If ANY candidate value fails the digit-length rule, it can NEVER win consensus.
+4. BUYER TIN: 10 digits (e.g. 0038480010 if company purchaser or printed).
+5. MACHINE NO / MRC: Pick valid fiscal register serial (e.g. MOR..., DATECS..., DAISY...).
+6. RECEIPT DATE: Format strictly as DD/MM/YYYY.
+7. ARITHMETIC VERIFICATION:
    - Check Subtotal + VAT (15%) = Total Amount within 0.05 tolerance.
    - If engines disagree on numbers, choose the mathematically sound set that sums correctly.
-7. ITEMS BREAKDOWN:
+8. ITEMS BREAKDOWN:
    - Preserve detailed material descriptions (e.g. "REBAR 16MM", "CEMENT OPC", "SAND"). Avoid generic labels.
    - Ensure for every item: Qty x Unit Price = Total Value, and Total Value + VAT = Value After VAT.
-8. CONFIDENCE SCORE (0-100):
-   - 95-100: All engines agreed on TIN, FS#, and arithmetic is 100% exact.
-   - 80-94: Minor discrepancy resolved (e.g. one engine missed MRC or date format), but math and TIN are verified.
+9. CONFIDENCE SCORE (0-100):
+   - 95-100: All engines agreed on 10-digit TIN, 8-digit FS#, and arithmetic is 100% exact.
+   - 80-94: Minor discrepancy resolved, but math, 10-digit TIN and 8-digit FS# are verified.
    - 60-79: Discrepancy required significant reconciliation or low-quality receipt.
-   - <60: Unresolved discrepancy or missing critical fields (TIN or FS#).
-9. PROVENANCE & QC NOTES:
-   - State clearly which engine outputs were adopted and what was reconciled.
+   - <60: Unresolved discrepancy or invalid TIN / FS#.
+10. PROVENANCE & QC NOTES:
+   - State clearly which engine outputs were adopted, what was reconciled, and whether TIN / FS# are valid.
 
 Return STRICT JSON matching:
 {
@@ -2575,7 +2833,20 @@ PROMPT;
                         $parsed   = json_decode($jsonText, true);
 
                         if (is_array($parsed) && !empty($parsed['merchant_name'])) {
+                            // Run strict deterministic QC normalization on QC Agent's output
+                            $tinNorm = QcService::normalizeTin($parsed['supplier_tin'] ?? null);
+                            $fsNorm  = QcService::normalizeFsNo($parsed['fs_no'] ?? null);
+
+                            $parsed['supplier_tin'] = $tinNorm['value'];
+                            $parsed['tin_valid']    = $tinNorm['is_valid'];
+                            $parsed['fs_no']        = $fsNorm['value'];
+                            $parsed['fs_no_raw']    = (string)($parsed['fs_no'] ?? '');
+                            $parsed['fs_no_valid']  = $fsNorm['is_valid'];
+
                             $score = (int)($parsed['confidence_score'] ?? 92);
+                            if (!$tinNorm['is_valid'] || !$fsNorm['is_valid']) {
+                                $score = min($score, 60);
+                            }
                             $parsed['confidence_score'] = max(10, min(100, $score));
                             return $parsed;
                         }
@@ -2613,30 +2884,54 @@ PROMPT;
             $base = reset($engineResults);
         }
 
-        // Cross-check supplier TIN
-        $allTins = [];
+        // Cross-check supplier TIN: compare only AFTER normalization
+        // A value that fails the digit-length rule can NEVER win the consensus vote!
+        $validTins = [];
+        $rawTins   = [];
         foreach ($engineResults as $res) {
-            $tin = preg_replace('/[^0-9]/', '', (string)($res['supplier_tin'] ?? ''));
-            if (strlen($tin) === 10) {
-                $allTins[$tin] = ($allTins[$tin] ?? 0) + 1;
+            $rawT = (string)($res['supplier_tin'] ?? '');
+            $tinNorm = QcService::normalizeTin($rawT);
+            if ($tinNorm['is_valid']) {
+                $validTins[$tinNorm['value']] = ($validTins[$tinNorm['value']] ?? 0) + 1;
+            } elseif ($rawT !== '') {
+                $rawTins[$rawT] = ($rawTins[$rawT] ?? 0) + 1;
             }
         }
-        if (!empty($allTins)) {
-            arsort($allTins);
-            $base['supplier_tin'] = array_key_first($allTins);
+        if (!empty($validTins)) {
+            arsort($validTins);
+            $base['supplier_tin'] = array_key_first($validTins);
+            $base['tin_valid']    = true;
+        } else {
+            // No engine produced a valid 10-digit TIN: candidate can never win consensus
+            arsort($rawTins);
+            $base['supplier_tin'] = array_key_first($rawTins) ?: '';
+            $base['tin_valid']    = false;
         }
 
-        // Cross-check FS No
-        $allFs = [];
+        // Cross-check FS No: compare only AFTER normalization
+        // A value that fails the digit-length rule can NEVER win the consensus vote!
+        $validFs  = [];
+        $rawFsMap = [];
         foreach ($engineResults as $res) {
-            $fs = strtoupper(preg_replace('/\s+/', '', (string)($res['fs_no'] ?? '')));
-            if (!empty($fs)) {
-                $allFs[$fs] = ($allFs[$fs] ?? 0) + 1;
+            $rawF = (string)($res['fs_no'] ?? '');
+            $fsNorm = QcService::normalizeFsNo($rawF);
+            if ($fsNorm['is_valid']) {
+                $validFs[$fsNorm['value']] = ($validFs[$fsNorm['value']] ?? 0) + 1;
+            } elseif ($rawF !== '') {
+                $rawFsMap[$rawF] = ($rawFsMap[$rawF] ?? 0) + 1;
             }
         }
-        if (!empty($allFs)) {
-            arsort($allFs);
-            $base['fs_no'] = array_key_first($allFs);
+        if (!empty($validFs)) {
+            arsort($validFs);
+            $base['fs_no']       = array_key_first($validFs);
+            $base['fs_no_raw']   = (string)($base['fs_no'] ?? '');
+            $base['fs_no_valid'] = true;
+        } else {
+            // No engine produced a valid 8-digit FS No: candidate can never win consensus
+            arsort($rawFsMap);
+            $base['fs_no']       = array_key_first($rawFsMap) ?: '';
+            $base['fs_no_raw']   = $base['fs_no'];
+            $base['fs_no_valid'] = false;
         }
 
         // Arithmetic cross-check
@@ -2659,17 +2954,16 @@ PROMPT;
         $score = 50;
         $notes = [];
 
-        $tin = preg_replace('/[^0-9]/', '', (string)($base['supplier_tin'] ?? ''));
-        if (strlen($tin) === 10) {
+        if (!empty($base['tin_valid'])) {
             $score += 20;
         } else {
-            $notes[] = "Supplier TIN missing or not 10 digits";
+            $notes[] = "invalid_tin: Supplier TIN must be exactly 10 digits";
         }
 
-        if (!empty($base['fs_no'])) {
+        if (!empty($base['fs_no_valid'])) {
             $score += 15;
         } else {
-            $notes[] = "FS Number missing";
+            $notes[] = "invalid_fs_no: FS No must be exactly 8 digits";
         }
 
         if ($mathExact) {

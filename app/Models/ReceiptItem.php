@@ -85,15 +85,14 @@ class ReceiptItem extends Model
 
         // Validate Receipt header parent data if loaded
         if ($this->receipt) {
-            $tin = preg_replace('/[^0-9]/', '', (string)$this->receipt->vendor_tin);
-            if (empty($tin)) {
-                $errors[] = "Supplier TIN is missing";
-            } elseif (strlen($tin) !== 10) {
-                $errors[] = "Supplier TIN should be 10 digits (got " . strlen($tin) . ")";
+            $tinResult = \App\Services\QcService::normalizeTin($this->receipt->vendor_tin);
+            if (!$tinResult['is_valid']) {
+                $errors[] = "tin_is_10_digits: " . $tinResult['error'];
             }
 
-            if (empty($this->receipt->fs_no)) {
-                $errors[] = "FS Number is missing";
+            $fsResult = \App\Services\QcService::normalizeFsNo($this->receipt->fs_no);
+            if (!$fsResult['is_valid']) {
+                $errors[] = "fs_no_is_8_digits: " . $fsResult['error'];
             }
 
             if (empty($this->receipt->receipt_date)) {

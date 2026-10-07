@@ -2582,6 +2582,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/settings',           [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'getSettings'])->name('get-settings');
         Route::post('/settings',          [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'saveSettings'])->name('save-settings');
         Route::post('/test-key',          [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'testApiKey'])->name('test-key');
+        Route::post('/chat',              [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'chatAgent'])->name('chat');
         Route::get('/{receipt}',          [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'show'])->name('show');
         Route::delete('/{receipt}',       [App\Http\Controllers\Admin\OCRReceiptScannerController::class, 'destroy'])->name('destroy');
     });
