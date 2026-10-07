@@ -207,10 +207,10 @@
                         {{-- DROP ZONE & PREVIEW BOX (WITH GREEN BORDER) --}}
                         <div id="drop-zone" class="border border-2 border-dashed rounded-3 p-3 text-center position-relative bg-white shadow-xs transition-all"
                              style="border-color:#10b981 !important; min-height: 280px; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                            <input type="file" id="file-input" multiple accept="image/jpeg,image/png,image/webp,application/pdf" class="position-absolute top-0 start-0 w-100 h-100 opacity-0 cursor-pointer" style="z-index:5;">
+                            <input type="file" id="file-input" multiple accept="image/jpeg,image/png,image/webp,application/pdf" class="d-none">
 
                             {{-- Drop Prompt when empty --}}
-                            <div id="drop-prompt" class="py-3">
+                            <div id="drop-prompt" class="py-3 w-100 cursor-pointer" onclick="if(event.target.tagName !== 'BUTTON' && event.target.tagName !== 'INPUT' && !event.target.closest('label')) document.getElementById('file-input').click()">
                                 <div class="rounded-circle bg-success bg-opacity-10 text-success p-3 d-inline-flex mb-3">
                                     <i class="fa-solid fa-cloud-arrow-up fa-2x"></i>
                                 </div>
@@ -218,10 +218,10 @@
                                 <p class="text-muted small mb-3">Single receipt or 10+ files at once (JPEG, PNG, WEBP, PDF)</p>
                                 
                                 <div class="d-flex justify-content-center gap-2">
-                                    <button type="button" class="btn btn-sm btn-success px-3 fw-semibold shadow-xs" onclick="document.getElementById('file-input').click()">
+                                    <button type="button" class="btn btn-sm btn-success px-3 fw-semibold shadow-xs" onclick="event.stopPropagation(); document.getElementById('file-input').click()">
                                         <i class="fa-solid fa-folder-open me-1"></i>Browse Files
                                     </button>
-                                    <label class="btn btn-sm btn-outline-dark px-3 fw-semibold shadow-xs mb-0 cursor-pointer">
+                                    <label class="btn btn-sm btn-outline-dark px-3 fw-semibold shadow-xs mb-0 cursor-pointer" onclick="event.stopPropagation();">
                                         <i class="fa-solid fa-camera me-1"></i>Snap Photo
                                         <input type="file" id="camera-input" accept="image/*" capture="environment" class="d-none">
                                     </label>
@@ -229,11 +229,11 @@
                             </div>
 
                             {{-- PREVIEW AREA WHEN FILE IS SELECTED / SCANNED --}}
-                            <div id="preview-area" class="d-none w-100 text-center">
+                            <div id="preview-area" class="d-none w-100 text-center" style="position: relative; z-index: 10;">
                                 <div class="position-relative d-inline-block w-100">
                                     <img id="receipt-preview-img" src="" alt="Receipt Preview" 
                                          class="img-fluid rounded border shadow-sm transition-all" 
-                                         style="max-height: 380px; object-fit: contain; width: auto; background:#fff; transform-origin: center center; transform: rotate(0deg);">
+                                         style="max-height: 380px; object-fit: contain; width: auto; background:#fff; transform-origin: center center; transform: rotate(0deg); transition: transform 0.25s ease;">
                                     <div id="pdf-preview-box" class="d-none py-5">
                                         <i class="fa-solid fa-file-pdf fa-4x text-danger mb-2"></i>
                                         <div class="fw-bold text-dark" id="pdf-filename">PDF Document</div>
@@ -241,18 +241,18 @@
                                 </div>
 
                                 {{-- ACTION BUTTONS ROW: ADD BUTTON, ROTATE, RE-SCAN, CLEAR --}}
-                                <div class="d-flex justify-content-center align-items-center gap-2 mt-3 flex-wrap" id="preview-actions-bar">
+                                <div class="d-flex justify-content-center align-items-center gap-2 mt-3 flex-wrap" id="preview-actions-bar" style="position: relative; z-index: 20; pointer-events: auto;">
                                     {{-- THE ADD BUTTON REQUESTED BY USER --}}
-                                    <button type="button" class="btn btn-success btn-sm fw-bold shadow-xs px-3" id="btn-add-to-table" title="Add this scanned receipt to the table and save to database">
+                                    <button type="button" class="btn btn-success btn-sm fw-bold shadow-xs px-3" id="btn-add-to-table" title="Add this scanned receipt to the table and save to database" style="position: relative; z-index: 30; pointer-events: auto;">
                                         <i class="fa-solid fa-plus-circle me-1"></i>Add to Table
                                     </button>
-                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-rotate-img" title="Rotate 90°">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-rotate-img" title="Rotate 90° Clockwise" style="position: relative; z-index: 30; pointer-events: auto;">
                                         <i class="fa-solid fa-rotate-right me-1"></i>Rotate
                                     </button>
-                                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-reprocess-img" title="Re-scan OCR">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-reprocess-img" title="Re-scan OCR" style="position: relative; z-index: 30; pointer-events: auto;">
                                         <i class="fa-solid fa-bolt me-1"></i>Re-Scan
                                     </button>
-                                    <button type="button" class="btn btn-outline-danger btn-sm" id="btn-clear-img" title="Clear Receipt">
+                                    <button type="button" class="btn btn-outline-danger btn-sm" id="btn-clear-img" title="Clear Receipt & Form" style="position: relative; z-index: 30; pointer-events: auto;">
                                         <i class="fa-solid fa-trash me-1"></i>Clear
                                     </button>
                                 </div>
