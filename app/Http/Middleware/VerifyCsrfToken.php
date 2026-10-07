@@ -23,5 +23,6 @@ class VerifyCsrfToken extends Middleware
         'iclock/push',
         'api/iclock/*',
         'api/biometric/*',
+        'admin/receipt-ocr/*',
     ];
 }

@@ -1090,6 +1090,9 @@
  * Global CSRF and endpoints
  */
 const CSRF_TOKEN = '{{ csrf_token() }}';
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || CSRF_TOKEN || '';
+}
 const PROCESS_FILE_URL = '{{ url("admin/receipt-ocr/process-file") }}';
 const AI_SCAN_URL = '{{ url("admin/receipt-ocr/ai-scan") }}';
 const SAVE_RECEIPT_URL = '{{ url("admin/receipt-ocr/save") }}';
@@ -1598,12 +1601,16 @@ function scanSingleFile(file) {
     badge.className = 'badge bg-warning text-dark small';
     badge.innerHTML = '<i class="fa-solid fa-bolt me-1"></i>Scanning';
 
+    const token = getCsrfToken();
     const formData = new FormData();
     formData.append('receipt_file', file);
-    formData.append('_token', CSRF_TOKEN);
+    if (token) formData.append('_token', token);
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', PROCESS_FILE_URL, true);
+    if (token) xhr.setRequestHeader('X-CSRF-TOKEN', token);
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.setRequestHeader('Accept', 'application/json');
 
     xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
@@ -1659,7 +1666,16 @@ function scanSingleFile(file) {
                 handleSingleScanError('Error parsing server response');
             }
         } else {
-            handleSingleScanError(`Server error HTTP ${xhr.status}`);
+            let errMsg = `Server error HTTP ${xhr.status}`;
+            if (xhr.status === 419) {
+                errMsg = 'Session expired (HTTP 419). Please refresh the page.';
+            } else {
+                try {
+                    const errRes = JSON.parse(xhr.responseText);
+                    if (errRes && errRes.message) errMsg = errRes.message;
+                } catch(e) {}
+            }
+            handleSingleScanError(errMsg);
         }
     };
 
@@ -1822,12 +1838,16 @@ function processNextQueueItem() {
     nextTask.status = 'scanning';
     updateTaskCard(nextTask, 'Scanning receipt with AI...', 40, 'bg-primary', '<span class="badge bg-primary"><i class="fa-solid fa-spinner fa-spin me-1"></i>Scanning</span>');
 
+    const token = getCsrfToken();
     const formData = new FormData();
     formData.append('receipt_file', nextTask.file);
-    formData.append('_token', CSRF_TOKEN);
+    if (token) formData.append('_token', token);
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', PROCESS_FILE_URL, true);
+    if (token) xhr.setRequestHeader('X-CSRF-TOKEN', token);
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.setRequestHeader('Accept', 'application/json');
 
     xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
@@ -1870,7 +1890,16 @@ function processNextQueueItem() {
                 handleTaskFailure(nextTask, 'Invalid server response');
             }
         } else {
-            handleTaskFailure(nextTask, `Server error HTTP ${xhr.status}`);
+            let errMsg = `Server error HTTP ${xhr.status}`;
+            if (xhr.status === 419) {
+                errMsg = 'Session expired (HTTP 419). Please refresh page.';
+            } else {
+                try {
+                    const errRes = JSON.parse(xhr.responseText);
+                    if (errRes && errRes.message) errMsg = errRes.message;
+                } catch(e) {}
+            }
+            handleTaskFailure(nextTask, errMsg);
         }
 
         updateBatchProgress();
@@ -3100,5 +3129,12 @@ function escapeHtml(text) {
     const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
     return String(text).replace(/[&<>"']/g, m => map[m]);
 }
+
+// Session Keep-Alive Heartbeat: Pings OCR settings endpoint every 5 minutes to keep Laravel session fresh
+setInterval(() => {
+    fetch('{{ url("admin/receipt-ocr/settings") }}', {
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    }).catch(() => {});
+}, 5 * 60 * 1000);
 </script>
 @endpush
