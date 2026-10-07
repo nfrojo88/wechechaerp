@@ -397,6 +397,10 @@ class OCRReceiptScannerController extends Controller
         $this->ensureAuthorized();
 
         $path = $request->input('file_path');
+        if (!empty($path)) {
+            $path = ltrim(preg_replace('#^https?://[^/]+/storage/#i', '', $path), '/');
+            $path = ltrim(preg_replace('#^(storage/|/storage/)#i', '', $path), '/');
+        }
         $fileUrl = null;
         $mimeType = 'image/jpeg';
         $ext = 'jpg';
@@ -493,14 +497,21 @@ class OCRReceiptScannerController extends Controller
             ], 422);
         }
 
-        // Check for duplicate FS No using normalized 8-digit FS No
+        $receiptId = $request->input('receipt_id');
+
+        // Check for duplicate FS No using normalized 8-digit FS No (excluding self if updating existing receipt)
         if (!empty($fsNo) && !$request->boolean('force_save')) {
-            $existing = Receipt::where('fs_no', $fsNo)
-                ->orWhere('fs_no_raw', $fsNo)
-                ->orWhere('fs_no_raw', 'FS' . $fsNo)
-                ->orWhere('parsed_data->fs_no', $fsNo)
-                ->orWhere('parsed_data->fs_no', 'FS' . $fsNo)
-                ->first();
+            $dupQuery = Receipt::where(function($q) use ($fsNo) {
+                $q->where('fs_no', $fsNo)
+                  ->orWhere('fs_no_raw', $fsNo)
+                  ->orWhere('fs_no_raw', 'FS' . $fsNo)
+                  ->orWhere('parsed_data->fs_no', $fsNo)
+                  ->orWhere('parsed_data->fs_no', 'FS' . $fsNo);
+            });
+            if ($receiptId) {
+                $dupQuery->where('id', '!=', $receiptId);
+            }
+            $existing = $dupQuery->first();
             if ($existing) {
                 return response()->json([
                     'success'           => true,
@@ -522,39 +533,74 @@ class OCRReceiptScannerController extends Controller
             $subtotal = max(0, round($total - $vat, 2));
         }
 
-        $receipt = Receipt::create([
-            'uploaded_by'  => Auth::id() ?: 1,
-            'project_id'   => $request->project_id,
-            'vendor_name'  => $request->vendor_name ?: 'General Merchant',
-            'vendor_tin'   => $supplierTin,
-            'tin_valid'    => $tinValid,
-            'buyer_tin'    => $request->buyer_tin ?: '0038480010',
-            'fs_no'        => $fsNo,
-            'fs_no_raw'    => $fsNoRaw,
-            'fs_no_valid'  => $fsNoValid,
-            'mrc_no'       => $request->machine_no,
-            'receipt_date' => $dbDate ?: now()->toDateString(),
-            'subtotal'     => $subtotal,
-            'vat_amount'   => $vat,
-            'total_amount' => $total,
-            'currency'     => 'ETB',
-            'category'     => $request->category ?: 'material',
-            'description'  => $request->description ?: 'Purchased Goods',
-            'file_path'    => $request->file_path,
-            'file_type'    => $fileType,
-            'ocr_raw_text' => $request->ocr_raw_text,
-            'ocr_engine'       => $request->engine ?: 'gemini',
-            'confidence'       => $request->confidence ?: 'high',
-            'confidence_score' => (int)($request->confidence_score ?: 90),
-            'qc_notes'         => $request->qc_notes ?: 'Added to table via OCR Receipt Scanner Studio.',
-            'needs_review'     => (!$tinValid || !$fsNoValid || $request->boolean('needs_review')),
-            'parsed_data'      => $request->all(),
-            'parse_status'     => 'parsed',
-            'status'           => 'approved',
-            'approved_by'      => Auth::id() ?: 1,
-            'approved_at'      => now(),
-            'notes'            => 'Added to table via OCR Receipt Scanner Studio.',
-        ]);
+        $receipt = null;
+        if ($receiptId) {
+            $receipt = Receipt::find($receiptId);
+        }
+
+        if ($receipt) {
+            $receipt->update([
+                'project_id'       => $request->project_id ?: $receipt->project_id,
+                'vendor_name'      => $request->vendor_name ?: 'General Merchant',
+                'vendor_tin'       => $supplierTin ?: $receipt->vendor_tin,
+                'tin_valid'        => $tinValid,
+                'buyer_tin'        => $request->buyer_tin ?: ($receipt->buyer_tin ?: '0038480010'),
+                'fs_no'            => $fsNo ?: $receipt->fs_no,
+                'fs_no_raw'        => $fsNoRaw ?: $receipt->fs_no_raw,
+                'fs_no_valid'      => $fsNoValid,
+                'mrc_no'           => $request->machine_no ?: $receipt->mrc_no,
+                'receipt_date'     => $dbDate ?: $receipt->receipt_date,
+                'subtotal'         => $subtotal,
+                'vat_amount'       => $vat,
+                'total_amount'     => $total,
+                'category'         => $request->category ?: $receipt->category,
+                'description'      => $request->description ?: $receipt->description,
+                'file_path'        => $request->file_path ?: $receipt->file_path,
+                'file_type'        => $fileType,
+                'ocr_raw_text'     => $request->ocr_raw_text ?: $receipt->ocr_raw_text,
+                'ocr_engine'       => $request->engine ?: ($receipt->ocr_engine ?: 'gemini'),
+                'confidence'       => $request->confidence ?: ($receipt->confidence ?: 'high'),
+                'confidence_score' => (int)($request->confidence_score ?: ($receipt->confidence_score ?: 90)),
+                'qc_notes'         => $request->qc_notes ?: 'Updated via OCR Receipt Scanner Studio.',
+                'needs_review'     => (!$tinValid || !$fsNoValid || $request->boolean('needs_review')),
+                'parsed_data'      => $request->all(),
+            ]);
+            $receipt->items()->delete();
+        } else {
+            $receipt = Receipt::create([
+                'uploaded_by'      => Auth::id() ?: 1,
+                'project_id'       => $request->project_id,
+                'vendor_name'      => $request->vendor_name ?: 'General Merchant',
+                'vendor_tin'       => $supplierTin,
+                'tin_valid'        => $tinValid,
+                'buyer_tin'        => $request->buyer_tin ?: '0038480010',
+                'fs_no'            => $fsNo,
+                'fs_no_raw'        => $fsNoRaw,
+                'fs_no_valid'      => $fsNoValid,
+                'mrc_no'           => $request->machine_no,
+                'receipt_date'     => $dbDate ?: now()->toDateString(),
+                'subtotal'         => $subtotal,
+                'vat_amount'       => $vat,
+                'total_amount'     => $total,
+                'currency'         => 'ETB',
+                'category'         => $request->category ?: 'material',
+                'description'      => $request->description ?: 'Purchased Goods',
+                'file_path'        => $request->file_path,
+                'file_type'        => $fileType,
+                'ocr_raw_text'     => $request->ocr_raw_text,
+                'ocr_engine'       => $request->engine ?: 'gemini',
+                'confidence'       => $request->confidence ?: 'high',
+                'confidence_score' => (int)($request->confidence_score ?: 90),
+                'qc_notes'         => $request->qc_notes ?: 'Added to table via OCR Receipt Scanner Studio.',
+                'needs_review'     => (!$tinValid || !$fsNoValid || $request->boolean('needs_review')),
+                'parsed_data'      => $request->all(),
+                'parse_status'     => 'parsed',
+                'status'           => 'approved',
+                'approved_by'      => Auth::id() ?: 1,
+                'approved_at'      => now(),
+                'notes'            => 'Added to table via OCR Receipt Scanner Studio.',
+            ]);
+        }
 
         $lineItems = $request->input('line_items', []);
         if (empty($lineItems)) {

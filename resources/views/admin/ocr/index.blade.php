@@ -1145,6 +1145,8 @@ let currentPreviewRotation = 0;
 let currentActiveFile = null;
 let currentExtractedData = null;
 let currentUploadedFilePath = null;
+let currentSavedReceiptId = null;
+let currentSavedItemIds = [];
 let currentEngineUsed = 'gemini';
 let currentConfidence = 'high';
 
@@ -1290,9 +1292,12 @@ function setupPreviewButtons() {
     const rescanBtn = document.getElementById('btn-reprocess-img');
     const clearBtn = document.getElementById('btn-clear-img');
 
-    // ADD BUTTON IN THE SECTION (Main user request)
+    // 1. ADD / SAVE TO TABLE BUTTON
     const handleAddToTable = () => {
-        if (!currentExtractedData && !currentUploadedFilePath) {
+        const vendorVal = document.getElementById('field_vendor')?.value.trim() || '';
+        const fsVal = document.getElementById('field_fs_no')?.value.trim() || '';
+
+        if (!currentExtractedData && !currentUploadedFilePath && !vendorVal && !fsVal) {
             showToast('Please upload or scan a receipt first.', 'warning');
             return;
         }
@@ -1315,15 +1320,16 @@ function setupPreviewButtons() {
         const total = parseFloat(document.getElementById('field_total').value) || 0;
 
         const payload = {
-            file_path: currentUploadedFilePath || (currentExtractedData ? currentExtractedData.file_path : ''),
-            vendor_name: document.getElementById('field_vendor').value.trim() || 'General Merchant',
-            vendor_tin: document.getElementById('field_tin').value.trim(),
+            receipt_id: currentSavedReceiptId || null,
+            file_path: currentUploadedFilePath || (currentExtractedData ? currentExtractedData.file_path : '') || document.getElementById('stored_file_path')?.value || '',
+            vendor_name: vendorVal || 'General Merchant',
+            vendor_tin: document.getElementById('field_tin')?.value.trim() || '',
             buyer_tin: '0038480010',
-            fs_no: document.getElementById('field_fs_no').value.trim(),
-            machine_no: document.getElementById('field_machine_no').value.trim(),
-            receipt_date: document.getElementById('field_date').value.trim(),
-            description: document.getElementById('field_description').value.trim() || 'Purchased Material',
-            uom_id: document.getElementById('field_uom').value,
+            fs_no: fsVal,
+            machine_no: document.getElementById('field_machine_no')?.value.trim() || '',
+            receipt_date: document.getElementById('field_date')?.value.trim() || '',
+            description: document.getElementById('field_description')?.value.trim() || 'Purchased Material',
+            uom_id: document.getElementById('field_uom')?.value || '9',
             subtotal: subtotal,
             vat_amount: vat,
             total_amount: total,
@@ -1334,10 +1340,10 @@ function setupPreviewButtons() {
                 ? currentExtractedData.items 
                 : [
                     {
-                        item_description: document.getElementById('field_description').value.trim() || (currentExtractedData && currentExtractedData.items && currentExtractedData.items[0] ? currentExtractedData.items[0].item_description : 'Purchased Material'),
-                        uom: document.getElementById('field_uom').value,
-                        qty: parseFloat(document.getElementById('field_qty').value) || 1,
-                        unit_price: parseFloat(document.getElementById('field_unit_price').value) || subtotal,
+                        item_description: document.getElementById('field_description')?.value.trim() || (currentExtractedData && currentExtractedData.items && currentExtractedData.items[0] ? currentExtractedData.items[0].item_description : 'Purchased Material'),
+                        uom: document.getElementById('field_uom')?.value || '9',
+                        qty: parseFloat(document.getElementById('field_qty')?.value) || 1,
+                        unit_price: parseFloat(document.getElementById('field_unit_price')?.value) || subtotal,
                         total_value: subtotal,
                         vat_amount: vat,
                         value_after_vat: total
@@ -1345,22 +1351,27 @@ function setupPreviewButtons() {
                 ]
         };
 
-        addBtn.disabled = true;
-        addBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Adding...';
+        const activeBtn = addBtn || addFormBtn;
+        if (activeBtn) {
+            activeBtn.disabled = true;
+            activeBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Saving...';
+        }
 
         fetch(SAVE_RECEIPT_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': CSRF_TOKEN,
+                'X-CSRF-TOKEN': getCsrfToken(),
                 'Accept': 'application/json'
             },
             body: JSON.stringify(payload)
         })
         .then(r => r.json())
         .then(res => {
-            addBtn.disabled = false;
-            addBtn.innerHTML = '<i class="fa-solid fa-plus-circle me-1"></i>Add to Table';
+            if (activeBtn) {
+                activeBtn.disabled = false;
+                activeBtn.innerHTML = '<i class="fa-solid fa-plus-circle me-1"></i>Add to Table';
+            }
 
             if (res.is_duplicate) {
                 if (confirm(`${res.duplicate_message}\n\nWould you like to Replace the existing receipt with this new scan?`)) {
@@ -1370,13 +1381,17 @@ function setupPreviewButtons() {
             }
 
             if (res.success) {
-                showToast(res.message, 'success');
+                showToast(res.message || 'Receipt saved to table successfully!', 'success');
+                if (res.receipt) {
+                    currentSavedReceiptId = res.receipt.id;
+                }
                 if (res.items && res.items.length > 0) {
+                    currentSavedItemIds = res.items.map(it => it.id);
                     res.items.forEach(it => appendRowToTable(it, res.receipt));
                 }
                 updateStatsDisplay();
 
-                // Highlight newly added row
+                // Highlight newly added or updated row
                 if (res.items && res.items[0]) {
                     const tr = document.getElementById('row-' + res.items[0].id);
                     if (tr) {
@@ -1390,38 +1405,37 @@ function setupPreviewButtons() {
             }
         })
         .catch(err => {
-            addBtn.disabled = false;
-            addBtn.innerHTML = '<i class="fa-solid fa-plus-circle me-1"></i>Add to Table';
-            showToast('Network error adding receipt to table', 'danger');
+            if (activeBtn) {
+                activeBtn.disabled = false;
+                activeBtn.innerHTML = '<i class="fa-solid fa-plus-circle me-1"></i>Add to Table';
+            }
+            showToast('Network error saving receipt: ' + err.message, 'danger');
         });
     };
 
     if (addBtn) addBtn.addEventListener('click', handleAddToTable);
     if (addFormBtn) addFormBtn.addEventListener('click', handleAddToTable);
 
-    // ROTATE BUTTON
+    // 2. ROTATE BUTTON (90° clockwise with live canvas rendering support)
     if (rotateBtn) {
         rotateBtn.addEventListener('click', () => {
             currentPreviewRotation = (currentPreviewRotation + 90) % 360;
             const img = document.getElementById('receipt-preview-img');
-            if (img) img.style.transform = `rotate(${currentPreviewRotation}deg)`;
+            if (img) {
+                img.style.transform = `rotate(${currentPreviewRotation}deg)`;
+            }
+            showToast(`Receipt rotated to ${currentPreviewRotation}°. Click "Re-Scan" to process upright orientation.`, 'info');
         });
     }
 
-    // RE-SCAN BUTTON
+    // 3. RE-SCAN BUTTON (With canvas rotation, Gemini Vision AI, and server file support)
     if (rescanBtn) {
         rescanBtn.addEventListener('click', () => {
-            if (currentActiveFile) {
-                scanSingleFile(currentActiveFile);
-            } else if (currentUploadedFilePath) {
-                scanExistingPath(currentUploadedFilePath);
-            } else {
-                showToast('No receipt file loaded to re-scan.', 'info');
-            }
+            rescanCurrentPreview();
         });
     }
 
-    // CLEAR BUTTON
+    // 4. CLEAR BUTTON
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
             resetPreviewArea();
@@ -1429,10 +1443,167 @@ function setupPreviewButtons() {
     }
 }
 
+/**
+ * Re-Scan currently active preview image or file with Gemini Vision AI
+ */
+async function rescanCurrentPreview() {
+    const rescanBtn = document.getElementById('btn-reprocess-img');
+    const originalHtml = rescanBtn ? rescanBtn.innerHTML : '';
+    if (rescanBtn) {
+        rescanBtn.disabled = true;
+        rescanBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Re-Scanning...';
+    }
+
+    try {
+        const img = document.getElementById('receipt-preview-img');
+
+        // If the user rotated the image preview, produce an upright image File via HTML5 Canvas
+        let fileToScan = currentActiveFile;
+        if (img && !img.classList.contains('d-none') && img.src && currentPreviewRotation !== 0) {
+            try {
+                const rotatedBlob = await renderRotatedImageBlob(img, currentPreviewRotation);
+                if (rotatedBlob) {
+                    const fname = (currentActiveFile && currentActiveFile.name)
+                        ? currentActiveFile.name.replace(/\.[^/.]+$/, "") + `_rot${currentPreviewRotation}.jpg`
+                        : `receipt_rot${currentPreviewRotation}.jpg`;
+                    fileToScan = new File([rotatedBlob], fname, { type: 'image/jpeg' });
+                    currentActiveFile = fileToScan;
+                    // Reset CSS rotation since the image file itself is now physically rotated upright
+                    img.style.transform = 'rotate(0deg)';
+                    currentPreviewRotation = 0;
+                    showToast('Applying rotated upright image for OCR...', 'info');
+                }
+            } catch (canvasErr) {
+                console.warn('Canvas rotation fallback:', canvasErr);
+            }
+        }
+
+        if (fileToScan) {
+            scanSingleFile(fileToScan);
+        } else if (currentUploadedFilePath) {
+            await rescanServerFilePath(currentUploadedFilePath);
+        } else if (img && img.src && !img.src.startsWith('data:,')) {
+            try {
+                const resp = await fetch(img.src);
+                const blob = await resp.blob();
+                const file = new File([blob], 'receipt_preview.jpg', { type: blob.type || 'image/jpeg' });
+                currentActiveFile = file;
+                scanSingleFile(file);
+            } catch (e) {
+                showToast('No receipt file loaded to re-scan. Please upload a receipt.', 'warning');
+            }
+        } else {
+            showToast('No receipt file loaded to re-scan. Please upload or drag a receipt.', 'warning');
+        }
+    } finally {
+        setTimeout(() => {
+            if (rescanBtn) {
+                rescanBtn.disabled = false;
+                rescanBtn.innerHTML = originalHtml || '<i class="fa-solid fa-bolt me-1"></i>Re-Scan';
+            }
+        }, 1200);
+    }
+}
+
+/**
+ * Render image element to a rotated JPEG Blob using HTML5 Canvas
+ */
+function renderRotatedImageBlob(imgEl, degrees) {
+    return new Promise((resolve) => {
+        const deg = ((degrees % 360) + 360) % 360;
+        if (deg === 0) {
+            resolve(null);
+            return;
+        }
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const rad = deg * Math.PI / 180;
+            const is90or270 = (deg === 90 || deg === 270);
+
+            const w = img.naturalWidth || img.width || 800;
+            const h = img.naturalHeight || img.height || 1000;
+
+            canvas.width = is90or270 ? h : w;
+            canvas.height = is90or270 ? w : h;
+
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate(rad);
+            ctx.drawImage(img, -w / 2, -h / 2);
+
+            canvas.toBlob((blob) => {
+                resolve(blob);
+            }, 'image/jpeg', 0.95);
+        };
+        img.onerror = () => resolve(null);
+        img.src = imgEl.src;
+    });
+}
+
+/**
+ * Re-scan an existing server-stored file path using AI_SCAN_URL
+ */
+function rescanServerFilePath(filePath) {
+    const pbarContainer = document.getElementById('ocr-progress-container');
+    const pbar = document.getElementById('ocr-progress-bar');
+    const pctEl = document.getElementById('ocr-progress-pct');
+    const labelEl = document.getElementById('ocr-progress-label');
+    const badge = document.getElementById('ocr-status-badge');
+
+    if (pbarContainer) pbarContainer.classList.remove('d-none');
+    if (pbar) { pbar.style.width = '35%'; pbar.className = 'progress-bar progress-bar-striped progress-bar-animated bg-primary'; }
+    if (pctEl) pctEl.textContent = '35%';
+    if (labelEl) labelEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1 text-primary"></i>Re-scanning with Gemini AI...';
+    if (badge) {
+        badge.className = 'badge bg-warning text-dark small';
+        badge.innerHTML = '<i class="fa-solid fa-bolt me-1"></i>Re-Scanning';
+    }
+
+    return fetch(AI_SCAN_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': getCsrfToken(),
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ file_path: filePath })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (pbar) { pbar.style.width = '100%'; pbar.className = 'progress-bar bg-success'; }
+        if (pctEl) pctEl.textContent = '100%';
+        if (labelEl) labelEl.innerHTML = '<i class="fa-solid fa-circle-check text-success me-1"></i>Scan Complete!';
+        if (badge) {
+            badge.className = 'badge bg-success text-white small';
+            badge.innerHTML = '<i class="fa-solid fa-check me-1"></i>Scan Complete';
+        }
+
+        if (res.success && (res.data || res.extracted)) {
+            const data = res.data || res.extracted;
+            currentExtractedData = data;
+            currentEngineUsed = res.engine || 'gemini';
+            currentConfidence = res.confidence || 'high';
+            populateFormWithExtracted(data, filePath, res.engine, res.confidence);
+            runLiveValidation();
+            showToast('Receipt re-scanned successfully with Gemini Vision AI!', 'success');
+        } else {
+            showToast(res.message || 'Could not extract data on re-scan.', 'danger');
+        }
+    })
+    .catch(err => {
+        showToast('Error during re-scan: ' + err.message, 'danger');
+    });
+}
+
 function resetPreviewArea() {
     currentActiveFile = null;
     currentExtractedData = null;
     currentUploadedFilePath = null;
+    currentSavedReceiptId = null;
+    currentSavedItemIds = [];
     currentPreviewRotation = 0;
 
     const previewArea = document.getElementById('preview-area');
@@ -1449,18 +1620,30 @@ function resetPreviewArea() {
         img.style.transform = 'rotate(0deg)';
     }
 
+    const pdfBox = document.getElementById('pdf-preview-box');
+    if (pdfBox) pdfBox.classList.add('d-none');
+
+    // Reset file picker inputs so selecting the same file triggers onchange
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) fileInput.value = '';
+    const camInput = document.getElementById('camera-input');
+    if (camInput) camInput.value = '';
+
     // Reset Form Fields
-    document.getElementById('field_vendor').value = '';
-    document.getElementById('field_tin').value = '';
-    document.getElementById('field_fs_no').value = '';
-    document.getElementById('field_machine_no').value = '';
-    document.getElementById('field_description').value = '';
-    document.getElementById('field_qty').value = '1.00';
-    document.getElementById('field_unit_price').value = '0.00';
-    document.getElementById('field_subtotal').value = '0.00';
-    document.getElementById('field_vat').value = '0.00';
-    document.getElementById('field_total').value = '0.00';
-    document.getElementById('raw-ocr-textarea').value = '';
+    const fieldIds = [
+        'field_vendor', 'field_tin', 'field_fs_no', 'field_machine_no', 
+        'field_date', 'field_description', 'field_qty', 'field_unit_price', 
+        'field_subtotal', 'field_vat', 'field_total', 'stored_file_path',
+        'raw-ocr-textarea'
+    ];
+    fieldIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (id === 'field_qty') el.value = '1.00';
+            else if (['field_unit_price', 'field_subtotal', 'field_vat', 'field_total'].includes(id)) el.value = '0.00';
+            else el.value = '';
+        }
+    });
 
     const badge = document.getElementById('ocr-status-badge');
     if (badge) {
@@ -1474,6 +1657,8 @@ function resetPreviewArea() {
     if (fsBadge)  { fsBadge.className = 'badge bg-secondary d-none'; fsBadge.textContent = ''; }
     const chkAllow = document.getElementById('chk_allow_invalid_identifiers');
     if (chkAllow) chkAllow.checked = false;
+
+    showToast('Preview and form cleared. Ready for next receipt.', 'info');
 }
 
 /**
@@ -1674,10 +1859,13 @@ function scanSingleFile(file) {
                 } else if (res.success) {
                     currentExtractedData = res.receipt.parsed_data || {};
                     currentUploadedFilePath = res.receipt.file_path;
+                    currentSavedReceiptId = res.receipt ? res.receipt.id : null;
+                    currentSavedItemIds = res.items ? res.items.map(it => it.id) : [];
                     currentEngineUsed = res.engine || 'gemini';
                     currentConfidence = res.confidence || 'high';
 
                     populateFormWithExtracted(res.receipt.parsed_data, res.receipt.file_path, res.engine, res.confidence);
+                    runLiveValidation();
 
                     // Add items into table automatically
                     if (res.items && res.items.length > 0) {
@@ -2044,7 +2232,8 @@ function appendRowToTable(item, receipt) {
     const isTinValid = receipt ? (receipt.tin_valid !== false) : true;
     const isFsValid = receipt ? (receipt.fs_no_valid !== false) : true;
 
-    const tr = document.createElement('tr');
+    const existingTr = document.getElementById('row-' + item.id);
+    const tr = existingTr || document.createElement('tr');
     tr.id = 'row-' + item.id;
     tr.setAttribute('data-id', item.id);
     tr.setAttribute('data-receipt-id', receipt ? receipt.id : '');
@@ -2097,7 +2286,9 @@ function appendRowToTable(item, receipt) {
             </div>
         </td>
     `;
-    tbody.insertBefore(tr, tbody.firstChild);
+    if (!existingTr) {
+        tbody.insertBefore(tr, tbody.firstChild);
+    }
 }
 
 function formatDateDisplay(d) {
