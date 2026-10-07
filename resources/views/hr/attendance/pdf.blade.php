@@ -117,19 +117,26 @@
             border-color: #1e3a8a !important;
         }
 
-        /* ── Standard A4 Page Container ───────────────────────────────── */
+        /* ── Standard A4 Page Container (Guaranteed 1 Page Per Employee) ─── */
         .a4-page {
             width: 210mm;
-            min-height: 297mm;
+            height: 297mm;
+            max-height: 297mm;
             margin: 0 auto 20px auto;
             background: #ffffff;
-            padding: 14mm 12mm 12mm 12mm;
+            padding: 7mm 8mm 6mm 8mm;
             border-radius: 4px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
             position: relative;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            box-sizing: border-box;
+            overflow: hidden;
+            page-break-after: always;
+            page-break-inside: avoid;
+            break-after: page;
+            break-inside: avoid;
         }
 
         .a4-landscape-page {
@@ -137,7 +144,7 @@
             min-height: 210mm;
             margin: 0 auto 20px auto;
             background: #ffffff;
-            padding: 10mm 10mm 10mm 10mm;
+            padding: 8mm 8mm 8mm 8mm;
             border-radius: 4px;
             box-shadow: 0 5px 20px rgba(0, 0, 0, 0.25);
         }
@@ -145,102 +152,106 @@
         /* ── Header Styling ──────────────────────────────────────────── */
         .timesheet-header {
             border-bottom: 2px solid var(--primary);
-            padding-bottom: 10px;
-            margin-bottom: 10px;
+            padding-bottom: 4px;
+            margin-bottom: 3px;
         }
 
         .header-top {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            gap: 12px;
+            gap: 10px;
         }
 
         .company-title {
-            font-size: 15px;
+            font-size: 13px;
             font-weight: 800;
             color: var(--primary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.4px;
+            line-height: 1.1;
         }
 
         .company-subtitle {
-            font-size: 9.5px;
+            font-size: 8px;
             font-weight: 600;
             color: var(--text-muted);
+            margin-top: 1px;
         }
 
         .doc-title-badge {
             background: #0f172a;
             color: #ffffff;
-            padding: 4px 10px;
+            padding: 3px 8px;
             border-radius: 4px;
-            font-size: 11px;
+            font-size: 9.5px;
             font-weight: 700;
             text-align: right;
             text-transform: uppercase;
+            white-space: nowrap;
         }
 
         /* ── Employee Profile Info Card (A4 Header) ───────────────────── */
         .emp-profile-card {
             background: #f8fafc;
             border: 1px solid var(--border-color);
-            border-radius: 6px;
-            padding: 8px 12px;
-            margin-top: 8px;
+            border-radius: 4px;
+            padding: 4px 8px;
+            margin-top: 4px;
             display: grid;
             grid-template-columns: 2fr 1.3fr 1.3fr 1.4fr;
-            gap: 10px;
-            font-size: 9.5px;
+            gap: 6px;
+            font-size: 8.5px;
         }
 
         .profile-field label {
             display: block;
-            font-size: 8px;
+            font-size: 7px;
             font-weight: 700;
             color: var(--text-muted);
             text-transform: uppercase;
-            letter-spacing: 0.4px;
+            letter-spacing: 0.3px;
             margin-bottom: 1px;
         }
 
         .profile-field span {
             font-weight: 700;
             color: #0f172a;
-            font-size: 10.5px;
+            font-size: 9.5px;
         }
 
         /* ── 4-Punch Detailed Table (A4 Size) ────────────────────────── */
         table.timesheet-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 9px;
+            font-size: 7.8px;
             text-align: center;
             background: #ffffff;
-            margin-top: 8px;
+            margin-top: 3px;
         }
 
         table.timesheet-table th,
         table.timesheet-table td {
             border: 1px solid #cbd5e1;
-            padding: 3.5px 3px;
+            padding: 1.6px 2px;
             vertical-align: middle;
+            line-height: 1.15;
         }
 
         table.timesheet-table thead tr:first-child th {
             background-color: #0f172a;
             color: #ffffff;
-            font-size: 8.5px;
+            font-size: 7.5px;
             font-weight: 700;
-            padding: 5px 3px;
+            padding: 3px 2px;
         }
 
         table.timesheet-table thead tr:nth-child(2) th {
             background-color: #f1f5f9;
             color: #1e293b;
-            font-size: 8px;
+            font-size: 7px;
             font-weight: 700;
-            padding: 4px 2px;
+            padding: 2px;
         }
 
         .th-morning { background-color: #e0f2fe !important; color: #0369a1 !important; }
@@ -249,7 +260,7 @@
         .time-cell {
             font-family: monospace;
             font-weight: 700;
-            font-size: 8.5px;
+            font-size: 7.5px;
             white-space: nowrap;
         }
 
@@ -260,11 +271,11 @@
         .late-pill {
             background: #fed7aa;
             color: #9a3412;
-            font-size: 6.5px;
+            font-size: 6px;
             font-weight: 800;
             padding: 0.5px 2px;
             border-radius: 2px;
-            margin-left: 2px;
+            margin-left: 1px;
         }
 
         /* ── Row State Highlighting ─────────────────────────────────── */
@@ -277,31 +288,32 @@
         /* ── Monthly Summary Footer Box ──────────────────────────────── */
         .summary-box {
             background: #f8fafc;
-            border: 1.5px solid var(--border-color);
-            border-radius: 6px;
-            padding: 8px 12px;
-            margin-top: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 8px;
+            margin-top: 4px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 4px;
         }
 
         .summary-item {
             text-align: center;
-            padding: 0 6px;
+            padding: 0 4px;
         }
 
         .summary-val {
             font-family: monospace;
-            font-size: 13px;
+            font-size: 11px;
             font-weight: 800;
             display: block;
+            line-height: 1.1;
         }
 
         .summary-lbl {
-            font-size: 7.8px;
+            font-size: 6.8px;
             font-weight: 700;
             color: var(--text-muted);
             text-transform: uppercase;
@@ -311,31 +323,31 @@
         .signature-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-top: 14px;
-            padding-top: 6px;
+            gap: 12px;
+            margin-top: 5px;
+            padding-top: 2px;
         }
 
         .sign-card {
-            border-top: 1.5px solid #0f172a;
-            padding-top: 5px;
-            font-size: 8px;
+            border-top: 1.2px solid #0f172a;
+            padding-top: 2px;
+            font-size: 7.5px;
             color: #334155;
         }
 
         .sign-title {
             font-weight: 800;
             color: #0f172a;
-            font-size: 9px;
+            font-size: 8px;
             text-transform: uppercase;
-            margin-bottom: 12px;
+            margin-bottom: 5px;
         }
 
         /* ── Matrix Layout Specific ──────────────────────────────────── */
         .matrix-table-wrap {
             overflow-x: auto;
             border: 1px solid var(--border-color);
-            margin-top: 10px;
+            margin-top: 8px;
         }
 
         table.matrix-view-table {
@@ -363,7 +375,7 @@
         .punch-late { color: #c2410c; font-weight: 700; }
         .punch-ontime { color: #15803d; font-weight: 700; }
 
-        /* ── Print Media Optimization ────────────────────────────────── */
+        /* ── Print Media Optimization (Strict 1 Page Per Employee) ─────── */
         @media print {
             body {
                 background: #ffffff !important;
@@ -377,17 +389,26 @@
 
             .a4-page {
                 width: 100% !important;
-                min-height: 297mm !important;
-                padding: 6mm 6mm !important;
+                height: 287mm !important;
+                max-height: 287mm !important;
+                min-height: 0 !important;
+                padding: 0 !important;
                 margin: 0 !important;
                 box-shadow: none !important;
                 border-radius: 0 !important;
                 page-break-after: always !important;
                 page-break-inside: avoid !important;
+                break-after: page !important;
+                break-inside: avoid !important;
+                overflow: hidden !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
             }
 
             .a4-page:last-child {
                 page-break-after: auto !important;
+                break-after: auto !important;
             }
 
             .a4-landscape-page {
@@ -400,11 +421,12 @@
 
             @page {
                 size: A4 portrait;
-                margin: 6mm;
+                margin: 5mm;
             }
 
             .signature-grid {
-                page-break-inside: avoid;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
             }
         }
     </style>
@@ -451,9 +473,23 @@
                 <span class="text-muted" style="font-size: 10px;">&rarr;</span>
                 <input type="date" name="end_date" value="{{ request('end_date', $period['end_greg']) }}" class="form-control-sm" title="End Date">
 
+                @if(request('employee_ids'))
+                    @if(is_array(request('employee_ids')))
+                        @foreach(request('employee_ids') as $eid)
+                            <input type="hidden" name="employee_ids[]" value="{{ $eid }}">
+                        @endforeach
+                    @else
+                        <input type="hidden" name="employee_ids" value="{{ request('employee_ids') }}">
+                    @endif
+                @endif
+
                 <!-- Filter Single Employee or All -->
                 <select name="employee_id" class="form-select-sm" onchange="this.form.submit()" title="Filter specific employee or all staff">
-                    <option value="">All Staff ({{ count($employees) }} Sheets)</option>
+                    @if(request('employee_ids') && is_array(request('employee_ids')) && count(request('employee_ids')) > 1)
+                        <option value="">Selected Staff ({{ count($employees) }} Sheets)</option>
+                    @else
+                        <option value="">All Staff ({{ count($employees) }} Sheets)</option>
+                    @endif
                     @foreach($employees as $e)
                     <option value="{{ $e->id }}" {{ request('employee_id') == $e->id ? 'selected' : '' }}>
                         {{ $e->full_name }} ({{ $e->employee_code ?? 'EMP' }})
@@ -478,9 +514,19 @@
     </div>
 
     @php
-        $selectedEmpId = request('employee_id');
-        $activeLayout  = request('layout', 'timesheet');
-        $filteredRows  = $selectedEmpId ? collect($matrix)->filter(fn($r, $k) => $k == $selectedEmpId) : collect($matrix);
+        $selectedEmpId  = request('employee_id');
+        $rawEmpIds      = request('employee_ids');
+        $selectedEmpIds = is_array($rawEmpIds) ? $rawEmpIds : ($rawEmpIds ? explode(',', $rawEmpIds) : []);
+        $selectedEmpIds = array_filter(array_map('trim', $selectedEmpIds));
+
+        $activeLayout   = request('layout', 'timesheet');
+        $filteredRows   = collect($matrix);
+
+        if ($selectedEmpId) {
+            $filteredRows = $filteredRows->filter(fn($r, $k) => $k == $selectedEmpId);
+        } elseif (!empty($selectedEmpIds)) {
+            $filteredRows = $filteredRows->filter(fn($r, $k) => in_array((string)$k, array_map('strval', $selectedEmpIds)));
+        }
     @endphp
 
     <!-- ── Container For Export Content ──────────────────────────────── -->
@@ -702,17 +748,17 @@
                     <div class="sign-card">
                         <div class="sign-title">Employee Signature / የሰራተኛው ፊርማ</div>
                         <div>Name: <strong>{{ $emp->full_name }}</strong></div>
-                        <div style="margin-top: 14px;">Signature: ___________________________</div>
+                        <div style="margin-top: 8px;">Signature: ___________________________</div>
                     </div>
                     <div class="sign-card">
                         <div class="sign-title">Verified By: HR / Timekeeper</div>
                         <div>Name: _________________________________</div>
-                        <div style="margin-top: 14px;">Signature: ___________________________</div>
+                        <div style="margin-top: 8px;">Signature: ___________________________</div>
                     </div>
                     <div class="sign-card">
                         <div class="sign-title">Approved By: Department Head / GM</div>
                         <div>Name: _________________________________</div>
-                        <div style="margin-top: 14px;">Signature: ___________________________</div>
+                        <div style="margin-top: 8px;">Signature: ___________________________</div>
                     </div>
                 </div>
             </div>
@@ -881,12 +927,12 @@
             const isTimesheet = '{{ $activeLayout }}' === 'timesheet';
 
             const opt = {
-                margin:       [4, 4, 4, 4],
+                margin:       [3, 3, 3, 3],
                 filename:     'Attendance-Timesheet-A4-{{ Str::slug($period["full_label"]) }}-{{ date("Y-m-d") }}.pdf',
                 image:        { type: 'jpeg', quality: 0.98 },
                 html2canvas:  { scale: 2, useCORS: true, logging: false },
                 jsPDF:        { unit: 'mm', format: 'a4', orientation: isTimesheet ? 'portrait' : 'landscape' },
-                pagebreak:    { mode: ['css', 'legacy'] }
+                pagebreak:    { mode: ['css', 'legacy'], after: '.a4-page' }
             };
 
             html2pdf().set(opt).from(element).save().then(function() {

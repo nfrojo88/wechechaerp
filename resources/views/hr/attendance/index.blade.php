@@ -1495,17 +1495,42 @@ function openDayDetailModal(cell) {
                             </select>
                         </div>
 
-                        {{-- Specific Employee Filter (Optional) --}}
+                        {{-- Multi-Employee Selection with Search & Quick Select --}}
                         <div class="col-12">
-                            <label class="form-label small fw-bold text-dark mb-1">
-                                <i class="fa-solid fa-user-tag text-primary me-1"></i>Employee Selection:
-                            </label>
-                            <select name="employee_id" class="form-select form-select-sm">
-                                <option value="">All Active Staff (Generates Individual A4 Sheets for All)</option>
-                                @foreach($employees as $e)
-                                <option value="{{ $e->id }}">{{ $e->full_name }} ({{ $e->employee_code ?? 'EMP' }}) &bull; {{ $e->role_title ?: ($e->department ?? 'General') }}</option>
-                                @endforeach
-                            </select>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label small fw-bold text-dark mb-0">
+                                    <i class="fa-solid fa-user-check text-primary me-1"></i>Select Employee(s) for PDF:
+                                </label>
+                                <span class="badge bg-secondary text-white" id="pdfSelectedBadge">All Active Staff</span>
+                            </div>
+
+                            <div class="border rounded-3 p-2 bg-light shadow-xs">
+                                <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
+                                    <div class="input-group input-group-sm flex-grow-1">
+                                        <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                                        <input type="text" id="pdfEmpSearchInput" class="form-control form-control-sm border-start-0" placeholder="Search by name, EMP code, department..." oninput="filterPdfEmployeeList()">
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2.5 fw-semibold" style="font-size:0.75rem;" onclick="togglePdfSelectAllEmployees(true)">Select All</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2.5 fw-semibold" style="font-size:0.75rem;" onclick="togglePdfSelectAllEmployees(false)">Clear</button>
+                                </div>
+
+                                <div class="list-group rounded border overflow-auto bg-white" style="max-height: 200px;" id="pdfEmployeeListContainer">
+                                    @foreach($employees as $e)
+                                    <label class="list-group-item list-group-item-action d-flex align-items-center gap-2 py-1.5 px-2.5 cursor-pointer pdf-emp-item" data-search="{{ strtolower($e->full_name . ' ' . ($e->employee_code ?? '') . ' ' . ($e->role_title ?? '') . ' ' . ($e->department ?? '')) }}">
+                                        <input class="form-check-input flex-shrink-0 mt-0 pdf-emp-checkbox" type="checkbox" name="employee_ids[]" value="{{ $e->id }}" onchange="updatePdfSelectedCount()">
+                                        <div class="flex-grow-1 text-truncate" style="font-size: 0.8rem;">
+                                            <strong class="text-dark">{{ $e->full_name }}</strong>
+                                            <span class="badge bg-light text-dark border font-monospace ms-1" style="font-size: 0.72rem;">{{ $e->employee_code ?? 'EMP-' . $e->id }}</span>
+                                            <span class="text-muted ms-1" style="font-size: 0.75rem;">&bull; {{ $e->role_title ?: ($e->department ?? 'General') }}</span>
+                                        </div>
+                                    </label>
+                                    @endforeach
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mt-1 text-muted" style="font-size: 0.72rem;">
+                                    <span><i class="fa-solid fa-circle-info me-1 text-info"></i>Check one, several, or all. Leave unselected to export all staff.</span>
+                                    <span class="fw-semibold text-primary" id="pdfEmpTotalVisibleCount">{{ count($employees) }} staff listed</span>
+                                </div>
+                            </div>
                         </div>
 
                         {{-- Staff Category --}}
@@ -1576,6 +1601,43 @@ function togglePdfDateMode() {
         monthBox.classList.remove('d-none');
         customBox.classList.add('d-none');
         if (periodInput) periodInput.disabled = false;
+    }
+function filterPdfEmployeeList() {
+    const q = (document.getElementById('pdfEmpSearchInput').value || '').toLowerCase().trim();
+    const items = document.querySelectorAll('.pdf-emp-item');
+    let visible = 0;
+    items.forEach(item => {
+        const text = (item.getAttribute('data-search') || '').toLowerCase();
+        const matches = text.includes(q);
+        item.style.setProperty('display', matches ? 'flex' : 'none', 'important');
+        if (matches) visible++;
+    });
+    const countEl = document.getElementById('pdfEmpTotalVisibleCount');
+    if (countEl) countEl.textContent = `${visible} staff found`;
+}
+
+function togglePdfSelectAllEmployees(select) {
+    const visibleItems = document.querySelectorAll('.pdf-emp-item');
+    visibleItems.forEach(item => {
+        if (item.style.display !== 'none') {
+            const cb = item.querySelector('.pdf-emp-checkbox');
+            if (cb) cb.checked = select;
+        }
+    });
+    updatePdfSelectedCount();
+}
+
+function updatePdfSelectedCount() {
+    const checked = document.querySelectorAll('.pdf-emp-checkbox:checked').length;
+    const badge = document.getElementById('pdfSelectedBadge');
+    if (badge) {
+        if (checked === 0) {
+            badge.className = 'badge bg-secondary text-white';
+            badge.textContent = 'All Active Staff (Auto)';
+        } else {
+            badge.className = 'badge bg-success text-white';
+            badge.textContent = `${checked} Employee${checked > 1 ? 's' : ''} Selected`;
+        }
     }
 }
 </script>

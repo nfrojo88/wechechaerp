@@ -214,6 +214,23 @@ class AttendanceController extends Controller
             $empQuery->where('project_id', $request->input('project_id'));
         }
 
+        // Support multi-employee selection (employee_ids array/list) or single employee_id
+        $selectedEmpIds = [];
+        if ($request->has('employee_ids')) {
+            $raw = $request->input('employee_ids');
+            if (is_array($raw)) {
+                $selectedEmpIds = array_filter(array_map('intval', $raw));
+            } elseif (is_string($raw) && trim($raw) !== '') {
+                $selectedEmpIds = array_filter(array_map('intval', explode(',', $raw)));
+            }
+        } elseif ($request->filled('employee_id')) {
+            $selectedEmpIds = [(int)$request->input('employee_id')];
+        }
+
+        if (!empty($selectedEmpIds)) {
+            $empQuery->whereIn('id', $selectedEmpIds);
+        }
+
         $allActiveEmployees = Employee::activeRoster()->orderBy('full_name')->get();
         $officeStaffCount = Employee::activeRoster()->officeStaffOnly()->count();
         $siteStaffCount = Employee::activeRoster()->siteOnly()->count();
