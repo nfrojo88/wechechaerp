@@ -313,6 +313,94 @@
     </table>
     @endif
 
+    @if($ticket->has_material_request)
+    <!-- IT Material Requisition & Store Dispatch Authorization -->
+    <div class="section-title" style="border-left-color: #d97706; background-color: #fef3c7;">
+        IT Material Requisition & Warehouse Dispatch Authorization
+    </div>
+    <table class="form-grid">
+        <tr>
+            <th>Justification</th>
+            <td colspan="3">{{ $ticket->mr_justification ?: 'Standard IT equipment requirement' }}</td>
+        </tr>
+        <tr>
+            <th>Target Location / Project</th>
+            <td>{{ $ticket->mr_project_location ?: 'Head Office / IT Department' }}</td>
+            <th>Urgency Level</th>
+            <td>{{ strtoupper($ticket->mr_urgency ?: 'MEDIUM') }}</td>
+        </tr>
+    </table>
+
+    <table class="form-grid" style="margin-top: 4px;">
+        <thead>
+            <tr style="background-color: #f1f5f9;">
+                <th style="width: 30px; text-align: center;">#</th>
+                <th>Item Description</th>
+                <th style="width: 60px; text-align: center;">Req. Qty</th>
+                <th style="width: 50px;">Unit</th>
+                <th>Purpose</th>
+                <th style="width: 70px; text-align: center;">Store Qty</th>
+                <th style="width: 90px; text-align: center;">Store Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            @forelse($ticket->materialRequestItems as $idx => $item)
+                <tr>
+                    <td style="text-align: center;">{{ $idx + 1 }}</td>
+                    <td><strong>{{ $item->item_name }}</strong></td>
+                    <td style="text-align: center;">{{ $item->quantity }}</td>
+                    <td>{{ $item->unit ?: 'pcs' }}</td>
+                    <td>{{ $item->purpose ?: '—' }}</td>
+                    <td style="text-align: center;">{{ $item->store_dispatch_qty ?: '—' }}</td>
+                    <td style="text-align: center;">{{ strtoupper($item->store_dispatch_status ?: 'Pending') }}</td>
+                </tr>
+            @empty
+                <tr>
+                    <td colspan="7" style="text-align: center;">No individual line items.</td>
+                </tr>
+            @endforelse
+        </tbody>
+    </table>
+
+    <!-- 3-Way Requisition Signatures -->
+    <table class="form-grid" style="margin-top: 6px;">
+        <tr style="background-color: #f8fafc;">
+            <th style="width: 33.3%; text-align: center;">1. General Manager (GM) Approval</th>
+            <th style="width: 33.3%; text-align: center;">2. Store Manager Dispatch</th>
+            <th style="width: 33.3%; text-align: center;">3. Head Office Secretary Receipt</th>
+        </tr>
+        <tr>
+            <td style="font-size: 8.5pt;">
+                <strong>Status:</strong> {{ strtoupper(str_replace('_', ' ', $ticket->mr_gm_status ?: 'Pending Review')) }}<br>
+                <strong>Authorized By:</strong> {{ $ticket->mrGmDecidedBy->name ?? 'GM' }}<br>
+                <strong>Date:</strong> {{ $ticket->mr_gm_decided_at ? $ticket->mr_gm_decided_at->format('d/m/Y') : '___________' }}<br>
+                @if($ticket->mr_gm_notes)
+                    <strong>Notes:</strong> {{ $ticket->mr_gm_notes }}<br>
+                @endif
+                <div style="margin-top: 20px; border-top: 1px dotted #94a3b8; text-align: center; color: #64748b;">GM Signature</div>
+            </td>
+            <td style="font-size: 8.5pt;">
+                <strong>Status:</strong> {{ strtoupper(str_replace('_', ' ', $ticket->mr_store_status ?: 'Pending Store')) }}<br>
+                <strong>Dispatched By:</strong> {{ $ticket->mrStoreManagedBy->name ?? 'Store Manager' }}<br>
+                <strong>Date:</strong> {{ $ticket->mr_store_dispatched_at ? $ticket->mr_store_dispatched_at->format('d/m/Y') : '___________' }}<br>
+                @if($ticket->mr_store_notes)
+                    <strong>Notes:</strong> {{ $ticket->mr_store_notes }}<br>
+                @endif
+                <div style="margin-top: 20px; border-top: 1px dotted #94a3b8; text-align: center; color: #64748b;">Store Manager Signature</div>
+            </td>
+            <td style="font-size: 8.5pt;">
+                <strong>Status:</strong> {{ $ticket->mr_secretary_received ? 'CONFIRMED RECEIVED' : 'PENDING HO DELIVERY' }}<br>
+                <strong>Received By:</strong> {{ $ticket->mrSecretaryReceivedBy->name ?? 'HO Secretary' }}<br>
+                <strong>Date:</strong> {{ $ticket->mr_secretary_received_at ? $ticket->mr_secretary_received_at->format('d/m/Y') : '___________' }}<br>
+                @if($ticket->mr_secretary_notes)
+                    <strong>Notes:</strong> {{ $ticket->mr_secretary_notes }}<br>
+                @endif
+                <div style="margin-top: 20px; border-top: 1px dotted #94a3b8; text-align: center; color: #64748b;">Secretary Signature</div>
+            </td>
+        </tr>
+    </table>
+    @endif
+
     <!-- 5. Attachments -->
     <div class="section-title">5. Attachments</div>
     <table class="form-grid">

@@ -64,6 +64,206 @@
                 </div>
             </div>
 
+            <!-- Section 2: IT Material Request & Dispatch Status (If requested) -->
+            @if($ticket->has_material_request)
+            <div class="card shadow-sm border-0 mb-4 border-top border-4 border-warning">
+                <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <h6 class="m-0 font-weight-bold text-dark">
+                            <i class="fa-solid fa-boxes-stacked me-2 text-warning"></i>IT Material Requisition
+                        </h6>
+                        <small class="text-muted">Workflow: GM Approval → Store Dispatch → Head Office Secretary Receipt</small>
+                    </div>
+                    <div class="d-flex flex-wrap gap-1">
+                        {!! $ticket->mr_gm_status_badge !!}
+                        {!! $ticket->mr_store_status_badge !!}
+                        @if($ticket->mr_secretary_received)
+                            <span class="badge bg-success text-white"><i class="fa-solid fa-building-circle-check me-1"></i>Received at Head Office</span>
+                        @else
+                            <span class="badge bg-secondary text-white"><i class="fa-solid fa-clock me-1"></i>Pending HO Delivery</span>
+                        @endif
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Request Overview Details -->
+                    <div class="row g-3 p-3 bg-light rounded mb-3">
+                        <div class="col-md-5">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Justification</span>
+                            <div class="text-dark font-weight-bold mt-1">{{ $ticket->mr_justification ?: 'Standard IT requisition' }}</div>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Target Location / Project</span>
+                            <div class="text-dark mt-1"><i class="fa-solid fa-location-dot text-danger me-1"></i>{{ $ticket->mr_project_location ?: 'Head Office / IT Department' }}</div>
+                        </div>
+                        <div class="col-md-3">
+                            <span class="text-xs text-muted text-uppercase d-block font-weight-bold">Urgency Level</span>
+                            <div class="mt-1">
+                                <span class="badge {{ $ticket->mr_urgency === 'critical' ? 'bg-danger' : ($ticket->mr_urgency === 'high' ? 'bg-warning text-dark' : 'bg-primary') }} text-uppercase">
+                                    {{ $ticket->mr_urgency ?: 'Medium' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Items List Table -->
+                    <h6 class="font-weight-bold text-dark small text-uppercase mb-2">Requested Material Items ({{ $ticket->materialRequestItems->count() }})</h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light text-muted small text-uppercase">
+                                <tr>
+                                    <th style="width: 40px;" class="text-center">#</th>
+                                    <th>Item Description</th>
+                                    <th class="text-center" style="width: 80px;">Requested</th>
+                                    <th style="width: 70px;">Unit</th>
+                                    <th>Purpose</th>
+                                    <th class="text-center" style="width: 100px;">Dispatched Qty</th>
+                                    <th class="text-center" style="width: 120px;">Warehouse Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse($ticket->materialRequestItems as $idx => $mItem)
+                                    <tr>
+                                        <td class="text-center text-muted small">{{ $idx + 1 }}</td>
+                                        <td><strong class="text-dark">{{ $mItem->item_name }}</strong></td>
+                                        <td class="text-center font-weight-bold text-primary">{{ $mItem->quantity }}</td>
+                                        <td class="small">{{ $mItem->unit ?: 'pcs' }}</td>
+                                        <td class="small text-muted">{{ $mItem->purpose ?: '—' }}</td>
+                                        <td class="text-center font-weight-bold text-success">{{ $mItem->store_dispatch_qty ?: '—' }}</td>
+                                        <td class="text-center small">
+                                            @if($mItem->store_dispatch_status === 'available')
+                                                <span class="badge bg-success">Available</span>
+                                            @elseif($mItem->store_dispatch_status === 'partial')
+                                                <span class="badge bg-warning text-dark">Partial</span>
+                                            @elseif($mItem->store_dispatch_status === 'unavailable')
+                                                <span class="badge bg-danger">Unavailable</span>
+                                            @else
+                                                <span class="badge bg-light text-muted border">Pending Review</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted py-3">No specific line items recorded.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 3-Stage Progress Timeline Cards -->
+                    <div class="row g-3">
+                        <!-- Stage 1: GM Review -->
+                        <div class="col-md-4">
+                            <div class="card h-100 border {{ $ticket->mr_gm_status === 'approved_to_store' ? 'border-success bg-light' : ($ticket->mr_gm_status === 'rejected_by_gm' ? 'border-danger bg-light' : 'border-warning') }}">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="font-weight-bold m-0 small text-uppercase">1. GM Approval</h6>
+                                        {!! $ticket->mr_gm_status_badge !!}
+                                    </div>
+                                    @if($ticket->mr_gm_decided_at)
+                                        <div class="small text-muted mb-1">
+                                            By: <strong class="text-dark">{{ $ticket->mrGmDecidedBy->name ?? 'General Manager' }}</strong>
+                                        </div>
+                                        <div class="small text-muted mb-2">
+                                            Date: {{ $ticket->mr_gm_decided_at->format('M d, Y h:i A') }}
+                                        </div>
+                                        @if($ticket->mr_gm_notes)
+                                            <div class="p-2 rounded bg-white border small text-dark">
+                                                <strong>Note:</strong> {{ $ticket->mr_gm_notes }}
+                                            </div>
+                                        @endif
+                                    @else
+                                        <p class="small text-muted mb-0">Under review by General Manager for warehouse release authorization.</p>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Stage 2: Store Manager Dispatch -->
+                        <div class="col-md-4">
+                            <div class="card h-100 border {{ in_array($ticket->mr_store_status, ['dispatched', 'partially_dispatched']) ? 'border-success bg-light' : ($ticket->mr_store_status === 'unavailable' ? 'border-danger bg-light' : 'border-secondary') }}">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="font-weight-bold m-0 small text-uppercase">2. Store Dispatch</h6>
+                                        {!! $ticket->mr_store_status_badge !!}
+                                    </div>
+                                    @if($ticket->mr_store_dispatched_at)
+                                        <div class="small text-muted mb-1">
+                                            By: <strong class="text-dark">{{ $ticket->mrStoreManagedBy->name ?? 'Store Manager' }}</strong>
+                                        </div>
+                                        <div class="small text-muted mb-2">
+                                            Date: {{ $ticket->mr_store_dispatched_at->format('M d, Y h:i A') }}
+                                        </div>
+                                        @if($ticket->mr_store_notes)
+                                            <div class="p-2 rounded bg-white border small text-dark">
+                                                <strong>Note:</strong> {{ $ticket->mr_store_notes }}
+                                            </div>
+                                        @endif
+                                    @else
+                                        <p class="small text-muted mb-0">
+                                            {{ $ticket->mr_gm_status === 'approved_to_store' ? 'Store Manager is preparing goods for dispatch.' : 'Pending GM approval.' }}
+                                        </p>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Stage 3: Head Office Secretary Receipt -->
+                        <div class="col-md-4">
+                            <div class="card h-100 border {{ $ticket->mr_secretary_received ? 'border-success bg-light' : 'border-secondary' }}">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="font-weight-bold m-0 small text-uppercase">3. HO Receipt</h6>
+                                        @if($ticket->mr_secretary_received)
+                                            <span class="badge bg-success text-white"><i class="fa-solid fa-circle-check me-1"></i>Received</span>
+                                        @else
+                                            <span class="badge bg-secondary text-white">Pending Delivery</span>
+                                        @endif
+                                    </div>
+                                    @if($ticket->mr_secretary_received)
+                                        <div class="small text-muted mb-1">
+                                            By: <strong class="text-dark">{{ $ticket->mrSecretaryReceivedBy->name ?? 'Head Office Secretary' }}</strong>
+                                        </div>
+                                        <div class="small text-muted mb-2">
+                                            Date: {{ $ticket->mr_secretary_received_at ? $ticket->mr_secretary_received_at->format('M d, Y h:i A') : 'Recorded' }}
+                                        </div>
+                                        @if($ticket->mr_secretary_notes)
+                                            <div class="p-2 rounded bg-white border small text-dark">
+                                                <strong>Note:</strong> {{ $ticket->mr_secretary_notes }}
+                                            </div>
+                                        @endif
+                                    @else
+                                        <p class="small text-muted mb-0">Will be confirmed upon physical arrival and inspection at Head Office.</p>
+                                    @endif
+
+                                    @php
+                                        $currUser = auth()->user();
+                                        $isSecUser = $currUser && $currUser->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin']);
+                                    @endphp
+                                    @if($isSecUser && in_array($ticket->mr_store_status, ['dispatched', 'partially_dispatched']) && !$ticket->mr_secretary_received)
+                                        <div class="mt-2 pt-2 border-top">
+                                            <button type="button" class="btn btn-sm btn-info text-white w-100 shadow-sm" data-bs-toggle="collapse" data-bs-target="#userSecretaryConfirmCollapse">
+                                                <i class="fa-solid fa-stamp me-1"></i> Confirm Receipt
+                                            </button>
+                                            <div class="collapse mt-2" id="userSecretaryConfirmCollapse">
+                                                <form action="{{ route('admin.tickets.secretary-confirm', $ticket) }}" method="POST" class="p-2 border rounded bg-white">
+                                                    @csrf
+                                                    <label class="form-label small font-weight-bold">Receipt Remarks</label>
+                                                    <textarea name="mr_secretary_notes" rows="2" class="form-control form-control-sm mb-2" placeholder="Received at reception..."></textarea>
+                                                    <button type="submit" class="btn btn-sm btn-success w-100">Confirm Receipt</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            @endif
+
             <!-- Section 3: Problem Report (If Problem or Both) -->
             @if(in_array($ticket->submission_type, ['problem', 'both']) || !empty($ticket->description))
             <div class="card shadow-sm border-0 mb-4">

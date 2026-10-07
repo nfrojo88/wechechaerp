@@ -10,6 +10,7 @@ use App\Models\PrWorkflowLog;
 use App\Services\ProcurementLifecycleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 
 class MaterialRequestController extends Controller
 {
@@ -242,7 +243,7 @@ class MaterialRequestController extends Controller
         try {
             $linkedPr = $mr->createOrGetPurchaseRequest(auth()->id());
         } catch (\Throwable $e) {
-            \Log::error("Failed to auto-create companion PR for MR #{$mr->reference_number}: " . $e->getMessage());
+            Log::error("Failed to auto-create companion PR for MR #{$mr->reference_number}: " . $e->getMessage());
         }
 
         // Trigger Instant SMS Handoff: Site Engineer -> Planning
@@ -258,7 +259,7 @@ class MaterialRequestController extends Controller
                 ]
             );
         } catch (\Throwable $e) {
-            \Log::error("MR Submitted SMS trigger failed: " . $e->getMessage());
+            Log::error("MR Submitted SMS trigger failed: " . $e->getMessage());
         }
 
         if ($request->filled('redirect_back')) {
@@ -361,7 +362,7 @@ class MaterialRequestController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            \Log::error("Failed to forward companion PRs to coordinator for MR #{$materialRequest->reference_number}: " . $e->getMessage());
+            Log::error("Failed to forward companion PRs to coordinator for MR #{$materialRequest->reference_number}: " . $e->getMessage());
         }
 
         // Trigger Instant SMS Handoff: Planning -> Coordinator
@@ -376,7 +377,7 @@ class MaterialRequestController extends Controller
                 ]
             );
         } catch (\Throwable $e) {
-            \Log::error("Planning Forwarded SMS trigger failed: " . $e->getMessage());
+            Log::error("Planning Forwarded SMS trigger failed: " . $e->getMessage());
         }
 
         return back()->with('success', 'Material Request approved by Planning Team and sent to Coordinator.');
@@ -418,7 +419,7 @@ class MaterialRequestController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            \Log::error("Failed to reject companion PRs for MR #{$materialRequest->reference_number}: " . $e->getMessage());
+            Log::error("Failed to reject companion PRs for MR #{$materialRequest->reference_number}: " . $e->getMessage());
         }
 
         // Trigger Instant SMS Handoff: Planning Rejects -> Requester (Site Engineer)
@@ -433,7 +434,7 @@ class MaterialRequestController extends Controller
                 ]
             );
         } catch (\Throwable $e) {
-            \Log::error("Planning Rejected SMS trigger failed: " . $e->getMessage());
+            Log::error("Planning Rejected SMS trigger failed: " . $e->getMessage());
         }
 
         return back()->with('success', 'Material Request rejected by Planning Team.');
@@ -485,7 +486,7 @@ class MaterialRequestController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            \Log::error("Failed to dispatch companion PRs to store for MR #{$materialRequest->reference_number}: " . $e->getMessage());
+            Log::error("Failed to dispatch companion PRs to store for MR #{$materialRequest->reference_number}: " . $e->getMessage());
         }
 
         // Trigger Instant SMS Handoff: Coordinator -> Store Manager
@@ -501,7 +502,7 @@ class MaterialRequestController extends Controller
                 ]
             );
         } catch (\Throwable $e) {
-            \Log::error("Coordinator Dispatched SMS trigger failed: " . $e->getMessage());
+            Log::error("Coordinator Dispatched SMS trigger failed: " . $e->getMessage());
         }
 
         return back()->with('success', 'Material Request sent to Store Manager.');
@@ -526,7 +527,7 @@ class MaterialRequestController extends Controller
                 ]
             );
         } catch (\Throwable $e) {
-            \Log::error("Store Manager to PR SMS trigger failed: " . $e->getMessage());
+            Log::error("Store Manager to PR SMS trigger failed: " . $e->getMessage());
         }
 
         return redirect()->route('purchase-requests.show', $pr)
@@ -550,7 +551,7 @@ class MaterialRequestController extends Controller
                 ]
             );
         } catch (\Throwable $e) {
-            \Log::error("Store Manager convertToPr SMS trigger failed: " . $e->getMessage());
+            Log::error("Store Manager convertToPr SMS trigger failed: " . $e->getMessage());
         }
 
         return redirect()->route('purchase-requests.show', $pr)
@@ -575,7 +576,7 @@ class MaterialRequestController extends Controller
                 ]
             );
         } catch (\Throwable $e) {
-            \Log::error("Store Manager SIV SMS trigger failed: " . $e->getMessage());
+            Log::error("Store Manager SIV SMS trigger failed: " . $e->getMessage());
         }
 
         return redirect()->route('transfers.create', [

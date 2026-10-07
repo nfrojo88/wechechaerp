@@ -24,6 +24,18 @@ class SupportTicket extends Model
         'expected_benefits', 'expected_benefits_other',
         // 5. Attachments
         'attachment_path', 'attachment_name', 'attachments_notes',
+        // 5b. Material Request (IT)
+        'has_material_request', 'mr_justification', 'mr_urgency', 'mr_project_location',
+        // GM decision
+        'mr_gm_status', 'mr_gm_decided_at', 'mr_gm_notes', 'mr_gm_decided_by',
+        // Store Manager
+        'mr_store_status', 'mr_store_dispatched_at', 'mr_store_notes', 'mr_store_managed_by',
+        // Procurement link
+        'mr_purchase_request_id',
+        // Head Office Secretary
+        'mr_secretary_received', 'mr_secretary_received_at', 'mr_secretary_received_by', 'mr_secretary_notes',
+        // MR SMS flags
+        'mr_sms_gm_sent', 'mr_sms_store_sent',
         // 6. IT Department / Admin Use Only
         'status', 'date_received', 'received_by_id', 'assigned_to', 'target_resolution_date',
         'root_cause', 'actions_taken', 'resolution_decision', 'date_closed', 'user_confirmed_resolved',
@@ -33,15 +45,23 @@ class SupportTicket extends Model
     ];
 
     protected $casts = [
-        'submitted_date'         => 'date',
-        'date_received'          => 'date',
-        'target_resolution_date' => 'date',
-        'date_closed'            => 'date',
-        'resolved_at'            => 'datetime',
-        'expected_benefits'      => 'array',
-        'notified_gm'            => 'boolean',
-        'notified_admin'         => 'boolean',
-        'sms_alert_sent'         => 'boolean',
+        'submitted_date'              => 'date',
+        'date_received'               => 'date',
+        'target_resolution_date'      => 'date',
+        'date_closed'                 => 'date',
+        'resolved_at'                 => 'datetime',
+        'expected_benefits'           => 'array',
+        'notified_gm'                 => 'boolean',
+        'notified_admin'              => 'boolean',
+        'sms_alert_sent'              => 'boolean',
+        // Material Request
+        'has_material_request'        => 'boolean',
+        'mr_gm_decided_at'            => 'datetime',
+        'mr_store_dispatched_at'      => 'datetime',
+        'mr_secretary_received'       => 'boolean',
+        'mr_secretary_received_at'    => 'datetime',
+        'mr_sms_gm_sent'              => 'boolean',
+        'mr_sms_store_sent'           => 'boolean',
     ];
 
     protected static function boot()
@@ -203,6 +223,80 @@ class SupportTicket extends Model
                 if (!Schema::hasColumn('support_tickets', 'sms_alert_log')) {
                     $table->text('sms_alert_log')->nullable();
                 }
+                // Material Request fields
+                if (!Schema::hasColumn('support_tickets', 'has_material_request')) {
+                    $table->boolean('has_material_request')->default(false);
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_justification')) {
+                    $table->text('mr_justification')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_urgency')) {
+                    $table->string('mr_urgency', 50)->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_project_location')) {
+                    $table->string('mr_project_location', 255)->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_gm_status')) {
+                    $table->string('mr_gm_status', 50)->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_gm_decided_at')) {
+                    $table->timestamp('mr_gm_decided_at')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_gm_notes')) {
+                    $table->text('mr_gm_notes')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_gm_decided_by')) {
+                    $table->unsignedBigInteger('mr_gm_decided_by')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_store_status')) {
+                    $table->string('mr_store_status', 50)->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_store_dispatched_at')) {
+                    $table->timestamp('mr_store_dispatched_at')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_store_notes')) {
+                    $table->text('mr_store_notes')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_store_managed_by')) {
+                    $table->unsignedBigInteger('mr_store_managed_by')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_purchase_request_id')) {
+                    $table->unsignedBigInteger('mr_purchase_request_id')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_secretary_received')) {
+                    $table->boolean('mr_secretary_received')->default(false);
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_secretary_received_at')) {
+                    $table->timestamp('mr_secretary_received_at')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_secretary_received_by')) {
+                    $table->unsignedBigInteger('mr_secretary_received_by')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_secretary_notes')) {
+                    $table->text('mr_secretary_notes')->nullable();
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_sms_gm_sent')) {
+                    $table->boolean('mr_sms_gm_sent')->default(false);
+                }
+                if (!Schema::hasColumn('support_tickets', 'mr_sms_store_sent')) {
+                    $table->boolean('mr_sms_store_sent')->default(false);
+                }
+                // Create it_material_request_items if missing
+                if (!Schema::hasTable('it_material_request_items')) {
+                    Schema::create('it_material_request_items', function (Blueprint $t) {
+                        $t->id();
+                        $t->unsignedBigInteger('support_ticket_id');
+                        $t->string('item_name', 255);
+                        $t->string('unit', 50)->nullable();
+                        $t->decimal('quantity', 10, 2)->default(1);
+                        $t->string('purpose', 500)->nullable();
+                        $t->string('urgency_level', 50)->nullable();
+                        $t->string('store_dispatch_qty', 50)->nullable();
+                        $t->string('store_dispatch_status', 50)->nullable();
+                        $t->text('store_notes')->nullable();
+                        $t->timestamps();
+                    });
+                }
             });
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning("SupportTicket::ensureSchema check: " . $e->getMessage());
@@ -227,6 +321,47 @@ class SupportTicket extends Model
     public function replies(): HasMany
     {
         return $this->hasMany(TicketReply::class, 'ticket_id');
+    }
+
+    public function materialRequestItems(): HasMany
+    {
+        return $this->hasMany(ItMaterialRequestItem::class, 'support_ticket_id');
+    }
+
+    public function mrGmDecidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'mr_gm_decided_by');
+    }
+
+    public function mrStoreManagedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'mr_store_managed_by');
+    }
+
+    public function mrSecretaryReceivedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'mr_secretary_received_by');
+    }
+
+    public function getMrGmStatusBadgeAttribute(): string
+    {
+        return match($this->mr_gm_status) {
+            'pending_gm'        => '<span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>Pending GM Review</span>',
+            'approved_to_store' => '<span class="badge bg-success text-white"><i class="fa-solid fa-check me-1"></i>Approved → Store Manager</span>',
+            'rejected_by_gm'    => '<span class="badge bg-danger text-white"><i class="fa-solid fa-ban me-1"></i>Rejected by GM</span>',
+            default             => '<span class="badge bg-secondary">Not Submitted</span>',
+        };
+    }
+
+    public function getMrStoreStatusBadgeAttribute(): string
+    {
+        return match($this->mr_store_status) {
+            'pending_store'         => '<span class="badge bg-warning text-dark"><i class="fa-solid fa-clock me-1"></i>Pending Store Action</span>',
+            'dispatched'            => '<span class="badge bg-success text-white"><i class="fa-solid fa-truck me-1"></i>Fully Dispatched</span>',
+            'partially_dispatched'  => '<span class="badge bg-info text-dark"><i class="fa-solid fa-box-open me-1"></i>Partially Dispatched</span>',
+            'unavailable'           => '<span class="badge bg-danger text-white"><i class="fa-solid fa-triangle-exclamation me-1"></i>Unavailable – Needs Purchase</span>',
+            default                 => '<span class="badge bg-secondary">—</span>',
+        };
     }
 
     public function getStatusBadgeAttribute(): string

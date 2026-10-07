@@ -1402,15 +1402,6 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/admin/role-assignment/store', [RoleAssignmentController::class, 'storeRole'])->name('admin.role-assignment.store');
         Route::delete('/admin/role-assignment/destroy/{role}', [RoleAssignmentController::class, 'destroyRole'])->name('admin.role-assignment.destroy');
         
-        Route::get('/admin/tickets', [AdminTicketController::class, 'index'])->name('admin.tickets.index');
-        Route::get('/admin/tickets/{ticket}', [AdminTicketController::class, 'show'])->name('admin.tickets.show');
-        Route::post('/admin/tickets/{ticket}/reply', [AdminTicketController::class, 'reply'])->name('admin.tickets.reply');
-        Route::post('/admin/tickets/{ticket}/status', [AdminTicketController::class, 'updateStatus'])->name('admin.tickets.status');
-        Route::post('/admin/tickets/{ticket}/assign', [AdminTicketController::class, 'assign'])->name('admin.tickets.assign');
-        Route::post('/admin/tickets/{ticket}/it-section', [AdminTicketController::class, 'updateItSection'])->name('admin.tickets.it-section');
-        Route::post('/admin/tickets/{ticket}/resend-sms', [AdminTicketController::class, 'resendSms'])->name('admin.tickets.resend-sms');
-        Route::get('/admin/tickets/{ticket}/print', [SupportTicketController::class, 'print'])->name('admin.tickets.print');
-
         // Scratch Material Procurement Requisitions (Global Admin Only)
         Route::get('/admin/procurement/scratch-requests', [App\Http\Controllers\Admin\ScratchMaterialRequestController::class, 'index'])
             ->name('admin.scratch-material-requests.index');
@@ -1427,6 +1418,20 @@ Route::middleware(['auth'])->group(function () {
         Route::match(['get', 'post', 'delete'], '/admin/attendance/devices/{id}/delete', [App\Http\Controllers\AttendanceController::class, 'deleteZkDevice'])
             ->name('admin.attendance.devices.delete');
     });
+
+    // Admin & Management Ticket Handling (Protected by AdminTicketController middleware for Admin, GM, IT, Store Manager, Secretary)
+    Route::get('/admin/tickets', [AdminTicketController::class, 'index'])->name('admin.tickets.index');
+    Route::get('/admin/tickets/{ticket}', [AdminTicketController::class, 'show'])->name('admin.tickets.show');
+    Route::post('/admin/tickets/{ticket}/reply', [AdminTicketController::class, 'reply'])->name('admin.tickets.reply');
+    Route::post('/admin/tickets/{ticket}/status', [AdminTicketController::class, 'updateStatus'])->name('admin.tickets.status');
+    Route::post('/admin/tickets/{ticket}/assign', [AdminTicketController::class, 'assign'])->name('admin.tickets.assign');
+    Route::post('/admin/tickets/{ticket}/it-section', [AdminTicketController::class, 'updateItSection'])->name('admin.tickets.it-section');
+    Route::post('/admin/tickets/{ticket}/resend-sms', [AdminTicketController::class, 'resendSms'])->name('admin.tickets.resend-sms');
+    Route::get('/admin/tickets/{ticket}/print', [SupportTicketController::class, 'print'])->name('admin.tickets.print');
+    Route::post('/admin/tickets/{ticket}/gm-approve', [AdminTicketController::class, 'gmApproveMaterialRequest'])->name('admin.tickets.gm-approve');
+    Route::post('/admin/tickets/{ticket}/gm-reject', [AdminTicketController::class, 'gmRejectMaterialRequest'])->name('admin.tickets.gm-reject');
+    Route::post('/admin/tickets/{ticket}/store-dispatch', [AdminTicketController::class, 'storeManagerDispatch'])->name('admin.tickets.store-dispatch');
+    Route::post('/admin/tickets/{ticket}/secretary-confirm', [AdminTicketController::class, 'secretaryConfirmReceipt'])->name('admin.tickets.secretary-confirm');
 
     // Support Tickets (All Employees)
     Route::get('/tickets', [SupportTicketController::class, 'index'])->name('tickets.index');

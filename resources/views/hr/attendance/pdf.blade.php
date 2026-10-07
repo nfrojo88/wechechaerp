@@ -351,6 +351,18 @@
             vertical-align: middle;
         }
 
+        table.matrix-view-table th.sun-col { background: #334155; }
+        table.matrix-view-table th.sun-col-sub { background: #e2e8f0; }
+        table.matrix-view-table td.bg-code-p { background-color: #f0fdf4; }
+        table.matrix-view-table td.bg-code-late { background-color: #fff7ed; }
+        table.matrix-view-table td.bg-code-s { background-color: #f0f9ff; }
+        table.matrix-view-table td.bg-code-a { background-color: #fef2f2; }
+        table.matrix-view-table td.bg-code-l { background-color: #eff6ff; }
+        table.matrix-view-table td.bg-code-h { background-color: #faf5ff; }
+        table.matrix-view-table td.bg-code-sun { background-color: #f1f5f9; }
+        .punch-late { color: #c2410c; font-weight: 700; }
+        .punch-ontime { color: #15803d; font-weight: 700; }
+
         /* ── Print Media Optimization ────────────────────────────────── */
         @media print {
             body {
@@ -734,7 +746,7 @@
                         <tr style="background:#0f172a; color:#fff;">
                             <th rowspan="2" style="width: 140px; text-align: left; padding: 4px;">EMPLOYEE</th>
                             @foreach($periodDays as $day)
-                            <th style="min-width: 38px; {{ $day['is_sunday'] ? 'background:#334155;' : '' }}">
+                            <th class="{{ $day['is_sunday'] ? 'sun-col' : '' }}" style="min-width: 38px;">
                                 <div>{{ $day['eth_day'] }}</div>
                                 <div style="font-size: 6.5px;">{{ substr($day['eth_label_en'], 0, 4) }}</div>
                             </th>
@@ -751,7 +763,7 @@
                         </tr>
                         <tr style="background:#f1f5f9; color:#1e293b;">
                             @foreach($periodDays as $day)
-                            <th style="font-size: 7px; {{ $day['is_sunday'] ? 'background:#e2e8f0;' : '' }}">
+                            <th class="{{ $day['is_sunday'] ? 'sun-col-sub' : '' }}" style="font-size: 7px;">
                                 {{ $day['greg_day'] }} {{ $day['day_name_en'] }}
                             </th>
                             @endforeach
@@ -781,20 +793,20 @@
                                 $aIn = $dItem['afternoon_in'] ?? null;
                                 $aOut = $dItem['afternoon_out'] ?? null;
 
-                                $bg = match($code) {
-                                    'P' => $isLate ? '#fff7ed' : '#f0fdf4',
-                                    'S' => '#f0f9ff',
-                                    'A' => '#fef2f2',
-                                    'L' => '#eff6ff',
-                                    'H' => '#faf5ff',
-                                    'SUN' => '#f1f5f9',
-                                    default => '#ffffff'
+                                $cellBgClass = match($code) {
+                                    'P' => $isLate ? 'bg-code-late' : 'bg-code-p',
+                                    'S' => 'bg-code-s',
+                                    'A' => 'bg-code-a',
+                                    'L' => 'bg-code-l',
+                                    'H' => 'bg-code-h',
+                                    'SUN' => 'bg-code-sun',
+                                    default => ''
                                 };
                             @endphp
-                            <td style="background-color: {{ $bg }};">
+                            <td class="{{ $cellBgClass }}">
                                 @if($code === 'P')
                                     <div style="font-size: 7px; line-height: 1.1; font-family: monospace;">
-                                        <div style="color: {{ $isLate ? '#c2410c' : '#15803d' }}; font-weight: 700;">
+                                        <div class="{{ $isLate ? 'punch-late' : 'punch-ontime' }}">
                                             M: {{ $mIn ? substr($mIn, 0, 5) : '—' }} &bull; {{ $mOut ? substr($mOut, 0, 5) : '—' }}
                                         </div>
                                         <div style="color: #475569;">

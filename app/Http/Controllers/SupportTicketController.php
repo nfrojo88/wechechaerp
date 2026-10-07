@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\SupportTicket;
 use App\Models\TicketReply;
 use App\Models\ActivityLog;
+use App\Models\ItMaterialRequestItem;
 use App\Services\ItIncidentAlertService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -166,10 +167,33 @@ class SupportTicketController extends Controller
             'attachment_name'         => $attachmentName,
             'attachments_notes'       => $request->attachments_notes,
 
+            // Material Request header
+            'has_material_request'    => $request->boolean('has_material_request'),
+            'mr_justification'        => $request->mr_justification,
+            'mr_urgency'              => $request->mr_urgency,
+            'mr_project_location'     => $request->mr_project_location,
+            'mr_gm_status'            => $request->boolean('has_material_request') ? 'pending_gm' : null,
+
             'status'                  => 'open',
             'date_received'           => now()->toDateString(),
             'user_confirmed_resolved' => 'pending',
         ]);
+
+        // Save material request line items
+        if ($request->boolean('has_material_request') && $request->filled('mr_items')) {
+            foreach ($request->mr_items as $item) {
+                if (!empty($item['item_name'])) {
+                    ItMaterialRequestItem::create([
+                        'support_ticket_id' => $ticket->id,
+                        'item_name'         => $item['item_name'],
+                        'quantity'          => $item['quantity'] ?? 1,
+                        'unit'              => $item['unit'] ?? null,
+                        'purpose'           => $item['purpose'] ?? null,
+                        'urgency_level'     => $item['urgency_level'] ?? 'medium',
+                    ]);
+                }
+            }
+        }
 
         ActivityLog::log(
             'created',
@@ -184,7 +208,19 @@ class SupportTicketController extends Controller
             $smsResult = $alertService->sendProblemReportAlert($ticket);
         }
 
+        // If material request included, send additional SMS to GM
+        if ($request->boolean('has_material_request')) {
+            try {
+                $alertService->sendMaterialRequestAlert($ticket);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('MR GM SMS failed: ' . $e->getMessage());
+            }
+        }
+
         $msg = "IT report #{$ticket->ticket_no} submitted successfully.";
+        if ($request->boolean('has_material_request')) {
+            $msg .= " Your Material Request is now pending GM approval.";
+        }
         if (!empty($smsResult['recipients_sent'])) {
             $msg .= " An immediate SMS alert has been sent to the General Manager (GM) and Global Admin ({$smsResult['recipients_sent']} recipient(s)).";
         }
@@ -204,7 +240,16 @@ class SupportTicketController extends Controller
             abort(403, 'Unauthorized access to this ticket.');
         }
 
-        $ticket->load(['replies.user', 'assignedTo', 'receivedBy', 'user.employee']);
+        $ticket->load([
+            'replies.user',
+            'assignedTo',
+            'receivedBy',
+            'user.employee',
+            'materialRequestItems',
+            'mrGmDecidedBy',
+            'mrStoreManagedBy',
+            'mrSecretaryReceivedBy',
+        ]);
 
         return view('tickets.show', compact('ticket'));
     }
@@ -248,7 +293,15 @@ class SupportTicketController extends Controller
             abort(403);
         }
 
-        $ticket->load(['assignedTo', 'receivedBy', 'user.employee']);
+        $ticket->load([
+            'assignedTo',
+            'receivedBy',
+            'user.employee',
+            'materialRequestItems',
+            'mrGmDecidedBy',
+            'mrStoreManagedBy',
+            'mrSecretaryReceivedBy',
+        ]);
 
         return view('tickets.print', compact('ticket'));
     }

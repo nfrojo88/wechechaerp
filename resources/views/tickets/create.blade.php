@@ -356,10 +356,138 @@
                     </div>
                 </div>
 
-                <!-- 5. Attachments -->
+                <!-- 5. Material Request -->
+                <div class="card shadow-sm border-0 mb-4 border-start border-4" style="border-left-color:#f59e0b !important;">
+                    <div class="card-header py-3 border-bottom d-flex align-items-center" style="background:linear-gradient(135deg,#fffbeb,#fef3c7);">
+                        <span class="badge me-2 px-2 py-1" style="background:#f59e0b;">5</span>
+                        <h6 class="m-0 font-weight-bold text-dark"><i class="fa-solid fa-boxes-stacked me-2 text-warning"></i>Material Request (IT Equipment / Supplies)</h6>
+                        <span class="badge bg-light text-secondary ms-2 small">Optional</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="hasMaterialRequest" name="has_material_request" value="1"
+                                {{ old('has_material_request') ? 'checked' : '' }}
+                                onchange="toggleMaterialRequest()">
+                            <label class="form-check-label font-weight-bold" for="hasMaterialRequest">
+                                <i class="fa-solid fa-cart-plus me-1 text-warning"></i>
+                                I need to request materials / equipment for this issue
+                            </label>
+                        </div>
+
+                        <div id="materialRequestBody" @if(!old('has_material_request')) style="display: none;" @endif>
+
+                            {{-- Info banner --}}
+                            <div class="alert alert-warning border-0 py-2 mb-3 small">
+                                <i class="fa-solid fa-info-circle me-1"></i>
+                                Your request will be sent to the <strong>General Manager (GM)</strong> for approval. The GM will then forward it directly to the <strong>Store Manager</strong> who will check availability and dispatch items. Finally, the Head Office Secretary will confirm receipt.
+                            </div>
+
+                            {{-- Request Header --}}
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted text-uppercase fw-bold">Urgency Level</label>
+                                    <select name="mr_urgency" class="form-select">
+                                        <option value="">— Select Urgency —</option>
+                                        <option value="low" {{ old('mr_urgency') == 'low' ? 'selected' : '' }}>🟢 Low – Not blocking work</option>
+                                        <option value="medium" {{ old('mr_urgency') == 'medium' ? 'selected' : '' }}>🔵 Medium – Slowing work</option>
+                                        <option value="high" {{ old('mr_urgency') == 'high' ? 'selected' : '' }}>🟠 High – Work blocked</option>
+                                        <option value="critical" {{ old('mr_urgency') == 'critical' ? 'selected' : '' }}>🔴 Critical – Completely stopped</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label small text-muted text-uppercase fw-bold">Project / Location / Department</label>
+                                    <input type="text" name="mr_project_location" class="form-control" value="{{ old('mr_project_location') }}" placeholder="e.g. Head Office ICT Room, Site A Server Room">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small text-muted text-uppercase fw-bold">Justification / Purpose <span class="text-danger">*</span></label>
+                                    <textarea name="mr_justification" rows="2" class="form-control" placeholder="Why are these materials needed? How will they solve the issue?">{{ old('mr_justification') }}</textarea>
+                                </div>
+                            </div>
+
+                            {{-- Item Rows Table --}}
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="m-0 text-dark"><i class="fa-solid fa-list me-1 text-warning"></i> Requested Items</h6>
+                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="addMrItem()">
+                                    <i class="fa-solid fa-plus me-1"></i> Add Item
+                                </button>
+                            </div>
+
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-sm align-middle" id="mrItemsTable">
+                                    <thead class="table-warning">
+                                        <tr>
+                                            <th style="width:35%">Item Name / Description <span class="text-danger">*</span></th>
+                                            <th style="width:10%">Qty <span class="text-danger">*</span></th>
+                                            <th style="width:12%">Unit</th>
+                                            <th style="width:25%">Purpose / Use</th>
+                                            <th style="width:10%">Urgency</th>
+                                            <th style="width:8%"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="mrItemsBody">
+                                        @if(old('mr_items'))
+                                            @foreach(old('mr_items') as $i => $item)
+                                            <tr class="mr-item-row">
+                                                <td><input type="text" name="mr_items[{{ $i }}][item_name]" class="form-control form-control-sm" value="{{ $item['item_name'] ?? '' }}" required placeholder="e.g. UPS Battery"></td>
+                                                <td><input type="number" name="mr_items[{{ $i }}][quantity]" class="form-control form-control-sm" value="{{ $item['quantity'] ?? 1 }}" min="1" step="0.5" required></td>
+                                                <td><input type="text" name="mr_items[{{ $i }}][unit]" class="form-control form-control-sm" value="{{ $item['unit'] ?? '' }}" placeholder="pcs / box / m"></td>
+                                                <td><input type="text" name="mr_items[{{ $i }}][purpose]" class="form-control form-control-sm" value="{{ $item['purpose'] ?? '' }}" placeholder="What it solves"></td>
+                                                <td>
+                                                    <select name="mr_items[{{ $i }}][urgency_level]" class="form-select form-select-sm">
+                                                        <option value="medium" {{ ($item['urgency_level'] ?? '') == 'medium' ? 'selected' : '' }}>Medium</option>
+                                                        <option value="low" {{ ($item['urgency_level'] ?? '') == 'low' ? 'selected' : '' }}>Low</option>
+                                                        <option value="high" {{ ($item['urgency_level'] ?? '') == 'high' ? 'selected' : '' }}>High</option>
+                                                        <option value="critical" {{ ($item['urgency_level'] ?? '') == 'critical' ? 'selected' : '' }}>Critical</option>
+                                                    </select>
+                                                </td>
+                                                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash"></i></button></td>
+                                            </tr>
+                                            @endforeach
+                                        @else
+                                            <tr class="mr-item-row" id="mrRow0">
+                                                <td><input type="text" name="mr_items[0][item_name]" class="form-control form-control-sm" placeholder="e.g. UPS Battery, Ethernet Cable" required></td>
+                                                <td><input type="number" name="mr_items[0][quantity]" class="form-control form-control-sm" value="1" min="1" step="0.5" required></td>
+                                                <td><input type="text" name="mr_items[0][unit]" class="form-control form-control-sm" placeholder="pcs"></td>
+                                                <td><input type="text" name="mr_items[0][purpose]" class="form-control form-control-sm" placeholder="e.g. Replace dead UPS"></td>
+                                                <td>
+                                                    <select name="mr_items[0][urgency_level]" class="form-select form-select-sm">
+                                                        <option value="medium" selected>Medium</option>
+                                                        <option value="low">Low</option>
+                                                        <option value="high">High</option>
+                                                        <option value="critical">Critical</option>
+                                                    </select>
+                                                </td>
+                                                <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash"></i></button></td>
+                                            </tr>
+                                        @endif
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {{-- Lifecycle Info --}}
+                            <div class="mt-3">
+                                <p class="text-muted small mb-1"><i class="fa-solid fa-timeline me-1"></i><strong>Procurement Lifecycle:</strong></p>
+                                <div class="d-flex flex-wrap gap-2 align-items-center">
+                                    <span class="badge bg-secondary py-2 px-3"><i class="fa-solid fa-file-circle-plus me-1"></i>IT Submits Request</span>
+                                    <i class="fa-solid fa-arrow-right text-muted"></i>
+                                    <span class="badge bg-warning text-dark py-2 px-3"><i class="fa-solid fa-user-tie me-1"></i>GM Reviews &amp; Approves</span>
+                                    <i class="fa-solid fa-arrow-right text-muted"></i>
+                                    <span class="badge bg-info text-dark py-2 px-3"><i class="fa-solid fa-warehouse me-1"></i>Store Manager Dispatches</span>
+                                    <i class="fa-solid fa-arrow-right text-muted"></i>
+                                    <span class="badge py-2 px-3" style="background:#8b5cf6;color:white;"><i class="fa-solid fa-cart-flatbed me-1"></i>Procurement (if needed)</span>
+                                    <i class="fa-solid fa-arrow-right text-muted"></i>
+                                    <span class="badge bg-success py-2 px-3"><i class="fa-solid fa-file-signature me-1"></i>Secretary Confirms Receipt</span>
+                                </div>
+                            </div>
+
+                        </div>{{-- end materialRequestBody --}}
+                    </div>
+                </div>
+
+                <!-- 6. Attachments -->
                 <div class="card shadow-sm border-0 mb-4">
                     <div class="card-header bg-light py-3 border-bottom d-flex align-items-center">
-                        <span class="badge bg-secondary rounded-circle me-2 px-2 py-1">5</span>
+                        <span class="badge bg-secondary rounded-circle me-2 px-2 py-1">6</span>
                         <h6 class="m-0 font-weight-bold text-dark">Attachments</h6>
                     </div>
                     <div class="card-body">
@@ -377,6 +505,7 @@
                         </div>
                     </div>
                 </div>
+
 
                 <!-- Submission Bar -->
                 <div class="card shadow-sm border-0 mb-5 bg-white">
@@ -410,6 +539,40 @@
 </style>
 
 <script>
+let mrRowIndex = 1;
+
+function toggleMaterialRequest() {
+    const cb = document.getElementById('hasMaterialRequest');
+    document.getElementById('materialRequestBody').style.display = cb.checked ? 'block' : 'none';
+    // Toggle required on items
+    document.querySelectorAll('#mrItemsBody input[required]').forEach(el => {
+        el.required = cb.checked;
+    });
+}
+
+function addMrItem() {
+    const tbody = document.getElementById('mrItemsBody');
+    const row = document.createElement('tr');
+    row.className = 'mr-item-row';
+    row.innerHTML = `
+        <td><input type="text" name="mr_items[${mrRowIndex}][item_name]" class="form-control form-control-sm" placeholder="Item name" required></td>
+        <td><input type="number" name="mr_items[${mrRowIndex}][quantity]" class="form-control form-control-sm" value="1" min="1" step="0.5" required></td>
+        <td><input type="text" name="mr_items[${mrRowIndex}][unit]" class="form-control form-control-sm" placeholder="pcs"></td>
+        <td><input type="text" name="mr_items[${mrRowIndex}][purpose]" class="form-control form-control-sm" placeholder="Purpose"></td>
+        <td>
+            <select name="mr_items[${mrRowIndex}][urgency_level]" class="form-select form-select-sm">
+                <option value="medium" selected>Medium</option>
+                <option value="low">Low</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+            </select>
+        </td>
+        <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="fa-solid fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(row);
+    mrRowIndex++;
+}
+
 function toggleSections() {
     const isProblem = document.getElementById('type_problem').checked;
     const isSuggestion = document.getElementById('type_suggestion').checked;
@@ -444,6 +607,7 @@ function toggleSections() {
 
 document.addEventListener('DOMContentLoaded', function() {
     toggleSections();
+    toggleMaterialRequest();
 
     // Prevent double submission
     const form = document.getElementById('itReportForm');

@@ -7,6 +7,7 @@ use App\Models\SupportTicket;
 use App\Models\TicketReply;
 use App\Models\User;
 use App\Models\ActivityLog;
+use App\Models\ItMaterialRequestItem;
 use App\Services\ItIncidentAlertService;
 use Illuminate\Http\Request;
 
@@ -16,9 +17,9 @@ class AdminTicketController extends Controller
     {
         $this->middleware(function ($request, $next) {
             $user = auth()->user();
-            $adminRoles = ['global_admin', 'admin', 'gm', 'General Manager', 'it_admin', 'it_manager'];
+            $adminRoles = ['global_admin', 'admin', 'gm', 'General Manager', 'general_manager', 'it_admin', 'it_manager', 'store_manager', 'Store Manager', 'secretary'];
             if (!$user || !$user->roles || !$user->roles->whereIn('name', $adminRoles)->count()) {
-                abort(403, 'Access denied. Admin or GM access only.');
+                abort(403, 'Access denied. Authorized roles only.');
             }
             return $next($request);
         });
@@ -51,7 +52,9 @@ class AdminTicketController extends Controller
             });
         }
 
-        $tickets = $query->latest()->paginate(20)->withQueryString();
+        /** @var \Illuminate\Pagination\LengthAwarePaginator $tickets */
+        $tickets = $query->latest()->paginate(20);
+        $tickets->appends($request->query());
         $admins = User::whereHas('roles', fn($q) => $q->whereIn('name', ['global_admin', 'admin', 'gm', 'it_admin', 'it_manager']))->get(['id', 'name']);
 
         $stats = [
@@ -71,7 +74,16 @@ class AdminTicketController extends Controller
     {
         SupportTicket::ensureSchema();
 
-        $ticket->load(['user.employee', 'replies.user', 'assignedTo', 'receivedBy']);
+        $ticket->load([
+            'user.employee',
+            'replies.user',
+            'assignedTo',
+            'receivedBy',
+            'materialRequestItems',
+            'mrGmDecidedBy',
+            'mrStoreManagedBy',
+            'mrSecretaryReceivedBy',
+        ]);
         $admins = User::whereHas('roles', fn($q) => $q->whereIn('name', ['global_admin', 'admin', 'gm', 'it_admin', 'it_manager']))->get(['id', 'name']);
 
         return view('admin.tickets.show', compact('ticket', 'admins'));
@@ -207,5 +219,124 @@ class AdminTicketController extends Controller
         } else {
             return back()->with('error', "SMS dispatch failed: " . ($result['error'] ?? 'Unknown gateway issue'));
         }
+    }
+
+    // ── Material Request Workflow ─────────────────────────────────────────────
+
+    /**
+     * GM: Approve a Material Request and forward to Store Manager.
+     */
+    public function gmApproveMaterialRequest(Request $request, SupportTicket $ticket, ItIncidentAlertService $alertService)
+    {
+        if (!$ticket->has_material_request) {
+            return back()->with('error', 'This ticket has no material request.');
+        }
+
+        $request->validate([
+            'mr_gm_notes' => 'nullable|string|max:1000',
+        ]);
+
+        $ticket->load('materialRequestItems');
+
+        $ticket->update([
+            'mr_gm_status'       => 'approved_to_store',
+            'mr_gm_decided_at'   => now(),
+            'mr_gm_decided_by'   => auth()->id(),
+            'mr_gm_notes'        => $request->mr_gm_notes,
+            'mr_store_status'    => 'pending_store',
+        ]);
+
+        // Notify Store Manager via SMS
+        try {
+            $alertService->sendStoreManagerAlert($ticket);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Store Manager SMS failed: ' . $e->getMessage());
+        }
+
+        ActivityLog::log('approved', "GM approved Material Request for Ticket {$ticket->ticket_no} → forwarded to Store Manager.", 'IT Material Requests', $ticket);
+
+        return back()->with('success', 'Material Request approved and forwarded to Store Manager via SMS.');
+    }
+
+    /**
+     * GM: Reject a Material Request.
+     */
+    public function gmRejectMaterialRequest(Request $request, SupportTicket $ticket)
+    {
+        $request->validate([
+            'mr_gm_notes' => 'required|string|max:1000',
+        ]);
+
+        $ticket->update([
+            'mr_gm_status'     => 'rejected_by_gm',
+            'mr_gm_decided_at' => now(),
+            'mr_gm_decided_by' => auth()->id(),
+            'mr_gm_notes'      => $request->mr_gm_notes,
+        ]);
+
+        ActivityLog::log('rejected', "GM rejected Material Request for Ticket {$ticket->ticket_no}. Reason: {$request->mr_gm_notes}", 'IT Material Requests', $ticket);
+
+        return back()->with('success', 'Material Request rejected.');
+    }
+
+    /**
+     * Store Manager: Record dispatch status for each item and overall status.
+     */
+    public function storeManagerDispatch(Request $request, SupportTicket $ticket)
+    {
+        $request->validate([
+            'mr_store_status' => 'required|in:dispatched,partially_dispatched,unavailable',
+            'mr_store_notes'  => 'nullable|string|max:2000',
+            'items'           => 'nullable|array',
+            'items.*.id'                   => 'required|exists:it_material_request_items,id',
+            'items.*.store_dispatch_qty'   => 'nullable|string|max:50',
+            'items.*.store_dispatch_status'=> 'nullable|in:available,partial,unavailable',
+            'items.*.store_notes'          => 'nullable|string|max:500',
+        ]);
+
+        // Update individual items
+        if (!empty($request->items)) {
+            foreach ($request->items as $itemData) {
+                ItMaterialRequestItem::where('id', $itemData['id'])
+                    ->where('support_ticket_id', $ticket->id)
+                    ->update([
+                        'store_dispatch_qty'    => $itemData['store_dispatch_qty'] ?? null,
+                        'store_dispatch_status' => $itemData['store_dispatch_status'] ?? null,
+                        'store_notes'           => $itemData['store_notes'] ?? null,
+                    ]);
+            }
+        }
+
+        $ticket->update([
+            'mr_store_status'        => $request->mr_store_status,
+            'mr_store_dispatched_at' => now(),
+            'mr_store_managed_by'    => auth()->id(),
+            'mr_store_notes'         => $request->mr_store_notes,
+        ]);
+
+        ActivityLog::log('dispatched', "Store Manager updated dispatch for Material Request Ticket {$ticket->ticket_no}: {$request->mr_store_status}", 'IT Material Requests', $ticket);
+
+        return back()->with('success', 'Dispatch status updated successfully.');
+    }
+
+    /**
+     * Head Office Secretary: Confirm receipt of dispatched materials.
+     */
+    public function secretaryConfirmReceipt(Request $request, SupportTicket $ticket)
+    {
+        $request->validate([
+            'mr_secretary_notes' => 'nullable|string|max:1000',
+        ]);
+
+        $ticket->update([
+            'mr_secretary_received'    => true,
+            'mr_secretary_received_at' => now(),
+            'mr_secretary_received_by' => auth()->id(),
+            'mr_secretary_notes'       => $request->mr_secretary_notes,
+        ]);
+
+        ActivityLog::log('received', "Head Office Secretary confirmed receipt for Material Request Ticket {$ticket->ticket_no}.", 'IT Material Requests', $ticket);
+
+        return back()->with('success', 'Receipt confirmed at Head Office.');
     }
 }

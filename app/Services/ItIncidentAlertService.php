@@ -108,6 +108,90 @@ class ItIncidentAlertService
     }
 
     /**
+     * Notify GM that an IT Material Request requires their approval.
+     */
+    public function sendMaterialRequestAlert(SupportTicket $ticket): array
+    {
+        $dedupKey = "it_mr_gm_alert_{$ticket->id}";
+        if (Cache::has($dedupKey)) {
+            return ['success' => true, 'already_sent' => true];
+        }
+
+        $gmPhones = $this->procurementSms->getPhoneNumbersForRole('gm');
+        $adminPhones = $this->procurementSms->getGlobalAdminPhoneNumbers();
+        $phones = array_values(array_unique(array_filter(array_merge($gmPhones, $adminPhones))));
+
+        if (empty($phones)) {
+            Log::warning("ItIncidentAlertService: No GM phone found for MR alert on Ticket #{$ticket->ticket_no}");
+            return ['success' => false, 'error' => 'No GM phone configured'];
+        }
+
+        $submitter   = $ticket->submitter_name ?? 'IT Staff';
+        $dept        = $ticket->department ?? '';
+        $itemCount   = $ticket->materialRequestItems ? $ticket->materialRequestItems->count() : '?';
+        $urgency     = strtoupper($ticket->mr_urgency ?? 'MEDIUM');
+        $message = "[IT MATERIAL REQUEST] Ticket #{$ticket->ticket_no}: {$itemCount} item(s) requested by {$submitter} ({$dept}). Urgency: {$urgency}. Please review and approve in the ERP system.";
+
+        $sentCount = 0;
+        foreach ($phones as $phone) {
+            $normalized = $this->procurementSms->normalizePhone($phone);
+            if (!$normalized) continue;
+            try {
+                $resp = $this->ethiopiaSms->sendMessage($normalized, $message);
+                if (!empty($resp['success'])) $sentCount++;
+            } catch (\Throwable $e) {
+                Log::error("MR GM SMS error for {$normalized}: " . $e->getMessage());
+            }
+        }
+
+        Cache::put($dedupKey, true, now()->addMinutes(15));
+
+        try {
+            $ticket->update(['mr_sms_gm_sent' => true]);
+        } catch (\Throwable $e) {}
+
+        return ['success' => $sentCount > 0, 'recipients_sent' => $sentCount];
+    }
+
+    /**
+     * Notify Store Manager that GM approved an IT Material Request.
+     */
+    public function sendStoreManagerAlert(SupportTicket $ticket): array
+    {
+        $storePhones = $this->procurementSms->getPhoneNumbersForRole('store_manager');
+        $extra = array_filter([env('STORE_MANAGER_PHONE')]);
+        $phones = array_values(array_unique(array_filter(array_merge($storePhones, $extra))));
+
+        // fallback to GM+admin phones if no store manager configured
+        if (empty($phones)) {
+            $phones = $this->resolveEscalationPhones();
+        }
+
+        $submitter  = $ticket->submitter_name ?? 'IT Staff';
+        $dept       = $ticket->department ?? '';
+        $itemCount  = $ticket->materialRequestItems ? $ticket->materialRequestItems->count() : '?';
+        $message = "[STORE ACTION REQUIRED] IT Material Request #{$ticket->ticket_no} APPROVED by GM. {$itemCount} item(s) from {$submitter} ({$dept}) need dispatch. Check ERP Procurement \u2192 IT Requests.";
+
+        $sentCount = 0;
+        foreach ($phones as $phone) {
+            $normalized = $this->procurementSms->normalizePhone($phone);
+            if (!$normalized) continue;
+            try {
+                $resp = $this->ethiopiaSms->sendMessage($normalized, $message);
+                if (!empty($resp['success'])) $sentCount++;
+            } catch (\Throwable $e) {
+                Log::error("MR Store SMS error for {$normalized}: " . $e->getMessage());
+            }
+        }
+
+        try {
+            $ticket->update(['mr_sms_store_sent' => true]);
+        } catch (\Throwable $e) {}
+
+        return ['success' => $sentCount > 0, 'recipients_sent' => $sentCount];
+    }
+
+    /**
      * Send direct system error alert to GM & Global Admin when an unhandled 500 error occurs.
      */
     public function sendDirectSystemErrorAlert(string $errorTitle, string $errorMessage, ?string $location = null): void
