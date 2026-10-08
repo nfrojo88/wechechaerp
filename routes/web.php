@@ -1624,6 +1624,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/vehicle-reminders/vehicle/{unit}',                 [App\Http\Controllers\VehicleReminderController::class, 'vehicleDetail'])->name('vehicle-reminders.vehicle-detail');
         Route::post('/vehicle-reminders/{vehicleReminder}/odometer',    [App\Http\Controllers\VehicleReminderController::class, 'updateOdometer'])->name('vehicle-reminders.odometer');
         Route::post('/vehicle-reminders/{vehicleReminder}/renew',       [App\Http\Controllers\VehicleReminderController::class, 'renew'])->name('vehicle-reminders.renew');
+        Route::post('/vehicle-reminders/{vehicleReminder}/send-sms',    [App\Http\Controllers\VehicleReminderController::class, 'sendSmsAlert'])->name('vehicle-reminders.send-sms');
         Route::resource('vehicle-reminders',                            App\Http\Controllers\VehicleReminderController::class);
     });
 

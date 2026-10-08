@@ -99,6 +99,18 @@ class CheckVehicleReminders extends Command
                     ]);
                     $alertsCreated++;
                     $this->warn("Alert logged: {$message}");
+
+                    // If SMS reminders enabled, send SMS to General Service and GM
+                    if ($reminder->send_sms ?? true) {
+                        try {
+                            $smsService = app(\App\Services\VehicleReminderSmsService::class);
+                            $smsResult = $smsService->sendReminderSms($reminder, $alertType);
+                            $this->info("SMS sent for vehicle reminder #{$reminder->id}: {$smsResult['sent']} delivered, {$smsResult['failed']} failed.");
+                        } catch (\Throwable $e) {
+                            Log::error("Failed to send scheduled SMS for vehicle reminder #{$reminder->id}: " . $e->getMessage());
+                            $this->error("SMS error for reminder #{$reminder->id}: " . $e->getMessage());
+                        }
+                    }
                 }
             }
         }

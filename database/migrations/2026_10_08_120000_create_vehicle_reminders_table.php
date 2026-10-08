@@ -40,6 +40,10 @@ return new class extends Migration
             $table->string('attachment', 500)->nullable();
             $table->text('notes')->nullable();
             $table->json('alert_days_before')->nullable();
+            $table->boolean('notify_general_service')->default(true);
+            $table->boolean('notify_gm')->default(true);
+            $table->boolean('send_sms')->default(true);
+            $table->string('custom_sms_phone', 100)->nullable();
 
             // Audit
             $table->unsignedBigInteger('created_by')->nullable();
@@ -70,8 +74,10 @@ return new class extends Migration
         Schema::create('vehicle_reminder_notifications', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('vehicle_reminder_id')->index();
-            $table->string('channel', 30)->default('in_app');
+            $table->string('channel', 30)->default('in_app'); // in_app|sms
             $table->string('alert_type', 50)->nullable();
+            $table->string('recipient_phone', 50)->nullable();
+            $table->string('recipient_role', 50)->nullable();
             $table->boolean('sent')->default(false);
             $table->timestamp('sent_at')->nullable();
             $table->text('message')->nullable();

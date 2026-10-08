@@ -31,6 +31,13 @@
                     <i class="fa-solid fa-gauge-high me-1"></i>Update Odometer
                 </button>
             @endif
+            <form action="{{ route('general-service.vehicle-reminders.send-sms', $vehicleReminder) }}" method="POST" class="d-inline"
+                  onsubmit="return confirm('Dispatch instant SMS alert to General Service team and General Manager (GM) for this vehicle?');">
+                @csrf
+                <button type="submit" class="btn btn-outline-success rounded-pill px-3 shadow-sm fw-semibold">
+                    <i class="fa-solid fa-comment-sms me-1"></i>Send SMS Alert to GS &amp; GM
+                </button>
+            </form>
             <button type="button" class="btn btn-success rounded-pill px-3 shadow-sm fw-semibold"
                     data-bs-toggle="modal" data-bs-target="#renewModal">
                 <i class="fa-solid fa-rotate me-1"></i>Renew / Mark Serviced
@@ -276,6 +283,40 @@
                         </div>
                     </div>
 
+                </div>
+            </div>
+
+            {{-- SMS Notification Settings Card --}}
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-header bg-white border-bottom border-light py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0 text-dark">
+                        <i class="fa-solid fa-comment-sms text-success me-2"></i>SMS &amp; Recipient Configuration
+                    </h6>
+                    <span class="badge {{ ($vehicleReminder->send_sms ?? true) ? 'bg-success' : 'bg-secondary' }} rounded-pill px-3 py-1">
+                        {{ ($vehicleReminder->send_sms ?? true) ? 'SMS Active (AfroMessage)' : 'SMS Disabled' }}
+                    </span>
+                </div>
+                <div class="card-body p-3">
+                    <div class="row g-3 small">
+                        <div class="col-md-4">
+                            <span class="text-muted d-block">General Service Team:</span>
+                            <span class="fw-bold {{ ($vehicleReminder->notify_general_service ?? true) ? 'text-success' : 'text-muted' }}">
+                                <i class="fa-solid {{ ($vehicleReminder->notify_general_service ?? true) ? 'fa-circle-check text-success' : 'fa-circle-xmark text-muted' }} me-1"></i>
+                                {{ ($vehicleReminder->notify_general_service ?? true) ? 'Notified via SMS' : 'Disabled' }}
+                            </span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="text-muted d-block">General Manager (GM):</span>
+                            <span class="fw-bold {{ ($vehicleReminder->notify_gm ?? true) ? 'text-success' : 'text-muted' }}">
+                                <i class="fa-solid {{ ($vehicleReminder->notify_gm ?? true) ? 'fa-circle-check text-success' : 'fa-circle-xmark text-muted' }} me-1"></i>
+                                {{ ($vehicleReminder->notify_gm ?? true) ? 'Notified via SMS' : 'Disabled' }}
+                            </span>
+                        </div>
+                        <div class="col-md-4">
+                            <span class="text-muted d-block">Custom / Driver Phone:</span>
+                            <span class="fw-bold text-dark">{{ $vehicleReminder->custom_sms_phone ?: 'None specified' }}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 

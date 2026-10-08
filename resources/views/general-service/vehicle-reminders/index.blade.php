@@ -284,6 +284,13 @@
                                                     data-bs-toggle="modal" data-bs-target="#renewModal-{{ $reminder->id }}" title="Renew / Mark Serviced">
                                                 <i class="fa-solid fa-rotate"></i> Renew
                                             </button>
+                                            <form action="{{ route('general-service.vehicle-reminders.send-sms', $reminder) }}" method="POST" class="d-inline"
+                                                  onsubmit="return confirm('Dispatch SMS reminder to General Service team and General Manager (GM) for this vehicle?');">
+                                                @csrf
+                                                <button type="submit" class="btn btn-outline-success px-2" title="Send SMS Alert to GS & GM">
+                                                    <i class="fa-solid fa-comment-sms"></i>
+                                                </button>
+                                            </form>
                                             <a href="{{ route('general-service.vehicle-reminders.show', $reminder) }}" class="btn btn-outline-secondary px-2" title="View Detail">
                                                 <i class="fa-solid fa-eye"></i>
                                             </a>

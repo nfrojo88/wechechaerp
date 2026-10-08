@@ -492,13 +492,27 @@ class VehicleReminderController extends Controller
             }
         }
 
-        return $request->validate($rules);
+        $rules['notify_general_service'] = 'nullable';
+        $rules['notify_gm']              = 'nullable';
+        $rules['send_sms']               = 'nullable';
+        $rules['custom_sms_phone']       = 'nullable|string|max:50';
+
+        $data = $request->validate($rules);
+        $data['notify_general_service'] = $request->has('notify_general_service');
+        $data['notify_gm']              = $request->has('notify_gm');
+        $data['send_sms']               = $request->has('send_sms');
+
+        return $data;
     }
 
     private function validateRenewRequest(Request $request, VehicleReminder $reminder): array
     {
         $type = $reminder->reminder_type;
-        $rules = ['notes' => 'nullable|string|max:1000', 'attachment_file' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:10240'];
+        $rules = [
+            'notes'           => 'nullable|string|max:1000',
+            'attachment_file' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:10240',
+            'send_sms_now'    => 'nullable',
+        ];
 
         if ($type === VehicleReminder::TYPE_BOLO) {
             $rules['bolo_last_date']   = 'nullable|date';
@@ -522,5 +536,24 @@ class VehicleReminderController extends Controller
         }
 
         return $request->validate($rules);
+    }
+
+    // ── Send Instant SMS Alert ────────────────────────────────────────────────
+
+    public function sendSmsAlert(VehicleReminder $vehicleReminder, \App\Services\VehicleReminderSmsService $smsService)
+    {
+        try {
+            $result = $smsService->sendReminderSms($vehicleReminder, 'manual_instant_alert');
+
+            if ($result['sent'] > 0) {
+                return back()->with('success', "SMS alert sent to {$result['sent']} recipient(s) (General Service & GM).");
+            } elseif ($result['total'] === 0) {
+                return back()->with('error', "No phone numbers found for General Service / GM. Please verify user or employee profile phone numbers.");
+            } else {
+                return back()->with('error', "SMS dispatch encountered issues for {$result['failed']} recipient(s). Check system logs.");
+            }
+        } catch (\Throwable $e) {
+            return back()->with('error', "SMS dispatch failed: " . $e->getMessage());
+        }
     }
 }

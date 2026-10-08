@@ -191,6 +191,67 @@
                                     <option value="renewed" {{ old('status', $vehicleReminder->status) === 'renewed' ? 'selected' : '' }}>Renewed</option>
                                 </select>
                             </div>
+
+                            {{-- SMS & Recipient Notification Panel --}}
+                            <div class="col-12">
+                                <div class="p-3 rounded-4 border bg-light bg-opacity-50">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <label class="form-label fw-bold mb-0 text-dark">
+                                            <i class="fa-solid fa-comment-sms text-success me-2"></i>Remind General Service &amp; General Manager (GM) via SMS
+                                        </label>
+                                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-3 py-1 fw-semibold">
+                                            <i class="fa-solid fa-shield-halved me-1"></i>Automated SMS Alerts
+                                        </span>
+                                    </div>
+                                    <p class="text-muted small mb-3">
+                                        Configure who receives advance expiration and service threshold notifications via SMS.
+                                    </p>
+
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <span class="fw-semibold small d-block mb-2 text-dark">Recipients (Who to Notify):</span>
+                                            <div class="d-flex flex-column gap-2">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" name="notify_general_service" id="edit_notify_gs" value="1"
+                                                           {{ old('notify_general_service', $vehicleReminder->notify_general_service ?? true) ? 'checked' : '' }}>
+                                                    <label class="form-check-label small fw-semibold text-dark" for="edit_notify_gs">
+                                                        <i class="fa-solid fa-screwdriver-wrench text-warning me-1"></i>General Service Team (GS)
+                                                    </label>
+                                                    <small class="d-block text-muted" style="font-size:0.75rem;">Notifies General Service officers &amp; transport handlers</small>
+                                                </div>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" name="notify_gm" id="edit_notify_gm" value="1"
+                                                           {{ old('notify_gm', $vehicleReminder->notify_gm ?? true) ? 'checked' : '' }}>
+                                                    <label class="form-check-label small fw-semibold text-dark" for="edit_notify_gm">
+                                                        <i class="fa-solid fa-user-tie text-primary me-1"></i>General Manager (GM)
+                                                    </label>
+                                                    <small class="d-block text-muted" style="font-size:0.75rem;">Notifies General Manager for executive oversight</small>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="col-md-6">
+                                            <span class="fw-semibold small d-block mb-2 text-dark">Delivery Channels:</span>
+                                            <div class="d-flex flex-column gap-2">
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" name="send_sms" id="edit_send_sms" value="1"
+                                                           {{ old('send_sms', $vehicleReminder->send_sms ?? true) ? 'checked' : '' }}>
+                                                    <label class="form-check-label small fw-semibold text-dark" for="edit_send_sms">
+                                                        <i class="fa-solid fa-paper-plane text-success me-1"></i>Send SMS Reminders (AfroMessage)
+                                                    </label>
+                                                    <small class="d-block text-muted" style="font-size:0.75rem;">Sends verified SMS directly to General Service &amp; GM phones</small>
+                                                </div>
+                                                <div class="mt-2">
+                                                    <label for="edit_custom_sms_phone" class="form-label small fw-semibold mb-1 text-muted">Additional / Driver Phone (Optional):</label>
+                                                    <input type="text" id="edit_custom_sms_phone" name="custom_sms_phone" class="form-control form-control-sm rounded-3"
+                                                           value="{{ old('custom_sms_phone', $vehicleReminder->custom_sms_phone) }}" placeholder="e.g. 0911234567">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="col-12">
                                 <label for="notes" class="form-label">Notes &amp; Remarks</label>
                                 <textarea id="notes" name="notes" class="form-control rounded-3" rows="3">{{ old('notes', $vehicleReminder->notes) }}</textarea>
