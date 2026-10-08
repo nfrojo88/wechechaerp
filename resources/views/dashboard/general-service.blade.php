@@ -362,11 +362,14 @@
                     <h6 class="fw-bold mb-2 text-warning"><i class="fa-solid fa-bolt me-2"></i>Quick Actions</h6>
                     <p class="text-white-50 small mb-3">Instant navigation for general service daily duties.</p>
                     <div class="d-grid gap-2">
-                        <a href="{{ route('general-service.maintenance.index') }}" class="btn btn-warning btn-sm fw-bold text-dark text-start">
+                        <a href="{{ route('general-service.vehicle-reminders.dashboard') }}" class="btn btn-warning btn-sm fw-bold text-dark text-start">
+                            <i class="fa-solid fa-clock-rotate-left me-2"></i>Vehicle Reminders (Bolo &amp; Service)
+                        </a>
+                        <a href="{{ route('general-service.maintenance.index') }}" class="btn btn-outline-light btn-sm text-start">
                             <i class="fa-solid fa-list-check me-2"></i>Manage All Maintenance Tickets
                         </a>
                         <a href="{{ route('store-manager.fixed-assets.index') }}" class="btn btn-outline-light btn-sm text-start">
-                            <i class="fa-solid fa-truck-pickup me-2"></i>View Company Fixed Assets & Fleet
+                            <i class="fa-solid fa-truck-pickup me-2"></i>View Company Fixed Assets &amp; Fleet
                         </a>
                         <a href="{{ route('transfers.index') }}" class="btn btn-outline-light btn-sm text-start">
                             <i class="fa-solid fa-truck-ramp-box me-2"></i>Store Material Transfers

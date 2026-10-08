@@ -23,6 +23,9 @@ class Kernel extends ConsoleKernel
 
         // Check & escalate overdue audit receipt inquiries (>3 days to Auditor/Finance Head, >5 days to GM/Admin)
         $schedule->command('audit:escalate-overdue-inquiries')->hourly()->withoutOverlapping();
+
+        // Check vehicle reminders daily (Bolo, insurance, service intervals)
+        $schedule->command('vehicles:check-reminders')->dailyAt('08:00')->withoutOverlapping();
     }
 
     /**

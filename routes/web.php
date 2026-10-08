@@ -1616,6 +1616,15 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/maintenance/{maintenanceRequest}/resubmit-returned', [App\Http\Controllers\Admin\GeneralServiceController::class, 'resubmitReturned'])->name('maintenance.resubmit-returned');
         Route::post('/maintenance/{maintenanceRequest}/ask-money',      [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMoney'])->name('maintenance.ask-money');
         Route::post('/maintenance/{maintenanceRequest}/ask-material',   [App\Http\Controllers\Admin\GeneralServiceController::class, 'askMaterial'])->name('maintenance.ask-material');
+
+        // ─── Vehicle Reminders ─────────────────────────────────────────────────
+        Route::get('/vehicle-reminders/dashboard',                      [App\Http\Controllers\VehicleReminderController::class, 'dashboard'])->name('vehicle-reminders.dashboard');
+        Route::get('/vehicle-reminders/export',                         [App\Http\Controllers\VehicleReminderController::class, 'export'])->name('vehicle-reminders.export');
+        Route::get('/vehicle-reminders/search-vehicles',                [App\Http\Controllers\VehicleReminderController::class, 'searchVehicles'])->name('vehicle-reminders.search-vehicles');
+        Route::get('/vehicle-reminders/vehicle/{unit}',                 [App\Http\Controllers\VehicleReminderController::class, 'vehicleDetail'])->name('vehicle-reminders.vehicle-detail');
+        Route::post('/vehicle-reminders/{vehicleReminder}/odometer',    [App\Http\Controllers\VehicleReminderController::class, 'updateOdometer'])->name('vehicle-reminders.odometer');
+        Route::post('/vehicle-reminders/{vehicleReminder}/renew',       [App\Http\Controllers\VehicleReminderController::class, 'renew'])->name('vehicle-reminders.renew');
+        Route::resource('vehicle-reminders',                            App\Http\Controllers\VehicleReminderController::class);
     });
 
     // ─── Fixed Assets Route Alias ──────────────────────────────────────────────

@@ -100,6 +100,11 @@ class FixedAssetUnit extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function vehicleReminders()
+    {
+        return $this->hasMany(VehicleReminder::class, 'fixed_asset_unit_id');
+    }
+
     // ─── Status Helpers ───────────────────────────────────────────────────────
 
     public function isAvailable(): bool

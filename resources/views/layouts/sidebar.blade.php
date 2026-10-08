@@ -953,6 +953,33 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
+            <a href="{{ route('general-service.vehicle-reminders.dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('general-service.vehicle-reminders.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-clock-rotate-left text-info"></i>
+                <span>Vehicle Reminders</span>
+                @php
+                    $gsPendingReminderCount = 0;
+                    try {
+                        if (\Illuminate\Support\Facades\Schema::hasTable('vehicle_reminders')) {
+                            $today = \Carbon\Carbon::today();
+                            $in30 = $today->copy()->addDays(30);
+                            $gsPendingReminderCount = \App\Models\VehicleReminder::where(function($q) use ($today, $in30) {
+                                $q->where(function($sq) use ($in30) {
+                                    $sq->where('bolo_expiry_date', '<=', $in30)
+                                       ->orWhere('insurance_expiry_date', '<=', $in30);
+                                })->orWhere(function($sq) {
+                                    $sq->where('reminder_type', 'service_km')
+                                       ->whereRaw('next_service_km - current_odometer_km <= COALESCE(reminder_threshold_km, 500)');
+                                });
+                            })->whereNotIn('status', ['renewed', 'serviced'])->count();
+                        }
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($gsPendingReminderCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $gsPendingReminderCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-truck-moving text-primary"></i>
                 <span>Transfers &amp; Drivers</span>
@@ -2046,6 +2073,33 @@
             <a href="{{ route('store-manager.fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.fixed-assets.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-truck-monster text-primary"></i>
                 <span>Workshop &amp; Fixed Assets</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('general-service.vehicle-reminders.dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('general-service.vehicle-reminders.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-clock-rotate-left text-info"></i>
+                <span>Vehicle Reminders</span>
+                @php
+                    $adminVehReminderCount = 0;
+                    try {
+                        if (\Illuminate\Support\Facades\Schema::hasTable('vehicle_reminders')) {
+                            $today = \Carbon\Carbon::today();
+                            $in30 = $today->copy()->addDays(30);
+                            $adminVehReminderCount = \App\Models\VehicleReminder::where(function($q) use ($today, $in30) {
+                                $q->where(function($sq) use ($in30) {
+                                    $sq->where('bolo_expiry_date', '<=', $in30)
+                                       ->orWhere('insurance_expiry_date', '<=', $in30);
+                                })->orWhere(function($sq) {
+                                    $sq->where('reminder_type', 'service_km')
+                                       ->whereRaw('next_service_km - current_odometer_km <= COALESCE(reminder_threshold_km, 500)');
+                                });
+                            })->whereNotIn('status', ['renewed', 'serviced'])->count();
+                        }
+                    } catch (\Throwable $e) {}
+                @endphp
+                @if($adminVehReminderCount > 0)
+                    <span class="badge bg-danger rounded-pill ms-auto">{{ $adminVehReminderCount }}</span>
+                @endif
             </a>
         </li>
         <li class="sidebar-nav-item">
