@@ -6,9 +6,12 @@ use App\Models\Employee;
 use App\Models\LeaveRequest;
 use App\Models\Attendance;
 use App\Models\Payroll;
+use App\Models\Holiday;
+use App\Models\SiteDeploymentRequest;
 use App\Models\EmployeeContract;
 use App\Models\PerformanceReview;
 use App\Models\EmployeeAchievement;
+use App\Helpers\EthiopianCalendar;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -93,19 +96,291 @@ class EmployeeSelfServiceController extends Controller
     {
         $employee = Employee::where('user_id', Auth::id())->firstOrFail();
 
-        $query = Attendance::where('employee_id', $employee->id);
+        // 1. Available Ethiopian payroll periods & current period
+        $availablePeriods = EthiopianCalendar::getAvailablePayrollPeriods(12, 1);
+        $currentPeriod = EthiopianCalendar::getCurrentPayrollPeriod();
 
-        if ($request->filled('month')) {
-            $query->whereMonth('attendance_date', $request->month)
-                  ->whereYear('attendance_date', $request->year ?? Carbon::now()->year);
-        } else {
-            $query->whereMonth('attendance_date', Carbon::now()->month)
-                  ->whereYear('attendance_date', Carbon::now()->year);
+        $selectedPeriodKey = $request->input('period');
+        $selectedPeriod = null;
+
+        if ($request->filled('period')) {
+            if ($selectedPeriodKey && str_contains($selectedPeriodKey, '-')) {
+                [$ey, $em] = explode('-', $selectedPeriodKey);
+                $selectedPeriod = EthiopianCalendar::getPayrollPeriod((int)$ey, (int)$em);
+            }
+        } elseif ($request->filled('month')) {
+            $m = (int)$request->month;
+            $y = (int)($request->year ?? Carbon::now()->year);
+            $startCarbon = Carbon::createFromDate($y, $m, 1)->startOfMonth();
+            $endCarbon   = Carbon::createFromDate($y, $m, 1)->endOfMonth();
+
+            $curr = $startCarbon->copy();
+            $periodDays = [];
+            while ($curr->lte($endCarbon)) {
+                $greg = $curr->toDateString();
+                $et = EthiopianCalendar::toEthiopian($curr);
+                $periodDays[] = [
+                    'greg_date'    => $greg,
+                    'greg_day'     => $curr->format('d'),
+                    'greg_month'   => $curr->format('M'),
+                    'greg_label'   => $curr->format('M d'),
+                    'day_of_week'  => $curr->dayOfWeek,
+                    'day_name_en'  => $curr->format('D'),
+                    'is_sunday'    => $curr->isSunday(),
+                    'is_saturday'  => $curr->isSaturday(),
+                    'eth_year'     => $et['year'] ?? null,
+                    'eth_month'    => $et['month'] ?? null,
+                    'eth_day'      => $et['day'] ?? null,
+                    'eth_label_am' => $et['short_am'] ?? '',
+                    'eth_label_en' => $et['short_en'] ?? '',
+                    'display_label'=> ($et['day'] ?? '') . ' ' . ($et['month_en'] ?? ''),
+                ];
+                $curr->addDay();
+            }
+
+            $selectedPeriod = [
+                'eth_year'       => null,
+                'eth_month'      => null,
+                'month_am'       => $startCarbon->format('F Y'),
+                'month_en'       => $startCarbon->format('F Y'),
+                'period_key'     => 'greg-' . $y . '-' . $m,
+                'label_am'       => $startCarbon->format('F Y'),
+                'label_en'       => $startCarbon->format('F Y'),
+                'full_label'     => $startCarbon->format('F Y'),
+                'start_greg'     => $startCarbon->toDateString(),
+                'end_greg'       => $endCarbon->toDateString(),
+                'total_days'     => count($periodDays),
+                'days'           => $periodDays,
+            ];
+            $selectedPeriodKey = 'greg-' . $y . '-' . $m;
         }
 
-        $attendance = $query->orderBy('attendance_date', 'desc')->paginate(30);
+        if (!$selectedPeriod) {
+            $selectedPeriod = $currentPeriod;
+            $selectedPeriodKey = $currentPeriod['period_key'];
+        }
 
-        return view('employee.self-service.attendance', compact('employee', 'attendance'));
+        $startDate  = $selectedPeriod['start_greg'];
+        $endDate    = $selectedPeriod['end_greg'];
+        $periodDays = $selectedPeriod['days'];
+
+        // 2. Fetch all attendance records in this period for the employee
+        $periodRecords = Attendance::where('employee_id', $employee->id)
+            ->whereBetween('attendance_date', [$startDate, $endDate])
+            ->orderBy('attendance_date', 'asc')
+            ->get();
+
+        $recordsByDate = $periodRecords->keyBy(function($item) {
+            return $item->attendance_date ? $item->attendance_date->toDateString() : '';
+        });
+
+        // 3. Approved Leaves for this employee in period
+        $leaves = collect();
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('leave_requests')) {
+                $leaves = LeaveRequest::where('employee_id', $employee->id)
+                    ->where('status', 'approved')
+                    ->where(function($q) use ($startDate, $endDate) {
+                        $q->whereBetween('start_date', [$startDate, $endDate])
+                          ->orWhereBetween('end_date', [$startDate, $endDate])
+                          ->orWhere(function($sq) use ($startDate, $endDate) {
+                              $sq->where('start_date', '<=', $startDate)->where('end_date', '>=', $endDate);
+                          });
+                    })
+                    ->get();
+            }
+        } catch (\Throwable $e) {}
+
+        // 4. Public Holidays in period
+        $holidays = collect();
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('holidays')) {
+                $holidays = Holiday::where(function($q) use ($startDate, $endDate) {
+                        $q->whereBetween('holiday_date', [$startDate, $endDate])
+                          ->orWhere(function($sq) use ($startDate, $endDate) {
+                              $sq->whereBetween('from_date', [$startDate, $endDate])
+                                ->orWhereBetween('to_date', [$startDate, $endDate]);
+                          });
+                    })
+                    ->get();
+            }
+        } catch (\Throwable $e) {}
+
+        // 5. Approved site deployment
+        $approvedSiteDeployments = collect();
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('site_deployment_requests')) {
+                $approvedSiteDeployments = SiteDeploymentRequest::where('employee_id', $employee->id)
+                    ->where('status', 'approved')
+                    ->where(function($q) use ($startDate, $endDate) {
+                        $q->whereBetween('start_date', [$startDate, $endDate])
+                          ->orWhereBetween('end_date', [$startDate, $endDate])
+                          ->orWhere(function($sq) use ($startDate, $endDate) {
+                              $sq->where('start_date', '<=', $startDate)->where('end_date', '>=', $endDate);
+                          });
+                    })
+                    ->get();
+            }
+        } catch (\Throwable $e) {}
+
+        // 6. Build Daily Sheet data and summary statistics
+        $todayDateStr = today()->toDateString();
+        $sheetDays = [];
+        $summary = [
+            'present'      => 0,
+            'absent'       => 0,
+            'leave'        => 0,
+            'holiday'      => 0,
+            'site'         => 0,
+            'half_day'     => 0,
+            'late_days'    => 0,
+            'penalty_days' => 0,
+            'hours'        => 0.0,
+        ];
+
+        foreach ($periodDays as $dayItem) {
+            $greg = $dayItem['greg_date'];
+            $isSunday = $dayItem['is_sunday'];
+            $att = $recordsByDate->get($greg);
+
+            $hasPunch = $att && (
+                !empty($att->morning_in) ||
+                !empty($att->morning_out) ||
+                !empty($att->afternoon_in) ||
+                !empty($att->afternoon_out) ||
+                !empty($att->check_in) ||
+                !empty($att->check_out) ||
+                (float)$att->hours_worked > 0
+            );
+
+            $isLate = false;
+            $lateMinutes = 0;
+            if ($hasPunch) {
+                $inPunch = $att->morning_in ?: $att->check_in;
+                $lateMinutes = $att->late_minutes ?: (\class_exists(\App\Services\BiometricPunchService::class) ? \App\Services\BiometricPunchService::calculateLateMinutes($inPunch) : 0);
+                $isLate = $lateMinutes > 0 || ($att->morning_in && $att->morning_in > '08:40:59');
+            }
+
+            // Site deployment
+            $siteDep = $approvedSiteDeployments->first(function($sd) use ($greg) {
+                $sdStart = $sd->start_date ? Carbon::parse($sd->start_date)->toDateString() : null;
+                $sdEnd   = $sd->end_date ? Carbon::parse($sd->end_date)->toDateString() : null;
+                return $sdStart && $sdEnd && $sdStart <= $greg && $sdEnd >= $greg;
+            });
+            $hasSite = ($att && ($att->status === 'S' || $att->source === 'site_dispatch' || (method_exists($att, 'isOnSite') && $att->isOnSite()))) ?: $siteDep;
+
+            // Leave
+            $leaveObj = $leaves->first(function($lv) use ($greg) {
+                $lvStart = $lv->start_date ? Carbon::parse($lv->start_date)->toDateString() : null;
+                $lvEnd   = $lv->end_date ? Carbon::parse($lv->end_date)->toDateString() : null;
+                return $lvStart && $lvEnd && $lvStart <= $greg && $lvEnd >= $greg;
+            });
+
+            // Holiday
+            $holidayObj = $holidays->first(function($h) use ($greg) {
+                $hd = $h->holiday_date ? Carbon::parse($h->holiday_date)->toDateString() : null;
+                if ($hd && $hd === $greg) return true;
+                if ($h->from_date && $h->to_date) {
+                    return Carbon::parse($h->from_date)->toDateString() <= $greg 
+                        && Carbon::parse($h->to_date)->toDateString() >= $greg;
+                }
+                return false;
+            });
+
+            // Determine status code
+            if ($isSunday) {
+                if ($hasPunch) {
+                    $code = 'P';
+                    $cellClass = 'cell-sunday-ot';
+                    $label = 'Sunday Overtime (P)';
+                    $summary['present']++;
+                } else {
+                    $code = 'SUN';
+                    $cellClass = 'cell-sunday';
+                    $label = 'Sunday (Rest Day)';
+                }
+            } elseif ($hasSite) {
+                $code = 'S';
+                $cellClass = 'cell-site';
+                $label = 'On-Site Deployment (S)';
+                $summary['site']++;
+                $summary['present']++;
+            } elseif ($hasPunch) {
+                $code = 'P';
+                $cellClass = $isLate ? 'cell-present-late' : 'cell-present-ontime';
+                $label = $isLate ? "Present (Late {$lateMinutes}m)" : 'Present (P)';
+                $summary['present']++;
+                if ($isLate) {
+                    $summary['late_days']++;
+                }
+            } elseif ($leaveObj) {
+                $code = 'L';
+                $cellClass = 'cell-leave';
+                $label = 'Approved Leave: ' . ($leaveObj->leave_type ?? 'Leave');
+                $summary['leave']++;
+            } elseif ($holidayObj) {
+                $code = 'H';
+                $cellClass = 'cell-holiday';
+                $label = 'Public Holiday: ' . ($holidayObj->title ?? $holidayObj->name ?? 'Holiday');
+                $summary['holiday']++;
+            } else {
+                if ($greg > $todayDateStr) {
+                    $code = '—';
+                    $cellClass = 'cell-upcoming';
+                    $label = 'Upcoming Day';
+                } else {
+                    $code = 'A';
+                    $cellClass = 'cell-absent';
+                    $label = 'Absent (A)';
+                    $summary['absent']++;
+                }
+            }
+
+            // Punch strings
+            $rawIn  = $att?->morning_in ?: ($att?->afternoon_in ?: $att?->check_in);
+            $rawOut = $att?->afternoon_out ?: ($att?->morning_out ?: $att?->check_out);
+            $punchIn  = $rawIn ? Carbon::parse($rawIn)->format('h:i A') : null;
+            $punchOut = $rawOut ? Carbon::parse($rawOut)->format('h:i A') : null;
+
+            if ($att && (float)$att->hours_worked > 0) {
+                $summary['hours'] += (float)$att->hours_worked;
+            }
+
+            if ($att && in_array(strtolower($att->status ?? ''), ['half-day', 'half_day'])) {
+                $summary['half_day']++;
+            }
+
+            $sheetDays[] = [
+                'day'         => $dayItem,
+                'record'      => $att,
+                'code'        => $code,
+                'class'       => $cellClass,
+                'label'       => $label,
+                'punch_in'    => $punchIn,
+                'punch_out'   => $punchOut,
+                'is_late'     => $isLate,
+                'late_min'    => $lateMinutes,
+            ];
+        }
+
+        $summary['penalty_days'] = intdiv($summary['late_days'], 3);
+
+        // Paginated attendance records for table (showing newest first)
+        $attendance = Attendance::where('employee_id', $employee->id)
+            ->whereBetween('attendance_date', [$startDate, $endDate])
+            ->orderBy('attendance_date', 'desc')
+            ->paginate(35);
+
+        return view('employee.self-service.attendance', compact(
+            'employee',
+            'attendance',
+            'availablePeriods',
+            'currentPeriod',
+            'selectedPeriod',
+            'selectedPeriodKey',
+            'sheetDays',
+            'summary'
+        ));
     }
 
     /**
