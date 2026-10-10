@@ -64,6 +64,14 @@
                             @if($project->location)
                             <div class="text-muted small"><i class="fa-solid fa-location-dot me-1"></i>{{ $project->location }}</div>
                             @endif
+                            @php $pca = $project->pettyCashAccount; @endphp
+                            @if($pca)
+                            <div class="mt-1">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.72rem;">
+                                    <i class="fa-solid fa-wallet me-1"></i>{{ $pca->name }} [{{ $pca->code }}]
+                                </span>
+                            </div>
+                            @endif
                         </td>
                         <td>{{ $project->client_name ?? '—' }}</td>
                         <td>

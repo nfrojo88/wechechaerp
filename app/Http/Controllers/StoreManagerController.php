@@ -2393,7 +2393,7 @@ class StoreManagerController extends Controller
         $projectId = $request->input('project_id');
         $assignmentStatus = $request->input('status'); // 'assigned', 'unassigned', 'all'
 
-        $storesQuery = Store::with(['project', 'manager.roles', 'users.roles'])
+        $storesQuery = Store::with(['project', 'manager.roles', 'users.roles', 'pettyCashAccount'])
             ->withCount(['inventory', 'users'])
             ->latest();
 
@@ -2586,7 +2586,10 @@ class StoreManagerController extends Controller
             }
         }
 
-        return redirect()->back()->with('success', "New Store [{$store->code}] {$store->name} created successfully!");
+        $pettyCashAccount = $store->autoCreateSitePettyCash();
+        $pcaCode = $pettyCashAccount ? " and Site Petty Cash [{$pettyCashAccount->code}]" : '';
+
+        return redirect()->back()->with('success', "New Store [{$store->code}] {$store->name} created successfully{$pcaCode}!");
     }
 
     /**

@@ -41,6 +41,19 @@
                             @endif
                         </td>
                     </tr>
+                    <tr>
+                        <td class="text-muted">Site Petty Cash</td>
+                        <td class="fw-semibold">
+                            @if($store->pettyCashAccount)
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                    <i class="fa-solid fa-wallet me-1"></i>{{ $store->pettyCashAccount->name }} [{{ $store->pettyCashAccount->code }}]
+                                </span>
+                                <div class="small text-muted mt-1">Balance: Br {{ number_format($store->pettyCashAccount->current_balance, 2) }}</div>
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
+                    </tr>
                 </table>
                 @if($store->address)
                 <div class="mt-3 pt-3 border-top">

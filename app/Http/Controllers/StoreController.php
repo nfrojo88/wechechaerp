@@ -17,7 +17,7 @@ class StoreController extends Controller
 
     public function index(Request $request)
     {
-        $query = Store::with('project', 'manager')->latest();
+        $query = Store::with('project', 'manager', 'pettyCashAccount')->latest();
 
         /** @var \App\Models\User|null $user */
         $user = auth()->user();
@@ -79,14 +79,16 @@ class StoreController extends Controller
             'notes'      => ['nullable', 'string'],
         ]);
 
-        Store::create($validated);
+        $store = Store::create($validated);
+        $pettyCashAccount = $store->autoCreateSitePettyCash();
 
-        return redirect()->route('stores.index')->with('success', 'Store created successfully.');
+        $pcaCode = $pettyCashAccount ? " and Site Petty Cash [{$pettyCashAccount->code}]" : '';
+        return redirect()->route('stores.index')->with('success', 'Store created successfully' . $pcaCode . '.');
     }
 
     public function show(Store $store)
     {
-        $store->load('project', 'manager', 'inventory.product');
+        $store->load('project', 'manager', 'pettyCashAccount', 'inventory.product');
         return view('stores.show', compact('store'));
     }
 

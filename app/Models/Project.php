@@ -24,6 +24,7 @@ class Project extends Model
         'budget_allocated',
         'budget_consumed',
         'default_store_id',
+        'petty_cash_account_id',
         'created_by',
     ];
 
@@ -38,6 +39,30 @@ class Project extends Model
     public function defaultStore()
     {
         return $this->belongsTo(Store::class, 'default_store_id');
+    }
+
+    public function pettyCashAccount()
+    {
+        return $this->belongsTo(ChartOfAccount::class, 'petty_cash_account_id');
+    }
+
+    public function getPettyCashAccountAttribute(): ?ChartOfAccount
+    {
+        if (!empty($this->petty_cash_account_id)) {
+            $account = ChartOfAccount::find($this->petty_cash_account_id);
+            if ($account) return $account;
+        }
+
+        if ($this->defaultStore && $this->defaultStore->pettyCashAccount) {
+            return $this->defaultStore->pettyCashAccount;
+        }
+
+        $siteStore = $this->stores()->whereNotNull('petty_cash_account_id')->first();
+        if ($siteStore && $siteStore->pettyCashAccount) {
+            return $siteStore->pettyCashAccount;
+        }
+
+        return null;
     }
 
     public function creator()
@@ -148,9 +173,46 @@ class Project extends Model
 
     protected static function booted()
     {
+        static::created(function (Project $project) {
+            try {
+                $project->autoCreateSitePettyCash();
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Failed to auto-create site petty cash for project #{$project->id}: " . $e->getMessage());
+            }
+        });
+
         static::saved(function ($project) {
             $project->syncProjectBasedEmployees();
         });
+    }
+
+    /**
+     * Resolve or automatically create a dedicated Site Petty Cash account for this project.
+     */
+    public function autoCreateSitePettyCash(?User $custodian = null): ChartOfAccount
+    {
+        $store = $this->defaultStore ?: $this->stores()->first();
+        if (!$store) {
+            $storeName = $this->name;
+            $storeCode = 'STR-' . ($this->code ?: strtoupper(uniqid()));
+            $store = Store::create([
+                'name'       => $storeName,
+                'code'       => $storeCode,
+                'type'       => 'site',
+                'is_active'  => true,
+                'project_id' => $this->id,
+                'notes'      => 'Automatically created site store for project: ' . $this->name,
+            ]);
+            $this->updateQuietly(['default_store_id' => $store->id]);
+        }
+
+        $pca = $store->autoCreateSitePettyCash($custodian);
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('projects', 'petty_cash_account_id')) {
+            $this->updateQuietly(['petty_cash_account_id' => $pca->id]);
+        }
+
+        return $pca;
     }
 
     /**

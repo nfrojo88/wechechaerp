@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @section('title', 'Assign Store Keepers — Store Manager Hub')
 
@@ -280,6 +280,13 @@
                                             <div class="small text-muted"><i class="fa-solid fa-diagram-project me-1"></i>{{ $store->project->name }}</div>
                                         @else
                                             <div class="small text-muted"><i class="fa-solid fa-building me-1"></i>Central / Head Office</div>
+                                        @endif
+                                        @if($store->pettyCashAccount)
+                                            <div class="mt-1">
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.7rem;">
+                                                    <i class="fa-solid fa-wallet me-1"></i>Petty Cash: {{ $store->pettyCashAccount->code }}
+                                                </span>
+                                            </div>
                                         @endif
                                     </td>
 

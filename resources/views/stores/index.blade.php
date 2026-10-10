@@ -67,8 +67,13 @@
                 </div>
                 @endif
                 @if($store->address)
-                <div class="small text-muted">
+                <div class="small text-muted mb-1">
                     <i class="fa-solid fa-location-dot me-1"></i> {{ $store->address }}
+                </div>
+                @endif
+                @if($store->pettyCashAccount)
+                <div class="small text-muted">
+                    <i class="fa-solid fa-wallet text-success me-1"></i> {{ $store->pettyCashAccount->name }} [{{ $store->pettyCashAccount->code }}]
                 </div>
                 @endif
             </div>

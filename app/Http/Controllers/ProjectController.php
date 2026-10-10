@@ -16,7 +16,7 @@ class ProjectController extends Controller
 
     public function index(Request $request)
     {
-        $query = Project::with('defaultStore', 'creator')->latest();
+        $query = Project::with(['defaultStore.pettyCashAccount', 'stores.pettyCashAccount', 'creator'])->latest();
 
         /** @var \App\Models\User|null $user */
         $user = auth()->user();
@@ -83,23 +83,34 @@ class ProjectController extends Controller
 
         $project = Project::create($validated);
 
-        // Auto-create the store using the project name
-        $storeName = $project->name;
-        $storeCode = 'STR-' . ($project->code ?: strtoupper(uniqid()));
+        // Auto-create the site store using the project name (if not already created by model event)
+        $store = $project->defaultStore ?: $project->stores()->first();
+        if (!$store) {
+            $storeName = $project->name;
+            $storeCode = 'STR-' . ($project->code ?: strtoupper(uniqid()));
 
-        $store = \App\Models\Store::create([
-            'name' => $storeName,
-            'code' => $storeCode,
-            'type' => 'site',
-            'is_active' => true,
-            'project_id' => $project->id,
-            'notes' => 'Automatically created store for project: ' . $project->name,
-        ]);
+            $store = \App\Models\Store::create([
+                'name' => $storeName,
+                'code' => $storeCode,
+                'type' => 'site',
+                'is_active' => true,
+                'project_id' => $project->id,
+                'notes' => 'Automatically created site store for project: ' . $project->name,
+            ]);
+        }
 
-        // Set as default store for project
-        $project->update(['default_store_id' => $store->id]);
+        // Explicitly resolve or create dedicated Site Petty Cash account
+        $pettyCashAccount = $store->autoCreateSitePettyCash();
 
-        return redirect()->route('projects.index')->with('success', 'Project created successfully along with ' . $storeName . '.');
+        // Set as default store and link petty cash account for project
+        $projectUpdate = ['default_store_id' => $store->id];
+        if (\Illuminate\Support\Facades\Schema::hasColumn('projects', 'petty_cash_account_id') && $pettyCashAccount) {
+            $projectUpdate['petty_cash_account_id'] = $pettyCashAccount->id;
+        }
+        $project->update($projectUpdate);
+
+        $pcaCode = $pettyCashAccount ? " and Site Petty Cash [{$pettyCashAccount->code}]" : '';
+        return redirect()->route('projects.index')->with('success', 'Project created successfully along with ' . $store->name . $pcaCode . '.');
     }
 
     public function show(Project $project)
@@ -111,7 +122,7 @@ class ProjectController extends Controller
             return view('erp_plans.show', compact('erp_plan'));
         }
 
-        $project->load('defaultStore', 'stores', 'creator');
+        $project->load(['defaultStore.pettyCashAccount', 'stores.pettyCashAccount', 'creator']);
         return view('projects.show', compact('project'));
     }
 

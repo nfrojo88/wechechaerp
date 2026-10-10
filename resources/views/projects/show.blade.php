@@ -147,6 +147,18 @@
                             @endcan
                         </td>
                     </tr>
+                    @php $pca = $project->pettyCashAccount; @endphp
+                    @if($pca)
+                    <tr>
+                        <td class="text-muted">Site Petty Cash</td>
+                        <td class="fw-semibold">
+                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                <i class="fa-solid fa-wallet me-1"></i>{{ $pca->name }} [{{ $pca->code }}]
+                            </span>
+                            <div class="small text-muted mt-1">Balance: Br {{ number_format($pca->current_balance, 2) }}</div>
+                        </td>
+                    </tr>
+                    @endif
                 </table>
 
                 {{-- Budget Utilization Bar (visible only to authorized roles) --}}
@@ -199,16 +211,25 @@
                 </div>
                 @endcan
 
-                <h6 class="mb-3">Associated Stores</h6>
+                <h6 class="mb-3">Associated Stores &amp; Site Petty Cash</h6>
                 @if($project->stores->count() > 0)
                     <div class="list-group list-group-flush">
                     @foreach($project->stores as $store)
-                        <a href="{{ route('stores.show', $store) }}" class="list-group-item list-group-item-action px-0 border-0">
-                            <i class="fas fa-warehouse text-muted me-2"></i> {{ $store->name }}
-                            @if($project->default_store_id == $store->id)
-                                <span class="badge bg-secondary ms-2">Default</span>
+                        <div class="list-group-item px-0 border-0 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div>
+                                <a href="{{ route('stores.show', $store) }}" class="text-decoration-none fw-semibold">
+                                    <i class="fas fa-warehouse text-muted me-2"></i> {{ $store->name }}
+                                </a>
+                                @if($project->default_store_id == $store->id)
+                                    <span class="badge bg-secondary ms-1">Default Store</span>
+                                @endif
+                            </div>
+                            @if($store->pettyCashAccount)
+                                <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.75rem;">
+                                    <i class="fa-solid fa-wallet me-1"></i>{{ $store->pettyCashAccount->name }} [{{ $store->pettyCashAccount->code }}]
+                                </span>
                             @endif
-                        </a>
+                        </div>
                     @endforeach
                     </div>
                 @else
