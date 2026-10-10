@@ -398,94 +398,187 @@ class FixedAsset extends Model
             $syncedCount = 0;
 
             foreach ($products as $prod) {
-                // Total on hand in inventory
-                $totalOnHand = (int) round(Inventory::where('product_id', $prod->id)->sum('quantity_on_hand'));
-                $totalReserved = (int) round(Inventory::where('product_id', $prod->id)->sum('quantity_reserved'));
-                $stockQty = $totalOnHand > 0 ? $totalOnHand : $totalReserved;
+                // Find all store inventories for this product
+                $storeInvs = Inventory::with('store')
+                    ->where('product_id', $prod->id)
+                    ->get();
 
-                // Track at least 1 if product exists in catalog as an asset, or the actual inventory quantity
-                $targetQty = max($stockQty, 1);
+                $activeStoreInvs = $storeInvs->filter(function($i) {
+                    return (float)$i->quantity_on_hand > 0 || (float)$i->quantity_reserved > 0;
+                });
 
-                $unitCost = (float) (
-                    Inventory::where('product_id', $prod->id)->where('unit_cost', '>', 0)->value('unit_cost')
+                $category = self::resolveCategory($prod->category . ' ' . $prod->sub_category, $prod->name);
+
+                $globalUnitCost = (float) (
+                    $storeInvs->where('unit_cost', '>', 0)->value('unit_cost')
                     ?: DB::table('material_prices')->where('product_id', $prod->id)->orderByDesc('effective_date')->value('price')
                     ?: $prod->unit_price
                     ?: $prod->selling_price
                     ?: 0
                 );
 
-                $storeId = Inventory::where('product_id', $prod->id)->where('quantity_on_hand', '>', 0)->value('store_id')
-                    ?: Store::where('is_active', true)->value('id');
+                if ($activeStoreInvs->isNotEmpty()) {
+                    // Synchronize PER STORE so each store's Fixed Assets match its inventory stock
+                    foreach ($activeStoreInvs as $inv) {
+                        $storeId = (int) $inv->store_id;
+                        $storeName = $inv->store?->name ?? (Store::find($storeId)?->name ?? 'Store #' . $storeId);
+                        $storeStockQty = (int) round($inv->quantity_on_hand > 0 ? $inv->quantity_on_hand : $inv->quantity_reserved);
+                        $targetQty = max($storeStockQty, 1);
+                        $unitCost = (float) ($inv->unit_cost > 0 ? $inv->unit_cost : $globalUnitCost);
 
-                $category = self::resolveCategory($prod->category . ' ' . $prod->sub_category, $prod->name);
+                        // Find or link FixedAsset for this product in THIS store
+                        $fixedAsset = FixedAsset::withTrashed()
+                            ->where('store_id', $storeId)
+                            ->where(function($q) use ($prod) {
+                                $q->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($prod->name))])
+                                  ->orWhere('description', 'like', "%(Product ID: {$prod->id})%")
+                                  ->orWhere('description', 'like', "%SKU: " . ($prod->sku ?? '') . "%");
+                            })->first();
 
-                // Find existing FixedAsset by name or SKU/ID in description
-                $fixedAsset = FixedAsset::withTrashed()
-                    ->where(function($q) use ($prod) {
-                        $q->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($prod->name))])
-                          ->orWhere('description', 'like', "%(Product ID: {$prod->id})%")
-                          ->orWhere('description', 'like', "%SKU: " . ($prod->sku ?? '') . "%");
-                    })->first();
+                        if (!$fixedAsset) {
+                            // Check if an unassigned/orphaned asset exists with null store_id
+                            $orphan = FixedAsset::withTrashed()
+                                ->whereNull('store_id')
+                                ->where(function($q) use ($prod) {
+                                    $q->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($prod->name))])
+                                      ->orWhere('description', 'like', "%(Product ID: {$prod->id})%")
+                                      ->orWhere('description', 'like', "%SKU: " . ($prod->sku ?? '') . "%");
+                                })->first();
 
-                if ($fixedAsset) {
-                    if ($fixedAsset->trashed()) {
-                        $fixedAsset->restore();
+                            if ($orphan) {
+                                $orphan->store_id = $storeId;
+                                $orphan->saveQuietly();
+                                $fixedAsset = $orphan;
+                            }
+                        }
+
+                        if (!$fixedAsset) {
+                            // Generate unique prefix
+                            $basePrefix = self::generateCleanPrefix($prod->name, $prod->sku);
+                            $prefix = $basePrefix;
+                            $c = 1;
+                            while (FixedAsset::where('code_prefix', $prefix)->exists()) {
+                                $c++;
+                                $prefix = substr($basePrefix, 0, 3) . $c;
+                            }
+
+                            $fixedAsset = FixedAsset::create([
+                                'name'           => $prod->name,
+                                'category'       => $category,
+                                'code_prefix'    => $prefix,
+                                'total_quantity' => $targetQty,
+                                'unit_cost'      => $unitCost,
+                                'store_id'       => $storeId,
+                                'supplier'       => $prod->supplier ?? null,
+                                'description'    => "Auto-synced from Store Inventory (Product SKU: " . ($prod->sku ?? 'N/A') . ", Product ID: {$prod->id})",
+                                'created_by'     => auth()->id(),
+                            ]);
+                        } else {
+                            if ($fixedAsset->trashed()) {
+                                $fixedAsset->restore();
+                            }
+                        }
+
+                        // Re-distribute surplus units from other stores that were wrongly lumped under one store in earlier syncs
+                        $otherAssets = FixedAsset::where('id', '!=', $fixedAsset->id)
+                            ->where(function($q) use ($prod) {
+                                $q->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($prod->name))])
+                                  ->orWhere('description', 'like', "%(Product ID: {$prod->id})%")
+                                  ->orWhere('description', 'like', "%SKU: " . ($prod->sku ?? '') . "%");
+                            })->get();
+
+                        foreach ($otherAssets as $otherAsset) {
+                            $otherInvQty = (int) round(Inventory::where('product_id', $prod->id)->where('store_id', $otherAsset->store_id)->value('quantity_on_hand') ?? 0);
+                            $otherUnitsCount = $otherAsset->units()->count();
+                            $surplus = $otherUnitsCount - $otherInvQty;
+                            $needed = $targetQty - $fixedAsset->units()->count();
+
+                            if ($surplus > 0 && $needed > 0) {
+                                $toMoveCount = min($surplus, $needed);
+                                $movableUnits = $otherAsset->units()
+                                    ->where('status', FixedAssetUnit::STATUS_IN_STORE)
+                                    ->take($toMoveCount)
+                                    ->get();
+
+                                foreach ($movableUnits as $mu) {
+                                    $mu->update([
+                                        'fixed_asset_id'   => $fixedAsset->id,
+                                        'current_location' => $storeName,
+                                    ]);
+                                }
+
+                                $otherAsset->total_quantity = max($otherAsset->units()->count(), $otherInvQty, 1);
+                                $otherAsset->saveQuietly();
+                            }
+                        }
+
+                        // Ensure units count matches inventory quantity
+                        $currentUnitsCount = $fixedAsset->units()->count();
+                        if ($currentUnitsCount < $targetQty) {
+                            $fixedAsset->total_quantity = $targetQty;
+                            $fixedAsset->saveQuietly();
+                            $fixedAsset->generateUnitsToMatchQuantity([
+                                'purchase_price'   => $unitCost,
+                                'current_location' => $storeName,
+                                'condition'        => $prod->equipment_condition ?: 'good',
+                            ]);
+                        } else {
+                            $fixedAsset->total_quantity = max($currentUnitsCount, $targetQty);
+                            $fixedAsset->saveQuietly();
+                        }
+
+                        // Keep in_store units current_location updated with this store's name
+                        $fixedAsset->units()->where('status', FixedAssetUnit::STATUS_IN_STORE)->update([
+                            'current_location' => $storeName,
+                        ]);
+
+                        $syncedCount++;
                     }
-
-                    $needsSave = false;
-                    if ($targetQty > $fixedAsset->total_quantity) {
-                        $fixedAsset->total_quantity = $targetQty;
-                        $needsSave = true;
-                    }
-                    if ($unitCost > 0 && (!$fixedAsset->unit_cost || $fixedAsset->unit_cost == 0)) {
-                        $fixedAsset->unit_cost = $unitCost;
-                        $needsSave = true;
-                    }
-                    if (!$fixedAsset->store_id && $storeId) {
-                        $fixedAsset->store_id = $storeId;
-                        $needsSave = true;
-                    }
-
-                    if ($needsSave) {
-                        $fixedAsset->saveQuietly();
-                    }
-
-                    // Generate any missing units up to total_quantity
-                    $fixedAsset->generateUnitsToMatchQuantity([
-                        'purchase_price'   => $unitCost,
-                        'current_location' => $fixedAsset->store?->name ?? 'Main Store',
-                        'condition'        => $prod->equipment_condition ?: 'good',
-                    ]);
-
-                    $syncedCount++;
                 } else {
-                    // Create new FixedAsset
-                    $basePrefix = self::generateCleanPrefix($prod->name, $prod->sku);
-                    $prefix = $basePrefix;
-                    $c = 1;
-                    while (FixedAsset::where('code_prefix', $prefix)->exists()) {
-                        $c++;
-                        $prefix = substr($basePrefix, 0, 3) . $c;
+                    // Product has 0 stock across all stores: keep/ensure single record in default store
+                    $defaultStoreId = Store::where('is_active', true)->value('id') ?: 1;
+                    $defaultStoreName = Store::find($defaultStoreId)?->name ?? 'Main Store';
+
+                    $fixedAsset = FixedAsset::withTrashed()
+                        ->where(function($q) use ($prod) {
+                            $q->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($prod->name))])
+                              ->orWhere('description', 'like', "%(Product ID: {$prod->id})%")
+                              ->orWhere('description', 'like', "%SKU: " . ($prod->sku ?? '') . "%");
+                        })->first();
+
+                    if ($fixedAsset) {
+                        if ($fixedAsset->trashed()) $fixedAsset->restore();
+                        if (!$fixedAsset->store_id) {
+                            $fixedAsset->store_id = $defaultStoreId;
+                            $fixedAsset->saveQuietly();
+                        }
+                    } else {
+                        $basePrefix = self::generateCleanPrefix($prod->name, $prod->sku);
+                        $prefix = $basePrefix;
+                        $c = 1;
+                        while (FixedAsset::where('code_prefix', $prefix)->exists()) {
+                            $c++;
+                            $prefix = substr($basePrefix, 0, 3) . $c;
+                        }
+
+                        $fixedAsset = FixedAsset::create([
+                            'name'           => $prod->name,
+                            'category'       => $category,
+                            'code_prefix'    => $prefix,
+                            'total_quantity' => 1,
+                            'unit_cost'      => $globalUnitCost,
+                            'store_id'       => $defaultStoreId,
+                            'supplier'       => $prod->supplier ?? null,
+                            'description'    => "Auto-synced from Catalog (Product SKU: " . ($prod->sku ?? 'N/A') . ", Product ID: {$prod->id})",
+                            'created_by'     => auth()->id(),
+                        ]);
+
+                        $fixedAsset->generateUnitsToMatchQuantity([
+                            'purchase_price'   => $globalUnitCost,
+                            'current_location' => $defaultStoreName,
+                            'condition'        => $prod->equipment_condition ?: 'good',
+                        ]);
                     }
-
-                    $fixedAsset = FixedAsset::create([
-                        'name'           => $prod->name,
-                        'category'       => $category,
-                        'code_prefix'    => $prefix,
-                        'total_quantity' => $targetQty,
-                        'unit_cost'      => $unitCost,
-                        'store_id'       => $storeId,
-                        'supplier'       => $prod->supplier ?? null,
-                        'description'    => "Auto-synced from Direct Store Inventory (Product SKU: " . ($prod->sku ?? 'N/A') . ", Product ID: {$prod->id})",
-                        'created_by'     => auth()->id(),
-                    ]);
-
-                    $fixedAsset->generateUnitsToMatchQuantity([
-                        'purchase_price'   => $unitCost,
-                        'current_location' => $fixedAsset->store?->name ?? 'Main Store',
-                        'condition'        => $prod->equipment_condition ?: 'good',
-                    ]);
-
                     $syncedCount++;
                 }
             }

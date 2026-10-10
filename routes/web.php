@@ -758,12 +758,15 @@ Route::get('/sync-fixed-assets-inventory', function () {
         $usedUnitCodes = [];
 
         foreach ($existingProducts as $prod) {
-            $totalOnHand = (int) round(\Illuminate\Support\Facades\DB::table('inventory')->where('product_id', $prod->id)->sum('quantity_on_hand'));
-            $totalAvailable = (int) round(\Illuminate\Support\Facades\DB::table('inventory')->where('product_id', $prod->id)->selectRaw('SUM(quantity_on_hand - COALESCE(quantity_reserved, 0)) as avail')->value('avail') ?? 0);
-            $qty = $totalAvailable > 0 ? $totalAvailable : ($totalOnHand > 0 ? $totalOnHand : 0);
+            $storeInvs = \Illuminate\Support\Facades\DB::table('inventory')
+                ->where('product_id', $prod->id)
+                ->where(function($q) {
+                    $q->where('quantity_on_hand', '>', 0)
+                      ->orWhere('quantity_reserved', '>', 0);
+                })
+                ->get();
 
-            // Only sync products with actual inventory on hand
-            if ($qty <= 0 && $totalOnHand <= 0) {
+            if ($storeInvs->isEmpty()) {
                 continue;
             }
 
@@ -780,57 +783,61 @@ Route::get('/sync-fixed-assets-inventory', function () {
             $prodCost = (float) ($prod->current_cost ?? $prod->standard_cost ?? $prod->unit_price ?? $prod->selling_price ?? 0);
             $unitCost = $invCost > 0 ? $invCost : ($matPrice > 0 ? $matPrice : $prodCost);
 
-            $storeId = \Illuminate\Support\Facades\DB::table('inventory')->where('product_id', $prod->id)->where('quantity_on_hand', '>', 0)->value('store_id');
-
-            // Clean code prefix
             $cleanName = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $prod->name));
             $basePrefix = substr($cleanName, 0, 4) ?: 'AST';
-
-            $prefix = $basePrefix;
-            $counter = 1;
-            while (isset($usedPrefixes[$prefix])) {
-                $counter++;
-                $prefix = substr($basePrefix, 0, 3) . $counter;
-            }
-            $usedPrefixes[$prefix] = true;
-
             $prodCategory = $prod->sub_category ?? $prod->category ?? 'Computer & IT';
 
-            $fixedAssetId = \Illuminate\Support\Facades\DB::table('fixed_assets')->insertGetId([
-                'name'           => $prod->name,
-                'category'       => $prodCategory,
-                'code_prefix'    => $prefix,
-                'total_quantity' => $qty,
-                'unit_cost'      => $unitCost,
-                'store_id'       => $storeId,
-                'description'    => 'Synced with Inventory On-Hand Stock (Product SKU: ' . ($prod->sku ?? $prod->code ?? '') . ')',
-                'created_at'     => now(),
-                'updated_at'     => now(),
-            ]);
+            foreach ($storeInvs as $sInv) {
+                $qty = (int) round($sInv->quantity_on_hand > 0 ? $sInv->quantity_on_hand : $sInv->quantity_reserved);
+                if ($qty <= 0) continue;
 
-            for ($i = 1; $i <= $qty; $i++) {
-                $seq = $i;
-                $unitCode = "{$prefix}-{$seq}";
-                while (isset($usedUnitCodes[$unitCode])) {
-                    $seq++;
-                    $unitCode = "{$prefix}-{$seq}";
+                $storeObj = \Illuminate\Support\Facades\DB::table('stores')->where('id', $sInv->store_id)->first();
+                $storeName = $storeObj ? $storeObj->name : 'Store #' . $sInv->store_id;
+
+                $prefix = $basePrefix;
+                $counter = 1;
+                while (isset($usedPrefixes[$prefix])) {
+                    $counter++;
+                    $prefix = substr($basePrefix, 0, 3) . $counter;
                 }
-                $usedUnitCodes[$unitCode] = true;
+                $usedPrefixes[$prefix] = true;
 
-                \Illuminate\Support\Facades\DB::table('fixed_asset_units')->insert([
-                    'fixed_asset_id'  => $fixedAssetId,
-                    'unit_code'       => $unitCode,
-                    'sequence_number' => $seq,
-                    'status'          => 'in_store',
-                    'condition'       => $prod->equipment_condition ?: 'good',
-                    'current_location'=> $prod->current_location ?: 'Main Store',
-                    'purchase_price'  => $unitCost,
-                    'created_at'      => now(),
-                    'updated_at'      => now(),
+                $fixedAssetId = \Illuminate\Support\Facades\DB::table('fixed_assets')->insertGetId([
+                    'name'           => $prod->name,
+                    'category'       => $prodCategory,
+                    'code_prefix'    => $prefix,
+                    'total_quantity' => $qty,
+                    'unit_cost'      => $unitCost,
+                    'store_id'       => $sInv->store_id,
+                    'description'    => 'Synced with Inventory Stock (Store: ' . $storeName . ', Product SKU: ' . ($prod->sku ?? $prod->code ?? '') . ')',
+                    'created_at'     => now(),
+                    'updated_at'     => now(),
                 ]);
-            }
 
-            $synced[] = "<strong>{$prod->name}</strong>: {$qty} units (Prefix: <code>{$prefix}</code>, Unit Cost: Br " . number_format($unitCost, 2) . ", Total: Br " . number_format($qty * $unitCost, 2) . ")";
+                for ($i = 1; $i <= $qty; $i++) {
+                    $seq = $i;
+                    $unitCode = "{$prefix}-{$seq}";
+                    while (isset($usedUnitCodes[$unitCode])) {
+                        $seq++;
+                        $unitCode = "{$prefix}-{$seq}";
+                    }
+                    $usedUnitCodes[$unitCode] = true;
+
+                    \Illuminate\Support\Facades\DB::table('fixed_asset_units')->insert([
+                        'fixed_asset_id'  => $fixedAssetId,
+                        'unit_code'       => $unitCode,
+                        'sequence_number' => $seq,
+                        'status'          => 'in_store',
+                        'condition'       => $prod->equipment_condition ?: 'good',
+                        'current_location'=> $storeName,
+                        'purchase_price'  => $unitCost,
+                        'created_at'      => now(),
+                        'updated_at'      => now(),
+                    ]);
+                }
+
+                $synced[] = "<strong>{$prod->name}</strong> [{$storeName}]: {$qty} units (Prefix: <code>{$prefix}</code>, Unit Cost: Br " . number_format($unitCost, 2) . ", Total: Br " . number_format($qty * $unitCost, 2) . ")";
+            }
         }
 
         \Illuminate\Support\Facades\Cache::forget('sidebar_fixed_asset_units_count');

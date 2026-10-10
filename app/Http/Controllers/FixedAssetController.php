@@ -49,19 +49,35 @@ class FixedAssetController extends Controller
             \Illuminate\Support\Facades\Log::warning("FixedAssetController auto-sync failed: " . $e->getMessage());
         }
 
-        // Fast Single-Query KPI Aggregation
-        $unitStats = DB::table('fixed_asset_units')
-            ->selectRaw("
-                COUNT(*) as total_units,
-                SUM(CASE WHEN status = 'in_store' THEN 1 ELSE 0 END) as in_store_units,
-                SUM(CASE WHEN status = 'assigned' THEN 1 ELSE 0 END) as assigned_units,
-                SUM(CASE WHEN status = 'maintenance' THEN 1 ELSE 0 END) as maintenance_units,
-                SUM(CASE WHEN status = 'disposed' THEN 1 ELSE 0 END) as disposed_units,
-                SUM(purchase_price) as total_valuation
-            ")->first();
+        // Fast Single-Query KPI Aggregation (Store-scoped when a store filter is active)
+        $unitStatsQuery = DB::table('fixed_asset_units')
+            ->join('fixed_assets', 'fixed_assets.id', '=', 'fixed_asset_units.fixed_asset_id')
+            ->whereNull('fixed_asset_units.deleted_at')
+            ->whereNull('fixed_assets.deleted_at');
+
+        $assetCountQuery = FixedAsset::query();
+
+        if ($storeId) {
+            $unitStatsQuery->where('fixed_assets.store_id', $storeId);
+            $assetCountQuery->where('store_id', $storeId);
+        }
+
+        if ($category) {
+            $unitStatsQuery->where('fixed_assets.category', $category);
+            $assetCountQuery->where('category', $category);
+        }
+
+        $unitStats = $unitStatsQuery->selectRaw("
+            COUNT(fixed_asset_units.id) as total_units,
+            SUM(CASE WHEN fixed_asset_units.status = 'in_store' THEN 1 ELSE 0 END) as in_store_units,
+            SUM(CASE WHEN fixed_asset_units.status = 'assigned' THEN 1 ELSE 0 END) as assigned_units,
+            SUM(CASE WHEN fixed_asset_units.status = 'maintenance' THEN 1 ELSE 0 END) as maintenance_units,
+            SUM(CASE WHEN fixed_asset_units.status = 'disposed' THEN 1 ELSE 0 END) as disposed_units,
+            SUM(fixed_asset_units.purchase_price) as total_valuation
+        ")->first();
 
         $kpi = [
-            'total_assets'      => FixedAsset::count(),
+            'total_assets'      => $assetCountQuery->count(),
             'total_units'       => (int) ($unitStats->total_units ?? 0),
             'in_store_units'    => (int) ($unitStats->in_store_units ?? 0),
             'assigned_units'    => (int) ($unitStats->assigned_units ?? 0),

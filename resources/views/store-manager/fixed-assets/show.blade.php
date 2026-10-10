@@ -110,7 +110,24 @@
                         </tr>
                         <tr>
                             <th class="text-muted">Store Location:</th>
-                            <td>{{ $fixedAsset->store->name ?? 'Main Store' }}</td>
+                            <td>
+                                <span class="fw-semibold text-dark">{{ $fixedAsset->store->name ?? 'Main Store' }}</span>
+                                @php
+                                    $invOnHand = \Illuminate\Support\Facades\DB::table('inventory')
+                                        ->where('store_id', $fixedAsset->store_id)
+                                        ->where('product_id', function($q) use ($fixedAsset) {
+                                            $q->select('id')->from('products')->where('name', $fixedAsset->name)->limit(1);
+                                        })
+                                        ->value('quantity_on_hand');
+                                @endphp
+                                @if($invOnHand !== null)
+                                    <div class="mt-1">
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.75rem;" title="Direct inventory on-hand in this store">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>Inventory: {{ (float)$invOnHand }} on hand
+                                        </span>
+                                    </div>
+                                @endif
+                            </td>
                         </tr>
                         @if($fixedAsset->supplier)
                         <tr>

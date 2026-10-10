@@ -183,10 +183,18 @@
                         @endforeach
                     </select>
 
-                    <select name="store_id" class="form-select form-select-sm" style="width: 130px;" onchange="this.form.submit()">
-                        <option value="">All Stores</option>
+                    <select name="store_id" class="form-select form-select-sm fw-semibold" style="width: 180px;" onchange="this.form.submit()">
+                        <option value="">🏪 All Stores (All Units)</option>
                         @foreach($stores as $st)
-                            <option value="{{ $st->id }}" @selected(request('store_id') == $st->id)>{{ $st->name }}</option>
+                            @php
+                                $storeUnitCount = \Illuminate\Support\Facades\DB::table('fixed_asset_units')
+                                    ->join('fixed_assets', 'fixed_assets.id', '=', 'fixed_asset_units.fixed_asset_id')
+                                    ->where('fixed_assets.store_id', $st->id)
+                                    ->whereNull('fixed_asset_units.deleted_at')
+                                    ->whereNull('fixed_assets.deleted_at')
+                                    ->count();
+                            @endphp
+                            <option value="{{ $st->id }}" @selected(request('store_id') == $st->id)>🏪 {{ $st->name }} ({{ $storeUnitCount }} units)</option>
                         @endforeach
                     </select>
 
@@ -263,8 +271,23 @@
                             </td>
                             <td>
                                 <div class="small text-dark fw-semibold">
-                                    <i class="fa-solid fa-warehouse text-muted me-1"></i>{{ $asset->store->name ?? 'Main Store' }}
+                                    <i class="fa-solid fa-warehouse text-primary me-1"></i>{{ $asset->store->name ?? 'Main Store' }}
                                 </div>
+                                @php
+                                    $invOnHand = \Illuminate\Support\Facades\DB::table('inventory')
+                                        ->where('store_id', $asset->store_id)
+                                        ->where('product_id', function($q) use ($asset) {
+                                            $q->select('id')->from('products')->where('name', $asset->name)->limit(1);
+                                        })
+                                        ->value('quantity_on_hand');
+                                @endphp
+                                @if($invOnHand !== null)
+                                    <div class="mt-1">
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.72rem;" title="Inventory on-hand matches this store">
+                                            <i class="fa-solid fa-boxes-stacked me-1"></i>Inv: {{ (float)$invOnHand }} in store
+                                        </span>
+                                    </div>
+                                @endif
                             </td>
                             <td>
                                 <div class="small fw-semibold text-dark">Br {{ number_format($asset->unit_cost, 2) }}</div>
