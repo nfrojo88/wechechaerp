@@ -7,6 +7,9 @@ use App\Models\LetterAttachment;
 use App\Models\LetterRecipient;
 use App\Models\LetterNotification;
 use App\Models\User;
+use App\Models\LetterActionLog;
+use App\Models\LetterSequence;
+use App\Services\ProcurementSmsService;
 use App\Services\SmsEthiopiaService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -260,6 +263,9 @@ class LetterController extends Controller
             'attachments.uploader',
             'recipients.fromUser',
             'recipients.toUser',
+            'addressedTo',
+            'registeredBy',
+            'actionLogs.user',
         ]);
 
         // Mark viewed for current user if not marked yet
@@ -877,5 +883,642 @@ class LetterController extends Controller
         return \App\Models\Employee::where('user_id', $user->id)
             ->orWhere('email', $user->email)
             ->value('phone');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // EMPLOYEE SELF-SERVICE: MY LETTERS
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Display the authenticated employee's "My Letters" list.
+     * Strictly scoped to the employee's own letters (never other employees' letters).
+     */
+    public function myLetters(Request $request)
+    {
+        $user = Auth::user();
+
+        $query = Letter::with(['attachments', 'addressedTo', 'registeredBy'])
+            ->where('created_by', $user->id);
+
+        // Filter by Status (Draft, Sent, Registered)
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Filter by Category
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
+        // Search in subject / reference number / body
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            $query->where(function ($q) use ($search) {
+                $q->where('subject', 'like', "%{$search}%")
+                  ->orWhere('letter_number', 'like', "%{$search}%")
+                  ->orWhere('specification', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('date', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('date', '<=', $request->date_to);
+        }
+
+        $letters = $query->latest('id')->paginate(15)->withQueryString();
+
+        // Metrics for employee's own letters
+        $stats = [
+            'total'      => Letter::where('created_by', $user->id)->count(),
+            'draft'      => Letter::where('created_by', $user->id)->where('status', Letter::STATUS_DRAFT)->count(),
+            'sent'       => Letter::where('created_by', $user->id)->where('status', Letter::STATUS_SENT)->count(),
+            'registered' => Letter::where('created_by', $user->id)->where('status', Letter::STATUS_REGISTERED)->count(),
+        ];
+
+        return view('letters.my-letters.index', compact('letters', 'stats'));
+    }
+
+    /**
+     * Show form for employee to compose a new letter (save as draft or send directly to secretary).
+     */
+    public function createDraft()
+    {
+        return view('letters.my-letters.create');
+    }
+
+    /**
+     * Store new employee letter (as Draft or Sent directly to Secretary).
+     * No auto-category and no auto-person selection.
+     */
+    public function storeDraft(Request $request)
+    {
+        $validated = $request->validate([
+            'subject'       => 'required|string|max:255',
+            'specification' => 'required|string',
+            'priority'      => 'nullable|in:normal,urgent',
+            'submit_action' => 'required|in:save_draft,send_secretary',
+            'attachments.*' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:10240',
+        ]);
+
+        $user = Auth::user();
+        $isSending = ($validated['submit_action'] === 'send_secretary');
+
+        DB::beginTransaction();
+        try {
+            $letter = Letter::create([
+                'letter_number'          => null, // Reference number is assigned later by secretary
+                'is_reference_locked'    => false,
+                'type'                   => Letter::TYPE_INCOMING,
+                'date'                   => now()->toDateString(),
+                'subject'                => $validated['subject'],
+                'specification'          => $validated['specification'],
+                'category'               => null, // No automatic category
+                'addressed_to_user_id'   => null, // No automatic person selection
+                'sender'                 => $user->name,
+                'sender_department'      => $user->employee?->department?->name ?? null,
+                'priority'               => $validated['priority'] ?? Letter::PRIORITY_NORMAL,
+                'status'                 => $isSending ? Letter::STATUS_SENT : Letter::STATUS_DRAFT,
+                'sent_at'                => $isSending ? now() : null,
+                'created_by'             => $user->id,
+            ]);
+
+            // Handle optional attachments
+            if ($request->hasFile('attachments')) {
+                foreach ($request->file('attachments') as $file) {
+                    if ($file->isValid()) {
+                        $path = \App\Services\FileUploadService::upload($file, 'correspondence');
+                        LetterAttachment::create([
+                            'letter_id'   => $letter->id,
+                            'file_path'   => $path,
+                            'file_name'   => $file->getClientOriginalName(),
+                            'file_type'   => strtolower($file->getClientOriginalExtension()),
+                            'file_size'   => $file->getSize(),
+                            'uploaded_by' => $user->id,
+                        ]);
+                    }
+                }
+            }
+
+            if ($isSending) {
+                $this->dispatchToSecretary($letter, $user);
+                LetterActionLog::record($letter->id, $user->id, 'sent', "Letter created and sent directly to Secretary Inbox by {$user->name}.");
+            } else {
+                LetterActionLog::record($letter->id, $user->id, 'draft_saved', "Letter saved as draft by {$user->name}.");
+            }
+
+            DB::commit();
+
+            $msg = $isSending
+                ? 'Your letter has been sent directly to the Secretary Inbox.'
+                : 'Letter draft saved successfully. You can review or edit it before sending.';
+
+            return redirect()->route('letters.my-letters.index')->with('success', $msg);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to store employee letter: " . $e->getMessage());
+            return back()->withInput()->with('error', 'Failed to save letter: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show form to edit an existing draft letter.
+     */
+    public function editDraft(Letter $letter)
+    {
+        $user = Auth::user();
+
+        // Drafts are strictly private to creator
+        if ($letter->created_by !== $user->id || $letter->status !== Letter::STATUS_DRAFT) {
+            abort(403, 'Unauthorized access or this letter has already been sent.');
+        }
+
+        return view('letters.my-letters.edit', compact('letter'));
+    }
+
+    /**
+     * Update an existing draft letter (save draft or send to secretary).
+     */
+    public function updateDraft(Request $request, Letter $letter)
+    {
+        $user = Auth::user();
+
+        if ($letter->created_by !== $user->id || $letter->status !== Letter::STATUS_DRAFT) {
+            abort(403, 'Unauthorized access or this letter has already been sent.');
+        }
+
+        $validated = $request->validate([
+            'subject'       => 'required|string|max:255',
+            'specification' => 'required|string',
+            'priority'      => 'nullable|in:normal,urgent',
+            'submit_action' => 'required|in:save_draft,send_secretary',
+            'attachments.*' => 'nullable|file|mimes:pdf,png,jpg,jpeg|max:10240',
+        ]);
+
+        $isSending = ($validated['submit_action'] === 'send_secretary');
+
+        DB::beginTransaction();
+        try {
+            $letter->update([
+                'subject'       => $validated['subject'],
+                'specification' => $validated['specification'],
+                'priority'      => $validated['priority'] ?? Letter::PRIORITY_NORMAL,
+                'status'        => $isSending ? Letter::STATUS_SENT : Letter::STATUS_DRAFT,
+                'sent_at'       => $isSending ? now() : null,
+            ]);
+
+            if ($request->hasFile('attachments')) {
+                foreach ($request->file('attachments') as $file) {
+                    if ($file->isValid()) {
+                        $path = \App\Services\FileUploadService::upload($file, 'correspondence');
+                        LetterAttachment::create([
+                            'letter_id'   => $letter->id,
+                            'file_path'   => $path,
+                            'file_name'   => $file->getClientOriginalName(),
+                            'file_type'   => strtolower($file->getClientOriginalExtension()),
+                            'file_size'   => $file->getSize(),
+                            'uploaded_by' => $user->id,
+                        ]);
+                    }
+                }
+            }
+
+            if ($isSending) {
+                $this->dispatchToSecretary($letter, $user);
+                LetterActionLog::record($letter->id, $user->id, 'sent', "Draft submitted and sent to Secretary Inbox by {$user->name}.");
+            } else {
+                LetterActionLog::record($letter->id, $user->id, 'draft_updated', "Draft updated by {$user->name}.");
+            }
+
+            DB::commit();
+
+            $msg = $isSending
+                ? 'Your letter has been sent directly to the Secretary Inbox.'
+                : 'Draft updated successfully.';
+
+            return redirect()->route('letters.my-letters.index')->with('success', $msg);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to update letter draft: " . $e->getMessage());
+            return back()->withInput()->with('error', 'Failed to update draft: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send an existing draft letter directly to the Secretary Inbox.
+     */
+    public function sendDraftToSecretary(Letter $letter)
+    {
+        $user = Auth::user();
+
+        if ($letter->created_by !== $user->id || $letter->status !== Letter::STATUS_DRAFT) {
+            abort(403, 'Unauthorized access or this letter is not in draft status.');
+        }
+
+        DB::beginTransaction();
+        try {
+            $letter->update([
+                'status'  => Letter::STATUS_SENT,
+                'sent_at' => now(),
+            ]);
+
+            $this->dispatchToSecretary($letter, $user);
+            LetterActionLog::record($letter->id, $user->id, 'sent', "Draft sent to Secretary Inbox by {$user->name}.");
+
+            DB::commit();
+
+            return redirect()->route('letters.my-letters.index')
+                ->with('success', 'Letter sent directly to the Secretary Inbox.');
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to send draft to secretary: " . $e->getMessage());
+            return back()->with('error', 'Failed to send letter: ' . $e->getMessage());
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // SECRETARY INBOX & MANUAL REGISTRATION WORKFLOW
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Secretary Inbox: Sees all letters sent to the secretary role.
+     * Can filter by category and status.
+     */
+    public function secretaryInbox(Request $request)
+    {
+        $user = Auth::user();
+
+        // Only secretary, admin, or global_admin can access the secretary inbox
+        if (!$user->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin'])) {
+            abort(403, 'Unauthorized. Access to Secretary Inbox is reserved for the Secretary role.');
+        }
+
+        $query = Letter::with(['creator', 'attachments', 'addressedTo', 'registeredBy'])
+            ->whereIn('status', [Letter::STATUS_SENT, Letter::STATUS_REGISTERED, Letter::STATUS_PENDING, Letter::STATUS_VIEWED, Letter::STATUS_REDIRECTED]);
+
+        // Filter by Category
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
+        // Filter by Status (sent / registered)
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Search
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            $query->where(function ($q) use ($search) {
+                $q->where('subject', 'like', "%{$search}%")
+                  ->orWhere('letter_number', 'like', "%{$search}%")
+                  ->orWhere('specification', 'like', "%{$search}%")
+                  ->orWhereHas('creator', fn($cq) => $cq->where('name', 'like', "%{$search}%"));
+            });
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('date', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('date', '<=', $request->date_to);
+        }
+
+        $letters = $query->latest('id')->paginate(15)->withQueryString();
+
+        $stats = [
+            'sent'       => Letter::whereIn('status', [Letter::STATUS_SENT, Letter::STATUS_PENDING])->count(),
+            'registered' => Letter::where('status', Letter::STATUS_REGISTERED)->count(),
+            'total'      => Letter::whereIn('status', [Letter::STATUS_SENT, Letter::STATUS_REGISTERED, Letter::STATUS_PENDING, Letter::STATUS_VIEWED, Letter::STATUS_REDIRECTED])->count(),
+        ];
+
+        $users = User::where('is_active', true)->orderBy('name')->get(['id', 'name', 'email']);
+        $categories = Letter::CATEGORIES;
+        $nextSuggestedNumber = LetterSequence::peekNext();
+
+        return view('letters.secretary.inbox', compact('letters', 'stats', 'users', 'categories', 'nextSuggestedNumber'));
+    }
+
+    /**
+     * Step 1: Secretary gives the letter a reference number from a unique sequential numbering
+     * (per year, never reused, locked after assignment).
+     */
+    public function assignReferenceNumber(Request $request, Letter $letter)
+    {
+        $user = Auth::user();
+        if (!$user->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin'])) {
+            abort(403, 'Unauthorized.');
+        }
+
+        // Locked check: once assigned, reference number is locked
+        if ($letter->is_reference_locked && !empty($letter->letter_number)) {
+            return back()->with('error', "Reference number is already assigned and locked ({$letter->letter_number}). It cannot be changed or reused.");
+        }
+
+        $request->validate([
+            'letter_number' => 'nullable|string|max:60|unique:letters,letter_number,' . $letter->id,
+        ]);
+
+        DB::beginTransaction();
+        try {
+            // Either secretary provided custom sequential number, or generate next atomically
+            $newNumber = $request->filled('letter_number')
+                ? trim($request->letter_number)
+                : LetterSequence::generateNext();
+
+            $letter->update([
+                'letter_number'       => $newNumber,
+                'is_reference_locked' => true,
+            ]);
+
+            LetterActionLog::record(
+                $letter->id,
+                $user->id,
+                'numbered',
+                "Reference number '{$newNumber}' was assigned and locked by {$user->name}.",
+                ['reference_number' => $newNumber]
+            );
+
+            DB::commit();
+
+            return back()->with('success', "Reference number {$newNumber} has been successfully assigned and locked.");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to assign letter reference number: " . $e->getMessage());
+            return back()->with('error', 'Failed to assign reference number: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Step 2: Secretary chooses one category:
+     * Leave Letter, Advance Loan Letter, Payment, Government, Bank & Insurance.
+     */
+    public function setCategory(Request $request, Letter $letter)
+    {
+        $user = Auth::user();
+        if (!$user->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin'])) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $request->validate([
+            'category' => 'required|in:' . implode(',', Letter::CATEGORIES),
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $letter->update([
+                'category' => $request->category,
+            ]);
+
+            LetterActionLog::record(
+                $letter->id,
+                $user->id,
+                'categorized',
+                "Category set to '{$request->category}' by {$user->name}.",
+                ['category' => $request->category]
+            );
+
+            DB::commit();
+
+            return back()->with('success', "Category set to '{$request->category}'.");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to set letter category: " . $e->getMessage());
+            return back()->with('error', 'Failed to set category: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Step 3: Secretary selects the person the letter is addressed to or handled by, from user list.
+     */
+    public function setHandledPerson(Request $request, Letter $letter)
+    {
+        $user = Auth::user();
+        if (!$user->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin'])) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $request->validate([
+            'addressed_to_user_id' => 'required|exists:users,id',
+        ]);
+
+        $targetUser = User::findOrFail($request->addressed_to_user_id);
+
+        DB::beginTransaction();
+        try {
+            $letter->update([
+                'addressed_to_user_id' => $targetUser->id,
+            ]);
+
+            LetterActionLog::record(
+                $letter->id,
+                $user->id,
+                'person_selected',
+                "Addressed / handled person set to {$targetUser->name} by {$user->name}.",
+                ['user_id' => $targetUser->id, 'user_name' => $targetUser->name]
+            );
+
+            DB::commit();
+
+            return back()->with('success', "Letter addressed to {$targetUser->name}.");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to set handled person: " . $e->getMessage());
+            return back()->with('error', 'Failed to set handled person: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Mark Letter as Registered.
+     * STRICT REQUIREMENT: Only after all three (Reference Number, Category, Handled Person) are set
+     * can the secretary mark the letter Registered.
+     */
+    public function markRegistered(Request $request, Letter $letter)
+    {
+        $user = Auth::user();
+        if (!$user->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin'])) {
+            abort(403, 'Unauthorized. Only the secretary or admin can register letters.');
+        }
+
+        // Verify that all 3 manual fields are set
+        $missing = [];
+        if (empty($letter->letter_number)) {
+            $missing[] = 'Reference Number';
+        }
+        if (empty($letter->category)) {
+            $missing[] = 'Category';
+        }
+        if (empty($letter->addressed_to_user_id)) {
+            $missing[] = 'Addressed / Handled Person';
+        }
+
+        if (!empty($missing)) {
+            return back()->with('error', 'Registration blocked: All three items must be set before registering this letter. Missing: ' . implode(', ', $missing) . '.');
+        }
+
+        DB::beginTransaction();
+        try {
+            $letter->update([
+                'status'              => Letter::STATUS_REGISTERED,
+                'is_reference_locked' => true,
+                'registered_by'       => $user->id,
+                'registered_at'       => now(),
+            ]);
+
+            $targetUser = $letter->addressedTo;
+
+            // Log routing entry
+            LetterRecipient::create([
+                'letter_id'    => $letter->id,
+                'from_user_id' => $user->id,
+                'to_user_id'   => $letter->addressed_to_user_id,
+                'to_role_name' => null,
+                'action'       => 'registered',
+                'notes'        => "Letter registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to " . ($targetUser?->name ?? 'User'),
+                'status'       => Letter::STATUS_REGISTERED,
+            ]);
+
+            // Action Audit Log
+            LetterActionLog::record(
+                $letter->id,
+                $user->id,
+                'registered',
+                "Letter officially Registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to " . ($targetUser?->name ?? 'User') . " by {$user->name}.",
+                [
+                    'letter_number'        => $letter->letter_number,
+                    'category'             => $letter->category,
+                    'addressed_to_user_id' => $letter->addressed_to_user_id,
+                ]
+            );
+
+            // In-App Notification to letter creator
+            if ($letter->created_by && $letter->created_by !== $user->id) {
+                LetterNotification::create([
+                    'user_id'   => $letter->created_by,
+                    'letter_id' => $letter->id,
+                    'message'   => "Your letter '{$letter->subject}' has been registered by Secretary {$user->name} as Ref #{$letter->letter_number} [{$letter->category}].",
+                ]);
+            }
+
+            // In-App Notification to assigned person
+            if ($targetUser && $targetUser->id !== $user->id) {
+                LetterNotification::create([
+                    'user_id'   => $targetUser->id,
+                    'letter_id' => $letter->id,
+                    'message'   => "New letter registered and assigned to you: Ref #{$letter->letter_number} [{$letter->category}] - {$letter->subject}.",
+                ]);
+            }
+
+            // SMS Notification to the selected person through ProcurementSmsService
+            if ($targetUser) {
+                $this->sendRegistrationSmsToTargetUser($targetUser, $letter, $user->name);
+            }
+
+            DB::commit();
+
+            return back()->with('success', "Letter {$letter->letter_number} successfully Registered and dispatched to " . ($targetUser?->name ?? 'the selected person') . ".");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to register letter: " . $e->getMessage());
+            return back()->with('error', 'Registration failed: ' . $e->getMessage());
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // INTERNAL HELPERS: DISPATCH, SMS, AUDIT
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Dispatch letter to Secretary role inbox with fallback to global_admin and SMS alerts.
+     */
+    private function dispatchToSecretary(Letter $letter, User $sender): void
+    {
+        // 1. Check if active secretary user exists
+        $activeSecretaries = User::whereHas('roles', fn($q) => $q->whereIn('name', ['secretary', 'Secretary']))
+            ->where('is_active', true)
+            ->get();
+
+        $fallbackToAdmin = $activeSecretaries->isEmpty();
+
+        if ($fallbackToAdmin) {
+            Log::warning("Letter dispatch audit: No active secretary user exists in the system for letter #{$letter->id} (Subject: {$letter->subject}). Falling back to global_admin.");
+            LetterActionLog::record(
+                $letter->id,
+                $sender->id,
+                'fallback_to_admin',
+                "No active secretary user found in system. Fallback triggered: letter routed to Global Administrator."
+            );
+        }
+
+        // 2. Add routing record
+        LetterRecipient::create([
+            'letter_id'    => $letter->id,
+            'from_user_id' => $sender->id,
+            'to_user_id'   => null,
+            'to_role_name' => $fallbackToAdmin ? 'global_admin' : 'secretary',
+            'action'       => 'initial_sent',
+            'notes'        => $fallbackToAdmin
+                ? "Sent to Secretary Inbox (Fallback routed to Global Admin: No active secretary user found) by {$sender->name}"
+                : "Sent to Secretary Inbox by {$sender->name}",
+            'status'       => Letter::STATUS_SENT,
+        ]);
+
+        // 3. In-App Notifications
+        if ($fallbackToAdmin) {
+            $admins = User::whereHas('roles', fn($q) => $q->whereIn('name', ['global_admin', 'admin', 'Global Admin', 'Admin']))
+                ->where('is_active', true)
+                ->get();
+
+            foreach ($admins as $adm) {
+                LetterNotification::create([
+                    'user_id'   => $adm->id,
+                    'letter_id' => $letter->id,
+                    'message'   => "[Secretary Unassigned] New letter submitted by {$sender->name}: {$letter->subject}",
+                ]);
+            }
+        } else {
+            foreach ($activeSecretaries as $sec) {
+                LetterNotification::create([
+                    'user_id'   => $sec->id,
+                    'letter_id' => $letter->id,
+                    'message'   => "New letter received from {$sender->name}: {$letter->subject}",
+                ]);
+            }
+        }
+
+        // 4. Send SMS via ProcurementSmsService
+        try {
+            $procurementSms = app(ProcurementSmsService::class);
+            $directLink = url('/letters/' . $letter->id);
+            $subjectSnippet = \Illuminate\Support\Str::limit($letter->subject, 40);
+
+            $message = "Wechacha ERP: New correspondence letter submitted by {$sender->name}. Subject: \"{$subjectSnippet}\". Register in Secretary Inbox: {$directLink}";
+
+            $procurementSms->notifyRole($letter->id, 'secretary', $message);
+        } catch (\Throwable $e) {
+            Log::error("Failed to send letter dispatch SMS: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Send SMS to selected person when secretary registers the letter.
+     * Must contain reference number, category, and direct link.
+     */
+    private function sendRegistrationSmsToTargetUser(User $targetUser, Letter $letter, string $secretaryName): void
+    {
+        try {
+            $procurementSms = app(ProcurementSmsService::class);
+            $directLink = url('/letters/' . $letter->id);
+            $subjectSnippet = \Illuminate\Support\Str::limit($letter->subject, 35);
+
+            $message = "Wechacha ERP: Letter #{$letter->letter_number} [{$letter->category}] has been registered and addressed to you by {$secretaryName}. Subject: \"{$subjectSnippet}\". View: {$directLink}";
+
+            $procurementSms->sendToUser($letter->id, $targetUser, 'assigned_recipient', $message);
+        } catch (\Throwable $e) {
+            Log::error("Failed to send registration SMS to user {$targetUser->id}: " . $e->getMessage());
+        }
     }
 }

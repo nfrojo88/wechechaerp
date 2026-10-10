@@ -9,10 +9,20 @@
     {{-- Top Header --}}
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
-            <div class="d-flex align-items-center gap-2 mb-1">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
                 <h3 class="fw-bold mb-0">
-                    <i class="fa-solid fa-file-lines text-primary me-2"></i>{{ $letter->letter_number }}
+                    <i class="fa-solid fa-file-lines text-primary me-2"></i>{{ $letter->letter_number ?: 'Draft / Unregistered Letter' }}
                 </h3>
+                @if($letter->is_reference_locked)
+                    <span class="badge bg-light text-dark border"><i class="fa-solid fa-lock text-muted me-1"></i>Locked</span>
+                @endif
+
+                @if($letter->category)
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                        <i class="fa-solid fa-tag me-1"></i>{{ $letter->category }}
+                    </span>
+                @endif
+
                 @if($letter->type === 'incoming')
                 <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-2 py-1">
                     <i class="fa-solid fa-arrow-down-left me-1"></i> Incoming
@@ -29,23 +39,52 @@
 
                 @php
                 $badgeClass = match($letter->status) {
-                'pending' => 'bg-warning text-dark',
-                'viewed' => 'bg-info text-dark',
-                'redirected' => 'bg-primary text-white',
-                'closed' => 'bg-success text-white',
-                default => 'bg-secondary text-white'
+                    'draft' => 'bg-secondary text-white',
+                    'sent' => 'bg-warning text-dark',
+                    'registered' => 'bg-success text-white',
+                    'pending' => 'bg-warning text-dark',
+                    'viewed' => 'bg-info text-dark',
+                    'redirected' => 'bg-primary text-white',
+                    'closed' => 'bg-dark text-white',
+                    default => 'bg-secondary text-white'
                 };
                 @endphp
-                <span class="badge {{ $badgeClass }} px-2 py-1">{{ ucfirst($letter->status) }}</span>
+                <span class="badge {{ $badgeClass }} px-2.5 py-1">{{ ucfirst($letter->status) }}</span>
             </div>
-            <p class="text-muted small mb-0">Registered on <strong>{{ $letter->created_at->format('M d, Y H:i') }}</strong> by <strong>{{ $letter->creator->name ?? 'Secretary' }}</strong></p>
+            <p class="text-muted small mb-0">
+                Created on <strong>{{ $letter->created_at->format('M d, Y H:i') }}</strong> by <strong>{{ $letter->creator->name ?? 'Employee' }}</strong>
+                @if($letter->registered_at)
+                    &bull; Registered on <strong>{{ $letter->registered_at->format('M d, Y H:i') }}</strong> by <strong>{{ $letter->registeredBy->name ?? 'Secretary' }}</strong>
+                @endif
+                @if($letter->addressedTo)
+                    &bull; Addressed to: <strong class="text-primary">{{ $letter->addressedTo->name }}</strong>
+                @endif
+            </p>
         </div>
 
-        <div class="d-flex gap-2">
-            <a href="{{ route('letters.index') }}" class="btn btn-outline-secondary shadow-sm">
-                <i class="fa-solid fa-arrow-left me-1"></i> Back to Inbox
+        <div class="d-flex flex-wrap gap-2">
+            @if(auth()->user()->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin']))
+                <a href="{{ route('letters.secretary.inbox') }}" class="btn btn-outline-warning shadow-sm">
+                    <i class="fa-solid fa-inbox me-1"></i> Secretary Inbox
+                </a>
+            @endif
+            <a href="{{ route('letters.my-letters.index') }}" class="btn btn-outline-secondary shadow-sm">
+                <i class="fa-solid fa-arrow-left me-1"></i> My Letters
             </a>
-            @if($letter->status !== 'closed')
+
+            @if($letter->status === \App\Models\Letter::STATUS_DRAFT && $letter->created_by === auth()->id())
+                <a href="{{ route('letters.my-letters.edit', $letter->id) }}" class="btn btn-primary shadow-sm">
+                    <i class="fa-solid fa-pen-to-square me-1"></i> Edit Draft
+                </a>
+                <form action="{{ route('letters.my-letters.send', $letter->id) }}" method="POST" class="d-inline" onsubmit="return confirm('Send directly to the Secretary Inbox?');">
+                    @csrf
+                    <button type="submit" class="btn btn-success shadow-sm">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Send to Secretary
+                    </button>
+                </form>
+            @endif
+
+            @if($letter->status !== 'closed' && $letter->status !== 'draft')
             <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#redirectModal">
                 <i class="fa-solid fa-share me-1"></i> Redirect / Forward
             </button>
@@ -112,9 +151,29 @@
                         <div class="col-md-6">
                             <div class="p-2 border rounded bg-white">
                                 <span class="text-muted d-block">Created By:</span>
-                                <strong class="text-dark">{{ $letter->creator->name ?? 'Secretary' }} ({{ $letter->creator->email ?? '' }})</strong>
+                                <strong class="text-dark">{{ $letter->creator->name ?? 'Employee' }} ({{ $letter->creator->email ?? '' }})</strong>
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <div class="p-2 border rounded bg-white">
+                                <span class="text-muted d-block">Category:</span>
+                                <strong class="text-dark">{{ $letter->category ?? 'Not yet categorized' }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-2 border rounded bg-white">
+                                <span class="text-muted d-block">Addressed / Handled By:</span>
+                                <strong class="text-dark">{{ $letter->addressedTo?->name ?? 'Not yet assigned' }}</strong>
+                            </div>
+                        </div>
+                        @if($letter->registered_at)
+                        <div class="col-md-6">
+                            <div class="p-2 border rounded bg-white">
+                                <span class="text-muted d-block">Registered By:</span>
+                                <strong class="text-success">{{ $letter->registeredBy?->name ?? 'Secretary' }} ({{ $letter->registered_at->format('M d, Y H:i') }})</strong>
+                            </div>
+                        </div>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -348,6 +407,27 @@
                         @empty
                         <div class="text-muted small text-center py-3">No routing logs recorded yet.</div>
                         @endforelse
+
+                        {{-- Action History Audit Trail (Sent, Numbered, Categorized, Person Selected, Registered) --}}
+                        @if($letter->actionLogs->isNotEmpty())
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3 mt-4 small text-uppercase" style="letter-spacing: 0.5px;">
+                                <i class="fa-solid fa-clipboard-check text-success me-1"></i>Action Audit History
+                            </h6>
+                            @foreach($letter->actionLogs as $log)
+                                <div class="timeline-item mb-3 position-relative ps-3">
+                                    <div class="position-absolute rounded-circle bg-success"
+                                        style="width: 10px; height: 10px; left: -19px; top: 5px; border: 2px solid white;"></div>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="badge bg-light text-dark border small fw-bold">
+                                            {{ ucfirst(str_replace('_', ' ', $log->action)) }}
+                                        </span>
+                                        <small class="text-muted">{{ $log->created_at->format('M d, Y H:i') }}</small>
+                                    </div>
+                                    <div class="small text-dark">{{ $log->description }}</div>
+                                    <small class="text-muted" style="font-size: 0.72rem;">By: <strong>{{ $log->user->name ?? 'System' }}</strong></small>
+                                </div>
+                            @endforeach
+                        @endif
                     </div>
                 </div>
             </div>

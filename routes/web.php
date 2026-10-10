@@ -2540,6 +2540,22 @@ Route::middleware(['auth'])->group(function () {
 
     // ─── Correspondence (Letter) Management System ──────────────────────────────────
     Route::prefix('letters')->name('letters.')->group(function () {
+        // Employee Self-Service: My Letters (All Employees)
+        Route::get('/my-letters',                         [App\Http\Controllers\LetterController::class, 'myLetters'])->name('my-letters.index');
+        Route::get('/my-letters/create',                  [App\Http\Controllers\LetterController::class, 'createDraft'])->name('my-letters.create');
+        Route::post('/my-letters',                        [App\Http\Controllers\LetterController::class, 'storeDraft'])->name('my-letters.store');
+        Route::get('/my-letters/{letter}/edit',           [App\Http\Controllers\LetterController::class, 'editDraft'])->name('my-letters.edit');
+        Route::put('/my-letters/{letter}',                [App\Http\Controllers\LetterController::class, 'updateDraft'])->name('my-letters.update');
+        Route::post('/my-letters/{letter}/send',          [App\Http\Controllers\LetterController::class, 'sendDraftToSecretary'])->name('my-letters.send');
+
+        // Secretary Role Inbox & Manual Registration
+        Route::get('/secretary-inbox',                    [App\Http\Controllers\LetterController::class, 'secretaryInbox'])->name('secretary.inbox');
+        Route::post('/{letter}/assign-number',            [App\Http\Controllers\LetterController::class, 'assignReferenceNumber'])->name('assign-number');
+        Route::post('/{letter}/set-category',             [App\Http\Controllers\LetterController::class, 'setCategory'])->name('set-category');
+        Route::post('/{letter}/set-handled-person',       [App\Http\Controllers\LetterController::class, 'setHandledPerson'])->name('set-handled-person');
+        Route::post('/{letter}/register',                 [App\Http\Controllers\LetterController::class, 'markRegistered'])->name('register');
+
+        // Shared Registry, Details & Timelines
         Route::get('/dashboard',                         [App\Http\Controllers\LetterController::class, 'dashboard'])->name('dashboard');
         Route::get('/',                                  [App\Http\Controllers\LetterController::class, 'index'])->name('index');
         Route::get('/create',                            [App\Http\Controllers\LetterController::class, 'create'])->name('create');

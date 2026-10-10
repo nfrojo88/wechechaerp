@@ -221,6 +221,7 @@ class ProcurementSmsService
             'general_service'  => ['general_service', 'General Service', 'dispatcher', 'fleet_manager'],
             'coordinator'      => ['coordinator', 'Coordinator', 'project_coordinator', 'site_coordinator', 'site_engineer'],
             'planning'         => ['planning', 'Planning', 'planning_manager', 'Planning Manager'],
+            'secretary'        => ['secretary', 'Secretary', 'head_office_secretary'],
             'global_admin'     => ['global_admin', 'admin', 'Global Admin', 'Admin'],
         ];
 

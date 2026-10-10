@@ -820,9 +820,28 @@
     </a>
 </li>
 <li class="sidebar-nav-item">
-    <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
+    <a href="{{ route('letters.my-letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.my-letters.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-file-pen text-info"></i>
+        <span>My Letters</span>
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('letters.secretary.inbox') }}" class="sidebar-nav-link {{ request()->routeIs('letters.secretary.*') ? 'active' : '' }}">
+        <i class="fa-solid fa-inbox text-warning"></i>
+        <span>Secretary Inbox</span>
+        @php
+            $secSentLettersBadge = 0;
+            try { $secSentLettersBadge = \App\Models\Letter::whereIn('status', [\App\Models\Letter::STATUS_SENT, \App\Models\Letter::STATUS_PENDING])->count(); } catch (\Throwable $e) {}
+        @endphp
+        @if($secSentLettersBadge > 0)
+            <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.65rem;">{{ $secSentLettersBadge }}</span>
+        @endif
+    </a>
+</li>
+<li class="sidebar-nav-item">
+    <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') && !request()->routeIs('letters.my-letters.*') && !request()->routeIs('letters.secretary.*') ? 'active' : '' }}">
         <i class="fa-solid fa-envelope-open-text text-success"></i>
-        <span>Letters &amp; Dispatches</span>
+        <span>Letters Registry</span>
     </a>
 </li>
 
@@ -881,6 +900,12 @@
             <a href="{{ route('leave-requests.create') }}" class="sidebar-nav-link {{ request()->routeIs('leave-requests.create') || request()->routeIs('leave-requests.my-requests') ? 'active' : '' }}">
                 <i class="fa-solid fa-calendar-plus text-info"></i>
                 <span>Ask / Request Leave</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.my-letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.my-letters.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-file-pen text-info"></i>
+                <span>My Letters</span>
             </a>
         </li>
         @elseif($isAuditorUser)
@@ -975,8 +1000,27 @@
         <hr class="sidebar-section-divider">
         <li style="padding: 0.35rem 0.9rem 0.1rem;">
             <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
-                Letter Registry &amp; History
+                Secretary Inbox &amp; Registry
             </small>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.secretary.inbox') }}" class="sidebar-nav-link {{ request()->routeIs('letters.secretary.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-inbox text-warning"></i>
+                <span>Secretary Inbox</span>
+                @php
+                    $secPendingSentCount = 0;
+                    try { $secPendingSentCount = \App\Models\Letter::whereIn('status', [\App\Models\Letter::STATUS_SENT, \App\Models\Letter::STATUS_PENDING])->count(); } catch (\Throwable $e) {}
+                @endphp
+                @if($secPendingSentCount > 0)
+                    <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.65rem;">{{ $secPendingSentCount }}</span>
+                @endif
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.my-letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.my-letters.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-file-pen text-info"></i>
+                <span>My Letters</span>
+            </a>
         </li>
         <li class="sidebar-nav-item">
             <a href="{{ route('letters.index', ['tab' => 'all']) }}" class="sidebar-nav-link {{ request()->routeIs('letters.index') && !request('type') ? 'active' : '' }}">
@@ -1108,9 +1152,17 @@
         </li>
         @endif
 
+        {{-- My Letters: Visible to ALL employees --}}
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.my-letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.my-letters.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-file-pen text-info"></i>
+                <span>My Letters</span>
+            </a>
+        </li>
+
         @if(!$isSecretary && !$isStoreKeeper && !$isGeneralServiceUser && !$isAuditorUser && !$isSiteEngineer)
         <li class="sidebar-nav-item">
-            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
+            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') && !request()->routeIs('letters.my-letters.*') && !request()->routeIs('letters.secretary.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-envelope-open-text text-primary"></i>
                 <span>Correspondence (Letters)</span>
                 @php
@@ -1937,7 +1989,13 @@
             </a>
         </li>
         <li class="sidebar-nav-item">
-            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') ? 'active' : '' }}">
+            <a href="{{ route('letters.my-letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.my-letters.*') ? 'active' : '' }}">
+                <i class="fa-solid fa-file-pen text-info"></i>
+                <span>My Letters</span>
+            </a>
+        </li>
+        <li class="sidebar-nav-item">
+            <a href="{{ route('letters.index') }}" class="sidebar-nav-link {{ request()->routeIs('letters.*') && !request()->routeIs('letters.my-letters.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-envelope-open-text text-primary"></i>
                 <span>Correspondence (Letters)</span>
                 @php

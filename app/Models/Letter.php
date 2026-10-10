@@ -12,15 +12,21 @@ class Letter extends Model
 
     protected $fillable = [
         'letter_number',
+        'is_reference_locked',
         'type',
         'date',
         'subject',
         'specification',
+        'category',
+        'addressed_to_user_id',
         'sender',
         'sender_department',
         'recipient_organization',
         'priority',
         'status',
+        'sent_at',
+        'registered_by',
+        'registered_at',
         'created_by',
         'closed_by',
         'closed_at',
@@ -49,24 +55,45 @@ class Letter extends Model
     ];
 
     protected $casts = [
-        'date'               => 'date',
-        'closed_at'          => 'datetime',
-        'paid_at'            => 'datetime',
-        'payment_amount'     => 'decimal:2',
-        'gross_amount'       => 'decimal:2',
-        'vat_rate'           => 'decimal:2',
-        'vat_amount'         => 'decimal:2',
-        'has_withholding'    => 'boolean',
-        'withholding_rate'   => 'decimal:2',
-        'withholding_amount' => 'decimal:2',
-        'net_amount'         => 'decimal:2',
+        'date'                => 'date',
+        'sent_at'             => 'datetime',
+        'registered_at'       => 'datetime',
+        'closed_at'           => 'datetime',
+        'paid_at'             => 'datetime',
+        'is_reference_locked' => 'boolean',
+        'payment_amount'      => 'decimal:2',
+        'gross_amount'        => 'decimal:2',
+        'vat_rate'            => 'decimal:2',
+        'vat_amount'          => 'decimal:2',
+        'has_withholding'     => 'boolean',
+        'withholding_rate'    => 'decimal:2',
+        'withholding_amount'  => 'decimal:2',
+        'net_amount'          => 'decimal:2',
     ];
 
     // Status Constants
+    const STATUS_DRAFT = 'draft';
+    const STATUS_SENT = 'sent';
+    const STATUS_REGISTERED = 'registered';
     const STATUS_PENDING = 'pending';
     const STATUS_VIEWED = 'viewed';
     const STATUS_REDIRECTED = 'redirected';
     const STATUS_CLOSED = 'closed';
+
+    // Category Constants
+    const CATEGORY_LEAVE_LETTER = 'Leave Letter';
+    const CATEGORY_ADVANCE_LOAN_LETTER = 'Advance Loan Letter';
+    const CATEGORY_PAYMENT = 'Payment';
+    const CATEGORY_GOVERNMENT = 'Government';
+    const CATEGORY_BANK_INSURANCE = 'Bank & Insurance';
+
+    const CATEGORIES = [
+        self::CATEGORY_LEAVE_LETTER,
+        self::CATEGORY_ADVANCE_LOAN_LETTER,
+        self::CATEGORY_PAYMENT,
+        self::CATEGORY_GOVERNMENT,
+        self::CATEGORY_BANK_INSURANCE,
+    ];
 
     // Type Constants
     const TYPE_INCOMING = 'incoming';
@@ -165,25 +192,64 @@ class Letter extends Model
     }
 
     /**
+     * Relationship: Person addressed to / handled by (selected by Secretary)
+     */
+    public function addressedTo()
+    {
+        return $this->belongsTo(User::class, 'addressed_to_user_id');
+    }
+
+    /**
+     * Relationship: Secretary / Admin who registered the letter
+     */
+    public function registeredBy()
+    {
+        return $this->belongsTo(User::class, 'registered_by');
+    }
+
+    /**
+     * Relationship: Comprehensive action history audit logs
+     */
+    public function actionLogs()
+    {
+        return $this->hasMany(LetterActionLog::class, 'letter_id')->orderBy('id', 'asc');
+    }
+
+    /**
+     * Status Helper Checks
+     */
+    public function isDraft(): bool
+    {
+        return $this->status === self::STATUS_DRAFT;
+    }
+
+    public function isSent(): bool
+    {
+        return $this->status === self::STATUS_SENT;
+    }
+
+    public function isRegistered(): bool
+    {
+        return $this->status === self::STATUS_REGISTERED;
+    }
+
+    public function getStatusBadgeClass(): string
+    {
+        return match ($this->status) {
+            self::STATUS_DRAFT      => 'bg-secondary text-white',
+            self::STATUS_SENT       => 'bg-warning text-dark',
+            self::STATUS_REGISTERED => 'bg-success text-white',
+            self::STATUS_CLOSED     => 'bg-dark text-white',
+            default                 => 'bg-info text-white',
+        };
+    }
+
+    /**
      * Generate next suggested letter number
      */
     public static function generateSuggestedNumber(string $type = 'incoming'): string
     {
-        $prefix = ($type === self::TYPE_OUTGOING) ? 'OUT' : 'IN';
-        $year = date('Y');
-        $pattern = "{$prefix}-{$year}-%";
-
-        $lastLetter = self::withTrashed()
-            ->where('letter_number', 'like', $pattern)
-            ->orderBy('id', 'desc')
-            ->first();
-
-        $seq = 1;
-        if ($lastLetter && preg_match("/{$prefix}-{$year}-(\d+)/", $lastLetter->letter_number, $matches)) {
-            $seq = intval($matches[1]) + 1;
-        }
-
-        return sprintf('%s-%s-%03d', $prefix, $year, $seq);
+        return LetterSequence::generateNext();
     }
 
     /**
@@ -191,33 +257,43 @@ class Letter extends Model
      */
     public function isAccessibleBy(User $user): bool
     {
-        // Global admin, secretary, and creator always have access
-        if ($user->hasRole(['admin', 'global_admin', 'secretary']) || $this->created_by === $user->id) {
+        // 1. If it's a draft, STRICTLY only the creator can access it
+        if ($this->status === self::STATUS_DRAFT) {
+            return $this->created_by === $user->id;
+        }
+
+        // 2. The author always has access to their own sent/registered letters
+        if ($this->created_by === $user->id) {
             return true;
         }
 
-        // Direct user recipient
-        $directRecipient = $this->recipients()->where('to_user_id', $user->id)->exists();
-        if ($directRecipient) {
+        // 3. Secretary and Global Admin/Admin can view letters sent to secretary
+        if ($user->hasRole(['admin', 'global_admin', 'secretary'])) {
             return true;
         }
 
-        // Role-based recipient
+        // 4. The person selected/addressed to can view the letter once assigned/registered
+        if ($this->addressed_to_user_id === $user->id) {
+            return true;
+        }
+
+        // 5. Direct user recipient in routing log
+        if ($this->recipients()->where('to_user_id', $user->id)->exists()) {
+            return true;
+        }
+
+        // 6. Role-based recipient
         $userRoles = $user->getRoleNames()->toArray();
-        if (!empty($userRoles)) {
-            $roleRecipient = $this->recipients()->whereIn('to_role_name', $userRoles)->exists();
-            if ($roleRecipient) {
-                return true;
-            }
-        }
-
-        // Forwarder / Question Sender in routing chain
-        $isSenderInChain = $this->recipients()->where('from_user_id', $user->id)->exists();
-        if ($isSenderInChain) {
+        if (!empty($userRoles) && $this->recipients()->whereIn('to_role_name', $userRoles)->exists()) {
             return true;
         }
 
-        // Management / Executive Hierarchy
+        // 7. Forwarder / Question Sender in routing chain
+        if ($this->recipients()->where('from_user_id', $user->id)->exists()) {
+            return true;
+        }
+
+        // 8. Management / Executive Hierarchy
         if ($user->hasAnyRole(['gm', 'general_manager', 'managing_director', 'director', 'ceo', 'deputy_general_manager'])) {
             return true;
         }
