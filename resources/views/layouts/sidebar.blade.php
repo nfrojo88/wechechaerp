@@ -191,7 +191,7 @@
             <li><a href="{{ route('products.index') }}" class="sidebar-nav-link {{ request()->routeIs('products.*') ? 'active' : '' }}"><i class="fa-solid fa-book"></i><span>Material Catalog</span></a></li>
             <li><a href="{{ route('store-manager.fixed-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.fixed-assets.*') ? 'active' : '' }}"><i class="fa-solid fa-truck-monster text-warning"></i><span>Fixed Assets</span></a></li>
             <li><a href="{{ route('store-manager.damaged-assets.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.damaged-assets.*') ? 'active' : '' }}"><i class="fa-solid fa-triangle-exclamation text-danger"></i><span>Damaged Assets</span></a></li>
-            <li><a href="{{ route('store-manager.material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-clipboard-list text-danger"></i><span>Material Requests</span></a></li>
+            <li><a href="{{ route('store-manager.material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.material-requests.*') ? 'active' : '' }}"><i class="fa-solid fa-clipboard-list text-danger"></i><span>Store Material Requests</span></a></li>
             <li><a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.*') ? 'active' : '' }}"><i class="fa-solid fa-truck-moving text-warning"></i><span>Transfers & Drivers</span></a></li>
             <li><a href="{{ route('store-manager.issued.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.issued.*') ? 'active' : '' }}"><i class="fa-solid fa-hand-holding"></i><span>Issued Materials</span></a></li>
             <li><a href="{{ route('store-manager.store-keepers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.store-keepers.*') ? 'active' : '' }}"><i class="fa-solid fa-users-gear text-success"></i><span>Assign Store Keepers</span></a></li>
@@ -672,12 +672,6 @@
     </a>
 </li>
 <li class="sidebar-nav-item">
-    <a href="{{ route('dashboard.gm') }}#project-expenses" class="sidebar-nav-link">
-        <i class="fa-solid fa-chart-pie text-danger"></i>
-        <span>Project Expenses</span>
-    </a>
-</li>
-<li class="sidebar-nav-item">
     <a href="{{ route('material-usages.index') }}" class="sidebar-nav-link {{ request()->routeIs('material-usages.*') ? 'active' : '' }}">
         <i class="fa-solid fa-boxes-packing text-success"></i>
         <span>Material Consumption</span>
@@ -714,12 +708,6 @@
     <small style="color:#64748b; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
         Procurement &amp; Stores
     </small>
-</li>
-<li class="sidebar-nav-item">
-    <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ (request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*')) && request('status') !== 'pending_gm' ? 'active' : '' }}">
-        <i class="fa-solid fa-arrows-split-up-and-left text-warning"></i>
-        <span>Procurement — My Queue</span>
-    </a>
 </li>
 <li class="sidebar-nav-item">
     <a href="{{ route('products.index') }}" class="sidebar-nav-link {{ request()->routeIs('products.*') ? 'active' : '' }}">
@@ -881,62 +869,11 @@
                 <span>{{ $dashTitle }}</span>
             </a>
         </li>
-        @if($canSendToSiteUser)
-        <li class="sidebar-nav-item" style="padding: 0.1rem 0.75rem 0.1rem;">
-            <a href="{{ route('attendance.site-deployments') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.site-deployments*') ? 'active' : '' }}" style="font-weight:600;">
-                <i class="fa-solid fa-person-digging text-primary"></i>
-                <span>Send to Site (ወደ ሳይት መላክ)</span>
-                <span class="badge bg-primary text-white rounded-pill ms-auto" style="font-size:0.6rem;">Status S</span>
-            </a>
-        </li>
-        @endif
         @elseif($isGeneralServiceUser)
         <li class="sidebar-nav-item">
             <a href="{{ route('dashboard.general_service') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.general_service') ? 'active' : '' }}">
                 <i class="fa-solid fa-screwdriver-wrench text-warning"></i>
                 <span>General Service Hub</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('general-service.vehicle-reminders.dashboard') }}" class="sidebar-nav-link {{ request()->routeIs('general-service.vehicle-reminders.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-clock-rotate-left text-info"></i>
-                <span>Vehicle Reminders</span>
-                @php
-                    $gsPendingReminderCount = 0;
-                    try {
-                        if (\Illuminate\Support\Facades\Schema::hasTable('vehicle_reminders')) {
-                            $today = \Carbon\Carbon::today();
-                            $in30 = $today->copy()->addDays(30);
-                            $gsPendingReminderCount = \App\Models\VehicleReminder::where(function($q) use ($today, $in30) {
-                                $q->where(function($sq) use ($in30) {
-                                    $sq->where('bolo_expiry_date', '<=', $in30)
-                                       ->orWhere('insurance_expiry_date', '<=', $in30);
-                                })->orWhere(function($sq) {
-                                    $sq->where('reminder_type', 'service_km')
-                                       ->whereRaw('next_service_km - current_odometer_km <= COALESCE(reminder_threshold_km, 500)');
-                                });
-                            })->whereNotIn('status', ['renewed', 'serviced'])->count();
-                        }
-                    } catch (\Throwable $e) {}
-                @endphp
-                @if($gsPendingReminderCount > 0)
-                    <span class="badge bg-danger rounded-pill ms-auto">{{ $gsPendingReminderCount }}</span>
-                @endif
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('store-manager.transfers.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.transfers.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-truck-moving text-primary"></i>
-                <span>Transfers &amp; Drivers</span>
-                @php
-                    $gsPendingDriverCount = 0;
-                    try {
-                        $gsPendingDriverCount = \App\Models\Transfer::whereIn('status', ['draft', 'pending_approval'])->count();
-                    } catch (\Throwable $e) {}
-                @endphp
-                @if($gsPendingDriverCount > 0)
-                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $gsPendingDriverCount }}</span>
-                @endif
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -1205,163 +1142,6 @@
         </li>
         @endif
 
-        {{-- General Manager Section --}}
-        @if(auth()->check() && (auth()->user()->hasAnyRole(['gm', 'general_manager', 'General Manager', 'GM']) || in_array('gm', $rawUserRoles) || in_array('general_manager', $rawUserRoles)))
-
-        <li class="sidebar-nav-item">
-            @php
-                $pendingGmLeaveCount = 0;
-                try {
-                    if (\Illuminate\Support\Facades\Schema::hasTable('leave_requests')) {
-                        $pendingGmLeaveCount = \App\Models\LeaveRequest::where('status', 'pending')->count();
-                    }
-                } catch (\Exception $e) {}
-            @endphp
-            <a href="{{ route('leave-requests.index') }}" class="sidebar-nav-link {{ (request()->routeIs('leave-requests.*') && !request()->routeIs('leave-requests.create') && !request()->routeIs('leave-requests.my-requests')) ? 'active' : '' }}">
-                <i class="fa-solid fa-calendar-check text-success"></i>
-                <span>GM Leave Decisions</span>
-                @if($pendingGmLeaveCount > 0)
-                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingGmLeaveCount }}</span>
-                @endif
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('expenses.index') }}?tab=pending_gm" class="sidebar-nav-link {{ (request()->routeIs('expenses.*') || request()->is('expenses*') || request()->routeIs('approvals.*')) && request('tab') === 'pending_gm' ? 'active' : '' }}">
-                <i class="fa-solid fa-file-invoice-dollar text-warning"></i>
-                <span>Expense Approvals</span>
-
-                @php
-                    $pendingGmExpCount = 0;
-                    try {
-                        $pendingGmExpCount = \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PENDING_GM)->count();
-                    } catch (\Exception $e) {}
-                @endphp
-                @if($pendingGmExpCount > 0)
-                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingGmExpCount }}</span>
-                @endif
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('finance.payroll.gm') }}" class="sidebar-nav-link {{ request()->routeIs('finance.payroll.gm*') ? 'active' : '' }}">
-                <i class="fa-solid fa-file-signature text-warning"></i>
-                <span>Payroll Approvals</span>
-            </a>
-        </li>
-
-
-        <li class="sidebar-nav-item">
-            <a href="{{ route('payroll.advances') }}?status=pending" class="sidebar-nav-link {{ request()->routeIs('payroll.advances*') && request('status') === 'pending' ? 'active' : '' }}">
-                <i class="fa-solid fa-hand-holding-dollar text-success"></i>
-                <span>Loan Approvals</span>
-                @php
-                    $pendingLoansCount = 0;
-                    try {
-                        $pendingLoansCount = \App\Models\EmployeeAdvance::where('status', 'pending')->count();
-                    } catch (\Exception $e) {}
-                @endphp
-                @if($pendingLoansCount > 0)
-                    <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingLoansCount }}</span>
-                @endif
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('employees.pending-approval') }}" class="sidebar-nav-link {{ request()->routeIs('employees.pending-approval') ? 'active' : '' }}">
-                <i class="fa-solid fa-user-clock text-warning"></i>
-                <span>Employee Approvals</span>
-                @php
-                    $pendingEmpCount = 0;
-                    try {
-                        $pendingEmpCount = \App\Models\Employee::where(function($q) {
-                            $q->where('is_approved_by_gm', false)->orWhereNull('is_approved_by_gm');
-                        })->count();
-                    } catch (\Exception $e) {}
-                @endphp
-                @if($pendingEmpCount > 0)
-                    <span class="badge bg-warning text-dark rounded-pill ms-auto">{{ $pendingEmpCount }}</span>
-                @endif
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('attendance.site-deployments') }}" class="sidebar-nav-link {{ request()->routeIs('attendance.site-deployments*') ? 'active' : '' }}">
-                <i class="fa-solid fa-person-digging text-primary"></i>
-                <span>Send to Site (ወደ ሳይት መላክ)</span>
-                <span class="badge bg-primary text-white rounded-pill ms-auto" style="font-size:0.6rem;">Status S</span>
-            </a>
-        </li>
-
-        {{-- ── GM Expense & Cost Tracking ──────────────────────────────────── --}}
-        <hr class="sidebar-section-divider" style="margin:0.4rem 0.75rem;">
-        <li style="padding: 0.1rem 0.75rem 0.05rem;">
-            <small style="color:#64748b; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.05em; font-weight:600;">
-                <i class="fa-solid fa-chart-pie me-1" style="color:#20c997;"></i>Expense Tracking
-            </small>
-        </li>
-
-        <li class="sidebar-nav-item">
-            <a href="{{ route('dashboard.gm') }}#project-expenses"
-               class="sidebar-nav-link {{ request()->routeIs('dashboard.gm') ? 'active' : '' }}"
-               title="View per-project expense breakdown: cash + material consumption">
-                <i class="fa-solid fa-chart-bar text-danger"></i>
-                <span>Project Expenses</span>
-                @php
-                    $totalProjExpCount = 0;
-                    try {
-                        $totalProjExpCount = \App\Models\Project::where('status', 'active')->count();
-                    } catch (\Exception $e) {}
-                @endphp
-                @if($totalProjExpCount > 0)
-                    <span class="badge rounded-pill ms-auto" style="background:rgba(220,53,69,0.15);color:#dc3545;font-size:0.6rem;">{{ $totalProjExpCount }}</span>
-                @endif
-            </a>
-        </li>
-
-        <li class="sidebar-nav-item">
-            <a href="{{ route('finance.tax-deductions.index') }}"
-               class="sidebar-nav-link {{ request()->routeIs('finance.tax-deductions.*') ? 'active' : '' }}"
-               title="VAT & 3% Withholding Tax Deductions Ledger & Monthly Report">
-                <i class="fa-solid fa-receipt text-danger"></i>
-                <span>VAT &amp; WHT Tax Ledger</span>
-            </a>
-        </li>
-
-        <li class="sidebar-nav-item">
-            <a href="{{ route('material-usages.index') }}"
-               class="sidebar-nav-link {{ request()->routeIs('material-usages.*') ? 'active' : '' }}"
-               title="Track material consumption priced by unit cost across all projects">
-                <i class="fa-solid fa-boxes me-1" style="color:#20c997;"></i>
-                <span>Material Consumption</span>
-                @php
-                    $pendingMatUsageCount = 0;
-                    try {
-                        $pendingMatUsageCount = \App\Models\MaterialUsage::where('status', 'draft')->count();
-                    } catch (\Exception $e) {}
-                @endphp
-                @if($pendingMatUsageCount > 0)
-                    <span class="badge bg-secondary rounded-pill ms-auto" style="font-size:0.6rem;">{{ $pendingMatUsageCount }}</span>
-                @endif
-            </a>
-        </li>
-
-        <li class="sidebar-nav-item">
-            <a href="{{ route('expense-requests.index') }}"
-               class="sidebar-nav-link {{ (request()->routeIs('expense-requests.*') && !request()->routeIs('expense-requests.create')) ? 'active' : '' }}"
-               title="All expense requests across all projects">
-                <i class="fa-solid fa-receipt text-warning"></i>
-                <span>All Expense Requests</span>
-                @php
-                    $allExpReqCount = 0;
-                    try {
-                        $allExpReqCount = \App\Models\ExpenseRequest::whereIn('status', ['pending', 'reviewed', 'approved', 'assigned'])->count();
-                    } catch (\Exception $e) {}
-                @endphp
-                @if($allExpReqCount > 0)
-                    <span class="badge bg-warning text-dark rounded-pill ms-auto" style="font-size:0.6rem;">{{ $allExpReqCount }}</span>
-                @endif
-            </a>
-        </li>
-
-        @endif
-
         {{-- Masters --}}
 
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isStoreKeeper && !$isStoreManager && !$isAuditorUser))
@@ -1375,7 +1155,7 @@
             </a>
         </li>
         @endif
-        @if($isCoordinator || (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['stores.view', 'stores.create', 'stores.edit', 'stores.delete']))))
+        @if(!$isCoordinator && (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['stores.view', 'stores.create', 'stores.edit', 'stores.delete']))))
         <li class="sidebar-nav-item">
             <a href="{{ route('stores.index') }}" class="sidebar-nav-link {{ request()->routeIs('stores.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-warehouse text-info"></i>
@@ -1383,7 +1163,7 @@
             </a>
         </li>
         @endif
-        @if($isCoordinator || (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['products.view', 'products.create', 'products.edit', 'products.delete']))))
+        @if(!$isCoordinator && (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->hasAnyPermission(['products.view', 'products.create', 'products.edit', 'products.delete']))))
         <li class="sidebar-nav-item">
             <a href="{{ route('products.index') }}" class="sidebar-nav-link {{ request()->routeIs('products.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-boxes-stacked text-warning"></i>
@@ -1396,7 +1176,7 @@
 
         {{-- Inventory --}}
         @if(!auth()->check() || (!$isSiteStaffUser && !$isGeneralServiceUser && !$isStoreKeeper && !$isStoreManager && !$isAuditorUser))
-        @if($isCoordinator || (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->can('inventory.view') || auth()->user()->hasAnyPermission(['inventory.view', 'inventory.view_all_stores', 'inventory.*']))))
+        @if(!$isCoordinator && (auth()->check() && (auth()->user()->hasAnyRole(['coordinator', 'Coordinator', 'admin', 'global_admin']) || auth()->user()->can('inventory.view') || auth()->user()->hasAnyPermission(['inventory.view', 'inventory.view_all_stores', 'inventory.*']))))
         <li class="sidebar-nav-item">
             <a href="{{ route('inventory.index') }}" class="sidebar-nav-link {{ request()->routeIs('inventory.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-boxes-stacked text-primary"></i>
@@ -1424,7 +1204,7 @@
         <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.material-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-clipboard-list text-danger"></i>
-                <span>Material Requests</span>
+                <span>Store Material Requests</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -1590,25 +1370,11 @@
                 @endif
             </a>
         </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('store-manager.transfers.index', ['tab' => 'in_transit']) }}" class="sidebar-nav-link {{ request()->input('tab') === 'in_transit' || request()->input('tab') === 'assigned_drivers' ? 'active' : '' }}">
-                <i class="fa-solid fa-truck-fast text-info"></i>
-                <span>Driver &amp; Dispatch Status</span>
-                @php
-                    $smInTransitCount = 0;
-                    try {
-                        $smInTransitCount = \App\Models\Transfer::where('status', 'in_transit')->count();
-                    } catch (\Throwable $e) {}
-                @endphp
-                @if($smInTransitCount > 0)
-                    <span class="badge bg-info text-dark rounded-pill ms-auto" title="In-Transit with Driver">{{ $smInTransitCount }}</span>
-                @endif
-            </a>
-        </li>
+
         <li class="sidebar-nav-item">
             <a href="{{ route('store-manager.material-requests.index') }}" class="sidebar-nav-link {{ request()->routeIs('store-manager.material-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-clipboard-list text-danger"></i>
-                <span>Material Requests</span>
+                <span>Store Material Requests</span>
             </a>
         </li>
         <li class="sidebar-nav-item">
@@ -1828,7 +1594,7 @@
         </li>
         @endif
 
-        @if(!auth()->user()->hasAnyRole(['planning_manager', 'planning']))
+        @if(!auth()->user()->hasAnyRole(['planning_manager', 'planning', 'coordinator', 'Coordinator']) && !$isCoordinator)
         <li class="sidebar-nav-item">
             <a href="{{ route('products.index') }}" class="sidebar-nav-link {{ request()->routeIs('products.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-box text-warning"></i>
@@ -1867,12 +1633,14 @@
             </a>
         </li>
         @endcanany
+        @if(!$isCoordinator && !auth()->user()->hasAnyRole(['coordinator', 'Coordinator']))
         <li class="sidebar-nav-item">
             <a href="{{ route('procurement.my-queue') }}" class="sidebar-nav-link {{ request()->routeIs('procurement.*') || request()->routeIs('purchase-requests.*') ? 'active' : '' }}">
                 <i class="fa-solid fa-tasks text-warning"></i>
                 <span>Procurement — My Queue</span>
             </a>
         </li>
+        @endif
         @canany(['purchases.view', 'purchases.*'])
         <li class="sidebar-nav-item">
             <a href="{{ route('purchase-orders.index') }}" class="sidebar-nav-link {{ request()->routeIs('purchase-orders.*') ? 'active' : '' }}">
@@ -2325,6 +2093,7 @@
             </a>
         </li>
         @endcanany
+        @if(!auth()->user()->hasAnyRole(['site_engineer', 'foreman']))
         @canany(['issues.view', 'issues.create', 'issues.resolve', 'issues.*'])
         <li class="sidebar-nav-item">
             <a href="{{ route('issues.index') }}" class="sidebar-nav-link {{ request()->routeIs('issues.*') ? 'active' : '' }}">
@@ -2333,6 +2102,7 @@
             </a>
         </li>
         @endcanany
+        @endif
         @canany(['waste.view', 'waste.create', 'waste.*'])
         <li class="sidebar-nav-item">
             <a href="{{ route('waste.index') }}" class="sidebar-nav-link {{ request()->routeIs('waste.*') ? 'active' : '' }}">
@@ -2774,137 +2544,6 @@
                 @endif
             </a>
         </li>
-        @endif
-
-        {{-- Admin --}}
-        @php $isAuditorUser = in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit'])); @endphp
-        @if(auth()->check() && !$isAuditorUser && (auth()->user()->hasAnyRole(['global_admin', 'admin']) || auth()->user()->canAny(['users.view', 'users.*', 'settings.view', 'settings.*'])))
-        @canany(['users.view', 'users.*'])
-        <li class="sidebar-nav-item">
-            <a href="{{ route('users.index') }}" class="sidebar-nav-link {{ request()->routeIs('users.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-user-shield"></i>
-                <span>User Management</span>
-            </a>
-        </li>
-        
-        @role('global_admin|admin')
-        <li class="sidebar-nav-item">
-            <a href="{{ route('admin.role-assignment.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.role-assignment.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-user-tag text-info"></i>
-                <span>Role Assignment</span>
-                @php
-                    $noRoleCount = 0;
-                    try {
-                        $noRoleCount = \App\Models\User::whereDoesntHave('roles')->count();
-                    } catch (\Exception $e) {}
-                @endphp
-                @if($noRoleCount > 0)
-                    <span class="badge bg-warning text-dark ms-auto">{{ $noRoleCount }}</span>
-                @endif
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('admin.employee-ratings.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.employee-ratings.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-star text-warning"></i>
-                <span>Employee Ratings</span>
-            </a>
-        </li>
-
-        <li class="sidebar-nav-item">
-            <a href="{{ route('admin.tickets.index') }}" class="sidebar-nav-link {{ request()->routeIs('admin.tickets.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-laptop-medical text-danger"></i>
-                <span>IT Reports &amp; Support</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('admin.attendance.device-logs') }}" class="sidebar-nav-link {{ request()->routeIs('admin.attendance.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-fingerprint text-primary"></i>
-                <span>Device Logs &amp; Reset</span>
-            </a>
-        </li>
-        @if(auth()->check() && auth()->user()->hasRole('global_admin'))
-        <li class="sidebar-nav-item">
-            <a href="{{ \Illuminate\Support\Facades\Route::has('admin.ocr.index') ? route('admin.ocr.index') : url('/admin/receipt-ocr') }}" class="sidebar-nav-link {{ request()->routeIs('admin.ocr.*') || request()->is('admin/receipt-ocr*') ? 'active' : '' }}">
-                <i class="fa-solid fa-expand text-success"></i>
-                <span>OCR Receipt Scanner</span>
-                <span class="badge bg-success text-white rounded-pill ms-auto" style="font-size:0.6rem;">Global Admin</span>
-            </a>
-        </li>
-        @endif
-        @endrole
-        @endcanany
-        @canany(['settings.view', 'settings.*'])
-        <li class="sidebar-nav-item">
-            <a href="{{ route('settings.index') }}" class="sidebar-nav-link {{ request()->routeIs('settings.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-cogs"></i>
-                <span>System Settings</span>
-            </a>
-        </li>
-        @endcanany
-        @endif
-
-        @if(auth()->check() && !$isAuditorUser && (auth()->user()->hasAnyRole(['admin', 'global_admin']) || (method_exists(auth()->user(), 'can') && (auth()->user()->can('audit.view') || auth()->user()->can('finance.audit.view') || auth()->user()->can('admin.audit.view')))))
-        <li class="sidebar-nav-item sidebar-section-label" style="padding:8px 16px 4px; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; pointer-events:none; user-select:none;">Audit &amp; Compliance</li>
-        <li class="sidebar-nav-item">
-            <a href="{{ \Illuminate\Support\Facades\Route::has('dashboard.audit') ? route('dashboard.audit') : url('/dashboard/audit') }}" class="sidebar-nav-link {{ request()->routeIs('dashboard.audit') ? 'active' : '' }}">
-                <i class="fa-solid fa-chart-pie text-info"></i>
-                <span>Audit Dashboard</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ \Illuminate\Support\Facades\Route::has('finance.replenishments.index') ? route('finance.replenishments.index') : url('/finance/replenishments') }}" class="sidebar-nav-link {{ request()->is('finance/replenishments*') ? 'active' : '' }}">
-                <i class="fa-solid fa-hand-holding-dollar text-warning"></i>
-                <span>Petty Cash Audit &amp; Approvals</span>
-                @php
-                    $pendingAudReplenishCount = 0;
-                    try {
-                        if (\Illuminate\Support\Facades\Schema::hasTable('petty_cash_replenishments')) {
-                            $pendingAudReplenishCount = \App\Models\PettyCashReplenishment::where('status', 'pending')->count();
-                        }
-                    } catch (\Exception $e) {}
-                @endphp
-                @if($pendingAudReplenishCount > 0)
-                    <span class="badge bg-danger rounded-pill ms-auto">{{ $pendingAudReplenishCount }}</span>
-                @endif
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('admin.activity-logs') }}" class="sidebar-nav-link {{ request()->routeIs('admin.activity-logs') ? 'active' : '' }}">
-                <i class="fa-solid fa-list-ol text-primary"></i>
-                <span>Audit &amp; Activity Trail</span>
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ \Illuminate\Support\Facades\Route::has('audit.expense-receipts.index') ? route('audit.expense-receipts.index') : url('/audit/expense-receipts') }}" class="sidebar-nav-link {{ request()->routeIs('audit.expense-receipts.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-receipt text-warning"></i>
-                <span>Expense Receipt Audit</span>
-                @php
-                    $audMissingReceiptCount2 = 0;
-                    try {
-                        if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
-                            $audMissingReceiptCount2 = \App\Models\ExpenseRequest::whereNull('attachment')
-                                ->where('status', \App\Models\ExpenseRequest::STATUS_PAID)
-                                ->where(function ($q) {
-                                    $q->whereNull('audit_receipt_status')
-                                      ->orWhereNotIn('audit_receipt_status', ['verified_no_receipt', 'verified']);
-                                })
-                                ->count();
-                        }
-                    } catch (\Throwable $e) {}
-                @endphp
-                @if($audMissingReceiptCount2 > 0)
-                    <span class="badge bg-danger rounded-pill ms-auto">{{ $audMissingReceiptCount2 }}</span>
-                @endif
-            </a>
-        </li>
-        <li class="sidebar-nav-item">
-            <a href="{{ route('expenses.index') }}" class="sidebar-nav-link {{ request()->routeIs('expenses.*') ? 'active' : '' }}">
-                <i class="fa-solid fa-file-invoice-dollar text-success"></i>
-                <span>Expense &amp; Payment Audit</span>
-            </a>
-        </li>
-
-
         @endif
 
         @endif {{-- end if($isGmUser) --}}

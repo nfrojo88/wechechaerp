@@ -185,8 +185,8 @@ class MaterialUsageController extends Controller
         if ($selectedStoreId) {
             $storeProducts = Inventory::with('product')
                 ->where('store_id', $selectedStoreId)
-                ->where('quantity_on_hand', '>', 0)
                 ->get()
+                ->filter(fn($inv) => $inv->product !== null)
                 ->map(fn($inv) => [
                     'id' => $inv->product_id,
                     'name' => $inv->product->name ?? 'Unknown',
@@ -194,7 +194,9 @@ class MaterialUsageController extends Controller
                     'unit' => $inv->product->unit ?? 'pcs',
                     'unit_cost' => $this->resolveLatestUnitPrice((int) $inv->product_id, (int) $selectedStoreId),
                     'stock_on_hand' => (float) $inv->quantity_on_hand,
-                ])->values()->all();
+                ])
+                ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+                ->values()->all();
         }
 
         // Fallback to all active products
@@ -290,6 +292,7 @@ class MaterialUsageController extends Controller
         $inventories = Inventory::with('product')
             ->where('store_id', $store->id)
             ->get()
+            ->filter(fn($inv) => $inv->product !== null)
             ->map(fn($inv) => [
                 'id' => $inv->product_id,
                 'name' => $inv->product->name ?? 'Item',
@@ -297,7 +300,9 @@ class MaterialUsageController extends Controller
                 'unit' => $inv->product->unit ?? 'pcs',
                 'unit_cost' => $this->resolveLatestUnitPrice((int) $inv->product_id, (int) $store->id),
                 'stock_on_hand' => (float) $inv->quantity_on_hand,
-            ]);
+            ])
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
 
         return response()->json([
             'store_id' => $store->id,
