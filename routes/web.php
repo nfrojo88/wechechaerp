@@ -1799,6 +1799,11 @@ Route::middleware(['auth'])->group(function () {
     Route::post('transfers/{transfer}/reject', [App\Http\Controllers\TransferController::class, 'reject'])->name('transfers.reject');
     Route::post('transfers/{transfer}/complete', [App\Http\Controllers\TransferController::class, 'complete'])->name('transfers.complete');
 
+    // AI Receipt Scanner Endpoint for Purchasing Screens
+    Route::post('purchases/receipt-scan', [App\Http\Controllers\PurchaseReceiptScanController::class, 'scan'])
+        ->middleware('throttle:30,1')
+        ->name('purchases.receipt-scan');
+
     // Procurement & Purchasing
     Route::resource('purchase-requests', App\Http\Controllers\PurchaseRequestController::class)->except(['edit', 'update', 'destroy']);
     Route::delete('purchase-requests/{purchaseRequest}', [App\Http\Controllers\PurchaseRequestController::class, 'destroy'])->name('purchase-requests.destroy');

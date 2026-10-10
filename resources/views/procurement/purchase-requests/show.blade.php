@@ -1363,20 +1363,104 @@
                                 Payment of <strong>{{ number_format($purchaseRequest->payment?->amount ?? $purchaseRequest->direct_buy_amount, 2) }} ETB</strong> disbursed. Upload vendor receipt and send directly to Store Keeper for material intake.
                             </p>
                         </div>
-                        <form action="{{ route('purchase-requests.upload-receipt', $purchaseRequest) }}" method="POST" enctype="multipart/form-data">
+                        <form action="{{ route('purchase-requests.upload-receipt', $purchaseRequest) }}" method="POST" enctype="multipart/form-data" id="prReceiptUploadForm">
                             @csrf
                             <div class="mb-2">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Official Vendor Receipt (PDF / Image) <span class="text-danger">*</span></label>
-                                <input type="file" name="receipt_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+                                <input type="file" name="receipt_file" id="prReceiptFileInput" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
                             </div>
+
+                            {{-- Dynamic OCR Feedback & Duplicate Alert Area --}}
+                            <div id="prOcrFeedbackArea"></div>
+
+                            {{-- OCR Extracted & Editable Fields --}}
+                            <div class="p-2.5 rounded-3 border bg-light mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="small fw-bold text-uppercase text-muted" style="font-size:0.72rem;">
+                                        <i class="fas fa-file-invoice text-primary me-1"></i> Receipt Fiscal Details
+                                    </span>
+                                    <span class="badge bg-white text-secondary border small" style="font-size:0.68rem;">Auto-prefilled by OCR</span>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-7">
+                                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Vendor / Supplier Name</label>
+                                        <input type="text" name="vendor_name" id="prVendorName" class="form-control form-control-sm bg-white" placeholder="e.g. Astra General Trading">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Supplier TIN (10 digits)</label>
+                                        <input type="text" name="supplier_tin" id="prSupplierTin" maxlength="10" class="form-control form-control-sm bg-white font-monospace" placeholder="00xxxxxxxx">
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">FS Receipt # (8 digits)</label>
+                                        <input type="text" name="fs_no" id="prFsNo" maxlength="8" class="form-control form-control-sm bg-white font-monospace" placeholder="00xxxxxx">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Receipt Date</label>
+                                        <input type="date" name="receipt_date" id="prReceiptDate" class="form-control form-control-sm bg-white" value="{{ date('Y-m-d') }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Total Amount (ETB)</label>
+                                        <input type="number" step="0.01" name="total_amount" id="prTotalAmount" class="form-control form-control-sm bg-white fw-bold text-success font-monospace" placeholder="0.00">
+                                    </div>
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Subtotal / Taxable (ETB)</label>
+                                        <input type="number" step="0.01" name="subtotal" id="prSubtotal" class="form-control form-control-sm bg-white font-monospace" placeholder="0.00">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">15% VAT (ETB)</label>
+                                        <input type="number" step="0.01" name="vat_amount" id="prVatAmount" class="form-control form-control-sm bg-white font-monospace" placeholder="0.00">
+                                    </div>
+                                </div>
+                                <div class="mb-0">
+                                    <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Extracted Materials / Line Items</label>
+                                    <input type="text" name="material_description" id="prDescription" class="form-control form-control-sm bg-white" placeholder="Extracted item list...">
+                                    <input type="hidden" name="items_json" id="prItemsJson">
+                                </div>
+                            </div>
+
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-uppercase text-muted">Receipt Notes / Reference</label>
-                                <textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Cash sales invoice #, receipt date, or purchase notes..."></textarea>
+                                <textarea name="notes" id="prReceiptNotes" class="form-control form-control-sm" rows="2" placeholder="Cash sales invoice #, receipt date, or purchase notes..."></textarea>
                             </div>
-                            <button class="btn btn-primary btn-sm w-100 fw-bold py-2 shadow-sm">
+                            <button type="submit" id="prUploadSubmitBtn" class="btn btn-primary btn-sm w-100 fw-bold py-2 shadow-sm">
                                 <i class="fas fa-paper-plane me-1"></i> Upload Receipt & Send to Store Manager
                             </button>
                         </form>
+
+                        <script src="{{ asset('js/receipt-ocr-scanner.js') }}"></script>
+                        <script>
+                        document.addEventListener('DOMContentLoaded', function () {
+                            if (window.ReceiptOcrScanner) {
+                                ReceiptOcrScanner.init({
+                                    fileInput: '#prReceiptFileInput',
+                                    form: '#prReceiptUploadForm',
+                                    submitBtn: '#prUploadSubmitBtn',
+                                    statusContainer: '#prOcrFeedbackArea',
+                                    fields: {
+                                        vendor_name: '#prVendorName',
+                                        supplier_tin: '#prSupplierTin',
+                                        fs_no: '#prFsNo',
+                                        receipt_date: '#prReceiptDate',
+                                        total_amount: '#prTotalAmount',
+                                        subtotal: '#prSubtotal',
+                                        vat_amount: '#prVatAmount',
+                                        description: '#prDescription',
+                                        notes: '#prReceiptNotes'
+                                    },
+                                    onItemsExtracted: function (items) {
+                                        const hiddenEl = document.getElementById('prItemsJson');
+                                        if (hiddenEl) {
+                                            hiddenEl.value = JSON.stringify(items);
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                        </script>
 
                     <!-- STAGE 8: Verify Receipt -->
                     @elseif($purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_RECEIPT_VERIFY)

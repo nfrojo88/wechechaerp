@@ -166,7 +166,7 @@
                             <label class="form-label fw-semibold text-dark small">
                                 Purchase Date <span class="text-danger">*</span>
                             </label>
-                            <input type="date" name="purchase_date" class="form-control form-control-sm" value="{{ old('purchase_date', date('Y-m-d')) }}" required>
+                            <input type="date" name="purchase_date" id="pettyPurchaseDate" class="form-control form-control-sm" value="{{ old('purchase_date', date('Y-m-d')) }}" required>
                         </div>
 
                         {{-- Supplier / Merchant Name --}}
@@ -174,7 +174,23 @@
                             <label class="form-label fw-semibold text-dark small">
                                 Supplier / Merchant / Shop <span class="text-danger">*</span>
                             </label>
-                            <input type="text" name="supplier_name" class="form-control form-control-sm" placeholder="e.g. Merkato Hardware, TotalEnergies, Site Vendor" value="{{ old('supplier_name') }}" required>
+                            <input type="text" name="supplier_name" id="pettySupplierName" class="form-control form-control-sm" placeholder="e.g. Merkato Hardware, TotalEnergies, Site Vendor" value="{{ old('supplier_name') }}" required>
+                        </div>
+
+                        {{-- Supplier TIN & FS Number (Auto-detected by OCR) --}}
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label fw-semibold text-dark small">
+                                    Supplier TIN
+                                </label>
+                                <input type="text" name="supplier_tin" id="pettySupplierTin" maxlength="10" class="form-control form-control-sm font-monospace" placeholder="10-digit TIN" value="{{ old('supplier_tin') }}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label fw-semibold text-dark small">
+                                    FS Number
+                                </label>
+                                <input type="text" name="fs_no" id="pettyFsNo" maxlength="8" class="form-control form-control-sm font-monospace" placeholder="8-digit FS" value="{{ old('fs_no') }}">
+                            </div>
                         </div>
 
                         {{-- Receipt / Invoice Number --}}
@@ -182,7 +198,7 @@
                             <label class="form-label fw-semibold text-dark small">
                                 Cash Receipt / Voucher # <span class="text-danger">*</span>
                             </label>
-                            <input type="text" name="receipt_no" class="form-control form-control-sm font-monospace" placeholder="e.g. CR-89412, INV-0042" value="{{ old('receipt_no') }}" required>
+                            <input type="text" name="receipt_no" id="pettyReceiptNo" class="form-control form-control-sm font-monospace" placeholder="e.g. CR-89412, INV-0042" value="{{ old('receipt_no') }}" required>
                         </div>
 
                         {{-- Receipt Attachment --}}
@@ -190,14 +206,17 @@
                             <label class="form-label fw-semibold text-dark small">
                                 Attach Receipt Image / PDF
                             </label>
-                            <input type="file" name="attachment" class="form-control form-control-sm" accept="image/*,.pdf">
+                            <input type="file" name="attachment" id="pettyAttachmentInput" class="form-control form-control-sm" accept="image/*,.pdf">
                             <small class="text-muted d-block mt-1" style="font-size:0.73rem;">Photo of paper receipt or physical voucher.</small>
                         </div>
+
+                        {{-- Dynamic OCR Feedback & Duplicate Alert Area --}}
+                        <div id="pettyOcrFeedbackArea"></div>
 
                         {{-- Notes --}}
                         <div class="mb-0">
                             <label class="form-label fw-semibold text-dark small">Notes / Purpose</label>
-                            <textarea name="notes" rows="2" class="form-control form-control-sm" placeholder="Purpose or site usage note...">{{ old('notes') }}</textarea>
+                            <textarea name="notes" id="pettyNotes" rows="2" class="form-control form-control-sm" placeholder="Purpose or site usage note...">{{ old('notes') }}</textarea>
                         </div>
 
                     </div>
@@ -683,6 +702,7 @@
 </div>
 
 @push('scripts')
+<script src="{{ asset('js/receipt-ocr-scanner.js') }}"></script>
 <script type="application/json" id="storesDataScript">{!! json_encode($storesData ?? []) !!}</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -1073,6 +1093,65 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
             return true;
+        });
+    }
+
+    // Initialize AI Receipt OCR Scanner
+    if (window.ReceiptOcrScanner) {
+        ReceiptOcrScanner.init({
+            fileInput: '#pettyAttachmentInput',
+            form: '#pettyCashPurchaseForm',
+            submitBtn: '#submitPurchaseBtn',
+            statusContainer: '#pettyOcrFeedbackArea',
+            fields: {
+                vendor_name: '#pettySupplierName',
+                supplier_tin: '#pettySupplierTin',
+                fs_no: '#pettyFsNo',
+                receipt_date: '#pettyPurchaseDate',
+                notes: '#pettyNotes'
+            },
+            onScanComplete: function(scanData) {
+                const rNo = document.getElementById('pettyReceiptNo');
+                if (rNo && !rNo.value && scanData.data && scanData.data.fs_no) {
+                    rNo.value = scanData.data.fs_no;
+                }
+            },
+            onItemsExtracted: function(items) {
+                if (!Array.isArray(items) || items.length === 0) return;
+                const rows = document.querySelectorAll('.item-row');
+                items.forEach(function(item, idx) {
+                    let targetRow = rows[idx];
+                    if (!targetRow && addRowBtn) {
+                        addRowBtn.click();
+                        const newRows = document.querySelectorAll('.item-row');
+                        targetRow = newRows[newRows.length - 1];
+                    }
+                    if (targetRow) {
+                        const qtyInput = targetRow.querySelector('.qty-input');
+                        const priceInput = targetRow.querySelector('.price-input');
+                        const select = targetRow.querySelector('.product-select');
+                        if (qtyInput && item.qty) {
+                            qtyInput.value = item.qty;
+                            qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                        if (priceInput && item.unit_price) {
+                            priceInput.value = item.unit_price;
+                            priceInput.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                        if (select && item.item_description) {
+                            const desc = item.item_description.toLowerCase();
+                            for (let i = 0; i < select.options.length; i++) {
+                                const optText = (select.options[i].text || '').toLowerCase();
+                                if (optText && (optText.includes(desc) || desc.includes(optText))) {
+                                    select.selectedIndex = i;
+                                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
         });
     }
 });

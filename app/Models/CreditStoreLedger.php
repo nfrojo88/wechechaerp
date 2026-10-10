@@ -75,4 +75,9 @@ class CreditStoreLedger extends Model
             default          => 'danger',
         };
     }
+
+    public function receiptRecords(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(Receipt::class, 'purchasable');
+    }
 }

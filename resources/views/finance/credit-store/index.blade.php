@@ -525,6 +525,9 @@
                                                     <span class="input-group-text bg-white"><i class="fas fa-file-upload text-success"></i></span>
                                                     <input type="file" name="receipt_file" id="receiptFileInput" class="form-control form-control-sm bg-white" accept=".pdf,.jpg,.jpeg,.png,.webp">
                                                 </div>
+                                                <div id="creditBatchOcrFeedbackArea"></div>
+                                                <input type="hidden" name="supplier_tin" id="creditBatchSupplierTin">
+                                                <input type="hidden" name="fs_no" id="creditBatchFsNo">
                                                 <div class="form-text small text-muted">Attach bank slip, cheque scan, or signed vendor voucher (PDF, JPG, PNG up to 10MB). Applied to all selected items.</div>
                                             </div>
 
@@ -872,8 +875,31 @@
                 }
             });
         }
+
+        // Initialize AI Receipt OCR Scanner for Batch Settlement
+        if (window.ReceiptOcrScanner) {
+            ReceiptOcrScanner.init({
+                fileInput: '#receiptFileInput',
+                form: '#batchPaymentModal form',
+                submitBtn: '#submitBatchPaymentBtn',
+                statusContainer: '#creditBatchOcrFeedbackArea',
+                fields: {
+                    supplier_tin: '#creditBatchSupplierTin',
+                    fs_no: '#creditBatchFsNo',
+                    receipt_date: 'input[name="payment_date"]',
+                    notes: 'input[name="notes"]'
+                },
+                onScanComplete: function(scanData) {
+                    const refInput = document.querySelector('#batchPaymentModal input[name="reference_no"]');
+                    if (refInput && !refInput.value && scanData.data && scanData.data.fs_no) {
+                        refInput.value = 'FS-' + scanData.data.fs_no;
+                    }
+                }
+            });
+        }
     });
 </script>
+<script src="{{ asset('js/receipt-ocr-scanner.js') }}"></script>
 
 <style>
     /* Unlocked Smooth Modal & Table Scrollbars */

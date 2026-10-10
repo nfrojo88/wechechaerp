@@ -43,6 +43,8 @@ class Receipt extends Model
         'approved_at',
         'notes',
         'qc_notes',
+        'purchasable_type',
+        'purchasable_id',
     ];
 
     protected $casts = [
@@ -106,5 +108,10 @@ class Receipt extends Model
     public function items()
     {
         return $this->hasMany(ReceiptItem::class, 'receipt_id');
+    }
+
+    public function purchasable(): \Illuminate\Database\Eloquent\Relations\MorphTo
+    {
+        return $this->morphTo();
     }
 }

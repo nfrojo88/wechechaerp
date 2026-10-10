@@ -19,6 +19,8 @@ class PettyCashMaterialPurchase extends Model
         'purchased_by',
         'purchase_date',
         'supplier_name',
+        'supplier_tin',
+        'fs_no',
         'receipt_no',
         'total_amount',
         'notes',
@@ -61,5 +63,10 @@ class PettyCashMaterialPurchase extends Model
     public function items()
     {
         return $this->hasMany(PettyCashMaterialPurchaseItem::class, 'purchase_id');
+    }
+
+    public function receiptRecords(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(Receipt::class, 'purchasable');
     }
 }

@@ -314,5 +314,10 @@ class PurchaseRequest extends Model
 
         return $list;
     }
+
+    public function receiptRecords(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(Receipt::class, 'purchasable');
+    }
 }
 

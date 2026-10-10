@@ -16,15 +16,19 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Schema\Blueprint;
+use App\Services\ReceiptOcrService;
 use OpenSpout\Writer\XLSX\Writer as XlsxWriter;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Cell;
 
 class OCRReceiptScannerController extends Controller
 {
-    public function __construct()
+    protected ReceiptOcrService $ocrService;
+
+    public function __construct(?ReceiptOcrService $ocrService = null)
     {
         $this->middleware('auth');
+        $this->ocrService = $ocrService ?? app(ReceiptOcrService::class);
     }
 
     /**
@@ -97,6 +101,9 @@ class OCRReceiptScannerController extends Controller
                     }
                     if (!Schema::hasColumn('receipts', 'qc_notes')) {
                         $table->text('qc_notes')->nullable()->after('notes');
+                    }
+                    if (!Schema::hasColumn('receipts', 'purchasable_type') && !Schema::hasColumn('receipts', 'purchasable_id')) {
+                        $table->nullableMorphs('purchasable');
                     }
                 });
 
@@ -744,216 +751,48 @@ class OCRReceiptScannerController extends Controller
         ]);
 
         $file     = $request->file('receipt_file');
-        $mimeType = $file->getMimeType();
         $ext      = strtolower($file->getClientOriginalExtension());
-        $isPdf    = $ext === 'pdf' || str_contains($mimeType, 'pdf');
-
         $filename = 'ocr_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $ext;
         $path     = $file->storeAs('receipts', $filename, 'public');
         $fileUrl  = asset('storage/' . $path);
-        $fileBytes= file_get_contents($file->getRealPath());
-        $base64   = base64_encode($fileBytes);
 
-        // Run Parallel Multi-Engine Extraction Pipeline & Quality Control Agent
-        $pipeline = $this->executeMultiEnginePipeline(
-            $base64,
-            $isPdf ? 'application/pdf' : $mimeType,
-            $ext,
-            $file->getRealPath()
-        );
+        $scan = $this->ocrService->scan($file->getRealPath());
 
-        $extracted       = $pipeline['extracted'];
-        $engineUsed      = $pipeline['engine_label'];
-        $engineSlug      = $pipeline['engine_slug'];
-        $confidence      = $pipeline['confidence'];
-        $confidenceScore = $pipeline['confidence_score'];
-        $qcNotes         = $pipeline['qc_notes'];
-        $rawText         = $pipeline['raw_text'];
-
-        // Normalize extracted items and fields using strict QcService
-        $rawFs = trim((string)($extracted['fs_no'] ?? ''));
-        $rawTin = trim((string)($extracted['supplier_tin'] ?? ''));
-        $fsNorm = QcService::normalizeFsNo($rawFs);
-        $tinNorm = QcService::normalizeTin($rawTin);
-
-        $fsNo = $fsNorm['value'];
-        $fsNoRaw = $rawFs;
-        $fsNoValid = $fsNorm['is_valid'];
-        $supplierTin = $tinNorm['value'];
-        $tinValid = $tinNorm['is_valid'];
-
-        $merchantName = trim((string)($extracted['merchant_name'] ?? ''));
-        $mrcNo = trim((string)($extracted['machine_no'] ?? ($extracted['mrc_no'] ?? '')));
-
-        // Check for duplicate FS No using normalized 8-digit FS No
-        $existingReceipt = null;
-        if (!empty($fsNo)) {
-            $existingReceipt = Receipt::where('fs_no', $fsNo)
-                ->orWhere('fs_no_raw', $fsNo)
-                ->orWhere('fs_no_raw', 'FS' . $fsNo)
-                ->orWhere('parsed_data->fs_no', $fsNo)
-                ->orWhere('parsed_data->fs_no', 'FS' . $fsNo)
-                ->first();
-        }
-
-        $isDuplicate = false;
-        if ($existingReceipt && !$request->boolean('force_save')) {
-            $isDuplicate = true;
+        if ($scan['is_duplicate'] && !$request->boolean('force_save')) {
+            $existing = $scan['existing_receipt'];
             return response()->json([
                 'success'           => true,
                 'is_duplicate'      => true,
-                'duplicate_message' => "Duplicate detected: FS No {$fsNo} already exists in ERP (#{$existingReceipt->receipt_number} - {$existingReceipt->vendor_name}).",
+                'duplicate_message' => "Duplicate detected: FS No {$scan['fs_no']} already exists in ERP (#{$existing['receipt_number']} - {$existing['vendor_name']}).",
                 'existing_receipt'  => [
-                    'id'             => $existingReceipt->id,
-                    'receipt_number' => $existingReceipt->receipt_number,
-                    'vendor_name'    => $existingReceipt->vendor_name,
-                    'fs_no'          => $existingReceipt->fs_no,
-                    'total_amount'   => $existingReceipt->total_amount,
-                    'receipt_date'   => $existingReceipt->receipt_date ? $existingReceipt->receipt_date->format('d/m/Y') : '',
+                    'id'             => $existing['id'],
+                    'receipt_number' => $existing['receipt_number'],
+                    'vendor_name'    => $existing['vendor_name'],
+                    'fs_no'          => $existing['fs_no'],
+                    'total_amount'   => $existing['total_amount'],
+                    'receipt_date'   => $existing['receipt_date'],
                 ],
-                'extracted'         => $extracted,
+                'extracted'         => $scan['extracted'],
                 'file_path'         => $path,
                 'file_url'          => $fileUrl,
-                'engine'            => $engineUsed,
-                'engine_slug'       => $engineSlug,
-                'confidence'        => $confidence,
-                'confidence_score'  => $confidenceScore,
-                'qc_notes'          => $qcNotes,
+                'engine'            => $scan['engine'],
+                'engine_slug'       => $scan['engine_slug'],
+                'confidence'        => $scan['confidence'],
+                'confidence_score'  => $scan['confidence_score'],
+                'qc_notes'          => $scan['qc_notes'],
             ]);
         }
 
-        // Parse Receipt Date
-        $dateStr = $extracted['receipt_date'] ?? now()->format('d/m/Y');
-        $dbDate = $this->parseDateToYmd($dateStr);
+        $receipt = $this->ocrService->saveReceipt(
+            $scan,
+            $path,
+            null,
+            Auth::id() ?: 1,
+            $request->project_id ? (int)$request->project_id : null,
+            $request->category ?: 'material'
+        );
 
-        // Calculate receipt totals from items
-        $itemsData = $extracted['items'] ?? [];
-        if (empty($itemsData)) {
-            $itemsData = [
-                [
-                    'item_description' => $extracted['description'] ?? 'Purchased Goods',
-                    'uom'              => (string)($extracted['uom_id'] ?? '9'),
-                    'qty'              => 1.00,
-                    'unit_price'       => (float)($extracted['subtotal'] ?? 0),
-                    'total_value'      => (float)($extracted['subtotal'] ?? 0),
-                    'vat'              => (float)($extracted['vat_amount'] ?? 0),
-                    'value_after_vat'  => (float)($extracted['total_amount'] ?? 0),
-                ]
-            ];
-        }
-
-        $calcSubtotal = 0.0;
-        $calcVat = 0.0;
-        $calcTotal = 0.0;
-        foreach ($itemsData as $it) {
-            $calcSubtotal += (float)($it['total_value'] ?? 0);
-            $calcVat      += (float)($it['vat'] ?? 0);
-            $calcTotal    += (float)($it['value_after_vat'] ?? 0);
-        }
-
-        if ($calcSubtotal == 0 && !empty($extracted['subtotal'])) {
-            $calcSubtotal = (float)$extracted['subtotal'];
-            $calcVat      = (float)$extracted['vat_amount'];
-            $calcTotal    = (float)$extracted['total_amount'];
-        }
-
-        $needsReview = (!$tinValid || !$fsNoValid || $confidence === 'review' || $confidence === 'low' || $confidenceScore < 75);
-
-        $allItemNames = array_filter(array_map(fn($it) => trim((string)($it['item_description'] ?? ($it['name'] ?? ''))), $itemsData));
-        $materialListSummary = !empty($allItemNames) ? implode(', ', $allItemNames) : ($extracted['description'] ?? 'Materials');
-
-        // Persist Receipt
-        $receipt = Receipt::create([
-            'uploaded_by'  => Auth::id() ?: 1,
-            'project_id'   => $request->project_id,
-            'vendor_name'  => $merchantName ?: 'General Merchant',
-            'vendor_tin'   => $supplierTin,
-            'tin_valid'    => $tinValid,
-            'buyer_tin'    => $extracted['buyer_tin'] ?? '0038480010',
-            'fs_no'        => $fsNo,
-            'fs_no_raw'    => $fsNoRaw,
-            'fs_no_valid'  => $fsNoValid,
-            'mrc_no'       => $mrcNo,
-            'receipt_date' => $dbDate,
-            'subtotal'     => round($calcSubtotal, 2),
-            'vat_amount'   => round($calcVat, 2),
-            'total_amount' => round($calcTotal, 2),
-            'currency'     => 'ETB',
-            'category'     => $request->category ?: 'material',
-            'description'  => $materialListSummary,
-            'file_path'    => $path,
-            'file_type'        => $isPdf ? 'pdf' : 'image',
-            'ocr_raw_text'     => $rawText,
-            'ocr_engine'       => $engineSlug,
-            'confidence'       => $confidence,
-            'confidence_score' => $confidenceScore,
-            'needs_review'     => $needsReview,
-            'parsed_data'      => $extracted,
-            'parse_status'     => 'parsed',
-            'status'           => 'approved',
-            'approved_by'      => Auth::id() ?: 1,
-            'approved_at'      => now(),
-            'notes'            => "Scanned via {$engineUsed} ({$confidenceScore}% confidence). FS: {$fsNo}",
-            'qc_notes'         => $qcNotes,
-        ]);
-
-        // Insert Receipt Items (One row per item)
-        $createdItems = [];
-        $hasFlaggedItem = false;
-
-        foreach ($itemsData as $item) {
-            $qty = (float)($item['qty'] ?? 1);
-            $unitPrice = (float)($item['unit_price'] ?? 0);
-            $totalVal = (float)($item['total_value'] ?? round($qty * $unitPrice, 2));
-            $vatAmt = (float)($item['vat'] ?? round($totalVal * 0.15, 2));
-            $valAfter = (float)($item['value_after_vat'] ?? round($totalVal + $vatAmt, 2));
-
-            $rItem = new ReceiptItem([
-                'receipt_id'       => $receipt->id,
-                'item_description' => $item['item_description'] ?? 'Material',
-                'vat_category'     => $extracted['vat_category'] ?? 'G',
-                'calendar_type'    => $extracted['calendar_type'] ?? 'G',
-                'purchase_type'    => (int)($extracted['purchase_type'] ?? 3),
-                'uom'              => (string)($item['uom'] ?? ($extracted['uom_id'] ?? '9')),
-                'qty'              => $qty,
-                'unit_price'       => $unitPrice,
-                'total_value'      => $totalVal,
-                'vat_amount'       => $vatAmt,
-                'value_after_vat'  => $valAfter,
-            ]);
-
-            // Arithmetic validation
-            $errors = [];
-            if ($qty > 0 && $unitPrice > 0 && abs(round($qty * $unitPrice, 2) - $totalVal) > 0.05) {
-                $errors[] = "Qty x Unit Price (" . round($qty * $unitPrice, 2) . ") ≠ Total Value ($totalVal)";
-            }
-            if ($totalVal > 0 && abs(round($totalVal * 0.15, 2) - $vatAmt) > 0.05) {
-                $errors[] = "Total Value x 15% (" . round($totalVal * 0.15, 2) . ") ≠ VAT ($vatAmt)";
-            }
-            if (($totalVal > 0 || $vatAmt > 0) && abs(round($totalVal + $vatAmt, 2) - $valAfter) > 0.05) {
-                $errors[] = "Total Value + VAT (" . round($totalVal + $vatAmt, 2) . ") ≠ Value After VAT ($valAfter)";
-            }
-            if (empty($supplierTin) || strlen($supplierTin) !== 10) {
-                $errors[] = "Supplier TIN is invalid (expected 10 digits)";
-            }
-            if (empty($fsNo)) {
-                $errors[] = "FS Number is missing";
-            }
-
-            if (!empty($errors)) {
-                $rItem->is_flagged = true;
-                $rItem->flag_reasons = $errors;
-                $hasFlaggedItem = true;
-            }
-
-            $rItem->save();
-            $rItem->setRelation('receipt', $receipt);
-            $createdItems[] = $rItem;
-        }
-
-        if ($hasFlaggedItem) {
-            $receipt->update(['needs_review' => true]);
-        }
+        $createdItems = $receipt->items()->get();
 
         return response()->json([
             'success'          => true,
@@ -961,12 +800,12 @@ class OCRReceiptScannerController extends Controller
             'receipt'          => $receipt,
             'items'            => $createdItems,
             'file_url'         => $fileUrl,
-            'engine'           => $engineUsed,
-            'engine_slug'      => $engineSlug,
-            'confidence'       => $confidence,
-            'confidence_score' => $confidenceScore,
-            'qc_notes'         => $qcNotes,
-            'message'          => "Receipt {$receipt->receipt_number} scanned via {$engineUsed} (QC Score: {$confidenceScore}%) and saved successfully (" . count($createdItems) . " row" . (count($createdItems) > 1 ? 's' : '') . ").",
+            'engine'           => $scan['engine'],
+            'engine_slug'      => $scan['engine_slug'],
+            'confidence'       => $scan['confidence'],
+            'confidence_score' => $scan['confidence_score'],
+            'qc_notes'         => $scan['qc_notes'],
+            'message'          => "Receipt {$receipt->receipt_number} scanned via {$scan['engine']} (QC Score: {$scan['confidence_score']}%) and saved successfully (" . count($createdItems) . " row" . (count($createdItems) > 1 ? 's' : '') . ").",
         ]);
     }
 
@@ -3204,132 +3043,6 @@ PROMPT;
      */
     public function executeMultiEnginePipeline(string $base64, string $mimeType, string $ext, ?string $realPath = null): array
     {
-        $geminiKey     = SystemSetting::get('gemini_api_key', env('GEMINI_API_KEY'));
-        $ocrSpaceKey   = SystemSetting::get('ocr_space_api_key', env('OCR_SPACE_API_KEY', 'helloworld'));
-        $nvidiaKey     = SystemSetting::get('nvidia_api_key', env('NVIDIA_API_KEY'));
-        $azureKey      = SystemSetting::get('azure_vision_key', env('AZURE_VISION_KEY'));
-        $azureEndpoint = SystemSetting::get('azure_vision_endpoint', env('AZURE_VISION_ENDPOINT'));
-
-        $engineResults = [];
-        $rawTexts      = [];
-
-        // Engine 1: Google Gemini Multimodal AI
-        if (!empty($geminiKey)) {
-            $geminiRes = $this->scanWithGemini($geminiKey, $base64, $mimeType);
-            if ($geminiRes && !empty($geminiRes['merchant_name'])) {
-                $engineResults['gemini'] = $geminiRes;
-                if (!empty($geminiRes['raw_text'])) {
-                    $rawTexts[] = "[Gemini OCR]\n" . $geminiRes['raw_text'];
-                }
-            }
-        }
-
-        // Engine 2: NVIDIA Vision NIM API
-        if (!empty($nvidiaKey)) {
-            $nvidiaRes = $this->scanWithNvidia($nvidiaKey, $base64, $mimeType);
-            if ($nvidiaRes && !empty($nvidiaRes['merchant_name'])) {
-                $engineResults['nvidia'] = $nvidiaRes;
-                if (!empty($nvidiaRes['raw_text'])) {
-                    $rawTexts[] = "[NVIDIA OCR]\n" . $nvidiaRes['raw_text'];
-                }
-            }
-        }
-
-        // Engine 3: Azure Computer Vision Read API
-        if (!empty($azureKey) && !empty($azureEndpoint)) {
-            $azureRes = $this->scanWithAzure($azureKey, $azureEndpoint, $base64, $mimeType);
-            if ($azureRes && !empty($azureRes['merchant_name'])) {
-                $engineResults['azure'] = $azureRes;
-                if (!empty($azureRes['raw_text'])) {
-                    $rawTexts[] = "[Azure OCR]\n" . $azureRes['raw_text'];
-                }
-            }
-        }
-
-        // Engine 4: OCR.Space API (run if fewer than 2 AI engines succeeded or as fallback)
-        if (count($engineResults) < 2 && !empty($ocrSpaceKey)) {
-            $ocrRes = $this->scanWithOcrSpace($ocrSpaceKey, $base64, $ext, $realPath ?: '');
-            if ($ocrRes && !empty($ocrRes['merchant_name'])) {
-                $engineResults['ocr_space'] = $ocrRes;
-                if (!empty($ocrRes['raw_text'])) {
-                    $rawTexts[] = "[OCR.Space]\n" . $ocrRes['raw_text'];
-                }
-            }
-        }
-
-        $combinedRawText = implode("\n\n---\n\n", $rawTexts);
-
-        // Quality Control Reconciliation
-        if (!empty($engineResults)) {
-            if (count($engineResults) > 1 && !empty($geminiKey)) {
-                $extracted = $this->callQcAgent($geminiKey, $engineResults);
-            } else {
-                $extracted = $this->reconcileWithDeterministicQc($engineResults);
-            }
-        } else {
-            // All engines failed: create clean manual entry skeleton
-            $extracted = [
-                'merchant_name'    => '',
-                'supplier_tin'     => '',
-                'buyer_tin'        => '0038480010',
-                'receipt_date'     => now()->format('d/m/Y'),
-                'machine_no'       => '',
-                'fs_no'            => '',
-                'items'            => [
-                    [
-                        'item_description' => 'Unreadable receipt item - please enter details',
-                        'uom'              => '9',
-                        'qty'              => 1.00,
-                        'unit_price'       => 0.00,
-                        'total_value'      => 0.00,
-                        'vat'              => 0.00,
-                        'value_after_vat'  => 0.00,
-                    ]
-                ],
-                'vat_category'     => 'G',
-                'calendar_type'    => 'G',
-                'purchase_type'    => 3,
-                'subtotal'         => 0.00,
-                'vat_amount'       => 0.00,
-                'total_amount'     => 0.00,
-                'raw_text'         => 'No text could be extracted by OCR engines.',
-                'confidence_score' => 20,
-                'qc_notes'         => 'All OCR engines failed to extract readable text. Manual input required.',
-                'provenance'       => 'None (Manual Entry)',
-            ];
-        }
-
-        if (empty($extracted['raw_text']) && !empty($combinedRawText)) {
-            $extracted['raw_text'] = $combinedRawText;
-        }
-
-        $activeEngines = array_keys($engineResults);
-        $engineLabel = !empty($activeEngines) ? implode(' + ', array_map(function($e) {
-            return match($e) {
-                'gemini'    => 'Gemini AI',
-                'nvidia'    => 'NVIDIA Vision',
-                'azure'     => 'Azure Read',
-                'ocr_space' => 'OCR.Space',
-                default     => ucfirst($e)
-            };
-        }, $activeEngines)) : 'Manual';
-
-        if (count($activeEngines) > 1) {
-            $engineLabel .= ' + QC Agent';
-        }
-
-        $score = (int)($extracted['confidence_score'] ?? 85);
-        $confidenceStr = ($score >= 85) ? 'high' : (($score >= 70) ? 'review' : 'low');
-
-        return [
-            'extracted'        => $extracted,
-            'engines_used'     => $activeEngines,
-            'engine_label'     => $engineLabel,
-            'engine_slug'      => !empty($activeEngines) ? implode(',', $activeEngines) : 'manual',
-            'confidence'       => $confidenceStr,
-            'confidence_score' => $score,
-            'qc_notes'         => $extracted['qc_notes'] ?? 'Verified by QC Agent',
-            'raw_text'         => $extracted['raw_text'] ?? $combinedRawText,
-        ];
+        return $this->ocrService->executeMultiEnginePipeline($base64, $mimeType, $ext, $realPath);
     }
 }

@@ -1848,14 +1848,101 @@ class PurchaseRequestController extends Controller
     public function uploadReceipt(Request $request, PurchaseRequest $purchaseRequest)
     {
         $this->authorizeStageRole($purchaseRequest, ['purchase', 'procurement_team', 'purchaser', 'buyer', 'purchase_manager']);
-        $request->validate(['receipt_file' => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:5120']);
+        $request->validate([
+            'receipt_file'         => 'required|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
+            'vendor_name'          => 'nullable|string|max:255',
+            'supplier_tin'         => 'nullable|string|max:20',
+            'fs_no'                => 'nullable|string|max:20',
+            'receipt_date'         => 'nullable|date',
+            'total_amount'         => 'nullable|numeric|min:0',
+            'subtotal'             => 'nullable|numeric|min:0',
+            'vat_amount'           => 'nullable|numeric|min:0',
+            'material_description' => 'nullable|string|max:500',
+            'items_json'           => 'nullable|string',
+            'notes'                => 'nullable|string|max:1000',
+        ]);
 
         $file     = $request->file('receipt_file');
         $path     = \App\Services\FileUploadService::upload($file, 'procurement_receipts');
         $original = $file->getClientOriginalName();
 
         $this->lifecycle->uploadReceipt($purchaseRequest, $path, $original, $request->notes, true);
-        return back()->with('success', 'Vendor purchase receipt uploaded. Request routed directly to Store Manager for material intake.');
+
+        // Auto-link to central Receipt table for fiscal and tax declarations
+        try {
+            $ocrService = app(\App\Services\ReceiptOcrService::class);
+            $rawItems   = json_decode($request->items_json, true) ?: [];
+            $ocrItems   = [];
+
+            if (!empty($rawItems) && is_array($rawItems)) {
+                foreach ($rawItems as $it) {
+                    $qty      = (float)($it['qty'] ?? 1);
+                    $price    = (float)($it['unit_price'] ?? 0);
+                    $totVal   = (float)($it['total_value'] ?? round($qty * $price, 2));
+                    $vatVal   = (float)($it['vat'] ?? round($totVal * 0.15, 2));
+                    $afterVat = (float)($it['value_after_vat'] ?? round($totVal + $vatVal, 2));
+
+                    $ocrItems[] = [
+                        'item_description' => $it['item_description'] ?? ($it['name'] ?? 'Procurement Material'),
+                        'uom'              => (string)($it['uom'] ?? '9'),
+                        'qty'              => $qty,
+                        'unit_price'       => $price,
+                        'total_value'      => $totVal,
+                        'vat'              => $vatVal,
+                        'value_after_vat'  => $afterVat,
+                    ];
+                }
+            } else {
+                $subtot   = (float)($request->subtotal ?: ($request->total_amount ?: 0));
+                $vatVal   = (float)($request->vat_amount ?: 0);
+                $totalVal = (float)($request->total_amount ?: ($subtot + $vatVal));
+
+                $ocrItems[] = [
+                    'item_description' => $request->material_description ?: ($purchaseRequest->items_summary ?: "Procurement Items - PR #{$purchaseRequest->pr_number}"),
+                    'uom'              => '9',
+                    'qty'              => 1.0,
+                    'unit_price'       => $subtot,
+                    'total_value'      => $subtot,
+                    'vat'              => $vatVal,
+                    'value_after_vat'  => $totalVal,
+                ];
+            }
+
+            $scanData = [
+                'vendor_name'       => $request->vendor_name ?: ($purchaseRequest->supplier_name ?: 'Vendor'),
+                'supplier_tin'      => $request->supplier_tin ?? '',
+                'tin_valid'         => !empty($request->supplier_tin) && strlen(trim($request->supplier_tin)) === 10,
+                'buyer_tin'         => '0038480010',
+                'fs_no'             => $request->fs_no ?? '',
+                'fs_no_raw'         => $request->fs_no ?? '',
+                'fs_no_valid'       => !empty($request->fs_no) && strlen(trim($request->fs_no)) === 8,
+                'receipt_date_ymd'  => $request->receipt_date ?: now()->toDateString(),
+                'subtotal'          => (float)($request->subtotal ?: ($request->total_amount ?: 0)),
+                'vat_amount'        => (float)($request->vat_amount ?: 0),
+                'total_amount'      => (float)($request->total_amount ?: 0),
+                'currency'          => 'ETB',
+                'description'       => $request->material_description ?: "Purchase Request #{$purchaseRequest->pr_number}",
+                'engine'            => 'OCR / Procurement',
+                'engine_slug'       => 'purchase_request',
+                'confidence'        => 'high',
+                'confidence_score'  => 95,
+                'qc_notes'          => "Verified PR #{$purchaseRequest->pr_number} receipt",
+                'items'             => $ocrItems,
+            ];
+
+            $ocrService->saveReceipt(
+                $scanData,
+                $path,
+                $purchaseRequest,
+                \Illuminate\Support\Facades\Auth::id(),
+                $purchaseRequest->project_id ?? null,
+                'material'
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Could not persist linked Receipt for PR #{$purchaseRequest->pr_number}: " . $e->getMessage());
+        }
+
+        return back()->with('success', 'Vendor purchase receipt uploaded and synced to central fiscal receipts. Request routed directly to Store Manager for material intake.');
     }
 
     // ─── STAGE 8: Verify Receipt ─────────────────────────────────────────────

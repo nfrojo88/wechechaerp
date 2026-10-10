@@ -73,4 +73,9 @@ class CreditStorePayment extends Model
     {
         return $this->belongsTo(User::class, 'recorded_by');
     }
+
+    public function receiptRecords(): \Illuminate\Database\Eloquent\Relations\MorphMany
+    {
+        return $this->morphMany(Receipt::class, 'purchasable');
+    }
 }

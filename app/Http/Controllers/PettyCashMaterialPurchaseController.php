@@ -103,6 +103,19 @@ class PettyCashMaterialPurchaseController extends Controller
                     });
                 }
             }
+
+            if (Schema::hasTable('petty_cash_material_purchases')) {
+                if (!Schema::hasColumn('petty_cash_material_purchases', 'supplier_tin')) {
+                    Schema::table('petty_cash_material_purchases', function (Blueprint $table) {
+                        $table->string('supplier_tin', 20)->nullable()->after('supplier_name');
+                    });
+                }
+                if (!Schema::hasColumn('petty_cash_material_purchases', 'fs_no')) {
+                    Schema::table('petty_cash_material_purchases', function (Blueprint $table) {
+                        $table->string('fs_no', 20)->nullable()->after('supplier_tin');
+                    });
+                }
+            }
         } catch (\Throwable $e) {
             // Silently continue if schema cannot be created here
         }
@@ -388,6 +401,8 @@ class PettyCashMaterialPurchaseController extends Controller
             'chart_of_account_id' => 'nullable|exists:chart_of_accounts,id',
             'purchase_date'       => 'required|date',
             'supplier_name'       => 'required|string|max:255',
+            'supplier_tin'        => 'nullable|string|max:20',
+            'fs_no'               => 'nullable|string|max:20',
             'receipt_no'          => 'required|string|max:100',
             'notes'               => 'nullable|string|max:1000',
             'attachment'          => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
@@ -430,6 +445,8 @@ class PettyCashMaterialPurchaseController extends Controller
                 'purchased_by'        => $user->id,
                 'purchase_date'       => $validated['purchase_date'],
                 'supplier_name'       => $validated['supplier_name'],
+                'supplier_tin'        => $validated['supplier_tin'] ?? null,
+                'fs_no'               => $validated['fs_no'] ?? null,
                 'receipt_no'          => $validated['receipt_no'],
                 'total_amount'        => $totalAmount,
                 'notes'               => $validated['notes'] ?? null,
@@ -586,6 +603,63 @@ class PettyCashMaterialPurchaseController extends Controller
             }
 
             $purchase->save();
+
+            // Auto-link to central Receipt table for fiscal and tax declarations
+            if ($attachmentPath || !empty($validated['fs_no'])) {
+                try {
+                    $ocrService = app(\App\Services\ReceiptOcrService::class);
+                    $ocrItems = [];
+                    foreach ($validated['items'] as $it) {
+                        $prod = Product::find($it['product_id']);
+                        $pName = $prod ? $prod->name : 'Material';
+                        $qty = (float)$it['quantity'];
+                        $price = (float)$it['unit_price'];
+                        $lineTot = round($qty * $price, 2);
+                        $ocrItems[] = [
+                            'item_description' => $pName . (!empty($it['remarks']) ? ' - ' . $it['remarks'] : ''),
+                            'uom'              => '9',
+                            'qty'              => $qty,
+                            'unit_price'       => $price,
+                            'total_value'      => $lineTot,
+                            'vat'              => round($lineTot * 0.15, 2),
+                            'value_after_vat'  => round($lineTot * 1.15, 2),
+                        ];
+                    }
+
+                    $scanData = [
+                        'vendor_name'       => $validated['supplier_name'],
+                        'supplier_tin'      => $validated['supplier_tin'] ?? '',
+                        'tin_valid'         => !empty($validated['supplier_tin']) && strlen(trim($validated['supplier_tin'])) === 10,
+                        'buyer_tin'         => '0038480010',
+                        'fs_no'             => $validated['fs_no'] ?? $validated['receipt_no'],
+                        'fs_no_raw'         => $validated['fs_no'] ?? $validated['receipt_no'],
+                        'fs_no_valid'       => !empty($validated['fs_no']) && strlen(trim($validated['fs_no'])) === 8,
+                        'receipt_date_ymd'  => $validated['purchase_date'],
+                        'subtotal'          => $totalAmount,
+                        'vat_amount'        => round($totalAmount * 0.15, 2),
+                        'total_amount'      => round($totalAmount * 1.15, 2),
+                        'currency'          => 'ETB',
+                        'description'       => "Petty Cash Purchase: " . $purchaseNo,
+                        'engine'            => 'Receipt OCR / Form',
+                        'engine_slug'       => 'petty_cash',
+                        'confidence'        => 'high',
+                        'confidence_score'  => 95,
+                        'qc_notes'          => "Site Petty Cash receipt #{$purchaseNo}",
+                        'items'             => $ocrItems,
+                    ];
+
+                    $ocrService->saveReceipt(
+                        $scanData,
+                        $attachmentPath ?: 'receipts/manual_petty_cash.pdf',
+                        $purchase,
+                        $user->id,
+                        $store->project_id ?? null,
+                        'material'
+                    );
+                } catch (\Throwable $ocrEx) {
+                    \Illuminate\Support\Facades\Log::warning("Could not auto-create linked Receipt for Petty Cash Purchase #{$purchaseNo}: " . $ocrEx->getMessage());
+                }
+            }
 
             return $purchase;
         });

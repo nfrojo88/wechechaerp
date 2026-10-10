@@ -292,6 +292,8 @@ class CreditStoreController extends Controller
             'no_receipt'                 => 'nullable|boolean',
             'no_receipt_reason'          => 'nullable|string|max:255',
             'reference_no'               => 'nullable|string|max:150',
+            'supplier_tin'               => 'nullable|string|max:20',
+            'fs_no'                      => 'nullable|string|max:20',
             'receipt_file'               => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
             'notes'                      => 'nullable|string',
         ]);
@@ -421,6 +423,56 @@ class CreditStoreController extends Controller
             }
 
             $payment = CreditStorePayment::create($paymentData);
+
+            // Auto-link to central Receipt table for fiscal tracking and duplicate detection
+            if ($filePath) {
+                try {
+                    $ocrService = app(\App\Services\ReceiptOcrService::class);
+                    $fsNo = $request->fs_no ?: (preg_match('/(?:FS-?|fs-?)([0-9]{8})/i', $request->reference_no ?? '', $m) ? $m[1] : null);
+                    $scanData = [
+                        'vendor_name'       => $ledger->vendor_name ?: 'Credit Vendor',
+                        'supplier_tin'      => $request->supplier_tin ?? '',
+                        'tin_valid'         => !empty($request->supplier_tin) && strlen(trim($request->supplier_tin)) === 10,
+                        'buyer_tin'         => '0038480010',
+                        'fs_no'             => $fsNo ?: ($request->reference_no ?: 'CR-PAY'),
+                        'fs_no_raw'         => $fsNo ?: ($request->reference_no ?: 'CR-PAY'),
+                        'fs_no_valid'       => !empty($fsNo) && strlen(trim($fsNo)) === 8,
+                        'receipt_date_ymd'  => $request->payment_date ?: now()->toDateString(),
+                        'subtotal'          => round((float)($gross ?: $settledCreditAmount), 2),
+                        'vat_amount'        => round((float)($vatAmount ?: 0), 2),
+                        'total_amount'      => round((float)($disbursedAmount ?: $settledCreditAmount), 2),
+                        'currency'          => 'ETB',
+                        'description'       => "Credit Payment for {$ledger->vendor_name} (" . ($ledger->item_description ?: 'Ledger #' . $ledger->id) . ")",
+                        'engine'            => 'Credit Payment OCR',
+                        'engine_slug'       => 'credit_payment',
+                        'confidence'        => 'high',
+                        'confidence_score'  => 95,
+                        'qc_notes'          => "Credit store payment receipt #{$payment->id}",
+                        'items'             => [
+                            [
+                                'item_description' => $ledger->item_description ?: 'Credit settlement',
+                                'uom'              => '9',
+                                'qty'              => 1.0,
+                                'unit_price'       => (float)$settledCreditAmount,
+                                'total_value'      => (float)$settledCreditAmount,
+                                'vat'              => (float)($vatAmount ?: 0),
+                                'value_after_vat'  => (float)($settledCreditAmount + ($vatAmount ?: 0)),
+                            ]
+                        ],
+                    ];
+
+                    $ocrService->saveReceipt(
+                        $scanData,
+                        $filePath,
+                        $payment,
+                        Auth::id(),
+                        $ledger->project_id ?? null,
+                        'credit_settlement'
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning("Could not persist linked Receipt for Credit Payment #{$payment->id}: " . $e->getMessage());
+                }
+            }
 
             // 2. Create Journal Entry
             $creditCoaId = $ledger->coa_account_id;
@@ -593,6 +645,8 @@ class CreditStoreController extends Controller
             'no_receipt'          => 'nullable|boolean',
             'no_receipt_reason'   => 'nullable|string|max:255',
             'reference_no'        => 'nullable|string|max:150',
+            'supplier_tin'        => 'nullable|string|max:20',
+            'fs_no'               => 'nullable|string|max:20',
             'receipt_file'        => 'nullable|file|mimes:pdf,jpg,jpeg,png,webp|max:10240',
             'notes'               => 'nullable|string',
         ]);
@@ -638,7 +692,9 @@ class CreditStoreController extends Controller
         $totalPaidSum = 0;
         $processedCount = 0;
 
-        DB::transaction(function () use ($request, $filePath, $originalFilename, $bankAccountId, $fundingCoaId, $baseNotes, &$totalPaidSum, &$processedCount) {
+        $firstPayment = null;
+
+        DB::transaction(function () use ($request, $filePath, $originalFilename, $bankAccountId, $fundingCoaId, $baseNotes, &$totalPaidSum, &$processedCount, &$firstPayment) {
             foreach ($request->selected_ids as $ledgerId) {
                 $ledger = CreditStoreLedger::lockForUpdate()->find($ledgerId);
                 if (!$ledger) {
@@ -671,6 +727,10 @@ class CreditStoreController extends Controller
                     'notes'                  => $baseNotes,
                     'recorded_by'            => Auth::id(),
                 ]);
+
+                if (!$firstPayment) {
+                    $firstPayment = $payment;
+                }
 
                 // 2. Double-entry Journal Entry
                 $creditCoaId = $ledger->coa_account_id;
@@ -753,6 +813,56 @@ class CreditStoreController extends Controller
                 $processedCount++;
             }
         });
+
+        // Auto-link shared receipt to central Receipt table for fiscal tracking and duplicate detection
+        if ($filePath && $firstPayment) {
+            try {
+                $ocrService = app(\App\Services\ReceiptOcrService::class);
+                $fsNo = $request->fs_no ?: (preg_match('/(?:FS-?|fs-?)([0-9]{8})/i', $request->reference_no ?? '', $m) ? $m[1] : null);
+                $scanData = [
+                    'vendor_name'       => 'Batch Credit Settlement',
+                    'supplier_tin'      => $request->supplier_tin ?? '',
+                    'tin_valid'         => !empty($request->supplier_tin) && strlen(trim($request->supplier_tin)) === 10,
+                    'buyer_tin'         => '0038480010',
+                    'fs_no'             => $fsNo ?: ($request->reference_no ?: 'BATCH-CR'),
+                    'fs_no_raw'         => $fsNo ?: ($request->reference_no ?: 'BATCH-CR'),
+                    'fs_no_valid'       => !empty($fsNo) && strlen(trim($fsNo)) === 8,
+                    'receipt_date_ymd'  => $request->payment_date ?: now()->toDateString(),
+                    'subtotal'          => round((float)$totalPaidSum, 2),
+                    'vat_amount'        => 0.00,
+                    'total_amount'      => round((float)$totalPaidSum, 2),
+                    'currency'          => 'ETB',
+                    'description'       => "Batch credit settlement for {$processedCount} purchases",
+                    'engine'            => 'Batch OCR',
+                    'engine_slug'       => 'credit_batch',
+                    'confidence'        => 'high',
+                    'confidence_score'  => 95,
+                    'qc_notes'          => "Batch settlement shared receipt ({$processedCount} purchases)",
+                    'items'             => [
+                        [
+                            'item_description' => "Batch credit settlement ({$processedCount} items)",
+                            'uom'              => '9',
+                            'qty'              => 1.0,
+                            'unit_price'       => (float)$totalPaidSum,
+                            'total_value'      => (float)$totalPaidSum,
+                            'vat'              => 0.0,
+                            'value_after_vat'  => (float)$totalPaidSum,
+                        ]
+                    ],
+                ];
+
+                $ocrService->saveReceipt(
+                    $scanData,
+                    $filePath,
+                    $firstPayment,
+                    Auth::id(),
+                    null,
+                    'credit_settlement'
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("Could not persist linked Receipt for Batch Credit Payment: " . $e->getMessage());
+            }
+        }
 
         $receiptText = $isNoReceipt ? "without receipt" : "with shared receipt attached";
         return redirect()->route('finance.credit-store.index')

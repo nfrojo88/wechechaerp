@@ -678,7 +678,10 @@
                                             </div>
                                             <div class="card-body p-2.5">
                                                 <div id="singleWithReceiptDiv">
-                                                    <input type="file" name="receipt_file" class="form-control form-control-sm bg-white" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                                    <input type="file" name="receipt_file" id="creditSingleReceiptInput" class="form-control form-control-sm bg-white" accept=".pdf,.jpg,.jpeg,.png,.webp">
+                                                    <div id="creditSingleOcrFeedbackArea"></div>
+                                                    <input type="hidden" name="supplier_tin" id="creditSingleSupplierTin">
+                                                    <input type="hidden" name="fs_no" id="creditSingleFsNo">
                                                     <div class="form-text small text-muted" style="font-size:0.72rem;">Attach bank slip, cheque scan, or signed voucher.</div>
                                                 </div>
                                                 <div id="singleWithoutReceiptDiv" class="p-2 rounded-2 border border-warning bg-warning bg-opacity-10 d-none">
@@ -853,14 +856,46 @@
                                 }
                             }
 
-                            document.addEventListener('DOMContentLoaded', () => {
-                                const selSingle = document.getElementById('singlePaymentAccountSelect');
-                                if (selSingle) onSingleAccountChange(selSingle);
-                                const selAssign = document.getElementById('assignAccountSelect');
-                                if (selAssign) onAssignAccountChange(selAssign);
-                                recalculateQuickPayTax();
-                            });
+                                document.addEventListener('DOMContentLoaded', () => {
+                                    const selSingle = document.getElementById('singlePaymentAccountSelect');
+                                    if (selSingle) onSingleAccountChange(selSingle);
+                                    const selAssign = document.getElementById('assignAccountSelect');
+                                    if (selAssign) onAssignAccountChange(selAssign);
+                                    recalculateQuickPayTax();
+
+                                    // Initialize AI Receipt OCR Scanner
+                                    if (window.ReceiptOcrScanner) {
+                                        ReceiptOcrScanner.init({
+                                            fileInput: '#creditSingleReceiptInput',
+                                            form: 'form[action*="record-payment"]',
+                                            submitBtn: '#singleSubmitBtn',
+                                            statusContainer: '#creditSingleOcrFeedbackArea',
+                                            fields: {
+                                                supplier_tin: '#creditSingleSupplierTin',
+                                                fs_no: '#creditSingleFsNo',
+                                                receipt_date: 'input[name="payment_date"]',
+                                                notes: 'textarea[name="notes"]'
+                                            },
+                                            onScanComplete: function(scanData) {
+                                                const amtInput = document.getElementById('quickPayAmountInput');
+                                                if (amtInput && scanData.data && scanData.data.total_amount) {
+                                                    const maxPayable = parseFloat(amtInput.getAttribute('max')) || Infinity;
+                                                    const scannedAmt = parseFloat(scanData.data.total_amount) || 0;
+                                                    if (scannedAmt > 0 && scannedAmt <= maxPayable) {
+                                                        amtInput.value = scannedAmt.toFixed(2);
+                                                        recalculateQuickPayTax();
+                                                    }
+                                                }
+                                                const refInput = document.querySelector('form[action*="record-payment"] input[name="reference_no"]');
+                                                if (refInput && !refInput.value && scanData.data && scanData.data.fs_no) {
+                                                    refInput.value = 'FS-' + scanData.data.fs_no;
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
                         </script>
+                        <script src="{{ asset('js/receipt-ocr-scanner.js') }}"></script>
                     @else
                         <div class="text-center py-4">
                             <div class="text-success mb-2">
