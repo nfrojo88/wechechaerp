@@ -185,6 +185,101 @@ html, body {
   box-shadow: 0 4px 14px rgba(245,158,11,.35);
 }
 .sidebar-nav-link.active i { opacity: 1; }
+
+/* ─────────────────────────────────────────
+   Global Admin Sidebar Accordion / Dropdown
+   ───────────────────────────────────────── */
+.sidebar-nav-item.group-item {
+  padding: 2px 8px;
+}
+.sidebar-group-toggle {
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+.sidebar-group-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.sidebar-group-toggle:not(.collapsed) {
+  color: #fff !important;
+  background: rgba(59, 130, 246, 0.18) !important;
+}
+.sidebar-chevron {
+  font-size: 11px;
+  transition: transform 0.25s ease;
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+.sidebar-group-toggle:not(.collapsed) .sidebar-chevron {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+.sidebar-group-toggle .group-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.sidebar-group-toggle .group-icon i {
+  font-size: 13px;
+  width: auto;
+  margin: 0;
+}
+.sidebar-sub-nav {
+  list-style: none;
+  padding: 4px 0 6px 0;
+  margin: 2px 6px 6px 18px;
+  background: rgba(0, 0, 0, 0.22);
+  border-left: 2px solid rgba(59, 130, 246, 0.4);
+  border-radius: 0 0 8px 8px;
+}
+.sidebar-sub-nav li {
+  padding: 1px 6px;
+}
+.sidebar-sub-nav .sidebar-nav-link {
+  font-size: 12.5px;
+  padding: 6px 12px;
+  margin: 1px 0;
+  border-radius: 6px;
+  gap: 10px;
+  color: #94a3b8;
+  white-space: normal;
+  text-decoration: none;
+}
+.sidebar-sub-nav .sidebar-nav-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.sidebar-sub-nav .sidebar-nav-link.active {
+  background: rgba(59, 130, 246, 0.85) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+  font-weight: 600;
+}
+.sidebar-section-divider {
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin: 0.35rem 0.5rem;
+}
+.sidebar.collapsed .sidebar-chevron {
+  display: none;
+}
+.sidebar.collapsed .sidebar-sub-nav {
+  display: none !important;
+}
 .sidebar-footer {
   border-top: 1px solid rgba(255,255,255,.08);
   padding: 14px 16px;
@@ -1191,11 +1286,53 @@ body.sidebar-open { overflow-y: hidden !important; }
         /* Close on backdrop click */
         $('#sidebarBackdrop').on('click', closeMobileSidebar);
 
-        /* Close sidebar on navigation (mobile link click) */
-        $('#sidebar .sidebar-nav-link').on('click', function () {
+        /* Close sidebar on navigation (mobile link click - exclude group toggles) */
+        $('#sidebar .sidebar-nav-link:not(.sidebar-group-toggle)').on('click', function () {
             if (window.innerWidth <= 768) {
                 closeMobileSidebar();
             }
+        });
+
+        /* ── Global Admin Sidebar Accordion / Dropdown Toggle ── */
+        $(document).on('click', '#sidebar .sidebar-group-toggle', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            var targetSelector = $(this).attr('data-bs-target') || $(this).attr('href');
+            if (!targetSelector || targetSelector === '#' || !targetSelector.startsWith('#')) return;
+
+            var $target = $(targetSelector);
+            if (!$target.length) return;
+
+            // If desktop sidebar was collapsed, expand it so submenu is visible
+            if ($('#sidebar').hasClass('collapsed')) {
+                $('#sidebar').removeClass('collapsed');
+            }
+
+            if (window.bootstrap && window.bootstrap.Collapse) {
+                var bsCollapse = window.bootstrap.Collapse.getOrCreateInstance($target[0], { toggle: false });
+                bsCollapse.toggle();
+            } else {
+                $target.toggleClass('show');
+                var isExpanded = $target.hasClass('show');
+                $(this).toggleClass('collapsed', !isExpanded);
+                $(this).attr('aria-expanded', isExpanded ? 'true' : 'false');
+            }
+        });
+
+        /* Sync toggle states with Bootstrap collapse events */
+        $(document).on('show.bs.collapse', '#sidebar .collapse', function () {
+            var id = $(this).attr('id');
+            $('#sidebar [data-bs-target="#' + id + '"], #sidebar [href="#' + id + '"]')
+                .removeClass('collapsed')
+                .attr('aria-expanded', 'true');
+        });
+
+        $(document).on('hide.bs.collapse', '#sidebar .collapse', function () {
+            var id = $(this).attr('id');
+            $('#sidebar [data-bs-target="#' + id + '"], #sidebar [href="#' + id + '"]')
+                .addClass('collapsed')
+                .attr('aria-expanded', 'false');
         });
 
         /* Close sidebar on Escape key */

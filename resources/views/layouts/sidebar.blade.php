@@ -129,8 +129,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $planningActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupPlanning" role="button"
-       aria-expanded="{{ $planningActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupPlanning" href="#adminGroupPlanning" role="button"
+       aria-expanded="{{ $planningActive ? 'true' : 'false' }}" aria-controls="adminGroupPlanning">
         <span class="group-icon" style="background:rgba(99,102,241,0.2);">
             <i class="fa-solid fa-diagram-project" style="color:#818cf8;"></i>
         </span>
@@ -167,8 +167,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $storeActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupStore" role="button"
-       aria-expanded="{{ $storeActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupStore" href="#adminGroupStore" role="button"
+       aria-expanded="{{ $storeActive ? 'true' : 'false' }}" aria-controls="adminGroupStore">
         <span class="group-icon" style="background:rgba(14,165,233,0.2);">
             <i class="fa-solid fa-warehouse" style="color:#38bdf8;"></i>
         </span>
@@ -208,8 +208,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $procActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupProcurement" role="button"
-       aria-expanded="{{ $procActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupProcurement" href="#adminGroupProcurement" role="button"
+       aria-expanded="{{ $procActive ? 'true' : 'false' }}" aria-controls="adminGroupProcurement">
         <span class="group-icon" style="background:rgba(245,158,11,0.2);">
             <i class="fa-solid fa-boxes-packing" style="color:#fbbf24;"></i>
         </span>
@@ -242,8 +242,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $financeActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupFinance" role="button"
-       aria-expanded="{{ $financeActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupFinance" href="#adminGroupFinance" role="button"
+       aria-expanded="{{ $financeActive ? 'true' : 'false' }}" aria-controls="adminGroupFinance">
         <span class="group-icon" style="background:rgba(34,197,94,0.2);">
             <i class="fa-solid fa-coins" style="color:#4ade80;"></i>
         </span>
@@ -294,8 +294,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $hrActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupHR" role="button"
-       aria-expanded="{{ $hrActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupHR" href="#adminGroupHR" role="button"
+       aria-expanded="{{ $hrActive ? 'true' : 'false' }}" aria-controls="adminGroupHR">
         <span class="group-icon" style="background:rgba(168,85,247,0.2);">
             <i class="fa-solid fa-users-gear" style="color:#c084fc;"></i>
         </span>
@@ -339,8 +339,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $contractActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupContracts" role="button"
-       aria-expanded="{{ $contractActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupContracts" href="#adminGroupContracts" role="button"
+       aria-expanded="{{ $contractActive ? 'true' : 'false' }}" aria-controls="adminGroupContracts">
         <span class="group-icon" style="background:rgba(251,191,36,0.2);">
             <i class="fa-solid fa-file-contract" style="color:#fbbf24;"></i>
         </span>
@@ -364,8 +364,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $marketingActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupMarketing" role="button"
-       aria-expanded="{{ $marketingActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupMarketing" href="#adminGroupMarketing" role="button"
+       aria-expanded="{{ $marketingActive ? 'true' : 'false' }}" aria-controls="adminGroupMarketing">
         <span class="group-icon" style="background:rgba(239,68,68,0.2);">
             <i class="fa-solid fa-bullhorn" style="color:#f87171;"></i>
         </span>
@@ -390,8 +390,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $letterActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupLetters" role="button"
-       aria-expanded="{{ $letterActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupLetters" href="#adminGroupLetters" role="button"
+       aria-expanded="{{ $letterActive ? 'true' : 'false' }}" aria-controls="adminGroupLetters">
         <span class="group-icon" style="background:rgba(14,165,233,0.15);">
             <i class="fa-solid fa-envelope-open-text" style="color:#38bdf8;"></i>
         </span>
@@ -423,8 +423,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $gsActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupGS" role="button"
-       aria-expanded="{{ $gsActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupGS" href="#adminGroupGS" role="button"
+       aria-expanded="{{ $gsActive ? 'true' : 'false' }}" aria-controls="adminGroupGS">
         <span class="group-icon" style="background:rgba(251,146,60,0.2);">
             <i class="fa-solid fa-screwdriver-wrench" style="color:#fb923c;"></i>
         </span>
@@ -457,7 +457,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $commActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupComm" role="button" aria-expanded="{{ $commActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupComm" href="#adminGroupComm" role="button"
+       aria-expanded="{{ $commActive ? 'true' : 'false' }}" aria-controls="adminGroupComm">
         <span class="group-icon" style="background:rgba(16,185,129,0.2);">
             <i class="fa-solid fa-envelope" style="color:#34d399;"></i>
         </span>
@@ -485,8 +486,8 @@
 @endphp
 <li class="sidebar-nav-item group-item">
     <a class="sidebar-nav-link sidebar-group-toggle {{ $adminSysActive ? '' : 'collapsed' }}"
-       data-bs-toggle="collapse" href="#adminGroupSystem" role="button"
-       aria-expanded="{{ $adminSysActive ? 'true' : 'false' }}">
+       data-bs-toggle="collapse" data-bs-target="#adminGroupSystem" href="#adminGroupSystem" role="button"
+       aria-expanded="{{ $adminSysActive ? 'true' : 'false' }}" aria-controls="adminGroupSystem">
         <span class="group-icon" style="background:rgba(100,116,139,0.25);">
             <i class="fa-solid fa-shield-halved" style="color:#94a3b8;"></i>
         </span>
