@@ -655,8 +655,8 @@
                                         <label class="form-label small fw-semibold text-dark mb-1">Tag Project (Optional)</label>
                                         <select id="vat-project-select" class="form-select form-select-sm">
                                             <option value="">-- No Project (General Company Expense) --</option>
-                                            @foreach($ocrProjects as $proj)
-                                                <option value="{{ $proj->id }}">{{ $proj->name }}</option>
+                                            @foreach($ocrProjects ?? [] as $proj)
+                                                <option value="{{ $proj->id }}">{{ $proj->name }}@if(!empty($proj->code)) ({{ $proj->code }})@endif @if(!empty($proj->status) && $proj->status !== 'active') [{{ ucfirst($proj->status) }}]@endif</option>
                                             @endforeach
                                         </select>
                                     </div>
@@ -2018,72 +2018,92 @@
                         <input type="text" name="buyer_tin" id="add_rcpt_buyer_tin" class="form-control" value="38480010">
                     </div>
 
-                    {{-- PURCHASE TYPE (Goods vs Services) --}}
-                    <div class="col-md-6">
-                        <label class="form-label small fw-semibold text-dark mb-1">
-                            <i class="fa-solid fa-tag text-secondary me-1"></i>ERCA Purchase Type
-                        </label>
-                        <select name="purchase_type" id="add_rcpt_purchase_type" class="form-select">
-                            <option value="PUR_GD" selected>PUR_GD (Goods / Materials - Line 100)</option>
-                            <option value="PUR_SR">PUR_SR (Services - Line 100)</option>
-                        </select>
-                    </div>
+                    {{-- ── FINANCIAL CORE & ERCA LINE 100 BREAKDOWN ── --}}
+                    <div class="col-12">
+                        <div class="card border border-success border-opacity-25 bg-success bg-opacity-10 rounded-3 p-3 shadow-xs">
+                            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                <span class="small fw-bold text-success text-uppercase" style="font-size:0.75rem; letter-spacing:0.5px;">
+                                    <i class="fa-solid fa-file-invoice-dollar me-1"></i>ERCA Purchase Type &amp; Financials (Line 100)
+                                </span>
+                                <span class="badge bg-success text-white rounded-pill px-2.5 py-0.5" style="font-size:0.68rem;">
+                                    Base + 15% VAT = Total Amount
+                                </span>
+                            </div>
 
-                    {{-- TOTAL AMOUNT --}}
-                    <div class="col-md-4">
-                        <label class="form-label small fw-bold text-dark mb-1">
-                            <i class="fa-solid fa-coins text-success me-1"></i>Total Amount (ETB) <span class="text-danger">*</span>
-                        </label>
-                        <input type="number" step="0.01" name="total_amount" id="add_rcpt_total_amount" class="form-control fw-bold fs-6 text-success" placeholder="0.00" required oninput="onTotalAmountChange()">
-                        <small class="text-muted" style="font-size:0.68rem;">Cash paid / Grand total</small>
-                    </div>
+                            <div class="row g-2">
+                                {{-- ERCA PURCHASE TYPE --}}
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-dark mb-1">
+                                        <i class="fa-solid fa-tag text-success me-1"></i>ERCA Purchase Type <span class="text-danger">*</span>
+                                    </label>
+                                    <select name="purchase_type" id="add_rcpt_purchase_type" class="form-select form-select-sm fw-bold border-success-subtle">
+                                        <option value="PUR_GD" selected>PUR_GD (Goods / Materials - 3)</option>
+                                        <option value="PUR_SR">PUR_SR (Services - 4)</option>
+                                    </select>
+                                    <small class="text-muted" style="font-size:0.68rem;">Auto-detected from receipt</small>
+                                </div>
 
-                    {{-- SUBTOTAL / BASE --}}
-                    <div class="col-md-4">
-                        <label class="form-label small fw-semibold text-dark mb-1">
-                            Base Subtotal (excl. VAT)
-                        </label>
-                        <input type="number" step="0.01" name="subtotal" id="add_rcpt_subtotal" class="form-control" placeholder="0.00" oninput="onSubtotalChange()">
-                        <small class="text-muted" style="font-size:0.68rem;">Taxable value before 15% VAT</small>
-                    </div>
+                                {{-- TOTAL AMOUNT --}}
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-dark mb-1">
+                                        <i class="fa-solid fa-coins text-success me-1"></i>Total Amount (ETB) <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="number" step="0.01" name="total_amount" id="add_rcpt_total_amount" class="form-control form-control-sm fw-bold fs-6 text-success border-success" placeholder="0.00" required oninput="onTotalAmountChange()">
+                                    <small class="text-muted" style="font-size:0.68rem;">Cash paid / Grand total</small>
+                                </div>
 
-                    {{-- VAT AMOUNT --}}
-                    <div class="col-md-4">
-                        <label class="form-label small fw-semibold text-dark mb-1">
-                            15% VAT Amount (ETB)
-                        </label>
-                        <input type="number" step="0.01" name="vat_amount" id="add_rcpt_vat_amount" class="form-control" placeholder="0.00" oninput="onVatAmountChange()">
-                        <small class="text-muted" style="font-size:0.68rem;">15% VAT from receipt</small>
-                    </div>
+                                {{-- BASE SUBTOTAL --}}
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-dark mb-1">
+                                        Base Subtotal (excl. VAT)
+                                    </label>
+                                    <input type="number" step="0.01" name="subtotal" id="add_rcpt_subtotal" class="form-control form-control-sm fw-semibold" placeholder="0.00" oninput="onSubtotalChange()">
+                                    <small class="text-muted" style="font-size:0.68rem;">Taxable value before VAT</small>
+                                </div>
 
-                    {{-- WITHHOLDING AMOUNT --}}
-                    <div class="col-md-4" id="add_rcpt_wht_wrapper" style="display: none;">
-                        <label class="form-label small fw-semibold text-dark mb-1">
-                            3% Withholding Amount (ETB)
-                        </label>
-                        <input type="number" step="0.01" name="withholding_amount" id="add_rcpt_withholding_amount" class="form-control" placeholder="0.00">
-                        <small class="text-muted" style="font-size:0.68rem;">3% of base subtotal</small>
+                                {{-- 15% VAT AMOUNT --}}
+                                <div class="col-md-3">
+                                    <label class="form-label small fw-bold text-dark mb-1">
+                                        15% VAT Amount (ETB)
+                                    </label>
+                                    <input type="number" step="0.01" name="vat_amount" id="add_rcpt_vat_amount" class="form-control form-control-sm fw-semibold" placeholder="0.00" oninput="onVatAmountChange()">
+                                    <small class="text-muted" style="font-size:0.68rem;">15% VAT from slip</small>
+                                </div>
+
+                                {{-- WITHHOLDING AMOUNT --}}
+                                <div class="col-md-3" id="add_rcpt_wht_wrapper" style="display: none;">
+                                    <label class="form-label small fw-bold text-dark mb-1">
+                                        3% Withholding Amount (ETB)
+                                    </label>
+                                    <input type="number" step="0.01" name="withholding_amount" id="add_rcpt_withholding_amount" class="form-control form-control-sm" placeholder="0.00">
+                                    <small class="text-muted" style="font-size:0.68rem;">3% of base subtotal</small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     {{-- PROJECT --}}
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <label class="form-label small fw-semibold text-dark mb-1">
                             <i class="fa-solid fa-diagram-project text-secondary me-1"></i>Project / Site
                         </label>
                         <select name="project_id" id="add_rcpt_project_id" class="form-select">
                             <option value="">Select Project (Optional)...</option>
                             @foreach($ocrProjects ?? [] as $proj)
-                                <option value="{{ $proj->id }}">{{ $proj->name }}</option>
+                                <option value="{{ $proj->id }}">
+                                    {{ $proj->name }}@if(!empty($proj->code)) ({{ $proj->code }})@endif @if(!empty($proj->status) && $proj->status !== 'active') [{{ ucfirst($proj->status) }}]@endif
+                                </option>
                             @endforeach
                         </select>
+                        <small class="text-muted" style="font-size:0.68rem;">Showing all company projects</small>
                     </div>
 
                     {{-- CATEGORY --}}
-                    <div class="col-md-4">
+                    <div class="col-md-6">
                         <label class="form-label small fw-semibold text-dark mb-1">
                             <i class="fa-solid fa-folder-tree text-secondary me-1"></i>Category
                         </label>
-                        <select name="category" id="add_rcpt_category" class="form-select">
+                        <select name="category" id="add_rcpt_category" class="form-select" onchange="onCategoryChange()">
                             <option value="material" selected>Material / Supply</option>
                             <option value="fuel">Fuel &amp; Oil</option>
                             <option value="equipment">Equipment &amp; Tools</option>
@@ -2321,6 +2341,17 @@
         }
     }
 
+    function onCategoryChange() {
+        const cat = document.getElementById('add_rcpt_category')?.value || '';
+        const purcTypeSelect = document.getElementById('add_rcpt_purchase_type');
+        if (!purcTypeSelect) return;
+        if (['machinery', 'subcontractor'].includes(cat)) {
+            purcTypeSelect.value = 'PUR_SR';
+        } else if (['material', 'fuel', 'equipment', 'spare_parts'].includes(cat)) {
+            purcTypeSelect.value = 'PUR_GD';
+        }
+    }
+
     function handleModalReceiptScan(file) {
         if (!file) return;
 
@@ -2396,6 +2427,11 @@
                 const taxTypeSelect = document.getElementById('add_rcpt_tax_type');
                 if (taxTypeSelect && vatVal > 0 && taxTypeSelect.value === 'withholding') {
                     taxTypeSelect.value = 'vat';
+                }
+
+                // Auto-populate ERCA purchase type (Goods vs Services)
+                if (data.purchase_type) {
+                    document.getElementById('add_rcpt_purchase_type').value = data.purchase_type;
                 }
 
                 // Automatically fill all amount fields

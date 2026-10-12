@@ -613,15 +613,23 @@ CRITICAL EXTRACTION RULES:
    - vat: 15% VAT for this item (2 decimals).
    - value_after_vat: Total including VAT (total_value + vat, 2 decimals).
 
-8. TOTALS ACROSS RECEIPT:
-   - subtotal: Taxable value before VAT across entire receipt.
-   - vat_amount: 15% VAT across entire receipt.
-   - total_amount: Grand total / cash paid.
+8. TOTALS ACROSS RECEIPT (CRITICAL FOR ACCURATE ERCA LINE 100 VAT DECLARATION):
+   - Look specifically for "TOTAL", "GRAND TOTAL", "CASH", "AMOUNT PAID" for total_amount.
+   - Look specifically for "TAXABLE", "SUBTOTAL", "TAXABLE A (15%)", "BASE VALUE" for subtotal.
+   - Look specifically for "VAT", "TAX", "VAT A (15%)", "15%" for vat_amount.
+   - Return clean numeric floats without commas or currency labels (e.g. 17565.22, never "17,565.22").
+   - If the receipt only prints a single total amount that includes 15% VAT:
+     subtotal = round(total_amount / 1.15, 2)
+     vat_amount = round(total_amount - subtotal, 2)
+   - Arithmetic rule: subtotal + vat_amount MUST equal total_amount.
 
-9. VAT DECLARATION CLASSIFICATION:
-   - vat_category: "G" for Goods or "S" for Services.
+9. ERCA PURCHASE TYPE & VAT DECLARATION CLASSIFICATION:
+   - Identify whether the transaction is Goods / Materials or Services:
+     * "PUR_GD" (numeric 3): Goods / Materials / Supplies / Fuel / Cement / Sand / Hardware / Rebar / Spare parts.
+     * "PUR_SR" (numeric 4): Services / Transport / Freight / Machinery Rental / Vehicle Rental / Labor / Subcontractor / Maintenance / Consulting / Hotel.
+   - vat_category: "G" if Goods / Materials, "S" if Services / Rental / Transport.
+   - purchase_type: "PUR_GD" for goods/materials or "PUR_SR" for services.
    - calendar_type: "G" for Gregorian or "E" for Ethiopian.
-   - purchase_type: 3 (Taxable-local Purchase of Inputs - Line No. 100).
    - uom_id: 9.
 
 Return STRICT JSON matching this schema:
@@ -638,7 +646,7 @@ Return STRICT JSON matching this schema:
   "total_amount": 0.00,
   "vat_category": "G",
   "calendar_type": "G",
-  "purchase_type": 3,
+  "purchase_type": "PUR_GD",
   "uom_id": 9,
   "items": [
     {
@@ -1017,23 +1025,31 @@ PROMPT;
 
         // 6. Find Totals
         if (preg_match('/(?:TOTAL|GRAND\s*TOTAL|TOTAL\s*DUE)[\s\:\=]*([0-9\.\,\ ]+)/i', $text, $m)) {
-            $cleanNum = preg_replace('/[^\d\.]/', '', str_replace(',', '.', trim($m[1])));
-            $totalVal = (float)$cleanNum;
+            $totalVal = QcService::parseMoney($m[1]);
         }
 
         if (preg_match('/(?:VAT|15\%|TAX)[\s\:\=]*([0-9\.\,\ ]+)/i', $text, $m)) {
-            $cleanNum = preg_replace('/[^\d\.]/', '', str_replace(',', '.', trim($m[1])));
-            $vatVal = (float)$cleanNum;
+            $vatVal = QcService::parseMoney($m[1]);
         }
 
         if (preg_match('/(?:TAXABLE|SUBTOTAL|SUB\s*TOTAL)[\s\:\=]*([0-9\.\,\ ]+)/i', $text, $m)) {
-            $cleanNum = preg_replace('/[^\d\.]/', '', str_replace(',', '.', trim($m[1])));
-            $subtotalVal = (float)$cleanNum;
+            $subtotalVal = QcService::parseMoney($m[1]);
         }
 
         if ($totalVal > 0 && $subtotalVal == 0) {
-            $subtotalVal = round($totalVal / 1.15, 2);
-            $vatVal = round($totalVal - $subtotalVal, 2);
+            if ($vatVal > 0) {
+                $subtotalVal = round($totalVal - $vatVal, 2);
+            } else {
+                $subtotalVal = round($totalVal / 1.15, 2);
+                $vatVal = round($totalVal - $subtotalVal, 2);
+            }
+        } elseif ($subtotalVal > 0 && $totalVal == 0) {
+            if ($vatVal > 0) {
+                $totalVal = round($subtotalVal + $vatVal, 2);
+            } else {
+                $vatVal = round($subtotalVal * 0.15, 2);
+                $totalVal = round($subtotalVal + $vatVal, 2);
+            }
         }
 
         return [

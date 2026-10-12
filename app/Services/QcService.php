@@ -161,4 +161,44 @@ class QcService
             'rule'     => 'fs_no_is_8_digits',
         ];
     }
+
+    /**
+     * Parse monetary values from OCR output, handling commas, spaces, currency symbols,
+     * and different decimal formats accurately without corrupting numbers.
+     * E.g.: "17,565.22" -> 17565.22, " 17 565.22 " -> 17565.22, "95.65" -> 95.65
+     */
+    public static function parseMoney($val): float
+    {
+        if (is_numeric($val)) {
+            return round((float)$val, 2);
+        }
+        if (empty($val)) {
+            return 0.0;
+        }
+        $str = trim((string)$val);
+        // Remove currency symbols or words like ETB, Birr, USD, etc.
+        $str = preg_replace('/[^\d\.\,\s]/i', '', $str);
+        $str = str_replace(' ', '', $str);
+
+        if (strpos($str, ',') !== false && strpos($str, '.') !== false) {
+            // E.g., "17,565.22"
+            if (strrpos($str, '.') > strrpos($str, ',')) {
+                $str = str_replace(',', '', $str);
+            } else {
+                // E.g., "17.565,22"
+                $str = str_replace('.', '', $str);
+                $str = str_replace(',', '.', $str);
+            }
+        } elseif (strpos($str, ',') !== false) {
+            // Only comma exists
+            if (preg_match('/,\d{2}$/', $str)) {
+                $str = str_replace(',', '.', $str);
+            } else {
+                $str = str_replace(',', '', $str);
+            }
+        }
+
+        return round((float)$str, 2);
+    }
 }
+

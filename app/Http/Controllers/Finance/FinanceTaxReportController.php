@@ -380,7 +380,7 @@ class FinanceTaxReportController extends Controller
             'flagged_count' => (int)\App\Models\ReceiptItem::where('is_flagged', true)->count(),
         ];
 
-        $ocrProjects = \App\Models\Project::where('status', 'active')->orderBy('name')->get(['id', 'name']);
+        $ocrProjects = \App\Models\Project::orderBy('name')->get();
         $ocrCategories = \App\Models\Receipt::CATEGORIES;
 
         // Available Bank Accounts & Chart of Accounts
@@ -1052,24 +1052,28 @@ class FinanceTaxReportController extends Controller
             $vendorName  = trim((string)($scan['vendor_name'] ?? ($scan['extracted']['merchant_name'] ?? '')));
             $mrcNo       = trim((string)($scan['mrc_no'] ?? ($scan['extracted']['machine_no'] ?? ($scan['extracted']['mrc_no'] ?? ''))));
             $items       = $scan['items'] ?? ($scan['extracted']['items'] ?? []);
-            $totalAmount = (float)($scan['total_amount'] ?? ($scan['extracted']['total_amount'] ?? ($scan['extracted']['total'] ?? ($scan['extracted']['grand_total'] ?? 0))));
-            $subtotal    = (float)($scan['subtotal'] ?? ($scan['extracted']['subtotal'] ?? ($scan['extracted']['taxable_amount'] ?? ($scan['extracted']['net_amount'] ?? 0))));
-            $vatAmount   = (float)($scan['vat_amount'] ?? ($scan['extracted']['vat_amount'] ?? ($scan['extracted']['vat'] ?? ($scan['extracted']['tax'] ?? 0))));
+            $totalAmount = QcService::parseMoney($scan['total_amount'] ?? ($scan['extracted']['total_amount'] ?? ($scan['extracted']['total'] ?? ($scan['extracted']['grand_total'] ?? 0))));
+            $subtotal    = QcService::parseMoney($scan['subtotal'] ?? ($scan['extracted']['subtotal'] ?? ($scan['extracted']['taxable_amount'] ?? ($scan['extracted']['net_amount'] ?? 0))));
+            $vatAmount   = QcService::parseMoney($scan['vat_amount'] ?? ($scan['extracted']['vat_amount'] ?? ($scan['extracted']['vat'] ?? ($scan['extracted']['tax'] ?? 0))));
 
-            // If amounts are missing, try aggregating from items array
+            // If amounts are missing, aggregate from items array
             if ($totalAmount == 0 && $subtotal == 0 && !empty($items)) {
                 foreach ($items as $it) {
-                    $itemVal = (float)($it['total_value'] ?? ((float)($it['qty'] ?? 1) * (float)($it['unit_price'] ?? 0)));
-                    $itemVat = (float)($it['vat'] ?? round($itemVal * 0.15, 2));
-                    $itemAfter = (float)($it['value_after_vat'] ?? ($itemVal + $itemVat));
+                    $itemVal = QcService::parseMoney($it['total_value'] ?? ((float)($it['qty'] ?? 1) * (float)($it['unit_price'] ?? 0)));
+                    $itemVat = QcService::parseMoney($it['vat'] ?? round($itemVal * 0.15, 2));
+                    $itemAfter = QcService::parseMoney($it['value_after_vat'] ?? ($itemVal + $itemVat));
                     $subtotal += $itemVal;
                     $vatAmount += $itemVat;
                     $totalAmount += $itemAfter;
                 }
             }
 
-            // Cross-calculate and reconcile Subtotal, VAT, and Total
-            if ($subtotal == 0 && $totalAmount > 0) {
+            // Cross-calculate and reconcile Subtotal, VAT, and Total with Ethiopian 15% VAT standard
+            if ($totalAmount > 0 && $subtotal > 0 && abs($totalAmount - $subtotal) < 0.02 && $vatAmount == 0) {
+                // If OCR set subtotal equal to total_amount, calculate base and 15% VAT
+                $subtotal  = round($totalAmount / 1.15, 2);
+                $vatAmount = round($totalAmount - $subtotal, 2);
+            } elseif ($subtotal == 0 && $totalAmount > 0) {
                 if ($vatAmount > 0) {
                     $subtotal = round($totalAmount - $vatAmount, 2);
                 } else {
@@ -1088,6 +1092,24 @@ class FinanceTaxReportController extends Controller
             } elseif ($vatAmount > 0 && $totalAmount == 0 && $subtotal == 0) {
                 $subtotal = round($vatAmount / 0.15, 2);
                 $totalAmount = round($subtotal + $vatAmount, 2);
+            }
+
+            // Detect ERCA Purchase Type (PUR_GD vs PUR_SR)
+            $rawPurcType = strtoupper(trim((string)($scan['purchase_type'] ?? ($scan['extracted']['purchase_type'] ?? ''))));
+            $rawVatCat   = strtoupper(trim((string)($scan['vat_category'] ?? ($scan['extracted']['vat_category'] ?? ''))));
+            
+            $purchaseType = 'PUR_GD'; // Default: Goods / Materials (Line 100)
+            if ($rawPurcType === 'PUR_SR' || $rawPurcType === '4' || $rawVatCat === 'S') {
+                $purchaseType = 'PUR_SR';
+            } else {
+                $descriptionAll = strtolower($vendorName . ' ' . ($scan['description'] ?? '') . ' ' . implode(' ', array_column($items, 'item_description')));
+                $serviceKeywords = ['service', 'services', 'transport', 'freight', 'logistics', 'rental', 'rent', 'lease', 'maintenance', 'repair', 'labor', 'labour', 'consultancy', 'consulting', 'cleaning', 'security', 'hotel', 'catering', 'engineering', 'garage', 'subcontractor', 'machinery rental'];
+                foreach ($serviceKeywords as $keyword) {
+                    if (str_contains($descriptionAll, $keyword)) {
+                        $purchaseType = 'PUR_SR';
+                        break;
+                    }
+                }
             }
 
             $rawDate     = $scan['receipt_date_ymd'] ?? ($scan['extracted']['receipt_date'] ?? null);
@@ -1113,6 +1135,7 @@ class FinanceTaxReportController extends Controller
                 'vendor_tin'        => $supplierTin,
                 'vendor_name'       => $vendorName ?: 'General Merchant',
                 'buyer_tin'         => $buyerTin,
+                'purchase_type'     => $purchaseType,
                 'total_amount'      => $totalAmount,
                 'subtotal'          => $subtotal,
                 'vat_amount'        => $vatAmount,
