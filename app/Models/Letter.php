@@ -79,6 +79,7 @@ class Letter extends Model
     const STATUS_VIEWED = 'viewed';
     const STATUS_REDIRECTED = 'redirected';
     const STATUS_CLOSED = 'closed';
+    const STATUS_REJECTED = 'rejected';
 
     // Category Constants
     const CATEGORY_LEAVE_LETTER = 'Leave Letter';
@@ -117,6 +118,11 @@ class Letter extends Model
     public function closer()
     {
         return $this->belongsTo(User::class, 'closed_by');
+    }
+
+    public function closedBy()
+    {
+        return $this->closer();
     }
 
     /**
@@ -233,12 +239,18 @@ class Letter extends Model
         return $this->status === self::STATUS_REGISTERED;
     }
 
+    public function isRejected(): bool
+    {
+        return $this->status === self::STATUS_REJECTED;
+    }
+
     public function getStatusBadgeClass(): string
     {
         return match ($this->status) {
             self::STATUS_DRAFT      => 'bg-secondary text-white',
             self::STATUS_SENT       => 'bg-warning text-dark',
             self::STATUS_REGISTERED => 'bg-success text-white',
+            self::STATUS_REJECTED   => 'bg-danger text-white',
             self::STATUS_CLOSED     => 'bg-dark text-white',
             default                 => 'bg-info text-white',
         };

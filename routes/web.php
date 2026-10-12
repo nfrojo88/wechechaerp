@@ -2554,6 +2554,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{letter}/set-category',             [App\Http\Controllers\LetterController::class, 'setCategory'])->name('set-category');
         Route::post('/{letter}/set-handled-person',       [App\Http\Controllers\LetterController::class, 'setHandledPerson'])->name('set-handled-person');
         Route::post('/{letter}/register',                 [App\Http\Controllers\LetterController::class, 'markRegistered'])->name('register');
+        Route::post('/{letter}/process-register',         [App\Http\Controllers\LetterController::class, 'processAndRegister'])->name('process-register');
+        Route::post('/{letter}/reject',                   [App\Http\Controllers\LetterController::class, 'rejectLetter'])->name('reject');
 
         // Shared Registry, Details & Timelines
         Route::get('/dashboard',                         [App\Http\Controllers\LetterController::class, 'dashboard'])->name('dashboard');

@@ -1221,14 +1221,14 @@ class LetterController extends Controller
         }
 
         $query = Letter::with(['creator', 'attachments', 'addressedTo', 'registeredBy'])
-            ->whereIn('status', [Letter::STATUS_SENT, Letter::STATUS_REGISTERED, Letter::STATUS_PENDING, Letter::STATUS_VIEWED, Letter::STATUS_REDIRECTED]);
+            ->whereIn('status', [Letter::STATUS_SENT, Letter::STATUS_REGISTERED, Letter::STATUS_PENDING, Letter::STATUS_VIEWED, Letter::STATUS_REDIRECTED, Letter::STATUS_REJECTED]);
 
         // Filter by Category
         if ($request->filled('category')) {
             $query->where('category', $request->category);
         }
 
-        // Filter by Status (sent / registered)
+        // Filter by Status (sent / registered / rejected)
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
@@ -1257,7 +1257,8 @@ class LetterController extends Controller
         $stats = [
             'sent'       => Letter::whereIn('status', [Letter::STATUS_SENT, Letter::STATUS_PENDING])->count(),
             'registered' => Letter::where('status', Letter::STATUS_REGISTERED)->count(),
-            'total'      => Letter::whereIn('status', [Letter::STATUS_SENT, Letter::STATUS_REGISTERED, Letter::STATUS_PENDING, Letter::STATUS_VIEWED, Letter::STATUS_REDIRECTED])->count(),
+            'rejected'   => Letter::where('status', Letter::STATUS_REJECTED)->count(),
+            'total'      => Letter::whereIn('status', [Letter::STATUS_SENT, Letter::STATUS_REGISTERED, Letter::STATUS_PENDING, Letter::STATUS_VIEWED, Letter::STATUS_REDIRECTED, Letter::STATUS_REJECTED])->count(),
         ];
 
         $users = User::where('is_active', true)->orderBy('name')->get(['id', 'name', 'email']);
@@ -1489,6 +1490,174 @@ class LetterController extends Controller
             DB::rollBack();
             Log::error("Failed to register letter: " . $e->getMessage());
             return back()->with('error', 'Registration failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Comprehensive Secretary Action: Assign Reference Number, Category, Handled Person, and Register all in one action.
+     */
+    public function processAndRegister(Request $request, Letter $letter)
+    {
+        $user = Auth::user();
+        if (!$user->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin'])) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $validated = $request->validate([
+            'letter_number'        => 'nullable|string|max:60|unique:letters,letter_number,' . $letter->id,
+            'category'             => 'required|in:' . implode(',', Letter::CATEGORIES),
+            'addressed_to_user_id' => 'required|exists:users,id',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            // 1. Reference number (use existing locked number, user provided number, or next atomic sequential number)
+            if (!$letter->is_reference_locked || empty($letter->letter_number)) {
+                $refNumber = $request->filled('letter_number')
+                    ? trim($request->letter_number)
+                    : LetterSequence::generateNext();
+
+                $letter->letter_number = $refNumber;
+                $letter->is_reference_locked = true;
+
+                LetterActionLog::record(
+                    $letter->id,
+                    $user->id,
+                    'numbered',
+                    "Reference number '{$refNumber}' was assigned and locked by {$user->name}.",
+                    ['reference_number' => $refNumber]
+                );
+            }
+
+            // 2. Category
+            $letter->category = $validated['category'];
+            LetterActionLog::record(
+                $letter->id,
+                $user->id,
+                'categorized',
+                "Category set to '{$validated['category']}' by {$user->name}.",
+                ['category' => $validated['category']]
+            );
+
+            // 3. Addressed / Handled Person
+            $targetUser = User::findOrFail($validated['addressed_to_user_id']);
+            $letter->addressed_to_user_id = $targetUser->id;
+            LetterActionLog::record(
+                $letter->id,
+                $user->id,
+                'person_selected',
+                "Addressed / handled person set to {$targetUser->name} by {$user->name}.",
+                ['user_id' => $targetUser->id, 'user_name' => $targetUser->name]
+            );
+
+            // 4. Mark Registered
+            $letter->status = Letter::STATUS_REGISTERED;
+            $letter->registered_by = $user->id;
+            $letter->registered_at = now();
+            $letter->save();
+
+            // 5. Add Routing entry
+            LetterRecipient::create([
+                'letter_id'    => $letter->id,
+                'from_user_id' => $user->id,
+                'to_user_id'   => $targetUser->id,
+                'to_role_name' => null,
+                'action'       => 'initial_sent',
+                'notes'        => "Letter registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to {$targetUser->name}",
+                'status'       => Letter::STATUS_PENDING,
+            ]);
+
+            // 6. Action Audit Log for registration
+            LetterActionLog::record(
+                $letter->id,
+                $user->id,
+                'registered',
+                "Letter officially Registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to {$targetUser->name} by {$user->name}.",
+                [
+                    'letter_number'        => $letter->letter_number,
+                    'category'             => $letter->category,
+                    'addressed_to_user_id' => $targetUser->id,
+                ]
+            );
+
+            // 7. In-App Notification to creator
+            if ($letter->created_by && $letter->created_by !== $user->id) {
+                LetterNotification::create([
+                    'user_id'   => $letter->created_by,
+                    'letter_id' => $letter->id,
+                    'message'   => "Your letter '{$letter->subject}' has been approved & registered by Secretary {$user->name} as Ref #{$letter->letter_number} [{$letter->category}].",
+                ]);
+            }
+
+            // 8. In-App Notification to assigned person
+            if ($targetUser->id !== $user->id) {
+                LetterNotification::create([
+                    'user_id'   => $targetUser->id,
+                    'letter_id' => $letter->id,
+                    'message'   => "New letter registered and addressed to you: Ref #{$letter->letter_number} [{$letter->category}] - {$letter->subject}.",
+                ]);
+            }
+
+            // 9. SMS Notification to target user
+            $this->sendRegistrationSmsToTargetUser($targetUser, $letter, $user->name);
+
+            DB::commit();
+
+            return back()->with('success', "Letter Ref #{$letter->letter_number} successfully Approved, Registered, and dispatched to {$targetUser->name}.");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to process and register letter: " . $e->getMessage());
+            return back()->with('error', 'Registration failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Secretary blocks / rejects a letter with a specified reason.
+     */
+    public function rejectLetter(Request $request, Letter $letter)
+    {
+        $user = Auth::user();
+        if (!$user->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin'])) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $validated = $request->validate([
+            'rejection_reason' => 'required|string|max:1000',
+        ]);
+
+        DB::beginTransaction();
+        try {
+            $letter->update([
+                'status'        => Letter::STATUS_REJECTED,
+                'closing_notes' => 'Blocked/Rejected: ' . $validated['rejection_reason'],
+                'closed_by'     => $user->id,
+                'closed_at'     => now(),
+            ]);
+
+            LetterActionLog::record(
+                $letter->id,
+                $user->id,
+                'rejected',
+                "Letter was blocked / rejected by Secretary {$user->name}: {$validated['rejection_reason']}",
+                ['reason' => $validated['rejection_reason']]
+            );
+
+            // In-App Notification to letter creator
+            if ($letter->created_by) {
+                LetterNotification::create([
+                    'user_id'   => $letter->created_by,
+                    'letter_id' => $letter->id,
+                    'message'   => "Your letter \"{$letter->subject}\" was blocked/rejected by the Secretary: {$validated['rejection_reason']}",
+                ]);
+            }
+
+            DB::commit();
+
+            return back()->with('success', "Letter has been blocked/rejected and author notified.");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to reject letter: " . $e->getMessage());
+            return back()->with('error', 'Failed to reject letter: ' . $e->getMessage());
         }
     }
 
