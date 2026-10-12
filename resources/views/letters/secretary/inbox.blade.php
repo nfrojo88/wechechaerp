@@ -2,8 +2,25 @@
 
 @section('title', 'Secretary Inbox & Correspondence Registration - Wechacha ERP')
 
+@push('styles')
+<style>
+.modal {
+    z-index: 1065 !important;
+}
+.modal-backdrop {
+    z-index: 1050 !important;
+}
+.modal-dialog {
+    z-index: 1070 !important;
+}
+.table-input-cell {
+    min-width: 170px;
+}
+</style>
+@endpush
+
 @section('content')
-<div class="container-fluid py-3" style="max-width: 1400px;">
+<div class="container-fluid py-3" style="max-width: 1440px;">
 
     {{-- Header --}}
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
@@ -142,18 +159,18 @@
             <div>
                 <h5 class="fw-bold mb-0 text-dark"><i class="fa-solid fa-list-check me-2 text-warning"></i>Inbox Letters &amp; Registration Checklist</h5>
             </div>
-            <small class="text-muted"><i class="fa-solid fa-info-circle me-1"></i>Click <strong>Review &amp; Process</strong> on any letter to inspect details &amp; attachments, then approve or block.</small>
+            <small class="text-muted"><i class="fa-solid fa-info-circle me-1"></i>You can set reference #, category, and person <strong>inline in each column</strong> or open <strong>Review &amp; Action</strong>.</small>
         </div>
 
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light text-muted small text-uppercase fw-bold" style="letter-spacing: 0.5px;">
                     <tr>
-                        <th class="ps-3 py-3" style="width: 24%;">Letter &amp; Sender</th>
-                        <th class="py-3" style="width: 17%;">1. Reference #</th>
-                        <th class="py-3" style="width: 17%;">2. Category</th>
-                        <th class="py-3" style="width: 18%;">3. Handled By</th>
-                        <th class="py-3 text-center" style="width: 10%;">Status</th>
+                        <th class="ps-3 py-3" style="width: 25%;">Letter &amp; Sender</th>
+                        <th class="py-3 table-input-cell" style="width: 18%;">1. Reference #</th>
+                        <th class="py-3 table-input-cell" style="width: 17%;">2. Category</th>
+                        <th class="py-3 table-input-cell" style="width: 18%;">3. Handled By</th>
+                        <th class="py-3 text-center" style="width: 8%;">Status</th>
                         <th class="pe-3 py-3 text-end" style="width: 14%;">Action &amp; Review</th>
                     </tr>
                 </thead>
@@ -193,7 +210,7 @@
                             </td>
 
                             {{-- Step 1: Reference Number --}}
-                            <td>
+                            <td class="table-input-cell">
                                 @if($hasNumber)
                                     <div class="d-flex align-items-center gap-1">
                                         <span class="font-monospace fw-bold text-primary">{{ $letter->letter_number }}</span>
@@ -203,17 +220,29 @@
                                     </div>
                                     <small class="text-muted d-block" style="font-size: 0.7rem;">Locked reference</small>
                                 @elseif(!$isRegistered && !$isRejected)
-                                    <button type="button" class="btn btn-xs btn-outline-warning rounded-pill px-2.5 py-1 text-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#assignNumberModal{{ $letter->id }}">
-                                        <i class="fa-solid fa-plus-circle me-1"></i> Assign Ref #
-                                    </button>
-                                    <div class="text-danger small mt-1" style="font-size: 0.7rem;"><i class="fa-solid fa-circle-xmark me-1"></i>Not assigned</div>
+                                    {{-- Quick Inline Assignment (No modal needed!) --}}
+                                    <form action="{{ route('letters.assign-number', $letter->id) }}" method="POST" class="d-flex align-items-center gap-1 mb-1">
+                                        @csrf
+                                        <div class="input-group input-group-sm" style="max-width: 170px;">
+                                            <input type="text" name="letter_number" class="form-control form-control-sm font-monospace fw-bold px-2" value="{{ \App\Models\LetterSequence::peekNext() }}" required title="Sequential Ref Number">
+                                            <button type="submit" class="btn btn-sm btn-primary px-2" title="Lock & Assign Number">
+                                                <i class="fa-solid fa-lock"></i>
+                                            </button>
+                                        </div>
+                                    </form>
+                                    <div class="d-flex align-items-center justify-content-between" style="max-width: 170px;">
+                                        <small class="text-muted" style="font-size: 0.68rem;"><i class="fa-solid fa-magic me-1 text-warning"></i>Auto-suggested</small>
+                                        <button type="button" class="btn btn-link btn-xs p-0 text-muted" data-bs-toggle="modal" data-bs-target="#assignNumberModal{{ $letter->id }}" title="Open Modal Dialog">
+                                            <i class="fa-solid fa-expand" style="font-size: 0.75rem;"></i>
+                                        </button>
+                                    </div>
                                 @else
                                     <span class="text-muted small">&mdash;</span>
                                 @endif
                             </td>
 
                             {{-- Step 2: Category --}}
-                            <td>
+                            <td class="table-input-cell">
                                 @if($hasCategory)
                                     <div class="d-flex align-items-center gap-1">
                                         <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2.5 py-1 fw-medium">
@@ -226,17 +255,24 @@
                                         @endif
                                     </div>
                                 @elseif(!$isRegistered && !$isRejected)
-                                    <button type="button" class="btn btn-xs btn-outline-warning rounded-pill px-2.5 py-1 text-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#categoryModal{{ $letter->id }}">
-                                        <i class="fa-solid fa-tag me-1"></i> Select Category
-                                    </button>
-                                    <div class="text-danger small mt-1" style="font-size: 0.7rem;"><i class="fa-solid fa-circle-xmark me-1"></i>Not selected</div>
+                                    {{-- Quick Inline Category Dropdown --}}
+                                    <form action="{{ route('letters.set-category', $letter->id) }}" method="POST" class="mb-1">
+                                        @csrf
+                                        <select name="category" class="form-select form-select-sm" style="max-width: 165px; font-size: 0.78rem;" onchange="this.form.submit()" required>
+                                            <option value="">-- Choose Category --</option>
+                                            @foreach($categories as $c)
+                                                <option value="{{ $c }}">{{ $c }}</option>
+                                            @endforeach
+                                        </select>
+                                    </form>
+                                    <div class="text-danger small" style="font-size: 0.68rem;"><i class="fa-solid fa-circle-exclamation me-1"></i>Required</div>
                                 @else
                                     <span class="text-muted small">&mdash;</span>
                                 @endif
                             </td>
 
                             {{-- Step 3: Addressed / Handled Person --}}
-                            <td>
+                            <td class="table-input-cell">
                                 @if($hasPerson && $letter->addressedTo)
                                     <div class="d-flex align-items-center justify-content-between">
                                         <div>
@@ -250,10 +286,17 @@
                                         @endif
                                     </div>
                                 @elseif(!$isRegistered && !$isRejected)
-                                    <button type="button" class="btn btn-xs btn-outline-warning rounded-pill px-2.5 py-1 text-dark fw-semibold" data-bs-toggle="modal" data-bs-target="#personModal{{ $letter->id }}">
-                                        <i class="fa-solid fa-user-plus me-1"></i> Select Person
-                                    </button>
-                                    <div class="text-danger small mt-1" style="font-size: 0.7rem;"><i class="fa-solid fa-circle-xmark me-1"></i>Not selected</div>
+                                    {{-- Quick Inline Handled Person Dropdown --}}
+                                    <form action="{{ route('letters.set-handled-person', $letter->id) }}" method="POST" class="mb-1">
+                                        @csrf
+                                        <select name="addressed_to_user_id" class="form-select form-select-sm" style="max-width: 175px; font-size: 0.78rem;" onchange="this.form.submit()" required>
+                                            <option value="">-- Choose Person --</option>
+                                            @foreach($users as $u)
+                                                <option value="{{ $u->id }}">{{ $u->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </form>
+                                    <div class="text-danger small" style="font-size: 0.68rem;"><i class="fa-solid fa-circle-exclamation me-1"></i>Required</div>
                                 @else
                                     <span class="text-muted small">&mdash;</span>
                                 @endif
@@ -288,6 +331,15 @@
                             {{-- Registration & View Actions --}}
                             <td class="pe-3 text-end">
                                 <div class="d-flex flex-column align-items-end gap-1">
+                                    @if($canRegister)
+                                        <form action="{{ route('letters.register', $letter->id) }}" method="POST" onsubmit="return confirm('Register this letter now? An SMS will be dispatched to {{ addslashes($letter->addressedTo?->name) }}.');" class="mb-1">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-bold shadow-xs">
+                                                <i class="fa-solid fa-stamp me-1"></i> Register Letter
+                                            </button>
+                                        </form>
+                                    @endif
+
                                     @if(!$isRegistered && !$isRejected)
                                         <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-bold shadow-xs" data-bs-toggle="modal" data-bs-target="#reviewModal{{ $letter->id }}">
                                             <i class="fa-solid fa-file-signature me-1"></i> Review &amp; Action
@@ -700,3 +752,17 @@
 
 </div>
 @endsection
+
+@push('scripts')
+<script>
+$(document).ready(function() {
+    // Append all modals to body so no container stacking contexts or animations interfere with clicking
+    $('.modal').appendTo('body');
+
+    // Auto-focus first interactive input when modal opens
+    $(document).on('shown.bs.modal', function(e) {
+        $(e.target).find('input:visible, select:visible, textarea:visible').first().focus();
+    });
+});
+</script>
+@endpush
