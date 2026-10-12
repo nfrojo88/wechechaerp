@@ -1051,10 +1051,24 @@ class FinanceTaxReportController extends Controller
 
             $vendorName  = trim((string)($scan['vendor_name'] ?? ($scan['extracted']['merchant_name'] ?? '')));
             $mrcNo       = trim((string)($scan['mrc_no'] ?? ($scan['extracted']['machine_no'] ?? ($scan['extracted']['mrc_no'] ?? ''))));
-            $totalAmount = (float)($scan['total_amount'] ?? ($scan['extracted']['total_amount'] ?? 0));
-            $subtotal    = (float)($scan['subtotal'] ?? ($scan['extracted']['subtotal'] ?? 0));
-            $vatAmount   = (float)($scan['vat_amount'] ?? ($scan['extracted']['vat_amount'] ?? 0));
+            $items       = $scan['items'] ?? ($scan['extracted']['items'] ?? []);
+            $totalAmount = (float)($scan['total_amount'] ?? ($scan['extracted']['total_amount'] ?? ($scan['extracted']['total'] ?? ($scan['extracted']['grand_total'] ?? 0))));
+            $subtotal    = (float)($scan['subtotal'] ?? ($scan['extracted']['subtotal'] ?? ($scan['extracted']['taxable_amount'] ?? ($scan['extracted']['net_amount'] ?? 0))));
+            $vatAmount   = (float)($scan['vat_amount'] ?? ($scan['extracted']['vat_amount'] ?? ($scan['extracted']['vat'] ?? ($scan['extracted']['tax'] ?? 0))));
 
+            // If amounts are missing, try aggregating from items array
+            if ($totalAmount == 0 && $subtotal == 0 && !empty($items)) {
+                foreach ($items as $it) {
+                    $itemVal = (float)($it['total_value'] ?? ((float)($it['qty'] ?? 1) * (float)($it['unit_price'] ?? 0)));
+                    $itemVat = (float)($it['vat'] ?? round($itemVal * 0.15, 2));
+                    $itemAfter = (float)($it['value_after_vat'] ?? ($itemVal + $itemVat));
+                    $subtotal += $itemVal;
+                    $vatAmount += $itemVat;
+                    $totalAmount += $itemAfter;
+                }
+            }
+
+            // Cross-calculate and reconcile Subtotal, VAT, and Total
             if ($subtotal == 0 && $totalAmount > 0) {
                 if ($vatAmount > 0) {
                     $subtotal = round($totalAmount - $vatAmount, 2);
@@ -1062,8 +1076,18 @@ class FinanceTaxReportController extends Controller
                     $subtotal = round($totalAmount / 1.15, 2);
                     $vatAmount = round($totalAmount - $subtotal, 2);
                 }
+            } elseif ($totalAmount == 0 && $subtotal > 0) {
+                if ($vatAmount > 0) {
+                    $totalAmount = round($subtotal + $vatAmount, 2);
+                } else {
+                    $vatAmount = round($subtotal * 0.15, 2);
+                    $totalAmount = round($subtotal + $vatAmount, 2);
+                }
             } elseif ($vatAmount == 0 && $subtotal > 0 && $totalAmount > $subtotal) {
                 $vatAmount = round($totalAmount - $subtotal, 2);
+            } elseif ($vatAmount > 0 && $totalAmount == 0 && $subtotal == 0) {
+                $subtotal = round($vatAmount / 0.15, 2);
+                $totalAmount = round($subtotal + $vatAmount, 2);
             }
 
             $rawDate     = $scan['receipt_date_ymd'] ?? ($scan['extracted']['receipt_date'] ?? null);
@@ -1078,8 +1102,6 @@ class FinanceTaxReportController extends Controller
             if (empty($buyerTin) || $buyerTin === '0038480010') {
                 $buyerTin = '38480010';
             }
-
-            $items = $scan['items'] ?? ($scan['extracted']['items'] ?? []);
 
             return response()->json([
                 'success'           => true,
