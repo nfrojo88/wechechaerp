@@ -41,7 +41,11 @@ class OCRReceiptScannerController extends Controller
             abort(401, 'Unauthenticated.');
         }
 
-        $allowedRoles = ['global_admin', 'admin', 'finance_officer', 'finance_manager', 'store_keeper', 'store_manager', 'general_manager'];
+        $allowedRoles = [
+            'global_admin', 'admin', 'finance_officer', 'finance_manager',
+            'Finance head', 'finance_head', 'Finance staff', 'finance_staff',
+            'finance', 'cashier', 'accountant', 'store_keeper', 'store_manager', 'general_manager'
+        ];
 
         $hasRole = false;
         if (method_exists($user, 'hasAnyRole')) {

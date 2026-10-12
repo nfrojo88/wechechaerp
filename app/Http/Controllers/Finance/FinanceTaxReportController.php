@@ -329,6 +329,55 @@ class FinanceTaxReportController extends Controller
         // Paginated tax deduction records
         $records = $query->latest()->paginate(20)->withQueryString();
 
+        // ── OCR SCANNED RECEIPTS & ERCA VAT DECLARATION (LED BY OCR) ─────────
+        $vatSource = $request->query('vat_source', 'ocr');
+
+        $ocrQuery = \App\Models\ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
+            ->whereHas('receipt')
+            ->latest('id');
+
+        if (!empty($search)) {
+            $s = trim($search);
+            $ocrQuery->where(function($q) use ($s) {
+                $q->where('item_description', 'like', "%{$s}%")
+                  ->orWhereHas('receipt', function($rq) use ($s) {
+                      $rq->where('fs_no', 'like', "%{$s}%")
+                         ->orWhere('fs_no_raw', 'like', "%{$s}%")
+                         ->orWhere('vendor_name', 'like', "%{$s}%")
+                         ->orWhere('vendor_tin', 'like', "%{$s}%")
+                         ->orWhere('buyer_tin', 'like', "%{$s}%")
+                         ->orWhere('mrc_no', 'like', "%{$s}%");
+                  });
+            });
+        }
+
+        if (!empty($category)) {
+            $ocrQuery->where(function($q) use ($category) {
+                $q->where('vat_category', $category)
+                  ->orWhereHas('receipt', fn($rq) => $rq->where('category', $category));
+            });
+        }
+
+        if (!empty($fromDate)) {
+            $ocrQuery->whereHas('receipt', fn($rq) => $rq->whereDate('receipt_date', '>=', Carbon::parse($fromDate)));
+        }
+        if (!empty($toDate)) {
+            $ocrQuery->whereHas('receipt', fn($rq) => $rq->whereDate('receipt_date', '<=', Carbon::parse($toDate)));
+        }
+
+        $ocrItems = $ocrQuery->paginate(20, ['*'], 'ocr_page')->withQueryString();
+
+        $ocrStats = [
+            'total_items'   => (int)\App\Models\ReceiptItem::count(),
+            'total_value'   => (float)\App\Models\ReceiptItem::sum('total_value'),
+            'total_vat'     => (float)\App\Models\ReceiptItem::sum('vat_amount'),
+            'total_after'   => (float)\App\Models\ReceiptItem::sum('value_after_vat'),
+            'flagged_count' => (int)\App\Models\ReceiptItem::where('is_flagged', true)->count(),
+        ];
+
+        $ocrProjects = \App\Models\Project::where('status', 'active')->orderBy('name')->get(['id', 'name']);
+        $ocrCategories = \App\Models\Receipt::CATEGORIES;
+
         // Available Bank Accounts & Chart of Accounts
         $bankAccounts = BankAccount::with(['assignedStaff', 'coa.manager'])->orderBy('bank_name')->get();
         $chartOfAccounts = ChartOfAccount::with('manager')->where('is_active', true)->orderBy('code')->get();
@@ -378,7 +427,12 @@ class FinanceTaxReportController extends Controller
             'settlements',
             'bankAccounts',
             'chartOfAccounts',
-            'financeStaff'
+            'financeStaff',
+            'ocrItems',
+            'ocrStats',
+            'ocrProjects',
+            'ocrCategories',
+            'vatSource'
         ));
     }
 

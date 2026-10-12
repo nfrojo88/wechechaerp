@@ -243,28 +243,36 @@
             </div>
         </div>
 
-        {{-- Card 2: Total VAT --}}
+        {{-- Card 2: Total VAT (Led by OCR) --}}
         <div class="col-12 col-sm-6 col-xl">
             <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-info">
                 <div class="card-body p-3.5 d-flex flex-column justify-content-between">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div>
-                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem; letter-spacing: 0.5px;">VAT (15% / VAT B)</span>
-                            <span class="text-muted" style="font-size: 0.7rem;">ጠቅላላ የተጨመረ ቫት</span>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem; letter-spacing: 0.5px;">VAT 15% (Lead by OCR)</span>
+                            <span class="text-muted" style="font-size: 0.7rem;">የቫት ግዢ መግለጫ (Line 100)</span>
                         </div>
                         <div class="p-2.5 bg-info bg-opacity-10 text-info rounded-3 fs-5">
-                            <i class="fa-solid fa-percent"></i>
+                            <i class="fa-solid fa-camera-viewfinder"></i>
                         </div>
                     </div>
                     <div>
-                        <div class="fs-4 fw-bold text-info font-monospace mb-1">+ ETB {{ number_format($totalVatAmount, 2) }}</div>
+                        <div class="fs-4 fw-bold text-info font-monospace mb-1">
+                            + ETB {{ number_format(($ocrStats['total_vat'] ?? 0) > 0 ? $ocrStats['total_vat'] : $totalVatAmount, 2) }}
+                        </div>
                         <div class="d-flex justify-content-between align-items-center">
-                            <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
-                                Accrued VAT
-                            </span>
-                            <button type="button" class="btn btn-link text-info p-0 text-decoration-none fw-semibold small" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#payVatModal">
-                                Pay VAT &rarr;
-                            </button>
+                            @if(($ocrStats['total_vat'] ?? 0) > 0)
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;" title="AI OCR Extracted Invoices">
+                                    <i class="fa-solid fa-check me-1"></i>{{ $ocrStats['total_items'] }} OCR Invoices
+                                </span>
+                            @else
+                                <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
+                                    Accrued VAT
+                                </span>
+                            @endif
+                            <a href="{{ route('finance.tax-deductions.index', ['tab' => 'vat']) }}" class="text-info text-decoration-none fw-semibold small" style="font-size: 0.75rem;">
+                                VAT OCR &rarr;
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -526,8 +534,9 @@
                     <li class="nav-item">
                         <a class="nav-link rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ $tab === 'vat' ? 'active bg-info text-white shadow-sm' : 'text-secondary bg-light' }}" 
                            href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'vat'])) }}">
-                            <i class="fa-solid fa-percent"></i>
-                            <span>VAT Applied</span>
+                            <i class="fa-solid fa-camera-viewfinder"></i>
+                            <span>VAT (Lead by OCR)</span>
+                            <span class="badge {{ $tab === 'vat' ? 'bg-white text-info' : 'bg-info-subtle text-info' }} rounded-pill ms-1">{{ $ocrStats['total_items'] ?? 0 }}</span>
                         </a>
                     </li>
                     <li class="nav-item">
@@ -541,282 +550,644 @@
                 </ul>
             </div>
 
-            {{-- Filter Bar --}}
-            <div class="card-body p-3 p-md-4 bg-light bg-opacity-50 border-bottom">
-                <form method="GET" action="{{ route('finance.tax-deductions.index') }}" class="row g-2 align-items-center">
-                    <input type="hidden" name="tab" value="{{ $tab }}">
-                    <input type="hidden" name="cycle" value="{{ $cycle }}">
-
-                    <div class="col-12 col-md-3">
-                        <div class="input-group">
-                            <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
-                            <input type="text" name="search" class="form-control border-start-0" 
-                                   placeholder="Search Ref, Voucher, Requester..." value="{{ request('search') }}">
+            @if($tab === 'vat')
+                {{-- ── ERCA VAT PURCHASE DECLARATION (LINE 100) - LEAD BY OCR ─────────── --}}
+                <div class="card-body p-3.5 bg-gradient bg-info bg-opacity-10 border-bottom">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <h5 class="fw-bold text-dark mb-0">
+                                    <i class="fa-solid fa-camera-viewfinder text-info me-2"></i>ERCA VAT Purchase Declaration (Line 100)
+                                </h5>
+                                <span class="badge bg-info text-white px-2.5 py-1 rounded-pill small">
+                                    <i class="fa-solid fa-microchip me-1"></i>Led by AI OCR
+                                </span>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill small">
+                                    Official eTax Format
+                                </span>
+                            </div>
+                            <p class="text-muted small mb-0 mt-1">
+                                Physical receipt slips and fiscal invoices extracted via multi-engine AI Vision OCR. Automatically validates Supplier TIN (Col D), FS / MRC Numbers (Col G, H), and calculates 15% VAT (Col N) for official ERCA declaration.
+                            </p>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <a href="{{ route('admin.ocr.export-excel', ['format' => 'etax']) }}" class="btn btn-sm btn-success fw-bold shadow-xs">
+                                <i class="fa-solid fa-file-excel me-1"></i>Export Excel (.xlsx)
+                            </a>
+                            <a href="{{ route('admin.ocr.export-csv', ['format' => 'etax']) }}" class="btn btn-sm btn-outline-success fw-bold shadow-xs">
+                                <i class="fa-solid fa-file-csv me-1"></i>Export CSV
+                            </a>
+                            <a href="{{ route('admin.ocr.index') }}" target="_blank" class="btn btn-sm btn-primary fw-bold shadow-xs" title="Open full studio with AI settings, chat QC agent, and raw text viewer">
+                                <i class="fa-solid fa-up-right-from-square me-1"></i>Full OCR Studio
+                            </a>
+                            <button type="button" class="btn btn-sm btn-info text-white fw-bold shadow-xs" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                                <i class="fa-solid fa-credit-card me-1"></i>Pay VAT
+                            </button>
                         </div>
                     </div>
+                </div>
 
-                    <div class="col-6 col-md-2">
-                        <select name="category" class="form-select" onchange="this.form.submit()">
-                            <option value="">All Categories</option>
-                            <option value="Service" {{ request('category') === 'Service' ? 'selected' : '' }}>🤝 Service (አገልግሎት)</option>
-                            <option value="Contract Work" {{ request('category') === 'Contract Work' ? 'selected' : '' }}>📝 Contract Work (የኮንትራት)</option>
-                            <option value="Transport" {{ request('category') === 'Transport' ? 'selected' : '' }}>🚚 Transport (ትራንስፖርት)</option>
-                            <option value="Loading & Unloading" {{ request('category') === 'Loading & Unloading' ? 'selected' : '' }}>📦 Loading &amp; Unloading</option>
-                            <option value="Maintenance" {{ request('category') === 'Maintenance' ? 'selected' : '' }}>🔧 Maintenance</option>
-                            <option value="Other" {{ request('category') === 'Other' ? 'selected' : '' }}>✨ Other</option>
-                        </select>
-                    </div>
+                {{-- Live OCR Scanner & Dropzone --}}
+                <div class="card-body p-3 p-md-4 bg-light border-bottom">
+                    <div class="row g-3 align-items-stretch">
+                        {{-- Dropzone Left --}}
+                        <div class="col-lg-7">
+                            <div id="vat-drop-zone" class="border border-2 border-dashed rounded-3 p-4 text-center bg-white shadow-xs position-relative h-100 d-flex flex-column justify-content-center align-items-center transition-all" style="border-color: #0dcaf0 !important; min-height: 200px;">
+                                <input type="file" id="vat-file-input" accept="image/jpeg,image/png,image/webp,application/pdf" class="d-none">
+                                <input type="file" id="vat-camera-input" accept="image/*" capture="environment" class="d-none">
 
-                    <div class="col-6 col-md-2">
-                        <select name="vat_type" class="form-select" onchange="this.form.submit()">
-                            <option value="">All VAT Types</option>
-                            <option value="exclusive" {{ request('vat_type') === 'exclusive' ? 'selected' : '' }}>15% Added (+15% ቫት)</option>
-                            <option value="vat_b" {{ request('vat_type') === 'vat_b' ? 'selected' : '' }}>15% Included (VAT B)</option>
-                            <option value="none" {{ request('vat_type') === 'none' ? 'selected' : '' }}>No VAT (0%)</option>
-                        </select>
-                    </div>
-
-                    <div class="col-6 col-md-2">
-                        <input type="date" name="from_date" class="form-control" value="{{ request('from_date') }}" title="From Date" placeholder="From Date">
-                    </div>
-
-                    <div class="col-6 col-md-2">
-                        <input type="date" name="to_date" class="form-control" value="{{ request('to_date') }}" title="To Date" placeholder="To Date">
-                    </div>
-
-                    <div class="col-12 col-md-1 d-flex gap-1.5">
-                        <button type="submit" class="btn btn-primary flex-fill" title="Apply Filter">
-                            <i class="fa-solid fa-filter"></i>
-                        </button>
-                        @if(request('search') || request('category') || request('vat_type') || request('from_date') || request('to_date'))
-                            <a href="{{ route('finance.tax-deductions.index', ['tab' => $tab, 'cycle' => $cycle]) }}" class="btn btn-outline-danger" title="Clear Filters">
-                                <i class="fa-solid fa-xmark"></i>
-                            </a>
-                        @endif
-                    </div>
-                </form>
-            </div>
-
-            {{-- Tax Deductions Table --}}
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-light-subtle text-muted text-uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
-                        <tr>
-                            <th class="ps-4 py-3">Voucher / Ref #</th>
-                            <th class="py-3">Requester / Project</th>
-                            <th class="py-3">Category</th>
-                            <th class="py-3 text-end">Base Invoiced</th>
-                            <th class="py-3 text-end">VAT (15%)</th>
-                            <th class="py-3 text-end text-danger">3% Withholding</th>
-                            <th class="py-3 text-end text-success">Net Paid</th>
-                            <th class="py-3">Paying Account</th>
-                            <th class="py-3 text-center">WHT Slip</th>
-                            <th class="py-3">Cycle Status</th>
-                            <th class="py-3 text-center pe-4">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y">
-                        @forelse($records as $item)
-                            @php
-                                $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
-                                $wht = (float)$item->calculated_withholding_amount;
-                                $net = (float)$item->effective_payable_amount;
-                                $hasWht = (bool)($item->has_withholding || $item->withholding_amount > 0 || $wht > 0);
-                                $isSettled = (bool)($item->vat_settled || $item->withholding_settled);
-                            @endphp
-                            <tr>
-                                {{-- Ref / Voucher # --}}
-                                <td class="ps-4">
-                                    <div class="fw-bold font-monospace text-primary">{{ $item->request_number }}</div>
-                                    <div class="small text-muted">{{ optional($item->created_at)->format('d M Y, h:i A') }}</div>
-                                    @if($item->payment_reference)
-                                        <span class="badge bg-light text-dark border font-monospace mt-1" style="font-size: 0.68rem;">
-                                            Ref: {{ $item->payment_reference }}
-                                        </span>
-                                    @endif
-                                </td>
-
-                                {{-- Requester / Project --}}
-                                <td>
-                                    <div class="fw-semibold text-dark small">{{ $item->user->name ?? ($item->employee->full_name ?? 'N/A') }}</div>
-                                    @if($item->project_id && $item->project)
-                                        <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
-                                            <i class="fa-solid fa-building me-1"></i>{{ $item->project->name }}
-                                        </span>
-                                    @elseif($item->purchaseRequest)
-                                        <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
-                                            <i class="fa-solid fa-cart-shopping me-1"></i>PR #{{ $item->purchaseRequest->pr_number ?? $item->purchaseRequest->id }}
-                                        </span>
-                                    @elseif($item->creditStoreLedger)
-                                        <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
-                                            <i class="fa-solid fa-truck-ramp-box me-1"></i>Credit Store #{{ $item->creditStoreLedger->id }}
-                                        </span>
-                                    @endif
-                                </td>
-
-                                {{-- Category --}}
-                                <td>
-                                    @php
-                                        $catColor = match($item->category) {
-                                            'Contract Work' => 'purple',
-                                            'Service' => 'warning',
-                                            'Transport' => 'info',
-                                            'Loading & Unloading' => 'secondary',
-                                            default => 'primary'
-                                        };
-                                    @endphp
-                                    <span class="badge bg-{{ $catColor }}-subtle text-{{ $catColor }} border border-{{ $catColor }}-subtle rounded-pill px-2.5 py-1 small">
-                                        {{ $item->category }}
-                                    </span>
-                                </td>
-
-                                {{-- Base Invoiced --}}
-                                <td class="text-end font-monospace fw-semibold small">
-                                    ETB {{ number_format($gross, 2) }}
-                                </td>
-
-                                {{-- VAT --}}
-                                <td class="text-end font-monospace small">
-                                    @if((float)($item->vat_amount ?? 0) > 0)
-                                        <span class="text-info fw-bold">+ ETB {{ number_format((float)$item->vat_amount, 2) }}</span>
-                                        <div class="text-muted" style="font-size:0.68rem;">
-                                            {{ $item->vat_type === 'vat_b' ? 'VAT B (15% Incl.)' : '15% Added' }}
-                                        </div>
-                                    @else
-                                        <span class="text-muted small">—</span>
-                                    @endif
-                                </td>
-
-                                {{-- Withholding Tax (3%) --}}
-                                <td class="text-end font-monospace small">
-                                    @if($hasWht && $wht > 0)
-                                        <span class="text-danger fw-bold">- ETB {{ number_format($wht, 2) }}</span>
-                                        <div class="text-muted" style="font-size:0.68rem;">3% Deducted</div>
-                                    @else
-                                        <span class="text-muted small">—</span>
-                                    @endif
-                                </td>
-
-                                {{-- Net Disbursed --}}
-                                <td class="text-end font-monospace fw-bold text-success small">
-                                    ETB {{ number_format($net, 2) }}
-                                </td>
-
-                                {{-- Paying Account --}}
-                                <td>
-                                    <div class="small fw-medium text-dark">
-                                        {{ $item->chartOfAccount->name ?? ($item->bankAccount->bank_name ?? 'Petty Cash') }}
+                                <div id="vat-drop-prompt" class="py-2 cursor-pointer" onclick="if(event.target.tagName !== 'BUTTON' && event.target.tagName !== 'INPUT' && !event.target.closest('label')) document.getElementById('vat-file-input').click()">
+                                    <div class="rounded-circle bg-info bg-opacity-10 text-info p-3 d-inline-flex mb-2">
+                                        <i class="fa-solid fa-cloud-arrow-up fa-2x"></i>
                                     </div>
-                                    @if($item->paidBy)
-                                        <small class="text-muted" style="font-size: 0.7rem;">By: {{ $item->paidBy->name }}</small>
-                                    @endif
-                                </td>
+                                    <h6 class="fw-bold text-dark mb-1">Drag &amp; Drop Fiscal Receipt or PDF Here</h6>
+                                    <p class="text-muted small mb-3">Instant AI extraction into ERCA VAT Line 100 Declaration</p>
+                                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                        <button type="button" class="btn btn-sm btn-info text-white px-3 fw-semibold shadow-xs" onclick="event.stopPropagation(); document.getElementById('vat-file-input').click()">
+                                            <i class="fa-solid fa-folder-open me-1"></i>Browse Receipt File
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-dark px-3 fw-semibold shadow-xs" onclick="event.stopPropagation(); document.getElementById('vat-camera-input').click()">
+                                            <i class="fa-solid fa-camera me-1"></i>Snap Photo (Camera)
+                                        </button>
+                                    </div>
+                                </div>
 
-                                {{-- WHT Slip Status --}}
-                                <td class="text-center">
-                                    @if(!empty($item->withholding_receipt))
-                                        <a href="{{ $item->withholding_receipt_url }}" target="_blank" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-0.5 shadow-xs" style="font-size:0.75rem;" title="View Attached 3% WHT Receipt Slip">
-                                            <i class="fa-solid fa-paperclip me-1"></i> Slip
-                                        </a>
-                                    @elseif($hasWht)
-                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0.5" style="font-size:0.68rem;" title="Withholding applied but slip not yet attached">
-                                            <i class="fa-solid fa-triangle-exclamation me-1"></i> Missing
+                                {{-- Progress indicator --}}
+                                <div id="vat-scan-progress" class="w-100 d-none mt-2">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small class="fw-bold text-dark" id="vat-scan-status-text">
+                                            <i class="fa-solid fa-spinner fa-spin me-1 text-info"></i>Scanning receipt with AI Vision...
+                                        </small>
+                                        <small class="fw-bold text-info font-monospace" id="vat-scan-pct">0%</small>
+                                    </div>
+                                    <div class="progress" style="height: 8px;">
+                                        <div id="vat-scan-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-info" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Optional Settings / Meta Right --}}
+                        <div class="col-lg-5">
+                            <div class="p-3 bg-white rounded-3 border h-100 d-flex flex-column justify-content-between shadow-xs">
+                                <div>
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <span class="small fw-bold text-uppercase text-muted" style="font-size:0.75rem;">Scan Options &amp; Project Tag</span>
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.7rem;">
+                                            <i class="fa-solid fa-bolt me-1"></i>Auto-Saves to ERCA Table
                                         </span>
-                                    @else
-                                        <span class="text-muted small">—</span>
-                                    @endif
-                                </td>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-semibold text-dark mb-1">Tag Project (Optional)</label>
+                                        <select id="vat-project-select" class="form-select form-select-sm">
+                                            <option value="">-- No Project (General Company Expense) --</option>
+                                            @foreach($ocrProjects as $proj)
+                                                <option value="{{ $proj->id }}">{{ $proj->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold text-dark mb-1">Category (Optional)</label>
+                                        <select id="vat-category-select" class="form-select form-select-sm">
+                                            @foreach($ocrCategories as $key => $label)
+                                                <option value="{{ $key }}" {{ $key === 'material' ? 'selected' : '' }}>{{ $label }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
 
-                                {{-- Cycle / Settle Status --}}
-                                <td>
-                                    <div class="d-flex flex-column gap-1">
-                                        @if((float)($item->vat_amount ?? 0) > 0 || in_array($item->vat_type, ['exclusive', 'inclusive', 'vat_b']))
-                                            @if($item->vat_settled)
-                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;" title="VAT Settled {{ optional($item->vat_settled_at)->format('M d, Y') }}">
-                                                    <i class="fa-solid fa-check me-1"></i>VAT Paid
-                                                </span>
-                                            @elseif($item->vat_settlement_id)
-                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
-                                                    <i class="fa-solid fa-clock me-1"></i>VAT Pending
-                                                </span>
-                                            @else
-                                                <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
-                                                    <i class="fa-solid fa-bolt me-1"></i>VAT Active
-                                                </span>
+                                {{-- Alert Result Box --}}
+                                <div id="vat-scan-result-alert" class="alert alert-light border small py-2 mb-0 d-flex align-items-center gap-2">
+                                    <i class="fa-solid fa-circle-info text-info"></i>
+                                    <span id="vat-scan-result-msg" class="text-muted">Upload a receipt or snap a photo. Once extracted, the 15-column ERCA record will be automatically recorded below.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Sub-toggle Pills: OCR Scanned Invoices vs Internal Expense Requests --}}
+                <div class="card-body p-3 bg-white border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <ul class="nav nav-pills gap-2 flex-wrap mb-0">
+                        <li class="nav-item">
+                            <a class="nav-link rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ ($vatSource ?? 'ocr') !== 'expense' ? 'active bg-info text-white shadow-sm' : 'text-secondary bg-light' }}" 
+                               href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'vat', 'vat_source' => 'ocr'])) }}">
+                                <i class="fa-solid fa-camera-viewfinder"></i>
+                                <span>OCR Scanned VAT Invoices (ERCA Line 100)</span>
+                                <span class="badge {{ ($vatSource ?? 'ocr') !== 'expense' ? 'bg-white text-info' : 'bg-info-subtle text-info' }} rounded-pill ms-1">{{ $ocrStats['total_items'] ?? 0 }}</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 {{ ($vatSource ?? 'ocr') === 'expense' ? 'active bg-info text-white shadow-sm' : 'text-secondary bg-light' }}" 
+                               href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['tab' => 'vat', 'vat_source' => 'expense'])) }}">
+                                <i class="fa-solid fa-file-invoice-dollar"></i>
+                                <span>Internal Expense Requests with VAT</span>
+                                <span class="badge {{ ($vatSource ?? 'ocr') === 'expense' ? 'bg-white text-info' : 'bg-secondary-subtle text-secondary' }} rounded-pill ms-1">{{ $totalRecords }}</span>
+                            </a>
+                        </li>
+                    </ul>
+                    @if(($vatSource ?? 'ocr') !== 'expense')
+                        <div class="text-muted small">
+                            <i class="fa-solid fa-info-circle text-primary me-1"></i>Showing <strong>{{ $ocrItems->total() }}</strong> extracted fiscal line items
+                        </div>
+                    @endif
+                </div>
+            @endif
+
+            @if($tab === 'vat' && ($vatSource ?? 'ocr') !== 'expense')
+                {{-- ── OCR Filter Bar ────────────────────────────────────────── --}}
+                <div class="card-body p-3 p-md-4 bg-light bg-opacity-50 border-bottom">
+                    <form method="GET" action="{{ route('finance.tax-deductions.index') }}" class="row g-2 align-items-center">
+                        <input type="hidden" name="tab" value="vat">
+                        <input type="hidden" name="vat_source" value="ocr">
+                        <input type="hidden" name="cycle" value="{{ $cycle }}">
+
+                        <div class="col-12 col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                                <input type="text" name="search" class="form-control border-start-0" 
+                                       placeholder="Search FS #, MRC #, Supplier TIN, Supplier Name, Item..." value="{{ request('search') }}">
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-3">
+                            <input type="date" name="from_date" class="form-control" value="{{ request('from_date') }}" title="From Date" placeholder="From Date">
+                        </div>
+
+                        <div class="col-6 col-md-3">
+                            <input type="date" name="to_date" class="form-control" value="{{ request('to_date') }}" title="To Date" placeholder="To Date">
+                        </div>
+
+                        <div class="col-12 col-md-2 d-flex gap-1.5">
+                            <button type="submit" class="btn btn-primary flex-fill" title="Apply Filter">
+                                <i class="fa-solid fa-filter me-1"></i>Filter
+                            </button>
+                            @if(request('search') || request('from_date') || request('to_date'))
+                                <a href="{{ route('finance.tax-deductions.index', ['tab' => 'vat', 'vat_source' => 'ocr', 'cycle' => $cycle]) }}" class="btn btn-outline-danger" title="Clear Filters">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </a>
+                            @endif
+                        </div>
+                    </form>
+                </div>
+
+                {{-- ERCA VAT Invoices Table (15-Column Declaration) --}}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="vat-ocr-table">
+                        <thead class="bg-light-subtle text-muted text-uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                            <tr>
+                                <th class="ps-4 py-3" style="width: 50px;">#</th>
+                                <th class="py-3">Supplier TIN <span class="badge bg-secondary-subtle text-dark border ms-1">Col D</span></th>
+                                <th class="py-3">Supplier Name <span class="badge bg-secondary-subtle text-dark border ms-1">Col E</span></th>
+                                <th class="py-3">Invoice Date <span class="badge bg-secondary-subtle text-dark border ms-1">Col F</span></th>
+                                <th class="py-3">Machine (MRC) # <span class="badge bg-secondary-subtle text-dark border ms-1">Col G</span></th>
+                                <th class="py-3">FS / Receipt # <span class="badge bg-secondary-subtle text-dark border ms-1">Col H</span></th>
+                                <th class="py-3">Item Description <span class="badge bg-secondary-subtle text-dark border ms-1">Col I</span></th>
+                                <th class="py-3 text-end">Base Value <span class="badge bg-secondary-subtle text-dark border ms-1">Col M</span></th>
+                                <th class="py-3 text-end text-info">VAT (15%) <span class="badge bg-info-subtle text-info border ms-1">Col N</span></th>
+                                <th class="py-3 text-end text-success">Total with VAT <span class="badge bg-success-subtle text-success border ms-1">Col O</span></th>
+                                <th class="py-3 text-center">Slip</th>
+                                <th class="py-3 text-center pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            @forelse($ocrItems as $index => $ocrItem)
+                                @php
+                                    $rcp = $ocrItem->receipt;
+                                    $tin = $rcp->vendor_tin ?? '';
+                                    $isTinValid = (bool)($rcp->tin_valid ?? (strlen(preg_replace('/\D/', '', $tin)) === 10));
+                                    $fsNo = $rcp->fs_no ?? '';
+                                    $isFsValid = (bool)($rcp->fs_no_valid ?? (strlen(preg_replace('/\D/', '', $fsNo)) === 8));
+                                    $slipUrl = $rcp && $rcp->file_path ? asset('storage/' . $rcp->file_path) : null;
+                                @endphp
+                                <tr id="ocr-row-{{ $ocrItem->id }}">
+                                    <td class="ps-4 text-muted small">{{ $ocrItems->firstItem() + $index }}</td>
+                                    
+                                    {{-- Supplier TIN (Col D) --}}
+                                    <td>
+                                        <div class="d-flex align-items-center gap-1.5">
+                                            <span class="font-monospace fw-bold {{ $isTinValid ? 'text-dark' : 'text-danger' }}">
+                                                {{ $tin ?: 'N/A' }}
+                                            </span>
+                                            @if($tin)
+                                                @if($isTinValid)
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-1.5 py-0.5" style="font-size:0.65rem;" title="Valid 10-Digit ERCA TIN">
+                                                        <i class="fa-solid fa-check"></i>
+                                                    </span>
+                                                @else
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-1.5 py-0.5" style="font-size:0.65rem;" title="Invalid TIN Length">
+                                                        <i class="fa-solid fa-triangle-exclamation"></i>
+                                                    </span>
+                                                @endif
                                             @endif
-                                        @endif
+                                        </div>
+                                    </td>
 
-                                        @if($hasWht)
-                                            @if($item->withholding_settled)
-                                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;" title="3% WHT Settled {{ optional($item->withholding_settled_at)->format('M d, Y') }}">
-                                                    <i class="fa-solid fa-check me-1"></i>WHT Paid
-                                                </span>
-                                            @elseif($item->withholding_settlement_id)
-                                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
-                                                    <i class="fa-solid fa-clock me-1"></i>WHT Pending
-                                                </span>
-                                            @else
-                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
-                                                    <i class="fa-solid fa-bolt me-1"></i>WHT Active
-                                                </span>
+                                    {{-- Supplier Name (Col E) --}}
+                                    <td>
+                                        <div class="fw-semibold text-dark small">{{ $rcp->vendor_name ?? 'Unknown Vendor' }}</div>
+                                        @if($rcp && $rcp->project)
+                                            <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
+                                                <i class="fa-solid fa-building me-1"></i>{{ $rcp->project->name }}
+                                            </span>
+                                        @endif
+                                    </td>
+
+                                    {{-- Receipt Date (Col F) --}}
+                                    <td class="small text-muted font-monospace">
+                                        {{ $rcp && $rcp->receipt_date ? $rcp->receipt_date->format('d/m/Y') : '—' }}
+                                    </td>
+
+                                    {{-- MRC # (Col G) --}}
+                                    <td class="small font-monospace text-secondary">
+                                        {{ $rcp->mrc_no ?: '—' }}
+                                    </td>
+
+                                    {{-- FS / Receipt # (Col H) --}}
+                                    <td>
+                                        <div class="d-flex align-items-center gap-1.5">
+                                            <span class="font-monospace fw-bold text-primary">{{ $fsNo ?: '—' }}</span>
+                                            @if($fsNo)
+                                                @if($isFsValid)
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-1.5 py-0.5" style="font-size:0.65rem;" title="Valid 8-Digit FS #">
+                                                        <i class="fa-solid fa-check"></i>
+                                                    </span>
+                                                @else
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-1.5 py-0.5" style="font-size:0.65rem;" title="Check FS # format">
+                                                        !
+                                                    </span>
+                                                @endif
                                             @endif
-                                        @endif
+                                        </div>
+                                    </td>
 
-                                        @if(!((float)($item->vat_amount ?? 0) > 0 || in_array($item->vat_type, ['exclusive', 'inclusive', 'vat_b'])) && !$hasWht)
+                                    {{-- Item Description (Col I) --}}
+                                    <td>
+                                        <div class="small text-dark fw-medium">{{ $ocrItem->item_description ?: 'General Purchase' }}</div>
+                                        @if($rcp && $rcp->category)
+                                            <span class="badge bg-light text-muted border" style="font-size: 0.65rem;">
+                                                {{ ucfirst($rcp->category) }}
+                                            </span>
+                                        @endif
+                                    </td>
+
+                                    {{-- Taxable Base (Col M) --}}
+                                    <td class="text-end font-monospace fw-semibold small">
+                                        ETB {{ number_format((float)$ocrItem->total_value, 2) }}
+                                    </td>
+
+                                    {{-- 15% VAT (Col N) --}}
+                                    <td class="text-end font-monospace fw-bold text-info small">
+                                        + ETB {{ number_format((float)$ocrItem->vat_amount, 2) }}
+                                    </td>
+
+                                    {{-- Total with VAT (Col O) --}}
+                                    <td class="text-end font-monospace fw-bold text-success small">
+                                        ETB {{ number_format((float)$ocrItem->value_after_vat, 2) }}
+                                    </td>
+
+                                    {{-- Slip Preview Thumbnail --}}
+                                    <td class="text-center">
+                                        @if($slipUrl)
+                                            <button type="button" class="btn btn-xs btn-outline-info rounded-pill px-2 py-0.5 shadow-xs" 
+                                                    onclick="openVatSlipModal('{{ $slipUrl }}', '{{ addslashes($rcp->vendor_name ?? '') }}', '{{ $tin }}', '{{ $fsNo }}', '{{ $rcp->mrc_no ?? '' }}', '{{ optional($rcp->receipt_date)->format('d M Y') }}', '{{ number_format((float)$ocrItem->total_value, 2) }}', '{{ number_format((float)$ocrItem->vat_amount, 2) }}', '{{ number_format((float)$ocrItem->value_after_vat, 2) }}', '{{ route('admin.ocr.index') }}')"
+                                                    title="View High-Res Receipt Slip">
+                                                <i class="fa-solid fa-image me-1"></i>Slip
+                                            </button>
+                                        @else
                                             <span class="text-muted small">—</span>
                                         @endif
-                                    </div>
-                                </td>
+                                    </td>
 
-                                {{-- Actions --}}
-                                <td class="text-center pe-4">
-                                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2.5 py-1 shadow-xs" 
-                                            data-bs-toggle="modal" data-bs-target="#taxDetailModal{{ $item->id }}" title="View Full Tax Details">
-                                        <i class="fa-solid fa-eye"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="11" class="text-center py-5">
-                                    @if($cycle === 'active')
+                                    {{-- Actions --}}
+                                    <td class="text-center pe-4">
+                                        <div class="d-flex justify-content-center gap-1">
+                                            @if($slipUrl)
+                                                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2 py-0.5" 
+                                                        onclick="openVatSlipModal('{{ $slipUrl }}', '{{ addslashes($rcp->vendor_name ?? '') }}', '{{ $tin }}', '{{ $fsNo }}', '{{ $rcp->mrc_no ?? '' }}', '{{ optional($rcp->receipt_date)->format('d M Y') }}', '{{ number_format((float)$ocrItem->total_value, 2) }}', '{{ number_format((float)$ocrItem->vat_amount, 2) }}', '{{ number_format((float)$ocrItem->value_after_vat, 2) }}', '{{ route('admin.ocr.index') }}')"
+                                                        title="View Details">
+                                                    <i class="fa-solid fa-eye"></i>
+                                                </button>
+                                            @endif
+                                            <button type="button" class="btn btn-outline-danger btn-sm rounded-pill px-2 py-0.5" 
+                                                    onclick="deleteOcrItem({{ $ocrItem->id }}, '{{ addslashes($fsNo ?: 'Row #' . ($index + 1)) }}')"
+                                                    title="Delete Row">
+                                                <i class="fa-solid fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="12" class="text-center py-5">
                                         <div class="py-4">
-                                            <div class="p-3 bg-success bg-opacity-10 text-success rounded-circle d-inline-block fs-1 mb-3">
-                                                <i class="fa-solid fa-circle-check"></i>
+                                            <div class="p-3 bg-info bg-opacity-10 text-info rounded-circle d-inline-block fs-1 mb-3">
+                                                <i class="fa-solid fa-camera-viewfinder"></i>
                                             </div>
-                                            <h5 class="fw-bold text-dark">Starting from Zero: All Taxes Are Settled!</h5>
+                                            <h5 class="fw-bold text-dark">No OCR Extracted VAT Receipts Found</h5>
                                             <p class="text-muted small mx-auto" style="max-width: 480px;">
-                                                All VAT and 3% Withholding Tax liabilities from previous periods have been remitted to ERCA. 
-                                                The current active cycle starts from zero (ETB 0.00). Any new taxable payments made will accumulate here.
+                                                Drag and drop receipts or snap photos in the scanner box above. Multi-engine AI Vision will instantly populate the ERCA VAT Line 100 purchase declaration here.
                                             </p>
-                                            <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
-                                                <a href="{{ route('finance.tax-deductions.index', ['cycle' => 'all']) }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-1.5">
-                                                    <i class="fa-solid fa-layer-group me-1"></i> View All-Time Tax Ledger
-                                                </a>
-                                                <a href="{{ route('finance.tax-deductions.index', ['tab' => 'settlements']) }}" class="btn btn-outline-danger btn-sm rounded-pill px-3 py-1.5">
-                                                    <i class="fa-solid fa-file-invoice-dollar me-1"></i> View Past Remittance Batches
-                                                </a>
-                                            </div>
+                                            <button type="button" class="btn btn-info text-white btn-sm rounded-pill px-3 py-1.5 shadow-xs" onclick="document.getElementById('vat-file-input').click()">
+                                                <i class="fa-solid fa-cloud-arrow-up me-1"></i>Scan First Receipt
+                                            </button>
                                         </div>
-                                    @else
-                                        <div class="text-muted py-4">
-                                            <i class="fa-solid fa-receipt fs-1 mb-2 d-block text-secondary"></i>
-                                            <h6 class="fw-bold text-dark">No Tax Records Found</h6>
-                                            <p class="text-muted small mb-0">Try changing your search terms or filter criteria.</p>
-                                        </div>
-                                    @endif
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-
-            {{-- Pagination --}}
-            @if($records->hasPages())
-                <div class="card-footer bg-white border-top py-3 px-4">
-                    {{ $records->links() }}
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
+
+                {{-- Pagination for OCR items --}}
+                @if($ocrItems->hasPages())
+                    <div class="card-footer bg-white border-top py-3 px-4">
+                        {{ $ocrItems->links() }}
+                    </div>
+                @endif
+
+            @else
+                {{-- ── STANDARD / EXPENSE REQUESTS TABLE VIEW ──────────────────────── --}}
+                {{-- Filter Bar --}}
+                <div class="card-body p-3 p-md-4 bg-light bg-opacity-50 border-bottom">
+                    <form method="GET" action="{{ route('finance.tax-deductions.index') }}" class="row g-2 align-items-center">
+                        <input type="hidden" name="tab" value="{{ $tab }}">
+                        @if($tab === 'vat')
+                            <input type="hidden" name="vat_source" value="expense">
+                        @endif
+                        <input type="hidden" name="cycle" value="{{ $cycle }}">
+
+                        <div class="col-12 col-md-3">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0 text-muted"><i class="fa-solid fa-magnifying-glass"></i></span>
+                                <input type="text" name="search" class="form-control border-start-0" 
+                                       placeholder="Search Ref, Voucher, Requester..." value="{{ request('search') }}">
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-md-2">
+                            <select name="category" class="form-select" onchange="this.form.submit()">
+                                <option value="">All Categories</option>
+                                <option value="Service" {{ request('category') === 'Service' ? 'selected' : '' }}>🤝 Service (አገልግሎት)</option>
+                                <option value="Contract Work" {{ request('category') === 'Contract Work' ? 'selected' : '' }}>📝 Contract Work (የኮንትራት)</option>
+                                <option value="Transport" {{ request('category') === 'Transport' ? 'selected' : '' }}>🚚 Transport (ትራንስፖርት)</option>
+                                <option value="Loading & Unloading" {{ request('category') === 'Loading & Unloading' ? 'selected' : '' }}>📦 Loading &amp; Unloading</option>
+                                <option value="Maintenance" {{ request('category') === 'Maintenance' ? 'selected' : '' }}>🔧 Maintenance</option>
+                                <option value="Other" {{ request('category') === 'Other' ? 'selected' : '' }}>✨ Other</option>
+                            </select>
+                        </div>
+
+                        <div class="col-6 col-md-2">
+                            <select name="vat_type" class="form-select" onchange="this.form.submit()">
+                                <option value="">All VAT Types</option>
+                                <option value="exclusive" {{ request('vat_type') === 'exclusive' ? 'selected' : '' }}>15% Added (+15% ቫት)</option>
+                                <option value="vat_b" {{ request('vat_type') === 'vat_b' ? 'selected' : '' }}>15% Included (VAT B)</option>
+                                <option value="none" {{ request('vat_type') === 'none' ? 'selected' : '' }}>No VAT (0%)</option>
+                            </select>
+                        </div>
+
+                        <div class="col-6 col-md-2">
+                            <input type="date" name="from_date" class="form-control" value="{{ request('from_date') }}" title="From Date" placeholder="From Date">
+                        </div>
+
+                        <div class="col-6 col-md-2">
+                            <input type="date" name="to_date" class="form-control" value="{{ request('to_date') }}" title="To Date" placeholder="To Date">
+                        </div>
+
+                        <div class="col-12 col-md-1 d-flex gap-1.5">
+                            <button type="submit" class="btn btn-primary flex-fill" title="Apply Filter">
+                                <i class="fa-solid fa-filter"></i>
+                            </button>
+                            @if(request('search') || request('category') || request('vat_type') || request('from_date') || request('to_date'))
+                                <a href="{{ route('finance.tax-deductions.index', ['tab' => $tab, 'vat_source' => request('vat_source'), 'cycle' => $cycle]) }}" class="btn btn-outline-danger" title="Clear Filters">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </a>
+                            @endif
+                        </div>
+                    </form>
+                </div>
+
+                {{-- Tax Deductions Table --}}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="bg-light-subtle text-muted text-uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                            <tr>
+                                <th class="ps-4 py-3">Voucher / Ref #</th>
+                                <th class="py-3">Requester / Project</th>
+                                <th class="py-3">Category</th>
+                                <th class="py-3 text-end">Base Invoiced</th>
+                                <th class="py-3 text-end">VAT (15%)</th>
+                                <th class="py-3 text-end text-danger">3% Withholding</th>
+                                <th class="py-3 text-end text-success">Net Paid</th>
+                                <th class="py-3">Paying Account</th>
+                                <th class="py-3 text-center">WHT Slip</th>
+                                <th class="py-3">Cycle Status</th>
+                                <th class="py-3 text-center pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y">
+                            @forelse($records as $item)
+                                @php
+                                    $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
+                                    $wht = (float)$item->calculated_withholding_amount;
+                                    $net = (float)$item->effective_payable_amount;
+                                    $hasWht = (bool)($item->has_withholding || $item->withholding_amount > 0 || $wht > 0);
+                                    $isSettled = (bool)($item->vat_settled || $item->withholding_settled);
+                                @endphp
+                                <tr>
+                                    {{-- Ref / Voucher # --}}
+                                    <td class="ps-4">
+                                        <div class="fw-bold font-monospace text-primary">{{ $item->request_number }}</div>
+                                        <div class="small text-muted">{{ optional($item->created_at)->format('d M Y, h:i A') }}</div>
+                                        @if($item->payment_reference)
+                                            <span class="badge bg-light text-dark border font-monospace mt-1" style="font-size: 0.68rem;">
+                                                Ref: {{ $item->payment_reference }}
+                                            </span>
+                                        @endif
+                                    </td>
+
+                                    {{-- Requester / Project --}}
+                                    <td>
+                                        <div class="fw-semibold text-dark small">{{ $item->user->name ?? ($item->employee->full_name ?? 'N/A') }}</div>
+                                        @if($item->project_id && $item->project)
+                                            <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
+                                                <i class="fa-solid fa-building me-1"></i>{{ $item->project->name }}
+                                            </span>
+                                        @elseif($item->purchaseRequest)
+                                            <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
+                                                <i class="fa-solid fa-cart-shopping me-1"></i>PR #{{ $item->purchaseRequest->pr_number ?? $item->purchaseRequest->id }}
+                                            </span>
+                                        @elseif($item->creditStoreLedger)
+                                            <span class="badge bg-light text-secondary border fw-normal mt-0.5" style="font-size: 0.68rem;">
+                                                <i class="fa-solid fa-truck-ramp-box me-1"></i>Credit Store #{{ $item->creditStoreLedger->id }}
+                                            </span>
+                                        @endif
+                                    </td>
+
+                                    {{-- Category --}}
+                                    <td>
+                                        @php
+                                            $catColor = match($item->category) {
+                                                'Contract Work' => 'purple',
+                                                'Service' => 'warning',
+                                                'Transport' => 'info',
+                                                'Loading & Unloading' => 'secondary',
+                                                default => 'primary'
+                                            };
+                                        @endphp
+                                        <span class="badge bg-{{ $catColor }}-subtle text-{{ $catColor }} border border-{{ $catColor }}-subtle rounded-pill px-2.5 py-1 small">
+                                            {{ $item->category }}
+                                        </span>
+                                    </td>
+
+                                    {{-- Base Invoiced --}}
+                                    <td class="text-end font-monospace fw-semibold small">
+                                        ETB {{ number_format($gross, 2) }}
+                                    </td>
+
+                                    {{-- VAT --}}
+                                    <td class="text-end font-monospace small">
+                                        @if((float)($item->vat_amount ?? 0) > 0)
+                                            <span class="text-info fw-bold">+ ETB {{ number_format((float)$item->vat_amount, 2) }}</span>
+                                            <div class="text-muted" style="font-size:0.68rem;">
+                                                {{ $item->vat_type === 'vat_b' ? 'VAT B (15% Incl.)' : '15% Added' }}
+                                            </div>
+                                        @else
+                                            <span class="text-muted small">—</span>
+                                        @endif
+                                    </td>
+
+                                    {{-- Withholding Tax (3%) --}}
+                                    <td class="text-end font-monospace small">
+                                        @if($hasWht && $wht > 0)
+                                            <span class="text-danger fw-bold">- ETB {{ number_format($wht, 2) }}</span>
+                                            <div class="text-muted" style="font-size:0.68rem;">3% Deducted</div>
+                                        @else
+                                            <span class="text-muted small">—</span>
+                                        @endif
+                                    </td>
+
+                                    {{-- Net Disbursed --}}
+                                    <td class="text-end font-monospace fw-bold text-success small">
+                                        ETB {{ number_format($net, 2) }}
+                                    </td>
+
+                                    {{-- Paying Account --}}
+                                    <td>
+                                        <div class="small fw-medium text-dark">
+                                            {{ $item->chartOfAccount->name ?? ($item->bankAccount->bank_name ?? 'Petty Cash') }}
+                                        </div>
+                                        @if($item->paidBy)
+                                            <small class="text-muted" style="font-size: 0.7rem;">By: {{ $item->paidBy->name }}</small>
+                                        @endif
+                                    </td>
+
+                                    {{-- WHT Slip Status --}}
+                                    <td class="text-center">
+                                        @if(!empty($item->withholding_receipt))
+                                            <a href="{{ $item->withholding_receipt_url }}" target="_blank" class="btn btn-xs btn-outline-success rounded-pill px-2.5 py-0.5 shadow-xs" style="font-size:0.75rem;" title="View Attached 3% WHT Receipt Slip">
+                                                <i class="fa-solid fa-paperclip me-1"></i> Slip
+                                            </a>
+                                        @elseif($hasWht)
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0.5" style="font-size:0.68rem;" title="Withholding applied but slip not yet attached">
+                                                <i class="fa-solid fa-triangle-exclamation me-1"></i> Missing
+                                            </span>
+                                        @else
+                                            <span class="text-muted small">—</span>
+                                        @endif
+                                    </td>
+
+                                    {{-- Cycle / Settle Status --}}
+                                    <td>
+                                        <div class="d-flex flex-column gap-1">
+                                            @if((float)($item->vat_amount ?? 0) > 0 || in_array($item->vat_type, ['exclusive', 'inclusive', 'vat_b']))
+                                                @if($item->vat_settled)
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;" title="VAT Settled {{ optional($item->vat_settled_at)->format('M d, Y') }}">
+                                                        <i class="fa-solid fa-check me-1"></i>VAT Paid
+                                                    </span>
+                                                @elseif($item->vat_settlement_id)
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
+                                                        <i class="fa-solid fa-clock me-1"></i>VAT Pending
+                                                    </span>
+                                                @else
+                                                    <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
+                                                        <i class="fa-solid fa-bolt me-1"></i>VAT Active
+                                                    </span>
+                                                @endif
+                                            @endif
+
+                                            @if($hasWht)
+                                                @if($item->withholding_settled)
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;" title="3% WHT Settled {{ optional($item->withholding_settled_at)->format('M d, Y') }}">
+                                                        <i class="fa-solid fa-check me-1"></i>WHT Paid
+                                                    </span>
+                                                @elseif($item->withholding_settlement_id)
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
+                                                        <i class="fa-solid fa-clock me-1"></i>WHT Pending
+                                                    </span>
+                                                @else
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2 py-0.5" style="font-size: 0.65rem;">
+                                                        <i class="fa-solid fa-bolt me-1"></i>WHT Active
+                                                    </span>
+                                                @endif
+                                            @endif
+
+                                            @if(!((float)($item->vat_amount ?? 0) > 0 || in_array($item->vat_type, ['exclusive', 'inclusive', 'vat_b'])) && !$hasWht)
+                                                <span class="text-muted small">—</span>
+                                            @endif
+                                        </div>
+                                    </td>
+
+                                    {{-- Actions --}}
+                                    <td class="text-center pe-4">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-2.5 py-1 shadow-xs" 
+                                                data-bs-toggle="modal" data-bs-target="#taxDetailModal{{ $item->id }}" title="View Full Tax Details">
+                                            <i class="fa-solid fa-eye"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="11" class="text-center py-5">
+                                        @if($cycle === 'active')
+                                            <div class="py-4">
+                                                <div class="p-3 bg-success bg-opacity-10 text-success rounded-circle d-inline-block fs-1 mb-3">
+                                                    <i class="fa-solid fa-circle-check"></i>
+                                                </div>
+                                                <h5 class="fw-bold text-dark">Starting from Zero: All Taxes Are Settled!</h5>
+                                                <p class="text-muted small mx-auto" style="max-width: 480px;">
+                                                    All VAT and 3% Withholding Tax liabilities from previous periods have been remitted to ERCA. 
+                                                    The current active cycle starts from zero (ETB 0.00). Any new taxable payments made will accumulate here.
+                                                </p>
+                                                <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
+                                                    <a href="{{ route('finance.tax-deductions.index', ['cycle' => 'all']) }}" class="btn btn-outline-primary btn-sm rounded-pill px-3 py-1.5">
+                                                        <i class="fa-solid fa-layer-group me-1"></i> View All-Time Tax Ledger
+                                                    </a>
+                                                    <a href="{{ route('finance.tax-deductions.index', ['tab' => 'settlements']) }}" class="btn btn-outline-danger btn-sm rounded-pill px-3 py-1.5">
+                                                        <i class="fa-solid fa-file-invoice-dollar me-1"></i> View Past Remittance Batches
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        @else
+                                            <div class="text-muted py-4">
+                                                <i class="fa-solid fa-receipt fs-1 mb-2 d-block text-secondary"></i>
+                                                <h6 class="fw-bold text-dark">No Tax Records Found</h6>
+                                                <p class="text-muted small mb-0">Try changing your search terms or filter criteria.</p>
+                                            </div>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                {{-- Pagination --}}
+                @if($records->hasPages())
+                    <div class="card-footer bg-white border-top py-3 px-4">
+                        {{ $records->links() }}
+                    </div>
+                @endif
             @endif
         </div>
     @endif
@@ -1427,7 +1798,306 @@
     </div>
 @endforeach
 
+{{-- ── MODAL: High-Res OCR Receipt Slip Preview ────────────────────────────────────── --}}
+<div class="modal fade" id="vatReceiptSlipModal" tabindex="-1" aria-labelledby="vatReceiptSlipModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-dark text-white py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-receipt text-info fs-5"></i>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="vatReceiptSlipModalLabel">
+                            Receipt Slip Preview &mdash; <span id="modalFsNoDisplay" class="font-monospace text-info"></span>
+                        </h5>
+                        <small class="text-white-50">Verified ERCA Fiscal Receipt Document</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-4 align-items-center">
+                    <div class="col-md-7 text-center">
+                        <div class="p-2 border rounded-3 bg-light shadow-xs d-inline-block w-100" style="min-height: 280px; max-height: 520px; overflow: auto;">
+                            <img id="modalSlipImg" src="" alt="Receipt Slip" class="img-fluid rounded" style="max-height: 480px; object-fit: contain;">
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="p-3 bg-light rounded-3 border">
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                                <i class="fa-solid fa-file-invoice text-info me-1"></i>ERCA Declaration Data
+                            </h6>
+                            <div class="d-flex flex-column gap-2 small">
+                                <div>
+                                    <span class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Supplier / Merchant</span>
+                                    <span id="modalVendorName" class="fw-bold text-dark fs-6"></span>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <span class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Supplier TIN (Col D)</span>
+                                        <span id="modalVendorTin" class="font-monospace fw-bold text-primary"></span>
+                                    </div>
+                                    <div class="col-6">
+                                        <span class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Receipt Date (Col F)</span>
+                                        <span id="modalDate" class="font-monospace text-secondary"></span>
+                                    </div>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <span class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">FS # (Col H)</span>
+                                        <span id="modalFsNo" class="font-monospace fw-bold text-dark"></span>
+                                    </div>
+                                    <div class="col-6">
+                                        <span class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">MRC # (Col G)</span>
+                                        <span id="modalMrcNo" class="font-monospace text-secondary"></span>
+                                    </div>
+                                </div>
+                                <hr class="my-1">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">Taxable Base (Col M):</span>
+                                    <span class="font-monospace fw-semibold text-dark">ETB <span id="modalBase"></span></span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted">VAT 15% (Col N):</span>
+                                    <span class="font-monospace fw-bold text-info">+ ETB <span id="modalVat"></span></span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center border-top pt-1 mt-1">
+                                    <span class="fw-bold text-dark">Total with VAT (Col O):</span>
+                                    <span class="font-monospace fw-bold text-success fs-6">ETB <span id="modalTotal"></span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
+                <a id="modalStudioLink" href="{{ route('admin.ocr.index') }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+                    <i class="fa-solid fa-up-right-from-square me-1"></i>Open in OCR Studio
+                </a>
+                <div class="d-flex gap-2">
+                    <a id="modalDownloadBtn" href="#" target="_blank" download class="btn btn-info text-white btn-sm rounded-pill px-3 shadow-xs">
+                        <i class="fa-solid fa-download me-1"></i>Download Slip
+                    </a>
+                    <button type="button" class="btn btn-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+    // ── High-Res Slip Modal ──────────────────────────────────────────────────
+    function openVatSlipModal(imgUrl, vendor, tin, fs, mrc, date, base, vat, total, studioUrl) {
+        document.getElementById('modalSlipImg').src = imgUrl;
+        document.getElementById('modalVendorName').textContent = vendor || 'N/A';
+        document.getElementById('modalVendorTin').textContent = tin || 'N/A';
+        document.getElementById('modalFsNo').textContent = fs || '—';
+        document.getElementById('modalFsNoDisplay').textContent = fs ? ('FS #' + fs) : 'Slip View';
+        document.getElementById('modalMrcNo').textContent = mrc || '—';
+        document.getElementById('modalDate').textContent = date || '—';
+        document.getElementById('modalBase').textContent = base || '0.00';
+        document.getElementById('modalVat').textContent = vat || '0.00';
+        document.getElementById('modalTotal').textContent = total || '0.00';
+        document.getElementById('modalDownloadBtn').href = imgUrl;
+        if (studioUrl) {
+            document.getElementById('modalStudioLink').href = studioUrl;
+        }
+        const modal = new bootstrap.Modal(document.getElementById('vatReceiptSlipModal'));
+        modal.show();
+    }
+
+    // ── Delete OCR Row ────────────────────────────────────────────────────────
+    function deleteOcrItem(itemId, label) {
+        if (!confirm('Are you sure you want to delete ' + label + ' from the ERCA VAT declaration? This will remove the extracted row from the database.')) {
+            return;
+        }
+        fetch('{{ url('/admin/receipt-ocr/item') }}/' + itemId, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const row = document.getElementById('ocr-row-' + itemId);
+                if (row) {
+                    row.style.transition = 'all 0.3s ease';
+                    row.style.opacity = '0';
+                    setTimeout(() => {
+                        row.remove();
+                        window.location.reload();
+                    }, 300);
+                } else {
+                    window.location.reload();
+                }
+            } else {
+                alert(data.message || 'Failed to delete row.');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('An error occurred while deleting the row.');
+        });
+    }
+
+    // ── VAT Live OCR File Upload Handler ──────────────────────────────────────
+    function handleVatFileUpload(file, forceSave = false) {
+        if (!file) return;
+
+        const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+        if (!validTypes.includes(file.type) && !file.name.match(/\.(jpe?g|png|webp|pdf)$/i)) {
+            alert('Invalid file format. Please upload JPEG, PNG, WEBP, or PDF.');
+            return;
+        }
+
+        const maxBytes = 25 * 1024 * 1024; // 25MB
+        if (file.size > maxBytes) {
+            alert('File is too large. Maximum file size is 25MB.');
+            return;
+        }
+
+        const progressContainer = document.getElementById('vat-scan-progress');
+        const progressBar = document.getElementById('vat-scan-bar');
+        const progressPct = document.getElementById('vat-scan-pct');
+        const statusText = document.getElementById('vat-scan-status-text');
+        const alertBox = document.getElementById('vat-scan-result-alert');
+        const alertMsg = document.getElementById('vat-scan-result-msg');
+
+        if (progressContainer) progressContainer.classList.remove('d-none');
+        if (progressBar) progressBar.style.width = '20%';
+        if (progressPct) progressPct.textContent = '20%';
+        if (statusText) statusText.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1 text-info"></i>Uploading receipt file...';
+
+        let progressInterval = setInterval(() => {
+            if (!progressBar) return;
+            let cur = parseInt(progressBar.style.width) || 20;
+            if (cur < 85) {
+                cur += 15;
+                progressBar.style.width = cur + '%';
+                if (progressPct) progressPct.textContent = cur + '%';
+                if (cur >= 50 && statusText) {
+                    statusText.innerHTML = '<i class="fa-solid fa-microchip fa-spin me-1 text-info"></i>Extracting ERCA fields with AI Vision OCR...';
+                }
+            }
+        }, 600);
+
+        const formData = new FormData();
+        formData.append('receipt_file', file);
+        formData.append('_token', '{{ csrf_token() }}');
+        const projVal = document.getElementById('vat-project-select')?.value;
+        if (projVal) formData.append('project_id', projVal);
+        const catVal = document.getElementById('vat-category-select')?.value;
+        if (catVal) formData.append('category', catVal);
+        if (forceSave) formData.append('force_save', '1');
+
+        fetch('{{ route('admin.ocr.process-file') }}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        })
+        .then(async res => {
+            clearInterval(progressInterval);
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data.message || 'Server error ' + res.status);
+            }
+            return data;
+        })
+        .then(data => {
+            if (progressBar) progressBar.style.width = '100%';
+            if (progressPct) progressPct.textContent = '100%';
+
+            if (data.is_duplicate) {
+                if (statusText) statusText.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-warning me-1"></i>Duplicate receipt detected';
+                if (alertBox) {
+                    alertBox.className = 'alert alert-warning border small py-2 mb-0 d-flex align-items-center justify-content-between gap-2';
+                    alertBox.innerHTML = `<div><i class="fa-solid fa-triangle-exclamation text-warning me-1"></i><strong>${data.duplicate_message}</strong></div><button type="button" class="btn btn-warning btn-xs fw-bold" id="btn-force-save-vat">Save Anyway</button>`;
+                    document.getElementById('btn-force-save-vat')?.addEventListener('click', () => {
+                        handleVatFileUpload(file, true);
+                    });
+                }
+                return;
+            }
+
+            if (statusText) statusText.innerHTML = '<i class="fa-solid fa-circle-check text-success me-1"></i>Scan Complete &amp; ERCA Record Created!';
+            if (alertBox) {
+                alertBox.className = 'alert alert-success border border-success-subtle small py-2 mb-0 d-flex align-items-center gap-2';
+                const rcp = data.receipt || {};
+                const itemsCount = data.items ? data.items.length : 1;
+                alertBox.innerHTML = `<i class="fa-solid fa-circle-check text-success fs-5"></i><div><strong>Receipt Extracted:</strong> ${rcp.vendor_name || 'Vendor'} (TIN: ${rcp.vendor_tin || '—'}, FS: ${rcp.fs_no || '—'}) &mdash; <strong>VAT: ETB ${Number(rcp.vat_amount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</strong> (${itemsCount} row(s)). Reloading table...</div>`;
+            }
+
+            setTimeout(() => {
+                window.location.reload();
+            }, 1200);
+        })
+        .catch(err => {
+            clearInterval(progressInterval);
+            if (progressBar) {
+                progressBar.style.width = '100%';
+                progressBar.classList.remove('bg-info');
+                progressBar.classList.add('bg-danger');
+            }
+            if (statusText) statusText.innerHTML = '<i class="fa-solid fa-circle-xmark text-danger me-1"></i>Extraction failed: ' + (err.message || 'Unknown error');
+            if (alertBox) {
+                alertBox.className = 'alert alert-danger border border-danger-subtle small py-2 mb-0 d-flex align-items-center gap-2';
+                alertBox.innerHTML = `<i class="fa-solid fa-circle-xmark text-danger"></i><div><strong>Error scanning receipt:</strong> ${err.message || 'Please check the file and try again.'}</div>`;
+            }
+        });
+    }
+
+    // ── Dropzone Event Binding ───────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', function() {
+        const dropZone = document.getElementById('vat-drop-zone');
+        const fileInput = document.getElementById('vat-file-input');
+        const cameraInput = document.getElementById('vat-camera-input');
+
+        if (dropZone) {
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropZone.classList.add('bg-info', 'bg-opacity-10', 'border-primary');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropZone.classList.remove('bg-info', 'bg-opacity-10', 'border-primary');
+                }, false);
+            });
+
+            dropZone.addEventListener('drop', function(e) {
+                const dt = e.dataTransfer;
+                if (dt && dt.files && dt.files.length) {
+                    handleVatFileUpload(dt.files[0]);
+                }
+            }, false);
+        }
+
+        if (fileInput) {
+            fileInput.addEventListener('change', function() {
+                if (this.files && this.files.length) {
+                    handleVatFileUpload(this.files[0]);
+                }
+            });
+        }
+
+        if (cameraInput) {
+            cameraInput.addEventListener('change', function() {
+                if (this.files && this.files.length) {
+                    handleVatFileUpload(this.files[0]);
+                }
+            });
+        }
+    });
     function syncAssignedStaff(accountSelect, targetStaffSelectId, badgeId) {
         if (!accountSelect) return;
         const selectedOpt = accountSelect.options[accountSelect.selectedIndex];
