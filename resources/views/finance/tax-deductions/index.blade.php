@@ -2020,14 +2020,23 @@
 
                     {{-- ── FINANCIAL CORE & ERCA LINE 100 BREAKDOWN ── --}}
                     <div class="col-12">
-                        <div class="card border border-success border-opacity-25 bg-success bg-opacity-10 rounded-3 p-3 shadow-xs">
+                        <div class="card border border-success border-opacity-25 bg-success bg-opacity-10 rounded-3 p-3 shadow-xs" id="add_rcpt_financials_card">
                             <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
-                                <span class="small fw-bold text-success text-uppercase" style="font-size:0.75rem; letter-spacing:0.5px;">
-                                    <i class="fa-solid fa-file-invoice-dollar me-1"></i>ERCA Purchase Type &amp; Financials (Line 100)
-                                </span>
-                                <span class="badge bg-success text-white rounded-pill px-2.5 py-0.5" style="font-size:0.68rem;">
-                                    Base + 15% VAT = Total Amount
-                                </span>
+                                <div>
+                                    <span class="small fw-bold text-success text-uppercase d-block" style="font-size:0.75rem; letter-spacing:0.5px;">
+                                        <i class="fa-solid fa-file-invoice-dollar me-1"></i>ERCA Purchase Type &amp; Financials (Line 100)
+                                    </span>
+                                    <small class="text-muted" style="font-size:0.68rem;">Auto-scanned &amp; calculated from fiscal receipt</small>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <button type="button" class="btn btn-xs btn-outline-success fw-bold rounded-pill px-2.5 py-1 shadow-xs d-inline-flex align-items-center gap-1" onclick="document.getElementById('add_rcpt_file_input').click();" title="Scan receipt slip to auto-fill these fields">
+                                        <i class="fa-solid fa-camera-viewfinder"></i>
+                                        <span>Scan Receipt to Fill</span>
+                                    </button>
+                                    <span class="badge bg-success text-white rounded-pill px-2.5 py-1" style="font-size:0.68rem;" id="financials_formula_badge">
+                                        Base + 15% VAT = Total
+                                    </span>
+                                </div>
                             </div>
 
                             <div class="row g-2">
@@ -2077,6 +2086,18 @@
                                     </label>
                                     <input type="number" step="0.01" name="withholding_amount" id="add_rcpt_withholding_amount" class="form-control form-control-sm" placeholder="0.00">
                                     <small class="text-muted" style="font-size:0.68rem;">3% of base subtotal</small>
+                                </div>
+                            </div>
+
+                            {{-- Real-time Extracted Financials Status Feedback --}}
+                            <div id="add_rcpt_financials_status" class="mt-2.5 p-2 rounded-2 bg-white bg-opacity-80 border border-success border-opacity-50 small d-none text-dark">
+                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
+                                    <span id="add_rcpt_financials_status_text">
+                                        <i class="fa-solid fa-circle-check text-success me-1"></i>ERCA Financials auto-filled from scanned slip.
+                                    </span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" id="add_rcpt_financials_calc_badge">
+                                        15% VAT Verified
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -2430,15 +2451,37 @@
                 }
 
                 // Auto-populate ERCA purchase type (Goods vs Services)
-                if (data.purchase_type) {
-                    document.getElementById('add_rcpt_purchase_type').value = data.purchase_type;
+                const ptSelect = document.getElementById('add_rcpt_purchase_type');
+                if (ptSelect && data.purchase_type) {
+                    ptSelect.value = (data.purchase_type === 'PUR_SR' || data.purchase_type === 4 || data.purchase_type === '4') ? 'PUR_SR' : 'PUR_GD';
                 }
 
-                // Automatically fill all amount fields
+                // Automatically fill all amount fields in ERCA Purchase Type & Financials (Line 100)
                 if (totalVal > 0) document.getElementById('add_rcpt_total_amount').value = totalVal.toFixed(2);
                 if (subtotalVal > 0) document.getElementById('add_rcpt_subtotal').value = subtotalVal.toFixed(2);
                 if (vatVal > 0) document.getElementById('add_rcpt_vat_amount').value = vatVal.toFixed(2);
                 if (whtVal > 0) document.getElementById('add_rcpt_withholding_amount').value = whtVal.toFixed(2);
+
+                // Update real-time status inside ERCA Purchase Type & Financials (Line 100) card
+                const finCard = document.getElementById('add_rcpt_financials_card');
+                const finStatus = document.getElementById('add_rcpt_financials_status');
+                const finStatusText = document.getElementById('add_rcpt_financials_status_text');
+                const finBadge = document.getElementById('add_rcpt_financials_calc_badge');
+                if (finCard) {
+                    finCard.classList.remove('bg-opacity-10', 'border-opacity-25');
+                    finCard.classList.add('bg-opacity-25', 'border-success', 'border-2');
+                    setTimeout(() => {
+                        finCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, 200);
+                }
+                if (finStatus && finStatusText) {
+                    finStatus.classList.remove('d-none');
+                    const ptLabel = ptSelect ? ptSelect.options[ptSelect.selectedIndex]?.text : (data.purchase_type === 'PUR_SR' ? 'PUR_SR (Services - 4)' : 'PUR_GD (Goods - 3)');
+                    finStatusText.innerHTML = `<i class="fa-solid fa-circle-check text-success me-1"></i><strong>Scanned &amp; Filled:</strong> ERCA Type: <strong>${ptLabel}</strong> &bull; Total: <strong>ETB ${totalVal.toFixed(2)}</strong> &bull; Base: <strong>ETB ${subtotalVal.toFixed(2)}</strong> &bull; 15% VAT: <strong>ETB ${vatVal.toFixed(2)}</strong>`;
+                    if (finBadge) {
+                        finBadge.textContent = '✓ Line 100 Reconciled';
+                    }
+                }
 
                 if (data.vendor_name && (!document.getElementById('add_rcpt_description').value)) {
                     document.getElementById('add_rcpt_description').value = data.vendor_name + (data.fs_no ? (' (FS: ' + data.fs_no + ')') : '');
@@ -2512,6 +2555,15 @@
                 if (dateEl) dateEl.value = '{{ now()->format('Y-m-d') }}';
                 const buyerTinEl = document.getElementById('add_rcpt_buyer_tin');
                 if (buyerTinEl) buyerTinEl.value = '38480010';
+                const finCard = document.getElementById('add_rcpt_financials_card');
+                if (finCard) {
+                    finCard.classList.remove('bg-opacity-25', 'border-2');
+                    finCard.classList.add('bg-opacity-10');
+                }
+                const finStatus = document.getElementById('add_rcpt_financials_status');
+                if (finStatus) {
+                    finStatus.classList.add('d-none');
+                }
             });
         }
 

@@ -68,10 +68,10 @@ class ReceiptOcrService
                     'item_description' => $extracted['description'] ?? 'Purchased Goods',
                     'uom'              => (string)($extracted['uom_id'] ?? '9'),
                     'qty'              => 1.00,
-                    'unit_price'       => (float)($extracted['subtotal'] ?? 0),
-                    'total_value'      => (float)($extracted['subtotal'] ?? 0),
-                    'vat'              => (float)($extracted['vat_amount'] ?? 0),
-                    'value_after_vat'  => (float)($extracted['total_amount'] ?? 0),
+                    'unit_price'       => QcService::parseMoney($extracted['subtotal'] ?? 0),
+                    'total_value'      => QcService::parseMoney($extracted['subtotal'] ?? 0),
+                    'vat'              => QcService::parseMoney($extracted['vat_amount'] ?? 0),
+                    'value_after_vat'  => QcService::parseMoney($extracted['total_amount'] ?? 0),
                 ]
             ];
         }
@@ -83,10 +83,10 @@ class ReceiptOcrService
 
         foreach ($itemsData as &$it) {
             $qty       = (float)($it['qty'] ?? 1);
-            $unitPrice = (float)($it['unit_price'] ?? 0);
-            $totalVal  = (float)($it['total_value'] ?? round($qty * $unitPrice, 2));
-            $vatAmt    = (float)($it['vat'] ?? round($totalVal * 0.15, 2));
-            $valAfter  = (float)($it['value_after_vat'] ?? round($totalVal + $vatAmt, 2));
+            $unitPrice = QcService::parseMoney($it['unit_price'] ?? 0);
+            $totalVal  = QcService::parseMoney($it['total_value'] ?? round($qty * $unitPrice, 2));
+            $vatAmt    = QcService::parseMoney($it['vat'] ?? round($totalVal * 0.15, 2));
+            $valAfter  = QcService::parseMoney($it['value_after_vat'] ?? round($totalVal + $vatAmt, 2));
 
             // Arithmetic sanity check for each item
             if ($qty > 0 && $unitPrice > 0 && abs(round($qty * $unitPrice, 2) - $totalVal) > 0.05) {
@@ -108,10 +108,43 @@ class ReceiptOcrService
         }
         unset($it);
 
-        if ($calcSubtotal == 0 && !empty($extracted['subtotal'])) {
-            $calcSubtotal = (float)$extracted['subtotal'];
-            $calcVat      = (float)$extracted['vat_amount'];
-            $calcTotal    = (float)$extracted['total_amount'];
+        // Determine explicit slip totals (Line 100)
+        $slipTotal    = QcService::parseMoney($extracted['total_amount'] ?? 0);
+        $slipSubtotal = QcService::parseMoney($extracted['subtotal'] ?? 0);
+        $slipVat      = QcService::parseMoney($extracted['vat_amount'] ?? 0);
+
+        if ($slipTotal > 0) {
+            $calcTotal = $slipTotal;
+            if ($slipSubtotal > 0) {
+                $calcSubtotal = $slipSubtotal;
+            } elseif ($slipVat > 0) {
+                $calcSubtotal = round($slipTotal - $slipVat, 2);
+            } else {
+                $calcSubtotal = round($slipTotal / 1.15, 2);
+            }
+
+            if ($slipVat > 0) {
+                $calcVat = $slipVat;
+            } else {
+                $calcVat = round($calcTotal - $calcSubtotal, 2);
+            }
+        } elseif ($calcTotal > 0) {
+            if ($calcSubtotal == 0) {
+                if ($calcVat > 0) {
+                    $calcSubtotal = round($calcTotal - $calcVat, 2);
+                } else {
+                    $calcSubtotal = round($calcTotal / 1.15, 2);
+                    $calcVat = round($calcTotal - $calcSubtotal, 2);
+                }
+            }
+        } elseif ($slipSubtotal > 0) {
+            $calcSubtotal = $slipSubtotal;
+            if ($slipVat > 0) {
+                $calcVat = $slipVat;
+            } else {
+                $calcVat = round($slipSubtotal * 0.15, 2);
+            }
+            $calcTotal = round($calcSubtotal + $calcVat, 2);
         }
 
         if (empty($supplierTin) || strlen($supplierTin) !== 10) {
@@ -123,6 +156,12 @@ class ReceiptOcrService
 
         $allItemNames = array_filter(array_map(fn($it) => trim((string)($it['item_description'] ?? ($it['name'] ?? ''))), $itemsData));
         $materialListSummary = !empty($allItemNames) ? implode(', ', $allItemNames) : ($extracted['description'] ?? 'Materials');
+
+        // Normalize ERCA Purchase Type (PUR_GD vs PUR_SR)
+        $purcNorm = QcService::normalizePurchaseType(
+            $extracted['purchase_type'] ?? ($extracted['vat_category'] ?? null),
+            $merchantName . ' ' . $materialListSummary
+        );
 
         // Check for duplicate in database
         $duplicateReceipt = $this->findDuplicate($fsNo, $supplierTin);
@@ -156,6 +195,9 @@ class ReceiptOcrService
             'mrc_no'            => $mrcNo,
             'receipt_date'      => $dateStr,
             'receipt_date_ymd'  => $dbDate,
+            'purchase_type'     => $purcNorm['type'],
+            'purchase_type_int' => $purcNorm['code'],
+            'vat_category'      => $purcNorm['vat_category'],
             'subtotal'          => round($calcSubtotal, 2),
             'vat_amount'        => round($calcVat, 2),
             'total_amount'      => round($calcTotal, 2),
@@ -301,9 +343,9 @@ class ReceiptOcrService
                 'fs_no_valid'      => $fsNoValid,
                 'mrc_no'           => $scanData['mrc_no'] ?? null,
                 'receipt_date'     => $receiptDate,
-                'subtotal'         => round((float)($scanData['subtotal'] ?? 0), 2),
-                'vat_amount'       => round((float)($scanData['vat_amount'] ?? 0), 2),
-                'total_amount'     => round((float)($scanData['total_amount'] ?? 0), 2),
+                'subtotal'         => QcService::parseMoney($scanData['subtotal'] ?? 0),
+                'vat_amount'       => QcService::parseMoney($scanData['vat_amount'] ?? 0),
+                'total_amount'     => QcService::parseMoney($scanData['total_amount'] ?? 0),
                 'currency'         => 'ETB',
                 'category'         => $category ?: 'material',
                 'description'      => $scanData['description'] ?? 'Materials',
@@ -335,17 +377,22 @@ class ReceiptOcrService
             $hasFlaggedItem = false;
             foreach ($itemsData as $item) {
                 $qty       = (float)($item['qty'] ?? 1);
-                $unitPrice = (float)($item['unit_price'] ?? 0);
-                $totalVal  = (float)($item['total_value'] ?? round($qty * $unitPrice, 2));
-                $vatAmt    = (float)($item['vat'] ?? round($totalVal * 0.15, 2));
-                $valAfter  = (float)($item['value_after_vat'] ?? round($totalVal + $vatAmt, 2));
+                $unitPrice = QcService::parseMoney($item['unit_price'] ?? 0);
+                $totalVal  = QcService::parseMoney($item['total_value'] ?? round($qty * $unitPrice, 2));
+                $vatAmt    = QcService::parseMoney($item['vat'] ?? round($totalVal * 0.15, 2));
+                $valAfter  = QcService::parseMoney($item['value_after_vat'] ?? round($totalVal + $vatAmt, 2));
+
+                $itemPurcNorm = QcService::normalizePurchaseType(
+                    $item['purchase_type'] ?? ($scanData['purchase_type'] ?? ($scanData['extracted']['purchase_type'] ?? null)),
+                    ($item['item_description'] ?? '') . ' ' . ($scanData['vendor_name'] ?? '')
+                );
 
                 $rItem = new ReceiptItem([
                     'receipt_id'       => $receipt->id,
                     'item_description' => $item['item_description'] ?? 'Material',
-                    'vat_category'     => $scanData['extracted']['vat_category'] ?? ($scanData['vat_category'] ?? 'G'),
+                    'vat_category'     => $itemPurcNorm['vat_category'],
                     'calendar_type'    => $scanData['extracted']['calendar_type'] ?? ($scanData['calendar_type'] ?? 'G'),
-                    'purchase_type'    => (int)($scanData['extracted']['purchase_type'] ?? ($scanData['purchase_type'] ?? 3)),
+                    'purchase_type'    => $itemPurcNorm['code'],
                     'uom'              => (string)($item['uom'] ?? ($scanData['extracted']['uom_id'] ?? ($scanData['uom_id'] ?? '9'))),
                     'qty'              => $qty,
                     'unit_price'       => $unitPrice,

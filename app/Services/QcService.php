@@ -200,5 +200,49 @@ class QcService
 
         return round((float)$str, 2);
     }
+
+    /**
+     * Normalize ERCA purchase type into official numeric code (3 or 4) and eTax declaration type (PUR_GD or PUR_SR).
+     * Line 100: 3 = Taxable-local Purchase of Inputs (Goods / Materials) -> PUR_GD
+     * Line 110/120: 4 = Taxable-local Services / Imported Inputs -> PUR_SR
+     */
+    public static function normalizePurchaseType($val, ?string $contextText = null): array
+    {
+        $raw = strtoupper(trim((string)$val));
+        if ($raw === 'PUR_SR' || $raw === '4' || $raw === 'PUR_SER' || $raw === 'S' || $raw === 'SERVICE' || $raw === 'SERVICES') {
+            return [
+                'code'         => 4,
+                'type'         => 'PUR_SR',
+                'vat_category' => 'S',
+                'label'        => 'PUR_SR (Services - 4)',
+            ];
+        }
+
+        if (!empty($contextText)) {
+            $serviceKeywords = [
+                'service', 'services', 'transport', 'freight', 'logistics', 'rental', 'rent', 'lease',
+                'maintenance', 'repair', 'labor', 'labour', 'consultancy', 'consulting', 'cleaning',
+                'security', 'hotel', 'catering', 'engineering', 'garage', 'subcontractor', 'machinery rental'
+            ];
+            $lower = strtolower($contextText);
+            foreach ($serviceKeywords as $keyword) {
+                if (str_contains($lower, $keyword)) {
+                    return [
+                        'code'         => 4,
+                        'type'         => 'PUR_SR',
+                        'vat_category' => 'S',
+                        'label'        => 'PUR_SR (Services - 4)',
+                    ];
+                }
+            }
+        }
+
+        return [
+            'code'         => 3,
+            'type'         => 'PUR_GD',
+            'vat_category' => 'G',
+            'label'        => 'PUR_GD (Goods / Materials - 3)',
+        ];
+    }
 }
 

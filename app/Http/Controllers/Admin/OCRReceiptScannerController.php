@@ -1557,11 +1557,12 @@ class OCRReceiptScannerController extends Controller
                     // Col G: MRC (Machine Registration Code, e.g. DDB0000032 or blank)
                     $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : '';
 
-                    // Col H: PurcType (PUR_GD = Goods, PUR_SER = Services)
-                    $isService = ($item->vat_category === 'S') ||
-                                 (strtolower((string)($r->category ?? '')) === 'service') ||
-                                 (stripos((string)($item->item_description ?? ''), 'service') !== false);
-                    $purcType = $isService ? 'PUR_SER' : 'PUR_GD';
+                    // Col H: PurcType (PUR_GD = Goods, PUR_SR = Services)
+                    $purcNorm = QcService::normalizePurchaseType(
+                        $item->purchase_type ?: ($item->vat_category ?: ($r->category ?? null)),
+                        ($item->item_description ?? '') . ' ' . ($r ? $r->vendor_name : '')
+                    );
+                    $purcType = $purcNorm['type'];
 
                     // Col I: Encoded By (e.g. wechacha)
                     $encodedBy = $request->input('encoded_by') ?: (
@@ -1795,10 +1796,12 @@ class OCRReceiptScannerController extends Controller
                     $encodingDate = ($r && $r->created_at) ? $r->created_at->format('d-m-Y') : now()->format('d-m-Y');
                     $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : '';
 
-                    $isService = ($item->vat_category === 'S') ||
-                                 (strtolower((string)($r->category ?? '')) === 'service') ||
-                                 (stripos((string)($item->item_description ?? ''), 'service') !== false);
-                    $purcType = $isService ? 'PUR_SER' : 'PUR_GD';
+                    // Col H: PurcType (PUR_GD = Goods, PUR_SR = Services)
+                    $purcNorm = QcService::normalizePurchaseType(
+                        $item->purchase_type ?: ($item->vat_category ?: ($r->category ?? null)),
+                        ($item->item_description ?? '') . ' ' . ($r ? $r->vendor_name : '')
+                    );
+                    $purcType = $purcNorm['type'];
 
                     $encodedBy = $request->input('encoded_by') ?: (
                         SystemSetting::get('etax_encoded_by') ?: (

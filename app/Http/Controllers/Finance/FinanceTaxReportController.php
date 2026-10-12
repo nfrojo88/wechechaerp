@@ -1094,23 +1094,12 @@ class FinanceTaxReportController extends Controller
                 $totalAmount = round($subtotal + $vatAmount, 2);
             }
 
-            // Detect ERCA Purchase Type (PUR_GD vs PUR_SR)
-            $rawPurcType = strtoupper(trim((string)($scan['purchase_type'] ?? ($scan['extracted']['purchase_type'] ?? ''))));
-            $rawVatCat   = strtoupper(trim((string)($scan['vat_category'] ?? ($scan['extracted']['vat_category'] ?? ''))));
-            
-            $purchaseType = 'PUR_GD'; // Default: Goods / Materials (Line 100)
-            if ($rawPurcType === 'PUR_SR' || $rawPurcType === '4' || $rawVatCat === 'S') {
-                $purchaseType = 'PUR_SR';
-            } else {
-                $descriptionAll = strtolower($vendorName . ' ' . ($scan['description'] ?? '') . ' ' . implode(' ', array_column($items, 'item_description')));
-                $serviceKeywords = ['service', 'services', 'transport', 'freight', 'logistics', 'rental', 'rent', 'lease', 'maintenance', 'repair', 'labor', 'labour', 'consultancy', 'consulting', 'cleaning', 'security', 'hotel', 'catering', 'engineering', 'garage', 'subcontractor', 'machinery rental'];
-                foreach ($serviceKeywords as $keyword) {
-                    if (str_contains($descriptionAll, $keyword)) {
-                        $purchaseType = 'PUR_SR';
-                        break;
-                    }
-                }
-            }
+            // Detect ERCA Purchase Type (PUR_GD vs PUR_SR) using centralized QcService
+            $purcNorm = QcService::normalizePurchaseType(
+                $scan['purchase_type'] ?? ($scan['extracted']['purchase_type'] ?? ($scan['vat_category'] ?? null)),
+                $vendorName . ' ' . ($scan['description'] ?? '') . ' ' . implode(' ', array_column($items, 'item_description'))
+            );
+            $purchaseType = $purcNorm['type'];
 
             $rawDate     = $scan['receipt_date_ymd'] ?? ($scan['extracted']['receipt_date'] ?? null);
             $receiptDate = date('Y-m-d');
@@ -1198,9 +1187,9 @@ class FinanceTaxReportController extends Controller
             $fsNorm     = QcService::normalizeFsNo($fsNoRaw);
             $fsNo       = $fsNorm['value'] ?: $fsNoRaw;
 
-            $totalAmount = (float)$validated['total_amount'];
-            $vatAmount   = (float)($validated['vat_amount'] ?? 0);
-            $subtotal    = (float)($validated['subtotal'] ?? max(0, $totalAmount - $vatAmount));
+            $totalAmount = QcService::parseMoney($validated['total_amount']);
+            $vatAmount   = QcService::parseMoney($validated['vat_amount'] ?? 0);
+            $subtotal    = QcService::parseMoney($validated['subtotal'] ?? max(0, $totalAmount - $vatAmount));
 
             if ($vatAmount == 0 && ($validated['tax_type'] ?? 'vat') !== 'withholding') {
                 $subtotal  = round($totalAmount / 1.15, 2);
@@ -1208,12 +1197,19 @@ class FinanceTaxReportController extends Controller
             }
 
             $hasWithholding    = (bool)($validated['has_withholding'] ?? (($validated['tax_type'] ?? '') === 'withholding' || ($validated['tax_type'] ?? '') === 'both'));
-            $withholdingAmount = (float)($validated['withholding_amount'] ?? ($hasWithholding ? round($subtotal * 0.03, 2) : 0));
+            $withholdingAmount = QcService::parseMoney($validated['withholding_amount'] ?? ($hasWithholding ? round($subtotal * 0.03, 2) : 0));
 
             $ext = $filePath ? strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) : 'jpg';
             $isPdf = $ext === 'pdf';
 
             $receiptNumber = 'RCP-' . $targetDate->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+
+            $purcNorm = QcService::normalizePurchaseType(
+                $validated['purchase_type'] ?? null,
+                ($validated['description'] ?? '') . ' ' . ($validated['vendor_name'] ?? '')
+            );
+            $purcTypeCode = $purcNorm['code'];
+            $vatCategory  = $purcNorm['vat_category'];
 
             // 1. Create Receipt (for ERCA Line 100 VAT declaration)
             $receipt = new Receipt([
@@ -1249,9 +1245,9 @@ class FinanceTaxReportController extends Controller
             $receiptItem = new ReceiptItem([
                 'receipt_id'       => $receipt->id,
                 'item_description' => $validated['description'] ?: 'Purchased Materials',
-                'vat_category'     => 'G',
+                'vat_category'     => $vatCategory,
                 'calendar_type'    => 'G',
-                'purchase_type'    => ($validated['purchase_type'] ?? '') === 'PUR_SR' ? 4 : 3,
+                'purchase_type'    => $purcTypeCode,
                 'uom'              => '9',
                 'qty'              => 1.00,
                 'unit_price'       => $subtotal,
