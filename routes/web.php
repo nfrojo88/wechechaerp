@@ -2252,6 +2252,9 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('coa-transfers', App\Http\Controllers\CoaTransferController::class)->only(['index', 'create', 'store', 'show']);
     Route::resource('bank-accounts', App\Http\Controllers\BankAccountController::class)->except(['destroy']);
     
+    Route::get('income/export-excel', [App\Http\Controllers\IncomeController::class, 'exportExcel'])->name('income.export-excel');
+    Route::get('income/export-csv', [App\Http\Controllers\IncomeController::class, 'exportCsv'])->name('income.export-csv');
+    Route::post('income/scan-receipt', [App\Http\Controllers\IncomeController::class, 'scanReceipt'])->name('income.scan-receipt');
     Route::resource('income', App\Http\Controllers\IncomeController::class)->except(['edit', 'update', 'destroy']);
     Route::post('income/{income}/confirm', [App\Http\Controllers\IncomeController::class, 'confirm'])->name('income.confirm');
 

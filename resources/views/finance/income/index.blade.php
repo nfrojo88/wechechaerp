@@ -1,21 +1,87 @@
 @extends('layouts.app')
-@section('title', 'Company Income Track')
+@section('title', 'Company Income & Sales Receipts')
 @section('content')
 <div class="container-fluid">
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
-            <h1 class="h3 mb-1 fw-bold text-dark"><i class="fas fa-hand-holding-dollar text-success me-2"></i>Company Income Track</h1>
-            <p class="text-muted mb-0">Monitor company revenues across Transportation, Rental, and Construction divisions</p>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <h1 class="h3 mb-0 fw-bold text-dark"><i class="fas fa-hand-holding-dollar text-success me-2"></i>Company Income Track</h1>
+                <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill small">
+                    <i class="fa-solid fa-file-invoice me-1"></i>ERCA eTax 13-Col Sales Format
+                </span>
+            </div>
+            <p class="text-muted mb-0 mt-1">Monitor company revenues across divisions and export compliant ERCA eTax Sales Declarations</p>
         </div>
-        <button type="button" class="btn btn-primary rounded-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#recordIncomeModal">
-            <i class="fas fa-plus me-1"></i> Record Income
-        </button>
+
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            {{-- Export Excel (.xlsx) --}}
+            <div class="btn-group shadow-xs">
+                <button type="button" class="btn btn-success btn-sm fw-bold dropdown-toggle rounded-pill px-3 py-2 shadow-sm" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-file-excel me-1"></i>Export Excel (.xlsx)
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 260px;">
+                    <li class="dropdown-header small text-uppercase fw-bold text-success">
+                        <i class="fa-solid fa-file-invoice me-1"></i>Sales Declaration (13 Columns)
+                    </li>
+                    <li>
+                        <a class="dropdown-item small fw-semibold" href="{{ route('income.export-excel') }}">
+                            <i class="fa-solid fa-table-cells me-2 text-success"></i>Export All Records
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item small text-primary fw-semibold" href="#" onclick="openIncomeDateExportModal('excel'); return false;">
+                            <i class="fa-solid fa-calendar-days me-2 text-primary"></i>Export by Date Range (.xlsx)...
+                        </a>
+                    </li>
+                    @if(request()->anyFilled(['category', 'project_id', 'from_date', 'to_date', 'search']))
+                    <li>
+                        <a class="dropdown-item small text-info" href="{{ route('income.export-excel', request()->all()) }}">
+                            <i class="fa-solid fa-filter me-2"></i>Export Current Filtered View
+                        </a>
+                    </li>
+                    @endif
+                </ul>
+            </div>
+
+            {{-- Export CSV --}}
+            <div class="btn-group shadow-xs">
+                <button type="button" class="btn btn-outline-success btn-sm fw-bold dropdown-toggle rounded-pill px-3 py-2 shadow-sm" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fa-solid fa-file-csv me-1"></i>Export CSV
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 260px;">
+                    <li class="dropdown-header small text-uppercase fw-bold text-success">
+                        <i class="fa-solid fa-file-invoice me-1"></i>Sales Declaration (13 Columns)
+                    </li>
+                    <li>
+                        <a class="dropdown-item small fw-semibold" href="{{ route('income.export-csv') }}">
+                            <i class="fa-solid fa-file-csv me-2 text-success"></i>Export All as CSV (UTF-8 BOM)
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item small text-primary fw-semibold" href="#" onclick="openIncomeDateExportModal('csv'); return false;">
+                            <i class="fa-solid fa-calendar-days me-2 text-primary"></i>Export by Date Range (.csv)...
+                        </a>
+                    </li>
+                    @if(request()->anyFilled(['category', 'project_id', 'from_date', 'to_date', 'search']))
+                    <li>
+                        <a class="dropdown-item small text-info" href="{{ route('income.export-csv', request()->all()) }}">
+                            <i class="fa-solid fa-filter me-2"></i>Export Current Filtered CSV
+                        </a>
+                    </li>
+                    @endif
+                </ul>
+            </div>
+
+            <button type="button" class="btn btn-primary rounded-pill px-4 py-2 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#recordIncomeModal">
+                <i class="fas fa-plus me-1"></i> Record Income &amp; Receipt
+            </button>
+        </div>
     </div>
 
     @if(session('success'))
         <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
-            {{ session('success') }}
+            <i class="fa-solid fa-circle-check me-2"></i>{{ session('success') }}
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     @endif
@@ -81,42 +147,58 @@
 
     <!-- Filter Section -->
     <div class="card shadow-sm border-0 mb-4">
-        <div class="card-header bg-white border-0 pt-4 pb-0">
-            <h6 class="fw-bold mb-0"><i class="fas fa-filter me-2 text-muted"></i>Filter Records</h6>
+        <div class="card-header bg-white border-0 pt-3 pb-0 d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0 text-dark"><i class="fas fa-filter me-2 text-primary"></i>Filter Income &amp; Receipt Records</h6>
+            @if(request()->anyFilled(['category', 'project_id', 'from_date', 'to_date', 'search']))
+                <a href="{{ route('income.index') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-1 text-decoration-none">
+                    <i class="fa-solid fa-rotate-left me-1"></i>Reset Filters
+                </a>
+            @endif
         </div>
         <div class="card-body">
-            <div class="row g-3">
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold text-muted" style="font-size: 0.85rem;">Income Source</label>
-                    <select class="form-select bg-light border-0 text-dark">
-                        <option>All Divisions</option>
-                        <option>Transportation</option>
-                        <option>Rental</option>
-                        <option>Construction</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label fw-semibold text-muted" style="font-size: 0.85rem;">Project / Site</label>
-                    <select class="form-select bg-light border-0 text-dark">
-                        <option>All Sites</option>
-                        @foreach($projects as $p)
-                            <option value="{{ $p->id }}">{{ $p->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label fw-semibold text-muted" style="font-size: 0.85rem;">Date Range</label>
-                    <div class="input-group">
-                        <input type="date" class="form-control bg-light border-0 text-dark">
-                        <span class="input-group-text bg-light border-0">-</span>
-                        <input type="date" class="form-control bg-light border-0 text-dark">
+            <form method="GET" action="{{ route('income.index') }}">
+                <div class="row g-3">
+                    <div class="col-md-2">
+                        <label class="form-label fw-semibold text-muted small mb-1">Income Division</label>
+                        <select name="category" class="form-select bg-light border text-dark form-select-sm rounded-3">
+                            <option value="">All Divisions</option>
+                            <option value="transportation" {{ request('category') == 'transportation' ? 'selected' : '' }}>Transportation</option>
+                            <option value="rental" {{ request('category') == 'rental' ? 'selected' : '' }}>Rental</option>
+                            <option value="construction" {{ request('category') == 'construction' ? 'selected' : '' }}>Construction</option>
+                            <option value="other" {{ request('category') == 'other' ? 'selected' : '' }}>Other Income</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-semibold text-muted small mb-1">Project / Site</label>
+                        <select name="project_id" class="form-select bg-light border text-dark form-select-sm rounded-3">
+                            <option value="">All Sites</option>
+                            @foreach($projects as $p)
+                                <option value="{{ $p->id }}" {{ request('project_id') == $p->id ? 'selected' : '' }}>{{ $p->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold text-muted small mb-1">Date Range (From - To)</label>
+                        <div class="input-group input-group-sm">
+                            <input type="date" name="from_date" class="form-control bg-light border text-dark" value="{{ request('from_date') }}">
+                            <span class="input-group-text bg-light border">-</span>
+                            <input type="date" name="to_date" class="form-control bg-light border text-dark" value="{{ request('to_date') }}">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold text-muted small mb-1">Search FS#, MRC#, Buyer, TIN</label>
+                        <input type="text" name="search" class="form-control form-control-sm bg-light border text-dark rounded-3" placeholder="FS No, Buyer TIN, Client..." value="{{ request('search') }}">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end gap-2">
+                        <button type="submit" class="btn btn-primary btn-sm flex-grow-1 shadow-sm rounded-pill fw-semibold">
+                            <i class="fas fa-search me-1"></i> Filter
+                        </button>
+                        <a href="{{ route('income.index') }}" class="btn btn-light btn-sm border shadow-sm rounded-circle p-2" title="Reset">
+                            <i class="fas fa-redo"></i>
+                        </a>
                     </div>
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
-                    <button class="btn btn-primary w-100 me-2 shadow-sm rounded-3"><i class="fas fa-search me-1"></i> Filter</button>
-                    <button class="btn btn-light border shadow-sm rounded-3"><i class="fas fa-redo"></i></button>
-                </div>
-            </div>
+            </form>
         </div>
     </div>
 
@@ -125,96 +207,442 @@
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light text-secondary" style="font-size: 0.85rem;">
+                    <thead class="table-light text-secondary" style="font-size: 0.82rem;">
                         <tr>
-                            <th class="ps-4">ID</th>
+                            <th class="ps-4">INCOME REF</th>
                             <th>DATE</th>
-                            <th>SOURCE</th>
+                            <th>DIVISION</th>
                             <th>PROJECT / SITE</th>
-                            <th>DESCRIPTION / NOTES</th>
-                            <th>GROSS AMOUNT</th>
-                            <th>VAT (15%)</th>
-                            <th>WHT (3%)</th>
-                            <th>NET AMOUNT</th>
-                            <th>RECORDED BY</th>
-                            <th class="text-center">ACTION</th>
+                            <th>BUYER &amp; TIN</th>
+                            <th>RECEIPT (FS# &amp; MRC)</th>
+                            <th>COMMODITY</th>
+                            <th class="text-end">GROSS AMOUNT</th>
+                            <th class="text-end">VAT (15%)</th>
+                            <th class="text-end">NET AMOUNT</th>
+                            <th class="text-center">RECEIPT SLIP</th>
+                            <th class="text-center">ENCODED BY</th>
+                            <th class="text-center pe-4">ACTION</th>
                         </tr>
                     </thead>
-                    <tbody style="font-size: 0.95rem;">
+                    <tbody style="font-size: 0.90rem;">
                         @forelse($incomes as $inc)
                         @php
-                            $gross = $inc->amount;
+                            $gross = (float)$inc->amount;
                             $vat = $gross * 0.15;
                             $wht = $gross * 0.03;
                             $net = $gross + $vat - $wht;
                             
                             $badgeColor = 'bg-secondary';
                             $icon = 'fa-tag';
-                            if($inc->category == 'transportation') { $badgeColor = 'bg-info'; $icon = 'fa-truck'; }
+                            if($inc->category == 'transportation') { $badgeColor = 'bg-info text-white'; $icon = 'fa-truck'; }
                             if($inc->category == 'rental') { $badgeColor = 'bg-warning text-dark'; $icon = 'fa-tractor'; }
-                            if($inc->category == 'construction') { $badgeColor = 'bg-primary'; $icon = 'fa-building'; }
+                            if($inc->category == 'construction') { $badgeColor = 'bg-primary text-white'; $icon = 'fa-building'; }
                         @endphp
                         <tr>
-                            <td class="ps-4 text-muted"><strong>#{{ substr($inc->income_no, -5) }}</strong></td>
-                            <td class="text-nowrap">{{ \Carbon\Carbon::parse($inc->income_date)->format('d M Y') }}</td>
+                            <td class="ps-4 text-nowrap">
+                                <span class="fw-bold text-dark font-monospace">#{{ substr($inc->income_no, -5) }}</span>
+                                <div class="text-muted small" style="font-size: 0.75rem;">{{ $inc->income_no }}</div>
+                            </td>
+                            <td class="text-nowrap">
+                                <span class="fw-semibold text-dark">{{ \Carbon\Carbon::parse($inc->income_date)->format('d-m-Y') }}</span>
+                            </td>
                             <td>
-                                <span class="badge rounded-pill {{ $badgeColor }} px-3 py-2 fw-normal shadow-sm">
+                                <span class="badge rounded-pill {{ $badgeColor }} px-2.5 py-1.5 fw-semibold shadow-xs">
                                     <i class="fas {{ $icon }} me-1"></i> {{ ucfirst($inc->category) }}
                                 </span>
                             </td>
-                            <td class="text-muted">{{ $inc->project->name ?? '—' }}</td>
-                            <td class="text-muted text-truncate" style="max-width: 150px;">{{ $inc->description ?: 'No notes' }}</td>
-                            <td><strong class="text-dark">ETB<br>{{ number_format($gross, 2) }}</strong></td>
-                            <td class="text-success">+{{ number_format($vat, 2) }}</td>
-                            <td class="text-danger">-{{ number_format($wht, 2) }}</td>
-                            <td><strong class="text-primary">ETB<br>{{ number_format($net, 2) }}</strong></td>
-                            <td class="text-muted" style="font-size: 0.85rem;">
-                                {{ explode(' ', $inc->createdBy->name)[0] ?? 'Unknown' }}<br>
-                                {{ explode(' ', $inc->createdBy->name)[1] ?? '' }}
+                            <td class="text-muted text-truncate" style="max-width: 130px;" title="{{ $inc->project->name ?? '—' }}">
+                                {{ $inc->project->name ?? '—' }}
+                            </td>
+                            <td>
+                                <div class="fw-semibold text-dark text-truncate" style="max-width: 140px;" title="{{ $inc->buyer_name }}">
+                                    {{ $inc->buyer_name ?: ($inc->project->client_name ?? 'Walk-in Customer') }}
+                                </div>
+                                @if(!empty($inc->formatted_buyer_tin))
+                                    <span class="badge bg-light text-secondary border font-monospace small px-1.5 py-0.5">
+                                        TIN: {{ $inc->formatted_buyer_tin }}
+                                    </span>
+                                @else
+                                    <span class="text-muted small">—</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if(!empty($inc->formatted_receipt_no))
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle font-monospace fw-bold px-2 py-1">
+                                        {{ $inc->formatted_receipt_no }}
+                                    </span>
+                                @else
+                                    <span class="text-muted small">No FS#</span>
+                                @endif
+                                @if(!empty($inc->mrc_no))
+                                    <div class="text-muted font-monospace" style="font-size: 0.75rem;">
+                                        MRC: {{ $inc->mrc_no }}
+                                    </div>
+                                @endif
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border px-2 py-1 small">
+                                    {{ $inc->commodity_type ?: 'Services' }}
+                                </span>
+                            </td>
+                            <td class="text-end fw-bold text-dark">
+                                ETB {{ number_format($gross, 2) }}
+                            </td>
+                            <td class="text-end text-success fw-semibold">
+                                +{{ number_format($vat, 2) }}
+                            </td>
+                            <td class="text-end fw-bold text-primary">
+                                ETB {{ number_format($net, 2) }}
                             </td>
                             <td class="text-center">
+                                @if(!empty($inc->receipt_url))
+                                    <a href="{{ $inc->receipt_url }}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1 shadow-xs" title="View Uploaded Receipt Slip">
+                                        <i class="fa-solid fa-receipt me-1"></i>Slip
+                                    </a>
+                                @else
+                                    <span class="text-muted small">—</span>
+                                @endif
+                            </td>
+                            <td class="text-center font-monospace small text-muted">
+                                {{ $inc->encoded_by ?: 'wechacha' }}
+                            </td>
+                            <td class="text-center pe-4">
                                 @if($inc->status == 'draft')
                                     <form action="{{ route('income.confirm', $inc) }}" method="POST" class="d-inline" onsubmit="return confirm('Confirm this income record?');">
                                         @csrf
-                                        <button type="submit" class="btn btn-sm btn-success rounded-circle shadow-sm" style="width: 32px; height: 32px;"><i class="fas fa-check"></i></button>
+                                        <button type="submit" class="btn btn-sm btn-success rounded-circle shadow-sm" style="width: 30px; height: 30px;" title="Confirm Income">
+                                            <i class="fas fa-check"></i>
+                                        </button>
                                     </form>
                                 @else
-                                    <i class="fas fa-check-circle text-success fs-5"></i>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1 small">
+                                        <i class="fas fa-check-circle me-1"></i>Confirmed
+                                    </span>
                                 @endif
                             </td>
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="11" class="text-center py-5 text-muted">No income records found.</td>
+                            <td colspan="13" class="text-center py-5 text-muted">
+                                <i class="fa-solid fa-inbox fs-2 text-muted mb-2 d-block"></i>
+                                No company income records found matching the criteria.
+                            </td>
                         </tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
         </div>
-        <div class="card-footer bg-white border-0 py-3">
-            {{ method_exists($incomes, 'links') ? $incomes->links() : '' }}
+        <div class="card-footer bg-white border-0 py-3 d-flex justify-content-between align-items-center">
+            <span class="text-muted small">Showing {{ $incomes->firstItem() ?? 0 }} to {{ $incomes->lastItem() ?? 0 }} of {{ $incomes->total() }} records</span>
+            {{ $incomes->links() }}
         </div>
     </div>
 </div>
 
-<!-- Record Income Modal -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- RECORD INCOME & RECEIPT MODAL                                          -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
 <div class="modal fade" id="recordIncomeModal" tabindex="-1" aria-labelledby="recordIncomeModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
         <div class="modal-content border-0 shadow-lg rounded-4">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold text-dark" id="recordIncomeModalLabel"><i class="fas fa-hand-holding-dollar text-success me-2"></i>Record Company Income</h5>
+            <div class="modal-header bg-light border-bottom py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success p-2 rounded-circle text-white">
+                        <i class="fas fa-hand-holding-dollar fs-6"></i>
+                    </span>
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark mb-0" id="recordIncomeModalLabel">Record Company Income &amp; Sales Receipt</h5>
+                        <small class="text-muted">Compliant with Ethiopian ERCA eTax Sales Declaration (13 Columns)</small>
+                    </div>
+                </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body p-4 p-md-5 pt-3">
-                <form action="{{ route('income.store') }}" method="POST">
-                    @csrf
-                    <input type="hidden" name="payment_method" value="bank_transfer">
-                    
-                    <div class="mb-4">
-                        <label class="form-label fw-bold text-dark" style="font-size: 0.9rem;">Income Source <span class="text-danger">*</span></label>
-                        <select name="category" class="form-select form-select-lg bg-light border-0 text-dark" required style="border-radius: 12px; font-size: 0.95rem;">
-                            <option value="">Select Source...</option>
+            
+            <form action="{{ route('income.store') }}" method="POST" enctype="multipart/form-data" id="incomeRecordForm">
+                @csrf
+                <input type="hidden" name="payment_method" value="bank_transfer">
+                <input type="hidden" name="receipt_file_path" id="scannedReceiptPath" value="">
+
+                <div class="modal-body p-4">
+                    {{-- ── SECTION 1: OCR AUTO-SCAN RECEIPT ── --}}
+                    <div class="card border border-primary border-opacity-25 bg-primary bg-opacity-10 rounded-3 mb-4 shadow-xs">
+                        <div class="card-body p-3">
+                            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                                <label class="form-label fw-bold text-primary mb-0 small">
+                                    <i class="fa-solid fa-camera-viewfinder me-1"></i>Attach Receipt Slip / AI Vision OCR Scan
+                                </label>
+                                <span class="badge bg-primary text-white rounded-pill px-2 py-0.5 small">Auto-Extracts FS#, MRC, TIN, Amount</span>
+                            </div>
+                            <div class="row g-2 align-items-center">
+                                <div class="col-md-8">
+                                    <input type="file" name="receipt_file" id="modalReceiptFile" class="form-control bg-white border" accept="image/jpeg,image/png,image/webp,application/pdf">
+                                    <div class="form-text small text-muted">Upload fiscal sales slip, cash receipt, or bank receipt (JPG, PNG, PDF up to 25MB).</div>
+                                </div>
+                                <div class="col-md-4 d-grid">
+                                    <button type="button" class="btn btn-primary fw-semibold shadow-xs" id="btnScanOcr" onclick="triggerOcrScan();">
+                                        <i class="fa-solid fa-microchip me-1"></i><span id="scanBtnText">Extract with AI OCR</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="ocrStatusAlert" class="mt-2 d-none alert alert-info py-2 px-3 small mb-0 rounded-2"></div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        {{-- ── LEFT COLUMN: Basic Income Data ── --}}
+                        <div class="col-lg-6 border-end">
+                            <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
+                                <i class="fa-solid fa-wallet text-success me-1"></i>Income Information
+                            </h6>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold small text-dark">Income Division / Source <span class="text-danger">*</span></label>
+                                <select name="category" id="incomeCategorySelect" class="form-select bg-light border text-dark" required onchange="handleCategoryChange();">
+                                    <option value="transportation">Transportation</option>
+                                    <option value="rental">Rental</option>
+                                    <option value="construction">Construction</option>
+                                    <option value="other">Other Income</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold small text-dark">Project / Site (Optional)</label>
+                                <select name="project_id" id="incomeProjectSelect" class="form-select bg-light border text-dark">
+                                    <option value="">Select Project Site...</option>
+                                    @foreach($projects as $p)
+                                        <option value="{{ $p->id }}">{{ $p->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold small text-dark">Deposit to Bank / Cash Account <span class="text-danger">*</span></label>
+                                <select name="bank_account_id" class="form-select bg-light border text-dark" required>
+                                    <option value="">Select Bank or Cash Account...</option>
+                                    @foreach($bankAccounts as $b)
+                                        <option value="{{ $b->id }}">{{ $b->bank_name }} ({{ $b->account_number }})</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold small text-dark">Gross Amount (ETB) <span class="text-danger">*</span></label>
+                                    <input type="number" step="0.01" name="amount" id="modalAmount" class="form-control bg-light border text-dark fw-bold" required placeholder="0.00">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold small text-dark">Income Date <span class="text-danger">*</span></label>
+                                    <input type="date" name="income_date" id="modalIncomeDate" class="form-control bg-light border text-dark" required value="{{ date('Y-m-d') }}">
+                                </div>
+                            </div>
+
+                            <!-- Computed Tax Box -->
+                            <div class="p-3 mb-3 bg-light border rounded-3">
+                                <div class="row g-2 text-center">
+                                    <div class="col-3 border-end">
+                                        <small class="text-muted d-block" style="font-size: 0.72rem;">GROSS</small>
+                                        <strong class="text-dark small" id="lblGross">0.00</strong>
+                                    </div>
+                                    <div class="col-3 border-end">
+                                        <small class="text-muted d-block" style="font-size: 0.72rem;">VAT (+15%)</small>
+                                        <strong class="text-success small" id="lblVat">0.00</strong>
+                                    </div>
+                                    <div class="col-3 border-end">
+                                        <small class="text-muted d-block" style="font-size: 0.72rem;">WHT (-3%)</small>
+                                        <strong class="text-danger small" id="lblWht">0.00</strong>
+                                    </div>
+                                    <div class="col-3">
+                                        <small class="text-muted d-block" style="font-size: 0.72rem;">NET TOTAL</small>
+                                        <strong class="text-primary small" id="lblNet">0.00</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-2">
+                                <label class="form-label fw-semibold small text-dark">Description / Reference</label>
+                                <textarea name="description" class="form-control bg-light border text-dark" rows="2" placeholder="Income details, contract reference..."></textarea>
+                            </div>
+                        </div>
+
+                        {{-- ── RIGHT COLUMN: ERCA eTax Sales Receipt Details ── --}}
+                        <div class="col-lg-6">
+                            <h6 class="fw-bold text-primary border-bottom pb-2 mb-3">
+                                <i class="fa-solid fa-file-invoice text-primary me-1"></i>ERCA eTax Sales Receipt Details
+                            </h6>
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold small text-dark">Seller TIN (Company)</label>
+                                    <input type="text" name="seller_tin" id="modalSellerTin" class="form-control form-control-sm bg-light border font-monospace fw-bold" value="38480010" readonly>
+                                    <small class="text-muted" style="font-size: 0.70rem;">Wechecha Construction TIN</small>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold small text-dark">Buyer / Client TIN</label>
+                                    <input type="text" name="buyer_tin" id="modalBuyerTin" class="form-control form-control-sm bg-light border font-monospace" placeholder="e.g. 5201, 6870105">
+                                    <small class="text-muted" style="font-size: 0.70rem;">Client tax registration</small>
+                                </div>
+                            </div>
+
+                            <div class="mb-2">
+                                <label class="form-label fw-semibold small text-dark">Buyer / Client Trade Name</label>
+                                <input type="text" name="buyer_name" id="modalBuyerName" class="form-control form-control-sm bg-light border" placeholder="e.g. Ethiopian Roads Authority, Private Client">
+                            </div>
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold small text-dark">Receipt No (FS Number)</label>
+                                    <input type="text" name="receipt_no" id="modalReceiptNo" class="form-control form-control-sm bg-light border font-monospace fw-bold text-success" placeholder="e.g. FS00003898">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold small text-dark">MRC (Machine Code)</label>
+                                    <input type="text" name="mrc_no" id="modalMrcNo" class="form-control form-control-sm bg-light border font-monospace" placeholder="e.g. DDB0000032">
+                                </div>
+                            </div>
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold small text-dark">Transaction Type</label>
+                                    <select name="transaction_type" class="form-select form-select-sm bg-light border">
+                                        <option value="Cash Sales" selected>Cash Sales</option>
+                                        <option value="Credit Sales">Credit Sales</option>
+                                        <option value="Local Sales">Local Sales</option>
+                                        <option value="Local Sales with VAT">Local Sales with VAT</option>
+                                        <option value="Advance Payment">Advance Payment</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold small text-dark">Receipt Category</label>
+                                    <select name="receipt_category" class="form-select form-select-sm bg-light border">
+                                        <option value="Cash Sales Fiscal Receipt" selected>Cash Sales Fiscal Receipt</option>
+                                        <option value="VAT Invoice">VAT Invoice</option>
+                                        <option value="Manual Receipt">Manual Receipt</option>
+                                        <option value="Credit Sales Invoice">Credit Sales Invoice</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold small text-dark">Receipt Used</label>
+                                    <select name="receipt_used" class="form-select form-select-sm bg-light border">
+                                        <option value="Fiscal Cash Register" selected>Fiscal Cash Register</option>
+                                        <option value="Electronic Cash Register">Electronic Cash Register</option>
+                                        <option value="Sales Register Machine">Sales Register Machine</option>
+                                        <option value="Manual Receipt">Manual Receipt</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold small text-dark">Commodity Type</label>
+                                    <select name="commodity_type" id="modalCommodityType" class="form-select form-select-sm bg-light border">
+                                        <option value="Services" selected>Services</option>
+                                        <option value="Goods">Goods</option>
+                                        <option value="Transportation">Transportation</option>
+                                        <option value="Rental">Rental</option>
+                                        <option value="Construction">Construction</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="row g-2 mb-2">
+                                <div class="col-4">
+                                    <label class="form-label fw-semibold small text-dark">Quantity</label>
+                                    <input type="number" step="0.01" name="quantity" class="form-control form-control-sm bg-light border" value="1.00">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label fw-semibold small text-dark">Receipt Date</label>
+                                    <input type="date" name="receipt_date" id="modalReceiptDate" class="form-control form-control-sm bg-light border" value="{{ date('Y-m-d') }}">
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label fw-semibold small text-dark">Encoded By</label>
+                                    <input type="text" name="encoded_by" class="form-control form-control-sm bg-light border font-monospace" value="wechacha">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light border-top py-3 px-4">
+                    <button type="button" class="btn btn-light border rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm fw-bold">
+                        <i class="fas fa-save me-1"></i>Save Income &amp; Receipt
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- DATE RANGE EXPORT MODAL (13 COLUMNS ERCA E-TAX FORMAT)                -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="incomeExportDateModal" tabindex="-1" aria-labelledby="incomeExportDateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header border-bottom py-3 px-4 bg-light">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success p-2 rounded-circle text-white">
+                        <i class="fa-solid fa-file-excel fs-6" id="modalExportIcon"></i>
+                    </span>
+                    <div>
+                        <h5 class="modal-title fw-bold text-dark mb-0" id="incomeExportDateModalLabel">Export Sales Declaration</h5>
+                        <small class="text-muted">Official ERCA eTax 13-Column Format</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            
+            <form id="incomeExportForm" method="GET" action="{{ route('income.export-excel') }}">
+                <div class="modal-body p-4">
+                    <!-- Format Selection -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark mb-1">Export Format</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="export_format_choice" id="fmt_excel" value="excel" checked onchange="updateExportTarget();">
+                                <label class="form-check-label small fw-semibold text-dark" for="fmt_excel">
+                                    <i class="fa-solid fa-file-excel text-success me-1"></i>Excel (.xlsx)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="export_format_choice" id="fmt_csv" value="csv" onchange="updateExportTarget();">
+                                <label class="form-check-label small fw-semibold text-dark" for="fmt_csv">
+                                    <i class="fa-solid fa-file-csv text-primary me-1"></i>CSV (UTF-8 BOM)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Date Presets -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark mb-1">Quick Date Presets</label>
+                        <div class="d-flex flex-wrap gap-1.5">
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 small" onclick="setExportDates('today')">Today</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 small" onclick="setExportDates('yesterday')">Yesterday</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 small" onclick="setExportDates('this_week')">This Week</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 small" onclick="setExportDates('this_month')">This Month</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 small" onclick="setExportDates('last_month')">Last Month</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 small" onclick="setExportDates('all')">All Dates</button>
+                        </div>
+                    </div>
+
+                    <!-- Custom Date Pickers -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark mb-1">From Date</label>
+                            <input type="date" name="from_date" id="export_from_date" class="form-control form-control-sm bg-light border">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark mb-1">To Date</label>
+                            <input type="date" name="to_date" id="export_to_date" class="form-control form-control-sm bg-light border">
+                        </div>
+                    </div>
+
+                    <!-- Division Filter -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-dark mb-1">Division (Optional)</label>
+                        <select name="category" class="form-select form-select-sm bg-light border">
+                            <option value="">All Divisions</option>
                             <option value="transportation">Transportation</option>
                             <option value="rental">Rental</option>
                             <option value="construction">Construction</option>
@@ -222,70 +650,20 @@
                         </select>
                     </div>
 
-                    <div class="mb-4">
-                        <label class="form-label fw-bold text-dark" style="font-size: 0.9rem;">Project / Site (Optional)</label>
-                        <select name="project_id" class="form-select form-select-lg bg-light border-0 text-dark" style="border-radius: 12px; font-size: 0.95rem;">
-                            <option value="">Select Project Site...</option>
-                            @foreach($projects as $p)
-                                <option value="{{ $p->id }}">{{ $p->name }}</option>
-                            @endforeach
-                        </select>
+                    <!-- Encoded By Field -->
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-dark mb-1">eTax Encoded By Username</label>
+                        <input type="text" name="encoded_by" class="form-control form-control-sm bg-light border font-monospace" value="wechacha" placeholder="wechacha">
                     </div>
+                </div>
 
-                    <div class="mb-4">
-                        <label class="form-label fw-bold text-dark" style="font-size: 0.9rem;">Deposit to Bank/Cash Account <span class="text-danger">*</span></label>
-                        <select name="bank_account_id" class="form-select form-select-lg bg-light border-0 text-dark" required style="border-radius: 12px; font-size: 0.95rem;">
-                            <option value="">Select Bank or Cash Account...</option>
-                            @foreach($bankAccounts as $b)
-                                <option value="{{ $b->id }}">{{ $b->bank_name }} ({{ $b->account_number }})</option>
-                            @endforeach
-                        </select>
-                    </div>
-
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold text-dark" style="font-size: 0.9rem;">Amount (ETB) <span class="text-danger">*</span></label>
-                            <input type="number" step="0.01" name="amount" id="modalAmount" class="form-control form-control-lg bg-light border-0 text-dark fw-bold" required style="border-radius: 12px; font-size: 0.95rem;">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-bold text-dark" style="font-size: 0.9rem;">Income Date <span class="text-danger">*</span></label>
-                            <input type="date" name="income_date" class="form-control form-control-lg bg-light border-0 text-dark" required value="{{ date('Y-m-d') }}" style="border-radius: 12px; font-size: 0.95rem;">
-                        </div>
-                    </div>
-
-                    <!-- Computed Box -->
-                    <div class="p-4 mb-4 bg-white border rounded-4 shadow-sm" style="border-left: 4px solid #10b981 !important;">
-                        <div class="row g-3">
-                            <div class="col-6 border-end">
-                                <span class="text-muted" style="font-size: 0.85rem;">Gross Amount:</span>
-                                <h5 class="fw-bold text-dark mt-1" id="lblGross">ETB 0.00</h5>
-                            </div>
-                            <div class="col-6">
-                                <span class="text-muted" style="font-size: 0.85rem;">VAT Amount:</span>
-                                <div class="mt-1 text-success fw-bold" id="lblVat">0.00</div>
-                            </div>
-                            <div class="col-6 border-end border-top pt-3">
-                                <span class="text-muted" style="font-size: 0.85rem;">Withholding Tax:</span>
-                                <div class="mt-1 text-danger fw-bold" id="lblWht">0.00</div>
-                            </div>
-                            <div class="col-6 border-top pt-3">
-                                <span class="text-muted" style="font-size: 0.85rem;">Net Amount:</span>
-                                <h5 class="fw-bold text-primary mt-1" id="lblNet">ETB 0.00</h5>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mb-4">
-                        <label class="form-label fw-bold text-dark" style="font-size: 0.9rem;">Description / Notes</label>
-                        <textarea name="description" class="form-control bg-light border-0 text-dark p-3" rows="3" placeholder="Enter income details, references, or billing details..." style="border-radius: 12px; resize: none; font-size: 0.95rem;"></textarea>
-                    </div>
-
-                    <div class="text-end mt-2">
-                        <button type="button" class="btn btn-light border rounded-pill px-4 me-2 shadow-sm" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" class="btn btn-primary rounded-pill px-4 shadow-sm" style="background-color: #8b5cf6; border: none;"><i class="fas fa-save me-1"></i> Save Record</button>
-                    </div>
-                </form>
-            </div>
+                <div class="modal-footer bg-light border-top py-3 px-4">
+                    <button type="button" class="btn btn-light border rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold shadow-sm" id="btnDoExport">
+                        <i class="fa-solid fa-download me-1"></i>Download Export
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -304,13 +682,177 @@ document.addEventListener('DOMContentLoaded', function() {
         const wht = gross * 0.03;
         const net = gross + vat - wht;
 
-        lblGross.textContent = 'ETB ' + gross.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        lblGross.textContent = gross.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         lblVat.textContent = vat.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         lblWht.textContent = wht.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        lblNet.textContent = 'ETB ' + net.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        lblNet.textContent = net.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     }
 
-    amountInput.addEventListener('input', updateCalculations);
+    if (amountInput) {
+        amountInput.addEventListener('input', updateCalculations);
+    }
 });
+
+function handleCategoryChange() {
+    const cat = document.getElementById('incomeCategorySelect').value;
+    const cmd = document.getElementById('modalCommodityType');
+    if (cmd) {
+        if (cat === 'construction') {
+            cmd.value = 'Goods';
+        } else {
+            cmd.value = 'Services';
+        }
+    }
+}
+
+// Trigger OCR scanning for uploaded receipt slip
+function triggerOcrScan() {
+    const fileInput = document.getElementById('modalReceiptFile');
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        alert('Please choose a receipt slip image or PDF first.');
+        fileInput.focus();
+        return;
+    }
+
+    const btn = document.getElementById('btnScanOcr');
+    const btnText = document.getElementById('scanBtnText');
+    const statusAlert = document.getElementById('ocrStatusAlert');
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('receipt_file', file);
+    formData.append('_token', '{{ csrf_token() }}');
+
+    btn.disabled = true;
+    btnText.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Scanning OCR...';
+    statusAlert.classList.remove('d-none', 'alert-danger', 'alert-success');
+    statusAlert.classList.add('alert-info');
+    statusAlert.innerHTML = '<i class="fa-solid fa-microchip fa-spin me-1"></i>AI Vision OCR processing receipt slip... Please wait.';
+
+    fetch('{{ route("income.scan-receipt") }}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(res => res.json())
+    .then(data => {
+        btn.disabled = false;
+        btnText.innerHTML = '<i class="fa-solid fa-microchip me-1"></i>Extract with AI OCR';
+
+        if (data.success) {
+            statusAlert.classList.remove('alert-info');
+            statusAlert.classList.add('alert-success');
+            statusAlert.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i>Receipt extracted successfully! Fields pre-populated.';
+
+            // Populate form fields
+            if (data.buyer_tin) document.getElementById('modalBuyerTin').value = data.buyer_tin;
+            if (data.buyer_name) document.getElementById('modalBuyerName').value = data.buyer_name;
+            if (data.receipt_no) document.getElementById('modalReceiptNo').value = data.receipt_no;
+            if (data.mrc_no) document.getElementById('modalMrcNo').value = data.mrc_no;
+            if (data.receipt_date) document.getElementById('modalReceiptDate').value = data.receipt_date;
+            if (data.amount && parseFloat(data.amount) > 0) {
+                const amtInput = document.getElementById('modalAmount');
+                amtInput.value = parseFloat(data.amount).toFixed(2);
+                amtInput.dispatchEvent(new Event('input'));
+            }
+            if (data.file_path) {
+                document.getElementById('scannedReceiptPath').value = data.file_path;
+            }
+        } else {
+            statusAlert.classList.remove('alert-info');
+            statusAlert.classList.add('alert-danger');
+            statusAlert.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i>OCR Warning: ' + (data.message || 'Could not auto-extract fields. Please type manually.');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btnText.innerHTML = '<i class="fa-solid fa-microchip me-1"></i>Extract with AI OCR';
+        statusAlert.classList.remove('alert-info');
+        statusAlert.classList.add('alert-danger');
+        statusAlert.innerHTML = '<i class="fa-solid fa-circle-xmark me-1"></i>Scan error: ' + err.message;
+    });
+}
+
+// Open Export Date Modal
+function openIncomeDateExportModal(format) {
+    const excelRadio = document.getElementById('fmt_excel');
+    const csvRadio = document.getElementById('fmt_csv');
+    if (format === 'csv') {
+        csvRadio.checked = true;
+    } else {
+        excelRadio.checked = true;
+    }
+    updateExportTarget();
+
+    // Default to this month
+    setExportDates('this_month');
+
+    const modal = new bootstrap.Modal(document.getElementById('incomeExportDateModal'));
+    modal.show();
+}
+
+function updateExportTarget() {
+    const form = document.getElementById('incomeExportForm');
+    const btn = document.getElementById('btnDoExport');
+    const icon = document.getElementById('modalExportIcon');
+    const isCsv = document.getElementById('fmt_csv').checked;
+
+    if (isCsv) {
+        form.action = '{{ route("income.export-csv") }}';
+        btn.className = 'btn btn-outline-success rounded-pill px-4 fw-bold shadow-sm';
+        btn.innerHTML = '<i class="fa-solid fa-file-csv me-1"></i>Download CSV';
+        icon.className = 'fa-solid fa-file-csv fs-6';
+    } else {
+        form.action = '{{ route("income.export-excel") }}';
+        btn.className = 'btn btn-success rounded-pill px-4 fw-bold shadow-sm';
+        btn.innerHTML = '<i class="fa-solid fa-file-excel me-1"></i>Download Excel (.xlsx)';
+        icon.className = 'fa-solid fa-file-excel fs-6';
+    }
+}
+
+function setExportDates(preset) {
+    const fromInput = document.getElementById('export_from_date');
+    const toInput = document.getElementById('export_to_date');
+    const now = new Date();
+
+    const formatDate = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    if (preset === 'today') {
+        const todayStr = formatDate(now);
+        fromInput.value = todayStr;
+        toInput.value = todayStr;
+    } else if (preset === 'yesterday') {
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yStr = formatDate(yesterday);
+        fromInput.value = yStr;
+        toInput.value = yStr;
+    } else if (preset === 'this_week') {
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(now.setDate(diff));
+        fromInput.value = formatDate(monday);
+        toInput.value = formatDate(new Date());
+    } else if (preset === 'this_month') {
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        fromInput.value = formatDate(firstDay);
+        toInput.value = formatDate(now);
+    } else if (preset === 'last_month') {
+        const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+        fromInput.value = formatDate(firstDay);
+        toInput.value = formatDate(lastDay);
+    } else if (preset === 'all') {
+        fromInput.value = '';
+        toInput.value = '';
+    }
+}
 </script>
 @endsection
