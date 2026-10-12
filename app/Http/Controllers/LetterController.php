@@ -1413,9 +1413,9 @@ class LetterController extends Controller
                 'from_user_id' => $user->id,
                 'to_user_id'   => $letter->addressed_to_user_id,
                 'to_role_name' => null,
-                'action'       => 'registered',
+                'action'       => 'initial_sent',
                 'notes'        => "Letter registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to " . ($targetUser?->name ?? 'User'),
-                'status'       => Letter::STATUS_REGISTERED,
+                'status'       => Letter::STATUS_PENDING,
             ]);
 
             // Action Audit Log
@@ -1500,7 +1500,7 @@ class LetterController extends Controller
             'notes'        => $fallbackToAdmin
                 ? "Sent to Secretary Inbox (Fallback routed to Global Admin: No active secretary user found) by {$sender->name}"
                 : "Sent to Secretary Inbox by {$sender->name}",
-            'status'       => Letter::STATUS_SENT,
+            'status'       => Letter::STATUS_PENDING,
         ]);
 
         // 3. In-App Notifications
