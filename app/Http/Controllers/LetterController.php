@@ -190,9 +190,18 @@ class LetterController extends Controller
                     if ($file->isValid()) {
                         $originalName = $file->getClientOriginalName();
                         $ext = strtolower($file->getClientOriginalExtension());
-                        $size = $file->getSize();
+                        $size = 0;
+                        try {
+                            $size = $file->getSize();
+                        } catch (\Throwable) {
+                            $size = 0;
+                        }
 
                         $path = \App\Services\FileUploadService::upload($file, 'correspondence');
+
+                        if (!$size && !empty($path) && file_exists(public_path($path))) {
+                            $size = @filesize(public_path($path)) ?: 0;
+                        }
 
                         LetterAttachment::create([
                             'letter_id'   => $letter->id,
@@ -989,13 +998,27 @@ class LetterController extends Controller
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {
                     if ($file->isValid()) {
+                        $originalName = $file->getClientOriginalName();
+                        $fileType     = strtolower($file->getClientOriginalExtension());
+                        $fileSize     = 0;
+                        try {
+                            $fileSize = $file->getSize();
+                        } catch (\Throwable) {
+                            $fileSize = 0;
+                        }
+
                         $path = \App\Services\FileUploadService::upload($file, 'correspondence');
+
+                        if (!$fileSize && !empty($path) && file_exists(public_path($path))) {
+                            $fileSize = @filesize(public_path($path)) ?: 0;
+                        }
+
                         LetterAttachment::create([
                             'letter_id'   => $letter->id,
                             'file_path'   => $path,
-                            'file_name'   => $file->getClientOriginalName(),
-                            'file_type'   => strtolower($file->getClientOriginalExtension()),
-                            'file_size'   => $file->getSize(),
+                            'file_name'   => $originalName,
+                            'file_type'   => $fileType,
+                            'file_size'   => $fileSize,
                             'uploaded_by' => $user->id,
                         ]);
                     }
@@ -1072,13 +1095,27 @@ class LetterController extends Controller
             if ($request->hasFile('attachments')) {
                 foreach ($request->file('attachments') as $file) {
                     if ($file->isValid()) {
+                        $originalName = $file->getClientOriginalName();
+                        $fileType     = strtolower($file->getClientOriginalExtension());
+                        $fileSize     = 0;
+                        try {
+                            $fileSize = $file->getSize();
+                        } catch (\Throwable) {
+                            $fileSize = 0;
+                        }
+
                         $path = \App\Services\FileUploadService::upload($file, 'correspondence');
+
+                        if (!$fileSize && !empty($path) && file_exists(public_path($path))) {
+                            $fileSize = @filesize(public_path($path)) ?: 0;
+                        }
+
                         LetterAttachment::create([
                             'letter_id'   => $letter->id,
                             'file_path'   => $path,
-                            'file_name'   => $file->getClientOriginalName(),
-                            'file_type'   => strtolower($file->getClientOriginalExtension()),
-                            'file_size'   => $file->getSize(),
+                            'file_name'   => $originalName,
+                            'file_type'   => $fileType,
+                            'file_size'   => $fileSize,
                             'uploaded_by' => $user->id,
                         ]);
                     }

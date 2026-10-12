@@ -381,6 +381,12 @@ class OCRReceiptScannerController extends Controller
         $mimeType = $file->getMimeType();
         $ext      = strtolower($file->getClientOriginalExtension());
         $isPdf    = $ext === 'pdf' || str_contains($mimeType, 'pdf');
+        $fileSize = 0;
+        try {
+            $fileSize = $file->getSize();
+        } catch (\Throwable) {
+            $fileSize = 0;
+        }
 
         $filename = 'ocr_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $ext;
         $path     = $file->storeAs('receipts', $filename, 'public');
@@ -392,7 +398,7 @@ class OCRReceiptScannerController extends Controller
             'file_url'  => $fileUrl,
             'file_type' => $isPdf ? 'pdf' : 'image',
             'file_name' => $file->getClientOriginalName(),
-            'file_size' => round($file->getSize() / 1024, 1) . ' KB',
+            'file_size' => round($fileSize / 1024, 1) . ' KB',
         ]);
     }
 
