@@ -218,66 +218,48 @@ class DashboardController extends Controller
     // ─── Admin ──────────────────────────────────────────────────────────────────
     public function admin()
     {
-        $kpi = [
-            'total_projects'   => $this->safe(fn() => \App\Models\Project::where('status', 'active')->count()),
-            'total_employees'  => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count()),
-            'monthly_expenses' => $this->safe(function() {
-                $now = now();
-                $direct = (float) (\App\Models\Expense::whereMonth('expense_date', $now->month)
-                    ->whereYear('expense_date', $now->year)
-                    ->sum('amount') ?? 0);
+        $now = now();
 
-                $paidRequests = (float) (\App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
-                    ->where(function($q) use ($now) {
-                        $q->where(function($sq) use ($now) {
-                            $sq->whereNotNull('paid_at')
-                               ->whereMonth('paid_at', $now->month)
-                               ->whereYear('paid_at', $now->year);
-                        })->orWhere(function($sq) use ($now) {
-                            $sq->whereNull('paid_at')
-                               ->whereMonth('updated_at', $now->month)
-                               ->whereYear('updated_at', $now->year);
-                        })->orWhere(function($sq) use ($now) {
-                            $sq->whereNull('paid_at')
-                               ->whereMonth('created_at', $now->month)
-                               ->whereYear('created_at', $now->year);
-                        });
-                    })
-                    ->sum('amount') ?? 0);
+        // 1. Pending Approvals & Action Items
+        $pendingGmPrs = $this->safe(function () {
+            return \App\Models\PurchaseRequest::with([
+                    'project', 'requestedBy', 'supplier',
+                    'proformaInvoices' => fn($q) => $q->where('gm_selected', true)->orWhere('is_selected', true),
+                    'marketingVariance', 'items'
+                ])
+                ->where('status', \App\Models\PurchaseRequest::STATUS_PENDING_GM)
+                ->latest()
+                ->take(8)
+                ->get();
+        }, collect());
 
-                return $direct + $paidRequests;
-            }, 0),
-            'inventory_value'  => $this->safe(function() {
-                return \Illuminate\Support\Facades\DB::table('inventory')
-                    ->join('products', 'inventory.product_id', '=', 'products.id')
-                    ->whereNull('products.deleted_at')
-                    ->sum(\Illuminate\Support\Facades\DB::raw('inventory.quantity_on_hand * COALESCE(
-                        inventory.unit_cost,
-                        (SELECT price FROM material_prices WHERE product_id = products.id ORDER BY effective_date DESC, id DESC LIMIT 1),
-                        (SELECT unit_price FROM purchase_order_items WHERE product_id = products.id ORDER BY id DESC LIMIT 1),
-                        products.unit_price,
-                        0
-                    )'));
-            }),
-        ];
+        $unassignedStagePrs = $this->safe(function () {
+            return \App\Models\PurchaseRequest::with(['project', 'requestedBy'])
+                ->where('current_owner_role', 'global_admin')
+                ->whereNotIn('status', [
+                    \App\Models\PurchaseRequest::STATUS_COMPLETED,
+                    \App\Models\PurchaseRequest::STATUS_CANCELLED,
+                    \App\Models\PurchaseRequest::STATUS_REJECTED
+                ])
+                ->latest()
+                ->take(8)
+                ->get();
+        }, collect());
 
-        $usersByRole = $this->safe(fn() =>
-            User::join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
-                ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
-                ->select('roles.name', DB::raw('count(*) as total'))
-                ->groupBy('roles.name')->get(),
-            collect()
-        );
+        $pendingGmExpenses = $this->safe(function () {
+            return \App\Models\ExpenseRequest::with(['project', 'requester', 'maintenanceRequest', 'employee', 'user'])
+                ->where('status', \App\Models\ExpenseRequest::STATUS_PENDING_GM)
+                ->latest()
+                ->take(10)
+                ->get();
+        }, collect());
 
-        $projectBudgets = $this->safe(fn() =>
-            Project::withSum('budgets as budgeted_total', 'budgeted_amount')
-                   ->withSum('budgets as actual_total', 'actual_amount')
-                   ->take(5)->get(),
-            collect()
-        );
+        $pendingEmployees = $this->safe(function () {
+            return \App\Models\Employee::where(function($q) {
+                $q->where('is_approved_by_gm', false)->orWhereNull('is_approved_by_gm');
+            })->latest()->take(8)->get();
+        }, collect());
 
-        $activityLogs = $this->safe(fn() => \App\Models\ActivityLog::with('user')->latest()->take(20)->get(), collect());
-        
         $unassignedUsers = $this->safe(fn() => User::whereDoesntHave('roles')
             ->where(function ($q) {
                 $q->where('is_active', true)->orWhereNull('is_active');
@@ -292,19 +274,399 @@ class DashboardController extends Controller
             ->with('employee')
             ->latest()
             ->get(), collect());
+
+        // 2. Cash & Bank Accounts (from Chart of Accounts)
+        $cashAndBankCoas = $this->safe(function() {
+            return \App\Models\ChartOfAccount::where('is_active', true)
+                ->where(function($q) {
+                    $q->where('subtype', 'Cash and Bank')
+                      ->orWhere('subtype', 'like', '%Cash%')
+                      ->orWhere('subtype', 'like', '%Bank%')
+                      ->orWhere('name', 'like', '%Bank%')
+                      ->orWhere('name', 'like', '%Cash%')
+                      ->orWhere('code', 'like', '10%');
+                })
+                ->orderBy('code')
+                ->get();
+        }, collect());
+
+        $totalCashBankBalance = (float) $cashAndBankCoas->sum('current_balance');
+
+        // 3. Monthly and YTD Incomes & Expenses
+        $monthlyIncome = $this->safe(function() use ($now) {
+            $direct = (float) (\App\Models\Payment::whereMonth('payment_date', $now->month)
+                ->whereYear('payment_date', $now->year)
+                ->sum('amount') ?? 0);
+            $incRecords = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('income_records')) {
+                $incRecords = (float) (\App\Models\IncomeRecord::whereMonth('income_date', $now->month)
+                    ->whereYear('income_date', $now->year)
+                    ->where('status', '!=', 'cancelled')
+                    ->sum('amount') ?? 0);
+            }
+            return $direct + $incRecords;
+        }, 0);
+
+        $ytdIncome = $this->safe(function() use ($now) {
+            $direct = (float) (\App\Models\Payment::whereYear('payment_date', $now->year)->sum('amount') ?? 0);
+            $incRecords = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('income_records')) {
+                $incRecords = (float) (\App\Models\IncomeRecord::whereYear('income_date', $now->year)
+                    ->where('status', '!=', 'cancelled')
+                    ->sum('amount') ?? 0);
+            }
+            return $direct + $incRecords;
+        }, 0);
+
+        $monthlyExpenses = $this->safe(function() use ($now) {
+            $direct = (float) (\App\Models\Expense::whereMonth('expense_date', $now->month)
+                ->whereYear('expense_date', $now->year)
+                ->sum('amount') ?? 0);
+
+            $paidRequests = (float) (\App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                ->where(function($q) use ($now) {
+                    $q->where(function($sq) use ($now) {
+                        $sq->whereNotNull('paid_at')
+                           ->whereMonth('paid_at', $now->month)
+                           ->whereYear('paid_at', $now->year);
+                    })->orWhere(function($sq) use ($now) {
+                        $sq->whereNull('paid_at')
+                           ->whereMonth('updated_at', $now->month)
+                           ->whereYear('updated_at', $now->year);
+                    })->orWhere(function($sq) use ($now) {
+                        $sq->whereNull('paid_at')
+                           ->whereMonth('created_at', $now->month)
+                           ->whereYear('created_at', $now->year);
+                    });
+                })
+                ->sum('amount') ?? 0);
+
+            return $direct + $paidRequests;
+        }, 0);
+
+        $ytdExpenses = $this->safe(function() use ($now) {
+            $direct = (float) (\App\Models\Expense::whereYear('expense_date', $now->year)->sum('amount') ?? 0);
+            $paidRequests = (float) (\App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                ->where(function($q) use ($now) {
+                    $q->where(function($sq) use ($now) {
+                        $sq->whereNotNull('paid_at')->whereYear('paid_at', $now->year);
+                    })->orWhere(function($sq) use ($now) {
+                        $sq->whereNull('paid_at')->whereYear('updated_at', $now->year);
+                    })->orWhere(function($sq) use ($now) {
+                        $sq->whereNull('paid_at')->whereYear('created_at', $now->year);
+                    });
+                })
+                ->sum('amount') ?? 0);
+            return $direct + $paidRequests;
+        }, 0);
+
+        $inventoryValue = $this->safe(function() {
+            return (float) \Illuminate\Support\Facades\DB::table('inventory')
+                ->join('products', 'inventory.product_id', '=', 'products.id')
+                ->whereNull('products.deleted_at')
+                ->sum(\Illuminate\Support\Facades\DB::raw('inventory.quantity_on_hand * COALESCE(
+                    inventory.unit_cost,
+                    (SELECT price FROM material_prices WHERE product_id = products.id ORDER BY effective_date DESC, id DESC LIMIT 1),
+                    (SELECT unit_price FROM purchase_order_items WHERE product_id = products.id ORDER BY id DESC LIMIT 1),
+                    products.unit_price,
+                    0
+                )'));
+        }, 0);
+
+        $fixedAssetsValue = $this->safe(function() {
+            if (\Illuminate\Support\Facades\Schema::hasTable('fixed_assets')) {
+                return (float) \App\Models\FixedAsset::sum('purchase_price');
+            }
+            return 0;
+        }, 0);
+
+        $fixedAssetsCount = $this->safe(function() {
+            return \Illuminate\Support\Facades\Schema::hasTable('fixed_assets') ? \App\Models\FixedAsset::count() : 0;
+        }, 0);
+
+        // 4. Executive KPI Array
+        $kpi = [
+            'total_projects'          => $this->safe(fn() => \App\Models\Project::count(), 0),
+            'active_projects'         => $this->safe(fn() => \App\Models\Project::where('status', 'active')->count(), 0),
+            'completed_projects'      => $this->safe(fn() => \App\Models\Project::where('status', 'completed')->count(), 0),
+            'total_contract_value'    => $this->safe(fn() => (float) \App\Models\Project::sum('contract_value'), 0),
+            'total_budget_allocated'  => $this->safe(fn() => (float) \App\Models\Project::sum('budget_allocated'), 0),
+
+            'total_employees'         => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count(), 0),
+            'new_employees_month'     => $this->safe(fn() => \App\Models\Employee::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->count(), 0),
+            'employees_on_leave'      => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('leave_requests') ? \App\Models\LeaveRequest::where('status', 'approved')->whereDate('start_date', '<=', $now)->whereDate('end_date', '>=', $now)->count() : 0, 0),
+
+            'monthly_income'          => $monthlyIncome,
+            'ytd_income'              => $ytdIncome,
+            'monthly_expenses'        => $monthlyExpenses,
+            'ytd_expenses'            => $ytdExpenses,
+            'net_cash_flow'           => ($monthlyIncome - $monthlyExpenses),
+            'cash_bank_balance'       => $totalCashBankBalance,
+
+            'inventory_value'         => $inventoryValue,
+            'fixed_assets_value'      => $fixedAssetsValue,
+            'fixed_assets_count'      => $fixedAssetsCount,
+
+            'total_users'             => $this->safe(fn() => User::count(), 0),
+            'unassigned_roles_count'  => $unassignedUsers->count(),
+
+            'pending_gm_prs'          => $pendingGmPrs->count(),
+            'pending_gm_prs_amount'   => (float) $pendingGmPrs->sum(fn($pr) => (float)($pr->direct_buy_amount ?: $pr->items->sum('estimated_total'))),
+            'unassigned_prs_count'    => $unassignedStagePrs->count(),
+            'pending_gm_expenses'     => $pendingGmExpenses->count(),
+            'pending_gm_expenses_amount' => (float) $pendingGmExpenses->sum('amount'),
+            'pending_approvals'       => $pendingEmployees->count(),
+
+            'pending_payroll'         => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('payrolls') ? \Illuminate\Support\Facades\DB::table('payrolls')->where('status', 'pending')->count() : 0, 0),
+            'pending_loans'           => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('employee_advances') ? \App\Models\EmployeeAdvance::where('status', 'pending')->count() : 0, 0),
+            'pending_leaves'          => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('leave_requests') ? \App\Models\LeaveRequest::where('status', 'pending')->count() : 0, 0),
+            'pending_maintenance'     => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('maintenance_requests') ? \App\Models\MaintenanceRequest::whereIn('status', ['pending', 'in_progress', 'reported', 'gm_review'])->count() : 0, 0),
+            'open_issues'             => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('issues') ? \App\Models\Issue::where('status', 'open')->count() : 0, 0),
+
+            'draft_letters'           => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('letters') ? \App\Models\Letter::where('status', 'draft')->orWhereNull('ref_no')->count() : 0, 0),
+            'incoming_letters'        => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('letters') ? \App\Models\Letter::where('type', 'incoming')->count() : 0, 0),
+            'outgoing_letters'        => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('letters') ? \App\Models\Letter::where('type', 'outgoing')->count() : 0, 0),
+            'total_vehicles'          => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('vehicle_reminders') ? \App\Models\VehicleReminder::count() : 0, 0),
+        ];
+
+        // 5. System Users by Role
+        $usersByRole = $this->safe(fn() =>
+            User::join('model_has_roles', 'users.id', '=', 'model_has_roles.model_id')
+                ->join('roles', 'model_has_roles.role_id', '=', 'roles.id')
+                ->select('roles.name', DB::raw('count(*) as total'))
+                ->groupBy('roles.name')->get(),
+            collect()
+        );
+
+        // 6. Project Budgets
+        $projectBudgets = $this->safe(fn() =>
+            Project::withSum('budgets as budgeted_total', 'budgeted_amount')
+                   ->withSum('budgets as actual_total', 'actual_amount')
+                   ->take(6)->get(),
+            collect()
+        );
+
+        // 7. Full Project Expenses & Utilization (Cash + Daily Material Consumption priced at latest price)
+        $latestPriceMap = $this->getLatestMaterialPriceMap();
+        $projectExpenses = $this->safe(function () use ($latestPriceMap) {
+            $usagesByProject = collect();
+            if (\Illuminate\Support\Facades\Schema::hasTable('material_usages') && \Illuminate\Support\Facades\Schema::hasTable('material_usage_items')) {
+                $usagesByProject = \Illuminate\Support\Facades\DB::table('material_usages')
+                    ->join('material_usage_items', 'material_usages.id', '=', 'material_usage_items.material_usage_id')
+                    ->whereNotIn('material_usages.status', ['cancelled', 'rejected'])
+                    ->select(
+                        'material_usages.project_id',
+                        'material_usage_items.product_id',
+                        'material_usage_items.unit_cost as stored_unit_cost',
+                        \Illuminate\Support\Facades\DB::raw('COALESCE(material_usage_items.quantity, material_usage_items.used_quantity, 0) as qty')
+                    )
+                    ->get()
+                    ->groupBy('project_id');
+            }
+
+            return \App\Models\Project::select('projects.id', 'projects.name', 'projects.code',
+                    'projects.contract_value', 'projects.budget_allocated', 'projects.status')
+                ->get()
+                ->map(function ($project) use ($usagesByProject, $latestPriceMap) {
+                    $cashExpenses = (float) \App\Models\ExpenseRequest::where('project_id', $project->id)
+                        ->whereIn('status', [\App\Models\ExpenseRequest::STATUS_PAID, 'approved', 'assigned', 'reviewed'])
+                        ->sum('amount');
+
+                    $projectItems = $usagesByProject->get($project->id, collect());
+                    $materialCost = (float) $projectItems->sum(function ($item) use ($latestPriceMap) {
+                        $qty = (float) $item->qty;
+                        $unitPrice = (float) ($latestPriceMap[$item->product_id] ?? ((float)$item->stored_unit_cost ?: 0));
+                        return $qty * $unitPrice;
+                    });
+
+                    $totalExpense     = $cashExpenses + $materialCost;
+                    $contractValue    = (float) $project->contract_value;
+                    $budgetAllocated  = (float) $project->budget_allocated;
+                    $utilization      = $budgetAllocated > 0 ? min(999, round(($totalExpense / $budgetAllocated) * 100, 1)) : 0;
+                    $budgetStatus     = $utilization >= 100 ? 'danger' : ($utilization >= 80 ? 'warning' : 'success');
+
+                    return [
+                        'id'               => $project->id,
+                        'name'             => $project->name,
+                        'code'             => $project->code,
+                        'status'           => $project->status,
+                        'contract_value'   => $contractValue,
+                        'budget_allocated' => $budgetAllocated,
+                        'cash_expenses'    => $cashExpenses,
+                        'material_cost'    => $materialCost,
+                        'total_expense'    => $totalExpense,
+                        'remaining_budget' => max(0, $budgetAllocated - $totalExpense),
+                        'utilization'      => $utilization,
+                        'budget_status'    => $budgetStatus,
+                    ];
+                })
+                ->sortByDesc('total_expense')
+                ->values();
+        }, collect());
+
+        // 8. 6-Month Income vs Expense Trend
+        $monthlyAnalytics = $this->safe(function() {
+            $labels = [];
+            $incomes = [];
+            $expenses = [];
+            for ($i = 5; $i >= 0; $i--) {
+                $monthDate = \Carbon\Carbon::now()->subMonths($i);
+                $labels[] = $monthDate->format('M Y');
+                
+                $inc = (float) \Illuminate\Support\Facades\DB::table('payments')
+                    ->whereMonth('payment_date', $monthDate->month)
+                    ->whereYear('payment_date', $monthDate->year)
+                    ->sum('amount');
+                if (\Illuminate\Support\Facades\Schema::hasTable('income_records')) {
+                    $inc += (float) \Illuminate\Support\Facades\DB::table('income_records')
+                        ->whereNull('deleted_at')
+                        ->where('status', '!=', 'cancelled')
+                        ->whereMonth('income_date', $monthDate->month)
+                        ->whereYear('income_date', $monthDate->year)
+                        ->sum('amount');
+                }
+
+                $exp = (float) \Illuminate\Support\Facades\DB::table('expenses')
+                    ->whereMonth('expense_date', $monthDate->month)
+                    ->whereYear('expense_date', $monthDate->year)
+                    ->sum('amount')
+                    + (float) \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                    ->where(function($q) use ($monthDate) {
+                        $q->where(function($sq) use ($monthDate) {
+                            $sq->whereNotNull('paid_at')->whereMonth('paid_at', $monthDate->month)->whereYear('paid_at', $monthDate->year);
+                        })->orWhere(function($sq) use ($monthDate) {
+                            $sq->whereNull('paid_at')->whereMonth('updated_at', $monthDate->month)->whereYear('updated_at', $monthDate->year);
+                        })->orWhere(function($sq) use ($monthDate) {
+                            $sq->whereNull('paid_at')->whereMonth('created_at', $monthDate->month)->whereYear('created_at', $monthDate->year);
+                        });
+                    })
+                    ->sum('amount');
+
+                $incomes[] = round($inc, 2);
+                $expenses[] = round($exp, 2);
+            }
+            return ['labels' => $labels, 'incomes' => $incomes, 'expenses' => $expenses];
+        }, ['labels' => [], 'incomes' => [], 'expenses' => []]);
+
+        // 9. Real Expense Category Breakdown
+        $expenseCategories = $this->safe(function() {
+            return \Illuminate\Support\Facades\DB::table('expenses')
+                ->select('category', \Illuminate\Support\Facades\DB::raw('SUM(amount) as total'))
+                ->groupBy('category')
+                ->orderByDesc('total')
+                ->take(6)
+                ->get();
+        }, collect());
+
+        // 10. Low Stock Store Items
+        $lowStockItems = $this->safe(function() {
+            if (\Illuminate\Support\Facades\Schema::hasTable('inventory') && \Illuminate\Support\Facades\Schema::hasTable('products') && \Illuminate\Support\Facades\Schema::hasTable('stores')) {
+                return \Illuminate\Support\Facades\DB::table('inventory')
+                    ->join('products', 'inventory.product_id', '=', 'products.id')
+                    ->join('stores', 'inventory.store_id', '=', 'stores.id')
+                    ->whereNull('products.deleted_at')
+                    ->where('inventory.quantity_on_hand', '<=', 5)
+                    ->select('inventory.id', 'products.name as product_name', 'products.item_code', 'stores.name as store_name', 'inventory.quantity_on_hand', 'products.unit_of_measure')
+                    ->orderBy('inventory.quantity_on_hand')
+                    ->take(6)
+                    ->get();
+            }
+            return collect();
+        }, collect());
+
+        // 11. Overdue / Due Soon Vehicle Reminders
+        $overdueReminders = $this->safe(function() use ($now) {
+            if (\Illuminate\Support\Facades\Schema::hasTable('vehicle_reminders')) {
+                $today = $now->toDateString();
+                $soon = $now->copy()->addDays(14)->toDateString();
+                return \App\Models\VehicleReminder::with(['assetUnit', 'fixedAsset'])
+                    ->whereNull('deleted_at')
+                    ->where(function ($q) use ($today, $soon) {
+                        $q->where(function ($sq) use ($today) {
+                            $sq->where('bolo_expiry_date', '<=', $today);
+                        })->orWhere(function ($sq) use ($today) {
+                            $sq->where('insurance_expiry_date', '<=', $today);
+                        })->orWhere(function ($sq) use ($today, $soon) {
+                            $sq->whereBetween('bolo_expiry_date', [$today, $soon]);
+                        })->orWhere(function ($sq) use ($today, $soon) {
+                            $sq->whereBetween('insurance_expiry_date', [$today, $soon]);
+                        });
+                    })
+                    ->latest()
+                    ->take(5)
+                    ->get();
+            }
+            return collect();
+        }, collect());
+
+        // 12. Recent Site Issues
+        $recentIssues = $this->safe(function() {
+            if (\Illuminate\Support\Facades\Schema::hasTable('issues')) {
+                return \App\Models\Issue::with('project')->where('status', 'open')->latest()->take(5)->get();
+            }
+            return collect();
+        }, collect());
+
+        // 13. Recent Letters
+        $recentLetters = $this->safe(function() {
+            if (\Illuminate\Support\Facades\Schema::hasTable('letters')) {
+                return \App\Models\Letter::with(['creator', 'latestRecipient.toUser'])
+                    ->latest('id')
+                    ->take(5)
+                    ->get();
+            }
+            return collect();
+        }, collect());
+
+        // 14. Activity Logs & Support Tickets
+        $activityLogs = $this->safe(fn() => \App\Models\ActivityLog::with('user')->latest()->take(15)->get(), collect());
         
         $ticketStats = $this->safe(fn() => [
-            'open' => \App\Models\SupportTicket::where('status', 'open')->count(),
+            'open'        => \App\Models\SupportTicket::where('status', 'open')->count(),
             'in_progress' => \App\Models\SupportTicket::where('status', 'in_progress')->count(),
-            'resolved' => \App\Models\SupportTicket::where('status', 'resolved')->count(),
-            'total' => \App\Models\SupportTicket::count(),
+            'resolved'    => \App\Models\SupportTicket::where('status', 'resolved')->count(),
+            'total'       => \App\Models\SupportTicket::count(),
         ], ['open' => 0, 'in_progress' => 0, 'resolved' => 0, 'total' => 0]);
 
         $recentTickets = $this->safe(fn() => \App\Models\SupportTicket::with('user')->latest()->take(5)->get(), collect());
 
+        // 15. Tax Compliance Data
         $taxData = $this->getTaxComplianceReportData();
 
-        return view('dashboard.admin', compact('kpi', 'usersByRole', 'projectBudgets', 'activityLogs', 'unassignedUsers', 'ticketStats', 'recentTickets', 'taxData'));
+        // 16. Server & Environment Diagnostics
+        $systemDiagnostics = [
+            'php_version'     => PHP_VERSION,
+            'laravel_version' => app()->version(),
+            'environment'     => app()->environment(),
+            'db_connection'   => config('database.default'),
+            'cache_driver'    => config('cache.default'),
+            'server_time'     => now()->format('Y-m-d H:i:s T'),
+            'app_timezone'    => config('app.timezone'),
+        ];
+
+        return view('dashboard.admin', compact(
+            'kpi',
+            'usersByRole',
+            'projectBudgets',
+            'activityLogs',
+            'unassignedUsers',
+            'ticketStats',
+            'recentTickets',
+            'taxData',
+            'pendingGmPrs',
+            'unassignedStagePrs',
+            'pendingGmExpenses',
+            'pendingEmployees',
+            'cashAndBankCoas',
+            'projectExpenses',
+            'monthlyAnalytics',
+            'expenseCategories',
+            'lowStockItems',
+            'overdueReminders',
+            'recentIssues',
+            'recentLetters',
+            'systemDiagnostics'
+        ));
     }
 
     // ─── GM ─────────────────────────────────────────────────────────────────────
