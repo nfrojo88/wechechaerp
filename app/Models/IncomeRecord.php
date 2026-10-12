@@ -17,6 +17,8 @@ class IncomeRecord extends Model
         'amount',
         'payment_method',
         'bank_account_id',
+        'chart_of_account_id',
+        'is_deposited',
         'description',
         'notes',
         'status',
@@ -44,12 +46,14 @@ class IncomeRecord extends Model
         'amount'       => 'decimal:2',
         'unit_price'   => 'decimal:2',
         'quantity'     => 'decimal:2',
+        'is_deposited' => 'boolean',
     ];
 
-    public function project()       { return $this->belongsTo(Project::class); }
-    public function bankAccount()   { return $this->belongsTo(BankAccount::class); }
-    public function createdBy()     { return $this->belongsTo(User::class, 'created_by'); }
-    public function journalEntry()  { return $this->belongsTo(JournalEntry::class); }
+    public function project()        { return $this->belongsTo(Project::class); }
+    public function bankAccount()    { return $this->belongsTo(BankAccount::class); }
+    public function chartOfAccount() { return $this->belongsTo(ChartOfAccount::class, 'chart_of_account_id'); }
+    public function createdBy()      { return $this->belongsTo(User::class, 'created_by'); }
+    public function journalEntry()   { return $this->belongsTo(JournalEntry::class); }
 
     /**
      * Get the accessible public URL for the attached receipt.
@@ -65,6 +69,24 @@ class IncomeRecord extends Model
         }
 
         return asset('storage/' . ltrim($this->receipt_file_path, '/'));
+    }
+
+    /**
+     * Display label for the deposit account (COA or Bank Account).
+     */
+    public function getDepositAccountNameAttribute(): string
+    {
+        if ($this->chartOfAccount) {
+            $name = "[{$this->chartOfAccount->code}] {$this->chartOfAccount->name}";
+            if ($this->bankAccount) {
+                $name .= " ({$this->bankAccount->bank_name})";
+            }
+            return $name;
+        }
+        if ($this->bankAccount) {
+            return "{$this->bankAccount->bank_name} ({$this->bankAccount->account_number})";
+        }
+        return '—';
     }
 
     /**

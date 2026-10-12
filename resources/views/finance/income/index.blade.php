@@ -251,8 +251,11 @@
                                     <i class="fas {{ $icon }} me-1"></i> {{ ucfirst($inc->category) }}
                                 </span>
                             </td>
-                            <td class="text-muted text-truncate" style="max-width: 130px;" title="{{ $inc->project->name ?? '—' }}">
-                                {{ $inc->project->name ?? '—' }}
+                            <td class="text-muted text-truncate" style="max-width: 140px;" title="{{ $inc->project->name ?? '—' }}">
+                                <div class="text-dark fw-semibold text-truncate">{{ $inc->project->name ?? '—' }}</div>
+                                <div class="text-muted small text-truncate" style="font-size: 0.74rem;" title="{{ $inc->deposit_account_name }}">
+                                    <i class="fa-solid fa-building-columns me-1 text-primary"></i>{{ $inc->deposit_account_name }}
+                                </div>
                             </td>
                             <td>
                                 <div class="fw-semibold text-dark text-truncate" style="max-width: 140px;" title="{{ $inc->buyer_name }}">
@@ -417,13 +420,32 @@
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label fw-semibold small text-dark">Deposit to Bank / Cash Account <span class="text-danger">*</span></label>
-                                <select name="bank_account_id" class="form-select bg-light border text-dark" required>
-                                    <option value="">Select Bank or Cash Account...</option>
-                                    @foreach($bankAccounts as $b)
-                                        <option value="{{ $b->id }}">{{ $b->bank_name }} ({{ $b->account_number }})</option>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="form-label fw-semibold small text-dark mb-0">
+                                        <i class="fa-solid fa-building-columns text-primary me-1"></i>Deposit to Bank / Cash Account <span class="text-danger">*</span>
+                                    </label>
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle rounded-pill small" style="font-size: 0.70rem;">
+                                        <i class="fa-solid fa-sitemap me-1"></i>From COA
+                                    </span>
+                                </div>
+                                <select name="chart_of_account_id" id="modalDepositAccount" class="form-select bg-light border text-dark" required onchange="handleDepositAccountChange();">
+                                    <option value="">Select Account from COA...</option>
+                                    @foreach($coaAccounts as $coa)
+                                        @php
+                                            $linkedBank = $coa->bankAccounts->first();
+                                            $bankDetail = $linkedBank ? " • A/C: {$linkedBank->account_number} ({$linkedBank->bank_name})" : "";
+                                        @endphp
+                                        <option value="{{ $coa->id }}" 
+                                                data-bank-id="{{ $linkedBank?->id ?? '' }}"
+                                                data-balance="{{ $coa->current_balance }}">
+                                            [{{ $coa->code }}] {{ $coa->name }}{{ $bankDetail }} — Bal: ETB {{ number_format($coa->current_balance, 2) }}
+                                        </option>
                                     @endforeach
                                 </select>
+                                <input type="hidden" name="bank_account_id" id="modalBankAccountId" value="">
+                                <div class="form-text small text-muted" style="font-size: 0.75rem;">
+                                    <i class="fa-solid fa-circle-check text-success me-1"></i>The deposited money will be automatically added to this Bank / COA account balance.
+                                </div>
                             </div>
 
                             <div class="row g-2 mb-3">
@@ -702,6 +724,17 @@ function handleCategoryChange() {
         } else {
             cmd.value = 'Services';
         }
+    }
+}
+
+function handleDepositAccountChange() {
+    const select = document.getElementById('modalDepositAccount');
+    if (!select) return;
+    const opt = select.options[select.selectedIndex];
+    const bankId = opt ? (opt.getAttribute('data-bank-id') || '') : '';
+    const hiddenBank = document.getElementById('modalBankAccountId');
+    if (hiddenBank) {
+        hiddenBank.value = bankId;
     }
 }
 

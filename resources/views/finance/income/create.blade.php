@@ -72,13 +72,32 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">Bank / Cash Account</label>
-                        <select name="bank_account_id" class="form-select">
-                            <option value="">-- Select Bank Account --</option>
-                            @foreach($bankAccounts ?? [] as $b)
-                                <option value="{{ $b->id }}">{{ $b->bank_name }} ({{ $b->account_number }})</option>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-semibold mb-0">
+                                <i class="fa-solid fa-building-columns text-primary me-1"></i>Deposit to Bank / Cash Account (COA) <span class="text-danger">*</span>
+                            </label>
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle rounded-pill small" style="font-size: 0.70rem;">
+                                From Chart of Accounts
+                            </span>
+                        </div>
+                        <select name="chart_of_account_id" id="createDepositAccount" class="form-select" required onchange="const opt = this.options[this.selectedIndex]; document.getElementById('createBankAccountId').value = opt ? opt.getAttribute('data-bank-id') : '';">
+                            <option value="">-- Select Account from COA --</option>
+                            @foreach($coaAccounts ?? [] as $coa)
+                                @php
+                                    $linkedBank = $coa->bankAccounts->first();
+                                    $bankDetail = $linkedBank ? " • A/C: {$linkedBank->account_number} ({$linkedBank->bank_name})" : "";
+                                @endphp
+                                <option value="{{ $coa->id }}" 
+                                        data-bank-id="{{ $linkedBank?->id ?? '' }}"
+                                        data-balance="{{ $coa->current_balance }}">
+                                    [{{ $coa->code }}] {{ $coa->name }}{{ $bankDetail }} — Available: ETB {{ number_format($coa->current_balance, 2) }}
+                                </option>
                             @endforeach
                         </select>
+                        <input type="hidden" name="bank_account_id" id="createBankAccountId" value="">
+                        <div class="form-text small text-muted">
+                            <i class="fa-solid fa-circle-check text-success me-1"></i>Amount will be credited directly to this account balance.
+                        </div>
                     </div>
 
                     <div class="col-12">

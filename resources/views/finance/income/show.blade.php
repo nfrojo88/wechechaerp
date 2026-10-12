@@ -45,8 +45,8 @@
                             <strong class="text-dark fs-6">{{ $income->project->name ?? '—' }}</strong>
                         </div>
                         <div class="col-md-6">
-                            <span class="text-muted small d-block">Bank / Cash Account</span>
-                            <span class="text-dark">{{ $income->bankAccount ? $income->bankAccount->bank_name . ' (' . $income->bankAccount->account_number . ')' : '—' }}</span>
+                            <span class="text-muted small d-block">Deposited to Account (COA)</span>
+                            <strong class="text-dark"><i class="fa-solid fa-building-columns text-primary me-1"></i>{{ $income->deposit_account_name }}</strong>
                         </div>
                         <div class="col-md-6">
                             <span class="text-muted small d-block">Payment Method</span>

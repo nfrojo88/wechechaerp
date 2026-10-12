@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\IncomeRecord;
 use App\Models\Project;
 use App\Models\BankAccount;
+use App\Models\ChartOfAccount;
+use App\Models\BankTransaction;
 use App\Models\SystemSetting;
 use App\Services\ReceiptOcrService;
 use App\Services\QcService;
@@ -30,7 +32,7 @@ class IncomeController extends Controller
 
     /**
      * Self-healing runtime schema check.
-     * Ensures income_records has all receipt and eTax columns.
+     * Ensures income_records has all receipt, COA, deposit, and eTax columns.
      */
     private function ensureSchema(): void
     {
@@ -44,6 +46,12 @@ class IncomeController extends Controller
                 }
 
                 Schema::table('income_records', function (Blueprint $table) {
+                    if (!Schema::hasColumn('income_records', 'chart_of_account_id')) {
+                        $table->foreignId('chart_of_account_id')->nullable()->after('bank_account_id')->constrained('chart_of_accounts')->nullOnDelete();
+                    }
+                    if (!Schema::hasColumn('income_records', 'is_deposited')) {
+                        $table->boolean('is_deposited')->default(false)->after('status');
+                    }
                     if (!Schema::hasColumn('income_records', 'seller_tin')) {
                         $table->string('seller_tin', 50)->nullable()->default('38480010')->after('category');
                     }
@@ -94,12 +102,45 @@ class IncomeController extends Controller
     }
 
     /**
+     * Retrieve Cash and Bank Accounts directly from Chart of Accounts (COA).
+     */
+    private function getCoaAccounts()
+    {
+        $coas = ChartOfAccount::with(['bankAccounts', 'manager'])
+            ->where('is_active', true)
+            ->where(function ($q) {
+                $q->where('subtype', 'Cash and Bank')
+                  ->orWhere('subtype', 'like', '%Cash%')
+                  ->orWhere('subtype', 'like', '%Bank%')
+                  ->orWhere('type', 'asset')
+                  ->orWhere('code', 'like', '10%')
+                  ->orWhere('code', 'like', '11%');
+            })
+            ->orderBy('code')
+            ->get();
+
+        if ($coas->isEmpty()) {
+            $coas = ChartOfAccount::with(['bankAccounts', 'manager'])
+                ->where('is_active', true)
+                ->where('type', 'asset')
+                ->orderBy('code')
+                ->get();
+        }
+
+        if ($coas->isEmpty()) {
+            $coas = ChartOfAccount::where('is_active', true)->orderBy('code')->get();
+        }
+
+        return $coas;
+    }
+
+    /**
      * Build filtered query for income records.
      */
     private function buildQuery(Request $request)
     {
         $this->ensureSchema();
-        $query = IncomeRecord::with(['project', 'createdBy', 'bankAccount'])->latest('income_date')->latest('id');
+        $query = IncomeRecord::with(['project', 'createdBy', 'bankAccount', 'chartOfAccount'])->latest('income_date')->latest('id');
 
         // Division / Category filter
         if ($request->filled('category') && $request->category !== 'all') {
@@ -131,7 +172,7 @@ class IncomeController extends Controller
         // Free search
         if ($request->filled('search')) {
             $s = trim($request->search);
-            $query->where(function($q) use ($s) {
+            $query->where(function ($q) use ($s) {
                 $q->where('income_no', 'like', "%{$s}%")
                   ->orWhere('receipt_no', 'like', "%{$s}%")
                   ->orWhere('mrc_no', 'like', "%{$s}%")
@@ -153,14 +194,19 @@ class IncomeController extends Controller
         $incomes = $query->paginate(20)->withQueryString();
 
         $totalRevenue = IncomeRecord::where('status', 'confirmed')->sum('amount');
-        $totalBalance = BankAccount::where('is_active', true)->sum('current_balance') ?? 0;
+        
+        $coaAccounts  = $this->getCoaAccounts();
+        $bankAccounts = BankAccount::where('is_active', true)->get();
+
+        $bankTotal = (float) BankAccount::where('is_active', true)->sum('current_balance');
+        $coaTotal  = (float) $coaAccounts->sum('current_balance');
+        $totalBalance = $bankTotal > 0 ? $bankTotal : $coaTotal;
 
         $transportationTotal = IncomeRecord::where('category', 'transportation')->where('status', 'confirmed')->sum('amount');
         $rentalTotal         = IncomeRecord::where('category', 'rental')->where('status', 'confirmed')->sum('amount');
         $constructionTotal   = IncomeRecord::where('category', 'construction')->where('status', 'confirmed')->sum('amount');
 
-        $projects     = Project::where('status', 'active')->get();
-        $bankAccounts = BankAccount::where('is_active', true)->get();
+        $projects = Project::where('status', 'active')->get();
 
         return view('finance.income.index', compact(
             'incomes',
@@ -170,7 +216,8 @@ class IncomeController extends Controller
             'rentalTotal',
             'constructionTotal',
             'projects',
-            'bankAccounts'
+            'bankAccounts',
+            'coaAccounts'
         ));
     }
 
@@ -179,7 +226,8 @@ class IncomeController extends Controller
         $this->ensureSchema();
         $projects     = Project::where('status', 'active')->get();
         $bankAccounts = BankAccount::where('is_active', true)->get();
-        return view('finance.income.create', compact('projects', 'bankAccounts'));
+        $coaAccounts  = $this->getCoaAccounts();
+        return view('finance.income.create', compact('projects', 'bankAccounts', 'coaAccounts'));
     }
 
     public function store(Request $request)
@@ -187,31 +235,80 @@ class IncomeController extends Controller
         $this->ensureSchema();
 
         $data = $request->validate([
-            'project_id'       => 'nullable|exists:projects,id',
-            'category'         => 'required|string|max:50',
-            'income_date'      => 'required|date',
-            'amount'           => 'required|numeric|min:0.01',
-            'payment_method'   => 'required|string|max:50',
-            'bank_account_id'  => 'nullable|exists:bank_accounts,id',
-            'description'      => 'nullable|string',
-            'notes'            => 'nullable|string',
+            'project_id'          => 'nullable|exists:projects,id',
+            'category'            => 'required|string|max:50',
+            'income_date'         => 'required|date',
+            'amount'              => 'required|numeric|min:0.01',
+            'payment_method'      => 'required|string|max:50',
+            'chart_of_account_id' => 'nullable|exists:chart_of_accounts,id',
+            'bank_account_id'     => 'nullable|exists:bank_accounts,id',
+            'description'         => 'nullable|string',
+            'notes'               => 'nullable|string',
             // Receipt & eTax fields
-            'seller_tin'       => 'nullable|string|max:50',
-            'buyer_tin'        => 'nullable|string|max:50',
-            'buyer_name'       => 'nullable|string|max:255',
-            'transaction_type' => 'nullable|string|max:100',
-            'receipt_category' => 'nullable|string|max:100',
-            'receipt_used'     => 'nullable|string|max:100',
-            'mrc_no'           => 'nullable|string|max:100',
-            'receipt_no'       => 'nullable|string|max:100',
-            'commodity_type'   => 'nullable|string|max:100',
-            'quantity'         => 'nullable|numeric|min:0.01',
-            'unit_price'       => 'nullable|numeric|min:0',
-            'receipt_date'     => 'nullable|date',
-            'encoded_by'       => 'nullable|string|max:100',
-            'receipt_file'     => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
-            'receipt_file_path'=> 'nullable|string|max:255',
+            'seller_tin'          => 'nullable|string|max:50',
+            'buyer_tin'           => 'nullable|string|max:50',
+            'buyer_name'          => 'nullable|string|max:255',
+            'transaction_type'    => 'nullable|string|max:100',
+            'receipt_category'    => 'nullable|string|max:100',
+            'receipt_used'        => 'nullable|string|max:100',
+            'mrc_no'              => 'nullable|string|max:100',
+            'receipt_no'          => 'nullable|string|max:100',
+            'commodity_type'      => 'nullable|string|max:100',
+            'quantity'            => 'nullable|numeric|min:0.01',
+            'unit_price'          => 'nullable|numeric|min:0',
+            'receipt_date'        => 'nullable|date',
+            'encoded_by'          => 'nullable|string|max:100',
+            'receipt_file'        => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+            'receipt_file_path'   => 'nullable|string|max:255',
         ]);
+
+        // If chart_of_account_id was passed in bank_account_id slot or vice-versa, resolve COA
+        if (empty($data['chart_of_account_id']) && !empty($data['bank_account_id'])) {
+            $candidateCoa = ChartOfAccount::find($data['bank_account_id']);
+            if ($candidateCoa) {
+                $data['chart_of_account_id'] = $candidateCoa->id;
+                $data['bank_account_id'] = null;
+            }
+        }
+
+        // 1. Resolve Chart of Account and matching Bank Account
+        $coa = !empty($data['chart_of_account_id']) ? ChartOfAccount::with('bankAccounts')->find($data['chart_of_account_id']) : null;
+        $bankAccount = null;
+
+        if (!empty($data['bank_account_id'])) {
+            $bankAccount = BankAccount::find($data['bank_account_id']);
+        }
+
+        if (!$bankAccount && $coa) {
+            $bankAccount = $coa->bankAccounts->first() ?: BankAccount::where('coa_id', $coa->id)->first();
+            if (!$bankAccount) {
+                $bankAccount = BankAccount::where('account_name', 'like', "%{$coa->name}%")
+                    ->orWhere('bank_name', 'like', "%{$coa->name}%")
+                    ->first();
+            }
+            if (!$bankAccount) {
+                $cleanAccNum = preg_replace('/[^0-9]/', '', $coa->code) ?: '1000';
+                $bankAccount = BankAccount::create([
+                    'account_name'    => $coa->name,
+                    'account_number'  => $cleanAccNum . '-' . str_pad($coa->id, 4, '0', STR_PAD_LEFT),
+                    'bank_name'       => $coa->name,
+                    'account_type'    => 'checking',
+                    'currency'        => 'ETB',
+                    'current_balance' => (float)$coa->current_balance,
+                    'coa_id'          => $coa->id,
+                    'is_active'       => true,
+                    'notes'           => "Auto-linked to COA [{$coa->code}] {$coa->name}",
+                ]);
+            }
+        }
+
+        if ($bankAccount) {
+            $data['bank_account_id'] = $bankAccount->id;
+            if (!$coa && $bankAccount->coa_id) {
+                $coa = ChartOfAccount::find($bankAccount->coa_id);
+                $data['chart_of_account_id'] = $coa->id;
+            }
+        }
 
         // Handle receipt file upload if present
         if ($request->hasFile('receipt_file')) {
@@ -226,7 +323,6 @@ class IncomeController extends Controller
         $no = 'INC-' . date('Ymd') . '-' . str_pad(IncomeRecord::count() + 1, 4, '0', STR_PAD_LEFT);
         $data['income_no']  = $no;
         $data['created_by'] = Auth::id();
-        $data['status']     = 'draft';
 
         // Normalized Defaults for ERCA eTax Sales compliance
         $data['seller_tin']       = $request->input('seller_tin') ?: SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'));
@@ -268,19 +364,88 @@ class IncomeController extends Controller
             }
         }
 
-        IncomeRecord::create($data);
-        return redirect()->route('income.index')->with('success', "Income record #{$no} with receipt details saved successfully.");
+        // ═════════════════════════════════════════════════════════════════════
+        // DEPOSIT MONEY: Add the amount of money in that Bank / COA account
+        // ═════════════════════════════════════════════════════════════════════
+        $amountToDeposit = (float)$data['amount'];
+
+        if ($coa) {
+            $coa->increment('current_balance', $amountToDeposit);
+        }
+
+        if ($bankAccount) {
+            $bankAccount->increment('current_balance', $amountToDeposit);
+            $newBalance = (float)$bankAccount->fresh()->current_balance;
+
+            // Record Bank Transaction audit ledger
+            BankTransaction::create([
+                'bank_account_id'  => $bankAccount->id,
+                'transaction_date' => $data['income_date'] ?: now()->toDateString(),
+                'type'             => 'deposit',
+                'amount'           => $amountToDeposit,
+                'balance_after'    => $newBalance,
+                'reference_no'     => $no,
+                'reference_type'   => 'IncomeRecord',
+                'reference_id'     => null,
+                'description'      => "Sales Income Deposit #{$no} ({$data['category']}) - " . ($data['description'] ?: 'Revenue Deposit'),
+                'is_reconciled'    => true,
+            ]);
+        }
+
+        $data['is_deposited'] = true;
+        $data['status']       = 'confirmed'; // Confirmed & Deposited
+
+        $income = IncomeRecord::create($data);
+
+        if ($bankAccount) {
+            BankTransaction::where('reference_no', $no)->whereNull('reference_id')->update(['reference_id' => $income->id]);
+        }
+
+        $accName = $coa ? "[{$coa->code}] {$coa->name}" : ($bankAccount ? $bankAccount->bank_name : 'the designated account');
+        return redirect()->route('income.index')->with('success', "Income record #{$no} saved! ETB " . number_format($amountToDeposit, 2) . " has been deposited to {$accName}.");
     }
 
     public function show(IncomeRecord $income)
     {
         $this->ensureSchema();
-        $income->load(['project', 'createdBy', 'bankAccount', 'journalEntry']);
+        $income->load(['project', 'createdBy', 'bankAccount', 'chartOfAccount', 'journalEntry']);
         return view('finance.income.show', compact('income'));
     }
 
     public function confirm(IncomeRecord $income)
     {
+        $this->ensureSchema();
+        if (!$income->is_deposited) {
+            $amount = (float)$income->amount;
+            $coa = $income->chart_of_account_id ? ChartOfAccount::find($income->chart_of_account_id) : null;
+            if ($coa) {
+                $coa->increment('current_balance', $amount);
+            }
+
+            $bankAccount = $income->bank_account_id ? BankAccount::find($income->bank_account_id) : ($coa ? $coa->bankAccounts->first() : null);
+            if ($bankAccount) {
+                $bankAccount->increment('current_balance', $amount);
+                $newBalance = (float)$bankAccount->fresh()->current_balance;
+
+                BankTransaction::create([
+                    'bank_account_id'  => $bankAccount->id,
+                    'transaction_date' => $income->income_date ? $income->income_date->toDateString() : now()->toDateString(),
+                    'type'             => 'deposit',
+                    'amount'           => $amount,
+                    'balance_after'    => $newBalance,
+                    'reference_no'     => $income->income_no,
+                    'reference_type'   => 'IncomeRecord',
+                    'reference_id'     => $income->id,
+                    'description'      => "Confirmed Income Deposit #{$income->income_no} ({$income->category})",
+                    'is_reconciled'    => true,
+                ]);
+            }
+
+            $income->update(['status' => 'confirmed', 'is_deposited' => true]);
+            $accName = $coa ? "[{$coa->code}] {$coa->name}" : ($bankAccount ? $bankAccount->bank_name : 'account');
+            return back()->with('success', "Income record #{$income->income_no} confirmed and ETB " . number_format($amount, 2) . " deposited to {$accName} successfully.");
+        }
+
         $income->update(['status' => 'confirmed']);
         return back()->with('success', 'Income record confirmed.');
     }
@@ -496,7 +661,7 @@ class IncomeController extends Controller
 
         $filename = 'Company_Income_Sales_Report_' . now()->format('Y_m_d_His') . '.csv';
 
-        return response()->streamDownload(function() use ($items, $request) {
+        return response()->streamDownload(function () use ($items, $request) {
             $out = fopen('php://output', 'w');
             // Write UTF-8 BOM
             fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
