@@ -265,9 +265,10 @@ class ReceiptOcrService
         ?Model $purchasable = null,
         ?int $uploadedBy = null,
         ?int $projectId = null,
-        ?string $category = null
+        ?string $category = null,
+        ?string $customReceiptDate = null
     ): Receipt {
-        return DB::transaction(function () use ($scanData, $filePath, $purchasable, $uploadedBy, $projectId, $category) {
+        return DB::transaction(function () use ($scanData, $filePath, $purchasable, $uploadedBy, $projectId, $category, $customReceiptDate) {
             $userId   = $uploadedBy ?: (Auth::id() ?: 1);
             $ext      = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
             $isPdf    = $ext === 'pdf';
@@ -281,7 +282,11 @@ class ReceiptOcrService
 
             $needsReview = (!$tinValid || !$fsNoValid || ($scanData['confidence'] ?? '') === 'review' || ($scanData['confidence'] ?? '') === 'low' || ($scanData['confidence_score'] ?? 90) < 75);
 
-            $receiptNumber = 'RCP-' . now()->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+            $targetDate = $customReceiptDate ? \Illuminate\Support\Carbon::parse($customReceiptDate) : null;
+            $receiptDate = $targetDate ? $targetDate->toDateString() : ($scanData['receipt_date_ymd'] ?? now()->toDateString());
+            $recordTimestamp = $targetDate ? $targetDate->copy()->setTime(12, 0, 0) : now();
+
+            $receiptNumber = 'RCP-' . ($targetDate ? $targetDate->format('Ymd') : now()->format('Ymd')) . '-' . strtoupper(substr(uniqid(), -4));
 
             $receipt = new Receipt([
                 'receipt_number'   => $receiptNumber,
@@ -295,7 +300,7 @@ class ReceiptOcrService
                 'fs_no_raw'        => $fsNoRaw,
                 'fs_no_valid'      => $fsNoValid,
                 'mrc_no'           => $scanData['mrc_no'] ?? null,
-                'receipt_date'     => $scanData['receipt_date_ymd'] ?? now()->toDateString(),
+                'receipt_date'     => $receiptDate,
                 'subtotal'         => round((float)($scanData['subtotal'] ?? 0), 2),
                 'vat_amount'       => round((float)($scanData['vat_amount'] ?? 0), 2),
                 'total_amount'     => round((float)($scanData['total_amount'] ?? 0), 2),
@@ -313,7 +318,9 @@ class ReceiptOcrService
                 'parse_status'     => 'parsed',
                 'status'           => 'approved',
                 'approved_by'      => $userId,
-                'approved_at'      => now(),
+                'approved_at'      => $recordTimestamp,
+                'created_at'       => $recordTimestamp,
+                'updated_at'       => $recordTimestamp,
                 'notes'            => "Scanned via " . ($scanData['engine'] ?? 'OCR') . " (" . ($scanData['confidence_score'] ?? 90) . "% confidence). FS: {$fsNo}",
                 'qc_notes'         => $scanData['qc_notes'] ?? null,
             ]);
@@ -345,6 +352,8 @@ class ReceiptOcrService
                     'total_value'      => $totalVal,
                     'vat_amount'       => $vatAmt,
                     'value_after_vat'  => $valAfter,
+                    'created_at'       => $recordTimestamp,
+                    'updated_at'       => $recordTimestamp,
                 ]);
 
                 // Arithmetic validation

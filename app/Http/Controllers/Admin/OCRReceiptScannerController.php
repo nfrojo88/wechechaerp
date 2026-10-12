@@ -758,6 +758,7 @@ class OCRReceiptScannerController extends Controller
             'project_id'   => 'nullable|exists:projects,id',
             'category'     => 'nullable|string',
             'force_save'   => 'nullable|boolean',
+            'receipt_date' => 'nullable|string',
         ]);
 
         $file     = $request->file('receipt_file');
@@ -799,7 +800,8 @@ class OCRReceiptScannerController extends Controller
             null,
             Auth::id() ?: 1,
             $request->project_id ? (int)$request->project_id : null,
-            $request->category ?: 'material'
+            $request->category ?: 'material',
+            $request->receipt_date ?: null
         );
 
         $createdItems = $receipt->items()->get();

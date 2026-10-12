@@ -131,6 +131,10 @@
 
                     {{-- Utilities Group --}}
                     <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#addReceiptModal">
+                            <i class="fa-solid fa-cloud-arrow-up"></i>
+                            <span>+ Add Receipt (OCR)</span>
+                        </button>
                         <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5" onclick="openDateExportModal('{{ $tab }}', 'csv')" title="Select Date Range & Export">
                             <i class="fa-solid fa-file-csv"></i>
                             <span class="d-none d-sm-inline">Export CSV</span>
@@ -571,6 +575,9 @@
                             </p>
                         </div>
                         <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-primary fw-bold shadow-xs" data-bs-toggle="modal" data-bs-target="#addReceiptModal">
+                                <i class="fa-solid fa-cloud-arrow-up me-1"></i>+ Add Receipt (OCR)
+                            </button>
                             <button type="button" class="btn btn-sm btn-success fw-bold shadow-xs" onclick="openDateExportModal('vat', 'excel')" title="Export by Date">
                                 <i class="fa-solid fa-file-excel me-1"></i>Export Excel (.xlsx)
                             </button>
@@ -636,6 +643,13 @@
                                         <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.7rem;">
                                             <i class="fa-solid fa-bolt me-1"></i>Auto-Saves to ERCA Table
                                         </span>
+                                    </div>
+                                    <div class="mb-2">
+                                        <label class="form-label small fw-semibold text-dark mb-1">
+                                            <i class="fa-regular fa-calendar-days text-primary me-1"></i>Receipt Date (Optional override)
+                                        </label>
+                                        <input type="date" id="vat-receipt-date-input" class="form-control form-control-sm" value="{{ now()->format('Y-m-d') }}">
+                                        <small class="text-muted" style="font-size:0.68rem;">Will save for this date, or auto-detect from OCR</small>
                                     </div>
                                     <div class="mb-2">
                                         <label class="form-label small fw-semibold text-dark mb-1">Tag Project (Optional)</label>
@@ -1884,6 +1898,221 @@
     </div>
 </div>
 
+{{-- ── MODAL: Add Receipt & Create Tax Record via AI OCR ────────────────────────────── --}}
+<div class="modal fade" id="addReceiptModal" tabindex="-1" aria-labelledby="addReceiptModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-primary text-white py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="bg-white bg-opacity-20 p-2 rounded-circle text-white d-flex align-items-center justify-content-center" style="width:38px; height:38px;">
+                        <i class="fa-solid fa-receipt fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0 text-white" id="addReceiptModalLabel">
+                            Add Receipt Slip &amp; Tax Record (AI OCR)
+                        </h5>
+                        <small class="text-white-50">Upload or capture receipt slip &bull; AI auto-detects date &amp; amounts &bull; Adds to ledger for that date</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form id="addReceiptForm" enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="file_path" id="add_rcpt_file_path" value="">
+
+                <div class="modal-body p-4">
+                    {{-- ── OCR UPLOAD / SCAN BOX ── --}}
+                    <div class="card border-2 border-dashed border-primary border-opacity-50 bg-primary bg-opacity-10 rounded-3 mb-4 shadow-xs" id="addRcptDropzone" style="transition: all 0.2s ease;">
+                        <div class="card-body p-4 text-center">
+                            <div class="mb-2">
+                                <span class="d-inline-flex align-items-center justify-content-center bg-primary text-white rounded-circle shadow-xs" style="width: 48px; height: 48px;">
+                                    <i class="fa-solid fa-cloud-arrow-up fs-4"></i>
+                                </span>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">
+                                Drag &amp; Drop Receipt Slip Here, or <span class="text-primary text-decoration-underline cursor-pointer" onclick="document.getElementById('add_rcpt_file_input').click();">Browse</span>
+                            </h6>
+                            <p class="text-muted small mb-3" style="font-size:0.75rem;">
+                                Supports JPG, PNG, WEBP and PDF files up to 25MB &bull; Multi-engine AI OCR extracts TIN, FS#, MRC, Date &amp; VAT
+                            </p>
+
+                            <input type="file" name="receipt_file" id="add_rcpt_file_input" class="d-none" accept="image/jpeg,image/png,image/webp,application/pdf" onchange="if(this.files.length) handleModalReceiptScan(this.files[0])">
+                            <input type="file" id="add_rcpt_camera_input" class="d-none" accept="image/*" capture="environment" onchange="if(this.files.length) handleModalReceiptScan(this.files[0])">
+
+                            <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                <button type="button" class="btn btn-primary btn-sm fw-semibold rounded-pill px-3 shadow-xs" onclick="document.getElementById('add_rcpt_file_input').click();">
+                                    <i class="fa-solid fa-folder-open me-1"></i>Choose Slip
+                                </button>
+                                <button type="button" class="btn btn-outline-primary btn-sm fw-semibold rounded-pill px-3 shadow-xs" onclick="document.getElementById('add_rcpt_camera_input').click();">
+                                    <i class="fa-solid fa-camera me-1"></i>Take Photo
+                                </button>
+                            </div>
+
+                            {{-- OCR Scanning Progress & Status Alert --}}
+                            <div id="addRcptOcrStatus" class="mt-3 d-none alert alert-info py-2 px-3 small mb-0 rounded-3 text-start"></div>
+                        </div>
+                    </div>
+
+                    {{-- ── FORM FIELDS: REVIEW & CUSTOMIZE ── --}}
+                    <div class="row g-3">
+                        {{-- TARGET RECEIPT DATE --}}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-regular fa-calendar-days text-primary me-1"></i>Receipt Date <span class="text-danger">*</span>
+                            </label>
+                            <input type="date" name="receipt_date" id="add_rcpt_date" class="form-control fw-bold border-primary-subtle bg-light" value="{{ now()->format('Y-m-d') }}" required>
+                            <div class="form-text small text-muted" style="font-size:0.72rem;">
+                                Record will be booked and ledgered for this exact date.
+                            </div>
+                        </div>
+
+                        {{-- TAX TREATMENT --}}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-percent text-info me-1"></i>Tax Deduction Type <span class="text-danger">*</span>
+                            </label>
+                            <select name="tax_type" id="add_rcpt_tax_type" class="form-select fw-semibold" onchange="recalculateModalTaxAmounts(true)">
+                                <option value="vat" selected>15% VAT Only (ERCA Line 100)</option>
+                                <option value="withholding">3% Withholding Tax Only</option>
+                                <option value="both">Both 15% VAT &amp; 3% Withholding</option>
+                            </select>
+                        </div>
+
+                        {{-- FS NUMBER --}}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                <i class="fa-solid fa-receipt text-secondary me-1"></i>Fiscal Slip No. (FS #) <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" name="fs_no" id="add_rcpt_fs_no" class="form-control text-uppercase" placeholder="e.g. FS00003898" required>
+                        </div>
+
+                        {{-- MRC --}}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                <i class="fa-solid fa-cash-register text-secondary me-1"></i>Machine Reg. Code (MRC)
+                            </label>
+                            <input type="text" name="mrc_no" id="add_rcpt_mrc_no" class="form-control text-uppercase" placeholder="e.g. DDB0000032">
+                        </div>
+
+                        {{-- SELLER TIN --}}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                <i class="fa-solid fa-id-card text-secondary me-1"></i>Seller / Supplier TIN <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" name="vendor_tin" id="add_rcpt_vendor_tin" class="form-control" placeholder="10-digit TIN (e.g. 0005201889)" required>
+                        </div>
+
+                        {{-- SELLER NAME --}}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                <i class="fa-solid fa-shop text-secondary me-1"></i>Seller / Supplier Business Name
+                            </label>
+                            <input type="text" name="vendor_name" id="add_rcpt_vendor_name" class="form-control" placeholder="e.g. General Hardware Trading">
+                        </div>
+
+                        {{-- PURCHASER TIN --}}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                <i class="fa-solid fa-building text-secondary me-1"></i>Purchaser TIN (Wechecha)
+                            </label>
+                            <input type="text" name="buyer_tin" id="add_rcpt_buyer_tin" class="form-control" value="38480010">
+                        </div>
+
+                        {{-- PURCHASE TYPE (Goods vs Services) --}}
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                <i class="fa-solid fa-tag text-secondary me-1"></i>ERCA Purchase Type
+                            </label>
+                            <select name="purchase_type" id="add_rcpt_purchase_type" class="form-select">
+                                <option value="PUR_GD" selected>PUR_GD (Goods / Materials - Line 100)</option>
+                                <option value="PUR_SR">PUR_SR (Services - Line 100)</option>
+                            </select>
+                        </div>
+
+                        {{-- TOTAL AMOUNT --}}
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-solid fa-coins text-success me-1"></i>Total Amount (ETB) <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" step="0.01" name="total_amount" id="add_rcpt_total_amount" class="form-control fw-bold fs-6 text-success" placeholder="0.00" required oninput="recalculateModalTaxAmounts(true)">
+                        </div>
+
+                        {{-- SUBTOTAL / BASE --}}
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                Base Subtotal (excl. VAT)
+                            </label>
+                            <input type="number" step="0.01" name="subtotal" id="add_rcpt_subtotal" class="form-control" placeholder="0.00" oninput="recalculateModalTaxAmounts(false)">
+                        </div>
+
+                        {{-- VAT AMOUNT --}}
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                15% VAT Amount (ETB)
+                            </label>
+                            <input type="number" step="0.01" name="vat_amount" id="add_rcpt_vat_amount" class="form-control" placeholder="0.00">
+                        </div>
+
+                        {{-- WITHHOLDING AMOUNT --}}
+                        <div class="col-md-4" id="add_rcpt_wht_wrapper" style="display: none;">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                3% Withholding Amount (ETB)
+                            </label>
+                            <input type="number" step="0.01" name="withholding_amount" id="add_rcpt_withholding_amount" class="form-control" placeholder="0.00">
+                        </div>
+
+                        {{-- PROJECT --}}
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                <i class="fa-solid fa-diagram-project text-secondary me-1"></i>Project / Site
+                            </label>
+                            <select name="project_id" id="add_rcpt_project_id" class="form-select">
+                                <option value="">Select Project (Optional)...</option>
+                                @foreach($ocrProjects ?? [] as $proj)
+                                    <option value="{{ $proj->id }}">{{ $proj->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+
+                        {{-- CATEGORY --}}
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                <i class="fa-solid fa-folder-tree text-secondary me-1"></i>Category
+                            </label>
+                            <select name="category" id="add_rcpt_category" class="form-select">
+                                <option value="material" selected>Material / Supply</option>
+                                <option value="fuel">Fuel &amp; Oil</option>
+                                <option value="equipment">Equipment &amp; Tools</option>
+                                <option value="subcontractor">Subcontractor</option>
+                                <option value="machinery">Machinery Rental</option>
+                                <option value="office">Office &amp; Admin</option>
+                                <option value="spare_parts">Spare Parts</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+
+                        {{-- DESCRIPTION --}}
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-dark mb-1">
+                                Particulars / Description
+                            </label>
+                            <input type="text" name="description" id="add_rcpt_description" class="form-control" placeholder="e.g. Cement, rebar, or machine maintenance invoice">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary fw-bold rounded-pill px-4 shadow-xs" id="btnAddRcptSubmit">
+                        <i class="fa-solid fa-cloud-arrow-up me-1"></i>Save &amp; Add to Ledger
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 {{-- ── MODAL: Select Date Range & Export in CSV / Excel ────────────────────────────── --}}
 <div class="modal fade" id="exportDateModal" tabindex="-1" aria-labelledby="exportDateModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -2007,6 +2236,224 @@
 </div>
 
 <script>
+    // ── Add Receipt (AI OCR) Modal Handlers ─────────────────────────────────────
+    function triggerAddReceiptScan() {
+        const input = document.getElementById('add_rcpt_file_input');
+        if (!input || !input.files || input.files.length === 0) {
+            alert('Please choose or capture a receipt slip file first.');
+            input?.click();
+            return;
+        }
+        handleModalReceiptScan(input.files[0]);
+    }
+
+    function handleModalReceiptScan(file) {
+        if (!file) return;
+
+        const btn = document.getElementById('btnAddRcptScan');
+        const btnText = document.getElementById('addRcptScanBtnText');
+        const statusBox = document.getElementById('addRcptOcrStatus');
+
+        if (btn) btn.disabled = true;
+        if (btnText) btnText.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Scanning OCR...';
+
+        if (statusBox) {
+            statusBox.classList.remove('d-none', 'alert-danger', 'alert-success');
+            statusBox.classList.add('alert-info');
+            statusBox.innerHTML = '<i class="fa-solid fa-microchip fa-spin me-1"></i>AI Vision OCR analyzing receipt... extracting date, TIN, FS#, and amounts.';
+        }
+
+        const formData = new FormData();
+        formData.append('receipt_file', file);
+        formData.append('_token', '{{ csrf_token() }}');
+
+        fetch('{{ route('finance.tax-deductions.scan-receipt') }}', {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (btn) btn.disabled = false;
+            if (btnText) btnText.innerHTML = '<i class="fa-solid fa-microchip me-1"></i>Scan with AI OCR';
+
+            if (data.success) {
+                if (statusBox) {
+                    statusBox.classList.remove('alert-info');
+                    statusBox.classList.add('alert-success');
+                    let msg = '<i class="fa-solid fa-circle-check me-1"></i>Receipt successfully extracted! Verified with ' + (data.engine || 'AI OCR') + '.';
+                    if (data.is_duplicate) {
+                        msg += '<br><strong class="text-danger"><i class="fa-solid fa-triangle-exclamation me-1"></i>Warning:</strong> ' + (data.duplicate_message || 'Duplicate receipt FS# detected in records!');
+                    }
+                    statusBox.innerHTML = msg;
+                }
+
+                // Auto-populate form fields
+                if (data.file_path) document.getElementById('add_rcpt_file_path').value = data.file_path;
+                if (data.receipt_date) document.getElementById('add_rcpt_date').value = data.receipt_date;
+                if (data.fs_no) document.getElementById('add_rcpt_fs_no').value = data.fs_no;
+                if (data.mrc_no) document.getElementById('add_rcpt_mrc_no').value = data.mrc_no;
+                if (data.vendor_tin) document.getElementById('add_rcpt_vendor_tin').value = data.vendor_tin;
+                if (data.vendor_name) document.getElementById('add_rcpt_vendor_name').value = data.vendor_name;
+                if (data.buyer_tin) document.getElementById('add_rcpt_buyer_tin').value = data.buyer_tin;
+                if (data.total_amount && parseFloat(data.total_amount) > 0) {
+                    document.getElementById('add_rcpt_total_amount').value = parseFloat(data.total_amount).toFixed(2);
+                }
+                if (data.subtotal && parseFloat(data.subtotal) > 0) {
+                    document.getElementById('add_rcpt_subtotal').value = parseFloat(data.subtotal).toFixed(2);
+                }
+                if (data.vat_amount && parseFloat(data.vat_amount) > 0) {
+                    document.getElementById('add_rcpt_vat_amount').value = parseFloat(data.vat_amount).toFixed(2);
+                }
+                if (data.withholding_amount && parseFloat(data.withholding_amount) > 0) {
+                    document.getElementById('add_rcpt_withholding_amount').value = parseFloat(data.withholding_amount).toFixed(2);
+                }
+                if (data.vendor_name && (!document.getElementById('add_rcpt_description').value)) {
+                    document.getElementById('add_rcpt_description').value = data.vendor_name + (data.fs_no ? (' (FS: ' + data.fs_no + ')') : '');
+                }
+
+                recalculateModalTaxAmounts(false);
+            } else {
+                if (statusBox) {
+                    statusBox.classList.remove('alert-info');
+                    statusBox.classList.add('alert-danger');
+                    statusBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i>' + (data.message || 'Could not extract fields. You can enter them manually below.');
+                }
+            }
+        })
+        .catch(err => {
+            if (btn) btn.disabled = false;
+            if (btnText) btnText.innerHTML = '<i class="fa-solid fa-microchip me-1"></i>Scan with AI OCR';
+            if (statusBox) {
+                statusBox.classList.remove('alert-info');
+                statusBox.classList.add('alert-danger');
+                statusBox.innerHTML = '<i class="fa-solid fa-circle-xmark me-1"></i>Scan error: ' + err.message;
+            }
+        });
+    }
+
+    function recalculateModalTaxAmounts(fromTotal = true) {
+        const totalInput = document.getElementById('add_rcpt_total_amount');
+        const subtotalInput = document.getElementById('add_rcpt_subtotal');
+        const vatInput = document.getElementById('add_rcpt_vat_amount');
+        const whtInput = document.getElementById('add_rcpt_withholding_amount');
+        const taxType = document.getElementById('add_rcpt_tax_type')?.value || 'vat';
+        const whtWrapper = document.getElementById('add_rcpt_wht_wrapper');
+
+        if (whtWrapper) {
+            whtWrapper.style.display = (taxType === 'withholding' || taxType === 'both') ? 'block' : 'none';
+        }
+
+        const total = parseFloat(totalInput?.value) || 0;
+        if (total <= 0) return;
+
+        if (fromTotal) {
+            if (taxType === 'withholding') {
+                subtotalInput.value = total.toFixed(2);
+                vatInput.value = '0.00';
+                whtInput.value = (total * 0.03).toFixed(2);
+            } else {
+                const base = +(total / 1.15).toFixed(2);
+                const vat = +(total - base).toFixed(2);
+                subtotalInput.value = base.toFixed(2);
+                vatInput.value = vat.toFixed(2);
+                whtInput.value = (taxType === 'both') ? (base * 0.03).toFixed(2) : '0.00';
+            }
+        } else {
+            const subtotal = parseFloat(subtotalInput?.value) || 0;
+            if (taxType === 'withholding' || taxType === 'both') {
+                whtInput.value = (subtotal * 0.03).toFixed(2);
+            }
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const dropzone = document.getElementById('addRcptDropzone');
+        if (dropzone) {
+            ['dragenter', 'dragover'].forEach(name => {
+                dropzone.addEventListener(name, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.add('bg-primary', 'bg-opacity-25', 'border-primary');
+                });
+            });
+            ['dragleave', 'drop'].forEach(name => {
+                dropzone.addEventListener(name, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.remove('bg-opacity-25');
+                });
+            });
+            dropzone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                if (dt && dt.files && dt.files.length > 0) {
+                    handleModalReceiptScan(dt.files[0]);
+                }
+            });
+        }
+
+        const addModalEl = document.getElementById('addReceiptModal');
+        if (addModalEl) {
+            addModalEl.addEventListener('hidden.bs.modal', function() {
+                document.getElementById('addReceiptForm')?.reset();
+                const pathEl = document.getElementById('add_rcpt_file_path');
+                if (pathEl) pathEl.value = '';
+                const statusBox = document.getElementById('addRcptOcrStatus');
+                if (statusBox) {
+                    statusBox.classList.add('d-none');
+                    statusBox.innerHTML = '';
+                }
+                const dateEl = document.getElementById('add_rcpt_date');
+                if (dateEl) dateEl.value = '{{ now()->format('Y-m-d') }}';
+                const buyerTinEl = document.getElementById('add_rcpt_buyer_tin');
+                if (buyerTinEl) buyerTinEl.value = '38480010';
+            });
+        }
+
+        const addForm = document.getElementById('addReceiptForm');
+        if (addForm) {
+            addForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                const submitBtn = document.getElementById('btnAddRcptSubmit');
+                const origHtml = submitBtn.innerHTML;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Saving Record...';
+
+                const formData = new FormData(addForm);
+
+                fetch('{{ route('finance.tax-deductions.store-receipt') }}', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    body: formData
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        submitBtn.classList.remove('btn-primary');
+                        submitBtn.classList.add('btn-success');
+                        submitBtn.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i>Saved Successfully!';
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 800);
+                    } else {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = origHtml;
+                        alert('Error saving receipt: ' + (data.message || 'Please check form inputs.'));
+                    }
+                })
+                .catch(err => {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = origHtml;
+                    alert('Submission failed: ' + err.message);
+                });
+            });
+        }
+    });
+
     // ── Export by Date Modal Handlers ─────────────────────────────────────────
     function openDateExportModal(tab = 'all', defaultFormat = 'csv') {
         const modalEl = document.getElementById('exportDateModal');
@@ -2234,6 +2681,8 @@
         if (projVal) formData.append('project_id', projVal);
         const catVal = document.getElementById('vat-category-select')?.value;
         if (catVal) formData.append('category', catVal);
+        const dateVal = document.getElementById('vat-receipt-date-input')?.value;
+        if (dateVal) formData.append('receipt_date', dateVal);
         if (forceSave) formData.append('force_save', '1');
 
         fetch('{{ route('admin.ocr.process-file') }}', {

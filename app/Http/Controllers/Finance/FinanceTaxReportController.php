@@ -8,11 +8,16 @@ use App\Models\TaxSettlement;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\ChartOfAccount;
+use App\Models\Receipt;
+use App\Models\ReceiptItem;
 use App\Models\User;
+use App\Services\ReceiptOcrService;
+use App\Services\QcService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -1007,5 +1012,259 @@ class FinanceTaxReportController extends Controller
 
             fclose($handle);
         }, 200, $headers);
+    }
+
+    /**
+     * AJAX OCR Receipt Extraction for VAT & Tax Deductions Ledger.
+     * Takes an uploaded receipt image or PDF and extracts vendor, TIN, FS#, MRC#, amount, VAT, and date.
+     */
+    public function scanReceipt(Request $request)
+    {
+        $this->ensureSchema();
+
+        $request->validate([
+            'receipt_file' => 'required|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+        ]);
+
+        try {
+            $file     = $request->file('receipt_file');
+            $ext      = strtolower($file->getClientOriginalExtension());
+            $filename = 'tax_rcpt_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $ext;
+            $path     = $file->storeAs('receipts', $filename, 'public');
+            $fileUrl  = asset('storage/' . $path);
+
+            $ocrService = app(ReceiptOcrService::class);
+            $scan       = $ocrService->scan($file->getRealPath());
+
+            // Extract normalized FS No
+            $rawFs  = trim((string)($scan['fs_no'] ?? ''));
+            $fsNorm = QcService::normalizeFsNo($rawFs);
+            $fsNo   = $fsNorm['value'] ?: $rawFs;
+            if (empty($fsNo) && !empty($scan['extracted']['receipt_no'])) {
+                $fsNo = $scan['extracted']['receipt_no'];
+            }
+
+            // Extract normalized Supplier TIN
+            $rawTin      = trim((string)($scan['supplier_tin'] ?? ($scan['extracted']['supplier_tin'] ?? ($scan['extracted']['merchant_tin'] ?? ''))));
+            $tinNorm     = QcService::normalizeTin($rawTin);
+            $supplierTin = $tinNorm['value'] ?: $rawTin;
+
+            $vendorName  = trim((string)($scan['vendor_name'] ?? ($scan['extracted']['merchant_name'] ?? '')));
+            $mrcNo       = trim((string)($scan['mrc_no'] ?? ($scan['extracted']['machine_no'] ?? ($scan['extracted']['mrc_no'] ?? ''))));
+            $totalAmount = (float)($scan['total_amount'] ?? ($scan['extracted']['total_amount'] ?? 0));
+            $subtotal    = (float)($scan['subtotal'] ?? ($scan['extracted']['subtotal'] ?? 0));
+            $vatAmount   = (float)($scan['vat_amount'] ?? ($scan['extracted']['vat_amount'] ?? 0));
+
+            if ($subtotal == 0 && $totalAmount > 0) {
+                if ($vatAmount > 0) {
+                    $subtotal = round($totalAmount - $vatAmount, 2);
+                } else {
+                    $subtotal = round($totalAmount / 1.15, 2);
+                    $vatAmount = round($totalAmount - $subtotal, 2);
+                }
+            } elseif ($vatAmount == 0 && $subtotal > 0 && $totalAmount > $subtotal) {
+                $vatAmount = round($totalAmount - $subtotal, 2);
+            }
+
+            $rawDate     = $scan['receipt_date_ymd'] ?? ($scan['extracted']['receipt_date'] ?? null);
+            $receiptDate = date('Y-m-d');
+            if (!empty($rawDate)) {
+                try {
+                    $receiptDate = Carbon::parse($rawDate)->format('Y-m-d');
+                } catch (\Throwable $e) {}
+            }
+
+            $buyerTin = trim((string)($scan['buyer_tin'] ?? '38480010'));
+            if (empty($buyerTin) || $buyerTin === '0038480010') {
+                $buyerTin = '38480010';
+            }
+
+            $items = $scan['items'] ?? ($scan['extracted']['items'] ?? []);
+
+            return response()->json([
+                'success'           => true,
+                'file_path'         => $path,
+                'file_url'          => $fileUrl,
+                'receipt_date'      => $receiptDate,
+                'fs_no'             => $fsNo,
+                'mrc_no'            => $mrcNo,
+                'vendor_tin'        => $supplierTin,
+                'vendor_name'       => $vendorName ?: 'General Merchant',
+                'buyer_tin'         => $buyerTin,
+                'total_amount'      => $totalAmount,
+                'subtotal'          => $subtotal,
+                'vat_amount'        => $vatAmount,
+                'withholding_amount'=> round($subtotal * 0.03, 2),
+                'items'             => $items,
+                'is_duplicate'      => $scan['is_duplicate'] ?? false,
+                'duplicate_message' => $scan['duplicate_message'] ?? null,
+                'confidence'        => $scan['confidence'] ?? 'high',
+                'confidence_score'  => $scan['confidence_score'] ?? 90,
+                'engine'            => $scan['engine'] ?? 'AI Vision OCR',
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('FinanceTaxReportController scanReceipt failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'OCR processing failed: ' . $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Store and create Receipt & Tax Deduction record for the specified receipt date.
+     */
+    public function storeReceipt(Request $request)
+    {
+        $this->ensureSchema();
+
+        $validated = $request->validate([
+            'receipt_date'       => 'required|date',
+            'fs_no'              => 'nullable|string',
+            'mrc_no'             => 'nullable|string',
+            'vendor_name'        => 'nullable|string',
+            'vendor_tin'         => 'nullable|string',
+            'buyer_tin'          => 'nullable|string',
+            'total_amount'       => 'required|numeric|min:0.01',
+            'subtotal'           => 'nullable|numeric|min:0',
+            'vat_amount'         => 'nullable|numeric|min:0',
+            'has_withholding'    => 'nullable|boolean',
+            'withholding_amount' => 'nullable|numeric|min:0',
+            'tax_type'           => 'nullable|string',
+            'project_id'         => 'nullable|exists:projects,id',
+            'category'           => 'nullable|string',
+            'description'        => 'nullable|string',
+            'purchase_type'      => 'nullable|string',
+            'file_path'          => 'nullable|string',
+            'receipt_file'       => 'nullable|file|mimes:jpeg,jpg,png,webp,pdf|max:25600',
+        ]);
+
+        try {
+            $filePath = $validated['file_path'] ?? null;
+            if ($request->hasFile('receipt_file')) {
+                $file     = $request->file('receipt_file');
+                $ext      = strtolower($file->getClientOriginalExtension());
+                $filename = 'tax_rcpt_' . now()->format('Ymd_His') . '_' . uniqid() . '.' . $ext;
+                $filePath = $file->storeAs('receipts', $filename, 'public');
+            }
+
+            $targetDate = Carbon::parse($validated['receipt_date']);
+            $fsNoRaw    = trim($validated['fs_no'] ?? '');
+            $fsNorm     = QcService::normalizeFsNo($fsNoRaw);
+            $fsNo       = $fsNorm['value'] ?: $fsNoRaw;
+
+            $totalAmount = (float)$validated['total_amount'];
+            $vatAmount   = (float)($validated['vat_amount'] ?? 0);
+            $subtotal    = (float)($validated['subtotal'] ?? max(0, $totalAmount - $vatAmount));
+
+            if ($vatAmount == 0 && ($validated['tax_type'] ?? 'vat') !== 'withholding') {
+                $subtotal  = round($totalAmount / 1.15, 2);
+                $vatAmount = round($totalAmount - $subtotal, 2);
+            }
+
+            $hasWithholding    = (bool)($validated['has_withholding'] ?? (($validated['tax_type'] ?? '') === 'withholding' || ($validated['tax_type'] ?? '') === 'both'));
+            $withholdingAmount = (float)($validated['withholding_amount'] ?? ($hasWithholding ? round($subtotal * 0.03, 2) : 0));
+
+            $ext = $filePath ? strtolower(pathinfo($filePath, PATHINFO_EXTENSION)) : 'jpg';
+            $isPdf = $ext === 'pdf';
+
+            $receiptNumber = 'RCP-' . $targetDate->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+
+            // 1. Create Receipt (for ERCA Line 100 VAT declaration)
+            $receipt = new Receipt([
+                'receipt_number'   => $receiptNumber,
+                'uploaded_by'      => Auth::id() ?: 1,
+                'project_id'       => $validated['project_id'] ?? null,
+                'vendor_name'      => $validated['vendor_name'] ?: 'General Merchant',
+                'vendor_tin'       => $validated['vendor_tin'] ?? null,
+                'tin_valid'        => true,
+                'buyer_tin'        => $validated['buyer_tin'] ?: '38480010',
+                'fs_no'            => $fsNo,
+                'fs_no_raw'        => $fsNoRaw,
+                'fs_no_valid'      => true,
+                'mrc_no'           => $validated['mrc_no'] ?? null,
+                'receipt_date'     => $targetDate->toDateString(),
+                'subtotal'         => $subtotal,
+                'vat_amount'       => $vatAmount,
+                'total_amount'     => $totalAmount,
+                'currency'         => 'ETB',
+                'category'         => $validated['category'] ?? 'material',
+                'description'      => $validated['description'] ?: 'Purchased Materials / VAT Invoice',
+                'file_path'        => $filePath,
+                'file_type'        => $isPdf ? 'pdf' : 'image',
+                'status'           => 'approved',
+                'approved_by'      => Auth::id() ?: 1,
+                'approved_at'      => $targetDate->copy()->setTime(12, 0, 0),
+                'created_at'       => $targetDate->copy()->setTime(12, 0, 0),
+                'updated_at'       => $targetDate->copy()->setTime(12, 0, 0),
+            ]);
+            $receipt->save();
+
+            // 2. Create ReceiptItem
+            $receiptItem = new ReceiptItem([
+                'receipt_id'       => $receipt->id,
+                'item_description' => $validated['description'] ?: 'Purchased Materials',
+                'vat_category'     => 'G',
+                'calendar_type'    => 'G',
+                'purchase_type'    => ($validated['purchase_type'] ?? '') === 'PUR_SR' ? 4 : 3,
+                'uom'              => '9',
+                'qty'              => 1.00,
+                'unit_price'       => $subtotal,
+                'total_value'      => $subtotal,
+                'vat_amount'       => $vatAmount,
+                'value_after_vat'  => $totalAmount,
+                'is_flagged'       => false,
+                'created_at'       => $targetDate->copy()->setTime(12, 0, 0),
+                'updated_at'       => $targetDate->copy()->setTime(12, 0, 0),
+            ]);
+            $receiptItem->save();
+
+            // 3. Create ExpenseRequest so it appears in the Tax Deductions Ledger on this date
+            $taxExp = new ExpenseRequest();
+            $taxExp->request_number    = 'EXP-TAX-' . $targetDate->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+            $taxExp->user_id           = Auth::id() ?: 1;
+            $taxExp->project_id        = $validated['project_id'] ?? null;
+            $taxExp->category          = ucfirst($validated['category'] ?? 'Material');
+            $taxExp->description       = $validated['description'] ?: ($receipt->vendor_name . ' (FS: ' . $fsNo . ')');
+            $taxExp->amount            = $totalAmount;
+            $taxExp->gross_amount      = $totalAmount;
+            $taxExp->vat_type          = $vatAmount > 0 ? 'exclusive' : 'none';
+            $taxExp->vat_rate          = 15.00;
+            $taxExp->vat_amount        = $vatAmount;
+            $taxExp->has_withholding   = $hasWithholding;
+            $taxExp->withholding_rate  = 3.00;
+            $taxExp->withholding_amount= $withholdingAmount;
+            $taxExp->net_amount        = max(0, $totalAmount - $withholdingAmount);
+            $taxExp->payment_reference = 'FS: ' . $fsNo . ($receipt->mrc_no ? ' | MRC: ' . $receipt->mrc_no : '');
+            $taxExp->attachment        = $filePath;
+            $taxExp->status            = ExpenseRequest::STATUS_PAID;
+            $taxExp->paid_by           = Auth::id() ?: 1;
+            $taxExp->paid_at           = $targetDate->copy()->setTime(12, 0, 0);
+            $taxExp->created_at        = $targetDate->copy()->setTime(12, 0, 0);
+            $taxExp->updated_at        = $targetDate->copy()->setTime(12, 0, 0);
+            $taxExp->save();
+
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success'    => true,
+                    'message'    => "Receipt created successfully for date {$targetDate->format('d/m/Y')}!",
+                    'receipt'    => $receipt,
+                    'item'       => $receiptItem,
+                    'expense_id' => $taxExp->id,
+                ]);
+            }
+
+            return redirect()->route('finance.tax-deductions.index', ['tab' => 'vat'])
+                ->with('success', "Receipt #{$fsNo} ({$receipt->vendor_name}) created successfully for date {$targetDate->format('M d, Y')}!");
+        } catch (\Throwable $e) {
+            Log::error('FinanceTaxReportController storeReceipt failed: ' . $e->getMessage());
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to save receipt: ' . $e->getMessage(),
+                ], 422);
+            }
+            return back()->with('error', 'Failed to save receipt: ' . $e->getMessage())->withInput();
+        }
     }
 }
