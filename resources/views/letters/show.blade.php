@@ -62,8 +62,20 @@
             </p>
         </div>
 
+        @php
+            $currentUser = auth()->user();
+            $isSecretaryOrAdmin = $currentUser && $currentUser->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin']);
+            $isSecretaryOnly = $currentUser && $currentUser->hasRole('secretary') && !$currentUser->hasAnyRole(['admin', 'global_admin', 'gm', 'manager', 'director', 'hr_manager', 'finance_head']);
+            $isUnregistered = empty($letter->letter_number) || !$letter->is_reference_locked || !$letter->registered_at || in_array($letter->status, [\App\Models\Letter::STATUS_DRAFT, \App\Models\Letter::STATUS_SENT]);
+
+            // On Draft / Unregistered letters, ONLY secretary (or admin) role can redirect or edit.
+            $canRedirect = $letter->status !== 'closed' && ($isUnregistered ? $isSecretaryOrAdmin : true);
+            $canClose = $letter->status !== 'closed' && !$isUnregistered && !$isSecretaryOnly;
+            $canEditUnregistered = $isUnregistered && $isSecretaryOrAdmin;
+        @endphp
+
         <div class="d-flex flex-wrap gap-2">
-            @if(auth()->user()->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin']))
+            @if($isSecretaryOrAdmin)
                 <a href="{{ route('letters.secretary.inbox') }}" class="btn btn-outline-warning shadow-sm">
                     <i class="fa-solid fa-inbox me-1"></i> Secretary Inbox
                 </a>
@@ -82,12 +94,19 @@
                         <i class="fa-solid fa-paper-plane me-1"></i> Send to Secretary
                     </button>
                 </form>
+            @elseif($canEditUnregistered)
+                <a href="{{ route('letters.my-letters.edit', $letter->id) }}" class="btn btn-outline-primary shadow-sm">
+                    <i class="fa-solid fa-pen-to-square me-1"></i> Edit Letter
+                </a>
             @endif
 
-            @if($letter->status !== 'closed' && $letter->status !== 'draft')
+            @if($canRedirect)
             <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#redirectModal">
                 <i class="fa-solid fa-share me-1"></i> Redirect / Forward
             </button>
+            @endif
+
+            @if($canClose)
             <button type="button" class="btn btn-success shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
                 <i class="fa-solid fa-check-double me-1"></i> Mark Reviewed / Closed
             </button>
@@ -243,11 +262,6 @@
 
         {{-- Right Column: Actions & Routing History Timeline --}}
         <div class="col-lg-4">
-            @php
-            $currentUser = auth()->user();
-            $isSecretaryOnly = $currentUser && $currentUser->hasRole('secretary') && !$currentUser->hasAnyRole(['admin', 'global_admin', 'gm', 'manager', 'director', 'hr_manager', 'finance_head']);
-            @endphp
-
             {{-- Quick Action Card --}}
             @if($letter->status !== 'closed')
             <div class="card border-0 shadow-sm rounded-3 mb-4 border-start border-4 border-primary">
@@ -255,37 +269,64 @@
                     <h5 class="fw-bold mb-0"><i class="fa-solid fa-bolt text-warning me-2"></i>Action Controls</h5>
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-3">
-                        @if($isSecretaryOnly)
-                        As Secretary, you can forward this letter to the assigned manager or department for decision-making.
+                    @if($isUnregistered)
+                        @if($isSecretaryOrAdmin)
+                            <p class="small text-muted mb-3">
+                                <strong>Secretary Action:</strong> This letter is in <em>Draft / Unregistered</em> status. You can forward it or assign a reference number and register it in the Secretary Inbox.
+                            </p>
+                            <div class="d-grid gap-2">
+                                <a href="{{ route('letters.secretary.inbox') }}" class="btn btn-warning py-2 fw-semibold">
+                                    <i class="fa-solid fa-stamp me-1"></i> Go to Secretary Inbox (Register)
+                                </a>
+                                <button type="button" class="btn btn-outline-primary py-2 fw-semibold" data-bs-toggle="modal" data-bs-target="#redirectModal">
+                                    <i class="fa-solid fa-share me-1"></i> Redirect / Forward Letter
+                                </button>
+                                <a href="{{ route('letters.my-letters.edit', $letter->id) }}" class="btn btn-outline-secondary py-2 fw-medium">
+                                    <i class="fa-solid fa-pen-to-square me-1"></i> Edit Letter
+                                </a>
+                            </div>
                         @else
-                        You can forward this letter to another colleague/department or record a decision and close it.
+                            <div class="alert alert-info py-3 px-3 mb-0 small border-0 bg-info bg-opacity-10 text-dark rounded-3">
+                                <i class="fa-solid fa-clock-rotate-left text-info fs-5 d-block mb-2"></i>
+                                <strong>Awaiting Secretary Registration:</strong>
+                                <p class="mb-0 mt-1 text-muted">This letter is currently in Draft / Unregistered status in the Secretary Inbox. Only the Secretary role is authorized to redirect, edit, or register this letter.</p>
+                            </div>
                         @endif
-                    </p>
+                    @else
+                        <p class="small text-muted mb-3">
+                            @if($isSecretaryOnly)
+                            As Secretary, you can forward this letter to the assigned manager or department for decision-making.
+                            @else
+                            You can forward this letter to another colleague/department or record a decision and close it.
+                            @endif
+                        </p>
 
-                    @if($isRedirectedToFinance || $isFinanceOrAdmin)
-                    <div class="alert alert-warning border-0 shadow-sm rounded-3 py-2 px-3 small mb-3">
-                        <i class="fa-solid fa-hand-holding-dollar text-warning fa-lg me-1"></i>
-                        <strong>Finance Action:</strong> You can give a final decision and optionally process payment disbursement &amp; expense booking directly.
-                    </div>
-                    @endif
-
-                    <div class="d-grid gap-2">
-                        <button type="button" class="btn btn-outline-primary py-2 fw-semibold" data-bs-toggle="modal" data-bs-target="#redirectModal">
-                            <i class="fa-solid fa-share me-1"></i> Redirect / Forward Letter
-                        </button>
-
-                        @if(!$isSecretaryOnly)
-                        <button type="button" class="btn btn-success py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
-                            <i class="fa-solid fa-check-double me-1"></i> Give Decision &amp; Close Letter
-                        </button>
-                        @else
-                        <div class="alert alert-info py-2 px-3 mb-0 small border-0 bg-info bg-opacity-10 text-dark rounded-3">
-                            <i class="fa-solid fa-shield-halved text-info me-1"></i>
-                            <strong>Secretary Access:</strong> You can create and forward letters. Official decisions &amp; closure are reserved for assigned managers.
+                        @if($isRedirectedToFinance || $isFinanceOrAdmin)
+                        <div class="alert alert-warning border-0 shadow-sm rounded-3 py-2 px-3 small mb-3">
+                            <i class="fa-solid fa-hand-holding-dollar text-warning fa-lg me-1"></i>
+                            <strong>Finance Action:</strong> You can give a final decision and optionally process payment disbursement &amp; expense booking directly.
                         </div>
                         @endif
-                    </div>
+
+                        <div class="d-grid gap-2">
+                            @if($canRedirect)
+                            <button type="button" class="btn btn-outline-primary py-2 fw-semibold" data-bs-toggle="modal" data-bs-target="#redirectModal">
+                                <i class="fa-solid fa-share me-1"></i> Redirect / Forward Letter
+                            </button>
+                            @endif
+
+                            @if($canClose)
+                            <button type="button" class="btn btn-success py-2 fw-bold" data-bs-toggle="modal" data-bs-target="#closeModal">
+                                <i class="fa-solid fa-check-double me-1"></i> Give Decision &amp; Close Letter
+                            </button>
+                            @elseif($isSecretaryOnly)
+                            <div class="alert alert-info py-2 px-3 mb-0 small border-0 bg-info bg-opacity-10 text-dark rounded-3">
+                                <i class="fa-solid fa-shield-halved text-info me-1"></i>
+                                <strong>Secretary Access:</strong> You can create and forward letters. Official decisions &amp; closure are reserved for assigned managers.
+                            </div>
+                            @endif
+                        </div>
+                    @endif
                 </div>
             </div>
             @else
@@ -435,6 +476,7 @@
     </div>
 </div>
 
+@if($canRedirect)
 {{-- Modal 1: Redirect / Forward Letter --}}
 <div class="modal fade" id="redirectModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -498,7 +540,9 @@
         </div>
     </div>
 </div>
+@endif
 
+@if($canClose)
 {{-- Modal 2: Mark Reviewed / Closed / Payment Settlement --}}
 <div class="modal fade" id="closeModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -684,6 +728,7 @@
         </div>
     </div>
 </div>
+@endif
 
 <script>
     function toggleModalTarget() {

@@ -381,6 +381,14 @@ class LetterController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        // On Draft / Unregistered letters, ONLY secretary (or admin) role can redirect
+        $isUnregistered = empty($letter->letter_number) || !$letter->is_reference_locked || !$letter->registered_at || in_array($letter->status, [Letter::STATUS_DRAFT, Letter::STATUS_SENT]);
+        $isSecretaryOrAdmin = $user->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin']);
+
+        if ($isUnregistered && !$isSecretaryOrAdmin) {
+            abort(403, 'Unauthorized. In Draft / Unregistered status, only the Secretary role is authorized to redirect or forward this letter.');
+        }
+
         $validated = $request->validate([
             'send_target_type' => 'required|in:user,role',
             'to_user_id'       => 'required_if:send_target_type,user|nullable|exists:users,id',
@@ -435,6 +443,12 @@ class LetterController extends Controller
 
         if (!$letter->isAccessibleBy($user)) {
             abort(403, 'Unauthorized action.');
+        }
+
+        // Draft / Unregistered letters cannot be closed until officially registered
+        $isUnregistered = empty($letter->letter_number) || !$letter->is_reference_locked || !$letter->registered_at || in_array($letter->status, [Letter::STATUS_DRAFT, Letter::STATUS_SENT]);
+        if ($isUnregistered) {
+            return back()->with('error', 'This letter must be officially registered by the Secretary before a decision can be recorded or closed.');
         }
 
         // Strict Rule: Secretary role can only create & send/redirect letters, NOT make decisions or close letters.
@@ -1052,10 +1066,15 @@ class LetterController extends Controller
     public function editDraft(Letter $letter)
     {
         $user = Auth::user();
+        $isSecretaryOrAdmin = $user->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin']);
+        $isCreator = ($letter->created_by === $user->id);
 
-        // Drafts are strictly private to creator
-        if ($letter->created_by !== $user->id || $letter->status !== Letter::STATUS_DRAFT) {
-            abort(403, 'Unauthorized access or this letter has already been sent.');
+        // Creator can edit while in draft status. Secretary or admin can edit while unregistered/draft.
+        $canEdit = ($isCreator && $letter->status === Letter::STATUS_DRAFT)
+            || ($isSecretaryOrAdmin && (empty($letter->is_reference_locked) || empty($letter->letter_number)));
+
+        if (!$canEdit) {
+            abort(403, 'Unauthorized access or this letter has already been registered and locked.');
         }
 
         return view('letters.my-letters.edit', compact('letter'));
@@ -1067,9 +1086,14 @@ class LetterController extends Controller
     public function updateDraft(Request $request, Letter $letter)
     {
         $user = Auth::user();
+        $isSecretaryOrAdmin = $user->hasAnyRole(['secretary', 'Secretary', 'admin', 'global_admin']);
+        $isCreator = ($letter->created_by === $user->id);
 
-        if ($letter->created_by !== $user->id || $letter->status !== Letter::STATUS_DRAFT) {
-            abort(403, 'Unauthorized access or this letter has already been sent.');
+        $canEdit = ($isCreator && $letter->status === Letter::STATUS_DRAFT)
+            || ($isSecretaryOrAdmin && (empty($letter->is_reference_locked) || empty($letter->letter_number)));
+
+        if (!$canEdit) {
+            abort(403, 'Unauthorized access or this letter has already been registered and locked.');
         }
 
         $validated = $request->validate([
@@ -1134,6 +1158,10 @@ class LetterController extends Controller
             $msg = $isSending
                 ? 'Your letter has been sent directly to the Secretary Inbox.'
                 : 'Draft updated successfully.';
+
+            if ($user->hasRole('secretary')) {
+                return redirect()->route('letters.secretary.inbox')->with('success', $msg);
+            }
 
             return redirect()->route('letters.my-letters.index')->with('success', $msg);
         } catch (\Throwable $e) {
