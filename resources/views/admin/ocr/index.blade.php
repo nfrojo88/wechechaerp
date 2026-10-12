@@ -61,6 +61,11 @@
                         </a>
                     </li>
                     <li>
+                        <a class="dropdown-item small text-primary fw-semibold" href="#" onclick="openOcrDateExportModal('excel'); return false;">
+                            <i class="fa-solid fa-calendar-days me-2 text-primary"></i>Export by Date Range (.xlsx)...
+                        </a>
+                    </li>
+                    <li>
                         <a class="dropdown-item small" href="#" id="export-selected-excel-btn" onclick="exportData('excel', 'selected', 'etax'); return false;">
                             <i class="fa-solid fa-check-square me-2 text-info"></i>Export Selected Rows (<span class="selected-count-badge">0</span>)
                         </a>
@@ -98,6 +103,11 @@
                     <li>
                         <a class="dropdown-item small" href="#" onclick="exportData('csv', 'filtered', 'etax'); return false;">
                             <i class="fa-solid fa-filter me-2 text-primary"></i>Export Filtered as CSV
+                        </a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item small text-primary fw-semibold" href="#" onclick="openOcrDateExportModal('csv'); return false;">
+                            <i class="fa-solid fa-calendar-days me-2 text-primary"></i>Export by Date Range (.csv)...
                         </a>
                     </li>
                     <li>
@@ -1118,10 +1128,229 @@
     </div>
 </div>
 
+{{-- ── MODAL: Export by Date Range (CSV / Excel) ────────────────────────────────── --}}
+<div class="modal fade" id="ocrDateExportModal" tabindex="-1" aria-labelledby="ocrDateExportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-success text-white py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-file-export fs-5"></i>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="ocrDateExportModalLabel">Export OCR Invoices by Date</h5>
+                        <small class="text-white-50">Filter ERCA VAT records by day or date range</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form id="ocrDateExportForm" method="GET" action="{{ route('admin.ocr.export-csv') }}">
+                <div class="modal-body p-4">
+                    {{-- Quick Date Range Presets --}}
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-uppercase text-muted d-block mb-2" style="font-size:0.72rem; letter-spacing:0.5px;">
+                            <i class="fa-solid fa-bolt text-warning me-1"></i>Quick Date Presets
+                        </label>
+                        <div class="d-flex gap-1.5 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setOcrExportDatePreset('today')">Today</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setOcrExportDatePreset('yesterday')">Yesterday</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setOcrExportDatePreset('this_week')">This Week</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setOcrExportDatePreset('this_month')">This Month</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setOcrExportDatePreset('last_month')">Last Month</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setOcrExportDatePreset('all')">All Dates</button>
+                        </div>
+                    </div>
+
+                    {{-- Date Pickers: From Date & To Date --}}
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-regular fa-calendar me-1 text-primary"></i>From Date (Start)
+                            </label>
+                            <input type="date" class="form-control" id="ocr_export_from_date" name="date_from">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-regular fa-calendar-check me-1 text-primary"></i>To Date (End)
+                            </label>
+                            <input type="date" class="form-control" id="ocr_export_to_date" name="date_to">
+                        </div>
+                    </div>
+
+                    {{-- Export Format Selector (CSV vs Excel) --}}
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-uppercase text-muted d-block mb-1" style="font-size:0.72rem; letter-spacing:0.5px;">
+                            Export File Format
+                        </label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <div class="form-check p-2.5 border rounded-3 bg-light d-flex align-items-center gap-2 m-0 cursor-pointer" onclick="document.getElementById('ocr_export_fmt_csv').checked = true; updateOcrExportAction();">
+                                    <input class="form-check-input m-0 ms-1" type="radio" name="export_format" id="ocr_export_fmt_csv" value="csv" checked onchange="updateOcrExportAction()">
+                                    <label class="form-check-label small fw-bold text-dark cursor-pointer mb-0" for="ocr_export_fmt_csv">
+                                        <i class="fa-solid fa-file-csv text-success me-1"></i>CSV (.csv)
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="form-check p-2.5 border rounded-3 bg-light d-flex align-items-center gap-2 m-0 cursor-pointer" onclick="document.getElementById('ocr_export_fmt_excel').checked = true; updateOcrExportAction();">
+                                    <input class="form-check-input m-0 ms-1" type="radio" name="export_format" id="ocr_export_fmt_excel" value="excel" onchange="updateOcrExportAction()">
+                                    <label class="form-check-label small fw-bold text-dark cursor-pointer mb-0" for="ocr_export_fmt_excel">
+                                        <i class="fa-solid fa-file-excel text-success me-1"></i>Excel (.xlsx)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- ERCA Report Specification --}}
+                    <div class="mb-3 p-3 bg-light rounded-3 border">
+                        <label class="form-label small fw-bold text-dark mb-1 d-block">
+                            <i class="fa-solid fa-shield-halved text-info me-1"></i>ERCA VAT Specification
+                        </label>
+                        <div class="mb-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="template" id="ocr_tpl_etax" value="etax" checked>
+                                <label class="form-check-label small fw-semibold" for="ocr_tpl_etax">
+                                    eTax Purchase Declaration (8 Cols)
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="template" id="ocr_tpl_erca15" value="erca_15">
+                                <label class="form-check-label small fw-semibold" for="ocr_tpl_erca15">
+                                    Full ERCA 15-Column Report
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="valid_only" id="ocr_export_valid_only" value="1">
+                            <label class="form-check-label small text-muted" for="ocr_export_valid_only">
+                                Export only rows with valid 10-digit TIN &amp; 8-digit FS #
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info border-info-subtle small py-2 mb-0 d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-circle-info text-info"></i>
+                        <span id="ocr_export_preview_summary">Exporting all records. Leave dates blank to export all dates.</span>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success fw-bold rounded-pill px-4 shadow-xs" id="btnSubmitOcrExport">
+                        <i class="fa-solid fa-download me-1"></i>Download Export
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 @endsection
 
 @push('scripts')
 <script>
+function openOcrDateExportModal(defaultFormat = 'csv') {
+    const modalEl = document.getElementById('ocrDateExportModal');
+    if (!modalEl) return;
+
+    const csvRadio = document.getElementById('ocr_export_fmt_csv');
+    const excelRadio = document.getElementById('ocr_export_fmt_excel');
+    if (defaultFormat === 'excel' && excelRadio) {
+        excelRadio.checked = true;
+    } else if (csvRadio) {
+        csvRadio.checked = true;
+    }
+
+    updateOcrExportAction();
+    updateOcrExportSummary();
+
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+}
+
+function setOcrExportDatePreset(preset) {
+    const fromInput = document.getElementById('ocr_export_from_date');
+    const toInput = document.getElementById('ocr_export_to_date');
+    if (!fromInput || !toInput) return;
+
+    const now = new Date();
+    const formatDate = (d) => {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    if (preset === 'today') {
+        const todayStr = formatDate(now);
+        fromInput.value = todayStr;
+        toInput.value = todayStr;
+    } else if (preset === 'yesterday') {
+        const yest = new Date(now);
+        yest.setDate(now.getDate() - 1);
+        const yestStr = formatDate(yest);
+        fromInput.value = yestStr;
+        toInput.value = yestStr;
+    } else if (preset === 'this_week') {
+        const d = new Date(now);
+        const dayOfWeek = d.getDay() || 7;
+        d.setDate(d.getDate() - dayOfWeek + 1);
+        fromInput.value = formatDate(d);
+        toInput.value = formatDate(now);
+    } else if (preset === 'this_month') {
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        fromInput.value = formatDate(firstDay);
+        toInput.value = formatDate(now);
+    } else if (preset === 'last_month') {
+        const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+        fromInput.value = formatDate(firstDayLastMonth);
+        toInput.value = formatDate(lastDayLastMonth);
+    } else if (preset === 'all') {
+        fromInput.value = '';
+        toInput.value = '';
+    }
+
+    updateOcrExportSummary();
+}
+
+function updateOcrExportAction() {
+    const form = document.getElementById('ocrDateExportForm');
+    const isExcel = document.getElementById('ocr_export_fmt_excel')?.checked;
+    if (!form) return;
+
+    form.action = isExcel ? EXPORT_EXCEL_URL : EXPORT_CSV_URL;
+    const btn = document.getElementById('btnSubmitOcrExport');
+    if (btn) {
+        btn.innerHTML = `<i class="fa-solid fa-download me-1"></i>Download ${isExcel ? 'Excel (.xlsx)' : 'CSV (.csv)'}`;
+    }
+}
+
+function updateOcrExportSummary() {
+    const fromVal = document.getElementById('ocr_export_from_date')?.value;
+    const toVal = document.getElementById('ocr_export_to_date')?.value;
+    const summary = document.getElementById('ocr_export_preview_summary');
+    if (!summary) return;
+
+    if (fromVal && toVal) {
+        if (fromVal === toVal) {
+            summary.innerHTML = `Exporting records for day: <strong>${fromVal}</strong>`;
+        } else {
+            summary.innerHTML = `Exporting records from <strong>${fromVal}</strong> to <strong>${toVal}</strong>`;
+        }
+    } else if (fromVal) {
+        summary.innerHTML = `Exporting records starting from <strong>${fromVal}</strong> onwards`;
+    } else if (toVal) {
+        summary.innerHTML = `Exporting records up to <strong>${toVal}</strong>`;
+    } else {
+        summary.innerHTML = `Exporting all available records (all dates).`;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('ocr_export_from_date')?.addEventListener('change', updateOcrExportSummary);
+    document.getElementById('ocr_export_to_date')?.addEventListener('change', updateOcrExportSummary);
+});
 /**
  * Global CSRF and endpoints
  */

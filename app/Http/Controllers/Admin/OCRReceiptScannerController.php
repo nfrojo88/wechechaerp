@@ -1380,13 +1380,30 @@ class OCRReceiptScannerController extends Controller
                 $cat = $request->category;
                 $query->whereHas('receipt', fn($q) => $q->where('category', $cat));
             }
-            if ($request->filled('date_from')) {
-                $df = $request->date_from;
-                $query->whereHas('receipt', fn($q) => $q->whereDate('receipt_date', '>=', $df));
+            $df = $request->input('date_from') ?: ($request->input('from_date') ?: $request->input('start_date'));
+            $dt = $request->input('date_to') ?: ($request->input('to_date') ?: $request->input('end_date'));
+            $singleDate = $request->input('date') ?: $request->input('single_date');
+
+            if (!empty($singleDate)) {
+                $df = $df ?: $singleDate;
+                $dt = $dt ?: $singleDate;
             }
-            if ($request->filled('date_to')) {
-                $dt = $request->date_to;
-                $query->whereHas('receipt', fn($q) => $q->whereDate('receipt_date', '<=', $dt));
+
+            if (!empty($df)) {
+                $query->whereHas('receipt', function($q) use ($df) {
+                    $q->whereDate('receipt_date', '>=', $df)
+                      ->orWhere(function($sq) use ($df) {
+                          $sq->whereNull('receipt_date')->whereDate('created_at', '>=', $df);
+                      });
+                });
+            }
+            if (!empty($dt)) {
+                $query->whereHas('receipt', function($q) use ($dt) {
+                    $q->whereDate('receipt_date', '<=', $dt)
+                      ->orWhere(function($sq) use ($dt) {
+                          $sq->whereNull('receipt_date')->whereDate('created_at', '<=', $dt);
+                      });
+                });
             }
             if ($request->filled('search')) {
                 $s = trim($request->search);
@@ -1594,13 +1611,30 @@ class OCRReceiptScannerController extends Controller
                 $cat = $request->category;
                 $query->whereHas('receipt', fn($q) => $q->where('category', $cat));
             }
-            if ($request->filled('date_from')) {
-                $df = $request->date_from;
-                $query->whereHas('receipt', fn($q) => $q->whereDate('receipt_date', '>=', $df));
+            $df = $request->input('date_from') ?: ($request->input('from_date') ?: $request->input('start_date'));
+            $dt = $request->input('date_to') ?: ($request->input('to_date') ?: $request->input('end_date'));
+            $singleDate = $request->input('date') ?: $request->input('single_date');
+
+            if (!empty($singleDate)) {
+                $df = $df ?: $singleDate;
+                $dt = $dt ?: $singleDate;
             }
-            if ($request->filled('date_to')) {
-                $dt = $request->date_to;
-                $query->whereHas('receipt', fn($q) => $q->whereDate('receipt_date', '<=', $dt));
+
+            if (!empty($df)) {
+                $query->whereHas('receipt', function($q) use ($df) {
+                    $q->whereDate('receipt_date', '>=', $df)
+                      ->orWhere(function($sq) use ($df) {
+                          $sq->whereNull('receipt_date')->whereDate('created_at', '>=', $df);
+                      });
+                });
+            }
+            if (!empty($dt)) {
+                $query->whereHas('receipt', function($q) use ($dt) {
+                    $q->whereDate('receipt_date', '<=', $dt)
+                      ->orWhere(function($sq) use ($dt) {
+                          $sq->whereNull('receipt_date')->whereDate('created_at', '<=', $dt);
+                      });
+                });
             }
             if ($request->filled('search')) {
                 $s = trim($request->search);

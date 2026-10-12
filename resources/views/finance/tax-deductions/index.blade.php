@@ -131,10 +131,10 @@
 
                     {{-- Utilities Group --}}
                     <div class="d-flex align-items-center gap-2">
-                        <a href="{{ route('finance.tax-deductions.export-csv', request()->query()) }}" class="btn btn-outline-success btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5">
-                            <i class="fa-solid fa-file-excel"></i>
+                        <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5" onclick="openDateExportModal('{{ $tab }}', 'csv')" title="Select Date Range & Export">
+                            <i class="fa-solid fa-file-csv"></i>
                             <span class="d-none d-sm-inline">Export CSV</span>
-                        </a>
+                        </button>
                         <button type="button" onclick="window.print()" class="btn btn-outline-secondary btn-sm rounded-pill px-3 py-2 shadow-xs fw-semibold d-inline-flex align-items-center gap-1.5">
                             <i class="fa-solid fa-print"></i>
                             <span class="d-none d-sm-inline">Print</span>
@@ -571,12 +571,12 @@
                             </p>
                         </div>
                         <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <a href="{{ route('admin.ocr.export-excel', ['format' => 'etax']) }}" class="btn btn-sm btn-success fw-bold shadow-xs">
+                            <button type="button" class="btn btn-sm btn-success fw-bold shadow-xs" onclick="openDateExportModal('vat', 'excel')" title="Export by Date">
                                 <i class="fa-solid fa-file-excel me-1"></i>Export Excel (.xlsx)
-                            </a>
-                            <a href="{{ route('admin.ocr.export-csv', ['format' => 'etax']) }}" class="btn btn-sm btn-outline-success fw-bold shadow-xs">
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-success fw-bold shadow-xs" onclick="openDateExportModal('vat', 'csv')" title="Export by Date">
                                 <i class="fa-solid fa-file-csv me-1"></i>Export CSV
-                            </a>
+                            </button>
                             <a href="{{ route('admin.ocr.index') }}" target="_blank" class="btn btn-sm btn-primary fw-bold shadow-xs" title="Open full studio with AI settings, chat QC agent, and raw text viewer">
                                 <i class="fa-solid fa-up-right-from-square me-1"></i>Full OCR Studio
                             </a>
@@ -1884,7 +1884,251 @@
     </div>
 </div>
 
+{{-- ── MODAL: Select Date Range & Export in CSV / Excel ────────────────────────────── --}}
+<div class="modal fade" id="exportDateModal" tabindex="-1" aria-labelledby="exportDateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-success text-white py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-file-export fs-5"></i>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="exportDateModalLabel">Export Records by Date</h5>
+                        <small class="text-white-50">Select custom days or quick presets to download report</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+
+            <form id="exportDateForm" method="GET" action="{{ route('finance.tax-deductions.export-csv') }}">
+                <input type="hidden" name="tab" id="export_modal_tab" value="{{ $tab }}">
+                <input type="hidden" name="cycle" value="{{ $cycle }}">
+                <input type="hidden" name="category" value="{{ request('category') }}">
+                <input type="hidden" name="search" value="{{ request('search') }}">
+
+                <div class="modal-body p-4">
+                    {{-- Quick Date Range Presets --}}
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-uppercase text-muted d-block mb-2" style="font-size:0.72rem; letter-spacing:0.5px;">
+                            <i class="fa-solid fa-bolt text-warning me-1"></i>Quick Date Presets
+                        </label>
+                        <div class="d-flex gap-1.5 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setExportDatePreset('today')">Today</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setExportDatePreset('yesterday')">Yesterday</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setExportDatePreset('this_week')">This Week</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setExportDatePreset('this_month')">This Month</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setExportDatePreset('last_month')">Last Month</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setExportDatePreset('all')">All Dates</button>
+                        </div>
+                    </div>
+
+                    {{-- Date Pickers: From Date & To Date --}}
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-regular fa-calendar me-1 text-primary"></i>From Date (Start)
+                            </label>
+                            <input type="date" class="form-control" id="export_from_date" name="from_date" value="{{ request('from_date') }}">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-dark mb-1">
+                                <i class="fa-regular fa-calendar-check me-1 text-primary"></i>To Date (End)
+                            </label>
+                            <input type="date" class="form-control" id="export_to_date" name="to_date" value="{{ request('to_date') }}">
+                        </div>
+                    </div>
+
+                    {{-- Export Format Selector (CSV vs Excel) --}}
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-uppercase text-muted d-block mb-1" style="font-size:0.72rem; letter-spacing:0.5px;">
+                            Export File Format
+                        </label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <div class="form-check p-2.5 border rounded-3 bg-light d-flex align-items-center gap-2 m-0 cursor-pointer" onclick="document.getElementById('export_fmt_csv').checked = true; updateExportAction();">
+                                    <input class="form-check-input m-0 ms-1" type="radio" name="export_format" id="export_fmt_csv" value="csv" checked onchange="updateExportAction()">
+                                    <label class="form-check-label small fw-bold text-dark cursor-pointer mb-0" for="export_fmt_csv">
+                                        <i class="fa-solid fa-file-csv text-success me-1"></i>CSV (.csv)
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="form-check p-2.5 border rounded-3 bg-light d-flex align-items-center gap-2 m-0 cursor-pointer" onclick="document.getElementById('export_fmt_excel').checked = true; updateExportAction();">
+                                    <input class="form-check-input m-0 ms-1" type="radio" name="export_format" id="export_fmt_excel" value="excel" onchange="updateExportAction()">
+                                    <label class="form-check-label small fw-bold text-dark cursor-pointer mb-0" for="export_fmt_excel">
+                                        <i class="fa-solid fa-file-excel text-success me-1"></i>Excel (.xlsx)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- ERCA OCR Specific Options (shown when on VAT tab) --}}
+                    <div id="export_vat_options_container" class="mb-3 p-3 bg-light rounded-3 border">
+                        <label class="form-label small fw-bold text-dark mb-1 d-block">
+                            <i class="fa-solid fa-shield-halved text-info me-1"></i>ERCA VAT Specification
+                        </label>
+                        <div class="mb-2">
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="template" id="tpl_etax" value="etax" checked>
+                                <label class="form-check-label small fw-semibold" for="tpl_etax">
+                                    eTax Purchase Declaration (8 Cols)
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="template" id="tpl_erca15" value="erca_15">
+                                <label class="form-check-label small fw-semibold" for="tpl_erca15">
+                                    Full ERCA 15-Column Report
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="valid_only" id="export_valid_only" value="1">
+                            <label class="form-check-label small text-muted" for="export_valid_only">
+                                Export only rows with valid 10-digit TIN &amp; 8-digit FS #
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info border-info-subtle small py-2 mb-0 d-flex align-items-center gap-2">
+                        <i class="fa-solid fa-circle-info text-info"></i>
+                        <span id="export_preview_summary">Exporting all records. Leave dates blank to export entire cycle.</span>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light border-0 py-3 px-4 d-flex justify-content-between">
+                    <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success fw-bold rounded-pill px-4 shadow-xs" id="btnSubmitExport">
+                        <i class="fa-solid fa-download me-1"></i>Download Export
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
+    // ── Export by Date Modal Handlers ─────────────────────────────────────────
+    function openDateExportModal(tab = 'all', defaultFormat = 'csv') {
+        const modalEl = document.getElementById('exportDateModal');
+        if (!modalEl) return;
+
+        const tabInput = document.getElementById('export_modal_tab');
+        if (tabInput) tabInput.value = tab;
+
+        const csvRadio = document.getElementById('export_fmt_csv');
+        const excelRadio = document.getElementById('export_fmt_excel');
+        if (defaultFormat === 'excel' && excelRadio) {
+            excelRadio.checked = true;
+        } else if (csvRadio) {
+            csvRadio.checked = true;
+        }
+
+        const vatOptions = document.getElementById('export_vat_options_container');
+        if (vatOptions) {
+            vatOptions.style.display = (tab === 'vat') ? 'block' : 'none';
+        }
+
+        updateExportAction();
+        updateExportSummary();
+
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    function setExportDatePreset(preset) {
+        const fromInput = document.getElementById('export_from_date');
+        const toInput = document.getElementById('export_to_date');
+        if (!fromInput || !toInput) return;
+
+        const now = new Date();
+        const formatDate = (d) => {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        if (preset === 'today') {
+            const todayStr = formatDate(now);
+            fromInput.value = todayStr;
+            toInput.value = todayStr;
+        } else if (preset === 'yesterday') {
+            const yest = new Date(now);
+            yest.setDate(now.getDate() - 1);
+            const yestStr = formatDate(yest);
+            fromInput.value = yestStr;
+            toInput.value = yestStr;
+        } else if (preset === 'this_week') {
+            const d = new Date(now);
+            const dayOfWeek = d.getDay() || 7;
+            d.setDate(d.getDate() - dayOfWeek + 1);
+            fromInput.value = formatDate(d);
+            toInput.value = formatDate(now);
+        } else if (preset === 'this_month') {
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+            fromInput.value = formatDate(firstDay);
+            toInput.value = formatDate(now);
+        } else if (preset === 'last_month') {
+            const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+            fromInput.value = formatDate(firstDayLastMonth);
+            toInput.value = formatDate(lastDayLastMonth);
+        } else if (preset === 'all') {
+            fromInput.value = '';
+            toInput.value = '';
+        }
+
+        updateExportSummary();
+    }
+
+    function updateExportAction() {
+        const form = document.getElementById('exportDateForm');
+        const tabInput = document.getElementById('export_modal_tab');
+        const isExcel = document.getElementById('export_fmt_excel')?.checked;
+        const currentTab = tabInput ? tabInput.value : 'all';
+
+        if (!form) return;
+
+        if (currentTab === 'vat') {
+            form.action = isExcel 
+                ? '{{ route('admin.ocr.export-excel') }}' 
+                : '{{ route('admin.ocr.export-csv') }}';
+        } else {
+            form.action = '{{ route('finance.tax-deductions.export-csv') }}';
+        }
+
+        const btn = document.getElementById('btnSubmitExport');
+        if (btn) {
+            btn.innerHTML = `<i class="fa-solid fa-download me-1"></i>Download ${isExcel ? 'Excel (.xlsx)' : 'CSV (.csv)'}`;
+        }
+    }
+
+    function updateExportSummary() {
+        const fromVal = document.getElementById('export_from_date')?.value;
+        const toVal = document.getElementById('export_to_date')?.value;
+        const summary = document.getElementById('export_preview_summary');
+        if (!summary) return;
+
+        if (fromVal && toVal) {
+            if (fromVal === toVal) {
+                summary.innerHTML = `Exporting records for day: <strong>${fromVal}</strong>`;
+            } else {
+                summary.innerHTML = `Exporting records from <strong>${fromVal}</strong> to <strong>${toVal}</strong>`;
+            }
+        } else if (fromVal) {
+            summary.innerHTML = `Exporting records starting from <strong>${fromVal}</strong> onwards`;
+        } else if (toVal) {
+            summary.innerHTML = `Exporting records up to <strong>${toVal}</strong>`;
+        } else {
+            summary.innerHTML = `Exporting all available records (all dates).`;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('export_from_date')?.addEventListener('change', updateExportSummary);
+        document.getElementById('export_to_date')?.addEventListener('change', updateExportSummary);
+    });
+
     // ── High-Res Slip Modal ──────────────────────────────────────────────────
     function openVatSlipModal(imgUrl, vendor, tin, fs, mrc, date, base, vat, total, studioUrl) {
         document.getElementById('modalSlipImg').src = imgUrl;

@@ -840,7 +840,7 @@ class FinanceTaxReportController extends Controller
     /**
      * Export VAT and Withholding Tax deductions ledger to CSV.
      */
-    public function exportCsv(Request $request): StreamedResponse
+    public function exportCsv(Request $request)
     {
         $this->ensureSchema();
 
@@ -848,8 +848,19 @@ class FinanceTaxReportController extends Controller
         $cycle          = $request->input('cycle', 'active');
         $search         = $request->input('search');
         $category       = $request->input('category');
-        $fromDate       = $request->input('from_date');
-        $toDate         = $request->input('to_date');
+        $fromDate       = $request->input('from_date') ?: ($request->input('date_from') ?: $request->input('start_date'));
+        $toDate         = $request->input('to_date') ?: ($request->input('date_to') ?: $request->input('end_date'));
+        $singleDate     = $request->input('date') ?: $request->input('single_date');
+
+        if (!empty($singleDate)) {
+            $fromDate = $fromDate ?: $singleDate;
+            $toDate   = $toDate ?: $singleDate;
+        }
+
+        // If exporting VAT tab and not specifically requested as internal expense requests, delegate to OCR CSV
+        if ($tab === 'vat' && $request->input('vat_source') !== 'expense') {
+            return app(\App\Http\Controllers\Admin\OCRReceiptScannerController::class)->exportCsv($request);
+        }
 
         // Base Query: Strictly PAID records that have VAT, Withholding Tax, or an uploaded Withholding slip
         $query = ExpenseRequest::with(['user', 'employee', 'paidBy', 'bankAccount', 'chartOfAccount', 'letter', 'purchaseRequest'])
