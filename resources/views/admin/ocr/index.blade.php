@@ -43,7 +43,7 @@
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 260px;">
                     <li class="dropdown-header small text-uppercase fw-bold text-success">
-                        <i class="fa-solid fa-file-invoice me-1"></i>Purchase Declaration (8 Columns)
+                        <i class="fa-solid fa-file-invoice me-1"></i>Purchase Declaration (9 Columns / eTax)
                     </li>
                     <li>
                         <a class="dropdown-item small fw-semibold" href="#" onclick="exportData('excel', 'all', 'etax'); return false;">
@@ -88,7 +88,7 @@
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width: 260px;">
                     <li class="dropdown-header small text-uppercase fw-bold text-success">
-                        <i class="fa-solid fa-file-invoice me-1"></i>Purchase Declaration (8 Columns)
+                        <i class="fa-solid fa-file-invoice me-1"></i>Purchase Declaration (9 Columns / eTax)
                     </li>
                     <li>
                         <a class="dropdown-item small fw-semibold" href="#" onclick="exportData('csv', 'all', 'etax'); return false;">
@@ -1210,7 +1210,7 @@
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="radio" name="template" id="ocr_tpl_etax" value="etax" checked>
                                 <label class="form-check-label small fw-semibold" for="ocr_tpl_etax">
-                                    eTax Purchase Declaration (8 Cols)
+                                    eTax Purchase Declaration (9 Cols / Official)
                                 </label>
                             </div>
                             <div class="form-check form-check-inline">

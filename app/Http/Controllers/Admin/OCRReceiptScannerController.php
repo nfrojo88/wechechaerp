@@ -1496,8 +1496,7 @@ class OCRReceiptScannerController extends Controller
                     $writer->addRow(new Row($rowCells));
                 }
             } else {
-                // e-Tax Purchase Declaration Form (Exact 8 Columns requested by User)
-                // A: Purchaser TIN | B: Seller TIN | C: Amount | D: Receipt No | E: Receipt Date | F: Encoding Date | G: MRC | H: PurcType
+                // e-Tax Purchase Declaration Form (Exact 9 Columns: Purchaser TIN | Seller TIN | Amount | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By)
                 $headerCells = [
                     Cell::fromValue('Purchaser TIN'),
                     Cell::fromValue('Seller TIN'),
@@ -1507,6 +1506,7 @@ class OCRReceiptScannerController extends Controller
                     Cell::fromValue('Encoding Date'),
                     Cell::fromValue('MRC'),
                     Cell::fromValue('PurcType'),
+                    Cell::fromValue('Encoded By'),
                 ];
                 $writer->addRow(new Row($headerCells));
 
@@ -1514,28 +1514,30 @@ class OCRReceiptScannerController extends Controller
                     $r = $item->receipt;
 
                     // Col A: Purchaser TIN (e.g. 38480010)
-                    $buyerTin = $r ? ($r->buyer_tin ?: SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '0038480010'))) : '0038480010';
-                    $buyerDigits = preg_replace('/[^0-9]/', '', (string)$buyerTin);
-                    $purchaserTinVal = ($buyerDigits !== '') ? (int)$buyerDigits : (is_numeric($buyerTin) ? (int)$buyerTin : $buyerTin);
+                    $buyerTin = $r ? ($r->buyer_tin ?: SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'))) : '38480010';
+                    $buyerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$buyerTin));
+                    $purchaserTinVal = ($buyerDigits !== '') ? (int)$buyerDigits : 38480010;
 
                     // Col B: Seller TIN (e.g. 5201, 6870105, 60440)
                     $rawTin = $r ? (string)$r->vendor_tin : '';
-                    $sellerDigits = preg_replace('/[^0-9]/', '', $rawTin);
+                    $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawTin));
                     $sellerTinVal = ($sellerDigits !== '') ? (int)$sellerDigits : '';
 
                     // Col C: Amount (Receipt gross total / value after vat)
                     $amountVal = (float)($item->value_after_vat > 0 ? $item->value_after_vat : ($item->total_value > 0 ? $item->total_value : ($r ? $r->total_amount : 0)));
                     $amountVal = round($amountVal, 2);
 
-                    // Col D: Receipt No (e.g. FS00003898, DHN638Y2E0, 539)
+                    // Col D: Receipt No (e.g. FS00003898, FS00016506)
                     $receiptNo = '';
                     if ($r) {
                         if (!empty($r->fs_no_raw)) {
                             $receiptNo = trim($r->fs_no_raw);
                         } elseif (!empty($r->fs_no)) {
                             $cleanFs = trim($r->fs_no);
-                            if (preg_match('/^\d{8}$/', $cleanFs)) {
-                                $receiptNo = 'FS' . $cleanFs;
+                            if (preg_match('/^fs/i', $cleanFs)) {
+                                $receiptNo = strtoupper($cleanFs);
+                            } elseif (preg_match('/^\d+$/', $cleanFs)) {
+                                $receiptNo = 'FS' . str_pad($cleanFs, 8, '0', STR_PAD_LEFT);
                             } else {
                                 $receiptNo = $cleanFs;
                             }
@@ -1559,6 +1561,18 @@ class OCRReceiptScannerController extends Controller
                                  (stripos((string)($item->item_description ?? ''), 'service') !== false);
                     $purcType = $isService ? 'PUR_SER' : 'PUR_GD';
 
+                    // Col I: Encoded By (e.g. wechacha)
+                    $encodedBy = $request->input('encoded_by') ?: (
+                        SystemSetting::get('etax_encoded_by') ?: (
+                            $r && $r->uploader && !in_array(strtolower($r->uploader->name), ['admin', 'global admin', 'system'])
+                                ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $r->uploader->name))
+                                : 'wechacha'
+                        )
+                    );
+                    if (empty($encodedBy)) {
+                        $encodedBy = 'wechacha';
+                    }
+
                     $rowCells = [
                         Cell::fromValue($purchaserTinVal),
                         Cell::fromValue($sellerTinVal),
@@ -1568,6 +1582,7 @@ class OCRReceiptScannerController extends Controller
                         Cell::fromValue($encodingDate),
                         Cell::fromValue($mrc),
                         Cell::fromValue($purcType),
+                        Cell::fromValue($encodedBy),
                     ];
                     $writer->addRow(new Row($rowCells));
                 }
@@ -1588,7 +1603,7 @@ class OCRReceiptScannerController extends Controller
 
     /**
      * Export table into CSV.
-     * Defaults to e-Tax Purchase Declaration (8 columns), supports template=erca_15 for 15 columns.
+     * Defaults to e-Tax Purchase Declaration (9 columns: Purchaser TIN, Seller TIN, Amount, Receipt No, Receipt Date, Encoding Date, MRC, PurcType, Encoded By), supports template=erca_15 for 15 columns.
      */
     public function exportCsv(Request $request)
     {
@@ -1730,7 +1745,7 @@ class OCRReceiptScannerController extends Controller
                     ]);
                 }
             } else {
-                // e-Tax 8-column format: Purchaser TIN, Seller TIN, Amount, Receipt No, Receipt Date, Encoding Date, MRC, PurcType
+                // e-Tax Purchase Declaration Form (Exact 9 Columns: Purchaser TIN | Seller TIN | Amount | Receipt No | Receipt Date | Encoding Date | MRC | PurcType | Encoded By)
                 fputcsv($out, [
                     'Purchaser TIN',
                     'Seller TIN',
@@ -1740,17 +1755,18 @@ class OCRReceiptScannerController extends Controller
                     'Encoding Date',
                     'MRC',
                     'PurcType',
+                    'Encoded By',
                 ]);
 
                 foreach ($items as $item) {
                     $r = $item->receipt;
 
-                    $buyerTin = $r ? ($r->buyer_tin ?: SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '0038480010'))) : '0038480010';
-                    $buyerDigits = preg_replace('/[^0-9]/', '', (string)$buyerTin);
+                    $buyerTin = $r ? ($r->buyer_tin ?: SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'))) : '38480010';
+                    $buyerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$buyerTin));
                     $purchaserTin = ($buyerDigits !== '') ? $buyerDigits : '38480010';
 
                     $rawTin = $r ? (string)$r->vendor_tin : '';
-                    $sellerDigits = preg_replace('/[^0-9]/', '', $rawTin);
+                    $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', $rawTin));
                     $sellerTin = ($sellerDigits !== '') ? $sellerDigits : '';
 
                     $amount = (float)($item->value_after_vat > 0 ? $item->value_after_vat : ($item->total_value > 0 ? $item->total_value : ($r ? $r->total_amount : 0)));
@@ -1761,8 +1777,10 @@ class OCRReceiptScannerController extends Controller
                             $receiptNo = trim($r->fs_no_raw);
                         } elseif (!empty($r->fs_no)) {
                             $cleanFs = trim($r->fs_no);
-                            if (preg_match('/^\d{8}$/', $cleanFs)) {
-                                $receiptNo = 'FS' . $cleanFs;
+                            if (preg_match('/^fs/i', $cleanFs)) {
+                                $receiptNo = strtoupper($cleanFs);
+                            } elseif (preg_match('/^\d+$/', $cleanFs)) {
+                                $receiptNo = 'FS' . str_pad($cleanFs, 8, '0', STR_PAD_LEFT);
                             } else {
                                 $receiptNo = $cleanFs;
                             }
@@ -1780,6 +1798,17 @@ class OCRReceiptScannerController extends Controller
                                  (stripos((string)($item->item_description ?? ''), 'service') !== false);
                     $purcType = $isService ? 'PUR_SER' : 'PUR_GD';
 
+                    $encodedBy = $request->input('encoded_by') ?: (
+                        SystemSetting::get('etax_encoded_by') ?: (
+                            $r && $r->uploader && !in_array(strtolower($r->uploader->name), ['admin', 'global admin', 'system'])
+                                ? strtolower(preg_replace('/[^a-zA-Z0-9_]/', '', $r->uploader->name))
+                                : 'wechacha'
+                        )
+                    );
+                    if (empty($encodedBy)) {
+                        $encodedBy = 'wechacha';
+                    }
+
                     fputcsv($out, [
                         $purchaserTin,
                         $sellerTin,
@@ -1789,6 +1818,7 @@ class OCRReceiptScannerController extends Controller
                         $encodingDate,
                         $mrc,
                         $purcType,
+                        $encodedBy,
                     ]);
                 }
             }

@@ -1971,7 +1971,7 @@
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="radio" name="template" id="tpl_etax" value="etax" checked>
                                 <label class="form-check-label small fw-semibold" for="tpl_etax">
-                                    eTax Purchase Declaration (8 Cols)
+                                    eTax Purchase Declaration (9 Cols / Official)
                                 </label>
                             </div>
                             <div class="form-check form-check-inline">
