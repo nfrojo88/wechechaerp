@@ -34,13 +34,9 @@ class FixedAssetAssignment extends Model
         'updated_at'    => 'datetime',
     ];
 
-    protected static function booted()
-    {
-        static::ensureSchema();
-    }
-
     /**
      * Self-healing schema helper ensuring employee_id is nullable on production databases.
+     * CRITICAL: NEVER executes DDL inside an active transaction, avoiding MySQL implicit commits.
      */
     public static function ensureSchema(): void
     {
@@ -48,6 +44,12 @@ class FixedAssetAssignment extends Model
         if ($ensured) {
             return;
         }
+
+        // Avoid DDL inside transaction: MySQL implicitly commits transactions upon ALTER TABLE
+        if (DB::transactionLevel() > 0) {
+            return;
+        }
+
         $ensured = true;
 
         try {
@@ -72,25 +74,31 @@ class FixedAssetAssignment extends Model
      */
     public static function createSafely(array $attributes): ?self
     {
-        self::ensureSchema();
+        if (DB::transactionLevel() === 0) {
+            self::ensureSchema();
+        }
 
         try {
             return self::create($attributes);
         } catch (\Illuminate\Database\QueryException $e) {
             // Check for Column 'employee_id' cannot be null error (SQLSTATE 23000 / 1048)
             if (isset($attributes['employee_id']) && $attributes['employee_id'] === null) {
-                try {
-                    DB::statement("ALTER TABLE `fixed_asset_assignments` MODIFY `employee_id` BIGINT UNSIGNED NULL");
-                    return self::create($attributes);
-                } catch (\Throwable $alterEx) {
-                    // Fallback to active user's employee or first active employee if schema alter is blocked
-                    $fallbackEmployeeId = auth()->user()?->employee?->id 
-                        ?? Employee::value('id') 
-                        ?? null;
-                    if ($fallbackEmployeeId) {
-                        $attributes['employee_id'] = $fallbackEmployeeId;
+                if (DB::transactionLevel() === 0) {
+                    try {
+                        DB::statement("ALTER TABLE `fixed_asset_assignments` MODIFY `employee_id` BIGINT UNSIGNED NULL");
                         return self::create($attributes);
-                    }
+                    } catch (\Throwable $alterEx) {}
+                }
+
+                // If inside transaction or alter is blocked, fallback to an active employee ID so transaction NEVER breaks
+                $fallbackEmployeeId = auth()->user()?->employee?->id 
+                    ?? Employee::value('id') 
+                    ?? null;
+                if ($fallbackEmployeeId) {
+                    $attributes['employee_id'] = $fallbackEmployeeId;
+                    try {
+                        return self::create($attributes);
+                    } catch (\Throwable $ex2) {}
                 }
             }
             Log::warning("FixedAssetAssignment createSafely failed: " . $e->getMessage());

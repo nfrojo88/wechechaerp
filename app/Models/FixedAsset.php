@@ -339,11 +339,49 @@ class FixedAsset extends Model
                 $cat = strtolower(trim($productCheck->category ?? ''));
                 $subCat = strtolower(trim($productCheck->sub_category ?? ''));
                 $sku = strtoupper(trim($productCheck->sku ?? ''));
-                $isAsset = $cat === 'fixed asset' 
+                $nameLower = strtolower(trim($productCheck->name ?? ''));
+
+                $assetCategories = [
+                    'fixed asset', 'fixed assets', 'fixed_asset',
+                    'computer & it', 'it equipment', 'it',
+                    'office equipment',
+                    'equipment',
+                    'vehicle', 'vehicles', 'automotive',
+                    'heavy machinery', 'machinery', 'heavy equipment',
+                    'furniture', 'furniture & fixture',
+                    'tools', 'tools & equipment',
+                    'electronics',
+                    'appliances', 'appliance',
+                    'hardware',
+                    'printer', 'printers',
+                ];
+
+                $assetKeywords = [
+                    'printer', 'scanner', 'copier', 'photocopier',
+                    'laptop', 'desktop', 'computer', 'server', 'monitor', 'screen', 'ups', 'router', 'switch',
+                    'generator', 'compressor', 'pump', 'welder', 'welding', 'drill', 'grinder', 'saw',
+                    'excavator', 'loader', 'roller', 'grader', 'bulldozer', 'crane', 'forklift', 'mixer', 'vibrator',
+                    'truck', 'pickup', 'car', 'van', 'vehicle', 'tractor', 'trailer',
+                    'chair', 'table', 'desk', 'cabinet', 'shelf', 'shelving', 'safe',
+                    'camera', 'projector', 'radio', 'walkie talkie', 'television', 'tv', 'refrigerator', 'ac', 'air conditioner',
+                ];
+
+                $isAsset = in_array($cat, $assetCategories)
+                    || in_array($subCat, $assetCategories)
                     || str_contains($cat, 'asset') 
                     || str_contains($subCat, 'asset')
                     || str_starts_with($sku, 'FA-') 
                     || str_starts_with($sku, 'AST-');
+
+                if (!$isAsset) {
+                    foreach ($assetKeywords as $keyword) {
+                        if (str_contains($nameLower, $keyword)) {
+                            $isAsset = true;
+                            break;
+                        }
+                    }
+                }
+
                 if (!$isAsset) {
                     return 0; // Not an asset product, do not create or sync fixed assets
                 }
