@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\Store;
 use App\Models\Product;
 use App\Models\Inventory;
+use App\Models\Transfer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
