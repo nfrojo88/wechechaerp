@@ -591,6 +591,8 @@ class FixedAssetController extends Controller
             return back()->withErrors(['error' => 'Destination store cannot be the same as the origin store.']);
         }
 
+        FixedAssetAssignment::ensureSchema();
+
         $transferredCount = 0;
         $transferredCodes = [];
 
@@ -644,7 +646,7 @@ class FixedAssetController extends Controller
                     ]);
 
                     // Record assignment/movement history entry
-                    FixedAssetAssignment::create([
+                    FixedAssetAssignment::createSafely([
                         'fixed_asset_unit_id'    => $unit->id,
                         'employee_id'            => null,
                         'action'                 => 'transferred',

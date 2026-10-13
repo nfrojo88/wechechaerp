@@ -279,6 +279,7 @@ class GeneralServiceController extends Controller
             }
 
             $requestNumber = 'REQ-' . date('Ymd') . '-' . strtoupper(\Illuminate\Support\Str::random(4));
+            $isBankPayment = $request->boolean('money_is_bank_payment') || $request->filled('money_account_number');
             \App\Models\ExpenseRequest::create([
                 'request_number'         => $requestNumber,
                 'user_id'                => $user->id,
@@ -289,6 +290,10 @@ class GeneralServiceController extends Controller
                 'amount'                 => $validated['money_amount'],
                 'description'            => $validated['money_description'] ?? ("Maintenance expense for " . $maintenanceRequest->asset_name),
                 'attachment'             => $attachmentUrl,
+                'is_bank_payment'        => $isBankPayment,
+                'bank_name'              => $isBankPayment ? $request->input('money_bank_name') : null,
+                'account_number'         => $isBankPayment ? $request->input('money_account_number') : null,
+                'account_name'           => $isBankPayment ? $request->input('money_account_name') : null,
                 'status'                 => \App\Models\ExpenseRequest::STATUS_PENDING_HR,
             ]);
         }
@@ -462,9 +467,13 @@ class GeneralServiceController extends Controller
     public function askMoney(Request $request, MaintenanceRequest $maintenanceRequest)
     {
         $validated = $request->validate([
-            'amount'      => 'required|numeric|min:1',
-            'description' => 'required|string|max:2000',
-            'attachment'  => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'amount'          => 'required|numeric|min:1',
+            'description'     => 'required|string|max:2000',
+            'attachment'      => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
+            'is_bank_payment' => 'nullable|boolean',
+            'bank_name'       => 'nullable|string|max:255',
+            'account_number'  => 'nullable|string|max:100',
+            'account_name'    => 'nullable|string|max:255',
         ]);
 
         $user = auth()->user();
@@ -481,6 +490,8 @@ class GeneralServiceController extends Controller
             }
         }
 
+        $isBankPayment = $request->boolean('is_bank_payment') || $request->filled('account_number');
+
         $expense = \App\Models\ExpenseRequest::create([
             'request_number'         => $requestNumber,
             'user_id'                => $user->id,
@@ -491,6 +502,10 @@ class GeneralServiceController extends Controller
             'amount'                 => $validated['amount'],
             'description'            => $validated['description'],
             'attachment'             => $attachmentUrl,
+            'is_bank_payment'        => $isBankPayment,
+            'bank_name'              => $isBankPayment ? $request->input('bank_name') : null,
+            'account_number'         => $isBankPayment ? $request->input('account_number') : null,
+            'account_name'           => $isBankPayment ? $request->input('account_name') : null,
             'status'                 => \App\Models\ExpenseRequest::STATUS_PENDING_GM,
         ]);
 

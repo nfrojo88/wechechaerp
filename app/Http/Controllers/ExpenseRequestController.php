@@ -54,6 +54,10 @@ class ExpenseRequestController extends Controller
                     $table->timestamp('finance_assigned_at')->nullable();
                     $table->foreignId('paid_by')->nullable()->constrained('users')->nullOnDelete();
                     $table->timestamp('paid_at')->nullable();
+                    $table->boolean('is_bank_payment')->default(false);
+                    $table->string('bank_name')->nullable();
+                    $table->string('account_number')->nullable();
+                    $table->string('account_name')->nullable();
                     $table->string('payment_reference')->nullable();
                     $table->text('payment_notes')->nullable();
                     $table->timestamps();
@@ -127,6 +131,18 @@ class ExpenseRequestController extends Controller
                     }
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'employee_approved_at')) {
                         $table->timestamp('employee_approved_at')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'is_bank_payment')) {
+                        $table->boolean('is_bank_payment')->default(false);
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'bank_name')) {
+                        $table->string('bank_name', 255)->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'account_number')) {
+                        $table->string('account_number', 100)->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('expense_requests', 'account_name')) {
+                        $table->string('account_name', 255)->nullable();
                     }
                 });
             }
@@ -440,6 +456,10 @@ class ExpenseRequestController extends Controller
             'attachment' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
             'withholding_receipt' => 'nullable|file|mimes:jpeg,png,jpg,pdf,webp|max:10240',
             'withholding_receipt_number' => 'nullable|string|max:100',
+            'is_bank_payment' => 'nullable|boolean',
+            'bank_name' => 'nullable|string|max:255',
+            'account_number' => 'nullable|string|max:100',
+            'account_name' => 'nullable|string|max:255',
         ]);
 
         $user = auth()->user();
@@ -574,6 +594,11 @@ class ExpenseRequestController extends Controller
             ? ExpenseRequest::STATUS_PENDING_EMPLOYEE 
             : ExpenseRequest::STATUS_PENDING_HR;
 
+        $isBankPayment = $request->boolean('is_bank_payment') || $request->filled('account_number');
+        $bankName = $isBankPayment ? $request->input('bank_name') : null;
+        $accountNumber = $isBankPayment ? $request->input('account_number') : null;
+        $accountName = $isBankPayment ? $request->input('account_name') : null;
+
         $expenseRequest = ExpenseRequest::create([
             'request_number' => $requestNumber,
             'user_id' => $user->id,
@@ -594,6 +619,10 @@ class ExpenseRequestController extends Controller
             'withholding_receipt' => $withholdingReceiptUrl,
             'withholding_receipt_number' => $request->input('withholding_receipt_number'),
             'net_amount' => $netAmount,
+            'is_bank_payment' => $isBankPayment,
+            'bank_name' => $bankName,
+            'account_number' => $accountNumber,
+            'account_name' => $accountName,
             'description' => $validated['description'],
             'attachment' => $attachmentUrl,
             'status' => $initialStatus,

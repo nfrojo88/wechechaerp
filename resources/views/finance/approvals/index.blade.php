@@ -564,6 +564,19 @@
                         $requesterBank = $askingEmployee?->bank_name ?? null;
                         $requesterPhone = $askingEmployee?->phone ?? null;
 
+                        // Priority: If specific bank account details were specified on this Expense Request ("Ask Money")
+                        if ($rawReq && (!empty($rawReq->account_number) || !empty($rawReq->bank_name) || !empty($rawReq->account_name))) {
+                            if (!empty($rawReq->account_number)) {
+                                $requesterAcc = $rawReq->account_number;
+                            }
+                            if (!empty($rawReq->bank_name)) {
+                                $requesterBank = $rawReq->bank_name;
+                            }
+                            if (!empty($rawReq->account_name)) {
+                                $requesterName = $rawReq->account_name . ' (For: ' . ($askingUser?->name ?? $askingEmployee?->full_name ?? 'Requester') . ')';
+                            }
+                        }
+
                         // Ensure we NEVER display the approved person / custodian's bank account
                         if ($custodian?->employee && $requesterAcc === $custodian->employee->account_number) {
                             $requesterAcc = null;
@@ -1489,6 +1502,19 @@
                                 $payRequesterAcc = $payAskingEmp?->account_number ?? $payAskingUser?->employee?->account_number ?? null;
                                 $payRequesterBank = $payAskingEmp?->bank_name ?? $payAskingUser?->employee?->bank_name ?? 'Commercial Bank of Ethiopia (CBE)';
                                 $payRequesterPhone = $payAskingEmp?->phone ?? $payAskingUser?->employee?->phone ?? null;
+
+                                // Priority: If specific bank account details were specified on this Expense Request ("Ask Money")
+                                if ($req && (!empty($req->account_number) || !empty($req->bank_name) || !empty($req->account_name))) {
+                                    if (!empty($req->account_number)) {
+                                        $payRequesterAcc = $req->account_number;
+                                    }
+                                    if (!empty($req->bank_name)) {
+                                        $payRequesterBank = $req->bank_name;
+                                    }
+                                    if (!empty($req->account_name)) {
+                                        $payRequesterName = $req->account_name . ' (For: ' . ($payAskingEmp?->full_name ?? $payAskingUser?->name ?? 'Requester') . ')';
+                                    }
+                                }
 
                                 if ($payCustodian?->employee && $payRequesterAcc === $payCustodian->employee->account_number) {
                                     $payRequesterAcc = null;

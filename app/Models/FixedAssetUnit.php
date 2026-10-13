@@ -129,7 +129,7 @@ class FixedAssetUnit extends Model
             'notes'                   => $notes ? ($this->notes ? $this->notes . "\n" . $notes : $notes) : $this->notes,
         ]);
 
-        FixedAssetAssignment::create([
+        FixedAssetAssignment::createSafely([
             'fixed_asset_unit_id'    => $this->id,
             'employee_id'            => $employeeId,
             'action'                 => 'assigned',
@@ -159,7 +159,7 @@ class FixedAssetUnit extends Model
         ]);
 
         if ($previousEmployeeId) {
-            FixedAssetAssignment::create([
+            FixedAssetAssignment::createSafely([
                 'fixed_asset_unit_id'    => $this->id,
                 'employee_id'            => $previousEmployeeId,
                 'action'                 => 'returned',

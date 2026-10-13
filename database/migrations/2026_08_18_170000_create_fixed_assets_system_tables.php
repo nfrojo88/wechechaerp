@@ -77,7 +77,7 @@ return new class extends Migration
         Schema::create('fixed_asset_assignments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('fixed_asset_unit_id')->constrained('fixed_asset_units')->cascadeOnDelete();
-            $table->foreignId('employee_id')->constrained('employees')->cascadeOnDelete();
+            $table->foreignId('employee_id')->nullable()->constrained('employees')->nullOnDelete();
             $table->string('action', 50)->default('assigned'); // assigned, returned, transferred, maintenance, disposed
             $table->dateTime('assigned_date');
             $table->dateTime('returned_date')->nullable();

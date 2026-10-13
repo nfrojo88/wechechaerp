@@ -308,9 +308,53 @@
                             <textarea name="money_description" class="form-control form-control-sm rounded-3" rows="2" placeholder="Technician quotation, garage service details, labour fees...">{{ old('money_description') }}</textarea>
                         </div>
 
-                        <div class="mb-0">
+                        <div class="mb-3">
                             <label class="form-label fw-bold small text-secondary">Proforma / Quotation Attachment <small class="text-muted">(Optional)</small></label>
                             <input type="file" name="money_attachment" class="form-control form-control-sm rounded-3" accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
+                        </div>
+
+                        {{-- Direct Ask Money Bank Payment Destination --}}
+                        <div class="p-3 bg-light rounded-3 border border-primary-subtle shadow-xs">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div class="form-check form-switch mb-0">
+                                    <input class="form-check-input" type="checkbox" role="switch" name="money_is_bank_payment" id="money_bank_toggle" value="1" {{ old('money_is_bank_payment') ? 'checked' : '' }} onchange="toggleDirectMoneyBank(this)">
+                                    <label class="form-check-label fw-bold text-dark small" for="money_bank_toggle">
+                                        <i class="fa-solid fa-building-columns text-primary me-1"></i>Pay to Bank Account / Electronic Transfer (በባንክ ሂሳብ ይከፈል)
+                                    </label>
+                                </div>
+                                <span class="badge bg-secondary-subtle text-secondary border px-2 py-0.5 rounded-pill font-monospace small" id="money_bank_badge">
+                                    <i class="fa-solid fa-lock me-1"></i>Optional
+                                </span>
+                            </div>
+
+                            <div id="money_bank_fields" class="mt-2 pt-2 border-top {{ old('money_is_bank_payment') ? '' : 'd-none' }}">
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold text-dark mb-0">Bank Name (የባንክ ስም)</label>
+                                        <input type="text" list="directMaintBanks" name="money_bank_name" class="form-control form-control-sm" placeholder="e.g. CBE, Telebirr..." value="{{ old('money_bank_name') }}">
+                                        <datalist id="directMaintBanks">
+                                            <option value="Commercial Bank of Ethiopia (CBE)">
+                                            <option value="Telebirr">
+                                            <option value="Awash Bank">
+                                            <option value="Bank of Abyssinia">
+                                            <option value="Dashen Bank">
+                                            <option value="Cooperative Bank of Oromia (Coop)">
+                                            <option value="Hibret Bank (United)">
+                                            <option value="Nib International Bank">
+                                            <option value="Amhara Bank">
+                                            <option value="CBE Birr">
+                                        </datalist>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold text-dark mb-0">Account Number (የሂሳብ ቁጥር)</label>
+                                        <input type="text" name="money_account_number" class="form-control form-control-sm font-monospace fw-bold" placeholder="e.g. 1000..." value="{{ old('money_account_number') }}">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold text-dark mb-0">Account Holder Name (የባለቤቱ ስም)</label>
+                                        <input type="text" name="money_account_name" class="form-control form-control-sm" placeholder="e.g. Technician / Garage Name" value="{{ old('money_account_name') }}">
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -456,6 +500,24 @@ function addMaterialRow() {
     `;
 
     container.appendChild(div);
+}
+
+function toggleDirectMoneyBank(toggle) {
+    const f = document.getElementById('money_bank_fields');
+    const b = document.getElementById('money_bank_badge');
+    if (f) {
+        if (toggle.checked) f.classList.remove('d-none');
+        else f.classList.add('d-none');
+    }
+    if (b) {
+        if (toggle.checked) {
+            b.className = 'badge bg-success text-white border border-success px-2 py-0.5 rounded-pill font-monospace small';
+            b.innerHTML = '<i class="fa-solid fa-lock-open me-1"></i>Unlocked';
+        } else {
+            b.className = 'badge bg-secondary-subtle text-secondary border px-2 py-0.5 rounded-pill font-monospace small';
+            b.innerHTML = '<i class="fa-solid fa-lock me-1"></i>Optional';
+        }
+    }
 }
 </script>
 @endpush

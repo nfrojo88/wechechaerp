@@ -240,6 +240,15 @@
                                         </a>
                                     </div>
                                 @endif
+                                @if($req->account_number)
+                                    <div class="mt-1">
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 text-start text-wrap shadow-xs" style="font-size: 0.72rem; line-height: 1.35;" title="Bank Transfer: {{ $req->account_name }} ({{ $req->bank_name }}: {{ $req->account_number }})">
+                                            <i class="fa-solid fa-building-columns me-1"></i>Pay to: <span class="font-monospace fw-bold">{{ $req->account_number }}</span>
+                                            @if($req->bank_name) <span class="text-muted">({{ $req->bank_name }})</span> @endif
+                                            @if($req->account_name) <div class="text-dark fw-semibold" style="font-size: 0.70rem;"><i class="fa-solid fa-user me-1 text-secondary"></i>{{ $req->account_name }}</div> @endif
+                                        </span>
+                                    </div>
+                                @endif
                             </td>
                             <td class="fw-bold fs-6 text-success">
                                 {{ number_format($req->amount, 2) }} <small class="text-muted fw-normal">ETB</small>
@@ -823,6 +832,34 @@
                             </div>
                         </div>
 
+                        {{-- Designated Payee Bank Account Card (If Specified) --}}
+                        @if($req->account_number || $req->is_bank_payment)
+                            <div class="card border border-success border-opacity-50 rounded-3 mb-3 bg-success bg-opacity-10 overflow-hidden shadow-xs">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small class="text-success text-uppercase fw-bold" style="font-size:0.75rem;">
+                                            <i class="fa-solid fa-building-columns me-1"></i>Payee Bank Account Details (ክፍያው የሚገባበት የባንክ ሂሳብ)
+                                        </small>
+                                        @if($req->account_number)
+                                            <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-semibold" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $req->account_number }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
+                                                <i class="fa-regular fa-copy me-1"></i>Copy Account #
+                                            </button>
+                                        @endif
+                                    </div>
+                                    <div class="row g-2 align-items-center">
+                                        <div class="col-md-6 border-end pe-3">
+                                            <span class="fs-5 fw-bold text-success font-monospace">{{ $req->account_number ?: 'Not specified' }}</span>
+                                            <small class="text-muted d-block" style="font-size:0.75rem;">Bank: <strong>{{ $req->bank_name ?: 'Bank Transfer' }}</strong></small>
+                                        </div>
+                                        <div class="col-md-6 ps-3">
+                                            <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Account Holder Name (የባለቤቱ ስም):</small>
+                                            <strong class="text-dark fs-6">{{ $req->account_name ?: ($req->user->name ?? 'N/A') }}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
+
                         {{-- Invoice / Base Amount --}}
                         <div class="mb-3">
                             <label class="form-label fw-bold small text-dark">Invoice / Base Amount (ETB) <span class="text-danger">*</span></label>
@@ -1084,6 +1121,38 @@
                             </div>
                         </div>
                     </div>
+
+                    {{-- Payee Bank Account Details (If Specified) --}}
+                    @if($req->account_number || $req->is_bank_payment)
+                        <div class="card border border-success border-opacity-50 rounded-3 mb-3 bg-success bg-opacity-10 overflow-hidden shadow-xs">
+                            <div class="card-header bg-success bg-opacity-10 py-2 px-3 d-flex justify-content-between align-items-center">
+                                <span class="small fw-bold text-success text-uppercase">
+                                    <i class="fa-solid fa-building-columns me-1"></i>Payee Bank Account (ክፍያ የሚፈጸምበት የባንክ ሂሳብ)
+                                </span>
+                                @if($req->account_number)
+                                    <button type="button" class="btn btn-xs btn-outline-success py-0 px-2 fw-semibold" style="font-size: 11px;" onclick="navigator.clipboard.writeText('{{ $req->account_number }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy', 1500);">
+                                        <i class="fa-regular fa-copy me-1"></i>Copy Account #
+                                    </button>
+                                @endif
+                            </div>
+                            <div class="card-body p-3 bg-white">
+                                <div class="row g-2 align-items-center">
+                                    <div class="col-md-4 border-end pe-2">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Account Number (የሂሳብ ቁጥር):</small>
+                                        <span class="fs-5 fw-bold text-success font-monospace">{{ $req->account_number ?: 'Not specified' }}</span>
+                                    </div>
+                                    <div class="col-md-4 border-end px-2">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Bank Name (የባንክ ስም):</small>
+                                        <strong class="text-dark fs-6">{{ $req->bank_name ?: 'Bank Transfer' }}</strong>
+                                    </div>
+                                    <div class="col-md-4 ps-2">
+                                        <small class="text-muted text-uppercase fw-semibold d-block" style="font-size:0.72rem;">Account Holder Name (የባለቤቱ ስም):</small>
+                                        <strong class="text-dark fs-6">{{ $req->account_name ?: ($req->user->name ?? 'N/A') }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
 
                     <div class="mb-3">
                         <label class="fw-bold">Category & Reason:</label>
@@ -1513,16 +1582,23 @@
                                     <span class="badge bg-info text-white px-2 py-1" id="employeeCategoryBadge"><i class="fa-solid fa-truck-ramp-box me-1"></i>Transport &amp; Loading Allocation</span>
                                 </div>
                                 @php
-                                    $currentEmpId = auth()->user()->employee?->id;
+                                    $currentUserEmp = auth()->user()->employee;
+                                    $currentEmpId = $currentUserEmp?->id;
                                     $currentUserId = auth()->id();
+                                    $currentEmpBank = $currentUserEmp?->bank_name;
+                                    $currentEmpAcc = $currentUserEmp?->account_number;
+                                    $currentEmpName = $currentUserEmp?->full_name ?? auth()->user()->name;
                                 @endphp
-                                <select name="employee_id" id="employeeSelect" class="form-select form-select-lg fw-semibold mt-1 border-info">
+                                <select name="employee_id" id="employeeSelect" class="form-select form-select-lg fw-semibold mt-1 border-info" onchange="onAssignedEmployeeChanged(this)">
                                     <option value="" selected disabled>-- Select Another Employee / Driver / Handler (ሌላ ሰራተኛ/አሽከርካሪ ይምረጡ) --</option>
                                     @foreach($employees ?? [] as $emp)
                                         @if(($currentEmpId && $emp->id == $currentEmpId) || ($emp->user_id && $emp->user_id == $currentUserId))
                                             @continue
                                         @endif
-                                        <option value="{{ $emp->id }}">
+                                        <option value="{{ $emp->id }}"
+                                                data-bank="{{ $emp->bank_name ?? '' }}"
+                                                data-account="{{ $emp->account_number ?? '' }}"
+                                                data-name="{{ $emp->full_name ?? '' }}">
                                             👤 {{ $emp->full_name }} ({{ $emp->employee_code ?? 'EMP' }}) — {{ $emp->role_title ?? $emp->department ?? 'Staff' }}
                                         </option>
                                     @endforeach
@@ -1633,6 +1709,97 @@
 
                         <input type="hidden" name="amount" id="createFinalAmount" value="0.00">
                         <input type="hidden" name="net_amount" id="createNetAmount" value="0.00">
+
+                        {{-- Bank Payment Destination Section (ክፍያ የሚፈጸምበት የባንክ ሂሳብ / ወደዚህ ሂሳብ ይተላለፍ) --}}
+                        <div class="col-12" id="createBankPaymentSection">
+                            <div class="card border border-primary-subtle bg-light rounded-3 p-3 shadow-xs">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" name="is_bank_payment" id="createBankPaymentToggle" value="1" onchange="toggleBankPaymentOptions()">
+                                        <label class="form-check-label fw-bold text-dark fs-6" for="createBankPaymentToggle">
+                                            <i class="fa-solid fa-building-columns text-primary me-1"></i>Pay to Bank Account / Electronic Transfer (በባንክ ሂሳብ ይከፈል / ወደዚህ ሂሳብ ይተላለፍ)
+                                        </label>
+                                    </div>
+                                    <span class="badge bg-secondary-subtle text-secondary border px-2 py-1 rounded-pill font-monospace" id="bankPaymentStatusBadge">
+                                        <i class="fa-solid fa-lock me-1"></i>Locked / Optional
+                                    </span>
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    Unlock this option to specify the receiving bank account number, bank name, and payee name for electronic disbursement.
+                                </small>
+
+                                {{-- Unlocked Bank Payment Details Box --}}
+                                <div id="bankPaymentFieldsContainer" class="mt-3 pt-3 border-top" style="display: none;">
+                                    @if(!empty($currentEmpAcc) || !empty($currentEmpBank))
+                                        <div class="mb-3 p-2 bg-white rounded border border-primary-subtle d-flex align-items-center justify-content-between flex-wrap gap-2 small">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <i class="fa-solid fa-wand-magic-sparkles text-primary fs-6"></i>
+                                                <div>
+                                                    <strong class="text-dark">Your Registered Account:</strong>
+                                                    <span class="text-muted ms-1">{{ $currentEmpBank ?: 'CBE' }} — <span class="font-monospace text-primary fw-bold">{{ $currentEmpAcc }}</span> ({{ $currentEmpName }})</span>
+                                                </div>
+                                            </div>
+                                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill py-0 px-3 fw-semibold shadow-xs" onclick="fillMyBankDetails('{{ addslashes($currentEmpName) }}', '{{ addslashes($currentEmpBank ?? 'Commercial Bank of Ethiopia (CBE)') }}', '{{ addslashes($currentEmpAcc ?? '') }}')">
+                                                <i class="fa-solid fa-user-check me-1"></i>Auto-Fill My Account
+                                            </button>
+                                        </div>
+                                    @endif
+
+                                    <div class="row g-2">
+                                        {{-- Bank Name --}}
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-building-columns text-primary me-1"></i>Bank Name (የባንክ ስም) <span class="text-danger" id="bankNameAsterisk" style="display:none;">*</span>
+                                            </label>
+                                            <input type="text" list="ethiopianBanksList" name="bank_name" id="createBankName" class="form-control form-control-sm fw-semibold" placeholder="Select or type bank...">
+                                            <datalist id="ethiopianBanksList">
+                                                <option value="Commercial Bank of Ethiopia (CBE)">
+                                                <option value="Telebirr">
+                                                <option value="Awash Bank">
+                                                <option value="Bank of Abyssinia">
+                                                <option value="Dashen Bank">
+                                                <option value="Cooperative Bank of Oromia (Coop)">
+                                                <option value="Hibret Bank (United)">
+                                                <option value="Nib International Bank">
+                                                <option value="Wegagen Bank">
+                                                <option value="Zemen Bank">
+                                                <option value="Oromia Bank">
+                                                <option value="Sinqee Bank">
+                                                <option value="Lion International Bank">
+                                                <option value="Berhan Bank">
+                                                <option value="Enat Bank">
+                                                <option value="Global Bank Ethiopia">
+                                                <option value="Tsedey Bank">
+                                                <option value="Amhara Bank">
+                                                <option value="Gadaa Bank">
+                                                <option value="Hijra Bank">
+                                                <option value="ZamZam Bank">
+                                                <option value="CBE Birr">
+                                            </datalist>
+                                            <small class="text-muted" style="font-size:0.75rem;">e.g., CBE, Telebirr, Awash</small>
+                                        </div>
+
+                                        {{-- Account Number / To be paid to this account --}}
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-credit-card text-success me-1"></i>Account Number (የሂሳብ ቁጥር) <span class="text-danger" id="accountNoAsterisk" style="display:none;">*</span>
+                                            </label>
+                                            <input type="text" name="account_number" id="createAccountNumber" class="form-control form-control-sm font-monospace fw-bold" placeholder="e.g. 1000123456789 or 0911XXXXXX">
+                                            <small class="text-muted" style="font-size:0.75rem;">To be paid to this account</small>
+                                        </div>
+
+                                        {{-- Account Holder Name / Beneficiary Name --}}
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-user-tag text-info me-1"></i>Account Holder Name (የባለቤቱ ስም) <span class="text-danger" id="accountNameAsterisk" style="display:none;">*</span>
+                                            </label>
+                                            <input type="text" name="account_name" id="createAccountName" class="form-control form-control-sm fw-semibold" placeholder="e.g. Abebe Balcha / Vendor Name">
+                                            <small class="text-muted" style="font-size:0.75rem;">Payee / Beneficiary full name</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
 
                         <div class="col-12" id="otherReasonGroup" style="display: none;">
                             <label class="form-label fw-bold">Specify Reason for "Other" Category <span class="text-danger">*</span></label>
@@ -1966,8 +2133,76 @@ function recalculatePaymentTax(reqId) {
     }
 }
 
+function toggleBankPaymentOptions() {
+    const toggle = document.getElementById('createBankPaymentToggle');
+    const container = document.getElementById('bankPaymentFieldsContainer');
+    const badge = document.getElementById('bankPaymentStatusBadge');
+    const isUnlocked = toggle && toggle.checked;
+
+    if (container) {
+        container.style.display = isUnlocked ? 'block' : 'none';
+    }
+
+    if (badge) {
+        if (isUnlocked) {
+            badge.className = 'badge bg-success text-white border border-success px-2 py-1 rounded-pill font-monospace';
+            badge.innerHTML = '<i class="fa-solid fa-lock-open me-1"></i>Unlocked — Direct Bank Transfer';
+        } else {
+            badge.className = 'badge bg-secondary-subtle text-secondary border px-2 py-1 rounded-pill font-monospace';
+            badge.innerHTML = '<i class="fa-solid fa-lock me-1"></i>Locked / Optional';
+        }
+    }
+
+    const bankInput = document.getElementById('createBankName');
+    const accInput = document.getElementById('createAccountNumber');
+    const nameInput = document.getElementById('createAccountName');
+    const bankAsterisk = document.getElementById('bankNameAsterisk');
+    const accAsterisk = document.getElementById('accountNoAsterisk');
+    const nameAsterisk = document.getElementById('accountNameAsterisk');
+
+    if (bankAsterisk) bankAsterisk.style.display = isUnlocked ? 'inline' : 'none';
+    if (accAsterisk) accAsterisk.style.display = isUnlocked ? 'inline' : 'none';
+    if (nameAsterisk) nameAsterisk.style.display = isUnlocked ? 'inline' : 'none';
+
+    if (isUnlocked) {
+        if (accInput && !accInput.value) accInput.focus();
+    }
+}
+
+function fillMyBankDetails(name, bank, acc) {
+    const toggle = document.getElementById('createBankPaymentToggle');
+    if (toggle && !toggle.checked) {
+        toggle.checked = true;
+        toggleBankPaymentOptions();
+    }
+    const bankInput = document.getElementById('createBankName');
+    const accInput = document.getElementById('createAccountNumber');
+    const nameInput = document.getElementById('createAccountName');
+
+    if (bankInput && bank) bankInput.value = bank;
+    if (accInput && acc) accInput.value = acc;
+    if (nameInput && name) nameInput.value = name;
+}
+
+function onAssignedEmployeeChanged(select) {
+    if (!select || !select.value) return;
+    const opt = select.options[select.selectedIndex];
+    if (!opt) return;
+    const bank = opt.dataset.bank || '';
+    const acc = opt.dataset.account || '';
+    const name = opt.dataset.name || '';
+
+    // If bank payment is currently toggled on and fields are empty, autofill with selected employee's bank
+    const toggle = document.getElementById('createBankPaymentToggle');
+    const accInput = document.getElementById('createAccountNumber');
+    if (toggle && toggle.checked && accInput && !accInput.value) {
+        fillMyBankDetails(name, bank, acc);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     toggleCategoryOptions();
+    toggleBankPaymentOptions();
 
     // Strict form validation on request submission
     const createForm = document.getElementById('createExpenseRequestForm');
@@ -1976,6 +2211,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const category = document.getElementById('categorySelect').value;
             const employeeSelect = document.getElementById('employeeSelect');
             const projectSelect = document.getElementById('projectSelect');
+            const bankToggle = document.getElementById('createBankPaymentToggle');
 
             if (category === 'Transport' || category === 'Loading & Unloading') {
                 if (!employeeSelect || !employeeSelect.value) {
@@ -1992,6 +2228,26 @@ document.addEventListener('DOMContentLoaded', function() {
                     e.preventDefault();
                     alert('Strict Requirement: You must select a Project / Site for Loading & Unloading requests. (እባክዎ ለመጫን እና ማውረድ ወጪ የስራ ፕሮጀክት / ሳይት ይምረጡ)።');
                     projectSelect?.focus();
+                    return false;
+                }
+            }
+
+            // Validate Bank Payment details if unlocked / enabled
+            if (bankToggle && bankToggle.checked) {
+                const accInput = document.getElementById('createAccountNumber');
+                const nameInput = document.getElementById('createAccountName');
+
+                if (!accInput || !accInput.value.trim()) {
+                    e.preventDefault();
+                    alert('Bank Option Requirement: Please enter the Account Number to be paid to. (እባክዎ ክፍያው የሚገባበትን የባንክ ሂሳብ ቁጥር ያስገቡ)።');
+                    accInput?.focus();
+                    return false;
+                }
+
+                if (!nameInput || !nameInput.value.trim()) {
+                    e.preventDefault();
+                    alert('Bank Option Requirement: Please enter the Account Holder Name in the bank payment section. (እባክዎ በባንክ ክፍያ ክፍል ውስጥ የባለቤቱን ስም ያስገቡ)።');
+                    nameInput?.focus();
                     return false;
                 }
             }

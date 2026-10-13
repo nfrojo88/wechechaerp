@@ -1255,6 +1255,65 @@
                             <input type="file" name="attachment" class="form-control rounded-3" accept="image/jpeg,image/png,image/jpg,application/pdf,image/webp">
                             <small class="text-muted">Upload vendor proforma invoice, spare parts receipt, or photo of damaged part.</small>
                         </div>
+
+                        {{-- Bank Payment Destination Section (ክፍያ የሚፈጸምበት የባንክ ሂሳብ) --}}
+                        <div class="col-12">
+                            <div class="card border border-primary-subtle bg-light rounded-3 p-3 shadow-xs">
+                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" role="switch" name="is_bank_payment" id="maintAskMoneyBankToggle" value="1" onchange="toggleMaintBankOptions(this)">
+                                        <label class="form-check-label fw-bold text-dark fs-6" for="maintAskMoneyBankToggle">
+                                            <i class="fa-solid fa-building-columns text-primary me-1"></i>Pay to Bank Account / Electronic Transfer (በባንክ ሂሳብ ይከፈል / ወደዚህ ሂሳብ ይተላለፍ)
+                                        </label>
+                                    </div>
+                                    <span class="badge bg-secondary-subtle text-secondary border px-2 py-1 rounded-pill font-monospace" id="maintBankPaymentStatusBadge">
+                                        <i class="fa-solid fa-lock me-1"></i>Locked / Optional
+                                    </span>
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    Unlock to specify recipient technician, garage, or vendor bank account number and recipient name.
+                                </small>
+
+                                <div id="maintBankPaymentFields" class="mt-3 pt-3 border-top" style="display: none;">
+                                    <div class="row g-2">
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-building-columns text-primary me-1"></i>Bank Name (የባንክ ስም)
+                                            </label>
+                                            <input type="text" list="maintEthiopianBanks" name="bank_name" class="form-control form-control-sm" placeholder="e.g., CBE, Telebirr...">
+                                            <datalist id="maintEthiopianBanks">
+                                                <option value="Commercial Bank of Ethiopia (CBE)">
+                                                <option value="Telebirr">
+                                                <option value="Awash Bank">
+                                                <option value="Bank of Abyssinia">
+                                                <option value="Dashen Bank">
+                                                <option value="Cooperative Bank of Oromia (Coop)">
+                                                <option value="Hibret Bank (United)">
+                                                <option value="Nib International Bank">
+                                                <option value="Wegagen Bank">
+                                                <option value="Zemen Bank">
+                                                <option value="Oromia Bank">
+                                                <option value="Sinqee Bank">
+                                                <option value="Amhara Bank">
+                                                <option value="CBE Birr">
+                                            </datalist>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-credit-card text-success me-1"></i>Account Number (የሂሳብ ቁጥር)
+                                            </label>
+                                            <input type="text" name="account_number" id="maintAccountNumber" class="form-control form-control-sm font-monospace fw-bold" placeholder="e.g. 1000123456789">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label small fw-bold text-dark mb-1">
+                                                <i class="fa-solid fa-user-tag text-info me-1"></i>Account Holder Name (የባለቤቱ ስም)
+                                            </label>
+                                            <input type="text" name="account_name" id="maintAccountName" class="form-control form-control-sm" placeholder="e.g. Garage / Technician Name">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="alert alert-light border mt-3 mb-0 small text-muted">
@@ -1353,6 +1412,21 @@ function removeMaterialRow(buttonEl) {
         buttonEl.closest('tr').remove();
     } else {
         alert('At least one material item is required.');
+    }
+}
+
+function toggleMaintBankOptions(toggle) {
+    const fields = document.getElementById('maintBankPaymentFields');
+    const badge = document.getElementById('maintBankPaymentStatusBadge');
+    if (fields) fields.style.display = toggle.checked ? 'block' : 'none';
+    if (badge) {
+        if (toggle.checked) {
+            badge.className = 'badge bg-success text-white border border-success px-2 py-1 rounded-pill font-monospace';
+            badge.innerHTML = '<i class="fa-solid fa-lock-open me-1"></i>Unlocked — Direct Bank Transfer';
+        } else {
+            badge.className = 'badge bg-secondary-subtle text-secondary border px-2 py-1 rounded-pill font-monospace';
+            badge.innerHTML = '<i class="fa-solid fa-lock me-1"></i>Locked / Optional';
+        }
     }
 }
 </script>

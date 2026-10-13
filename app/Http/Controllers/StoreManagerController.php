@@ -1223,6 +1223,7 @@ class StoreManagerController extends Controller
                     $codes = array_values(array_filter(array_map('trim', (array)$codes)));
 
                     if (!empty($codes)) {
+                        \App\Models\FixedAssetAssignment::ensureSchema();
                         $units = \App\Models\FixedAssetUnit::with(['parentAsset'])->whereIn('unit_code', $codes)->get();
                         if ($units->isNotEmpty()) {
                             $fromStoreName = $transfer->fromStore->name ?? 'Origin Store';
@@ -1269,7 +1270,7 @@ class StoreManagerController extends Controller
                                         'notes'            => $unit->notes ? $unit->notes . "\n" . $historyNote : $historyNote,
                                     ]);
 
-                                    \App\Models\FixedAssetAssignment::create([
+                                    \App\Models\FixedAssetAssignment::createSafely([
                                         'fixed_asset_unit_id'    => $unit->id,
                                         'employee_id'            => null,
                                         'action'                 => 'transferred',

@@ -36,6 +36,10 @@ class ExpenseRequest extends Model
         'withholding_receipt',
         'withholding_receipt_number',
         'net_amount',
+        'is_bank_payment',
+        'bank_name',
+        'account_number',
+        'account_name',
         'service_type',
         'description',
         'attachment',
@@ -87,6 +91,7 @@ class ExpenseRequest extends Model
         'withholding_rate' => 'decimal:2',
         'withholding_amount' => 'decimal:2',
         'net_amount' => 'decimal:2',
+        'is_bank_payment' => 'boolean',
         'vat_settled' => 'boolean',
         'withholding_settled' => 'boolean',
         'tax_settled_at' => 'datetime',
@@ -433,6 +438,29 @@ class ExpenseRequest extends Model
     public function getAttachmentUrlAttribute()
     {
         return \App\Services\FileUploadService::url($this->attachment);
+    }
+
+    /**
+     * Accessor aliases and helpers for bank payment destination
+     */
+    public function getBeneficiaryBankNameAttribute(): ?string
+    {
+        return $this->bank_name;
+    }
+
+    public function getBeneficiaryAccountNumberAttribute(): ?string
+    {
+        return $this->account_number;
+    }
+
+    public function getBeneficiaryAccountNameAttribute(): ?string
+    {
+        return $this->account_name;
+    }
+
+    public function getHasBankPaymentAttribute(): bool
+    {
+        return (bool) ($this->is_bank_payment || !empty($this->account_number));
     }
 
     /**

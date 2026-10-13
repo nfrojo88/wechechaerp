@@ -98,6 +98,15 @@
                                         <i class="fa-solid fa-helmet-safety text-warning me-1"></i>{{ $req->project->name }}
                                     </div>
                                 @endif
+                                @if($req->account_number)
+                                    <div class="mt-1">
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 text-start text-wrap shadow-xs" style="font-size: 0.72rem; line-height: 1.35;" title="Paid to: {{ $req->account_name }} ({{ $req->bank_name }}: {{ $req->account_number }})">
+                                            <i class="fa-solid fa-building-columns me-1"></i>Pay to: <span class="font-monospace fw-bold">{{ $req->account_number }}</span>
+                                            @if($req->bank_name) <span class="text-muted">({{ $req->bank_name }})</span> @endif
+                                            @if($req->account_name) <div class="text-dark fw-semibold" style="font-size: 0.70rem;"><i class="fa-solid fa-user me-1 text-secondary"></i>{{ $req->account_name }}</div> @endif
+                                        </span>
+                                    </div>
+                                @endif
                             </td>
                             <td class="fw-bold fs-6 text-success">
                                 ETB {{ number_format($req->amount, 2) }}
