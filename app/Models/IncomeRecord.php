@@ -49,6 +49,25 @@ class IncomeRecord extends Model
         'is_deposited' => 'boolean',
     ];
 
+    protected static function booted()
+    {
+        static::creating(function (IncomeRecord $income) {
+            if (empty($income->description)) {
+                $income->description = !empty($income->buyer_name)
+                    ? "Income from {$income->buyer_name} (" . ucfirst($income->category ?: 'General') . ")"
+                    : "Income receipt - " . ucfirst($income->category ?: 'General');
+            }
+        });
+
+        static::updating(function (IncomeRecord $income) {
+            if (empty($income->description)) {
+                $income->description = !empty($income->buyer_name)
+                    ? "Income from {$income->buyer_name} (" . ucfirst($income->category ?: 'General') . ")"
+                    : "Income receipt - " . ucfirst($income->category ?: 'General');
+            }
+        });
+    }
+
     public function project()        { return $this->belongsTo(Project::class); }
     public function bankAccount()    { return $this->belongsTo(BankAccount::class); }
     public function chartOfAccount() { return $this->belongsTo(ChartOfAccount::class, 'chart_of_account_id'); }

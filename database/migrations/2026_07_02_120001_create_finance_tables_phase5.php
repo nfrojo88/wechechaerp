@@ -110,7 +110,7 @@ class CreateFinanceTablesPhase5 extends Migration
             $table->decimal('amount', 18, 2);
             $table->string('payment_method', 20)->default('bank');
             $table->foreignId('bank_account_id')->nullable()->constrained('bank_accounts')->nullOnDelete();
-            $table->text('description');
+            $table->text('description')->nullable();
             $table->text('notes')->nullable();
             $table->enum('status', ['draft', 'confirmed', 'reconciled', 'cancelled'])->default('draft')->index();
             $table->foreignId('created_by')->constrained('users')->cascadeOnDelete();

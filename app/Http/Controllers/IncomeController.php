@@ -38,11 +38,16 @@ class IncomeController extends Controller
     {
         try {
             if (Schema::hasTable('income_records')) {
-                // If category was an enum in MySQL, widen it to VARCHAR(50) so divisions don't fail
+                // If category was an enum in MySQL, widen it to VARCHAR(50) so divisions don't fail, and ensure description is nullable
                 if (DB::getDriverName() === 'mysql') {
-                    try {
-                        DB::statement("ALTER TABLE income_records MODIFY category VARCHAR(50) NOT NULL DEFAULT 'other'");
-                    } catch (\Throwable $e) {}
+                    if (DB::transactionLevel() === 0) {
+                        try {
+                            DB::statement("ALTER TABLE income_records MODIFY category VARCHAR(50) NOT NULL DEFAULT 'other'");
+                        } catch (\Throwable $e) {}
+                        try {
+                            DB::statement("ALTER TABLE income_records MODIFY description TEXT NULL");
+                        } catch (\Throwable $e) {}
+                    }
                 }
 
                 Schema::table('income_records', function (Blueprint $table) {
@@ -323,6 +328,13 @@ class IncomeController extends Controller
         $no = 'INC-' . date('Ymd') . '-' . str_pad(IncomeRecord::count() + 1, 4, '0', STR_PAD_LEFT);
         $data['income_no']  = $no;
         $data['created_by'] = Auth::id();
+
+        // Default description if omitted
+        if (empty($data['description'])) {
+            $data['description'] = !empty($data['buyer_name'])
+                ? "Income from {$data['buyer_name']} (" . ucfirst($data['category'] ?: 'General') . ")"
+                : "Income receipt - " . ucfirst($data['category'] ?: 'General');
+        }
 
         // Normalized Defaults for ERCA eTax Sales compliance
         $data['seller_tin']       = $request->input('seller_tin') ?: SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'));
