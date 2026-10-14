@@ -80,8 +80,27 @@
     </div>
 
     @if(session('success'))
-        <div class="alert alert-success alert-dismissible fade show shadow-sm" role="alert">
+        <div class="alert alert-success alert-dismissible fade show shadow-sm rounded-4" role="alert">
             <i class="fa-solid fa-circle-check me-2"></i>{{ session('success') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm rounded-4" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>{{ session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    @endif
+
+    @if($errors->any())
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm rounded-4" role="alert">
+            <h6 class="fw-bold mb-1"><i class="fa-solid fa-circle-xmark me-2"></i>Could not save income record:</h6>
+            <ul class="mb-0 ps-3 small">
+                @foreach($errors->all() as $err)
+                    <li>{{ $err }}</li>
+                @endforeach
+            </ul>
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     @endif
@@ -183,6 +202,7 @@
                         </label>
                         <div class="input-group input-group-sm">
                             <select name="ethiopian_month" class="form-select bg-light border text-dark fw-semibold" onchange="this.form.submit()">
+                                <option value="all" {{ $selectedEthMonth === 'all' ? 'selected' : '' }}>All Months (Full Year)</option>
                                 @foreach($availableEthMonths as $mId => $m)
                                     <option value="{{ $mId }}" {{ $selectedEthMonth == $mId ? 'selected' : '' }}>
                                         {{ $m['label'] }}
@@ -469,7 +489,7 @@
                                 <div class="col-6">
                                     <label class="form-label fw-semibold small text-dark">Income Date (GC or EC) <span class="text-danger">*</span></label>
                                     <input type="date" name="income_date" id="modalIncomeDate" class="form-control bg-light border text-dark" value="{{ date('Y-m-d') }}">
-                                    <input type="text" name="income_date_ec" id="modalIncomeDateEc" class="form-control form-control-sm bg-light border text-dark font-monospace mt-1" placeholder="DD/MM/YYYY EC">
+                                    <input type="text" name="income_date_ec" id="modalIncomeDateEc" class="form-control form-control-sm bg-light border text-dark font-monospace mt-1" placeholder="DD/MM/YYYY EC" value="{{ \App\Services\EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC') }}">
                                     <small class="text-muted" style="font-size:0.68rem;">Current (EC): {{ \App\Services\EthiopianDate::formatDateEc(now()) }}</small>
                                 </div>
                             </div>
@@ -589,7 +609,7 @@
                                 <div class="col-4">
                                     <label class="form-label fw-semibold small text-dark">Receipt Date</label>
                                     <input type="date" name="receipt_date" id="modalReceiptDate" class="form-control form-control-sm bg-light border" value="{{ date('Y-m-d') }}">
-                                    <input type="text" name="receipt_date_ec" id="modalReceiptDateEc" class="form-control form-control-sm bg-light border font-monospace mt-1" placeholder="DD/MM/YYYY EC">
+                                    <input type="text" name="receipt_date_ec" id="modalReceiptDateEc" class="form-control form-control-sm bg-light border font-monospace mt-1" placeholder="DD/MM/YYYY EC" value="{{ \App\Services\EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC') }}">
                                 </div>
                                 <div class="col-4">
                                     <label class="form-label fw-semibold small text-dark">Encoded By</label>
@@ -936,5 +956,15 @@ function setExportDates(preset) {
         toInput.value = '';
     }
 }
+
+@if($errors->any() || session('error'))
+document.addEventListener('DOMContentLoaded', function() {
+    const modalEl = document.getElementById('recordIncomeModal');
+    if (modalEl) {
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+});
+@endif
 </script>
 @endsection

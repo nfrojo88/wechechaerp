@@ -141,6 +141,60 @@ class IncomeController extends Controller
     }
 
     /**
+     * Parse any date string (Gregorian or Ethiopian) into standard YYYY-MM-DD for database.
+     */
+    private function parseAnyDateToGregorian(?string $dateStr): ?string
+    {
+        if (empty($dateStr)) {
+            return null;
+        }
+
+        $dateStr = trim($dateStr);
+
+        // 1. Check if explicitly marked as Ethiopian Calendar (EC, E.C., ዓ.ም.)
+        if (stripos($dateStr, 'EC') !== false || stripos($dateStr, 'E.C.') !== false || stripos($dateStr, 'ዓ.ም.') !== false) {
+            $parsed = EthiopianDate::parseEcToGregorian($dateStr);
+            if ($parsed) {
+                return $parsed;
+            }
+        }
+
+        // 2. DD/MM/YYYY or DD-MM-YYYY
+        if (preg_match('/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/', $dateStr, $m)) {
+            $d = (int)$m[1];
+            $mo = (int)$m[2];
+            $y = (int)$m[3];
+
+            // If year is in Ethiopian calendar range (2012 to 2021)
+            if ($y >= 2012 && $y <= 2021 && $mo >= 1 && $mo <= 13) {
+                return EthiopianDate::toGregorian($y, $mo, $d);
+            }
+
+            return sprintf('%04d-%02d-%02d', $y, $mo, $d);
+        }
+
+        // 3. YYYY-MM-DD or YYYY/MM/DD
+        if (preg_match('/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/', $dateStr, $m)) {
+            $y = (int)$m[1];
+            $mo = (int)$m[2];
+            $d = (int)$m[3];
+
+            // If year is in Ethiopian calendar range (2012 to 2021)
+            if ($y >= 2012 && $y <= 2021 && $mo >= 1 && $mo <= 13) {
+                return EthiopianDate::toGregorian($y, $mo, $d);
+            }
+
+            return sprintf('%04d-%02d-%02d', $y, $mo, $d);
+        }
+
+        try {
+            return \Carbon\Carbon::parse($dateStr)->toDateString();
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
      * Build filtered query for income records.
      */
     private function buildQuery(Request $request)
@@ -160,24 +214,26 @@ class IncomeController extends Controller
 
         // Ethiopian Year & Month selector
         $curEth = EthiopianDate::toEthiopian(now());
-        $ey = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: null));
-        $em = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: null));
+        $rawYear  = $request->input('ethiopian_year') ?: $request->input('year');
+        $rawMonth = $request->input('ethiopian_month') ?: $request->input('month');
 
-        // If no explicit date range was requested, default to current Ethiopian year & month
-        if (!$ey && !$em && !$request->filled('from_date') && !$request->filled('to_date') && !$request->filled('date_from') && !$request->filled('date_to') && !$request->filled('date')) {
-            $ey = $curEth['year'];
-            $em = $curEth['month'];
-        }
-
-        if ($ey && $em && $em >= 1 && $em <= 13) {
-            $mRange = EthiopianDate::monthRange($ey, $em);
-            $query->where(function ($q) use ($mRange) {
-                $q->whereBetween('income_date', [$mRange['start_date'], $mRange['end_date']])
-                  ->orWhere(function ($sub) use ($mRange) {
-                      $sub->whereNull('income_date')->whereBetween('receipt_date', [$mRange['start_date'], $mRange['end_date']]);
+        if ($rawMonth === 'all') {
+            $ey = (int)($rawYear ?: $curEth['year']);
+            $startRange = EthiopianDate::monthRange($ey, 1);
+            $endRange   = EthiopianDate::monthRange($ey, 13);
+            $query->where(function ($q) use ($startRange, $endRange) {
+                $q->whereBetween('income_date', [$startRange['start_date'], $endRange['end_date']])
+                  ->orWhere(function ($sub) use ($startRange, $endRange) {
+                      $sub->whereNull('income_date')->whereBetween('receipt_date', [$startRange['start_date'], $endRange['end_date']]);
                   });
             });
         } else {
+            $ey = (int)($rawYear ?: $curEth['year']);
+            $em = (int)($rawMonth ?: $curEth['month']);
+            if ($em < 1 || $em > 13) {
+                $em = $curEth['month'];
+            }
+
             // Fallback date range filtering if explicitly supplied
             $df = $request->input('from_date') ?: ($request->input('date_from') ?: $request->input('start_date'));
             $dt = $request->input('to_date') ?: ($request->input('date_to') ?: $request->input('end_date'));
@@ -188,11 +244,23 @@ class IncomeController extends Controller
                 $dt = $singleDate;
             }
 
-            if (!empty($df)) {
-                $query->whereDate('income_date', '>=', $df);
-            }
-            if (!empty($dt)) {
-                $query->whereDate('income_date', '<=', $dt);
+            if (!empty($df) || !empty($dt)) {
+                if (!empty($df)) {
+                    $gDateFrom = $this->parseAnyDateToGregorian($df) ?: $df;
+                    $query->whereDate('income_date', '>=', $gDateFrom);
+                }
+                if (!empty($dt)) {
+                    $gDateTo = $this->parseAnyDateToGregorian($dt) ?: $dt;
+                    $query->whereDate('income_date', '<=', $gDateTo);
+                }
+            } else {
+                $mRange = EthiopianDate::monthRange($ey, $em);
+                $query->where(function ($q) use ($mRange) {
+                    $q->whereBetween('income_date', [$mRange['start_date'], $mRange['end_date']])
+                      ->orWhere(function ($sub) use ($mRange) {
+                          $sub->whereNull('income_date')->whereBetween('receipt_date', [$mRange['start_date'], $mRange['end_date']]);
+                      });
+                });
             }
         }
 
@@ -221,13 +289,18 @@ class IncomeController extends Controller
         $incomes = $query->paginate(20)->withQueryString();
 
         $curEth = EthiopianDate::toEthiopian(now());
-        $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: $curEth['year']));
-        $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: $curEth['month']));
-        if ($selectedEthMonth < 1 || $selectedEthMonth > 13) {
+        $rawYear  = $request->input('ethiopian_year') ?: $request->input('year');
+        $rawMonth = $request->input('ethiopian_month') ?: $request->input('month');
+
+        $selectedEthYear  = (int)($rawYear ?: $curEth['year']);
+        $selectedEthMonth = ($rawMonth === 'all') ? 'all' : (int)($rawMonth ?: $curEth['month']);
+        if ($selectedEthMonth !== 'all' && ($selectedEthMonth < 1 || $selectedEthMonth > 13)) {
             $selectedEthMonth = $curEth['month'];
         }
 
-        $monthRange = EthiopianDate::monthRange($selectedEthYear, $selectedEthMonth);
+        $monthRange = ($selectedEthMonth === 'all')
+            ? ['start_date' => EthiopianDate::monthRange($selectedEthYear, 1)['start_date'], 'end_date' => EthiopianDate::monthRange($selectedEthYear, 13)['end_date'], 'month_name' => 'All Year']
+            : EthiopianDate::monthRange($selectedEthYear, $selectedEthMonth);
         $availableEthYears  = EthiopianDate::getYears();
         $availableEthMonths = EthiopianDate::getMonths();
 
@@ -277,27 +350,19 @@ class IncomeController extends Controller
     {
         $this->ensureSchema();
 
-        if ($request->filled('income_date_ec')) {
-            $parsed = EthiopianDate::parseEcToGregorian($request->input('income_date_ec'));
-            if ($parsed) {
-                $request->merge(['income_date' => $parsed]);
-            }
-        } elseif ($request->filled('income_date') && preg_match('/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/', trim($request->input('income_date')))) {
-            $parsed = EthiopianDate::parseEcToGregorian($request->input('income_date'));
-            if ($parsed) {
-                $request->merge(['income_date' => $parsed]);
-            }
+        // 1. Resolve income_date from EC or GC input
+        $rawIncomeDate = $request->input('income_date_ec') ?: $request->input('income_date');
+        $resolvedIncomeDate = $this->parseAnyDateToGregorian($rawIncomeDate);
+        if ($resolvedIncomeDate) {
+            $request->merge(['income_date' => $resolvedIncomeDate]);
         }
 
-        if ($request->filled('receipt_date_ec')) {
-            $parsed = EthiopianDate::parseEcToGregorian($request->input('receipt_date_ec'));
-            if ($parsed) {
-                $request->merge(['receipt_date' => $parsed]);
-            }
-        } elseif ($request->filled('receipt_date') && preg_match('/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/', trim($request->input('receipt_date')))) {
-            $parsed = EthiopianDate::parseEcToGregorian($request->input('receipt_date'));
-            if ($parsed) {
-                $request->merge(['receipt_date' => $parsed]);
+        // 2. Resolve receipt_date from EC or GC input
+        $rawReceiptDate = $request->input('receipt_date_ec') ?: $request->input('receipt_date');
+        if (!empty($rawReceiptDate)) {
+            $resolvedReceiptDate = $this->parseAnyDateToGregorian($rawReceiptDate);
+            if ($resolvedReceiptDate) {
+                $request->merge(['receipt_date' => $resolvedReceiptDate]);
             }
         }
 
@@ -355,17 +420,26 @@ class IncomeController extends Controller
             }
             if (!$bankAccount) {
                 $cleanAccNum = preg_replace('/[^0-9]/', '', $coa->code) ?: '1000';
-                $bankAccount = BankAccount::create([
-                    'account_name'    => $coa->name,
-                    'account_number'  => $cleanAccNum . '-' . str_pad($coa->id, 4, '0', STR_PAD_LEFT),
-                    'bank_name'       => $coa->name,
-                    'account_type'    => 'checking',
-                    'currency'        => 'ETB',
-                    'current_balance' => (float)$coa->current_balance,
-                    'coa_id'          => $coa->id,
-                    'is_active'       => true,
-                    'notes'           => "Auto-linked to COA [{$coa->code}] {$coa->name}",
-                ]);
+                $accNum = $cleanAccNum . '-' . str_pad($coa->id, 4, '0', STR_PAD_LEFT);
+                $existingBa = BankAccount::withTrashed()->where('account_number', $accNum)->first();
+                if ($existingBa) {
+                    if ($existingBa->trashed()) {
+                        $existingBa->restore();
+                    }
+                    $bankAccount = $existingBa;
+                } else {
+                    $bankAccount = BankAccount::create([
+                        'account_name'    => $coa->name,
+                        'account_number'  => $accNum,
+                        'bank_name'       => $coa->name,
+                        'account_type'    => 'checking',
+                        'currency'        => 'ETB',
+                        'current_balance' => (float)$coa->current_balance,
+                        'coa_id'          => $coa->id,
+                        'is_active'       => true,
+                        'notes'           => "Auto-linked to COA [{$coa->code}] {$coa->name}",
+                    ]);
+                }
             }
         }
 
@@ -386,10 +460,16 @@ class IncomeController extends Controller
             $data['receipt_file_path'] = $path;
         }
 
-        // Generate income tracking code
-        $no = 'INC-' . date('Ymd') . '-' . str_pad(IncomeRecord::count() + 1, 4, '0', STR_PAD_LEFT);
+        // Generate income tracking code safely without unique key collisions
+        $baseNo = 'INC-' . date('Ymd') . '-';
+        $seq = IncomeRecord::withTrashed()->where('income_no', 'like', "{$baseNo}%")->count() + 1;
+        $no = $baseNo . str_pad($seq, 4, '0', STR_PAD_LEFT);
+        while (IncomeRecord::withTrashed()->where('income_no', $no)->exists()) {
+            $seq++;
+            $no = $baseNo . str_pad($seq, 4, '0', STR_PAD_LEFT);
+        }
         $data['income_no']  = $no;
-        $data['created_by'] = Auth::id();
+        $data['created_by'] = Auth::id() ?: (\App\Models\User::first()?->id ?: 1);
 
         // Default description if omitted
         if (empty($data['description'])) {
@@ -438,45 +518,55 @@ class IncomeController extends Controller
             }
         }
 
-        // ═════════════════════════════════════════════════════════════════════
-        // DEPOSIT MONEY: Add the amount of money in that Bank / COA account
-        // ═════════════════════════════════════════════════════════════════════
-        $amountToDeposit = (float)$data['amount'];
-
-        if ($coa) {
-            $coa->increment('current_balance', $amountToDeposit);
-        }
-
-        if ($bankAccount) {
-            $bankAccount->increment('current_balance', $amountToDeposit);
-            $newBalance = (float)$bankAccount->fresh()->current_balance;
-
-            // Record Bank Transaction audit ledger
-            BankTransaction::create([
-                'bank_account_id'  => $bankAccount->id,
-                'transaction_date' => $data['income_date'] ?: now()->toDateString(),
-                'type'             => 'deposit',
-                'amount'           => $amountToDeposit,
-                'balance_after'    => $newBalance,
-                'reference_no'     => $no,
-                'reference_type'   => 'IncomeRecord',
-                'reference_id'     => null,
-                'description'      => "Sales Income Deposit #{$no} ({$data['category']}) - " . ($data['description'] ?: 'Revenue Deposit'),
-                'is_reconciled'    => true,
-            ]);
-        }
-
         $data['is_deposited'] = true;
         $data['status']       = 'confirmed'; // Confirmed & Deposited
 
-        $income = IncomeRecord::create($data);
+        $amountToDeposit = (float)$data['amount'];
 
-        if ($bankAccount) {
-            BankTransaction::where('reference_no', $no)->whereNull('reference_id')->update(['reference_id' => $income->id]);
+        try {
+            $income = DB::transaction(function () use ($data, $amountToDeposit, $coa, $bankAccount, $no) {
+                if ($coa) {
+                    $coa->increment('current_balance', $amountToDeposit);
+                }
+
+                if ($bankAccount) {
+                    $bankAccount->increment('current_balance', $amountToDeposit);
+                    $newBalance = (float)$bankAccount->fresh()->current_balance;
+
+                    BankTransaction::create([
+                        'bank_account_id'  => $bankAccount->id,
+                        'transaction_date' => $data['income_date'] ?: now()->toDateString(),
+                        'type'             => 'deposit',
+                        'amount'           => $amountToDeposit,
+                        'balance_after'    => $newBalance,
+                        'reference_no'     => $no,
+                        'reference_type'   => 'IncomeRecord',
+                        'reference_id'     => null,
+                        'description'      => "Sales Income Deposit #{$no} ({$data['category']}) - " . ($data['description'] ?: 'Revenue Deposit'),
+                        'is_reconciled'    => true,
+                    ]);
+                }
+
+                $record = IncomeRecord::create($data);
+
+                if ($bankAccount) {
+                    BankTransaction::where('reference_no', $no)->whereNull('reference_id')->update(['reference_id' => $record->id]);
+                }
+
+                return $record;
+            });
+
+            $accName = $coa ? "[{$coa->code}] {$coa->name}" : ($bankAccount ? $bankAccount->bank_name : 'the designated account');
+            $recordEth = EthiopianDate::toEthiopian($income->income_date);
+
+            return redirect()->route('income.index', [
+                'ethiopian_year'  => $recordEth['year'],
+                'ethiopian_month' => $recordEth['month'],
+            ])->with('success', "Income record #{$no} saved! ETB " . number_format($amountToDeposit, 2) . " has been deposited to {$accName}.");
+        } catch (\Throwable $e) {
+            Log::error("IncomeController::store failed: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return redirect()->back()->withInput()->with('error', "Failed to save income record: " . $e->getMessage());
         }
-
-        $accName = $coa ? "[{$coa->code}] {$coa->name}" : ($bankAccount ? $bankAccount->bank_name : 'the designated account');
-        return redirect()->route('income.index')->with('success', "Income record #{$no} saved! ETB " . number_format($amountToDeposit, 2) . " has been deposited to {$accName}.");
     }
 
     public function show(IncomeRecord $income)

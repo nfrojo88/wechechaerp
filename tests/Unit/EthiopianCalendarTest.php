@@ -277,5 +277,32 @@ class EthiopianCalendarTest extends TestCase
         // Standard Gregorian unchanged
         $this->assertEquals('2026-03-15', $ocrService->parseDateToYmd('2026-03-15'));
     }
+
+    /**
+     * Test Income Date parsing and active month mapping for Company Income Track.
+     */
+    public function test_income_date_parsing_and_month_period_mapping(): void
+    {
+        // 1 Meskerem 2018 -> 2025-09-11
+        $parsed1 = EthiopianDate::parseEcToGregorian('01/01/2018 EC');
+        $this->assertEquals('2025-09-11', $parsed1);
+        $eth1 = EthiopianDate::toEthiopian($parsed1);
+        $this->assertEquals(2018, $eth1['year']);
+        $this->assertEquals(1, $eth1['month']);
+
+        // Month range for Meskerem 2018 must encompass the parsed date
+        $range = EthiopianDate::monthRange(2018, 1);
+        $this->assertTrue(Carbon::parse($parsed1)->betweenIncluded($range['start'], $range['end']));
+
+        // 15 Tikimt 2018 -> 2025-10-25
+        $parsed2 = EthiopianDate::parseEcToGregorian('15/02/2018');
+        $this->assertEquals('2025-10-25', $parsed2);
+        $eth2 = EthiopianDate::toEthiopian($parsed2);
+        $this->assertEquals(2018, $eth2['year']);
+        $this->assertEquals(2, $eth2['month']);
+
+        $range2 = EthiopianDate::monthRange(2018, 2);
+        $this->assertTrue(Carbon::parse($parsed2)->betweenIncluded($range2['start'], $range2['end']));
+    }
 }
 
