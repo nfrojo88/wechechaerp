@@ -754,6 +754,7 @@ class PurchaseRequestController extends Controller
             }
 
             $createdTransfer = $transfer;
+            \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
 
             // Check if any items remain on the PR
             $remainingCount = $purchaseRequest->items()->count();
@@ -953,6 +954,7 @@ class PurchaseRequestController extends Controller
                     }
                 }
 
+                \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
                 $createdTransfers[] = $transfer;
                 $transferLoopIndex++;
             }

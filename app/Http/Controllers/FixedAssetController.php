@@ -705,6 +705,8 @@ class FixedAssetController extends Controller
                         ]);
                     }
                 }
+
+                \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
             }
         });
 

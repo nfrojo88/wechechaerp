@@ -16,6 +16,18 @@ class TransferItem extends Model
         'unit_codes' => 'array',
     ];
 
+    protected static function booted()
+    {
+        static::created(function (TransferItem $item) {
+            try {
+                $transfer = $item->relationLoaded('transfer') ? $item->transfer : Transfer::find($item->transfer_id);
+                if ($transfer && !in_array($transfer->status, ['rejected', 'cancelled'])) {
+                    \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+                }
+            } catch (\Throwable $e) {}
+        });
+    }
+
     public function transfer()
     {
         return $this->belongsTo(Transfer::class);

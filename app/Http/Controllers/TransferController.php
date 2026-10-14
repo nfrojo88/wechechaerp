@@ -74,9 +74,12 @@ class TransferController extends Controller
                     'unit'                => $item['unit'],
                 ]);
             }
+
+            // Immediately deduct from origin store and add to destination store inventory
+            \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
         });
 
-        return redirect()->route('transfers.index')->with('success', 'Transfer request created.');
+        return redirect()->route('transfers.index')->with('success', 'Transfer request created. Materials deducted from origin store and added to destination store inventory.');
     }
 
     public function show(Transfer $transfer)
@@ -200,10 +203,13 @@ class TransferController extends Controller
     public function reject(Request $request, Transfer $transfer)
     {
         $request->validate(['rejection_reason' => 'required|string']);
+
+        \App\Http\Controllers\StoreManagerController::reverseTransferInventory($transfer, $request->rejection_reason);
+
         $transfer->update([
             'status'           => 'rejected',
             'rejection_reason' => $request->rejection_reason,
         ]);
-        return back()->with('success', 'Transfer rejected.');
+        return back()->with('success', 'Transfer rejected and inventory movements reversed.');
     }
 }

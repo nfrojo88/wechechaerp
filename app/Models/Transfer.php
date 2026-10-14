@@ -100,6 +100,16 @@ class Transfer extends Model
         return $this->inventoryMovements()->where('type', 'transfer_in')->exists();
     }
 
+    public function syncInventory(): array
+    {
+        return \App\Http\Controllers\StoreManagerController::syncTransferInventory($this);
+    }
+
+    public function reverseInventory(?string $reason = null): array
+    {
+        return \App\Http\Controllers\StoreManagerController::reverseTransferInventory($this, $reason);
+    }
+
     public function getOutgoingSlipUrlAttribute(): ?string
     {
         if (empty($this->outgoing_slip_file)) {
