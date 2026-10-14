@@ -441,10 +441,20 @@
                                 </span>
                             </td>
                             <td class="text-center pe-4">
-                                <a href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum])) }}" 
-                                   class="btn btn-xs {{ $mTrend['is_current'] ? 'btn-primary' : 'btn-outline-secondary' }} rounded-pill px-2.5 py-1 small">
-                                    View Month
-                                </a>
+                                <div class="d-inline-flex align-items-center gap-1.5">
+                                    <button type="button" 
+                                            class="btn btn-xs btn-primary rounded-pill px-2.5 py-1 small d-inline-flex align-items-center gap-1 shadow-xs fw-semibold"
+                                            onclick="openMonthMovementsModal({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', '{{ $mTrend['month_am'] }}')"
+                                            title="View detailed transaction movements for {{ $mTrend['month_name'] }}">
+                                        <i class="fa-solid fa-receipt"></i>
+                                        <span>Movements</span>
+                                    </button>
+                                    <a href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum])) }}" 
+                                       class="btn btn-xs {{ $mTrend['is_current'] ? 'btn-outline-primary active' : 'btn-outline-secondary' }} rounded-pill px-2 py-1 small" 
+                                       title="Filter whole page to this month">
+                                        <i class="fa-solid fa-filter"></i>
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                     @endforeach
@@ -2560,6 +2570,442 @@
     </div>
 </div>
 
+{{-- ── 13-Month Movement & Transaction Audit Modal ────────────────────────────── --}}
+<div class="modal fade" id="monthMovementsModal" tabindex="-1" aria-labelledby="monthMovementsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            {{-- Modal Header --}}
+            <div class="modal-header bg-primary text-white py-3 px-4 flex-shrink-0">
+                <div class="d-flex align-items-center gap-2.5">
+                    <div class="p-2 bg-white bg-opacity-20 rounded-circle text-white">
+                        <i class="fa-solid fa-chart-pie fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0" id="mMovementsTitle">Ethiopian Month Financial Movements</h5>
+                        <small class="text-white-50" id="mMovementsWindow">Gregorian Date Window &amp; Movements Summary</small>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-light text-primary rounded-pill px-3 fw-semibold shadow-xs" onclick="printMonthMovements()">
+                        <i class="fa-solid fa-print me-1"></i>Print Report
+                    </button>
+                    <a id="mMovementsFilterBtn" href="#" class="btn btn-sm btn-outline-light rounded-pill px-3 fw-semibold">
+                        <i class="fa-solid fa-filter me-1"></i>Filter Ledger
+                    </a>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+
+            {{-- Modal Body --}}
+            <div class="modal-body p-3 p-md-4" style="background-color: #f8fafc;">
+                {{-- Spinner Loading State --}}
+                <div id="mMovementsSpinner" class="text-center py-5 my-3">
+                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div>
+                    <div class="mt-3 fw-semibold text-muted">Retrieving detailed financial movements for this month...</div>
+                    <small class="text-muted">Fetching Company Income receipts, Purchases, and Creditable Tax lines</small>
+                </div>
+
+                {{-- Error Alert --}}
+                <div id="mMovementsError" class="alert alert-danger rounded-4 shadow-sm" style="display: none;">
+                    <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                    <span id="mMovementsErrorMsg">Failed to load financial movements.</span>
+                </div>
+
+                {{-- Loaded Content Container --}}
+                <div id="mMovementsContent" style="display: none;">
+                    {{-- 1. Top KPI Summary Strip --}}
+                    <div class="row g-3 mb-4">
+                        {{-- 1. Sales & Output VAT --}}
+                        <div class="col-12 col-sm-6 col-xl">
+                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-primary">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.72rem;">Sales Base (ገቢ)</span>
+                                        <span id="mMovementsIncomeCount" class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill">0 receipts</span>
+                                    </div>
+                                    <div class="fs-5 fw-bold text-dark font-monospace" id="mMovementsSalesBase">ETB 0.00</div>
+                                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small">Output VAT (15%)</span>
+                                        <span class="fw-bold text-danger font-monospace" id="mMovementsOutputVat">ETB 0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- 2. Purchases & Input VAT --}}
+                        <div class="col-12 col-sm-6 col-xl">
+                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-success">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.72rem;">Purchases Base (ግዢ)</span>
+                                        <span id="mMovementsExpenseCount" class="badge bg-success-subtle text-success border border-success-subtle rounded-pill">0 items</span>
+                                    </div>
+                                    <div class="fs-5 fw-bold text-dark font-monospace" id="mMovementsPurchasesBase">ETB 0.00</div>
+                                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small">Input VAT (Creditable)</span>
+                                        <span class="fw-bold text-success font-monospace" id="mMovementsInputVat">ETB 0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- 3. Opening Credit --}}
+                        <div class="col-12 col-sm-6 col-xl">
+                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-info">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.72rem;">Opening Credit</span>
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill">From prev month</span>
+                                    </div>
+                                    <div class="fs-5 fw-bold text-info font-monospace" id="mMovementsOpeningCredit">+ ETB 0.00</div>
+                                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small">Total Creditable Input</span>
+                                        <span class="fw-bold text-dark font-monospace" id="mMovementsTotalCreditable">ETB 0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- 4. Signed Net VAT --}}
+                        <div class="col-12 col-sm-6 col-xl">
+                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-warning" id="mMovementsNetCard">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.72rem;">Signed Net VAT</span>
+                                        <span id="mMovementsNetBadge" class="badge bg-secondary rounded-pill small">Status</span>
+                                    </div>
+                                    <div class="fs-4 fw-bold font-monospace" id="mMovementsSignedNet">0.00</div>
+                                    <div class="mt-2 pt-2 border-top border-secondary-subtle">
+                                        <small class="text-muted d-block" id="mMovementsNetInstruction">Net reconciliation</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- 5. Withholding Tax (3%) --}}
+                        <div class="col-12 col-sm-6 col-xl">
+                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-danger">
+                                <div class="card-body p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.72rem;">3% Withholding</span>
+                                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill">Separate Line</span>
+                                    </div>
+                                    <div class="fs-5 fw-bold text-danger font-monospace" id="mMovementsWht">- ETB 0.00</div>
+                                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small">Net Disbursed</span>
+                                        <span class="fw-bold text-success font-monospace" id="mMovementsNetDisbursed">ETB 0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- 2. Interactive Navigation Tabs --}}
+                    <ul class="nav nav-pills gap-2 mb-3 bg-white p-2 rounded-4 shadow-sm border" id="monthMovementTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" id="pills-income-tab" data-bs-toggle="pill" data-bs-target="#pills-income" type="button" role="tab">
+                                <i class="fa-solid fa-arrow-down-long text-success"></i>
+                                <span>Where Income Came From (ገቢ)</span>
+                                <span class="badge bg-success-subtle text-success rounded-pill ms-1" id="mTabIncomeBadge">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" id="pills-expense-tab" data-bs-toggle="pill" data-bs-target="#pills-expense" type="button" role="tab">
+                                <i class="fa-solid fa-arrow-up-long text-danger"></i>
+                                <span>Purchases &amp; Paid Expenses (ግዢ)</span>
+                                <span class="badge bg-danger-subtle text-danger rounded-pill ms-1" id="mTabExpenseBadge">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" id="pills-ocr-tab" data-bs-toggle="pill" data-bs-target="#pills-ocr" type="button" role="tab">
+                                <i class="fa-solid fa-receipt text-primary"></i>
+                                <span>Scanned OCR Receipts</span>
+                                <span class="badge bg-primary-subtle text-primary rounded-pill ms-1" id="mTabOcrBadge">0</span>
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link rounded-pill fw-semibold small d-inline-flex align-items-center gap-1.5" id="pills-audit-tab" data-bs-toggle="pill" data-bs-target="#pills-audit" type="button" role="tab">
+                                <i class="fa-solid fa-scale-balanced text-dark"></i>
+                                <span>ERCA Line 100 Audit Sheet</span>
+                            </button>
+                        </li>
+                    </ul>
+
+                    {{-- 3. Tab Contents --}}
+                    <div class="tab-content" id="monthMovementTabContent">
+                        {{-- ── TAB 1: INCOMES & SALES ──────────────────────────── --}}
+                        <div class="tab-pane fade show active" id="pills-income" role="tabpanel">
+                            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+                                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-success-subtle text-success p-2 rounded-3"><i class="fa-solid fa-hand-holding-dollar fs-6"></i></span>
+                                        <div>
+                                            <h6 class="fw-bold mb-0 text-dark">Company Income &amp; Sales Receipts</h6>
+                                            <small class="text-muted">Sources of all company revenues, client payments, and 15% Output VAT</small>
+                                        </div>
+                                    </div>
+                                    <div style="min-width: 250px;">
+                                        <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search customer, invoice #, project..." onkeyup="filterMovementTable('mIncomeTable', this.value)">
+                                    </div>
+                                </div>
+                                <div class="table-responsive" style="max-height: 480px;">
+                                    <table class="table table-hover align-middle mb-0 text-nowrap" id="mIncomeTable">
+                                        <thead class="bg-light-subtle text-muted text-uppercase fw-bold sticky-top" style="font-size: 0.7rem;">
+                                            <tr>
+                                                <th class="ps-3 py-2.5">#</th>
+                                                <th class="py-2.5">Date (EC / GC)</th>
+                                                <th class="py-2.5">Income # / Ref</th>
+                                                <th class="py-2.5">Customer / Payer</th>
+                                                <th class="py-2.5">Project</th>
+                                                <th class="py-2.5">Receiving Account</th>
+                                                <th class="py-2.5 text-end">Sales Base</th>
+                                                <th class="py-2.5 text-end text-danger">Output VAT (15%)</th>
+                                                <th class="py-2.5 text-end text-success pe-3">Gross Received</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="mIncomeTableBody" class="divide-y">
+                                            {{-- Rows inserted via JS --}}
+                                        </tbody>
+                                        <tfoot class="bg-light fw-bold sticky-bottom border-top">
+                                            <tr>
+                                                <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Sales &amp; Output VAT</td>
+                                                <td class="text-end py-2 font-monospace text-dark" id="mIncomeTotalBase">ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-danger" id="mIncomeTotalVat">ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-success pe-3" id="mIncomeTotalGross">ETB 0.00</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- ── TAB 2: PURCHASES & EXPENSES ─────────────────────── --}}
+                        <div class="tab-pane fade" id="pills-expense" role="tabpanel">
+                            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+                                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-danger-subtle text-danger p-2 rounded-3"><i class="fa-solid fa-file-invoice fs-6"></i></span>
+                                        <div>
+                                            <h6 class="fw-bold mb-0 text-dark">Purchases, Petty Cash &amp; Paid Expense Vouchers</h6>
+                                            <small class="text-muted">Creditable business expenditures, 15% Input VAT, and 3% Withholding Deductions</small>
+                                        </div>
+                                    </div>
+                                    <div style="min-width: 250px;">
+                                        <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search payee, voucher #, category..." onkeyup="filterMovementTable('mExpenseTable', this.value)">
+                                    </div>
+                                </div>
+                                <div class="table-responsive" style="max-height: 480px;">
+                                    <table class="table table-hover align-middle mb-0 text-nowrap" id="mExpenseTable">
+                                        <thead class="bg-light-subtle text-muted text-uppercase fw-bold sticky-top" style="font-size: 0.7rem;">
+                                            <tr>
+                                                <th class="ps-3 py-2.5">#</th>
+                                                <th class="py-2.5">Date (EC / GC)</th>
+                                                <th class="py-2.5">Voucher / Ref #</th>
+                                                <th class="py-2.5">Payee / Supplier</th>
+                                                <th class="py-2.5">Category &amp; Project</th>
+                                                <th class="py-2.5">Disbursement Account</th>
+                                                <th class="py-2.5 text-end">Purchases Base</th>
+                                                <th class="py-2.5 text-end text-success">Input VAT (15%)</th>
+                                                <th class="py-2.5 text-end text-danger">3% WHT</th>
+                                                <th class="py-2.5 text-end text-dark pe-3">Net Disbursed</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="mExpenseTableBody" class="divide-y">
+                                            {{-- Rows inserted via JS --}}
+                                        </tbody>
+                                        <tfoot class="bg-light fw-bold sticky-bottom border-top">
+                                            <tr>
+                                                <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Purchases &amp; Deductions</td>
+                                                <td class="text-end py-2 font-monospace text-dark" id="mExpenseTotalBase">ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-success" id="mExpenseTotalVat">ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-danger" id="mExpenseTotalWht">- ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-dark pe-3" id="mExpenseTotalNet">ETB 0.00</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- ── TAB 3: SCANNED OCR RECEIPTS ─────────────────────── --}}
+                        <div class="tab-pane fade" id="pills-ocr" role="tabpanel">
+                            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+                                <div class="card-header bg-white border-bottom py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-primary-subtle text-primary p-2 rounded-3"><i class="fa-solid fa-camera-retro fs-6"></i></span>
+                                        <div>
+                                            <h6 class="fw-bold mb-0 text-dark">Scanned OCR Receipts (ERCA Cash Register Invoices)</h6>
+                                            <small class="text-muted">Itemized receipts with verified Vendor TIN, FS Numbers, and Machine MRC</small>
+                                        </div>
+                                    </div>
+                                    <div style="min-width: 250px;">
+                                        <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search vendor, FS #, item..." onkeyup="filterMovementTable('mOcrTable', this.value)">
+                                    </div>
+                                </div>
+                                <div class="table-responsive" style="max-height: 480px;">
+                                    <table class="table table-hover align-middle mb-0 text-nowrap" id="mOcrTable">
+                                        <thead class="bg-light-subtle text-muted text-uppercase fw-bold sticky-top" style="font-size: 0.7rem;">
+                                            <tr>
+                                                <th class="ps-3 py-2.5">#</th>
+                                                <th class="py-2.5">Date (EC / GC)</th>
+                                                <th class="py-2.5">FS # / Receipt #</th>
+                                                <th class="py-2.5">Vendor Name &amp; TIN</th>
+                                                <th class="py-2.5">Project / Category</th>
+                                                <th class="py-2.5">Item Description</th>
+                                                <th class="py-2.5 text-end">Base Value</th>
+                                                <th class="py-2.5 text-end text-success">VAT (15%)</th>
+                                                <th class="py-2.5 text-end text-dark pe-3">Value After VAT</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="mOcrTableBody" class="divide-y">
+                                            {{-- Rows inserted via JS --}}
+                                        </tbody>
+                                        <tfoot class="bg-light fw-bold sticky-bottom border-top">
+                                            <tr>
+                                                <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Scanned Invoices</td>
+                                                <td class="text-end py-2 font-monospace text-dark" id="mOcrTotalBase">ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-success" id="mOcrTotalVat">ETB 0.00</td>
+                                                <td class="text-end py-2 font-monospace text-dark pe-3" id="mOcrTotalAfter">ETB 0.00</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- ── TAB 4: ERCA LINE 100 AUDIT RECONCILIATION ────────── --}}
+                        <div class="tab-pane fade" id="pills-audit" role="tabpanel">
+                            <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white p-4">
+                                <div class="d-flex align-items-center justify-content-between mb-4 pb-3 border-bottom">
+                                    <div>
+                                        <h5 class="fw-bold mb-1 text-dark">
+                                            <i class="fa-solid fa-stamp text-primary me-2"></i>ERCA VAT Line 100 Monthly Declaration Audit
+                                        </h5>
+                                        <p class="text-muted small mb-0">Official net tax reconciliation formula for Ethiopian Revenue and Customs Authority filing</p>
+                                    </div>
+                                    <span class="badge bg-primary text-white rounded-pill px-3 py-1.5 font-monospace" id="mAuditPeriodBadge">
+                                        Period EC
+                                    </span>
+                                </div>
+
+                                <div class="row g-4">
+                                    {{-- Calculation breakdown list --}}
+                                    <div class="col-12 col-lg-7">
+                                        <div class="list-group list-group-flush rounded-4 border overflow-hidden">
+                                            <div class="list-group-item d-flex justify-content-between align-items-center py-3 bg-light">
+                                                <span class="fw-bold text-dark text-uppercase small">Audit Component / ERCA Line</span>
+                                                <span class="fw-bold text-dark text-uppercase small">Amount (ETB)</span>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center py-2.5">
+                                                <div>
+                                                    <span class="fw-semibold text-dark">1. Total Taxable Sales Base (ገቢ)</span>
+                                                    <small class="text-muted d-block">All customer invoice receipts issued in this month</small>
+                                                </div>
+                                                <span class="font-monospace fw-bold text-dark" id="mAuditSalesBase">0.00</span>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center py-2.5 bg-danger-subtle bg-opacity-25">
+                                                <div>
+                                                    <span class="fw-semibold text-danger">2. Output VAT Collected (15%)</span>
+                                                    <small class="text-muted d-block">Tax collected on behalf of the government</small>
+                                                </div>
+                                                <span class="font-monospace fw-bold text-danger" id="mAuditOutputVat">0.00</span>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center py-2.5">
+                                                <div>
+                                                    <span class="fw-semibold text-dark">3. Total Taxable Purchases Base (ግዢ)</span>
+                                                    <small class="text-muted d-block">Creditable procurement, petty cash, and OCR invoices</small>
+                                                </div>
+                                                <span class="font-monospace fw-bold text-dark" id="mAuditPurchasesBase">0.00</span>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center py-2.5 bg-success-subtle bg-opacity-25">
+                                                <div>
+                                                    <span class="fw-semibold text-success">4. Creditable Input VAT Paid (15%)</span>
+                                                    <small class="text-muted d-block">Direct tax paid on qualifying business purchases (VAT B excluded)</small>
+                                                </div>
+                                                <span class="font-monospace fw-bold text-success" id="mAuditInputVat">0.00</span>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center py-2.5 bg-info-subtle bg-opacity-25">
+                                                <div>
+                                                    <span class="fw-semibold text-info">5. Opening Credit Balance Brought Forward</span>
+                                                    <small class="text-muted d-block">Positive VAT credit balance carried forward from preceding month</small>
+                                                </div>
+                                                <span class="font-monospace fw-bold text-info" id="mAuditOpeningCredit">+ 0.00</span>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center py-2.5 bg-light">
+                                                <div>
+                                                    <span class="fw-bold text-dark">6. Total Creditable Pool = (4) + (5)</span>
+                                                    <small class="text-muted d-block">Total allowable tax credits applicable against Output VAT</small>
+                                                </div>
+                                                <span class="font-monospace fw-bold text-dark" id="mAuditTotalCreditable">0.00</span>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center py-3 border-top border-2" id="mAuditNetRow">
+                                                <div>
+                                                    <span class="fs-6 fw-bold text-dark">7. Signed Net VAT = (6) &minus; (2)</span>
+                                                    <small class="d-block" id="mAuditNetStatusText">Formula: Total Creditable Input &minus; Output VAT</small>
+                                                </div>
+                                                <span class="font-monospace fs-5 fw-bold" id="mAuditNetSigned">0.00</span>
+                                            </div>
+                                            <div class="list-group-item d-flex justify-content-between align-items-center py-2.5 bg-warning-subtle bg-opacity-25">
+                                                <div>
+                                                    <span class="fw-semibold text-dark">8. 3% Withholding Tax (Separate Line)</span>
+                                                    <small class="text-muted d-block">Remitted independently to ERCA (Not netted against VAT)</small>
+                                                </div>
+                                                <span class="font-monospace fw-bold text-danger" id="mAuditWht">- 0.00</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {{-- Executive Audit Conclusion & Action --}}
+                                    <div class="col-12 col-lg-5">
+                                        <div class="p-4 rounded-4 border h-100 d-flex flex-column justify-content-between" id="mAuditDecisionBox">
+                                            <div>
+                                                <div class="d-flex align-items-center gap-2 mb-3">
+                                                    <span class="p-2 rounded-circle bg-primary text-white"><i class="fa-solid fa-gavel fs-6"></i></span>
+                                                    <h6 class="fw-bold mb-0 text-dark">Filing Decision &amp; Audit Trail</h6>
+                                                </div>
+                                                <div class="p-3 rounded-3 mb-3" id="mAuditDecisionBanner">
+                                                    {{-- Decision injected via JS --}}
+                                                </div>
+                                                <div class="small text-muted space-y-2">
+                                                    <div class="d-flex gap-2 mb-2">
+                                                        <i class="fa-solid fa-circle-check text-success mt-1"></i>
+                                                        <span><strong>Ethiopian Calendar Rule:</strong> Bounded strictly within the Ethiopian month. Last-day transactions cannot leak into next cycle.</span>
+                                                    </div>
+                                                    <div class="d-flex gap-2 mb-2">
+                                                        <i class="fa-solid fa-circle-check text-success mt-1"></i>
+                                                        <span><strong>Negative Balance:</strong> Output &gt; Input indicates a payment liability due to ERCA by the 30th day.</span>
+                                                    </div>
+                                                    <div class="d-flex gap-2">
+                                                        <i class="fa-solid fa-circle-check text-success mt-1"></i>
+                                                        <span><strong>Positive Balance:</strong> Input &gt; Output constitutes a refundable or carry-forward credit into the next month's opening balance.</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="pt-3 border-top mt-3 d-flex gap-2">
+                                                <button type="button" class="btn btn-primary btn-sm rounded-pill px-3 w-100 fw-semibold" onclick="printMonthMovements()">
+                                                    <i class="fa-solid fa-print me-1"></i>Print ERCA Audit
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Modal Footer --}}
+            <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-between align-items-center flex-shrink-0">
+                <span class="small text-muted font-monospace" id="mMovementsFooterSummary">
+                    <i class="fa-solid fa-circle-info text-primary me-1"></i>All movements reconciled strictly in Ethiopian calendar era.
+                </span>
+                <button type="button" class="btn btn-secondary btn-sm rounded-pill px-4" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     // ── Add Receipt (AI OCR) Modal Handlers & Automatic Calculations ────────────
     function triggerAddReceiptScan() {
@@ -3329,6 +3775,478 @@
         if (refInput) {
             refInput.required = isChecked;
         }
+    }
+
+    // ── 13-Month Financial Movement & Audit Drilldown ────────────────────────
+    let currentMovementsData = null;
+
+    function formatMoney(amount) {
+        const n = parseFloat(amount) || 0;
+        return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function openMonthMovementsModal(ethYear, ethMonth, monthEn, monthAm) {
+        const modalEl = document.getElementById('monthMovementsModal');
+        if (!modalEl) return;
+
+        // Set initial modal header & filter link
+        document.getElementById('mMovementsTitle').innerText = `${monthEn} (${monthAm}) ${ethYear} ዓ.ም. — Financial Movements`;
+        document.getElementById('mMovementsWindow').innerText = 'Loading Gregorian window and transaction audit...';
+        
+        const filterBtn = document.getElementById('mMovementsFilterBtn');
+        if (filterBtn) {
+            const baseUrl = "{{ route('finance.tax-deductions.index') }}";
+            filterBtn.href = `${baseUrl}?ethiopian_year=${ethYear}&ethiopian_month=${ethMonth}`;
+        }
+
+        // Display spinner, hide content & error
+        document.getElementById('mMovementsSpinner').style.display = 'block';
+        document.getElementById('mMovementsContent').style.display = 'none';
+        document.getElementById('mMovementsError').style.display = 'none';
+
+        // Reset to first tab
+        const firstTab = document.getElementById('pills-income-tab');
+        if (firstTab && window.bootstrap) {
+            const tabTrigger = new bootstrap.Tab(firstTab);
+            tabTrigger.show();
+        }
+
+        // Show Modal
+        const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        bsModal.show();
+
+        // Fetch movements from server
+        const url = "{{ route('finance.tax-deductions.month-movements') }}?ethiopian_year=" + ethYear + "&ethiopian_month=" + ethMonth;
+        fetch(url, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(res => {
+            if (!res.ok) throw new Error('HTTP error ' + res.status);
+            return res.json();
+        })
+        .then(data => {
+            if (data.success) {
+                currentMovementsData = data;
+                renderMovementsData(data);
+                document.getElementById('mMovementsSpinner').style.display = 'none';
+                document.getElementById('mMovementsContent').style.display = 'block';
+            } else {
+                throw new Error(data.message || 'Error loading transaction movements');
+            }
+        })
+        .catch(err => {
+            console.error('Failed to load month movements:', err);
+            document.getElementById('mMovementsSpinner').style.display = 'none';
+            document.getElementById('mMovementsErrorMsg').innerText = err.message || 'Failed to load transaction movements.';
+            document.getElementById('mMovementsError').style.display = 'block';
+        });
+    }
+
+    function renderMovementsData(data) {
+        const m = data.month;
+        const s = data.summary;
+
+        // Header info
+        document.getElementById('mMovementsTitle').innerHTML = `<i class="fa-solid fa-calendar-day me-2 text-warning"></i>${m.title} &bull; Financial Movements &amp; Tax Audit`;
+        document.getElementById('mMovementsWindow').innerText = `Gregorian Period Window: ${m.gregorian_window}`;
+
+        // Top KPI Strip
+        document.getElementById('mMovementsSalesBase').innerText = 'ETB ' + formatMoney(s.sales_base);
+        document.getElementById('mMovementsOutputVat').innerText = 'ETB ' + formatMoney(s.output_vat);
+        document.getElementById('mMovementsIncomeCount').innerText = `${s.income_count} receipts`;
+
+        document.getElementById('mMovementsPurchasesBase').innerText = 'ETB ' + formatMoney(s.purchases_base);
+        document.getElementById('mMovementsInputVat').innerText = 'ETB ' + formatMoney(s.input_vat);
+        document.getElementById('mMovementsExpenseCount').innerText = `${s.expense_count} expenses`;
+
+        document.getElementById('mMovementsOpeningCredit').innerText = '+ ETB ' + formatMoney(s.opening_credit);
+        document.getElementById('mMovementsTotalCreditable').innerText = 'ETB ' + formatMoney(s.total_creditable_input);
+
+        // Signed Net VAT presentation
+        const netEl = document.getElementById('mMovementsSignedNet');
+        const badgeEl = document.getElementById('mMovementsNetBadge');
+        const cardEl = document.getElementById('mMovementsNetCard');
+        const instEl = document.getElementById('mMovementsNetInstruction');
+
+        netEl.innerText = s.signed_net_formatted;
+        netEl.className = `fs-4 fw-bold font-monospace ${s.text_class}`;
+        badgeEl.className = `badge ${s.badge_class} rounded-pill small`;
+        badgeEl.innerText = s.label;
+
+        if (s.is_payable) {
+            cardEl.className = 'card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-danger bg-danger bg-opacity-10';
+            instEl.innerText = `ETB ${formatMoney(s.payable_amount)} payable to ERCA`;
+        } else if (s.is_credit) {
+            cardEl.className = 'card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-success bg-success bg-opacity-10';
+            instEl.innerText = `ETB ${formatMoney(s.credit_carry_forward)} carries forward to next month`;
+        } else {
+            cardEl.className = 'card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-secondary';
+            instEl.innerText = 'Zero balance settled (0.00)';
+        }
+
+        // Withholding Tax & Net Disbursed
+        document.getElementById('mMovementsWht').innerText = '- ETB ' + formatMoney(s.withholding_tax);
+        document.getElementById('mMovementsNetDisbursed').innerText = 'ETB ' + formatMoney(s.net_disbursed);
+
+        // Tab count badges
+        document.getElementById('mTabIncomeBadge').innerText = s.income_count;
+        document.getElementById('mTabExpenseBadge').innerText = s.expense_count;
+        document.getElementById('mTabOcrBadge').innerText = s.ocr_count;
+
+        // 1. Render Incomes Table (Where Income Came From)
+        const incomeTbody = document.getElementById('mIncomeTableBody');
+        incomeTbody.innerHTML = '';
+        if (data.incomes && data.incomes.length > 0) {
+            data.incomes.forEach((inc, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="ps-3 text-muted font-monospace small">${idx + 1}</td>
+                    <td>
+                        <span class="fw-bold font-monospace text-dark d-block">${inc.date_ec}</span>
+                        <small class="text-muted" style="font-size:0.75rem;">${inc.date_gc}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-dark border font-monospace">${inc.income_no}</span>
+                        ${inc.receipt_no && inc.receipt_no !== '-' ? `<small class="text-muted d-block font-monospace">Ref: ${inc.receipt_no}</small>` : ''}
+                    </td>
+                    <td>
+                        <span class="fw-semibold text-dark d-block">${inc.buyer_name}</span>
+                        ${inc.buyer_tin && inc.buyer_tin !== '-' ? `<small class="text-muted font-monospace" style="font-size:0.75rem;">TIN: ${inc.buyer_tin}</small>` : ''}
+                    </td>
+                    <td>
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill small">${inc.project_name}</span>
+                    </td>
+                    <td class="small text-muted">
+                        <i class="fa-solid fa-building-columns me-1 text-primary"></i>${inc.account_name}
+                    </td>
+                    <td class="text-end font-monospace">ETB ${formatMoney(inc.sales_base)}</td>
+                    <td class="text-end font-monospace text-danger fw-semibold">ETB ${formatMoney(inc.output_vat)}</td>
+                    <td class="text-end font-monospace text-success fw-bold pe-3">ETB ${formatMoney(inc.gross_amount)}</td>
+                `;
+                incomeTbody.appendChild(tr);
+            });
+        } else {
+            incomeTbody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="text-center py-4 text-muted">
+                        <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No income receipts recorded in this Ethiopian month.
+                    </td>
+                </tr>
+            `;
+        }
+        document.getElementById('mIncomeTotalBase').innerText = 'ETB ' + formatMoney(s.sales_base);
+        document.getElementById('mIncomeTotalVat').innerText = 'ETB ' + formatMoney(s.output_vat);
+        document.getElementById('mIncomeTotalGross').innerText = 'ETB ' + formatMoney(s.gross_income);
+
+        // 2. Render Expenses Table (Purchases & Expenditures)
+        const expenseTbody = document.getElementById('mExpenseTableBody');
+        expenseTbody.innerHTML = '';
+        if (data.expenses && data.expenses.length > 0) {
+            data.expenses.forEach((exp, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="ps-3 text-muted font-monospace small">${idx + 1}</td>
+                    <td>
+                        <span class="fw-bold font-monospace text-dark d-block">${exp.date_ec}</span>
+                        <small class="text-muted" style="font-size:0.75rem;">${exp.date_gc}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-dark border font-monospace">${exp.request_number}</span>
+                        ${exp.payment_reference && exp.payment_reference !== '-' ? `<small class="text-muted d-block font-monospace">Ref: ${exp.payment_reference}</small>` : ''}
+                    </td>
+                    <td>
+                        <span class="fw-semibold text-dark d-block">${exp.payee}</span>
+                    </td>
+                    <td>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">${exp.category}</span>
+                        <small class="text-muted d-block" style="font-size:0.75rem;">${exp.project_name}</small>
+                    </td>
+                    <td class="small text-muted">
+                        <i class="fa-solid fa-wallet me-1 text-danger"></i>${exp.account_name}
+                    </td>
+                    <td class="text-end font-monospace">ETB ${formatMoney(exp.base_amount)}</td>
+                    <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(exp.vat_amount)}</td>
+                    <td class="text-end font-monospace text-danger">${exp.withholding_amount > 0 ? '- ETB ' + formatMoney(exp.withholding_amount) : '-'}</td>
+                    <td class="text-end font-monospace text-dark fw-bold pe-3">ETB ${formatMoney(exp.net_disbursed)}</td>
+                `;
+                expenseTbody.appendChild(tr);
+            });
+        } else {
+            expenseTbody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="text-center py-4 text-muted">
+                        <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No purchases or paid expenses recorded for this Ethiopian month.
+                    </td>
+                </tr>
+            `;
+        }
+        document.getElementById('mExpenseTotalBase').innerText = 'ETB ' + formatMoney(s.purchases_base);
+        document.getElementById('mExpenseTotalVat').innerText = 'ETB ' + formatMoney(s.input_vat);
+        document.getElementById('mExpenseTotalWht').innerText = '- ETB ' + formatMoney(s.withholding_tax);
+        document.getElementById('mExpenseTotalNet').innerText = 'ETB ' + formatMoney(s.net_disbursed);
+
+        // 3. Render OCR Invoices Table
+        const ocrTbody = document.getElementById('mOcrTableBody');
+        ocrTbody.innerHTML = '';
+        let ocrSumBase = 0, ocrSumVat = 0, ocrSumAfter = 0;
+        if (data.ocr_items && data.ocr_items.length > 0) {
+            data.ocr_items.forEach((ocr, idx) => {
+                ocrSumBase += ocr.base_value;
+                ocrSumVat += ocr.vat_amount;
+                ocrSumAfter += ocr.value_after_vat;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="ps-3 text-muted font-monospace small">${idx + 1}</td>
+                    <td>
+                        <span class="fw-bold font-monospace text-dark d-block">${ocr.date_ec}</span>
+                        <small class="text-muted" style="font-size:0.75rem;">${ocr.date_gc}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-primary border font-monospace">${ocr.fs_no}</span>
+                        <small class="text-muted d-block" style="font-size:0.75rem;">${ocr.receipt_number}</small>
+                    </td>
+                    <td>
+                        <span class="fw-semibold text-dark d-block">${ocr.vendor_name}</span>
+                        <small class="text-muted font-monospace" style="font-size:0.75rem;">TIN: ${ocr.vendor_tin}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-secondary-subtle text-secondary rounded-pill small">${ocr.project_name}</span>
+                        <small class="text-muted d-block" style="font-size:0.75rem;">${ocr.category}</small>
+                    </td>
+                    <td class="small text-dark text-truncate" style="max-width: 220px;" title="${ocr.item_description}">
+                        ${ocr.item_description}
+                    </td>
+                    <td class="text-end font-monospace">ETB ${formatMoney(ocr.base_value)}</td>
+                    <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(ocr.vat_amount)}</td>
+                    <td class="text-end font-monospace text-dark fw-bold pe-3">ETB ${formatMoney(ocr.value_after_vat)}</td>
+                `;
+                ocrTbody.appendChild(tr);
+            });
+        } else {
+            ocrTbody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="text-center py-4 text-muted">
+                        <i class="fa-solid fa-folder-open me-2 text-secondary"></i>No OCR scanned receipts recorded for this Ethiopian month.
+                    </td>
+                </tr>
+            `;
+        }
+        document.getElementById('mOcrTotalBase').innerText = 'ETB ' + formatMoney(ocrSumBase);
+        document.getElementById('mOcrTotalVat').innerText = 'ETB ' + formatMoney(ocrSumVat);
+        document.getElementById('mOcrTotalAfter').innerText = 'ETB ' + formatMoney(ocrSumAfter);
+
+        // 4. Render ERCA Line 100 Audit Tab
+        document.getElementById('mAuditPeriodBadge').innerText = `${m.title}`;
+        document.getElementById('mAuditSalesBase').innerText = formatMoney(s.sales_base);
+        document.getElementById('mAuditOutputVat').innerText = formatMoney(s.output_vat);
+        document.getElementById('mAuditPurchasesBase').innerText = formatMoney(s.purchases_base);
+        document.getElementById('mAuditInputVat').innerText = formatMoney(s.input_vat);
+        document.getElementById('mAuditOpeningCredit').innerText = '+ ' + formatMoney(s.opening_credit);
+        document.getElementById('mAuditTotalCreditable').innerText = formatMoney(s.total_creditable_input);
+        document.getElementById('mAuditNetSigned').innerText = s.signed_net_formatted;
+        document.getElementById('mAuditNetSigned').className = `font-monospace fs-5 fw-bold ${s.text_class}`;
+        document.getElementById('mAuditWht').innerText = '- ' + formatMoney(s.withholding_tax);
+
+        // Audit Decision Banner
+        const decisionBanner = document.getElementById('mAuditDecisionBanner');
+        if (s.is_payable) {
+            decisionBanner.className = 'p-3 rounded-3 mb-3 bg-danger bg-opacity-10 border border-danger text-danger';
+            decisionBanner.innerHTML = `
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="fa-solid fa-file-invoice-dollar fs-5"></i>
+                    <h6 class="fw-bold mb-0">Remittance Required: ETB ${formatMoney(s.payable_amount)}</h6>
+                </div>
+                <div class="small">Output VAT on sales exceeded allowable creditable input VAT. This amount is legally payable to ERCA by the 30th of the following Ethiopian month.</div>
+            `;
+        } else if (s.is_credit) {
+            decisionBanner.className = 'p-3 rounded-3 mb-3 bg-success bg-opacity-10 border border-success text-success';
+            decisionBanner.innerHTML = `
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="fa-solid fa-arrow-turn-up fs-5"></i>
+                    <h6 class="fw-bold mb-0">Credit Carried Forward: + ETB ${formatMoney(s.credit_carry_forward)}</h6>
+                </div>
+                <div class="small">Input VAT on creditable business purchases exceeded Output VAT. This positive credit automatically carries forward as an opening balance into the next Ethiopian month.</div>
+            `;
+        } else {
+            decisionBanner.className = 'p-3 rounded-3 mb-3 bg-secondary bg-opacity-10 border border-secondary text-secondary';
+            decisionBanner.innerHTML = `
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="fa-solid fa-scale-balanced fs-5"></i>
+                    <h6 class="fw-bold mb-0">Zero Balance Reconciled (ETB 0.00)</h6>
+                </div>
+                <div class="small">Output VAT exactly balances with creditable Input VAT. No payment is owed and no credit carries forward.</div>
+            `;
+        }
+
+        // Footer summary
+        document.getElementById('mMovementsFooterSummary').innerHTML = `
+            <i class="fa-solid fa-circle-check text-success me-1"></i>
+            Total <strong>${s.total_count}</strong> transactions loaded: <strong>${s.income_count}</strong> income receipts &bull; <strong>${s.expense_count}</strong> expense vouchers &bull; <strong>${s.ocr_count}</strong> scanned OCR invoices.
+        `;
+    }
+
+    function filterMovementTable(tableId, query) {
+        const table = document.getElementById(tableId);
+        if (!table) return;
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const trs = tbody.querySelectorAll('tr');
+        const q = (query || '').toLowerCase().trim();
+
+        trs.forEach(tr => {
+            const text = tr.innerText.toLowerCase();
+            tr.style.display = text.includes(q) ? '' : 'none';
+        });
+    }
+
+    function printMonthMovements() {
+        if (!currentMovementsData) return;
+        const d = currentMovementsData;
+        const m = d.month;
+        const s = d.summary;
+
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('Popup blocker prevented print window from opening. Please allow popups for this site.');
+            return;
+        }
+
+        let incomeRowsHtml = '';
+        d.incomes.forEach((inc, i) => {
+            incomeRowsHtml += `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td>${inc.date_ec}<br><small>${inc.date_gc}</small></td>
+                    <td>${inc.income_no}<br><small>${inc.receipt_no}</small></td>
+                    <td>${inc.buyer_name}<br><small>TIN: ${inc.buyer_tin}</small></td>
+                    <td>${inc.project_name}</td>
+                    <td>${inc.account_name}</td>
+                    <td style="text-align:right;">${formatMoney(inc.sales_base)}</td>
+                    <td style="text-align:right;">${formatMoney(inc.output_vat)}</td>
+                    <td style="text-align:right; font-weight:bold;">${formatMoney(inc.gross_amount)}</td>
+                </tr>
+            `;
+        });
+
+        let expenseRowsHtml = '';
+        d.expenses.forEach((exp, i) => {
+            expenseRowsHtml += `
+                <tr>
+                    <td>${i + 1}</td>
+                    <td>${exp.date_ec}<br><small>${exp.date_gc}</small></td>
+                    <td>${exp.request_number}</td>
+                    <td>${exp.payee}</td>
+                    <td>${exp.category} / ${exp.project_name}</td>
+                    <td>${exp.account_name}</td>
+                    <td style="text-align:right;">${formatMoney(exp.base_amount)}</td>
+                    <td style="text-align:right;">${formatMoney(exp.vat_amount)}</td>
+                    <td style="text-align:right;">${formatMoney(exp.withholding_amount)}</td>
+                    <td style="text-align:right; font-weight:bold;">${formatMoney(exp.net_disbursed)}</td>
+                </tr>
+            `;
+        });
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Financial Movement & Tax Audit — ${m.title}</title>
+                <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; padding: 24px; color: #1e293b; }
+                    h2, h3, h4 { margin: 0 0 6px 0; }
+                    .header { border-bottom: 2px solid #0f172a; padding-bottom: 14px; margin-bottom: 20px; }
+                    .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+                    .kpi-card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #f8fafc; }
+                    .kpi-card .lbl { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: bold; }
+                    .kpi-card .val { font-size: 16px; font-weight: bold; margin-top: 4px; font-family: monospace; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 12px; }
+                    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+                    th { background: #f1f5f9; text-transform: uppercase; font-size: 11px; }
+                    .section-title { font-size: 14px; font-weight: bold; margin: 18px 0 8px 0; border-left: 4px solid #2563eb; padding-left: 8px; }
+                    @media print { body { padding: 0; } }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2>Wechecha Construction &bull; Financial Movements &amp; Tax Audit</h2>
+                    <h4>${m.title} &mdash; ${m.gregorian_window}</h4>
+                    <small>Generated on: ${new Date().toLocaleString()}</small>
+                </div>
+
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="lbl">Sales Base</div>
+                        <div class="val">ETB ${formatMoney(s.sales_base)}</div>
+                        <small>Output VAT: ETB ${formatMoney(s.output_vat)}</small>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="lbl">Purchases Base</div>
+                        <div class="val">ETB ${formatMoney(s.purchases_base)}</div>
+                        <small>Input VAT: ETB ${formatMoney(s.input_vat)}</small>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="lbl">Opening Credit</div>
+                        <div class="val">+ ETB ${formatMoney(s.opening_credit)}</div>
+                        <small>Total Creditable: ETB ${formatMoney(s.total_creditable_input)}</small>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="lbl">Signed Net VAT</div>
+                        <div class="val">${s.signed_net_formatted}</div>
+                        <small>${s.label}</small>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="lbl">3% Withholding</div>
+                        <div class="val">- ETB ${formatMoney(s.withholding_tax)}</div>
+                        <small>Net Disbursed: ETB ${formatMoney(s.net_disbursed)}</small>
+                    </div>
+                </div>
+
+                <div class="section-title">1. Incoming Transactions (Company Sales &amp; Output VAT Receipts)</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Date (EC / GC)</th>
+                            <th>Income # / Ref</th>
+                            <th>Customer / Payer</th>
+                            <th>Project</th>
+                            <th>Receiving Account</th>
+                            <th style="text-align:right;">Sales Base</th>
+                            <th style="text-align:right;">Output VAT</th>
+                            <th style="text-align:right;">Gross Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>${incomeRowsHtml || '<tr><td colspan="9" style="text-align:center;">No income records</td></tr>'}</tbody>
+                </table>
+
+                <div class="section-title">2. Outgoing Transactions (Purchases, Expenditures &amp; Input VAT)</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Date (EC / GC)</th>
+                            <th>Voucher #</th>
+                            <th>Payee / Vendor</th>
+                            <th>Category / Project</th>
+                            <th>Paying Account</th>
+                            <th style="text-align:right;">Purchases Base</th>
+                            <th style="text-align:right;">15% Input VAT</th>
+                            <th style="text-align:right;">3% WHT</th>
+                            <th style="text-align:right;">Net Disbursed</th>
+                        </tr>
+                    </thead>
+                    <tbody>${expenseRowsHtml || '<tr><td colspan="10" style="text-align:center;">No expense records</td></tr>'}</tbody>
+                </table>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => { printWindow.print(); }, 400);
     }
 </script>
 @endsection

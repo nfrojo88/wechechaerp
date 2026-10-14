@@ -626,6 +626,277 @@ class FinanceTaxReportController extends Controller
     }
 
     /**
+     * AJAX endpoint: Retrieve all itemized financial movements for a specific Ethiopian month.
+     * Returns detailed transactions: Incomes (Sales), Expenses/Purchases, OCR Receipts, and Signed Net VAT reconciliation.
+     */
+    public function monthMovements(Request $request)
+    {
+        $curEth = EthiopianDate::toEthiopian(now());
+        $year  = (int)($request->query('ethiopian_year') ?: $curEth['year']);
+        $month = (int)($request->query('ethiopian_month') ?: $curEth['month']);
+
+        if ($month < 1 || $month > 13) {
+            $month = $curEth['month'];
+        }
+
+        $mRange = EthiopianDate::monthRange($year, $month);
+        $startDate = $mRange['start_date'];
+        $endDate   = $mRange['end_date'];
+        $start     = $mRange['start'];
+        $end       = $mRange['end'];
+
+        // 1. Incomes for this Ethiopian month (Where our income came from)
+        $incomes = collect();
+        if (Schema::hasTable('income_records')) {
+            $incomes = \App\Models\IncomeRecord::with(['project', 'bankAccount', 'chartOfAccount', 'createdBy'])
+                ->where(function ($iq) use ($startDate, $endDate) {
+                    $iq->whereBetween('income_date', [$startDate, $endDate])
+                       ->orWhere(function ($sub) use ($startDate, $endDate) {
+                           $sub->whereNull('income_date')->whereBetween('receipt_date', [$startDate, $endDate]);
+                       });
+                })
+                ->orderBy('income_date', 'asc')
+                ->orderBy('id', 'asc')
+                ->get();
+        }
+
+        $formattedIncomes = $incomes->map(function ($inc) {
+            $date = $inc->income_date ?: $inc->receipt_date;
+            $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
+            $base = round($gross / 1.15, 2);
+            $vat = round($gross - $base, 2);
+
+            $accountName = '-';
+            if ($inc->bankAccount) {
+                $accountName = $inc->bankAccount->bank_name . ($inc->bankAccount->account_number ? ' (' . $inc->bankAccount->account_number . ')' : '');
+            } elseif ($inc->chartOfAccount) {
+                $accountName = $inc->chartOfAccount->name;
+            } elseif (!empty($inc->payment_method)) {
+                $accountName = ucfirst($inc->payment_method);
+            }
+
+            return [
+                'id'           => $inc->id,
+                'income_no'    => $inc->income_no ?: ('INC-' . $inc->id),
+                'receipt_no'   => $inc->receipt_no ?: ($inc->mrc_no ?: '-'),
+                'date_ec'      => EthiopianDate::formatDateEc($date, 'DD/MM/YYYY EC'),
+                'date_gc'      => $date ? Carbon::parse($date)->format('M d, Y') : '-',
+                'buyer_name'   => $inc->buyer_name ?: ($inc->payer ?: 'Client / Customer'),
+                'buyer_tin'    => $inc->buyer_tin ?: '-',
+                'project_name' => $inc->project?->name ?: 'General / Head Office',
+                'account_name' => $accountName,
+                'category'     => ucfirst($inc->category ?: 'General'),
+                'sales_base'   => $base,
+                'output_vat'   => $vat,
+                'gross_amount' => $gross,
+                'description'  => $inc->description ?: ($inc->notes ?: '-'),
+                'receipt_url'  => $inc->receipt_file_path ? asset('storage/' . $inc->receipt_file_path) : null,
+            ];
+        });
+
+        $totalSalesBase = (float)$formattedIncomes->sum('sales_base');
+        $totalOutputVat = (float)$formattedIncomes->sum('output_vat');
+        $totalGrossIncome = (float)$formattedIncomes->sum('gross_amount');
+
+        // 2. Paid Expenses in this Ethiopian month (Where our purchases came from, excluding VAT B)
+        $expenses = collect();
+        if (Schema::hasTable('expense_requests')) {
+            $expenses = ExpenseRequest::with(['project', 'user', 'bankAccount', 'chartOfAccount', 'paidBy'])
+                ->where('status', ExpenseRequest::STATUS_PAID)
+                ->whereBetween('created_at', [$start, $end])
+                ->where('vat_type', '!=', 'vat_b')
+                ->orderBy('created_at', 'asc')
+                ->get();
+        }
+
+        $formattedExpenses = $expenses->map(function ($item) {
+            $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
+            $vatType = $item->vat_type ?? 'none';
+            $vatRate = (float)($item->vat_rate ?? 15.00);
+
+            $baseAmount = $gross;
+            $vatAmount  = 0.0;
+
+            if ((float)$item->vat_amount > 0 && $vatType === 'exclusive') {
+                $vatAmount  = (float)$item->vat_amount;
+                $baseAmount = $gross;
+            } elseif ($vatType === 'inclusive') {
+                $baseAmount = round($gross / (1 + ($vatRate / 100)), 2);
+                $vatAmount  = round($gross - $baseAmount, 2);
+            } elseif ($vatType === 'exclusive') {
+                $vatAmount  = round($gross * ($vatRate / 100), 2);
+                $baseAmount = $gross;
+            }
+
+            $whtAmount = (float)$item->calculated_withholding_amount;
+            $netDisbursed = (float)$item->effective_payable_amount;
+
+            $accountName = '-';
+            if ($item->bankAccount) {
+                $accountName = $item->bankAccount->bank_name . ($item->bankAccount->account_number ? ' (' . $item->bankAccount->account_number . ')' : '');
+            } elseif ($item->chartOfAccount) {
+                $accountName = $item->chartOfAccount->name;
+            } elseif (!empty($item->payment_method)) {
+                $accountName = ucfirst(str_replace('_', ' ', $item->payment_method));
+            }
+
+            $payee = $item->account_name ?: ($item->user?->name ?: 'Vendor / Payee');
+
+            return [
+                'id'                 => $item->id,
+                'request_number'     => $item->request_number,
+                'payment_reference'  => $item->payment_reference ?: '-',
+                'date_ec'            => EthiopianDate::formatDateEc($item->created_at, 'DD/MM/YYYY EC'),
+                'date_gc'            => $item->created_at->format('M d, Y'),
+                'payee'              => $payee,
+                'project_name'       => $item->project?->name ?: 'General',
+                'category'           => ucfirst(str_replace('_', ' ', $item->category ?: 'Expense')),
+                'account_name'       => $accountName,
+                'base_amount'        => $baseAmount,
+                'vat_type'           => $vatType,
+                'vat_rate'           => $vatRate,
+                'vat_amount'         => $vatAmount,
+                'has_withholding'    => (bool)$item->has_withholding,
+                'withholding_amount' => $whtAmount,
+                'net_disbursed'      => $netDisbursed,
+                'description'        => $item->description ?: '-',
+                'attachment_url'     => $item->attachment_url,
+                'status'             => $item->status,
+            ];
+        });
+
+        // 3. OCR Scanned Receipts in this Ethiopian month
+        $ocrItems = collect();
+        if (Schema::hasTable('receipt_items')) {
+            $ocrItems = \App\Models\ReceiptItem::with(['receipt', 'receipt.project', 'receipt.uploader'])
+                ->whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$startDate, $endDate]))
+                ->orderBy('id', 'asc')
+                ->get();
+        }
+
+        $formattedOcrItems = $ocrItems->map(function ($ocr) {
+            $r = $ocr->receipt;
+            $date = $r?->receipt_date;
+            return [
+                'id'               => $ocr->id,
+                'receipt_number'   => $r?->receipt_number ?: ('REC-' . $ocr->id),
+                'fs_no'            => $r?->fs_no ?: ($r?->fs_no_raw ?: '-'),
+                'vendor_name'      => $r?->vendor_name ?: 'Vendor',
+                'vendor_tin'       => $r?->vendor_tin ?: '-',
+                'date_ec'          => $date ? EthiopianDate::formatDateEc($date, 'DD/MM/YYYY EC') : '-',
+                'date_gc'          => $date ? Carbon::parse($date)->format('M d, Y') : '-',
+                'project_name'     => $r?->project?->name ?: 'General',
+                'category'         => $r?->category ?: ($ocr->vat_category ?: 'General'),
+                'item_description' => $ocr->item_description ?: ($r?->description ?: 'Purchased Goods/Services'),
+                'base_value'       => (float)$ocr->total_value,
+                'vat_amount'       => (float)$ocr->vat_amount,
+                'value_after_vat'  => (float)$ocr->value_after_vat,
+                'file_url'         => $r?->file_path ? asset('storage/' . $r->file_path) : null,
+            ];
+        });
+
+        $expPurchasesBase = (float)$formattedExpenses->sum('base_amount');
+        $expInputVat      = (float)$formattedExpenses->sum('vat_amount');
+        $ocrPurchasesBase = (float)$formattedOcrItems->sum('base_value');
+        $ocrInputVat      = (float)$formattedOcrItems->sum('vat_amount');
+
+        $effectivePurchasesBase = max($expPurchasesBase, $ocrPurchasesBase);
+        $effectiveInputVat      = max($expInputVat, $ocrInputVat);
+        $totalWithholding       = (float)$formattedExpenses->sum('withholding_amount');
+        $totalNetDisbursed      = (float)$formattedExpenses->sum('net_disbursed');
+
+        // 4. Calculate Opening Credit from previous month
+        $openingCredit = 0.0;
+        if (Schema::hasTable('income_records') || Schema::hasTable('expense_requests') || Schema::hasTable('receipt_items')) {
+            $prevYear  = ($month === 1) ? $year - 1 : $year;
+            $prevMonth = ($month === 1) ? 13 : $month - 1;
+            $prevRange = EthiopianDate::monthRange($prevYear, $prevMonth);
+
+            $prevIncomeSum = 0.0;
+            if (Schema::hasTable('income_records')) {
+                $prevIncomeSum = (float)\App\Models\IncomeRecord::where(function ($iq) use ($prevRange) {
+                    $iq->whereBetween('income_date', [$prevRange['start_date'], $prevRange['end_date']])
+                       ->orWhere(function ($sub) use ($prevRange) {
+                           $sub->whereNull('income_date')->whereBetween('receipt_date', [$prevRange['start_date'], $prevRange['end_date']]);
+                       });
+                })->sum('amount');
+            }
+            $prevOutputVat = round($prevIncomeSum - ($prevIncomeSum / 1.15), 2);
+
+            $prevExpIn = 0.0;
+            if (Schema::hasTable('expense_requests')) {
+                $prevExp = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
+                    ->whereBetween('created_at', [$prevRange['start'], $prevRange['end']])
+                    ->where('vat_type', '!=', 'vat_b')
+                    ->get();
+                $prevExpIn = (float)$prevExp->sum(function ($item) {
+                    if ((float)$item->vat_amount > 0 && ($item->vat_type ?? '') === 'exclusive') return (float)$item->vat_amount;
+                    $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
+                    if (($item->vat_type ?? '') === 'inclusive') return round($gross - ($gross / 1.15), 2);
+                    if (($item->vat_type ?? '') === 'exclusive') return round($gross * 0.15, 2);
+                    return 0.0;
+                });
+            }
+
+            $prevOcrIn = 0.0;
+            if (Schema::hasTable('receipt_items')) {
+                $prevOcrIn = (float)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => 
+                    $rq->whereBetween('receipt_date', [$prevRange['start_date'], $prevRange['end_date']])
+                )->sum('vat_amount');
+            }
+            $prevEffectiveInput = max($prevExpIn, $prevOcrIn);
+
+            $openingCredit = max(0.0, round($prevEffectiveInput - $prevOutputVat, 2));
+        }
+
+        // 5. Net VAT Calculation
+        $netVat = EthiopianDate::calculateNetVat($effectiveInputVat, $totalOutputVat, $openingCredit);
+
+        return response()->json([
+            'success' => true,
+            'month' => [
+                'year'             => $year,
+                'month'            => $month,
+                'month_name'       => EthiopianDate::MONTHS_EN[$month],
+                'month_am'         => EthiopianDate::MONTHS_AM[$month],
+                'title'            => EthiopianDate::MONTHS_EN[$month] . ' (' . EthiopianDate::MONTHS_AM[$month] . ') ' . $year . ' EC',
+                'gregorian_window' => $mRange['start']->format('M d, Y') . ' – ' . $mRange['end']->format('M d, Y') . ' (' . $mRange['days'] . ' Days)',
+                'start_date'       => $startDate,
+                'end_date'         => $endDate,
+                'days'             => $mRange['days'],
+            ],
+            'summary' => [
+                'sales_base'             => $totalSalesBase,
+                'output_vat'             => $totalOutputVat,
+                'gross_income'           => $totalGrossIncome,
+                'purchases_base'         => $effectivePurchasesBase,
+                'input_vat'              => $effectiveInputVat,
+                'opening_credit'         => $openingCredit,
+                'total_creditable_input' => $netVat['total_creditable_input'],
+                'net_vat'                => $netVat['net'],
+                'signed_net_formatted'   => $netVat['signed_net_formatted'],
+                'status'                 => $netVat['status'],
+                'label'                  => $netVat['label'],
+                'badge_class'            => $netVat['badge_class'],
+                'text_class'             => $netVat['text_class'],
+                'is_payable'             => $netVat['is_payable'],
+                'is_credit'              => $netVat['is_credit'],
+                'payable_amount'         => $netVat['payable_amount'],
+                'credit_carry_forward'   => $netVat['credit_carry_forward'],
+                'withholding_tax'        => $totalWithholding,
+                'net_disbursed'          => $totalNetDisbursed,
+                'income_count'           => $formattedIncomes->count(),
+                'expense_count'          => $formattedExpenses->count(),
+                'ocr_count'              => $formattedOcrItems->count(),
+                'total_count'            => $formattedIncomes->count() + $formattedExpenses->count() + $formattedOcrItems->count(),
+            ],
+            'incomes'   => $formattedIncomes,
+            'expenses'  => $formattedExpenses,
+            'ocr_items' => $formattedOcrItems,
+        ]);
+    }
+
+    /**
      * Initiate a Tax Payment / Remittance for VAT or Withholding (Finance Head assigns Finance Staff or pays immediately).
      */
     public function initiateSettlement(Request $request)

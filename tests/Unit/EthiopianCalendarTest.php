@@ -306,5 +306,35 @@ class EthiopianCalendarTest extends TestCase
         $range2 = EthiopianDate::monthRange(2018, 2);
         $this->assertTrue(Carbon::parse($parsed2)->betweenIncluded($range2['start'], $range2['end']));
     }
+
+    /**
+     * Test FinanceTaxReportController monthMovements AJAX response structure.
+     */
+    public function test_month_movements_drilldown_structure(): void
+    {
+        $controller = new \App\Http\Controllers\Finance\FinanceTaxReportController();
+        $request = new \Illuminate\Http\Request(['ethiopian_year' => 2019, 'ethiopian_month' => 1]);
+        $response = $controller->monthMovements($request);
+
+        $this->assertEquals(200, $response->getStatusCode());
+        $data = $response->getData(true);
+
+        $this->assertTrue($data['success']);
+        $this->assertEquals(2019, $data['month']['year']);
+        $this->assertEquals(1, $data['month']['month']);
+        $this->assertEquals('Meskerem', $data['month']['month_name']);
+        $this->assertEquals('መስከረም', $data['month']['month_am']);
+        $this->assertArrayHasKey('sales_base', $data['summary']);
+        $this->assertArrayHasKey('output_vat', $data['summary']);
+        $this->assertArrayHasKey('purchases_base', $data['summary']);
+        $this->assertArrayHasKey('input_vat', $data['summary']);
+        $this->assertArrayHasKey('opening_credit', $data['summary']);
+        $this->assertArrayHasKey('signed_net_formatted', $data['summary']);
+        $this->assertArrayHasKey('withholding_tax', $data['summary']);
+        $this->assertArrayHasKey('net_disbursed', $data['summary']);
+        $this->assertArrayHasKey('incomes', $data);
+        $this->assertArrayHasKey('expenses', $data);
+        $this->assertArrayHasKey('ocr_items', $data);
+    }
 }
 
