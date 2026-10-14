@@ -38,6 +38,46 @@
             </div>
             <span class="badge bg-white text-info border border-info px-3 py-2 fw-semibold"><i class="fa-solid fa-lock me-1"></i>Read-Only</span>
         </div>
+    @php
+        $isDeducted = $transfer->isDeductedFromOrigin();
+        $isAdded = $transfer->isAddedToDestination();
+    @endphp
+    @if(!in_array($transfer->status, ['rejected', 'cancelled']))
+    <div class="card shadow-sm mb-3 border-0">
+        <div class="card-body p-3 rounded-3 border {{ $isDeducted && $isAdded ? 'bg-success bg-opacity-10 border-success border-opacity-25' : 'bg-warning bg-opacity-10 border-warning border-opacity-25' }}">
+            <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between">
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas fa-arrow-up-from-bracket text-primary"></i>
+                        <span class="small fw-bold text-dark">Origin Store ({{ $transfer->fromStore->name ?? 'Origin Store' }}):</span>
+                        @if($isDeducted)
+                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Stock Deducted</span>
+                        @else
+                            <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending Deduction</span>
+                        @endif
+                    </div>
+                    <div class="vr d-none d-md-block opacity-25"></div>
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas fa-arrow-down-to-bracket text-success"></i>
+                        <span class="small fw-bold text-dark">Destination Store ({{ $transfer->toStore->name ?? 'Destination Store' }}):</span>
+                        @if($isAdded)
+                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Stock Added</span>
+                        @else
+                            <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending Addition</span>
+                        @endif
+                    </div>
+                </div>
+                <div>
+                    <form action="{{ route('transfers.sync-inventory', $transfer) }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-sm btn-primary fw-bold shadow-xs">
+                            <i class="fas fa-rotate me-1"></i>Check &amp; Adjust Inventory Now
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
     @endif
 
     <div class="row g-3">

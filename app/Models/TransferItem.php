@@ -18,7 +18,16 @@ class TransferItem extends Model
 
     protected static function booted()
     {
-        static::created(function (TransferItem $item) {
+        static::saved(function (TransferItem $item) {
+            try {
+                $transfer = $item->relationLoaded('transfer') ? $item->transfer : Transfer::find($item->transfer_id);
+                if ($transfer && !in_array($transfer->status, ['rejected', 'cancelled'])) {
+                    \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+                }
+            } catch (\Throwable $e) {}
+        });
+
+        static::deleted(function (TransferItem $item) {
             try {
                 $transfer = $item->relationLoaded('transfer') ? $item->transfer : Transfer::find($item->transfer_id);
                 if ($transfer && !in_array($transfer->status, ['rejected', 'cancelled'])) {

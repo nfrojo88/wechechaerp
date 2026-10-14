@@ -479,11 +479,11 @@
                     </button>
                 @endif
 
-                @if(in_array($transfer->status, ['in_transit', 'completed']))
+                @if(!in_array($transfer->status, ['rejected', 'cancelled']))
                     <form action="{{ route('store-manager.transfers.sync-inventory', $transfer) }}" method="POST" class="d-inline">
                         @csrf
-                        <button type="submit" class="btn btn-outline-secondary btn-sm shadow-sm" title="Reconcile and ensure inventory is deducted from origin store and added to destination store">
-                            <i class="fas fa-rotate me-1 text-primary"></i>Re-sync Stock Movements
+                        <button type="submit" class="btn btn-outline-primary btn-sm shadow-sm" title="Reconcile and ensure inventory is deducted from origin store and added to destination store">
+                            <i class="fas fa-rotate me-1 text-primary"></i>Check &amp; Adjust Inventory Now
                         </button>
                     </form>
                 @endif
@@ -508,29 +508,37 @@
             $isDeducted = $transfer->isDeductedFromOrigin();
             $isAdded = $transfer->isAddedToDestination();
         @endphp
-        @if(in_array($transfer->status, ['in_transit', 'completed']))
+        @if(!in_array($transfer->status, ['rejected', 'cancelled']))
         <div class="px-3 pt-3">
-            <div class="d-flex flex-wrap gap-3 align-items-center p-2.5 rounded-3 border {{ $isDeducted && ($transfer->status !== 'completed' || $isAdded) ? 'bg-success bg-opacity-10 border-success border-opacity-25' : 'bg-warning bg-opacity-10 border-warning border-opacity-25' }}">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="fas fa-arrow-up-from-bracket text-primary"></i>
-                    <span class="small fw-bold text-dark">Origin Store ({{ $transfer->fromStore->name ?? 'Origin Store' }}):</span>
-                    @if($isDeducted)
-                        <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Stock Deducted</span>
-                    @else
-                        <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending Deduction</span>
-                    @endif
+            <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between p-2.5 rounded-3 border {{ $isDeducted && $isAdded ? 'bg-success bg-opacity-10 border-success border-opacity-25' : 'bg-warning bg-opacity-10 border-warning border-opacity-25' }}">
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas fa-arrow-up-from-bracket text-primary"></i>
+                        <span class="small fw-bold text-dark">Origin Store ({{ $transfer->fromStore->name ?? 'Origin Store' }}):</span>
+                        @if($isDeducted)
+                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Stock Deducted</span>
+                        @else
+                            <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending Deduction</span>
+                        @endif
+                    </div>
+                    <div class="vr d-none d-md-block opacity-25"></div>
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas fa-arrow-down-to-bracket text-success"></i>
+                        <span class="small fw-bold text-dark">Destination Store ({{ $transfer->toStore->name ?? 'Destination Store' }}):</span>
+                        @if($isAdded)
+                            <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Stock Added</span>
+                        @else
+                            <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending Addition</span>
+                        @endif
+                    </div>
                 </div>
-                <div class="vr d-none d-md-block opacity-25"></div>
-                <div class="d-flex align-items-center gap-2">
-                    <i class="fas fa-arrow-down-to-bracket text-success"></i>
-                    <span class="small fw-bold text-dark">Destination Store ({{ $transfer->toStore->name ?? 'Destination Store' }}):</span>
-                    @if($isAdded)
-                        <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Stock Added</span>
-                    @elseif($transfer->status === 'completed')
-                        <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending Addition</span>
-                    @else
-                        <span class="badge bg-secondary"><i class="fas fa-hourglass-half me-1"></i>Awaiting Receipt</span>
-                    @endif
+                <div>
+                    <form action="{{ route('store-manager.transfers.sync-inventory', $transfer) }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-sm btn-primary py-1 px-2.5 fw-bold shadow-xs">
+                            <i class="fas fa-rotate me-1"></i>Check &amp; Adjust Inventory
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>

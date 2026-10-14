@@ -709,6 +709,25 @@ class StoreManagerController extends Controller
         $filterStoreId = $request->input('store_id');
         $status = $request->input('status');
 
+        // Auto-check and adjust any active transfers that have items not yet adjusted
+        try {
+            $unadjusted = Transfer::whereNotIn('status', ['rejected', 'cancelled'])
+                ->whereNotNull('from_store_id')
+                ->whereNotNull('to_store_id')
+                ->whereColumn('from_store_id', '!=', 'to_store_id')
+                ->whereHas('items')
+                ->where(function ($q) {
+                    $q->whereDoesntHave('inventoryMovements', fn($m) => $m->where('type', 'transfer_out'))
+                      ->orWhereDoesntHave('inventoryMovements', fn($m) => $m->where('type', 'transfer_in'));
+                })
+                ->limit(50)
+                ->get();
+
+            foreach ($unadjusted as $tr) {
+                self::syncTransferInventory($tr);
+            }
+        } catch (\Throwable $e) {}
+
         $query = Transfer::with(['fromStore', 'toStore', 'requestedBy', 'approvedBy', 'dispatchedBy', 'receivedBy', 'driver', 'items.product']);
 
         if ($isStoreKeeper) {
@@ -832,6 +851,13 @@ class StoreManagerController extends Controller
             if (!$storeId || ($transfer->from_store_id != $storeId && $transfer->to_store_id != $storeId)) {
                 abort(403, 'Unauthorized. You can only view incoming or outgoing transfers assigned to your store (' . ($assignedStore->name ?? 'None') . ').');
             }
+        }
+
+        // Auto-check and adjust inventory for this Transfer TR immediately on view
+        if (!in_array($transfer->status, ['rejected', 'cancelled'])) {
+            try {
+                self::syncTransferInventory($transfer);
+            } catch (\Throwable $e) {}
         }
 
         $transfer->load([
@@ -1213,30 +1239,35 @@ class StoreManagerController extends Controller
                     continue;
                 }
 
-                // 1. DEDUCT FROM ORIGIN STORE (immediately upon creation)
-                $alreadyDeducted = InventoryMovement::where('reference_type', Transfer::class)
+                // 1. DEDUCT FROM ORIGIN STORE (immediately upon creation / check)
+                $originInv = Inventory::withoutGlobalScopes()->firstOrCreate(
+                    ['store_id' => $transfer->from_store_id, 'product_id' => $item->product_id],
+                    [
+                        'quantity_on_hand'   => 0,
+                        'quantity_reserved'  => 0,
+                        'min_stock'          => 0,
+                        'unit_cost'          => (float)($item->product->unit_price ?? $item->product->purchase_price ?? 0),
+                        'last_movement_at'   => now(),
+                    ]
+                );
+
+                $rawOut = (float) InventoryMovement::where('reference_type', Transfer::class)
                     ->where('reference_id', $transfer->id)
+                    ->where('inventory_id', $originInv->id)
                     ->where('type', 'transfer_out')
-                    ->whereHas('inventory', function ($q) use ($transfer, $item) {
-                        $q->withoutGlobalScopes()
-                          ->where('store_id', $transfer->from_store_id)
-                          ->where('product_id', $item->product_id);
-                    })
-                    ->exists();
+                    ->sum('quantity');
 
-                if (!$alreadyDeducted) {
-                    $originInv = Inventory::withoutGlobalScopes()->firstOrCreate(
-                        ['store_id' => $transfer->from_store_id, 'product_id' => $item->product_id],
-                        [
-                            'quantity_on_hand'   => 0,
-                            'quantity_reserved'  => 0,
-                            'min_stock'          => 0,
-                            'unit_cost'          => (float)($item->product->unit_price ?? $item->product->purchase_price ?? 0),
-                            'last_movement_at'   => now(),
-                        ]
-                    );
+                $rawReturn = (float) InventoryMovement::where('reference_type', Transfer::class)
+                    ->where('reference_id', $transfer->id)
+                    ->where('inventory_id', $originInv->id)
+                    ->where('type', 'transfer_return')
+                    ->sum('quantity');
 
-                    $originInv->decrement('quantity_on_hand', $qty);
+                $netDeducted = abs($rawOut) - $rawReturn;
+                $diffOut = round($qty - $netDeducted, 4);
+
+                if ($diffOut > 0.0001) {
+                    $originInv->decrement('quantity_on_hand', $diffOut);
                     $originInv->update(['last_movement_at' => now()]);
 
                     $slipNo = $transfer->outgoing_slip_no ?: $transfer->physical_slip_no ?: $transfer->transfer_no ?: 'N/A';
@@ -1245,7 +1276,7 @@ class StoreManagerController extends Controller
                     InventoryMovement::create([
                         'inventory_id'   => $originInv->id,
                         'type'           => 'transfer_out',
-                        'quantity'       => -$qty,
+                        'quantity'       => -$diffOut,
                         'reference_type' => Transfer::class,
                         'reference_id'   => $transfer->id,
                         'performed_by'   => Auth::id() ?? $transfer->dispatched_by ?? $transfer->requested_by ?? 1,
@@ -1253,42 +1284,56 @@ class StoreManagerController extends Controller
                     ]);
 
                     $deductedCount++;
+                } elseif ($diffOut < -0.0001) {
+                    $excess = abs($diffOut);
+                    $originInv->increment('quantity_on_hand', $excess);
+                    $originInv->update(['last_movement_at' => now()]);
+
+                    InventoryMovement::create([
+                        'inventory_id'   => $originInv->id,
+                        'type'           => 'transfer_return',
+                        'quantity'       => $excess,
+                        'reference_type' => Transfer::class,
+                        'reference_id'   => $transfer->id,
+                        'performed_by'   => Auth::id() ?? $transfer->dispatched_by ?? $transfer->requested_by ?? 1,
+                        'remarks'        => 'Transfer #' . $transfer->transfer_no . ' excess stock returned to origin store',
+                    ]);
                 }
 
-                // 2. ADD TO DESTINATION STORE (immediately upon creation)
-                $alreadyAdded = InventoryMovement::where('reference_type', Transfer::class)
+                // 2. ADD TO DESTINATION STORE (immediately upon creation / check)
+                $unitCost = (float)($originInv?->unit_cost ?? $item->product->unit_price ?? $item->product->purchase_price ?? 0);
+
+                $destInv = Inventory::withoutGlobalScopes()->firstOrCreate(
+                    ['store_id' => $transfer->to_store_id, 'product_id' => $item->product_id],
+                    [
+                        'quantity_on_hand'   => 0,
+                        'quantity_reserved'  => 0,
+                        'min_stock'          => 5,
+                        'unit_cost'          => $unitCost,
+                        'last_movement_at'   => now(),
+                    ]
+                );
+
+                $rawIn = (float) InventoryMovement::where('reference_type', Transfer::class)
                     ->where('reference_id', $transfer->id)
+                    ->where('inventory_id', $destInv->id)
                     ->where('type', 'transfer_in')
-                    ->whereHas('inventory', function ($q) use ($transfer, $item) {
-                        $q->withoutGlobalScopes()
-                          ->where('store_id', $transfer->to_store_id)
-                          ->where('product_id', $item->product_id);
-                    })
-                    ->exists();
+                    ->sum('quantity');
 
-                if (!$alreadyAdded) {
-                    $originInv = Inventory::withoutGlobalScopes()
-                        ->where('store_id', $transfer->from_store_id)
-                        ->where('product_id', $item->product_id)
-                        ->first();
+                $rawReversal = (float) InventoryMovement::where('reference_type', Transfer::class)
+                    ->where('reference_id', $transfer->id)
+                    ->where('inventory_id', $destInv->id)
+                    ->where('type', 'transfer_reversal')
+                    ->sum('quantity');
 
-                    $unitCost = (float)($originInv?->unit_cost ?? $item->product->unit_price ?? $item->product->purchase_price ?? 0);
+                $netAdded = $rawIn - $rawReversal;
+                $diffIn = round($qty - $netAdded, 4);
 
-                    $destInv = Inventory::withoutGlobalScopes()->firstOrCreate(
-                        ['store_id' => $transfer->to_store_id, 'product_id' => $item->product_id],
-                        [
-                            'quantity_on_hand'   => 0,
-                            'quantity_reserved'  => 0,
-                            'min_stock'          => 5,
-                            'unit_cost'          => $unitCost,
-                            'last_movement_at'   => now(),
-                        ]
-                    );
-
+                if ($diffIn > 0.0001) {
                     $oldQty = (float)$destInv->quantity_on_hand;
                     $oldCost = (float)($destInv->unit_cost ?? 0);
-                    $newQty = $oldQty + $qty;
-                    $newCost = $newQty > 0 ? (($oldQty * $oldCost) + ($qty * $unitCost)) / $newQty : $unitCost;
+                    $newQty = $oldQty + $diffIn;
+                    $newCost = $newQty > 0 ? (($oldQty * $oldCost) + ($diffIn * $unitCost)) / $newQty : $unitCost;
 
                     $destInv->quantity_on_hand = $newQty;
                     $destInv->unit_cost = $newCost;
@@ -1301,7 +1346,7 @@ class StoreManagerController extends Controller
                     InventoryMovement::create([
                         'inventory_id'   => $destInv->id,
                         'type'           => 'transfer_in',
-                        'quantity'       => $qty,
+                        'quantity'       => $diffIn,
                         'reference_type' => Transfer::class,
                         'reference_id'   => $transfer->id,
                         'performed_by'   => Auth::id() ?? $transfer->received_by ?? $transfer->requested_by ?? 1,
@@ -1309,6 +1354,20 @@ class StoreManagerController extends Controller
                     ]);
 
                     $addedCount++;
+                } elseif ($diffIn < -0.0001) {
+                    $excess = abs($diffIn);
+                    $destInv->decrement('quantity_on_hand', $excess);
+                    $destInv->update(['last_movement_at' => now()]);
+
+                    InventoryMovement::create([
+                        'inventory_id'   => $destInv->id,
+                        'type'           => 'transfer_reversal',
+                        'quantity'       => $excess,
+                        'reference_type' => Transfer::class,
+                        'reference_id'   => $transfer->id,
+                        'performed_by'   => Auth::id() ?? $transfer->received_by ?? $transfer->requested_by ?? 1,
+                        'remarks'        => 'Transfer #' . $transfer->transfer_no . ' excess stock reversed from destination store',
+                    ]);
                 }
 
                 // 3. IF FIXED ASSET: MOVE FIXED ASSET UNITS & SYNC FIXED ASSET CATALOG
@@ -1477,6 +1536,35 @@ class StoreManagerController extends Controller
         $res = self::syncTransferInventory($transfer);
         $transfer->load(['fromStore', 'toStore']);
         return back()->with('success', "Stock movements verified! Deducted {$res['deducted']} item(s) from " . ($transfer->fromStore->name ?? 'Origin Store') . ", added {$res['added']} item(s) to " . ($transfer->toStore->name ?? 'Destination Store') . ".");
+    }
+
+    /**
+     * Reconcile and adjust inventory across ALL active transfers in the database.
+     */
+    public function syncAllTransfersInventory(Request $request)
+    {
+        $transfers = Transfer::whereNotIn('status', ['rejected', 'cancelled'])
+            ->whereNotNull('from_store_id')
+            ->whereNotNull('to_store_id')
+            ->whereColumn('from_store_id', '!=', 'to_store_id')
+            ->whereHas('items')
+            ->get();
+
+        $totalDeducted = 0;
+        $totalAdded = 0;
+        $adjustedTransfers = 0;
+
+        foreach ($transfers as $t) {
+            $res = self::syncTransferInventory($t);
+            if ($res['deducted'] > 0 || $res['added'] > 0) {
+                $adjustedTransfers++;
+                $totalDeducted += $res['deducted'];
+                $totalAdded += $res['added'];
+            }
+        }
+
+        $count = $transfers->count();
+        return back()->with('success', "Transfer TR Inventory Audit Complete: Verified {$count} transfer(s). Auto-adjusted {$adjustedTransfers} transfer(s) with {$totalDeducted} item(s) deducted from origin stores and {$totalAdded} item(s) added to destination stores.");
     }
 
     /**
@@ -1835,6 +1923,8 @@ class StoreManagerController extends Controller
                     }
                 }
             }
+
+            self::syncTransferInventory($transfer);
         });
 
         $msg = 'Transfer materials adjusted successfully.';
@@ -2014,17 +2104,19 @@ class StoreManagerController extends Controller
         if ($transfer->items()->count() <= 1) {
             $transferNo = $transfer->transfer_no;
             DB::transaction(function() use ($transfer, $item) {
+                self::reverseTransferInventory($transfer, "Transfer deleted upon removing last item");
                 $item->delete();
                 $transfer->delete();
             });
 
             return redirect()->route('store-manager.transfers.index')
-                ->with('success', "Item \"{$productName}\" removed. Since it was the only material, Transfer #{$transferNo} has been deleted.");
+                ->with('success', "Item \"{$productName}\" removed. Since it was the only material, Transfer #{$transferNo} has been deleted and inventory reversed.");
         }
 
         $item->delete();
+        self::syncTransferInventory($transfer);
 
-        return redirect()->back()->with('success', "Material line \"{$productName}\" removed from Transfer #{$transfer->transfer_no}.");
+        return redirect()->back()->with('success', "Material line \"{$productName}\" removed from Transfer #{$transfer->transfer_no} and inventory adjusted.");
     }
 
     /**

@@ -375,6 +375,14 @@ class PurchaseRequestController extends Controller
             ->latest()
             ->get();
 
+        foreach ($prTransfers as $pt) {
+            if (!in_array($pt->status, ['rejected', 'cancelled'])) {
+                try {
+                    \App\Http\Controllers\StoreManagerController::syncTransferInventory($pt);
+                } catch (\Throwable $e) {}
+            }
+        }
+
         $stockAvailability = [];
         $transferAvailability = [];
 

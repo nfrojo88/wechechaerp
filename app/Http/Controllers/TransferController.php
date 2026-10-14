@@ -15,6 +15,25 @@ class TransferController extends Controller
 {
     public function index()
     {
+        // Auto-check and adjust any active transfers that have items not yet adjusted
+        try {
+            $unadjusted = Transfer::whereNotIn('status', ['rejected', 'cancelled'])
+                ->whereNotNull('from_store_id')
+                ->whereNotNull('to_store_id')
+                ->whereColumn('from_store_id', '!=', 'to_store_id')
+                ->whereHas('items')
+                ->where(function ($q) {
+                    $q->whereDoesntHave('inventoryMovements', fn($m) => $m->where('type', 'transfer_out'))
+                      ->orWhereDoesntHave('inventoryMovements', fn($m) => $m->where('type', 'transfer_in'));
+                })
+                ->limit(50)
+                ->get();
+
+            foreach ($unadjusted as $tr) {
+                \App\Http\Controllers\StoreManagerController::syncTransferInventory($tr);
+            }
+        } catch (\Throwable $e) {}
+
         $transfers = Transfer::with(['fromStore', 'toStore', 'requestedBy'])
             ->latest()->paginate(20);
         return view('transfers.index', compact('transfers'));
@@ -84,6 +103,13 @@ class TransferController extends Controller
 
     public function show(Transfer $transfer)
     {
+        // Auto-check and adjust inventory for this Transfer TR immediately on view
+        if (!in_array($transfer->status, ['rejected', 'cancelled'])) {
+            try {
+                \App\Http\Controllers\StoreManagerController::syncTransferInventory($transfer);
+            } catch (\Throwable $e) {}
+        }
+
         $transfer->load(['fromStore', 'toStore', 'requestedBy', 'approvedBy', 'driver', 'items.product']);
         
         // Fetch drivers where department string or role_title contains driver
@@ -211,5 +237,15 @@ class TransferController extends Controller
             'rejection_reason' => $request->rejection_reason,
         ]);
         return back()->with('success', 'Transfer rejected and inventory movements reversed.');
+    }
+
+    public function syncInventoryManually(Request $request, Transfer $transfer)
+    {
+        return app(\App\Http\Controllers\StoreManagerController::class)->syncInventoryManually($request, $transfer);
+    }
+
+    public function syncAllTransfersInventory(Request $request)
+    {
+        return app(\App\Http\Controllers\StoreManagerController::class)->syncAllTransfersInventory($request);
     }
 }

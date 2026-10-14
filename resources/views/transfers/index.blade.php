@@ -17,11 +17,22 @@
                 <small class="text-muted">Internal Audit inspection of all inter-site store transfers and status movements</small>
             @endif
         </div>
-        @if(!$isAuditorUser && !$isStoreKeeper)
-            <a href="{{ route('transfers.create') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>New Transfer</a>
-        @elseif($isAuditorUser)
-            <span class="badge bg-info text-dark px-3 py-2 fs-6 rounded-pill fw-bold"><i class="fa-solid fa-eye me-1"></i>Read-Only Audit Stream</span>
-        @endif
+        <div class="d-flex gap-2 flex-wrap">
+            @if(!$isAuditorUser && !$isStoreKeeper)
+                <a href="{{ route('transfers.create') }}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>New Transfer</a>
+            @endif
+            @if(!$isAuditorUser)
+                <form action="{{ route('transfers.sync-all-inventory') }}" method="POST" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-outline-primary" title="Reconcile and ensure inventory is deducted from origin and added to destination for all transfers">
+                        <i class="fas fa-rotate me-1"></i>Check &amp; Adjust All Transfers
+                    </button>
+                </form>
+            @endif
+            @if($isAuditorUser)
+                <span class="badge bg-info text-dark px-3 py-2 fs-6 rounded-pill fw-bold"><i class="fa-solid fa-eye me-1"></i>Read-Only Audit Stream</span>
+            @endif
+        </div>
     </div>
     @if(session('success'))<div class="alert alert-success alert-dismissible fade show">{{ session('success') }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>@endif
     <div class="card shadow-sm">
@@ -29,7 +40,7 @@
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-dark">
-                        <tr><th>Transfer No</th><th>From</th><th>To</th><th>Requested By</th><th>Required Date</th><th>Status</th><th class="text-center">Action</th></tr>
+                        <tr><th>Transfer No</th><th>From</th><th>To</th><th>Requested By</th><th>Required Date</th><th>Status</th><th>Stock Status</th><th class="text-center">Action</th></tr>
                     </thead>
                     <tbody>
                         @forelse($transfers as $t)
@@ -42,6 +53,20 @@
                             <td>
                                 @php $colors = ['draft'=>'secondary','pending_approval'=>'warning','approved'=>'info','in_transit'=>'primary','completed'=>'success','rejected'=>'danger','cancelled'=>'dark']; @endphp
                                 <span class="badge bg-{{ $colors[$t->status] ?? 'secondary' }}">{{ str_replace('_',' ',ucfirst($t->status)) }}</span>
+                            </td>
+                            <td>
+                                @if($t->isDeductedFromOrigin() && $t->isAddedToDestination())
+                                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="fas fa-check-double me-1"></i>Stock Synced</span>
+                                @elseif(!in_array($t->status, ['rejected', 'cancelled']))
+                                    <form action="{{ route('transfers.sync-inventory', $t) }}" method="POST" class="d-inline">
+                                        @csrf
+                                        <button type="submit" class="btn btn-xs btn-outline-warning py-0 px-2" title="Click to auto-adjust inventory">
+                                            <i class="fas fa-rotate me-1"></i>Adjust Stock
+                                        </button>
+                                    </form>
+                                @else
+                                    <span class="text-muted small">—</span>
+                                @endif
                             </td>
                             <td class="text-center">
                                 <a href="{{ route('transfers.show', $t) }}" class="btn btn-sm btn-outline-info"><i class="fas fa-eye"></i></a>

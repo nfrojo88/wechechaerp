@@ -1798,6 +1798,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('transfers/{transfer}/send-to-driver', [App\Http\Controllers\TransferController::class, 'sendToDriver'])->name('transfers.send-to-driver');
     Route::post('transfers/{transfer}/reject', [App\Http\Controllers\TransferController::class, 'reject'])->name('transfers.reject');
     Route::post('transfers/{transfer}/complete', [App\Http\Controllers\TransferController::class, 'complete'])->name('transfers.complete');
+    Route::post('transfers/{transfer}/sync-inventory', [App\Http\Controllers\TransferController::class, 'syncInventoryManually'])->name('transfers.sync-inventory');
+    Route::post('transfers/sync-all-inventory', [App\Http\Controllers\TransferController::class, 'syncAllTransfersInventory'])->name('transfers.sync-all-inventory');
 
     // AI Receipt Scanner Endpoint for Purchasing Screens
     Route::post('purchases/receipt-scan', [App\Http\Controllers\PurchaseReceiptScanController::class, 'scan'])
@@ -2394,6 +2396,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('transfers/{transfer}/receive', [App\Http\Controllers\StoreManagerController::class, 'receiveTransfer'])->name('transfers.receive');
         Route::post('transfers/{transfer}/reject', [App\Http\Controllers\StoreManagerController::class, 'rejectTransfer'])->name('transfers.reject');
         Route::post('transfers/{transfer}/sync-inventory', [App\Http\Controllers\StoreManagerController::class, 'syncInventoryManually'])->name('transfers.sync-inventory');
+        Route::post('transfers/sync-all-inventory', [App\Http\Controllers\StoreManagerController::class, 'syncAllTransfersInventory'])->name('transfers.sync-all-inventory');
         Route::post('transfers/bulk-merge', [App\Http\Controllers\StoreManagerController::class, 'bulkMergeTransfers'])->name('transfers.bulk-merge');
         Route::post('transfers/{transfer}/merge-into', [App\Http\Controllers\StoreManagerController::class, 'mergeTransfersIntoThis'])->name('transfers.merge-into');
         Route::post('transfers/{transfer}/move-item', [App\Http\Controllers\StoreManagerController::class, 'moveTransferItem'])->name('transfers.move-item');

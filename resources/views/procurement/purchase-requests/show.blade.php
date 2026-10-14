@@ -2135,6 +2135,16 @@
                                                                         <td>{{ $tr->toStore?->name ?? 'Destination Store' }}</td>
                                                                         <td><span class="badge bg-success-subtle text-success">{{ ucfirst($tr->status) }}</span></td>
                                                                         <td class="text-end pe-2">
+                                                                            @if($tr->isDeductedFromOrigin() && $tr->isAddedToDestination())
+                                                                                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 me-1" style="font-size:0.75rem;" title="Inventory deducted from origin and added to destination"><i class="fas fa-check-double me-1"></i>Stock Synced</span>
+                                                                            @elseif(!in_array($tr->status, ['rejected', 'cancelled']))
+                                                                                <form action="{{ route('store-manager.transfers.sync-inventory', $tr) }}" method="POST" class="d-inline me-1">
+                                                                                    @csrf
+                                                                                    <button type="submit" class="btn btn-xs btn-outline-warning py-0 px-1 shadow-xs" title="Click to auto-adjust inventory">
+                                                                                        <i class="fas fa-rotate me-1"></i>Adjust Stock
+                                                                                    </button>
+                                                                                </form>
+                                                                            @endif
                                                                             <a href="{{ route('store-manager.transfers.show', $tr) }}" class="btn btn-xs btn-outline-primary shadow-xs">
                                                                                 <i class="fa-solid fa-arrow-up-right-from-square me-1"></i> View Transfer
                                                                             </a>

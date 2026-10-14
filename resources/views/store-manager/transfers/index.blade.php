@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 
 @php
     $authUser = auth()->user();
@@ -26,11 +26,19 @@
                 {{ $isAuditorUser ? 'Internal audit inspection of all warehouse transfers, driver logistics, dispatch slips, and verified destination stock receipts.' : ($isStoreKeeper ? 'Manage material dispatch and receiving with driver waybill slips for ' . ($assignedStore->name ?? 'your store') : 'Track and control inter-site material dispatches, driver logistics, and verified stock receipts') }}
             </p>
         </div>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap">
             @if(!$isAuditorUser && !$isStoreKeeper)
             <a href="{{ route('store-manager.transfers.create') }}" class="btn btn-primary btn-sm shadow-sm">
                 <i class="fas fa-plus me-1"></i>New Transfer Request
             </a>
+            @endif
+            @if(!$isAuditorUser)
+            <form action="{{ route('store-manager.transfers.sync-all-inventory') }}" method="POST" class="d-inline">
+                @csrf
+                <button type="submit" class="btn btn-outline-primary btn-sm shadow-sm" title="Reconcile and ensure inventory is deducted from origin and added to destination for all transfers">
+                    <i class="fas fa-rotate me-1"></i>Check &amp; Adjust All Transfers Inventory
+                </button>
+            </form>
             @endif
             @if($isStoreKeeper)
             <a href="{{ route('dashboard.store-keeper') }}" class="btn btn-outline-secondary btn-sm">
@@ -414,6 +422,11 @@
                                         <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1" style="font-size:0.68rem;">Incoming</span>
                                     @elseif($isOutgoing)
                                         <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-1" style="font-size:0.68rem;">Outgoing</span>
+                                    @endif
+                                    @if($transfer->isDeductedFromOrigin() && $transfer->isAddedToDestination())
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 ms-1" style="font-size:0.68rem;" title="Inventory deducted from origin and added to destination"><i class="fas fa-check-double me-1"></i>Stock Synced</span>
+                                    @elseif(!in_array($transfer->status, ['rejected', 'cancelled']))
+                                        <span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-25 ms-1" style="font-size:0.68rem;" title="Stock auto-adjust pending"><i class="fas fa-clock me-1"></i>Stock Sync Pending</span>
                                     @endif
                                 </div>
                             </td>
