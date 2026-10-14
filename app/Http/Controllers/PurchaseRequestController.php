@@ -2545,10 +2545,66 @@ class PurchaseRequestController extends Controller
                     ['deleted_pr_id' => $purchaseRequest->id, 'pr_no' => $prIdentifier]
                 );
 
+                // 1. Delete associated line items
                 $purchaseRequest->items()->delete();
+
+                // 2. Delete workflow audit logs
                 $purchaseRequest->workflowLogs()->delete();
-                $purchaseRequest->proformas()->delete();
-                $purchaseRequest->delete();
+
+                // 3. Delete proformas and remove any stored attachment files
+                foreach ($purchaseRequest->proformaInvoices as $prof) {
+                    if (!empty($prof->file_path)) {
+                        try {
+                            \App\Services\FileUploadService::delete($prof->file_path);
+                        } catch (\Throwable $ignored) {}
+                    }
+                    $prof->delete();
+                }
+
+                // 4. Delete market research records
+                $purchaseRequest->marketResearch()->delete();
+
+                // 5. Delete GM decisions
+                $purchaseRequest->gmDecisions()->delete();
+
+                // 6. Delete marketing variance
+                $purchaseRequest->marketingVariance()->delete();
+
+                // 7. Delete procurement payments
+                $purchaseRequest->payments()->delete();
+
+                // 8. Delete procurement receipt and attached files
+                if ($purchaseRequest->receipt) {
+                    if (!empty($purchaseRequest->receipt->file_path)) {
+                        try {
+                            \App\Services\FileUploadService::delete($purchaseRequest->receipt->file_path);
+                        } catch (\Throwable $ignored) {}
+                    }
+                    $purchaseRequest->receipt()->delete();
+                }
+
+                // 9. Delete driver booking
+                $purchaseRequest->driverBooking()->delete();
+
+                // 10. Clean up references in other tables
+                \App\Models\DeliveryReceipt::where('purchase_request_id', $purchaseRequest->id)->update(['purchase_request_id' => null]);
+                \App\Models\PurchaseOrder::where('purchase_request_id', $purchaseRequest->id)->update(['purchase_request_id' => null]);
+                \App\Models\PurchaseRequest::where('merged_into_pr_id', $purchaseRequest->id)->update(['merged_into_pr_id' => null]);
+
+                if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                    \App\Models\ExpenseRequest::where('purchase_request_id', $purchaseRequest->id)->update(['purchase_request_id' => null]);
+                }
+
+                if (\Illuminate\Support\Facades\Schema::hasTable('credit_store_ledgers')) {
+                    \App\Models\CreditStoreLedger::where('purchase_request_id', $purchaseRequest->id)->update(['purchase_request_id' => null]);
+                }
+
+                if (\Illuminate\Support\Facades\Schema::hasTable('support_tickets') && \Illuminate\Support\Facades\Schema::hasColumn('support_tickets', 'mr_purchase_request_id')) {
+                    \Illuminate\Support\Facades\DB::table('support_tickets')->where('mr_purchase_request_id', $purchaseRequest->id)->update(['mr_purchase_request_id' => null]);
+                }
+
+                // 11. Permanently delete the purchase request record
+                $purchaseRequest->forceDelete();
             });
 
             return redirect()->route('procurement.my-queue')

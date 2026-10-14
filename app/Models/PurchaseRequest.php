@@ -229,6 +229,7 @@ class PurchaseRequest extends Model
     public function items()           { return $this->hasMany(PurchaseRequestItem::class); }
     public function marketResearch()  { return $this->hasMany(MarketResearch::class); }
     public function proformaInvoices(){ return $this->hasMany(ProformaInvoice::class); }
+    public function proformas()       { return $this->proformaInvoices(); }
     public function purchaseOrders()  { return $this->hasMany(PurchaseOrder::class); }
 
     // ── New Lifecycle Relations ────────────────────────────────────────────

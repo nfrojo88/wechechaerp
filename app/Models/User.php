@@ -155,11 +155,20 @@ class User extends Authenticatable
      */
     public function isGlobalAdmin(): bool
     {
-        $roleNames = $this->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray();
-        return in_array('global_admin', $roleNames) 
+        if ((bool)($this->is_admin ?? false)) {
+            return true;
+        }
+
+        try {
+            if ($this->hasAnyRole(['global_admin', 'Global Admin', 'admin', 'Admin', 'super_admin', 'Super Admin', 'globaladmin'])) {
+                return true;
+            }
+        } catch (\Throwable $e) {}
+
+        $roleNames = $this->roles ? $this->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-', '_'], '', trim($r))))->toArray() : [];
+        return in_array('globaladmin', $roleNames) 
             || in_array('admin', $roleNames) 
-            || in_array('super_admin', $roleNames)
-            || (bool)($this->is_admin ?? false);
+            || in_array('superadmin', $roleNames);
     }
 
     public function accessUnblockedByUser()

@@ -3,7 +3,7 @@
 @php
     $authUser = auth()->user();
     $rawUserRoles = $authUser ? $authUser->roles->pluck('name')->map(fn($r) => strtolower(str_replace([' ', '-'], '_', trim($r))))->toArray() : [];
-    $isGlobalAdmin = in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles);
+    $isGlobalAdmin = ($authUser && $authUser->isGlobalAdmin()) || in_array('global_admin', $rawUserRoles) || in_array('admin', $rawUserRoles) || in_array('super_admin', $rawUserRoles);
     $isAuditorUser = !empty($isAuditor) || in_array('auditor', $rawUserRoles) || in_array('audit', $rawUserRoles) || in_array('internal_auditor', $rawUserRoles) || in_array('audit_team', $rawUserRoles) || ($authUser && $authUser->hasAnyRole(['auditor', 'audit', 'internal_auditor', 'Auditor', 'Audit']));
     $isStoreManagerUser = in_array('store_manager', $rawUserRoles);
     $isStoreKeeperUser = !empty($isStoreKeeper) || in_array('store_keeper', $rawUserRoles) || in_array('storekeeper', $rawUserRoles) || in_array('store_clerk', $rawUserRoles);
