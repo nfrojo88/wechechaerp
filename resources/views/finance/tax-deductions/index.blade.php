@@ -443,14 +443,18 @@
                             <td class="text-center pe-4">
                                 <div class="d-inline-flex align-items-center gap-1.5">
                                     <button type="button" 
-                                            class="btn btn-xs btn-primary rounded-pill px-2.5 py-1 small d-inline-flex align-items-center gap-1 shadow-xs fw-semibold"
-                                            onclick="openMonthMovementsModal({{ $selectedEthYear }}, {{ $mNum }}, '{{ $mTrend['month_name'] }}', '{{ $mTrend['month_am'] }}')"
+                                            class="btn btn-sm btn-primary rounded-pill px-3 py-1 small d-inline-flex align-items-center gap-1.5 shadow-xs fw-semibold"
+                                            data-year="{{ $selectedEthYear }}"
+                                            data-month="{{ $mNum }}"
+                                            data-name-en="{{ $mTrend['month_name'] }}"
+                                            data-name-am="{{ $mTrend['month_am'] }}"
+                                            onclick="openMonthMovementsModal(this.dataset.year, this.dataset.month, this.dataset.nameEn, this.dataset.nameAm)"
                                             title="View detailed transaction movements for {{ $mTrend['month_name'] }}">
                                         <i class="fa-solid fa-receipt"></i>
                                         <span>Movements</span>
                                     </button>
                                     <a href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum])) }}" 
-                                       class="btn btn-xs {{ $mTrend['is_current'] ? 'btn-outline-primary active' : 'btn-outline-secondary' }} rounded-pill px-2 py-1 small" 
+                                       class="btn btn-sm {{ $mTrend['is_current'] ? 'btn-outline-primary active' : 'btn-outline-secondary' }} rounded-pill px-2.5 py-1 small" 
                                        title="Filter whole page to this month">
                                         <i class="fa-solid fa-filter"></i>
                                     </a>
@@ -2571,9 +2575,34 @@
 </div>
 
 {{-- ── 13-Month Movement & Transaction Audit Modal ────────────────────────────── --}}
-<div class="modal fade" id="monthMovementsModal" tabindex="-1" aria-labelledby="monthMovementsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+<div class="modal fade" id="monthMovementsModal" tabindex="-1" aria-labelledby="monthMovementsModalLabel" aria-hidden="true" style="z-index: 1060;">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable my-3" style="max-width: 1240px;">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <style>
+                #monthMovementsModal .modal-body {
+                    min-height: 520px;
+                    background-color: #f8fafc;
+                }
+                #monthMovementsModal thead.sticky-header th {
+                    background-color: #f1f5f9 !important;
+                    position: sticky;
+                    top: 0;
+                    z-index: 5;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+                }
+                #monthMovementsModal tfoot.sticky-footer td {
+                    background-color: #f8fafc !important;
+                    position: sticky;
+                    bottom: 0;
+                    z-index: 5;
+                    box-shadow: 0 -1px 2px rgba(0,0,0,0.06);
+                }
+                #monthMovementsModal .kpi-card {
+                    border-radius: 14px;
+                    background: #fff;
+                    transition: transform 0.15s ease, box-shadow 0.15s ease;
+                }
+            </style>
             {{-- Modal Header --}}
             <div class="modal-header bg-primary text-white py-3 px-4 flex-shrink-0">
                 <div class="d-flex align-items-center gap-2.5">
@@ -2597,11 +2626,11 @@
             </div>
 
             {{-- Modal Body --}}
-            <div class="modal-body p-3 p-md-4" style="background-color: #f8fafc;">
+            <div class="modal-body p-3 p-md-4">
                 {{-- Spinner Loading State --}}
-                <div id="mMovementsSpinner" class="text-center py-5 my-3">
+                <div id="mMovementsSpinner" class="text-center py-5 my-4">
                     <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div>
-                    <div class="mt-3 fw-semibold text-muted">Retrieving detailed financial movements for this month...</div>
+                    <div class="mt-3 fw-bold text-dark fs-6">Retrieving detailed financial movements...</div>
                     <small class="text-muted">Fetching Company Income receipts, Purchases, and Creditable Tax lines</small>
                 </div>
 
@@ -2613,87 +2642,87 @@
 
                 {{-- Loaded Content Container --}}
                 <div id="mMovementsContent" style="display: none;">
-                    {{-- 1. Top KPI Summary Strip --}}
-                    <div class="row g-3 mb-4">
+                    {{-- 1. Top KPI Summary Strip: 5 Balanced Columns --}}
+                    <div class="row g-2.5 mb-3 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-5">
                         {{-- 1. Sales & Output VAT --}}
-                        <div class="col-12 col-sm-6 col-xl">
-                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-primary">
-                                <div class="card-body p-3">
+                        <div class="col">
+                            <div class="card border-0 shadow-sm kpi-card h-100 border-top border-4 border-primary">
+                                <div class="card-body p-2.5">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.72rem;">Sales Base (ገቢ)</span>
-                                        <span id="mMovementsIncomeCount" class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill">0 receipts</span>
+                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.68rem;">Sales Base (ገቢ)</span>
+                                        <span id="mMovementsIncomeCount" class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill" style="font-size: 0.65rem;">0 receipts</span>
                                     </div>
-                                    <div class="fs-5 fw-bold text-dark font-monospace" id="mMovementsSalesBase">ETB 0.00</div>
-                                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                                        <span class="text-muted small">Output VAT (15%)</span>
-                                        <span class="fw-bold text-danger font-monospace" id="mMovementsOutputVat">ETB 0.00</span>
+                                    <div class="fs-6 fw-bold text-dark font-monospace" id="mMovementsSalesBase">ETB 0.00</div>
+                                    <div class="mt-1.5 pt-1.5 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small" style="font-size: 0.72rem;">Output VAT (15%)</span>
+                                        <span class="fw-bold text-danger font-monospace small" id="mMovementsOutputVat">ETB 0.00</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {{-- 2. Purchases & Input VAT --}}
-                        <div class="col-12 col-sm-6 col-xl">
-                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-success">
-                                <div class="card-body p-3">
+                        <div class="col">
+                            <div class="card border-0 shadow-sm kpi-card h-100 border-top border-4 border-success">
+                                <div class="card-body p-2.5">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.72rem;">Purchases Base (ግዢ)</span>
-                                        <span id="mMovementsExpenseCount" class="badge bg-success-subtle text-success border border-success-subtle rounded-pill">0 items</span>
+                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.68rem;">Purchases Base (ግዢ)</span>
+                                        <span id="mMovementsExpenseCount" class="badge bg-success-subtle text-success border border-success-subtle rounded-pill" style="font-size: 0.65rem;">0 items</span>
                                     </div>
-                                    <div class="fs-5 fw-bold text-dark font-monospace" id="mMovementsPurchasesBase">ETB 0.00</div>
-                                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                                        <span class="text-muted small">Input VAT (Creditable)</span>
-                                        <span class="fw-bold text-success font-monospace" id="mMovementsInputVat">ETB 0.00</span>
+                                    <div class="fs-6 fw-bold text-dark font-monospace" id="mMovementsPurchasesBase">ETB 0.00</div>
+                                    <div class="mt-1.5 pt-1.5 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small" style="font-size: 0.72rem;">Input VAT (15%)</span>
+                                        <span class="fw-bold text-success font-monospace small" id="mMovementsInputVat">ETB 0.00</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {{-- 3. Opening Credit --}}
-                        <div class="col-12 col-sm-6 col-xl">
-                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-info">
-                                <div class="card-body p-3">
+                        <div class="col">
+                            <div class="card border-0 shadow-sm kpi-card h-100 border-top border-4 border-info">
+                                <div class="card-body p-2.5">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.72rem;">Opening Credit</span>
-                                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill">From prev month</span>
+                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.68rem;">Opening Credit</span>
+                                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill" style="font-size: 0.65rem;">Prev month</span>
                                     </div>
-                                    <div class="fs-5 fw-bold text-info font-monospace" id="mMovementsOpeningCredit">+ ETB 0.00</div>
-                                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                                        <span class="text-muted small">Total Creditable Input</span>
-                                        <span class="fw-bold text-dark font-monospace" id="mMovementsTotalCreditable">ETB 0.00</span>
+                                    <div class="fs-6 fw-bold text-info font-monospace" id="mMovementsOpeningCredit">+ ETB 0.00</div>
+                                    <div class="mt-1.5 pt-1.5 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small" style="font-size: 0.72rem;">Creditable Pool</span>
+                                        <span class="fw-bold text-dark font-monospace small" id="mMovementsTotalCreditable">ETB 0.00</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {{-- 4. Signed Net VAT --}}
-                        <div class="col-12 col-sm-6 col-xl">
-                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-warning" id="mMovementsNetCard">
-                                <div class="card-body p-3">
+                        <div class="col">
+                            <div class="card border-0 shadow-sm kpi-card h-100 border-top border-4 border-warning" id="mMovementsNetCard">
+                                <div class="card-body p-2.5">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.72rem;">Signed Net VAT</span>
-                                        <span id="mMovementsNetBadge" class="badge bg-secondary rounded-pill small">Status</span>
+                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.68rem;">Signed Net VAT</span>
+                                        <span id="mMovementsNetBadge" class="badge bg-secondary rounded-pill small" style="font-size: 0.65rem;">Status</span>
                                     </div>
-                                    <div class="fs-4 fw-bold font-monospace" id="mMovementsSignedNet">0.00</div>
-                                    <div class="mt-2 pt-2 border-top border-secondary-subtle">
-                                        <small class="text-muted d-block" id="mMovementsNetInstruction">Net reconciliation</small>
+                                    <div class="fs-6 fw-bold font-monospace" id="mMovementsSignedNet">0.00</div>
+                                    <div class="mt-1.5 pt-1.5 border-top border-secondary-subtle">
+                                        <small class="text-muted d-block text-truncate" id="mMovementsNetInstruction" style="font-size: 0.72rem;">Net reconciliation</small>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {{-- 5. Withholding Tax (3%) --}}
-                        <div class="col-12 col-sm-6 col-xl">
-                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-danger">
-                                <div class="card-body p-3">
+                        <div class="col">
+                            <div class="card border-0 shadow-sm kpi-card h-100 border-top border-4 border-danger">
+                                <div class="card-body p-2.5">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.72rem;">3% Withholding</span>
-                                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill">Separate Line</span>
+                                        <span class="text-muted small text-uppercase fw-bold" style="font-size: 0.68rem;">3% Withholding</span>
+                                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill" style="font-size: 0.65rem;">Separate</span>
                                     </div>
-                                    <div class="fs-5 fw-bold text-danger font-monospace" id="mMovementsWht">- ETB 0.00</div>
-                                    <div class="mt-2 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                                        <span class="text-muted small">Net Disbursed</span>
-                                        <span class="fw-bold text-success font-monospace" id="mMovementsNetDisbursed">ETB 0.00</span>
+                                    <div class="fs-6 fw-bold text-danger font-monospace" id="mMovementsWht">- ETB 0.00</div>
+                                    <div class="mt-1.5 pt-1.5 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
+                                        <span class="text-muted small" style="font-size: 0.72rem;">Net Disbursed</span>
+                                        <span class="fw-bold text-success font-monospace small" id="mMovementsNetDisbursed">ETB 0.00</span>
                                     </div>
                                 </div>
                             </div>
@@ -2748,9 +2777,9 @@
                                         <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search customer, invoice #, project..." onkeyup="filterMovementTable('mIncomeTable', this.value)">
                                     </div>
                                 </div>
-                                <div class="table-responsive" style="max-height: 480px;">
-                                    <table class="table table-hover align-middle mb-0 text-nowrap" id="mIncomeTable">
-                                        <thead class="bg-light-subtle text-muted text-uppercase fw-bold sticky-top" style="font-size: 0.7rem;">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0" id="mIncomeTable">
+                                        <thead class="sticky-header text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
                                             <tr>
                                                 <th class="ps-3 py-2.5">#</th>
                                                 <th class="py-2.5">Date (EC / GC)</th>
@@ -2766,7 +2795,7 @@
                                         <tbody id="mIncomeTableBody" class="divide-y">
                                             {{-- Rows inserted via JS --}}
                                         </tbody>
-                                        <tfoot class="bg-light fw-bold sticky-bottom border-top">
+                                        <tfoot class="sticky-footer fw-bold border-top">
                                             <tr>
                                                 <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Sales &amp; Output VAT</td>
                                                 <td class="text-end py-2 font-monospace text-dark" id="mIncomeTotalBase">ETB 0.00</td>
@@ -2794,9 +2823,9 @@
                                         <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search payee, voucher #, category..." onkeyup="filterMovementTable('mExpenseTable', this.value)">
                                     </div>
                                 </div>
-                                <div class="table-responsive" style="max-height: 480px;">
-                                    <table class="table table-hover align-middle mb-0 text-nowrap" id="mExpenseTable">
-                                        <thead class="bg-light-subtle text-muted text-uppercase fw-bold sticky-top" style="font-size: 0.7rem;">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0" id="mExpenseTable">
+                                        <thead class="sticky-header text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
                                             <tr>
                                                 <th class="ps-3 py-2.5">#</th>
                                                 <th class="py-2.5">Date (EC / GC)</th>
@@ -2813,7 +2842,7 @@
                                         <tbody id="mExpenseTableBody" class="divide-y">
                                             {{-- Rows inserted via JS --}}
                                         </tbody>
-                                        <tfoot class="bg-light fw-bold sticky-bottom border-top">
+                                        <tfoot class="sticky-footer fw-bold border-top">
                                             <tr>
                                                 <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Purchases &amp; Deductions</td>
                                                 <td class="text-end py-2 font-monospace text-dark" id="mExpenseTotalBase">ETB 0.00</td>
@@ -2842,9 +2871,9 @@
                                         <input type="text" class="form-control form-control-sm rounded-pill" placeholder="Search vendor, FS #, item..." onkeyup="filterMovementTable('mOcrTable', this.value)">
                                     </div>
                                 </div>
-                                <div class="table-responsive" style="max-height: 480px;">
-                                    <table class="table table-hover align-middle mb-0 text-nowrap" id="mOcrTable">
-                                        <thead class="bg-light-subtle text-muted text-uppercase fw-bold sticky-top" style="font-size: 0.7rem;">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle mb-0" id="mOcrTable">
+                                        <thead class="sticky-header text-muted text-uppercase fw-bold" style="font-size: 0.7rem;">
                                             <tr>
                                                 <th class="ps-3 py-2.5">#</th>
                                                 <th class="py-2.5">Date (EC / GC)</th>
@@ -2860,7 +2889,7 @@
                                         <tbody id="mOcrTableBody" class="divide-y">
                                             {{-- Rows inserted via JS --}}
                                         </tbody>
-                                        <tfoot class="bg-light fw-bold sticky-bottom border-top">
+                                        <tfoot class="sticky-footer fw-bold border-top">
                                             <tr>
                                                 <td colspan="6" class="ps-3 py-2 text-uppercase small text-muted">Total Scanned Invoices</td>
                                                 <td class="text-end py-2 font-monospace text-dark" id="mOcrTotalBase">ETB 0.00</td>
@@ -3804,16 +3833,33 @@
         document.getElementById('mMovementsContent').style.display = 'none';
         document.getElementById('mMovementsError').style.display = 'none';
 
-        // Reset to first tab
-        const firstTab = document.getElementById('pills-income-tab');
-        if (firstTab && window.bootstrap) {
-            const tabTrigger = new bootstrap.Tab(firstTab);
-            tabTrigger.show();
-        }
+        // Reset tab buttons and panes to initial state (Tab 1 active) without triggering conflicting CSS fade transitions
+        const tabButtons = modalEl.querySelectorAll('#monthMovementTab .nav-link');
+        tabButtons.forEach((btn, idx) => {
+            btn.classList.toggle('active', idx === 0);
+            btn.setAttribute('aria-selected', idx === 0 ? 'true' : 'false');
+        });
+        const tabPanes = modalEl.querySelectorAll('#monthMovementTabContent .tab-pane');
+        tabPanes.forEach((pane, idx) => {
+            if (idx === 0) {
+                pane.classList.add('show', 'active');
+            } else {
+                pane.classList.remove('show', 'active');
+            }
+        });
 
-        // Show Modal
-        const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
-        bsModal.show();
+        // Clear any previous table search inputs
+        modalEl.querySelectorAll('input[type="text"]').forEach(input => {
+            input.value = '';
+        });
+
+        // Show Modal safely with fallback
+        if (window.bootstrap && bootstrap.Modal) {
+            const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            bsModal.show();
+        } else if (window.$ && typeof $(modalEl).modal === 'function') {
+            $(modalEl).modal('show');
+        }
 
         // Fetch movements from server
         const url = "{{ route('finance.tax-deductions.month-movements') }}?ethiopian_year=" + ethYear + "&ethiopian_month=" + ethMonth;
