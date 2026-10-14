@@ -116,7 +116,7 @@
                                 <i class="fa-solid fa-file-invoice-dollar"></i>
                                 <span>Settle VAT</span>
                                 <span class="badge bg-white text-danger rounded-pill ms-1 font-monospace">
-                                    ETB {{ number_format($netVatDetails['payable_amount'], 2) }}
+                                    ETB {{ number_format($netVatDetails['payable_amount'] ?? $netVatDetails['amount_payable'] ?? abs($netVatDetails['net'] ?? 0), 2) }}
                                 </span>
                             </button>
                         @else

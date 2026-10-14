@@ -424,6 +424,7 @@ class EthiopianDate
             'is_credit'              => $isCredit,
             'credit_carry_forward'   => $creditCarryForward,
             'amount_payable'         => $amountPayable,
+            'payable_amount'         => $amountPayable,
         ];
     }
 }

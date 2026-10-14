@@ -538,6 +538,8 @@ class FinanceTaxReportController extends Controller
                 'text_class'           => $mNetCalc['text_class'],
                 'is_payable'           => $mNetCalc['is_payable'],
                 'is_credit'            => $mNetCalc['is_credit'],
+                'amount_payable'       => $mNetCalc['amount_payable'],
+                'payable_amount'       => $mNetCalc['payable_amount'],
                 'is_current'           => ($m === $selectedEthMonth),
             ];
 

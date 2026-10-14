@@ -87,6 +87,7 @@ class EthiopianCalendarTest extends TestCase
         $this->assertTrue($result1['is_payable']);
         $this->assertFalse($result1['is_credit']);
         $this->assertEquals(20000.00, $result1['amount_payable']);
+        $this->assertEquals(20000.00, $result1['payable_amount']);
         $this->assertEquals(0.00, $result1['credit_carry_forward']);
 
         // Case 2: Output 30,000 and Input 50,000 -> +20,000.00 (VAT credit carry forward)
@@ -99,6 +100,7 @@ class EthiopianCalendarTest extends TestCase
         $this->assertTrue($result2['is_credit']);
         $this->assertEquals(20000.00, $result2['credit_carry_forward']);
         $this->assertEquals(0.00, $result2['amount_payable']);
+        $this->assertEquals(0.00, $result2['payable_amount']);
 
         // Case 3: Output 40,000 and Input 40,000 -> 0.00 (Neutral)
         $result3 = EthiopianDate::calculateNetVat(40000.00, 40000.00);
