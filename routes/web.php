@@ -2049,6 +2049,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('employees/{employee}/record-leave-deduction', [App\Http\Controllers\EmployeeController::class, 'recordLeaveDeduction'])->name('employees.record-leave-deduction');
     Route::post('employees/{employee}/update-device-id', [App\Http\Controllers\EmployeeController::class, 'updateDeviceId'])->name('employees.update-device-id');
     Route::post('employees/{employee}/sync-device-attendance', [App\Http\Controllers\EmployeeController::class, 'syncDeviceAttendance'])->name('employees.sync-device-attendance');
+    Route::post('employees/salary/update-with-letter', [App\Http\Controllers\EmployeeController::class, 'updateSalaryWithLetter'])->name('employees.salary.update-with-letter');
     Route::resource('employees', App\Http\Controllers\EmployeeController::class);
     Route::get('employee-letters/{employeeLetter}/print', [App\Http\Controllers\EmployeeLetterController::class, 'print'])->name('employee-letters.print');
     Route::resource('employee-letters', App\Http\Controllers\EmployeeLetterController::class);
@@ -2236,6 +2237,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('payrolls/{payroll}/mark-paid',
         [App\Http\Controllers\PayrollController::class, 'markPaid'])
         ->name('payrolls.markPaid');
+    Route::post('payrolls/update-salary-with-letter',
+        [App\Http\Controllers\PayrollController::class, 'updateSalaryWithLetter'])
+        ->name('payrolls.update-salary-with-letter');
 
     // ─── Finance Head & GM Payroll Workflow ─────────────────────────────────
     Route::get('finance/payroll',               [App\Http\Controllers\FinancePayrollController::class, 'index'])->name('finance.payroll.index');

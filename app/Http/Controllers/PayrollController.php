@@ -15,7 +15,15 @@ class PayrollController extends Controller
         $payrolls = Payroll::with('employee')
             ->orderByDesc('year')->orderByDesc('month')
             ->paginate(25);
-        return view('hr.payrolls.index', compact('payrolls'));
+        $employees = Employee::activeRoster()
+            ->orderBy('full_name')
+            ->get(['id', 'full_name', 'employee_code', 'department', 'role_title', 'basic_salary', 'transport_allowance', 'house_allowance', 'position_allowance', 'user_id']);
+        return view('hr.payrolls.index', compact('payrolls', 'employees'));
+    }
+
+    public function updateSalaryWithLetter(Request $request)
+    {
+        return app(EmployeeController::class)->updateSalaryWithLetter($request);
     }
 
     public function create()

@@ -18,6 +18,7 @@ class Letter extends Model
         'subject',
         'specification',
         'category',
+        'employee_id',
         'addressed_to_user_id',
         'sender',
         'sender_department',
@@ -84,6 +85,7 @@ class Letter extends Model
     // Category Constants
     const CATEGORY_LEAVE_LETTER = 'Leave Letter';
     const CATEGORY_ADVANCE_LOAN_LETTER = 'Advance Loan Letter';
+    const CATEGORY_SALARY_UPDATE = 'Salary Update / Increment Letter';
     const CATEGORY_PAYMENT = 'Payment';
     const CATEGORY_GOVERNMENT = 'Government';
     const CATEGORY_BANK_INSURANCE = 'Bank & Insurance';
@@ -91,6 +93,7 @@ class Letter extends Model
     const CATEGORIES = [
         self::CATEGORY_LEAVE_LETTER,
         self::CATEGORY_ADVANCE_LOAN_LETTER,
+        self::CATEGORY_SALARY_UPDATE,
         self::CATEGORY_PAYMENT,
         self::CATEGORY_GOVERNMENT,
         self::CATEGORY_BANK_INSURANCE,
@@ -203,6 +206,22 @@ class Letter extends Model
     public function addressedTo()
     {
         return $this->belongsTo(User::class, 'addressed_to_user_id');
+    }
+
+    /**
+     * Relationship: Employee directly associated with letter (e.g. Salary Update, Warning, etc.)
+     */
+    public function employee()
+    {
+        return $this->belongsTo(Employee::class, 'employee_id')->withoutGlobalScope(\App\Scopes\NotDeadFileScope::class);
+    }
+
+    /**
+     * Relationship: Linked Employee Salary History record (if letter is a Salary Update)
+     */
+    public function salaryHistory()
+    {
+        return $this->hasOne(EmployeeSalaryHistory::class, 'letter_id');
     }
 
     /**

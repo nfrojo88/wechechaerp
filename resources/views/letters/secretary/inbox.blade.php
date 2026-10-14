@@ -179,10 +179,11 @@
                         @php
                             $hasNumber = !empty($letter->letter_number);
                             $hasCategory = !empty($letter->category);
-                            $hasPerson = !empty($letter->addressed_to_user_id);
+                            $hasPerson = !empty($letter->addressed_to_user_id) || !empty($letter->employee_id);
                             $isRegistered = ($letter->status === \App\Models\Letter::STATUS_REGISTERED);
                             $isRejected = ($letter->status === \App\Models\Letter::STATUS_REJECTED);
                             $canRegister = $hasNumber && $hasCategory && $hasPerson && !$isRegistered && !$isRejected;
+                            $isSalaryUpdate = ($letter->category === \App\Models\Letter::CATEGORY_SALARY_UPDATE || !empty($letter->employee_id) || !empty($letter->salaryHistory));
                         @endphp
                         <tr class="{{ $isRegistered ? 'bg-light-subtle' : ($isRejected ? 'table-danger-subtle bg-danger-subtle' : '') }}">
                             {{-- Letter & Sender --}}
@@ -192,6 +193,13 @@
                                         {{ $letter->subject }}
                                     </a>
                                 </div>
+                                @if($isSalaryUpdate && $letter->employee)
+                                    <div class="mb-1">
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill py-0.5 px-2" style="font-size: 0.68rem;">
+                                            <i class="fa-solid fa-money-bill-trend-up me-1"></i>Salary Update: {{ $letter->employee->full_name }} ({{ $letter->employee->employee_code }})
+                                        </span>
+                                    </div>
+                                @endif
                                 <div class="small text-muted d-flex align-items-center gap-1">
                                     <i class="fa-solid fa-user text-secondary"></i>
                                     <span>{{ $letter->creator?->name ?? ($letter->sender ?? 'Employee') }}</span>
@@ -271,16 +279,23 @@
                                 @endif
                             </td>
 
-                            {{-- Step 3: Addressed / Handled Person --}}
+                            {{-- Step 3: Addressed / Handled Person or Employee --}}
                             <td class="table-input-cell">
-                                @if($hasPerson && $letter->addressedTo)
+                                @if($hasPerson && ($letter->addressedTo || $letter->employee))
                                     <div class="d-flex align-items-center justify-content-between">
                                         <div>
-                                            <div class="fw-semibold text-dark small">{{ $letter->addressedTo->name }}</div>
-                                            <small class="text-muted" style="font-size: 0.7rem;">{{ $letter->addressedTo->email }}</small>
+                                            @if($letter->employee)
+                                                <div class="fw-semibold text-dark small">
+                                                    <i class="fa-solid fa-user-tie text-success me-1"></i>{{ $letter->employee->full_name }}
+                                                </div>
+                                                <small class="text-muted" style="font-size: 0.7rem;">Employee Code: {{ $letter->employee->employee_code }}</small>
+                                            @elseif($letter->addressedTo)
+                                                <div class="fw-semibold text-dark small">{{ $letter->addressedTo->name }}</div>
+                                                <small class="text-muted" style="font-size: 0.7rem;">{{ $letter->addressedTo->email }}</small>
+                                            @endif
                                         </div>
                                         @if(!$isRegistered && !$isRejected)
-                                            <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-1" data-bs-toggle="modal" data-bs-target="#personModal{{ $letter->id }}" title="Change Person">
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-muted ms-1" data-bs-toggle="modal" data-bs-target="#personModal{{ $letter->id }}" title="Change Person / Employee">
                                                 <i class="fa-solid fa-user-pen" style="font-size: 0.75rem;"></i>
                                             </button>
                                         @endif
@@ -332,7 +347,7 @@
                             <td class="pe-3 text-end">
                                 <div class="d-flex flex-column align-items-end gap-1">
                                     @if($canRegister)
-                                        <form action="{{ route('letters.register', $letter->id) }}" method="POST" onsubmit="return confirm('Register this letter now? An SMS will be dispatched to {{ addslashes($letter->addressedTo?->name) }}.');" class="mb-1">
+                                        <form action="{{ route('letters.register', $letter->id) }}" method="POST" onsubmit="return confirm('Register this letter now? Dispatch will be recorded for {{ addslashes($letter->addressedTo?->name ?? ($letter->employee?->full_name ?? 'the assigned recipient')) }}.');" class="mb-1">
                                             @csrf
                                             <button type="submit" class="btn btn-sm btn-success rounded-pill px-3 py-1 fw-bold shadow-xs">
                                                 <i class="fa-solid fa-stamp me-1"></i> Register Letter
@@ -389,9 +404,10 @@
         @php
             $hasNumber = !empty($letter->letter_number);
             $hasCategory = !empty($letter->category);
-            $hasPerson = !empty($letter->addressed_to_user_id);
+            $hasPerson = !empty($letter->addressed_to_user_id) || !empty($letter->employee_id);
             $isRegistered = ($letter->status === \App\Models\Letter::STATUS_REGISTERED);
             $isRejected = ($letter->status === \App\Models\Letter::STATUS_REJECTED);
+            $isSalaryUpdate = ($letter->category === \App\Models\Letter::CATEGORY_SALARY_UPDATE || !empty($letter->employee_id) || !empty($letter->salaryHistory));
         @endphp
 
         {{-- ── 1. UNIFIED REVIEW, APPROVE & REGISTER / BLOCK MODAL ── --}}
@@ -424,6 +440,33 @@
                         <div class="row g-4">
                             {{-- LEFT COLUMN: Letter Content & Attached Files --}}
                             <div class="col-12 col-lg-7">
+                                @if($isSalaryUpdate && ($letter->employee || $letter->salaryHistory))
+                                    <div class="alert alert-success border-0 shadow-sm d-flex align-items-start gap-3 p-3 mb-3 rounded-3">
+                                        <div class="text-success fs-3 lh-1"><i class="fa-solid fa-money-bill-trend-up"></i></div>
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
+                                                <h6 class="fw-bold text-success mb-0">HR Salary Increment &amp; Record Update</h6>
+                                                <span class="badge bg-success rounded-pill px-2.5 py-1">Auto-Archives to Employee History</span>
+                                            </div>
+                                            <div class="small text-dark mt-1">
+                                                Target Employee: <strong>{{ $letter->employee?->full_name ?? 'Employee' }}</strong> 
+                                                (Code: <code>{{ $letter->employee?->employee_code ?? 'N/A' }}</code> &bull; Dept: {{ $letter->employee?->department ?? 'General' }})
+                                            </div>
+                                            @if($letter->salaryHistory)
+                                                <div class="d-flex flex-wrap gap-3 small mt-2 pt-2 border-top border-success-subtle">
+                                                    <div><span class="text-muted">Previous:</span> <strong>{{ number_format($letter->salaryHistory->old_basic_salary, 2) }} ETB</strong></div>
+                                                    <div><span class="text-muted">New Basic:</span> <strong class="text-success">{{ number_format($letter->salaryHistory->new_basic_salary, 2) }} ETB</strong></div>
+                                                    <div><span class="text-muted">Difference:</span> <span class="badge bg-success">+{{ number_format($letter->salaryHistory->salary_difference, 2) }} ETB</span></div>
+                                                    <div><span class="text-muted">Effective Date:</span> <strong>{{ optional($letter->salaryHistory->effective_date)->format('d M, Y') }}</strong></div>
+                                                </div>
+                                            @endif
+                                            <div class="text-muted small mt-2" style="font-size: 0.72rem;">
+                                                <i class="fa-solid fa-circle-check text-success me-1"></i> Registering this letter will assign the reference number and permanently link the attached approval letter into this employee's official file &amp; salary history.
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endif
+
                                 {{-- Meta Information Strip --}}
                                 <div class="bg-light p-3 rounded-3 border mb-3">
                                     <div class="row g-2 small">
@@ -449,7 +492,13 @@
                                         </div>
                                         <div class="col-6 col-sm-4">
                                             <span class="text-muted d-block">Addressed To:</span>
-                                            <span class="fw-semibold text-dark">{{ $letter->addressedTo?->name ?: 'Not assigned yet' }}</span>
+                                            <span class="fw-semibold text-dark">
+                                                @if($letter->employee)
+                                                    <i class="fa-solid fa-user-tie text-success me-1"></i>{{ $letter->employee->full_name }}
+                                                @else
+                                                    {{ $letter->addressedTo?->name ?: 'Not assigned yet' }}
+                                                @endif
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -590,20 +639,41 @@
                                                     </select>
                                                 </div>
 
-                                                {{-- 3. Addressed / Handled Person --}}
+                                                {{-- 3. Addressed / Handled Person or Target Employee --}}
                                                 <div class="mb-3">
                                                     <label class="form-label fw-bold small mb-1">
-                                                        3. Handled By / Addressed To <span class="text-danger">*</span>
+                                                        3. Handled By / Target Personnel <span class="text-danger">*</span>
                                                     </label>
-                                                    <select name="addressed_to_user_id" class="form-select form-select-sm" required>
-                                                        <option value="">-- Choose User from List --</option>
-                                                        @foreach($users as $u)
-                                                            <option value="{{ $u->id }}" {{ old('addressed_to_user_id', $letter->addressed_to_user_id) == $u->id ? 'selected' : '' }}>
-                                                                {{ $u->name }} ({{ $u->email }})
-                                                            </option>
-                                                        @endforeach
-                                                    </select>
-                                                    <div class="text-muted small" style="font-size: 0.7rem;">Recipient will be notified via SMS and ERP inbox immediately.</div>
+                                                    @if($letter->employee)
+                                                        <div class="p-2.5 bg-success-subtle border border-success-subtle rounded-3 mb-2">
+                                                            <div class="d-flex align-items-center justify-content-between">
+                                                                <div class="fw-bold text-success small">
+                                                                    <i class="fa-solid fa-user-check me-1"></i>{{ $letter->employee->full_name }}
+                                                                </div>
+                                                                <span class="badge bg-success rounded-pill px-2 py-0.5" style="font-size: 0.68rem;">Target Employee</span>
+                                                            </div>
+                                                            <div class="text-muted small mt-0.5" style="font-size: 0.72rem;">
+                                                                Code: <code>{{ $letter->employee->employee_code }}</code> &bull; Dept: {{ $letter->employee->department ?? 'General' }}
+                                                            </div>
+                                                        </div>
+                                                        <input type="hidden" name="employee_id" value="{{ $letter->employee->id }}">
+                                                        @if($letter->employee->user_id)
+                                                            <input type="hidden" name="addressed_to_user_id" value="{{ $letter->employee->user_id }}">
+                                                        @endif
+                                                        <div class="text-muted small" style="font-size: 0.7rem;">
+                                                            <i class="fa-solid fa-link text-success me-1"></i> Pre-bound to employee profile. Letter and attachment will be archived to employee history upon registration.
+                                                        </div>
+                                                    @else
+                                                        <select name="addressed_to_user_id" class="form-select form-select-sm" required>
+                                                            <option value="">-- Choose User from List --</option>
+                                                            @foreach($users as $u)
+                                                                <option value="{{ $u->id }}" {{ old('addressed_to_user_id', $letter->addressed_to_user_id) == $u->id ? 'selected' : '' }}>
+                                                                    {{ $u->name }} ({{ $u->email }})
+                                                                </option>
+                                                            @endforeach
+                                                        </select>
+                                                        <div class="text-muted small" style="font-size: 0.7rem;">Recipient will be notified via SMS and ERP inbox immediately.</div>
+                                                    @endif
                                                 </div>
 
                                                 {{-- Approve & Register Submit --}}
@@ -721,15 +791,25 @@
                     <form action="{{ route('letters.set-handled-person', $letter->id) }}" method="POST">
                         @csrf
                         <div class="modal-header bg-light">
-                            <h6 class="modal-title fw-bold"><i class="fa-solid fa-user-check text-primary me-2"></i>Select Addressed / Handled Person</h6>
+                            <h6 class="modal-title fw-bold"><i class="fa-solid fa-user-check text-primary me-2"></i>Select Addressed Person / Employee</h6>
                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body p-4">
                             <p class="small text-muted mb-3">Subject: <strong>{{ $letter->subject }}</strong></p>
 
+                            @if($letter->employee)
+                                <div class="alert alert-success border-0 small mb-3">
+                                    <div class="fw-bold"><i class="fa-solid fa-user-tie me-1"></i> Current Linked Employee:</div>
+                                    <div class="mt-1">
+                                        <strong>{{ $letter->employee->full_name }}</strong> ({{ $letter->employee->employee_code }})
+                                        <div class="text-muted" style="font-size: 0.72rem;">Dept: {{ $letter->employee->department ?? 'General' }}</div>
+                                    </div>
+                                </div>
+                            @endif
+
                             <div class="mb-3">
-                                <label class="form-label fw-bold">Select Person <span class="text-danger">*</span></label>
-                                <select name="addressed_to_user_id" class="form-select" required>
+                                <label class="form-label fw-bold">Select System User</label>
+                                <select name="addressed_to_user_id" class="form-select" {{ $letter->employee ? '' : 'required' }}>
                                     <option value="">-- Choose Person from User List --</option>
                                     @foreach($users as $u)
                                         <option value="{{ $u->id }}" {{ old('addressed_to_user_id', $letter->addressed_to_user_id) == $u->id ? 'selected' : '' }}>
@@ -737,8 +817,23 @@
                                         </option>
                                     @endforeach
                                 </select>
-                                <div class="form-text">This person will receive an SMS notification and ERP inbox dispatch upon registration.</div>
+                                <div class="form-text">User will receive an SMS notification and ERP inbox dispatch upon registration.</div>
                             </div>
+
+                            @if(isset($employees) && $employees->isNotEmpty())
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Or Link Target Employee</label>
+                                    <select name="employee_id" class="form-select">
+                                        <option value="">-- Select Target Employee (Optional) --</option>
+                                        @foreach($employees as $emp)
+                                            <option value="{{ $emp->id }}" {{ old('employee_id', $letter->employee_id) == $emp->id ? 'selected' : '' }}>
+                                                {{ $emp->full_name }} ({{ $emp->employee_code }}) - {{ $emp->department ?? 'General' }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    <div class="form-text">If selected, this letter and attachment will automatically archive to this employee's history.</div>
+                                </div>
+                            @endif
                         </div>
                         <div class="modal-footer bg-light">
                             <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>

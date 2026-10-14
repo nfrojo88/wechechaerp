@@ -442,22 +442,128 @@
 
         {{-- Salary Information Card --}}
         <div class="card border-0 shadow-sm mb-3">
-            <div class="card-header bg-light">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <h5 class="mb-0"><i class="fa-solid fa-money-bill text-success me-2"></i>Salary Information</h5>
+                <button type="button" class="btn btn-sm btn-success shadow-xs fw-semibold" data-bs-toggle="modal" data-bs-target="#updateEmpSalaryModal">
+                    <i class="fa-solid fa-file-signature me-1"></i> Update Salary &amp; Issue Letter
+                </button>
             </div>
             <div class="card-body">
-                <div class="row g-4">
-                    <div class="col-md-6">
-                        <small class="text-muted d-block mb-1">Monthly Base Salary</small>
-                        <h6 class="mb-0">Br {{ number_format($employee->basic_salary, 2) }}</h6>
+                @php
+                    $baseSal = (float) ($employee->basic_salary ?? 0);
+                    $transAllow = (float) ($employee->transport_allowance ?? 0);
+                    $houseAllow = (float) ($employee->house_allowance ?? 0);
+                    $posAllow = (float) ($employee->position_allowance ?? 0);
+                    $grossSal = $baseSal + $transAllow + $houseAllow + $posAllow;
+                @endphp
+                <div class="row g-3 mb-3">
+                    <div class="col-6 col-md-3">
+                        <div class="p-2.5 rounded bg-light border text-center">
+                            <small class="text-muted d-block mb-1">Monthly Base Salary</small>
+                            <h6 class="mb-0 fw-bold text-success fs-5">Br {{ number_format($baseSal, 2) }}</h6>
+                        </div>
                     </div>
-                    @if($employee->bank_name)
-                    <div class="col-md-6">
-                        <small class="text-muted d-block mb-1">Bank Account</small>
-                        <h6 class="mb-0">{{ $employee->bank_name }} - {{ $employee->account_number }}</h6>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2.5 rounded bg-light border text-center">
+                            <small class="text-muted d-block mb-1">Transport Allow.</small>
+                            <h6 class="mb-0 fw-semibold text-dark">Br {{ number_format($transAllow, 2) }}</h6>
+                        </div>
                     </div>
-                    @endif
+                    <div class="col-6 col-md-2">
+                        <div class="p-2.5 rounded bg-light border text-center">
+                            <small class="text-muted d-block mb-1">House Allow.</small>
+                            <h6 class="mb-0 fw-semibold text-dark">Br {{ number_format($houseAllow, 2) }}</h6>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <div class="p-2.5 rounded bg-light border text-center">
+                            <small class="text-muted d-block mb-1">Position Allow.</small>
+                            <h6 class="mb-0 fw-semibold text-dark">Br {{ number_format($posAllow, 2) }}</h6>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="p-2.5 rounded bg-success-subtle border border-success-subtle text-center">
+                            <small class="text-success fw-bold d-block mb-1">Total Monthly Gross</small>
+                            <h6 class="mb-0 fw-bold text-success fs-5">Br {{ number_format($grossSal, 2) }}</h6>
+                        </div>
+                    </div>
                 </div>
+
+                @if($employee->bank_name)
+                <div class="p-2.5 rounded bg-white border d-flex align-items-center justify-content-between mb-3 small">
+                    <div>
+                        <i class="fa-solid fa-building-columns text-primary me-1.5"></i>
+                        <strong>Bank Account:</strong> {{ $employee->bank_name }} &bull; <span class="font-monospace fw-bold text-dark">{{ $employee->account_number }}</span>
+                    </div>
+                </div>
+                @endif
+
+                {{-- Historical Salary Revisions --}}
+                @if($employee->salaryHistories && $employee->salaryHistories->isNotEmpty())
+                <div class="border-top pt-3 mt-2">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold text-dark small mb-0">
+                            <i class="fa-solid fa-clock-rotate-left text-secondary me-1"></i>Salary Revision History ({{ $employee->salaryHistories->count() }})
+                        </h6>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0 small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Effective Date</th>
+                                    <th>Reason</th>
+                                    <th>Previous Base</th>
+                                    <th>New Base</th>
+                                    <th>Adjustment</th>
+                                    <th>Authorized Letter</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($employee->salaryHistories as $hist)
+                                    @php
+                                        $diff = (float) ($hist->new_basic_salary - $hist->old_basic_salary);
+                                        $diffSign = $diff >= 0 ? '+' : '';
+                                    @endphp
+                                    <tr>
+                                        <td><strong>{{ optional($hist->effective_date)->format('d M Y') }}</strong></td>
+                                        <td>
+                                            <span class="badge bg-light text-dark border">{{ $hist->reason ?? 'Revision' }}</span>
+                                        </td>
+                                        <td class="text-muted">Br {{ number_format($hist->old_basic_salary, 2) }}</td>
+                                        <td class="fw-bold text-dark">Br {{ number_format($hist->new_basic_salary, 2) }}</td>
+                                        <td>
+                                            @if($diff > 0)
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                    <i class="fa-solid fa-arrow-up me-0.5"></i>{{ $diffSign }}{{ number_format($diff, 2) }}
+                                                </span>
+                                            @elseif($diff < 0)
+                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                                    <i class="fa-solid fa-arrow-down me-0.5"></i>{{ number_format($diff, 2) }}
+                                                </span>
+                                            @else
+                                                <span class="badge bg-secondary-subtle text-secondary">No change</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if($hist->attachment_url)
+                                                <a href="{{ $hist->attachment_url }}" target="_blank" class="btn btn-xs btn-outline-primary" title="View / Download Signed Letter">
+                                                    <i class="fa-solid fa-paperclip me-1"></i>Signed Letter
+                                                </a>
+                                            @elseif($hist->letter)
+                                                <a href="{{ route('letters.show', $hist->letter->id) }}" target="_blank" class="btn btn-xs btn-outline-secondary">
+                                                    <i class="fa-solid fa-envelope me-1"></i>Letter Ref
+                                                </a>
+                                            @else
+                                                <span class="text-muted">&mdash;</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                @endif
             </div>
         </div>
 
@@ -1278,7 +1384,7 @@
                             'guarantee_letter'   => '#0d9488',
                             'power_of_attorney'  => '#4f46e5',
                             'application_letter' => '#6366f1',
-                            'thanks_letter', 'appreciation', 'promotion' => '#10b981',
+                            'thanks_letter', 'appreciation', 'promotion', 'salary_increment' => '#10b981',
                             'first_warning'      => '#f59e0b',
                             'second_warning'     => '#f97316',
                             'final_warning', 'termination' => '#ef4444',
@@ -1347,7 +1453,7 @@
                                             <i class="fa-solid fa-pen-to-square text-warning"></i>
                                         </a>
                                         @if($ltr->attachment_path)
-                                        <a href="{{ asset('storage/' . $ltr->attachment_path) }}" target="_blank" class="btn btn-sm btn-light border py-1.5 px-2.5" title="View Signed Attachment">
+                                        <a href="{{ $ltr->attachment_url ?? asset('storage/' . $ltr->attachment_path) }}" target="_blank" class="btn btn-sm btn-light border py-1.5 px-2.5" title="View Signed Attachment">
                                             <i class="fa-solid fa-paperclip text-success"></i>
                                         </a>
                                         @endif
@@ -1378,7 +1484,7 @@
                         'guarantee_letter'   => '#0d9488',
                         'power_of_attorney'  => '#4f46e5',
                         'application_letter' => '#6366f1',
-                        'thanks_letter', 'appreciation', 'promotion' => '#10b981',
+                        'thanks_letter', 'appreciation', 'promotion', 'salary_increment' => '#10b981',
                         'first_warning'      => '#f59e0b',
                         'second_warning'     => '#f97316',
                         'final_warning', 'termination' => '#ef4444',
@@ -1458,7 +1564,7 @@
                                     <div class="small">
                                         <i class="fa-solid fa-file-pdf text-success me-1"></i> <strong>Signed Copy Attached:</strong> {{ basename($ltr->attachment_path) }}
                                     </div>
-                                    <a href="{{ asset('storage/' . $ltr->attachment_path) }}" target="_blank" class="btn btn-sm btn-success py-1 px-3">
+                                    <a href="{{ $ltr->attachment_url ?? asset('storage/' . $ltr->attachment_path) }}" target="_blank" class="btn btn-sm btn-success py-1 px-3">
                                         <i class="fa-solid fa-download me-1"></i> View / Download Attachment
                                     </a>
                                 </div>
@@ -2915,6 +3021,193 @@ function openLetterModal(id) {
     </div>
 </div>
 @endif
+
+{{-- ── Modal: Update Salary & Issue Official Letter for this Employee ── --}}
+<div class="modal fade" id="updateEmpSalaryModal" tabindex="-1" aria-labelledby="updateEmpSalaryModalLabel" aria-hidden="true" style="z-index: 1070;">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <form action="{{ route('employees.salary.update-with-letter') }}" method="POST" enctype="multipart/form-data">
+                @csrf
+                <input type="hidden" name="employee_id" value="{{ $employee->id }}">
+
+                <div class="modal-header bg-success text-white py-3 px-4">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-white bg-opacity-25 text-white p-2 rounded-3 fs-5">
+                            <i class="fa-solid fa-file-invoice-dollar"></i>
+                        </span>
+                        <div>
+                            <h5 class="modal-title fw-bold mb-0 text-white" id="updateEmpSalaryModalLabel">
+                                Update Salary &amp; Issue Official Letter
+                            </h5>
+                            <small class="text-white-50">{{ $employee->full_name }} ({{ $employee->employee_code }}) &bull; {{ $employee->department ?? 'General' }}</small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+
+                <div class="modal-body p-4 bg-light">
+                    {{-- Current Compensation Card --}}
+                    <div class="card border border-2 border-info-subtle bg-info-subtle p-3 rounded-3 mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold text-dark mb-0"><i class="fa-solid fa-circle-info text-info me-1"></i>Current Compensation Summary</h6>
+                            <span class="badge bg-white text-info border border-info fw-bold px-2 py-0.5">{{ $employee->employee_code }}</span>
+                        </div>
+                        <div class="row g-2 text-center">
+                            <div class="col-6 col-md-3">
+                                <div class="bg-white p-2 rounded border">
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">Base Salary</small>
+                                    <strong class="text-dark">Br {{ number_format($employee->basic_salary, 2) }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="bg-white p-2 rounded border">
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">Transport</small>
+                                    <strong class="text-dark">Br {{ number_format($employee->transport_allowance, 2) }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="bg-white p-2 rounded border">
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">House</small>
+                                    <strong class="text-dark">Br {{ number_format($employee->house_allowance, 2) }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="bg-white p-2 rounded border">
+                                    <small class="text-muted d-block" style="font-size: 0.72rem;">Position</small>
+                                    <strong class="text-dark">Br {{ number_format($employee->position_allowance, 2) }}</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- New Salary Inputs --}}
+                    <div class="card border-0 shadow-xs rounded-3 p-3 mb-3 bg-white">
+                        <h6 class="fw-bold text-dark mb-3"><i class="fa-solid fa-pen-to-square text-success me-1"></i>New Compensation Details</h6>
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bold small text-dark mb-1">
+                                    New Basic Salary (ETB) <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light fw-bold">Br</span>
+                                    <input type="number" step="0.01" min="0" name="new_basic_salary" id="empNewBasicInput" class="form-control fw-bold fs-5 text-success" required value="{{ (float)$employee->basic_salary }}" oninput="calculateEmpSalaryDiff()">
+                                </div>
+                                <div class="small fw-semibold mt-1" id="empSalaryDiffBadge"></div>
+                            </div>
+
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bold small text-dark mb-1">
+                                    Effective Date <span class="text-danger">*</span>
+                                </label>
+                                <input type="date" name="effective_date" class="form-control" value="{{ date('Y-m-d') }}" required>
+                                <div class="text-muted small" style="font-size: 0.72rem;">Official start date for the revision.</div>
+                            </div>
+
+                            <div class="col-12 col-md-4">
+                                <label class="form-label small text-muted mb-1">Transport Allowance</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light">Br</span>
+                                    <input type="number" step="0.01" min="0" name="new_transport_allowance" class="form-control" value="{{ (float)$employee->transport_allowance }}">
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-md-4">
+                                <label class="form-label small text-muted mb-1">House Allowance</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light">Br</span>
+                                    <input type="number" step="0.01" min="0" name="new_house_allowance" class="form-control" value="{{ (float)$employee->house_allowance }}">
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-md-4">
+                                <label class="form-label small text-muted mb-1">Position Allowance</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light">Br</span>
+                                    <input type="number" step="0.01" min="0" name="new_position_allowance" class="form-control" value="{{ (float)$employee->position_allowance }}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Change Reason & Attached Letter --}}
+                    <div class="card border-0 shadow-xs rounded-3 p-3 mb-3 bg-white">
+                        <h6 class="fw-bold text-dark mb-3"><i class="fa-solid fa-file-arrow-up text-primary me-1"></i>Official Letter &amp; Authorization</h6>
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bold small text-dark mb-1">
+                                    Adjustment Reason <span class="text-danger">*</span>
+                                </label>
+                                <select name="reason" class="form-select" required>
+                                    <option value="Annual Merit Increment">Annual Merit Increment</option>
+                                    <option value="Promotion & Role Adjustment">Promotion &amp; Role Adjustment</option>
+                                    <option value="Performance Bonus / Merit">Performance Bonus / Merit</option>
+                                    <option value="Cost of Living Adjustment (COLA)">Cost of Living Adjustment (COLA)</option>
+                                    <option value="Market Rate Adjustment">Market Rate Adjustment</option>
+                                    <option value="Probation Confirmation">Probation Confirmation</option>
+                                    <option value="Contract Renewal Increment">Contract Renewal Increment</option>
+                                    <option value="Other Salary Revision">Other Salary Revision</option>
+                                </select>
+                            </div>
+
+                            <div class="col-12 col-md-6">
+                                <label class="form-label fw-bold small text-dark mb-1">
+                                    Attach Official Signed Letter <span class="text-danger">*</span>
+                                </label>
+                                <input type="file" name="letter_file" class="form-control" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" required>
+                                <div class="text-muted small" style="font-size: 0.72rem;">Signed letter (PDF, PNG, JPG, Word max 10MB).</div>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label small text-muted mb-1">Additional Notes / Letter Specifications</label>
+                                <textarea name="notes" class="form-control" rows="2" placeholder="Additional conditions, justification, or reference information..."></textarea>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-white rounded-3 border-start border-4 border-warning small shadow-xs">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-route text-warning fs-5"></i>
+                            <div>
+                                <strong>Secretary Registration:</strong>
+                                <span class="text-muted d-block">Submitting this form immediately updates the employee's salary and dispatches the signed letter to the <strong>Secretary Inbox</strong>. Once the Secretary assigns the sequential reference number and registers it, the letter will be permanently archived in this employee's official letters history.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-white border-top py-3 px-4">
+                    <button type="button" class="btn btn-light border px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success fw-bold px-4 py-2 shadow-xs">
+                        <i class="fa-solid fa-paper-plane me-1"></i> Update Salary &amp; Send Letter to Secretary
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function calculateEmpSalaryDiff() {
+        const currentBase = {{ (float)$employee->basic_salary }};
+        const newBasic = parseFloat(document.getElementById('empNewBasicInput').value) || 0;
+        const badge = document.getElementById('empSalaryDiffBadge');
+
+        if (!badge) return;
+        if (currentBase <= 0 || newBasic <= 0) {
+            badge.innerHTML = '';
+            return;
+        }
+
+        const diff = newBasic - currentBase;
+        if (diff > 0) {
+            badge.innerHTML = '<span class="text-success"><i class="fa-solid fa-arrow-up me-1"></i>Increase of Br ' + diff.toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' (+' + ((diff / currentBase) * 100).toFixed(1) + '%)</span>';
+        } else if (diff < 0) {
+            badge.innerHTML = '<span class="text-danger"><i class="fa-solid fa-arrow-down me-1"></i>Decrease of Br ' + Math.abs(diff).toLocaleString('en-US', { minimumFractionDigits: 2 }) + ' (' + ((diff / currentBase) * 100).toFixed(1) + '%)</span>';
+        } else {
+            badge.innerHTML = '<span class="text-muted"><i class="fa-solid fa-equals me-1"></i>No base salary change</span>';
+        }
+    }
+</script>
 
 @endsection
 

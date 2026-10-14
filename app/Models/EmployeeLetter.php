@@ -41,6 +41,28 @@ class EmployeeLetter extends Model
         return $this->belongsTo(User::class, 'issued_by');
     }
 
+    public function salaryHistory()
+    {
+        return $this->hasOne(EmployeeSalaryHistory::class, 'employee_letter_id');
+    }
+
+    public function getAttachmentUrlAttribute(): ?string
+    {
+        if (empty($this->attachment_path)) {
+            return null;
+        }
+
+        if (\Illuminate\Support\Str::startsWith($this->attachment_path, ['http://', 'https://'])) {
+            return $this->attachment_path;
+        }
+
+        if (file_exists(public_path($this->attachment_path))) {
+            return asset($this->attachment_path);
+        }
+
+        return asset('storage/' . $this->attachment_path);
+    }
+
     public function getTypeLabelAttribute(): string
     {
         return match ($this->letter_type) {
@@ -49,6 +71,7 @@ class EmployeeLetter extends Model
             'guarantee_letter'   => 'Guarantee Letter / የዋስትና ደብዳቤ (Guarantor Confirmation)',
             'power_of_attorney'  => 'Power of Attorney / Representation (ውክልና)',
             'application_letter' => 'Application Letter / Request (ማመልከቻ)',
+            'salary_increment'   => 'Salary Update / Increment Letter',
             'first_warning'      => 'First Written Warning',
             'second_warning'     => 'Second Written Warning',
             'final_warning'      => 'Final Warning Letter',
@@ -63,7 +86,7 @@ class EmployeeLetter extends Model
     public function getBadgeClassAttribute(): string
     {
         return match ($this->letter_type) {
-            'thanks_letter', 'appreciation', 'promotion' => 'bg-success text-white',
+            'thanks_letter', 'appreciation', 'promotion', 'salary_increment' => 'bg-success text-white',
             'guarantee_letter'   => 'bg-info text-dark border',
             'power_of_attorney'  => 'bg-primary text-white',
             'application_letter' => 'bg-indigo text-white',
@@ -81,6 +104,7 @@ class EmployeeLetter extends Model
     {
         return match ($this->letter_type) {
             'thanks_letter', 'appreciation', 'promotion' => 'fa-solid fa-award',
+            'salary_increment'   => 'fa-solid fa-money-bill-trend-up',
             'guarantee_letter'   => 'fa-solid fa-handshake-angle',
             'power_of_attorney'  => 'fa-solid fa-stamp',
             'application_letter' => 'fa-solid fa-file-pen',

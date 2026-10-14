@@ -9,6 +9,9 @@ use App\Models\LetterNotification;
 use App\Models\User;
 use App\Models\LetterActionLog;
 use App\Models\LetterSequence;
+use App\Models\Employee;
+use App\Models\EmployeeLetter;
+use App\Models\EmployeeSalaryHistory;
 use App\Services\ProcurementSmsService;
 use App\Services\SmsEthiopiaService;
 use Illuminate\Http\Request;
@@ -1220,7 +1223,7 @@ class LetterController extends Controller
             abort(403, 'Unauthorized. Access to Secretary Inbox is reserved for the Secretary role.');
         }
 
-        $query = Letter::with(['creator', 'attachments', 'addressedTo', 'registeredBy'])
+        $query = Letter::with(['creator', 'attachments', 'addressedTo', 'registeredBy', 'employee', 'salaryHistory'])
             ->whereIn('status', [Letter::STATUS_SENT, Letter::STATUS_REGISTERED, Letter::STATUS_PENDING, Letter::STATUS_VIEWED, Letter::STATUS_REDIRECTED, Letter::STATUS_REJECTED]);
 
         // Filter by Category
@@ -1240,7 +1243,8 @@ class LetterController extends Controller
                 $q->where('subject', 'like', "%{$search}%")
                   ->orWhere('letter_number', 'like', "%{$search}%")
                   ->orWhere('specification', 'like', "%{$search}%")
-                  ->orWhereHas('creator', fn($cq) => $cq->where('name', 'like', "%{$search}%"));
+                  ->orWhereHas('creator', fn($cq) => $cq->where('name', 'like', "%{$search}%"))
+                  ->orWhereHas('employee', fn($eq) => $eq->where('full_name', 'like', "%{$search}%")->orWhere('employee_code', 'like', "%{$search}%"));
             });
         }
 
@@ -1262,10 +1266,11 @@ class LetterController extends Controller
         ];
 
         $users = User::where('is_active', true)->orderBy('name')->get(['id', 'name', 'email']);
+        $employees = Employee::activeRoster()->orderBy('full_name')->get(['id', 'full_name', 'employee_code', 'user_id', 'basic_salary', 'department', 'role_title']);
         $categories = Letter::CATEGORIES;
         $nextSuggestedNumber = LetterSequence::peekNext();
 
-        return view('letters.secretary.inbox', compact('letters', 'stats', 'users', 'categories', 'nextSuggestedNumber'));
+        return view('letters.secretary.inbox', compact('letters', 'stats', 'users', 'employees', 'categories', 'nextSuggestedNumber'));
     }
 
     /**
@@ -1368,28 +1373,49 @@ class LetterController extends Controller
         }
 
         $request->validate([
-            'addressed_to_user_id' => 'required|exists:users,id',
+            'addressed_to_user_id' => 'nullable|exists:users,id',
+            'employee_id'          => 'nullable|exists:employees,id',
         ]);
 
-        $targetUser = User::findOrFail($request->addressed_to_user_id);
+        if (!$request->filled('addressed_to_user_id') && !$request->filled('employee_id')) {
+            return back()->with('error', 'Please select a recipient user or target employee.');
+        }
+
+        $targetUser = $request->filled('addressed_to_user_id') ? User::find($request->addressed_to_user_id) : null;
+        $employeeId = $request->input('employee_id');
+
+        if (!$targetUser && $employeeId) {
+            $linkedEmp = Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->find($employeeId);
+            if ($linkedEmp && $linkedEmp->user_id) {
+                $targetUser = User::find($linkedEmp->user_id);
+            }
+        }
 
         DB::beginTransaction();
         try {
-            $letter->update([
-                'addressed_to_user_id' => $targetUser->id,
-            ]);
+            $updateData = [];
+            if ($targetUser) {
+                $updateData['addressed_to_user_id'] = $targetUser->id;
+            }
+            if ($employeeId) {
+                $updateData['employee_id'] = $employeeId;
+            }
+
+            $letter->update($updateData);
+
+            $label = $targetUser?->name ?? ($letter->employee?->full_name ?? 'Personnel');
 
             LetterActionLog::record(
                 $letter->id,
                 $user->id,
                 'person_selected',
-                "Addressed / handled person set to {$targetUser->name} by {$user->name}.",
-                ['user_id' => $targetUser->id, 'user_name' => $targetUser->name]
+                "Addressed / handled target set to {$label} by {$user->name}.",
+                ['user_id' => $letter->addressed_to_user_id, 'employee_id' => $letter->employee_id, 'person_name' => $label]
             );
 
             DB::commit();
 
-            return back()->with('success', "Letter addressed to {$targetUser->name}.");
+            return back()->with('success', "Letter addressed to {$label}.");
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error("Failed to set handled person: " . $e->getMessage());
@@ -1417,8 +1443,8 @@ class LetterController extends Controller
         if (empty($letter->category)) {
             $missing[] = 'Category';
         }
-        if (empty($letter->addressed_to_user_id)) {
-            $missing[] = 'Addressed / Handled Person';
+        if (empty($letter->addressed_to_user_id) && empty($letter->employee_id)) {
+            $missing[] = 'Addressed / Handled Person or Employee';
         }
 
         if (!empty($missing)) {
@@ -1427,11 +1453,20 @@ class LetterController extends Controller
 
         DB::beginTransaction();
         try {
+            // Auto-fill addressed_to_user_id from linked employee if missing
+            if (empty($letter->addressed_to_user_id) && !empty($letter->employee_id)) {
+                $linkedEmp = Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->find($letter->employee_id);
+                if ($linkedEmp && $linkedEmp->user_id) {
+                    $letter->addressed_to_user_id = $linkedEmp->user_id;
+                }
+            }
+
             $letter->update([
                 'status'              => Letter::STATUS_REGISTERED,
                 'is_reference_locked' => true,
                 'registered_by'       => $user->id,
                 'registered_at'       => now(),
+                'addressed_to_user_id'=> $letter->addressed_to_user_id,
             ]);
 
             $targetUser = $letter->addressedTo;
@@ -1443,20 +1478,24 @@ class LetterController extends Controller
                 'to_user_id'   => $letter->addressed_to_user_id,
                 'to_role_name' => null,
                 'action'       => 'initial_sent',
-                'notes'        => "Letter registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to " . ($targetUser?->name ?? 'User'),
+                'notes'        => "Letter registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to " . ($targetUser?->name ?? ($letter->employee?->full_name ?? 'Personnel')),
                 'status'       => Letter::STATUS_PENDING,
             ]);
+
+            // Sync into Employee History (EmployeeLetter & EmployeeSalaryHistory)
+            $this->syncRegisteredLetterToEmployeeHistory($letter, $user);
 
             // Action Audit Log
             LetterActionLog::record(
                 $letter->id,
                 $user->id,
                 'registered',
-                "Letter officially Registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to " . ($targetUser?->name ?? 'User') . " by {$user->name}.",
+                "Letter officially Registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to " . ($targetUser?->name ?? ($letter->employee?->full_name ?? 'Personnel')) . " by {$user->name}.",
                 [
                     'letter_number'        => $letter->letter_number,
                     'category'             => $letter->category,
                     'addressed_to_user_id' => $letter->addressed_to_user_id,
+                    'employee_id'          => $letter->employee_id,
                 ]
             );
 
@@ -1485,7 +1524,7 @@ class LetterController extends Controller
 
             DB::commit();
 
-            return back()->with('success', "Letter {$letter->letter_number} successfully Registered and dispatched to " . ($targetUser?->name ?? 'the selected person') . ".");
+            return back()->with('success', "Letter {$letter->letter_number} successfully Registered and dispatched to " . ($targetUser?->name ?? ($letter->employee?->full_name ?? 'the employee')) . ".");
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error("Failed to register letter: " . $e->getMessage());
@@ -1506,8 +1545,13 @@ class LetterController extends Controller
         $validated = $request->validate([
             'letter_number'        => 'nullable|string|max:60|unique:letters,letter_number,' . $letter->id,
             'category'             => 'required|in:' . implode(',', Letter::CATEGORIES),
-            'addressed_to_user_id' => 'required|exists:users,id',
+            'addressed_to_user_id' => 'nullable|exists:users,id',
+            'employee_id'          => 'nullable|exists:employees,id',
         ]);
+
+        if (empty($validated['addressed_to_user_id']) && empty($validated['employee_id']) && empty($letter->addressed_to_user_id) && empty($letter->employee_id)) {
+            return back()->with('error', 'Please select either a handled user or target employee.');
+        }
 
         DB::beginTransaction();
         try {
@@ -1539,48 +1583,69 @@ class LetterController extends Controller
                 ['category' => $validated['category']]
             );
 
-            // 3. Addressed / Handled Person
-            $targetUser = User::findOrFail($validated['addressed_to_user_id']);
-            $letter->addressed_to_user_id = $targetUser->id;
+            // 3. Employee linking
+            if (!empty($validated['employee_id'])) {
+                $letter->employee_id = $validated['employee_id'];
+            }
+
+            // 4. Addressed / Handled Person
+            $targetUser = null;
+            if (!empty($validated['addressed_to_user_id'])) {
+                $targetUser = User::find($validated['addressed_to_user_id']);
+                $letter->addressed_to_user_id = $targetUser?->id;
+            } elseif ($letter->employee_id) {
+                $linkedEmp = Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->find($letter->employee_id);
+                if ($linkedEmp && $linkedEmp->user_id) {
+                    $targetUser = User::find($linkedEmp->user_id);
+                    $letter->addressed_to_user_id = $targetUser?->id;
+                }
+            }
+
+            $personLabel = $targetUser?->name ?? ($letter->employee?->full_name ?? 'Personnel');
+
             LetterActionLog::record(
                 $letter->id,
                 $user->id,
                 'person_selected',
-                "Addressed / handled person set to {$targetUser->name} by {$user->name}.",
-                ['user_id' => $targetUser->id, 'user_name' => $targetUser->name]
+                "Addressed / handled target set to {$personLabel} by {$user->name}.",
+                ['user_id' => $letter->addressed_to_user_id, 'employee_id' => $letter->employee_id, 'person_name' => $personLabel]
             );
 
-            // 4. Mark Registered
+            // 5. Mark Registered
             $letter->status = Letter::STATUS_REGISTERED;
             $letter->registered_by = $user->id;
             $letter->registered_at = now();
             $letter->save();
 
-            // 5. Add Routing entry
+            // 6. Add Routing entry
             LetterRecipient::create([
                 'letter_id'    => $letter->id,
                 'from_user_id' => $user->id,
-                'to_user_id'   => $targetUser->id,
+                'to_user_id'   => $letter->addressed_to_user_id,
                 'to_role_name' => null,
                 'action'       => 'initial_sent',
-                'notes'        => "Letter registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to {$targetUser->name}",
+                'notes'        => "Letter registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to {$personLabel}",
                 'status'       => Letter::STATUS_PENDING,
             ]);
 
-            // 6. Action Audit Log for registration
+            // 7. Sync into Employee History (EmployeeLetter & EmployeeSalaryHistory)
+            $this->syncRegisteredLetterToEmployeeHistory($letter, $user);
+
+            // 8. Action Audit Log for registration
             LetterActionLog::record(
                 $letter->id,
                 $user->id,
                 'registered',
-                "Letter officially Registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to {$targetUser->name} by {$user->name}.",
+                "Letter officially Registered as Ref #{$letter->letter_number} [{$letter->category}] and assigned to {$personLabel} by {$user->name}.",
                 [
                     'letter_number'        => $letter->letter_number,
                     'category'             => $letter->category,
-                    'addressed_to_user_id' => $targetUser->id,
+                    'addressed_to_user_id' => $letter->addressed_to_user_id,
+                    'employee_id'          => $letter->employee_id,
                 ]
             );
 
-            // 7. In-App Notification to creator
+            // 9. In-App Notification to creator
             if ($letter->created_by && $letter->created_by !== $user->id) {
                 LetterNotification::create([
                     'user_id'   => $letter->created_by,
@@ -1589,8 +1654,8 @@ class LetterController extends Controller
                 ]);
             }
 
-            // 8. In-App Notification to assigned person
-            if ($targetUser->id !== $user->id) {
+            // 10. In-App Notification to assigned person
+            if ($targetUser && $targetUser->id !== $user->id) {
                 LetterNotification::create([
                     'user_id'   => $targetUser->id,
                     'letter_id' => $letter->id,
@@ -1598,17 +1663,88 @@ class LetterController extends Controller
                 ]);
             }
 
-            // 9. SMS Notification to target user
-            $this->sendRegistrationSmsToTargetUser($targetUser, $letter, $user->name);
+            // 11. SMS Notification to target user
+            if ($targetUser) {
+                $this->sendRegistrationSmsToTargetUser($targetUser, $letter, $user->name);
+            }
 
             DB::commit();
 
-            return back()->with('success', "Letter Ref #{$letter->letter_number} successfully Approved, Registered, and dispatched to {$targetUser->name}.");
+            return back()->with('success', "Letter Ref #{$letter->letter_number} successfully Approved, Registered, and dispatched to {$personLabel}.");
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error("Failed to process and register letter: " . $e->getMessage());
             return back()->with('error', 'Registration failed: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Archive registered letter into Employee's official personnel history (EmployeeLetter)
+     */
+    protected function syncRegisteredLetterToEmployeeHistory(Letter $letter, User $actingUser): ?EmployeeLetter
+    {
+        $employeeId = $letter->employee_id;
+        if (!$employeeId && $letter->addressed_to_user_id) {
+            $targetUser = $letter->addressedTo ?? User::find($letter->addressed_to_user_id);
+            if ($targetUser && $targetUser->employee) {
+                $employeeId = $targetUser->employee->id;
+            }
+        }
+
+        if (!$employeeId) {
+            return null;
+        }
+
+        // Determine letter type for employee file
+        $letterType = 'other';
+        if ($letter->category === Letter::CATEGORY_SALARY_UPDATE || $letter->salaryHistory) {
+            $letterType = 'salary_increment';
+        } elseif ($letter->category === Letter::CATEGORY_LEAVE_LETTER) {
+            $letterType = 'application_letter';
+        } elseif (stripos($letter->subject, 'promotion') !== false) {
+            $letterType = 'promotion';
+        } elseif (stripos($letter->subject, 'warning') !== false) {
+            $letterType = 'first_warning';
+        }
+
+        $firstAttachment = $letter->attachments()->first();
+        $attachmentPath = $firstAttachment ? $firstAttachment->file_path : null;
+
+        $empLetter = EmployeeLetter::updateOrCreate(
+            [
+                'reference_number' => $letter->letter_number,
+            ],
+            [
+                'employee_id'            => $employeeId,
+                'letter_type'            => $letterType,
+                'title'                  => $letter->subject,
+                'content'                => $letter->specification,
+                'severity'               => in_array($letterType, ['salary_increment', 'promotion', 'thanks_letter']) ? 'positive' : 'info',
+                'issued_date'            => $letter->date ?? now()->toDateString(),
+                'issued_by'              => $actingUser->id,
+                'attachment_path'        => $attachmentPath,
+                'effective_date'         => $letter->date ?? now()->toDateString(),
+                'action_required'        => null,
+                'acknowledgement_status' => 'acknowledged',
+                'acknowledged_at'        => now(),
+            ]
+        );
+
+        if ($letter->salaryHistory) {
+            $letter->salaryHistory->update([
+                'employee_letter_id' => $empLetter->id,
+            ]);
+        }
+
+        LetterActionLog::record(
+            $letter->id,
+            $actingUser->id,
+            'archived_to_employee',
+            "Letter Ref #{$letter->letter_number} was officially archived into Employee Personnel History (ID #{$employeeId}).",
+            ['employee_id' => $employeeId, 'employee_letter_id' => $empLetter->id]
+        );
+
+        return $empLetter;
     }
 
     /**

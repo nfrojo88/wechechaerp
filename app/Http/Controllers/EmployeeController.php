@@ -4,8 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Models\Employee;
 use App\Models\Project;
+use App\Models\Letter;
+use App\Models\LetterAttachment;
+use App\Models\LetterRecipient;
+use App\Models\LetterNotification;
+use App\Models\LetterActionLog;
+use App\Models\EmployeeLetter;
+use App\Models\EmployeeSalaryHistory;
+use App\Models\SalaryStructure;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 
 class EmployeeController extends Controller
 {
@@ -653,11 +665,55 @@ class EmployeeController extends Controller
         }
     }
 
+    /**
+     * Auto-heal ensure employee_salary_histories table and letters.employee_id column exist
+     */
+    private function ensureSalaryHistoriesTableExists(): void
+    {
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('letters')) {
+                \Illuminate\Support\Facades\Schema::table('letters', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('letters', 'employee_id')) {
+                        $table->foreignId('employee_id')->nullable()->constrained('employees')->nullOnDelete();
+                    }
+                });
+            }
+
+            if (!\Illuminate\Support\Facades\Schema::hasTable('employee_salary_histories')) {
+                \Illuminate\Support\Facades\Schema::create('employee_salary_histories', function (\Illuminate\Database\Schema\Blueprint $table) {
+                    $table->id();
+                    $table->foreignId('employee_id')->constrained('employees')->cascadeOnDelete();
+                    $table->decimal('old_basic_salary', 15, 2)->default(0);
+                    $table->decimal('new_basic_salary', 15, 2)->default(0);
+                    $table->decimal('old_transport_allowance', 15, 2)->default(0);
+                    $table->decimal('new_transport_allowance', 15, 2)->default(0);
+                    $table->decimal('old_house_allowance', 15, 2)->default(0);
+                    $table->decimal('new_house_allowance', 15, 2)->default(0);
+                    $table->decimal('old_position_allowance', 15, 2)->default(0);
+                    $table->decimal('new_position_allowance', 15, 2)->default(0);
+                    $table->decimal('old_gross_salary', 15, 2)->default(0);
+                    $table->decimal('new_gross_salary', 15, 2)->default(0);
+                    $table->date('effective_date');
+                    $table->string('reason')->nullable();
+                    $table->text('notes')->nullable();
+                    $table->foreignId('letter_id')->nullable()->constrained('letters')->nullOnDelete();
+                    $table->foreignId('employee_letter_id')->nullable()->constrained('employee_letters')->nullOnDelete();
+                    $table->string('attachment_path')->nullable();
+                    $table->foreignId('changed_by')->nullable()->constrained('users')->nullOnDelete();
+                    $table->timestamps();
+                });
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Employee salary histories auto-heal: ' . $e->getMessage());
+        }
+    }
+
     public function show(Employee $employee)
     {
         Gate::authorize('view', $employee);
         $this->ensureLicenseTableExists();
         $this->ensureLettersTableExists();
+        $this->ensureSalaryHistoriesTableExists();
         $employee->load([
             'project', 
             'payrolls' => fn($q) => $q->latest()->limit(12),
@@ -665,6 +721,9 @@ class EmployeeController extends Controller
             'experience',
             'licenses',
             'letters.issuer',
+            'salaryHistories.changer',
+            'salaryHistories.letter',
+            'salaryHistories.employeeLetter',
             'activeAssets.product',
             'assignedFixedAssets.parentAsset',
             'fixedAssetAssignments.unit.parentAsset',
@@ -672,6 +731,208 @@ class EmployeeController extends Controller
             'fixedAssetAssignments.receiver'
         ]);
         return view('hr.employees.show', compact('employee'));
+    }
+
+    /**
+     * Update employee salary with official attached letter and dispatch to Secretary Inbox.
+     */
+    public function updateSalaryWithLetter(Request $request)
+    {
+        $this->ensureLettersTableExists();
+        $this->ensureSalaryHistoriesTableExists();
+
+        $validated = $request->validate([
+            'employee_id'             => 'required|exists:employees,id',
+            'new_basic_salary'        => 'required|numeric|min:0',
+            'new_transport_allowance' => 'nullable|numeric|min:0',
+            'new_house_allowance'     => 'nullable|numeric|min:0',
+            'new_position_allowance'  => 'nullable|numeric|min:0',
+            'effective_date'          => 'required|date',
+            'reason'                  => 'required|string|max:255',
+            'notes'                   => 'nullable|string',
+            'letter_file'             => 'required|file|mimes:pdf,png,jpg,jpeg,doc,docx|max:10240',
+        ]);
+
+        $employee = Employee::withoutGlobalScope(\App\Scopes\NotDeadFileScope::class)->findOrFail($validated['employee_id']);
+        Gate::authorize('update', $employee);
+
+        $user = Auth::user();
+
+        DB::beginTransaction();
+        try {
+            $oldBasic     = (float) ($employee->basic_salary ?? 0);
+            $oldTransport = (float) ($employee->transport_allowance ?? 0);
+            $oldHouse     = (float) ($employee->house_allowance ?? 0);
+            $oldPosition  = (float) ($employee->position_allowance ?? 0);
+            $oldGross     = $oldBasic + $oldTransport + $oldHouse + $oldPosition;
+
+            $newBasic     = (float) $validated['new_basic_salary'];
+            $newTransport = $request->filled('new_transport_allowance') ? (float) $validated['new_transport_allowance'] : $oldTransport;
+            $newHouse     = $request->filled('new_house_allowance') ? (float) $validated['new_house_allowance'] : $oldHouse;
+            $newPosition  = $request->filled('new_position_allowance') ? (float) $validated['new_position_allowance'] : $oldPosition;
+            $newGross     = $newBasic + $newTransport + $newHouse + $newPosition;
+
+            // 1. Upload letter document using FileUploadService
+            $filePath = '';
+            $originalName = 'Salary_Update_Letter';
+            $fileSize = 0;
+            $extension = 'pdf';
+
+            if ($request->hasFile('letter_file')) {
+                $file = $request->file('letter_file');
+                $originalName = $file->getClientOriginalName();
+                $extension = strtolower($file->getClientOriginalExtension()) ?: 'pdf';
+                $fileSize = $file->getSize() ?: 0;
+                $filePath = \App\Services\FileUploadService::upload($file, 'salary_letters');
+            }
+
+            // 2. Update Employee's salary fields
+            $employee->basic_salary        = $newBasic;
+            $employee->transport_allowance = $newTransport;
+            $employee->house_allowance     = $newHouse;
+            $employee->position_allowance  = $newPosition;
+            $employee->save();
+
+            // 2b. Sync SalaryStructure if table exists
+            if (\Illuminate\Support\Facades\Schema::hasTable('salary_structures')) {
+                try {
+                    SalaryStructure::where('employee_id', $employee->id)->where('is_active', true)->update(['is_active' => false]);
+                    SalaryStructure::create([
+                        'employee_id'         => $employee->id,
+                        'base_salary'         => $newBasic,
+                        'house_allowance'     => $newHouse,
+                        'transport_allowance' => $newTransport,
+                        'meal_allowance'      => 0,
+                        'other_allowance'     => $newPosition,
+                        'gross_salary'        => $newGross,
+                        'effective_from'      => $validated['effective_date'],
+                        'is_active'           => true,
+                    ]);
+                } catch (\Throwable $se) {
+                    Log::warning('SalaryStructure update bypassed: ' . $se->getMessage());
+                }
+            }
+
+            // 3. Compose Specification and Create Letter in Correspondence System
+            $diff = $newBasic - $oldBasic;
+            $diffSign = $diff >= 0 ? '+' : '';
+            $diffText = "{$diffSign}" . number_format($diff, 2);
+
+            $specification = "Official Salary Update for Employee: {$employee->full_name} (Code: {$employee->employee_code}, Dept: {$employee->department}, Role: {$employee->role_title})\n\n"
+                . "• Previous Basic Salary: Br " . number_format($oldBasic, 2) . "\n"
+                . "• New Basic Salary: Br " . number_format($newBasic, 2) . " ({$diffText} Br)\n"
+                . "• Transport Allowance: Br " . number_format($newTransport, 2) . "\n"
+                . "• House Allowance: Br " . number_format($newHouse, 2) . "\n"
+                . "• Position Allowance: Br " . number_format($newPosition, 2) . "\n"
+                . "• New Total Gross Salary: Br " . number_format($newGross, 2) . "\n"
+                . "• Effective Date: {$validated['effective_date']}\n"
+                . "• Adjustment Reason: {$validated['reason']}\n";
+
+            if (!empty($validated['notes'])) {
+                $specification .= "\nAdditional Notes:\n" . $validated['notes'];
+            }
+
+            $letter = Letter::create([
+                'employee_id'            => $employee->id,
+                'addressed_to_user_id'   => $employee->user_id,
+                'letter_number'          => null, // Nullable until Secretary assigns sequential number
+                'type'                   => Letter::TYPE_INCOMING,
+                'date'                   => $validated['effective_date'],
+                'subject'                => "Salary Update: {$employee->full_name} ({$employee->employee_code})",
+                'specification'          => $specification,
+                'category'               => Letter::CATEGORY_SALARY_UPDATE,
+                'sender'                 => $user->name . ' (HR Department)',
+                'sender_department'      => 'Human Resources',
+                'recipient_organization' => null,
+                'priority'               => Letter::PRIORITY_NORMAL,
+                'status'                 => Letter::STATUS_SENT,
+                'sent_at'                => now(),
+                'created_by'             => $user->id,
+            ]);
+
+            // 4. Attach uploaded letter document to LetterAttachment
+            if (!empty($filePath)) {
+                LetterAttachment::create([
+                    'letter_id'   => $letter->id,
+                    'file_path'   => $filePath,
+                    'file_name'   => $originalName,
+                    'file_type'   => $extension,
+                    'file_size'   => $fileSize,
+                    'uploaded_by' => $user->id,
+                ]);
+            }
+
+            // 5. Create Routing / Recipient Entry to Secretary Role
+            LetterRecipient::create([
+                'letter_id'    => $letter->id,
+                'from_user_id' => $user->id,
+                'to_user_id'   => null,
+                'to_role_name' => 'secretary',
+                'action'       => 'initial_sent',
+                'notes'        => "Official Salary Update letter submitted by HR {$user->name} for {$employee->full_name}. Awaiting reference numbering and secretary registration.",
+                'status'       => Letter::STATUS_PENDING,
+            ]);
+
+            // 6. Action Audit Log on Letter
+            LetterActionLog::record(
+                $letter->id,
+                $user->id,
+                'created_and_sent',
+                "Salary Update letter submitted by HR {$user->name} for {$employee->full_name}. Sent to Secretary for numbering and official registration.",
+                [
+                    'employee_id'      => $employee->id,
+                    'employee_name'    => $employee->full_name,
+                    'old_basic_salary' => $oldBasic,
+                    'new_basic_salary' => $newBasic,
+                    'effective_date'   => $validated['effective_date'],
+                    'reason'           => $validated['reason'],
+                ]
+            );
+
+            // 7. Record Salary History
+            EmployeeSalaryHistory::create([
+                'employee_id'             => $employee->id,
+                'old_basic_salary'        => $oldBasic,
+                'new_basic_salary'        => $newBasic,
+                'old_transport_allowance' => $oldTransport,
+                'new_transport_allowance' => $newTransport,
+                'old_house_allowance'     => $oldHouse,
+                'new_house_allowance'     => $newHouse,
+                'old_position_allowance'  => $oldPosition,
+                'new_position_allowance'  => $newPosition,
+                'old_gross_salary'        => $oldGross,
+                'new_gross_salary'        => $newGross,
+                'effective_date'          => $validated['effective_date'],
+                'reason'                  => $validated['reason'],
+                'notes'                   => $validated['notes'] ?? null,
+                'letter_id'               => $letter->id,
+                'employee_letter_id'      => null, // Linked upon secretary registration
+                'attachment_path'         => $filePath,
+                'changed_by'              => $user->id,
+            ]);
+
+            // 8. In-App Notifications to Secretary and Management
+            try {
+                $secretaries = User::role(['secretary', 'Secretary', 'admin', 'global_admin'])->get();
+                foreach ($secretaries as $sec) {
+                    LetterNotification::create([
+                        'user_id'   => $sec->id,
+                        'letter_id' => $letter->id,
+                        'message'   => "New Salary Update letter submitted for employee {$employee->full_name} ({$employee->employee_code}). Please assign reference number and register.",
+                    ]);
+                }
+            } catch (\Throwable $ne) {
+                Log::warning('Letter notification creation bypassed: ' . $ne->getMessage());
+            }
+
+            DB::commit();
+
+            return back()->with('success', "Employee salary for {$employee->full_name} updated to Br " . number_format($newBasic, 2) . " successfully! The official letter has been dispatched to the Secretary Inbox for reference numbering and registration.");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            Log::error("Failed to update employee salary with letter: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return back()->with('error', "Failed to update employee salary: " . $e->getMessage());
+        }
     }
 
     public function edit(Employee $employee)

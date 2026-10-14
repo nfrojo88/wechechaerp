@@ -452,6 +452,11 @@ class Employee extends Model
         return $this->hasOne(SalaryStructure::class)->where('is_active', true);
     }
 
+    public function salaryHistories()
+    {
+        return $this->hasMany(EmployeeSalaryHistory::class)->latest('effective_date')->latest('id');
+    }
+
     public function ratings()
     {
         return $this->hasMany(EmployeeRating::class);
