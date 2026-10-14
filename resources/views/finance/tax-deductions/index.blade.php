@@ -444,20 +444,39 @@
                                 <div class="d-inline-flex align-items-center gap-1.5">
                                     <button type="button" 
                                             class="btn btn-sm btn-primary rounded-pill px-3 py-1 small d-inline-flex align-items-center gap-1.5 shadow-xs fw-semibold"
+                                            id="btn-drawer-{{ $mNum }}"
+                                            data-year="{{ $selectedEthYear }}"
+                                            data-month="{{ $mNum }}"
+                                            data-name-en="{{ $mTrend['month_name'] }}"
+                                            data-name-am="{{ $mTrend['month_am'] }}"
+                                            onclick="toggleMonthInlineDrawer(this.dataset.year, this.dataset.month, this.dataset.nameEn, this.dataset.nameAm)"
+                                            title="View detailed transaction movements for {{ $mTrend['month_name'] }} directly in page">
+                                        <i class="fa-solid fa-receipt" id="icon-drawer-{{ $mNum }}"></i>
+                                        <span id="text-drawer-{{ $mNum }}">Movements</span>
+                                    </button>
+                                    <button type="button" 
+                                            class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1 small"
                                             data-year="{{ $selectedEthYear }}"
                                             data-month="{{ $mNum }}"
                                             data-name-en="{{ $mTrend['month_name'] }}"
                                             data-name-am="{{ $mTrend['month_am'] }}"
                                             onclick="openMonthMovementsModal(this.dataset.year, this.dataset.month, this.dataset.nameEn, this.dataset.nameAm)"
-                                            title="View detailed transaction movements for {{ $mTrend['month_name'] }}">
-                                        <i class="fa-solid fa-receipt"></i>
-                                        <span>Movements</span>
+                                            title="Open in Fullscreen Dialog">
+                                        <i class="fa-solid fa-up-right-from-square"></i>
                                     </button>
                                     <a href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum])) }}" 
                                        class="btn btn-sm {{ $mTrend['is_current'] ? 'btn-outline-primary active' : 'btn-outline-secondary' }} rounded-pill px-2.5 py-1 small" 
                                        title="Filter whole page to this month">
                                         <i class="fa-solid fa-filter"></i>
                                     </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {{-- Expandable Inline Drawer Row for this Month --}}
+                        <tr id="trend-drawer-row-{{ $mNum }}" class="trend-drawer-row d-none" style="background-color: #f8fafc;">
+                            <td colspan="8" class="p-0 border-top-0 border-bottom">
+                                <div id="trend-drawer-content-{{ $mNum }}" class="p-2 p-md-3">
+                                    {{-- Dynamically loaded inline movement details --}}
                                 </div>
                             </td>
                         </tr>
@@ -2575,10 +2594,20 @@
 </div>
 
 {{-- ── 13-Month Movement & Transaction Audit Modal ────────────────────────────── --}}
-<div class="modal fade" id="monthMovementsModal" tabindex="-1" aria-labelledby="monthMovementsModalLabel" aria-hidden="true" style="z-index: 1060;">
+<div class="modal fade" id="monthMovementsModal" tabindex="-1" aria-labelledby="monthMovementsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable my-3" style="max-width: 1240px;">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <style>
+                /* Prevent CSS transform containing block trapping modals inside content-wrapper */
+                .content-wrapper > .modal,
+                #monthMovementsModal {
+                    animation: none !important;
+                    transform: none !important;
+                    z-index: 1070 !important;
+                }
+                .modal-backdrop {
+                    z-index: 1060 !important;
+                }
                 #monthMovementsModal .modal-body {
                     min-height: 520px;
                     background-color: #f8fafc;
@@ -2602,15 +2631,18 @@
                     background: #fff;
                     transition: transform 0.15s ease, box-shadow 0.15s ease;
                 }
+                .trend-drawer-row {
+                    transition: all 0.2s ease-in-out;
+                }
             </style>
             {{-- Modal Header --}}
-            <div class="modal-header bg-primary text-white py-3 px-4 flex-shrink-0">
+            <div class="modal-header bg-dark text-white py-3 px-4 flex-shrink-0" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;">
                 <div class="d-flex align-items-center gap-2.5">
-                    <div class="p-2 bg-white bg-opacity-20 rounded-circle text-white">
+                    <div class="p-2 rounded-circle text-warning" style="background: rgba(245,158,11,0.2);">
                         <i class="fa-solid fa-chart-pie fs-5"></i>
                     </div>
                     <div>
-                        <h5 class="modal-title fw-bold mb-0" id="mMovementsTitle">Ethiopian Month Financial Movements</h5>
+                        <h5 class="modal-title fw-bold mb-0 text-white" id="mMovementsTitle">Ethiopian Month Financial Movements</h5>
                         <small class="text-white-50" id="mMovementsWindow">Gregorian Date Window &amp; Movements Summary</small>
                     </div>
                 </div>
@@ -3808,15 +3840,444 @@
 
     // ── 13-Month Financial Movement & Audit Drilldown ────────────────────────
     let currentMovementsData = null;
+    let openDrawerMonth = null;
+    const movementsCache = {};
+
+    // Relocate modal to document.body to prevent transform containing block traps
+    document.addEventListener('DOMContentLoaded', function () {
+        const modalEl = document.getElementById('monthMovementsModal');
+        if (modalEl && modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+    });
 
     function formatMoney(amount) {
         const n = parseFloat(amount) || 0;
         return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    // ── INLINE DRAWER: View movements directly inside the table ───────────────
+    function toggleMonthInlineDrawer(ethYear, ethMonth, monthEn, monthAm) {
+        const drawerRow = document.getElementById(`trend-drawer-row-${ethMonth}`);
+        const btn = document.getElementById(`btn-drawer-${ethMonth}`);
+        const icon = document.getElementById(`icon-drawer-${ethMonth}`);
+        const text = document.getElementById(`text-drawer-${ethMonth}`);
+        const contentContainer = document.getElementById(`trend-drawer-content-${ethMonth}`);
+        if (!drawerRow || !contentContainer) return;
+
+        // If clicking currently open drawer, close it
+        if (!drawerRow.classList.contains('d-none')) {
+            closeMonthInlineDrawer(ethMonth);
+            return;
+        }
+
+        // Close any other open drawer
+        if (openDrawerMonth && openDrawerMonth !== ethMonth) {
+            closeMonthInlineDrawer(openDrawerMonth);
+        }
+
+        // Open this drawer
+        drawerRow.classList.remove('d-none');
+        openDrawerMonth = ethMonth;
+        if (btn) btn.classList.replace('btn-primary', 'btn-dark');
+        if (icon) icon.className = 'fa-solid fa-chevron-up';
+        if (text) text.innerText = 'Hide';
+
+        // Check cache or fetch
+        const cacheKey = `${ethYear}-${ethMonth}`;
+        if (movementsCache[cacheKey]) {
+            renderInlineDrawer(ethMonth, movementsCache[cacheKey]);
+            return;
+        }
+
+        // Loading spinner
+        contentContainer.innerHTML = `
+            <div class="text-center py-4 bg-white rounded-4 border border-secondary-subtle shadow-xs">
+                <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                <span class="text-dark fw-semibold">Retrieving detailed financial movements for ${monthEn} (${monthAm})...</span>
+                <div class="text-muted small mt-1">Loading customer sales receipts, company expenditures, and ERCA tax lines</div>
+            </div>
+        `;
+
+        const url = "{{ route('finance.tax-deductions.month-movements') }}?ethiopian_year=" + ethYear + "&ethiopian_month=" + ethMonth;
+        fetch(url, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(res => {
+            if (!res.ok) throw new Error('HTTP error ' + res.status);
+            return res.json();
+        })
+        .then(data => {
+            if (data.success) {
+                movementsCache[cacheKey] = data;
+                renderInlineDrawer(ethMonth, data);
+            } else {
+                throw new Error(data.message || 'Error loading transaction movements');
+            }
+        })
+        .catch(err => {
+            console.error('Failed to load inline month movements:', err);
+            contentContainer.innerHTML = `
+                <div class="alert alert-danger rounded-4 py-3 px-4 d-flex align-items-center justify-content-between mb-0">
+                    <div>
+                        <i class="fa-solid fa-triangle-exclamation me-2"></i>
+                        <span>Failed to load transaction movements: ${err.message || 'Unknown error'}</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-danger rounded-pill" onclick="toggleMonthInlineDrawer(${ethYear}, ${ethMonth}, '${monthEn}', '${monthAm}')">
+                        <i class="fa-solid fa-rotate-right me-1"></i>Retry
+                    </button>
+                </div>
+            `;
+        });
+    }
+
+    function closeMonthInlineDrawer(ethMonth) {
+        const drawerRow = document.getElementById(`trend-drawer-row-${ethMonth}`);
+        const btn = document.getElementById(`btn-drawer-${ethMonth}`);
+        const icon = document.getElementById(`icon-drawer-${ethMonth}`);
+        const text = document.getElementById(`text-drawer-${ethMonth}`);
+        if (drawerRow) drawerRow.classList.add('d-none');
+        if (btn) btn.classList.replace('btn-dark', 'btn-primary');
+        if (icon) icon.className = 'fa-solid fa-receipt';
+        if (text) text.innerText = 'Movements';
+        if (openDrawerMonth === ethMonth) openDrawerMonth = null;
+    }
+
+    function renderInlineDrawer(monthNum, data) {
+        const m = data.month;
+        const s = data.summary;
+        const container = document.getElementById(`trend-drawer-content-${monthNum}`);
+        if (!container) return;
+
+        let incomeRows = '';
+        if (data.incomes && data.incomes.length > 0) {
+            data.incomes.forEach((inc, idx) => {
+                incomeRows += `
+                    <tr>
+                        <td class="ps-3 font-monospace small text-muted">${idx + 1}</td>
+                        <td><span class="fw-bold font-monospace text-dark d-block">${inc.date_ec}</span><small class="text-muted" style="font-size:0.75rem;">${inc.date_gc}</small></td>
+                        <td><span class="badge bg-light text-dark border font-monospace">${inc.income_no}</span></td>
+                        <td><span class="fw-semibold text-dark">${inc.buyer_name}</span>${inc.buyer_tin !== '-' ? `<small class="text-muted d-block font-monospace" style="font-size:0.75rem;">TIN: ${inc.buyer_tin}</small>` : ''}</td>
+                        <td><span class="badge bg-secondary-subtle text-secondary rounded-pill small">${inc.project_name}</span></td>
+                        <td class="small text-muted"><i class="fa-solid fa-building-columns me-1 text-primary"></i>${inc.account_name}</td>
+                        <td class="text-end font-monospace">ETB ${formatMoney(inc.sales_base)}</td>
+                        <td class="text-end font-monospace text-danger fw-semibold">ETB ${formatMoney(inc.output_vat)}</td>
+                        <td class="text-end font-monospace text-success fw-bold pe-3">ETB ${formatMoney(inc.gross_amount)}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            incomeRows = `<tr><td colspan="9" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-secondary"></i>No company income receipts recorded for this month.</td></tr>`;
+        }
+
+        let expenseRows = '';
+        if (data.expenses && data.expenses.length > 0) {
+            data.expenses.forEach((exp, idx) => {
+                expenseRows += `
+                    <tr>
+                        <td class="ps-3 font-monospace small text-muted">${idx + 1}</td>
+                        <td><span class="fw-bold font-monospace text-dark d-block">${exp.date_ec}</span><small class="text-muted" style="font-size:0.75rem;">${exp.date_gc}</small></td>
+                        <td><span class="badge bg-light text-dark border font-monospace">${exp.request_number}</span></td>
+                        <td><span class="fw-semibold text-dark">${exp.payee}</span></td>
+                        <td><span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small">${exp.category}</span><small class="text-muted d-block" style="font-size:0.75rem;">${exp.project_name}</small></td>
+                        <td class="small text-muted"><i class="fa-solid fa-wallet me-1 text-danger"></i>${exp.account_name}</td>
+                        <td class="text-end font-monospace">ETB ${formatMoney(exp.base_amount)}</td>
+                        <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(exp.vat_amount)}</td>
+                        <td class="text-end font-monospace text-danger">${exp.withholding_amount > 0 ? '- ETB ' + formatMoney(exp.withholding_amount) : '-'}</td>
+                        <td class="text-end font-monospace text-dark fw-bold pe-3">ETB ${formatMoney(exp.net_disbursed)}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            expenseRows = `<tr><td colspan="10" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-secondary"></i>No purchases or paid expenses recorded for this month.</td></tr>`;
+        }
+
+        let ocrRows = '';
+        if (data.ocr_items && data.ocr_items.length > 0) {
+            data.ocr_items.forEach((ocr, idx) => {
+                ocrRows += `
+                    <tr>
+                        <td class="ps-3 font-monospace small text-muted">${idx + 1}</td>
+                        <td><span class="fw-bold font-monospace text-dark d-block">${ocr.date_ec}</span><small class="text-muted" style="font-size:0.75rem;">${ocr.date_gc}</small></td>
+                        <td><span class="badge bg-light text-primary border font-monospace">${ocr.fs_no}</span></td>
+                        <td><span class="fw-semibold text-dark">${ocr.vendor_name}</span><small class="text-muted d-block font-monospace" style="font-size:0.75rem;">TIN: ${ocr.vendor_tin}</small></td>
+                        <td><span class="badge bg-secondary-subtle text-secondary rounded-pill small">${ocr.project_name}</span></td>
+                        <td class="small text-dark text-truncate" style="max-width: 200px;">${ocr.item_description}</td>
+                        <td class="text-end font-monospace">ETB ${formatMoney(ocr.base_value)}</td>
+                        <td class="text-end font-monospace text-success fw-semibold">ETB ${formatMoney(ocr.vat_amount)}</td>
+                        <td class="text-end font-monospace text-dark fw-bold pe-3">ETB ${formatMoney(ocr.value_after_vat)}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            ocrRows = `<tr><td colspan="9" class="text-center py-4 text-muted"><i class="fa-solid fa-folder-open me-2 text-secondary"></i>No OCR scanned invoices recorded for this month.</td></tr>`;
+        }
+
+        container.innerHTML = `
+            <div class="card border border-primary border-opacity-25 shadow-sm rounded-4 overflow-hidden bg-white mb-2">
+                <!-- Header Bar -->
+                <div class="card-header bg-dark text-white py-2.5 px-3 px-md-4 d-flex flex-wrap justify-content-between align-items-center gap-2" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important;">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="p-1.5 rounded-circle text-warning" style="background: rgba(245,158,11,0.2);"><i class="fa-solid fa-calendar-day"></i></span>
+                        <div>
+                            <h6 class="fw-bold mb-0 text-white">${m.title} &mdash; Transaction Movements &amp; Audit</h6>
+                            <small class="text-white-50">${m.gregorian_window}</small>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-light text-dark rounded-pill px-3 py-1 fw-semibold shadow-xs" onclick="openMonthMovementsModal(${m.year}, ${m.month}, '${m.month_name}', '${m.month_am}')">
+                            <i class="fa-solid fa-up-right-from-square me-1 text-primary"></i>Fullscreen Dialog
+                        </button>
+                        <a href="{{ route('finance.tax-deductions.index') }}?ethiopian_year=${m.year}&ethiopian_month=${m.month}" class="btn btn-sm btn-outline-light rounded-pill px-3 py-1 fw-semibold">
+                            <i class="fa-solid fa-filter me-1"></i>Filter Page
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-light rounded-circle p-1" onclick="closeMonthInlineDrawer(${monthNum})" title="Close Drawer">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card-body p-3">
+                    <!-- 5-Card KPI Strip -->
+                    <div class="row g-2 mb-3 row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-5">
+                        <div class="col">
+                            <div class="p-2.5 rounded-3 bg-light border border-secondary-subtle">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">Sales Base (ገቢ)</span>
+                                    <span class="badge bg-primary-subtle text-primary rounded-pill" style="font-size: 0.62rem;">${s.income_count} receipts</span>
+                                </div>
+                                <div class="fw-bold text-dark font-monospace fs-6">ETB ${formatMoney(s.sales_base)}</div>
+                                <div class="mt-1 pt-1 border-top border-secondary-subtle d-flex justify-content-between small" style="font-size: 0.7rem;">
+                                    <span class="text-muted">Output VAT:</span>
+                                    <span class="fw-bold text-danger font-monospace">ETB ${formatMoney(s.output_vat)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="p-2.5 rounded-3 bg-light border border-secondary-subtle">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">Purchases Base (ግዢ)</span>
+                                    <span class="badge bg-success-subtle text-success rounded-pill" style="font-size: 0.62rem;">${s.expense_count} items</span>
+                                </div>
+                                <div class="fw-bold text-dark font-monospace fs-6">ETB ${formatMoney(s.purchases_base)}</div>
+                                <div class="mt-1 pt-1 border-top border-secondary-subtle d-flex justify-content-between small" style="font-size: 0.7rem;">
+                                    <span class="text-muted">Input VAT:</span>
+                                    <span class="fw-bold text-success font-monospace">ETB ${formatMoney(s.input_vat)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="p-2.5 rounded-3 bg-light border border-secondary-subtle">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">Opening Credit</span>
+                                    <span class="badge bg-info-subtle text-info rounded-pill" style="font-size: 0.62rem;">Prev Month</span>
+                                </div>
+                                <div class="fw-bold text-info font-monospace fs-6">+ ETB ${formatMoney(s.opening_credit)}</div>
+                                <div class="mt-1 pt-1 border-top border-secondary-subtle d-flex justify-content-between small" style="font-size: 0.7rem;">
+                                    <span class="text-muted">Creditable Pool:</span>
+                                    <span class="fw-bold text-dark font-monospace">ETB ${formatMoney(s.total_creditable_input)}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="p-2.5 rounded-3 ${s.is_payable ? 'bg-danger-subtle border border-danger-subtle' : (s.is_credit ? 'bg-success-subtle border border-success-subtle' : 'bg-light border')}">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">Signed Net VAT</span>
+                                    <span class="badge ${s.badge_class} rounded-pill" style="font-size: 0.62rem;">${s.label}</span>
+                                </div>
+                                <div class="fw-bold font-monospace fs-6 ${s.text_class}">${s.signed_net_formatted}</div>
+                                <div class="mt-1 pt-1 border-top border-secondary-subtle small text-truncate" style="font-size: 0.7rem;">
+                                    ${s.is_payable ? `ETB ${formatMoney(s.payable_amount)} payable` : (s.is_credit ? `ETB ${formatMoney(s.credit_carry_forward)} carry forward` : 'Settled (0.00)')}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="p-2.5 rounded-3 bg-light border border-secondary-subtle">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-muted text-uppercase fw-bold" style="font-size: 0.65rem;">3% Withholding</span>
+                                    <span class="badge bg-warning-subtle text-dark rounded-pill" style="font-size: 0.62rem;">Separate</span>
+                                </div>
+                                <div class="fw-bold text-danger font-monospace fs-6">- ETB ${formatMoney(s.withholding_tax)}</div>
+                                <div class="mt-1 pt-1 border-top border-secondary-subtle d-flex justify-content-between small" style="font-size: 0.7rem;">
+                                    <span class="text-muted">Net Disbursed:</span>
+                                    <span class="fw-bold text-success font-monospace">ETB ${formatMoney(s.net_disbursed)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Inner Navigation Tabs -->
+                    <ul class="nav nav-tabs mb-3" id="drawerTab-${monthNum}" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active fw-semibold small" id="drawer-income-tab-${monthNum}" data-bs-toggle="tab" data-bs-target="#drawer-income-${monthNum}" type="button" role="tab">
+                                <i class="fa-solid fa-arrow-down-long text-success me-1"></i>Where Income Came From (${s.income_count})
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link fw-semibold small" id="drawer-expense-tab-${monthNum}" data-bs-toggle="tab" data-bs-target="#drawer-expense-${monthNum}" type="button" role="tab">
+                                <i class="fa-solid fa-arrow-up-long text-danger me-1"></i>Purchases &amp; Paid Expenses (${s.expense_count})
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link fw-semibold small" id="drawer-ocr-tab-${monthNum}" data-bs-toggle="tab" data-bs-target="#drawer-ocr-${monthNum}" type="button" role="tab">
+                                <i class="fa-solid fa-receipt text-primary me-1"></i>Scanned OCR Invoices (${s.ocr_count})
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link fw-semibold small" id="drawer-audit-tab-${monthNum}" data-bs-toggle="tab" data-bs-target="#drawer-audit-${monthNum}" type="button" role="tab">
+                                <i class="fa-solid fa-scale-balanced text-dark me-1"></i>ERCA Line 100 Audit
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content" id="drawerTabContent-${monthNum}">
+                        <!-- Income Tab -->
+                        <div class="tab-pane fade show active" id="drawer-income-${monthNum}" role="tabpanel">
+                            <div class="table-responsive" style="max-height: 380px;">
+                                <table class="table table-hover table-sm align-middle mb-0">
+                                    <thead class="bg-light sticky-top text-muted text-uppercase fw-bold" style="font-size: 0.68rem;">
+                                        <tr>
+                                            <th class="ps-3 py-2">#</th>
+                                            <th class="py-2">Date (EC / GC)</th>
+                                            <th class="py-2">Income #</th>
+                                            <th class="py-2">Buyer / Customer</th>
+                                            <th class="py-2">Project</th>
+                                            <th class="py-2">Account</th>
+                                            <th class="py-2 text-end">Sales Base</th>
+                                            <th class="py-2 text-end text-danger">Output VAT</th>
+                                            <th class="py-2 text-end pe-3">Gross Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">${incomeRows}</tbody>
+                                    <tfoot class="bg-light fw-bold">
+                                        <tr>
+                                            <td colspan="6" class="ps-3 py-2 small text-uppercase text-muted">Total Sales &amp; Output VAT</td>
+                                            <td class="text-end py-2 font-monospace">ETB ${formatMoney(s.sales_base)}</td>
+                                            <td class="text-end py-2 font-monospace text-danger">ETB ${formatMoney(s.output_vat)}</td>
+                                            <td class="text-end py-2 font-monospace text-success pe-3">ETB ${formatMoney(s.gross_income)}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Expense Tab -->
+                        <div class="tab-pane fade" id="drawer-expense-${monthNum}" role="tabpanel">
+                            <div class="table-responsive" style="max-height: 380px;">
+                                <table class="table table-hover table-sm align-middle mb-0">
+                                    <thead class="bg-light sticky-top text-muted text-uppercase fw-bold" style="font-size: 0.68rem;">
+                                        <tr>
+                                            <th class="ps-3 py-2">#</th>
+                                            <th class="py-2">Date (EC / GC)</th>
+                                            <th class="py-2">Voucher #</th>
+                                            <th class="py-2">Payee / Vendor</th>
+                                            <th class="py-2">Category</th>
+                                            <th class="py-2">Account</th>
+                                            <th class="py-2 text-end">Purchases Base</th>
+                                            <th class="py-2 text-end text-success">Input VAT</th>
+                                            <th class="py-2 text-end text-danger">3% WHT</th>
+                                            <th class="py-2 text-end pe-3">Net Disbursed</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">${expenseRows}</tbody>
+                                    <tfoot class="bg-light fw-bold">
+                                        <tr>
+                                            <td colspan="6" class="ps-3 py-2 small text-uppercase text-muted">Total Purchases &amp; Deductions</td>
+                                            <td class="text-end py-2 font-monospace">ETB ${formatMoney(s.purchases_base)}</td>
+                                            <td class="text-end py-2 font-monospace text-success">ETB ${formatMoney(s.input_vat)}</td>
+                                            <td class="text-end py-2 font-monospace text-danger">- ETB ${formatMoney(s.withholding_tax)}</td>
+                                            <td class="text-end py-2 font-monospace text-dark pe-3">ETB ${formatMoney(s.net_disbursed)}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- OCR Tab -->
+                        <div class="tab-pane fade" id="drawer-ocr-${monthNum}" role="tabpanel">
+                            <div class="table-responsive" style="max-height: 380px;">
+                                <table class="table table-hover table-sm align-middle mb-0">
+                                    <thead class="bg-light sticky-top text-muted text-uppercase fw-bold" style="font-size: 0.68rem;">
+                                        <tr>
+                                            <th class="ps-3 py-2">#</th>
+                                            <th class="py-2">Date (EC / GC)</th>
+                                            <th class="py-2">FS # / Receipt</th>
+                                            <th class="py-2">Vendor / TIN</th>
+                                            <th class="py-2">Project</th>
+                                            <th class="py-2">Description</th>
+                                            <th class="py-2 text-end">Base Value</th>
+                                            <th class="py-2 text-end text-success">VAT Amount</th>
+                                            <th class="py-2 text-end pe-3">Total Value</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y">${ocrRows}</tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Audit Tab -->
+                        <div class="tab-pane fade" id="drawer-audit-${monthNum}" role="tabpanel">
+                            <div class="p-3 bg-light rounded-3">
+                                <div class="row g-3 align-items-center">
+                                    <div class="col-md-7">
+                                        <ul class="list-group list-group-flush rounded-3 border">
+                                            <li class="list-group-item d-flex justify-content-between py-2 small">
+                                                <span>1. Taxable Sales Base (ገቢ)</span>
+                                                <span class="font-monospace fw-bold">ETB ${formatMoney(s.sales_base)}</span>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between py-2 small bg-danger-subtle bg-opacity-25">
+                                                <span class="text-danger fw-semibold">2. Output VAT Collected (15%)</span>
+                                                <span class="font-monospace fw-bold text-danger">ETB ${formatMoney(s.output_vat)}</span>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between py-2 small">
+                                                <span>3. Taxable Purchases Base (ግዢ)</span>
+                                                <span class="font-monospace fw-bold">ETB ${formatMoney(s.purchases_base)}</span>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between py-2 small bg-success-subtle bg-opacity-25">
+                                                <span class="text-success fw-semibold">4. Creditable Input VAT (15%)</span>
+                                                <span class="font-monospace fw-bold text-success">ETB ${formatMoney(s.input_vat)}</span>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between py-2 small bg-info-subtle bg-opacity-25">
+                                                <span class="text-info fw-semibold">5. Opening Credit from Previous Month</span>
+                                                <span class="font-monospace fw-bold text-info">+ ETB ${formatMoney(s.opening_credit)}</span>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between py-2 small fw-bold bg-white">
+                                                <span>6. Total Creditable Pool = (4) + (5)</span>
+                                                <span class="font-monospace">ETB ${formatMoney(s.total_creditable_input)}</span>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between py-2.5 border-top border-2 bg-light">
+                                                <span class="fw-bold">7. Signed Net VAT = (6) &minus; (2)</span>
+                                                <span class="font-monospace fs-6 fw-bold ${s.text_class}">${s.signed_net_formatted}</span>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <div class="p-3 rounded-3 border ${s.is_payable ? 'border-danger bg-danger-subtle text-danger' : (s.is_credit ? 'border-success bg-success-subtle text-success' : 'border-secondary bg-light')}">
+                                            <h6 class="fw-bold mb-1">${s.is_payable ? 'VAT Remittance Due' : (s.is_credit ? 'Credit Carried Forward' : 'Zero Balance')}</h6>
+                                            <div class="small">${s.is_payable ? `ETB ${formatMoney(s.payable_amount)} payable to ERCA by 30th.` : (s.is_credit ? `ETB ${formatMoney(s.credit_carry_forward)} carries forward to next month.` : 'Fully reconciled.')}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // ── FULLSCREEN MODAL: View movements in popup modal ───────────────────────
     function openMonthMovementsModal(ethYear, ethMonth, monthEn, monthAm) {
-        const modalEl = document.getElementById('monthMovementsModal');
+        let modalEl = document.getElementById('monthMovementsModal');
         if (!modalEl) return;
+
+        // Ensure modal is attached directly to document.body outside of transformed containers
+        if (modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
 
         // Set initial modal header & filter link
         document.getElementById('mMovementsTitle').innerText = `${monthEn} (${monthAm}) ${ethYear} ዓ.ም. — Financial Movements`;
@@ -3861,6 +4322,15 @@
             $(modalEl).modal('show');
         }
 
+        const cacheKey = `${ethYear}-${ethMonth}`;
+        if (movementsCache[cacheKey]) {
+            currentMovementsData = movementsCache[cacheKey];
+            renderMovementsData(currentMovementsData);
+            document.getElementById('mMovementsSpinner').style.display = 'none';
+            document.getElementById('mMovementsContent').style.display = 'block';
+            return;
+        }
+
         // Fetch movements from server
         const url = "{{ route('finance.tax-deductions.month-movements') }}?ethiopian_year=" + ethYear + "&ethiopian_month=" + ethMonth;
         fetch(url, {
@@ -3875,6 +4345,7 @@
         })
         .then(data => {
             if (data.success) {
+                movementsCache[cacheKey] = data;
                 currentMovementsData = data;
                 renderMovementsData(data);
                 document.getElementById('mMovementsSpinner').style.display = 'none';
@@ -3923,13 +4394,13 @@
         badgeEl.innerText = s.label;
 
         if (s.is_payable) {
-            cardEl.className = 'card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-danger bg-danger bg-opacity-10';
+            cardEl.className = 'card border-0 shadow-sm kpi-card rounded-4 h-100 bg-white border-top border-4 border-danger bg-danger bg-opacity-10';
             instEl.innerText = `ETB ${formatMoney(s.payable_amount)} payable to ERCA`;
         } else if (s.is_credit) {
-            cardEl.className = 'card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-success bg-success bg-opacity-10';
+            cardEl.className = 'card border-0 shadow-sm kpi-card rounded-4 h-100 bg-white border-top border-4 border-success bg-success bg-opacity-10';
             instEl.innerText = `ETB ${formatMoney(s.credit_carry_forward)} carries forward to next month`;
         } else {
-            cardEl.className = 'card border-0 shadow-sm rounded-4 h-100 bg-white border-top border-4 border-secondary';
+            cardEl.className = 'card border-0 shadow-sm kpi-card rounded-4 h-100 bg-white border-top border-4 border-secondary';
             instEl.innerText = 'Zero balance settled (0.00)';
         }
 
