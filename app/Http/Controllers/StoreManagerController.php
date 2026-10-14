@@ -1417,7 +1417,9 @@ class StoreManagerController extends Controller
                                   ->orWhere('description', 'like', "%SKU: " . ($prod->sku ?? '') . "%");
                             })->first();
 
-                        $qtyToTransfer = (int) round($receivedQty > 0 ? $receivedQty : $sentQty);
+                        $sentQty = (float)($item->sent_quantity ?? 0);
+                        $receivedQty = (float)($item->received_quantity ?? 0);
+                        $qtyToTransfer = (int) round($receivedQty > 0 ? $receivedQty : ($sentQty > 0 ? $sentQty : $qty));
 
                         if (!$destAsset) {
                             $basePrefix = \App\Models\FixedAsset::generateCleanPrefix($prod->name, $prod->sku);
