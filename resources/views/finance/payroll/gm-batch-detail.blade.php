@@ -5,16 +5,27 @@
 <div class="container-fluid px-4 py-3">
 
     {{-- Header --}}
-    <div class="d-flex align-items-center justify-content-between mb-4">
+    @php
+        $periodLabel = ($month >= 1 && $month <= 13 && isset(\App\Helpers\EthiopianCalendar::MONTHS_EN[$month]))
+            ? (\App\Helpers\EthiopianCalendar::MONTHS_EN[$month] . ' (' . \App\Helpers\EthiopianCalendar::MONTHS_AM[$month] . ') ' . $year . ' EC')
+            : date('F Y', mktime(0,0,0,$month,1,$year));
+    @endphp
+
+    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
         <div>
             <h1 class="h3 fw-bold mb-1">
-                <i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Review Payroll: {{ date('F Y', mktime(0,0,0,$month,1,$year)) }}
+                <i class="fa-solid fa-file-invoice-dollar text-primary me-2"></i>Review Payroll: {{ $periodLabel }}
             </h1>
             <p class="text-muted small mb-0">Submitted by Finance Head for General Manager approval.</p>
         </div>
-        <a href="{{ route('finance.payroll.gm') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
-            <i class="fa-solid fa-arrow-left me-1"></i>Back to Inbox
-        </a>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{{ route('attendance.index', ['period' => $selectedPeriodKey ?? "{$year}-{$month}"]) }}" target="_blank" class="btn btn-outline-primary btn-sm rounded-pill px-3" title="Audit verified punches in Attendance Section">
+                <i class="fa-solid fa-fingerprint me-1"></i>View Attendance Matrix
+            </a>
+            <a href="{{ route('finance.payroll.gm') }}" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                <i class="fa-solid fa-arrow-left me-1"></i>Back to Inbox
+            </a>
+        </div>
     </div>
 
     {{-- Summary KPI cards --}}

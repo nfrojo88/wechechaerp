@@ -124,113 +124,174 @@ class Payroll extends Model
     {
         $employee = Employee::find($employeeId);
         if (!$employee) {
-            return ['days' => 0, 'dates' => []];
+            return ['days' => 0, 'base_days' => 0, 'late_days' => 0, 'late_penalty_days' => 0, 'dates' => [], 'detailed_dates' => []];
         }
 
-        // Find all attendance records for this employee in this month/year
+        // Determine effective start and end date for the evaluation window
+        if ($startDate && $cutoffDate) {
+            $startCarbon = \Carbon\Carbon::parse($startDate)->startOfDay();
+            $endCarbon   = \Carbon\Carbon::parse($cutoffDate)->startOfDay();
+        } else {
+            // Check if year/month corresponds to Ethiopian calendar (months 1-13, years 2000-2050)
+            if ($year >= 2000 && $year <= 2040 && $month >= 1 && $month <= 13) {
+                $period = \App\Helpers\EthiopianCalendar::getPayrollPeriod($year, $month);
+                $startCarbon = \Carbon\Carbon::parse($period['start_greg'])->startOfDay();
+                $endCarbon   = \Carbon\Carbon::parse($period['end_greg'])->startOfDay();
+            } else {
+                $daysInMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->daysInMonth;
+                $startCarbon = \Carbon\Carbon::createFromDate($year, $month, 1)->startOfDay();
+                $endCarbon   = \Carbon\Carbon::createFromDate($year, $month, $daysInMonth)->startOfDay();
+            }
+        }
+
+        if ($startCarbon->gt($endCarbon)) {
+            $temp = $startCarbon;
+            $startCarbon = $endCarbon;
+            $endCarbon = $temp;
+        }
+
+        // Start day evaluation considering employee joining date
+        if ($employee->date_of_joining) {
+            $joinDate = \Carbon\Carbon::parse($employee->date_of_joining)->startOfDay();
+            if ($joinDate->gt($endCarbon)) {
+                return ['days' => 0, 'base_days' => 0, 'late_days' => 0, 'late_penalty_days' => 0, 'dates' => [], 'detailed_dates' => []];
+            }
+            if ($joinDate->gt($startCarbon)) {
+                $startCarbon = $joinDate;
+            }
+        }
+
+        // Find attendance records covering the date window
         $attendances = Attendance::where('employee_id', $employeeId)
-            ->whereYear('attendance_date', $year)
-            ->whereMonth('attendance_date', $month)
+            ->whereBetween('attendance_date', [$startCarbon->toDateString(), $endCarbon->toDateString() . ' 23:59:59'])
             ->get()
             ->keyBy(function($item) {
                 return \Carbon\Carbon::parse($item->attendance_date)->toDateString();
             });
 
-        $daysInMonth = \Carbon\Carbon::createFromDate($year, $month, 1)->daysInMonth;
-        if ($cutoffDate) {
-            try {
-                $parsedCutoff = \Carbon\Carbon::parse($cutoffDate);
-                if ($parsedCutoff->year == $year && $parsedCutoff->month == $month) {
-                    $cutoffDay = min((int) $parsedCutoff->day, $daysInMonth);
-                } else {
-                    $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
-                    $cutoffDay = $isCurrentMonth ? (int)date('j') : $daysInMonth;
-                }
-            } catch (\Throwable $e) {
-                $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
-                $cutoffDay = $isCurrentMonth ? (int)date('j') : $daysInMonth;
+        // Query approved site deployments covering this employee and date window
+        $siteDeployments = collect();
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('site_deployment_requests')) {
+                $siteDeployments = \App\Models\SiteDeploymentRequest::where('employee_id', $employeeId)
+                    ->where('status', 'approved')
+                    ->where(function($q) use ($startCarbon, $endCarbon) {
+                        $s = $startCarbon->toDateString();
+                        $e = $endCarbon->toDateString();
+                        $q->whereBetween('start_date', [$s, $e])
+                          ->orWhereBetween('end_date', [$s, $e])
+                          ->orWhere(function($sq) use ($s, $e) {
+                              $sq->where('start_date', '<=', $s)->where('end_date', '>=', $e);
+                          });
+                    })->get();
             }
-        } else {
-            $isCurrentMonth = ($month == (int)date('n') && $year == (int)date('Y'));
-            $cutoffDay = $isCurrentMonth ? (int)date('j') : $daysInMonth;
-        }
+        } catch (\Throwable $e) {}
 
-        // Start day (default 1, or employee joined during this month, or specified by startDate)
-        $startDay = 1;
-        if ($startDate) {
-            try {
-                $parsedStart = \Carbon\Carbon::parse($startDate);
-                if ($parsedStart->year == $year && $parsedStart->month == $month) {
-                    $startDay = max($startDay, (int) $parsedStart->day);
-                }
-            } catch (\Throwable $e) {}
-        }
-
-        if ($employee->date_of_joining) {
-            $joinDate = \Carbon\Carbon::parse($employee->date_of_joining);
-            if ($joinDate->year == $year && $joinDate->month == $month) {
-                $startDay = max($startDay, (int) $joinDate->day);
-            } elseif ($joinDate->year > $year || ($joinDate->year == $year && $joinDate->month > $month)) {
-                // Employee hadn't joined yet in this period
-                return ['days' => 0, 'dates' => []];
+        // Query approved leave requests
+        $leaves = collect();
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('leave_requests')) {
+                $leaves = LeaveRequest::where('employee_id', $employeeId)
+                    ->where('status', 'approved')
+                    ->where(function($q) use ($startCarbon, $endCarbon) {
+                        $s = $startCarbon->toDateString();
+                        $e = $endCarbon->toDateString();
+                        $q->whereBetween('start_date', [$s, $e])
+                          ->orWhereBetween('end_date', [$s, $e])
+                          ->orWhere(function($sq) use ($s, $e) {
+                              $sq->where('start_date', '<=', $s)->where('end_date', '>=', $e);
+                          });
+                    })->get();
             }
-        }
+        } catch (\Throwable $e) {}
 
         $unexcusedDays = 0.0;
         $absentDates = [];
+        $detailedDates = [];
         $lateDaysCount = 0;
 
-        for ($day = $startDay; $day <= $cutoffDay; $day++) {
-            $dateStr = sprintf('%04d-%02d-%02d', $year, $month, $day);
-            $carbonDate = \Carbon\Carbon::createFromDate($year, $month, $day);
+        $curr = $startCarbon->copy();
+        $todayStr = today()->toDateString();
+
+        while ($curr->lte($endCarbon)) {
+            $dateStr = $curr->toDateString();
+
+            // Attendance day format: "12 Meskerem (መስከረም 12)"
+            $et = \App\Helpers\EthiopianCalendar::toEthiopian($curr);
+            $ethDayLabel = !empty($et)
+                ? "{$et['day']} {$et['month_en']} ({$et['month_am']} {$et['day']})"
+                : $curr->format('M d, Y');
 
             // Skip Sundays (standard weekly rest day)
-            if ($carbonDate->isSunday()) {
+            if ($curr->isSunday()) {
+                $curr->addDay();
                 continue;
             }
 
-            // Check if there is an approved leave request covering this date
-            $hasApprovedLeave = LeaveRequest::where('employee_id', $employeeId)
-                ->where('status', 'approved')
-                ->whereDate('start_date', '<=', $dateStr)
-                ->whereDate('end_date', '>=', $dateStr)
-                ->exists();
-
+            // Check approved leave
+            $hasApprovedLeave = $leaves->first(function($lv) use ($dateStr) {
+                $s = $lv->start_date ? \Carbon\Carbon::parse($lv->start_date)->toDateString() : null;
+                $e = $lv->end_date ? \Carbon\Carbon::parse($lv->end_date)->toDateString() : null;
+                return $s && $e && $s <= $dateStr && $e >= $dateStr;
+            });
             if ($hasApprovedLeave) {
-                continue; // Excused by approved leave
+                $curr->addDay();
+                continue;
             }
+
+            // Check approved site deployment
+            $hasApprovedSite = $siteDeployments->first(function($sd) use ($dateStr) {
+                $s = $sd->start_date ? \Carbon\Carbon::parse($sd->start_date)->toDateString() : null;
+                $e = $sd->end_date ? \Carbon\Carbon::parse($sd->end_date)->toDateString() : null;
+                return $s && $e && $s <= $dateStr && $e >= $dateStr;
+            });
 
             if (isset($attendances[$dateStr])) {
                 $att = $attendances[$dateStr];
-                $isSaturday = \Carbon\Carbon::parse($dateStr)->isSaturday();
+                $isSaturday = $curr->isSaturday();
 
-                // ── On-Site Duty Check: DO NOT DEDUCT FROM PAYROLL ───────────────
-                // Status 'S', 'site', 'on_site' or notes containing 'On-Site' indicates
-                // the employee was sent to a construction project site by an authorized head.
-                // This is full paid working duty; NEVER count as unexcused or absent!
-                if (in_array(strtolower((string)$att->status), ['s', 'site', 'on_site']) || str_contains((string)($att->notes ?? ''), 'On-Site')) {
+                // On-Site Duty Check: DO NOT DEDUCT FROM PAYROLL
+                if ($hasApprovedSite || in_array(strtolower((string)$att->status), ['s', 'site', 'on_site']) || str_contains((string)($att->notes ?? ''), 'On-Site')) {
+                    $curr->addDay();
                     continue;
                 }
 
                 if ($att->status === 'absent') {
                     $unexcusedDays += 1.0;
-                    $absentDates[] = $dateStr;
+                    $absentDates[] = "{$ethDayLabel} — Absent";
+                    $detailedDates[] = [
+                        'date'    => $dateStr,
+                        'eth_day' => $ethDayLabel,
+                        'type'    => 'absent',
+                        'label'   => "{$ethDayLabel} — Absent",
+                    ];
                 } elseif ($att->status === 'half_day') {
                     if ($isSaturday && (!empty($att->morning_in) || ($att->hours_worked ?? 0) >= 2.0)) {
-                        // Official Saturday policy is morning session only; treated as full attendance
+                        $curr->addDay();
                         continue;
                     }
                     $unexcusedDays += 0.5;
-                    $absentDates[] = $dateStr . ' (Half Day)';
+                    $absentDates[] = "{$ethDayLabel} — Half Day (0.5d)";
+                    $detailedDates[] = [
+                        'date'    => $dateStr,
+                        'eth_day' => $ethDayLabel,
+                        'type'    => 'half_day',
+                        'label'   => "{$ethDayLabel} — Half Day (0.5d)",
+                    ];
                 } elseif (in_array($att->status, ['leave', 'holiday', 'weekend'])) {
-                    // Excused status
+                    $curr->addDay();
                     continue;
                 } elseif ($att->status !== 'present' && empty($att->morning_in) && empty($att->check_in)) {
-                    // Missing attendance / clock-in
                     $unexcusedDays += 1.0;
-                    $absentDates[] = $dateStr;
+                    $absentDates[] = "{$ethDayLabel} — Missing Clock-in";
+                    $detailedDates[] = [
+                        'date'    => $dateStr,
+                        'eth_day' => $ethDayLabel,
+                        'type'    => 'missing_punch',
+                        'label'   => "{$ethDayLabel} — Missing Clock-in",
+                    ];
                 } else {
-                    // Employee attended or worked on this date: check if late (RULE: 3 Late Days = 1 Absent Day Penalty)
+                    // Check late: RULE: 3 Late Days = 1 Absent Day Penalty
                     $isLate = false;
                     if (($att->late_minutes ?? 0) > 0 || ($att->status ?? '') === 'late') {
                         $isLate = true;
@@ -242,17 +303,37 @@ class Payroll extends Model
                     }
                 }
             } else {
-                // NO attendance record at all on this workday and no approved leave
-                $unexcusedDays += 1.0;
-                $absentDates[] = $dateStr;
+                if ($hasApprovedSite) {
+                    $curr->addDay();
+                    continue;
+                }
+                if ($dateStr <= $todayStr) {
+                    $unexcusedDays += 1.0;
+                    $absentDates[] = "{$ethDayLabel} — Absent (No punch)";
+                    $detailedDates[] = [
+                        'date'    => $dateStr,
+                        'eth_day' => $ethDayLabel,
+                        'type'    => 'absent',
+                        'label'   => "{$ethDayLabel} — Absent (No punch)",
+                    ];
+                }
             }
+
+            $curr->addDay();
         }
 
-        // ── RULE: 3 Late Days = 1 Absent Day Penalty ─────────────────────────
+        // RULE: 3 Late Days = 1 Absent Day Penalty
         $latePenaltyDays = intdiv($lateDaysCount, 3);
         if ($latePenaltyDays > 0) {
             $unexcusedDays += (float)$latePenaltyDays;
-            $absentDates[] = "Late Penalty: {$lateDaysCount} late days = {$latePenaltyDays} day(s) absent penalty (3 Late = 1 Absent rule)";
+            $penaltyStr = "Late Penalty: {$lateDaysCount} late days = {$latePenaltyDays} day(s) absent penalty (3 Late = 1 Absent rule)";
+            $absentDates[] = $penaltyStr;
+            $detailedDates[] = [
+                'date'    => null,
+                'eth_day' => 'Late Penalty (3:1)',
+                'type'    => 'late_penalty',
+                'label'   => $penaltyStr,
+            ];
         }
 
         return [
@@ -261,6 +342,7 @@ class Payroll extends Model
             'late_days'         => $lateDaysCount,
             'late_penalty_days' => $latePenaltyDays,
             'dates'             => $absentDates,
+            'detailed_dates'    => $detailedDates,
         ];
     }
 

@@ -5,38 +5,44 @@
 <div class="container-fluid px-4 py-3">
 
 {{-- ── Header ────────────────────────────────────────────────────────────── --}}
-<div class="d-flex align-items-center justify-content-between mb-4">
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
     <div>
         <h1 class="h3 fw-bold mb-1">
             <i class="fa-solid fa-money-bill-wave text-success me-2"></i>Payroll Management
         </h1>
-        <p class="text-muted small mb-0">Generate, review, and submit monthly payroll for GM approval.</p>
+        <p class="text-muted small mb-0">
+            Generate, review, and submit monthly payroll for GM approval synced directly with Ethiopian Attendance Periods (26th–25th).
+        </p>
     </div>
-    <div class="d-flex gap-2">
-        {{-- Period & Date Range Selector --}}
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        {{-- Ethiopian Attendance Payroll Period Selector --}}
         <form method="GET" action="{{ route('finance.payroll.index') }}" class="d-flex flex-wrap gap-2 align-items-center">
-            <div class="input-group input-group-sm" style="width: 175px;" title="Starting Date">
-                <span class="input-group-text bg-white text-muted px-2"><small class="fw-semibold text-secondary me-1">From</small><i class="fa-regular fa-calendar text-primary"></i></span>
-                <input type="date" name="start_date" id="payrollStartDatePicker" class="form-control form-control-sm"
-                       value="{{ $startDate }}"
-                       title="Payroll Starting Date"
-                       onchange="syncStartDateToMonthYear(this.value)">
+            <div class="input-group input-group-sm" style="min-width: 270px;" title="Ethiopian Attendance Payroll Period (26th–25th)">
+                <span class="input-group-text bg-white text-primary border-end-0">
+                    <i class="fa-solid fa-calendar-days"></i>
+                </span>
+                <select name="period" id="payrollPeriodSelect" class="form-select form-select-sm border-start-0 fw-semibold" onchange="this.form.submit()">
+                    @foreach($availablePeriods as $p)
+                        <option value="{{ $p['period_key'] }}" {{ $p['period_key'] === $selectedPeriodKey ? 'selected' : '' }}>
+                            {{ $p['full_label'] }} ({{ $p['label_en'] }})
+                        </option>
+                    @endforeach
+                </select>
             </div>
-            <div class="input-group input-group-sm" style="width: 175px;" title="Ending Date">
-                <span class="input-group-text bg-white text-muted px-2"><small class="fw-semibold text-secondary me-1">To</small><i class="fa-regular fa-calendar-check text-success"></i></span>
-                <input type="date" name="end_date" id="payrollEndDatePicker" class="form-control form-control-sm"
-                       value="{{ $endDate }}"
-                       title="Payroll Ending Date"
-                       onchange="syncEndDateToMonthYear(this.value)">
-            </div>
-            <select name="month" id="payrollMonthSelect" class="form-select form-select-sm" style="width:130px" onchange="syncMonthYearToDates()">
-                @for($m=1;$m<=12;$m++)
-                    <option value="{{ $m }}" {{ $month==$m?'selected':'' }}>{{ date('F',mktime(0,0,0,$m,1)) }}</option>
-                @endfor
-            </select>
-            <input type="number" name="year" id="payrollYearInput" class="form-control form-control-sm" value="{{ $year }}" style="width:85px" min="2020" max="2099" onchange="syncMonthYearToDates()">
-            <button type="submit" class="btn btn-sm btn-primary px-3 shadow-sm"><i class="fa-solid fa-filter me-1"></i>Filter</button>
+            <button type="submit" class="btn btn-sm btn-primary px-3 shadow-xs">
+                <i class="fa-solid fa-filter me-1"></i>Filter
+            </button>
         </form>
+
+        {{-- Direct Link: View Attendance Matrix in Attendance Section --}}
+        <a href="{{ route('attendance.index', ['period' => $selectedPeriodKey]) }}" target="_blank" class="btn btn-sm btn-outline-primary shadow-xs rounded-pill px-3" title="Open verified attendance matrix for this period in Attendance Section">
+            <i class="fa-solid fa-fingerprint me-1.5 text-primary"></i>View in Attendance Matrix
+        </a>
+
+        {{-- Export Attendance PDF --}}
+        <a href="{{ route('attendance.export-pdf', ['period' => $selectedPeriodKey]) }}" target="_blank" class="btn btn-sm btn-outline-danger shadow-xs rounded-pill px-2.5" title="Export this period's Clock In / Out Times matrix as PDF">
+            <i class="fa-solid fa-file-pdf me-1"></i>Attendance PDF
+        </a>
     </div>
 </div>
 
@@ -56,8 +62,8 @@
 
 {{-- ── Period & GM Status Banner ────────────────────────────────────────── --}}
 @php
-    $period = date('F Y', mktime(0,0,0,$month,1,$year));
-    $batchApproved  = $payrolls->where('gm_status','approved')->count()  === $payrolls->count() && $payrolls->count() > 0;
+    $periodTitle = ($periodData['full_label'] ?? "Month {$month}") . " (" . ($periodData['label_en'] ?? "EC") . ")";
+    $batchApproved  = $payrolls->where('gm_status','approved')->count() === $payrolls->count() && $payrolls->count() > 0;
     $batchSubmitted = $payrolls->where('gm_status','submitted')->count() > 0;
     $batchRejected  = $payrolls->where('gm_status','rejected')->count()  > 0;
 @endphp
@@ -67,14 +73,13 @@
     @elseif($batchRejected) alert-danger
     @elseif($batchSubmitted) alert-warning
     @else alert-info @endif" role="alert">
-    <div class="d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
         <div class="d-flex align-items-center flex-wrap gap-2">
-            <strong><i class="fa-solid fa-calendar-days me-1"></i>{{ $period }} Payroll</strong>
+            <strong><i class="fa-solid fa-calendar-days me-1"></i>{{ $periodTitle }} Payroll</strong>
             <span class="badge bg-white text-dark border shadow-xs px-2.5 py-1.5" style="font-size: 0.78rem;">
-                <i class="fa-regular fa-calendar-days text-primary me-1"></i>Period: 
-                <strong class="text-primary">{{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }}</strong>
-                <span class="text-muted mx-1">&ndash;</span>
-                <strong class="text-success">{{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }}</strong>
+                <i class="fa-solid fa-calendar-check text-success me-1"></i>Attendance Window: 
+                <strong class="text-primary">{{ $attendanceDayWindow }}</strong>
+                <span class="text-muted ms-1">({{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} &ndash; {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }})</span>
             </span>
             <span class="text-muted">—</span>
             @if($batchApproved)
@@ -94,13 +99,14 @@
             {{-- Generate Button --}}
             <form method="POST" action="{{ route('finance.payroll.generate') }}">
                 @csrf
+                <input type="hidden" name="period"     value="{{ $selectedPeriodKey }}">
                 <input type="hidden" name="month"      value="{{ $month }}">
                 <input type="hidden" name="year"       value="{{ $year }}">
                 <input type="hidden" name="start_date" value="{{ $startDate }}">
                 <input type="hidden" name="end_date"   value="{{ $endDate }}">
                 <input type="hidden" name="date"       value="{{ $endDate }}">
                 <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3 shadow-sm"
-                        onclick="return confirm('Auto-generate payroll for all active employees for {{ $period }} (Period: {{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} – {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }})?')">
+                        onclick="return confirm('Auto-generate payroll for all active employees for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})?')">
                     <i class="fa-solid fa-bolt me-1"></i>Auto-Generate Payroll
                 </button>
             </form>
@@ -108,13 +114,14 @@
             {{-- Recalculate / Sync Button --}}
             <form method="POST" action="{{ url('/finance/payroll/recalculate') }}">
                 @csrf
+                <input type="hidden" name="period"     value="{{ $selectedPeriodKey }}">
                 <input type="hidden" name="month"      value="{{ $month }}">
                 <input type="hidden" name="year"       value="{{ $year }}">
                 <input type="hidden" name="start_date" value="{{ $startDate }}">
                 <input type="hidden" name="end_date"   value="{{ $endDate }}">
                 <input type="hidden" name="date"       value="{{ $endDate }}">
                 <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm"
-                        onclick="return confirm('Recalculate payroll for {{ $period }} (Period: {{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} – {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }})? This will refresh all attendance records and loan deductions.')">
+                        onclick="return confirm('Recalculate payroll for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})? This will refresh all attendance records and loan deductions.')">
                     <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate / Sync
                 </button>
             </form>
@@ -125,13 +132,14 @@
             {{-- Recalculate Button on Rejected --}}
             <form method="POST" action="{{ url('/finance/payroll/recalculate') }}">
                 @csrf
+                <input type="hidden" name="period"     value="{{ $selectedPeriodKey }}">
                 <input type="hidden" name="month"      value="{{ $month }}">
                 <input type="hidden" name="year"       value="{{ $year }}">
                 <input type="hidden" name="start_date" value="{{ $startDate }}">
                 <input type="hidden" name="end_date"   value="{{ $endDate }}">
                 <input type="hidden" name="date"       value="{{ $endDate }}">
                 <button type="submit" class="btn btn-outline-primary btn-sm rounded-pill px-3 shadow-sm"
-                        onclick="return confirm('Recalculate payroll for {{ $period }} (Period: {{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} – {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }})?')">
+                        onclick="return confirm('Recalculate payroll for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})?')">
                     <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate / Sync
                 </button>
             </form>
@@ -219,25 +227,26 @@
 </div>
 
 {{-- ── Payroll Table ─────────────────────────────────────────────────────── --}}
-<div class="card border-0 shadow-sm rounded-4 overflow-hidden">
-    <div class="card-header bg-white py-3 px-4 border-bottom d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-center gap-2">
-            <h6 class="fw-bold mb-0"><i class="fa-solid fa-table-list text-primary me-2"></i>{{ $period }} Payroll Sheet</h6>
+<div class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4">
+    <div class="card-header bg-white py-3 px-4 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h6 class="fw-bold mb-0"><i class="fa-solid fa-table-list text-primary me-2"></i>{{ $periodTitle }} Payroll Sheet</h6>
             <span class="badge bg-light text-secondary border fw-normal" style="font-size: 0.78rem;">
-                <i class="fa-regular fa-calendar-days text-primary me-1"></i>{{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} &ndash; {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }}
+                <i class="fa-regular fa-calendar-days text-primary me-1"></i>{{ $attendanceDayWindow }}
             </span>
         </div>
         <div class="d-flex gap-2 align-items-center">
             @if($payrolls->isNotEmpty() && !$batchApproved && !$batchSubmitted)
             <form method="POST" action="{{ url('/finance/payroll/recalculate') }}">
                 @csrf
+                <input type="hidden" name="period"     value="{{ $selectedPeriodKey }}">
                 <input type="hidden" name="month"      value="{{ $month }}">
                 <input type="hidden" name="year"       value="{{ $year }}">
                 <input type="hidden" name="start_date" value="{{ $startDate }}">
                 <input type="hidden" name="end_date"   value="{{ $endDate }}">
                 <input type="hidden" name="date"       value="{{ $endDate }}">
                 <button type="submit" class="btn btn-sm btn-outline-primary rounded-pill shadow-xs"
-                        onclick="return confirm('Recalculate payroll for {{ $period }} (Period: {{ \Carbon\Carbon::parse($startDate)->format('M d, Y') }} – {{ \Carbon\Carbon::parse($endDate)->format('M d, Y') }})?')">
+                        onclick="return confirm('Recalculate payroll for {{ $periodTitle }} (Attendance Window: {{ $attendanceDayWindow }})?')">
                     <i class="fa-solid fa-arrows-rotate me-1"></i>Recalculate
                 </button>
             </form>
@@ -254,7 +263,7 @@
             <thead class="bg-light">
                 <tr>
                     <th class="ps-4">#</th>
-                    <th>Employee</th>
+                    <th style="min-width: 220px;">Employee &amp; Attendance</th>
                     <th>Department</th>
                     <th class="text-end">Basic Salary</th>
                     <th class="text-end text-info">Transport</th>
@@ -265,7 +274,7 @@
                     <th class="text-end text-secondary">Pension (7%)</th>
                     <th class="text-end text-purple" style="color:#6f42c1;">Co. Pension (11%)</th>
                     <th class="text-end text-warning">Income Tax</th>
-                    <th class="text-end text-danger">Other Ded.</th>
+                    <th class="text-end text-danger" style="min-width: 135px;">Other Ded.</th>
                     <th class="text-end fw-bold text-success">Net Pay</th>
                     <th class="text-center">Status</th>
                 </tr>
@@ -281,12 +290,36 @@
                         (float) ($p->overtime_pay ?? 0)
                     );
                     $calcCoPension = $p->company_pension ?? round($p->basic_salary * 0.11, 2);
+                    $attStat = $attendanceStats[$p->employee_id] ?? null;
                 @endphp
                 <tr>
                     <td class="ps-4 text-muted">{{ $i + 1 }}</td>
                     <td>
-                        <div class="fw-semibold">{{ $p->employee->full_name ?? 'N/A' }}</div>
+                        <div class="d-flex align-items-center justify-content-between gap-1">
+                            <div class="fw-semibold text-dark">{{ $p->employee->full_name ?? 'N/A' }}</div>
+                            <a href="{{ route('attendance.index', ['period' => $selectedPeriodKey, 'search' => $p->employee->employee_code ?: $p->employee->full_name]) }}" target="_blank" class="badge bg-primary-subtle text-primary border border-primary-subtle text-decoration-none" title="Audit verified biometric punches for {{ $p->employee->full_name }} in Attendance Section">
+                                <i class="fa-solid fa-fingerprint me-0.5"></i>Audit &rarr;
+                            </a>
+                        </div>
                         <div class="text-muted" style="font-size:.75rem">{{ $p->employee->employee_code ?? '' }}</div>
+                        {{-- Attendance Summary Badges --}}
+                        @if($attStat)
+                        <div class="d-flex align-items-center gap-1 mt-1 flex-wrap font-monospace" style="font-size: 0.68rem;">
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-1 py-0.5" title="Present (Biometric Punches): {{ $attStat['present'] }} days">P: {{ $attStat['present'] }}</span>
+                            @if($attStat['site'] > 0)
+                            <span class="badge bg-info-subtle text-info border border-info-subtle px-1 py-0.5" title="Approved Site Deployment: {{ $attStat['site'] }} days">S: {{ $attStat['site'] }}</span>
+                            @endif
+                            @if($attStat['leave'] > 0)
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-1 py-0.5" title="Approved Leave: {{ $attStat['leave'] }} days">L: {{ $attStat['leave'] }}</span>
+                            @endif
+                            @if($attStat['late'] > 0)
+                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-1 py-0.5" title="Late Check-ins (&gt;08:40 AM): {{ $attStat['late'] }} days ({{ $attStat['late_penalty_days'] }} penalty days)">Late: {{ $attStat['late'] }}</span>
+                            @endif
+                            @if($attStat['effective_absent'] > 0)
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-1 py-0.5" title="Effective Absent: {{ $attStat['effective_absent'] }} days (Base: {{ $attStat['absent'] }}, Penalty: {{ $attStat['late_penalty_days'] }})">Eff. Abs: {{ $attStat['effective_absent'] }}d</span>
+                            @endif
+                        </div>
+                        @endif
                     </td>
                     <td class="text-muted">{{ $p->employee->department ?? '—' }}</td>
                     <td class="text-end">{{ number_format($p->basic_salary, 2) }}</td>
@@ -300,13 +333,15 @@
                     <td class="text-end text-warning">{{ number_format($p->tax, 2) }}</td>
                     <td class="text-end text-danger">
                         <div class="fw-semibold">{{ number_format($p->deductions, 2) }}</div>
-                        @if(($p->loan_deduction ?? 0) > 0 || ($p->absence_deduction ?? 0) > 0)
+                        @if(($p->loan_deduction ?? 0) > 0 || ($p->absence_deduction ?? 0) > 0 || ($p->absent_days ?? 0) > 0)
                         <div class="text-muted" style="font-size:.7rem; line-height: 1.15;">
                             @if(($p->loan_deduction ?? 0) > 0)
                                 <span title="Salary Advance Loan Repayment" class="d-block text-warning"><i class="fa-solid fa-hand-holding-dollar me-1"></i>Loan: {{ number_format($p->loan_deduction, 2) }}</span>
                             @endif
                             @if(($p->absence_deduction ?? 0) > 0 || ($p->absent_days ?? 0) > 0)
-                                <span title="{{ $p->absent_days }} day(s) missed without approved leave (Basic / 30 x {{ $p->absent_days }})" class="d-block text-danger"><i class="fa-solid fa-calendar-xmark me-1"></i>Absent ({{ $p->absent_days }}d): {{ number_format($p->absence_deduction, 2) }}</span>
+                                <a href="#" class="d-block text-danger text-decoration-none mt-0.5" data-bs-toggle="modal" data-bs-target="#absenceDetailModal_{{ $p->id }}" title="Click to view absence days breakdown formatted in Ethiopian attendance day format">
+                                    <i class="fa-solid fa-calendar-xmark me-1"></i>Absent ({{ $p->absent_days }}d): {{ number_format($p->absence_deduction, 2) }} <i class="fa-solid fa-circle-info ms-0.5 small opacity-75"></i>
+                                </a>
                             @endif
                         </div>
                         @endif
@@ -330,7 +365,7 @@
                 <tr>
                     <td colspan="15" class="text-center py-5 text-muted">
                         <i class="fa-solid fa-file-circle-xmark fa-2x mb-2 d-block opacity-25"></i>
-                        No payroll entries for {{ $period }}.<br>
+                        No payroll entries for {{ $periodTitle }}.<br>
                         <small>Click <strong>Auto-Generate Payroll</strong> to create entries from employee records.</small>
                     </td>
                 </tr>
@@ -373,13 +408,100 @@
 
 </div>{{-- /container --}}
 
+{{-- ── Itemized Absence Breakdown Modals (Formatted in Ethiopian Attendance Day Format) ── --}}
+@foreach($payrolls as $p)
+@if(($p->absence_deduction ?? 0) > 0 || ($p->absent_days ?? 0) > 0)
+@php
+    $attStat = $attendanceStats[$p->employee_id] ?? null;
+    $detailedList = $attStat['detailed_absences'] ?? [];
+    $dailyRate = $p->basic_salary > 0 ? ($p->basic_salary / 30) : 0;
+@endphp
+<div class="modal fade" id="absenceDetailModal_{{ $p->id }}" tabindex="-1" aria-labelledby="absenceDetailModalLabel_{{ $p->id }}" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 border-0 shadow">
+            <div class="modal-header border-bottom py-3">
+                <h6 class="modal-title fw-bold" id="absenceDetailModalLabel_{{ $p->id }}">
+                    <i class="fa-solid fa-calendar-xmark text-danger me-2"></i>Absence Deduction Breakdown
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="bg-light rounded-3 p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-muted small">Employee</span>
+                        <strong>{{ $p->employee->full_name ?? 'N/A' }} ({{ $p->employee->employee_code ?? '' }})</strong>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-muted small">Attendance Window</span>
+                        <span class="badge bg-white text-dark border">{{ $attendanceDayWindow }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-muted small">Basic Salary</span>
+                        <span>{{ number_format($p->basic_salary, 2) }} ETB</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="text-muted small">Daily Deduction Rate (Basic / 30)</span>
+                        <span class="font-monospace fw-semibold">{{ number_format($dailyRate, 2) }} ETB / day</span>
+                    </div>
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="fw-bold">Total Absence Deduction</span>
+                        <span class="fw-bold text-danger fs-6">{{ number_format($p->absence_deduction, 2) }} ETB ({{ $p->absent_days }} days)</span>
+                    </div>
+                </div>
+
+                <h6 class="fw-bold small text-dark mb-2">
+                    <i class="fa-solid fa-list-ol text-primary me-1"></i>Unexcused Days &amp; Late Penalties (Attendance Day Format):
+                </h6>
+                @if(!empty($detailedList))
+                    <ul class="list-group list-group-flush border rounded-3 mb-3 small">
+                        @foreach($detailedList as $item)
+                        <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
+                            <div class="d-flex align-items-center gap-2">
+                                @if(($item['type'] ?? '') === 'penalty')
+                                    <i class="fa-solid fa-clock-rotate-left text-warning"></i>
+                                    <span>{{ $item['label'] }}</span>
+                                @else
+                                    <i class="fa-solid fa-circle-xmark text-danger"></i>
+                                    <span>{{ $item['label'] }}</span>
+                                @endif
+                            </div>
+                            <span class="badge bg-danger-subtle text-danger font-monospace px-1.5 py-1">
+                                @if(($item['type'] ?? '') === 'penalty') Penalty @else -1 day @endif
+                            </span>
+                        </li>
+                        @endforeach
+                    </ul>
+                @else
+                    <div class="alert alert-light border small text-muted mb-3">
+                        {{ $p->absent_days }} unexcused absent days deducted during this period.
+                    </div>
+                @endif
+
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted">Rule: Official work hours, biometric punches, 3 Lates = 1 Absent penalty.</small>
+                    <a href="{{ route('attendance.index', ['period' => $selectedPeriodKey, 'search' => $p->employee->employee_code ?: $p->employee->full_name]) }}" target="_blank" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 shadow-xs">
+                        <i class="fa-solid fa-fingerprint me-1"></i>Audit in Attendance Section &rarr;
+                    </a>
+                </div>
+            </div>
+            <div class="modal-footer border-top py-2">
+                <button type="button" class="btn btn-sm btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+@endif
+@endforeach
+
 {{-- ── Submit to GM Modal ───────────────────────────────────────────────── --}}
 <div class="modal fade" id="submitGMModal" tabindex="-1">
     <div class="modal-dialog">
         <form method="POST" action="{{ route('finance.payroll.submit-gm') }}" class="modal-content rounded-4 border-0 shadow">
             @csrf
-            <input type="hidden" name="month" value="{{ $month }}">
-            <input type="hidden" name="year"  value="{{ $year }}">
+            <input type="hidden" name="period" value="{{ $selectedPeriodKey }}">
+            <input type="hidden" name="month"  value="{{ $month }}">
+            <input type="hidden" name="year"   value="{{ $year }}">
             <div class="modal-header border-bottom">
                 <h5 class="modal-title fw-bold">
                     <i class="fa-solid fa-paper-plane text-warning me-2"></i>Send to GM for Approval
@@ -390,9 +512,13 @@
                 <div class="alert alert-warning border-0 rounded-3">
                     <i class="fa-solid fa-triangle-exclamation me-2"></i>
                     You are about to send <strong>{{ $payrolls->count() }} payroll entries</strong> for
-                    <strong>{{ $period }}</strong> to the <strong>General Manager</strong> for approval.
+                    <strong>{{ $periodTitle }}</strong> to the <strong>General Manager</strong> for approval.
                 </div>
                 <div class="bg-light rounded-3 p-3 mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted small">Attendance Window</span>
+                        <span class="fw-semibold">{{ $attendanceDayWindow }}</span>
+                    </div>
                     <div class="d-flex justify-content-between mb-1">
                         <span class="text-muted small">Total Gross Pay</span>
                         <span class="fw-semibold">{{ number_format($totals['gross'],2) }} ETB</span>
@@ -421,57 +547,6 @@
         </form>
     </div>
 </div>
-
-<script>
-    function syncStartDateToMonthYear(dateVal) {
-        if (!dateVal) return;
-        const parts = dateVal.split('-');
-        if (parts.length === 3) {
-            const y = parseInt(parts[0], 10);
-            const m = parseInt(parts[1], 10);
-            const mSelect = document.getElementById('payrollMonthSelect');
-            const yInput = document.getElementById('payrollYearInput');
-            if (mSelect) mSelect.value = m;
-            if (yInput) yInput.value = y;
-        }
-    }
-
-    function syncEndDateToMonthYear(dateVal) {
-        if (!dateVal) return;
-        const parts = dateVal.split('-');
-        if (parts.length === 3) {
-            const y = parseInt(parts[0], 10);
-            const m = parseInt(parts[1], 10);
-            const mSelect = document.getElementById('payrollMonthSelect');
-            const yInput = document.getElementById('payrollYearInput');
-            if (mSelect) mSelect.value = m;
-            if (yInput) yInput.value = y;
-        }
-    }
-
-    function syncMonthYearToDates() {
-        const mSelect = document.getElementById('payrollMonthSelect');
-        const yInput = document.getElementById('payrollYearInput');
-        const startPicker = document.getElementById('payrollStartDatePicker');
-        const endPicker = document.getElementById('payrollEndDatePicker');
-        if (mSelect && yInput) {
-            const m = String(mSelect.value).padStart(2, '0');
-            const y = yInput.value;
-            if (startPicker) {
-                startPicker.value = `${y}-${m}-01`;
-            }
-            if (endPicker) {
-                const maxDays = new Date(parseInt(y, 10), parseInt(m, 10), 0).getDate();
-                const now = new Date();
-                let endDay = maxDays;
-                if (now.getFullYear() === parseInt(y, 10) && (now.getMonth() + 1) === parseInt(m, 10)) {
-                    endDay = Math.min(now.getDate(), maxDays);
-                }
-                endPicker.value = `${y}-${m}-${String(endDay).padStart(2, '0')}`;
-            }
-        }
-    }
-</script>
 
 <style>
 @media print {

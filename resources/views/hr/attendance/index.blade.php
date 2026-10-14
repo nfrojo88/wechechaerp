@@ -44,6 +44,11 @@
                 <i class="fa-solid fa-list-check text-primary me-1"></i>Deployments
             </a>
 
+            {{-- Payroll Management Link --}}
+            <a href="{{ route('finance.payroll.index', ['period' => $selectedPeriodKey]) }}" class="btn btn-sm btn-outline-success shadow-xs" title="Open Payroll Management for this Ethiopian Period">
+                <i class="fa-solid fa-money-bill-wave me-1"></i>Payroll
+            </a>
+
             {{-- Export as PDF Button --}}
             <button type="button" class="btn btn-sm btn-outline-danger shadow-xs" data-bs-toggle="modal" data-bs-target="#exportAttendancePdfModal" title="Export monthly clock in / out attendance matrix as PDF">
                 <i class="fa-solid fa-file-pdf me-1"></i>Export as PDF

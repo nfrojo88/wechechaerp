@@ -56,7 +56,9 @@
             <tbody>
                 @foreach($batches as $batch)
                 @php
-                    $periodLabel = date('F Y', mktime(0,0,0,$batch->month,1,$batch->year));
+                    $periodLabel = ($batch->month >= 1 && $batch->month <= 13 && isset(\App\Helpers\EthiopianCalendar::MONTHS_EN[$batch->month]))
+                        ? (\App\Helpers\EthiopianCalendar::MONTHS_EN[$batch->month] . ' (' . \App\Helpers\EthiopianCalendar::MONTHS_AM[$batch->month] . ') ' . $batch->year . ' EC')
+                        : date('F Y', mktime(0,0,0,$batch->month,1,$batch->year));
                 @endphp
                 <tr>
                     <td class="ps-4">
@@ -106,8 +108,13 @@
             </thead>
             <tbody>
                 @foreach($history as $h)
+                @php
+                    $hPeriodLabel = ($h->month >= 1 && $h->month <= 13 && isset(\App\Helpers\EthiopianCalendar::MONTHS_EN[$h->month]))
+                        ? (\App\Helpers\EthiopianCalendar::MONTHS_EN[$h->month] . ' (' . \App\Helpers\EthiopianCalendar::MONTHS_AM[$h->month] . ') ' . $h->year . ' EC')
+                        : date('F Y', mktime(0,0,0,$h->month,1,$h->year));
+                @endphp
                 <tr>
-                    <td class="ps-4 fw-semibold">{{ date('F Y', mktime(0,0,0,$h->month,1,$h->year)) }}</td>
+                    <td class="ps-4 fw-semibold">{{ $hPeriodLabel }}</td>
                     <td class="text-center">{{ $h->employee_count }}</td>
                     <td class="text-end fw-semibold">{{ number_format($h->total_net, 2) }} ETB</td>
                     <td class="text-center">
