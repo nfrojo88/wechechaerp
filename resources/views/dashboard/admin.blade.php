@@ -6,12 +6,17 @@
     {{-- ══════════════════════════════════════════════════════════════════════════
          1. EXECUTIVE HEADER & REAL-TIME SYSTEM BAR
          ══════════════════════════════════════════════════════════════════════════ --}}
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2 pb-3 border-bottom">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 pb-3 border-bottom">
         <div>
             <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
                 <span class="badge bg-primary bg-opacity-10 text-primary px-3 py-1 rounded-pill fw-semibold" style="font-size:0.8rem;">
                     <i class="fa-solid fa-shield-halved me-1"></i>Global Admin Command Center
                 </span>
+                @if(!empty($ethiopianDateStr))
+                    <span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-50 px-2 py-1 rounded-pill fw-semibold" style="font-size:0.75rem;">
+                        <i class="fa-solid fa-calendar-day me-1 text-warning"></i>{{ $ethiopianDateStr }}
+                    </span>
+                @endif
                 <span class="badge bg-light text-muted border px-2 py-1 rounded-pill" style="font-size:0.75rem;">
                     <i class="fa-regular fa-clock me-1"></i>{{ now()->format('l, F j, Y — H:i') }}
                 </span>
@@ -47,6 +52,139 @@
             <a href="#vat-withholding-report" class="btn btn-outline-danger btn-sm rounded-pill px-3 shadow-xs">
                 <i class="fa-solid fa-receipt me-1"></i>VAT &amp; WHT
             </a>
+        </div>
+    </div>
+
+    {{-- ══════════════════════════════════════════════════════════════════════════
+         DYNAMIC PERIOD & DATA SCOPE FILTER BAR (DON'T SHOW OLD DATA)
+         ══════════════════════════════════════════════════════════════════════════ --}}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+        <div class="card-body p-2 p-md-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.5px; font-size: 0.75rem;">
+                    <i class="fa-solid fa-filter text-primary me-1"></i>Active Period Scope:
+                </span>
+                <div class="btn-group btn-group-sm rounded-pill p-1 bg-light border shadow-xs" role="group">
+                    <a href="{{ route('dashboard.admin', ['period' => 'current_month']) }}"
+                       class="btn btn-sm rounded-pill px-3 py-1 fw-semibold {{ ($period ?? 'current_month') === 'current_month' ? 'btn-primary text-white shadow-xs' : 'btn-light text-muted' }}">
+                        Current Month
+                    </a>
+                    <a href="{{ route('dashboard.admin', ['period' => 'today']) }}"
+                       class="btn btn-sm rounded-pill px-3 py-1 fw-semibold {{ ($period ?? '') === 'today' ? 'btn-primary text-white shadow-xs' : 'btn-light text-muted' }}">
+                        Today
+                    </a>
+                    <a href="{{ route('dashboard.admin', ['period' => 'last_30_days']) }}"
+                       class="btn btn-sm rounded-pill px-3 py-1 fw-semibold {{ ($period ?? '') === 'last_30_days' ? 'btn-primary text-white shadow-xs' : 'btn-light text-muted' }}">
+                        Last 30 Days
+                    </a>
+                    <a href="{{ route('dashboard.admin', ['period' => 'current_year']) }}"
+                       class="btn btn-sm rounded-pill px-3 py-1 fw-semibold {{ ($period ?? '') === 'current_year' ? 'btn-primary text-white shadow-xs' : 'btn-light text-muted' }}">
+                        Fiscal Year
+                    </a>
+                    <a href="{{ route('dashboard.admin', ['period' => 'all']) }}"
+                       class="btn btn-sm rounded-pill px-3 py-1 fw-semibold {{ ($period ?? '') === 'all' ? 'btn-secondary text-white shadow-xs' : 'btn-light text-muted' }}">
+                        All History
+                    </a>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 text-muted small">
+                <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2 py-1">
+                    <i class="fa-solid fa-shield-check me-1"></i>Active Data Filter
+                </span>
+                <span class="font-monospace text-dark fw-semibold">{{ $periodLabel ?? 'Current Month' }}</span>
+                <span class="text-muted d-none d-lg-inline">• Dead files &amp; closed projects excluded</span>
+            </div>
+        </div>
+    </div>
+
+    {{-- ══════════════════════════════════════════════════════════════════════════
+         TODAY'S OPERATIONS LIVE PULSE RIBBON
+         ══════════════════════════════════════════════════════════════════════════ --}}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white" style="border-left: 5px solid #0284c7 !important;">
+        <div class="card-body p-3 p-md-4">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-info bg-opacity-10 text-info px-3 py-1 rounded-pill fw-bold" style="font-size:0.75rem;">
+                        <i class="fa-solid fa-bolt me-1"></i>TODAY'S OPERATIONS PULSE
+                    </span>
+                    <span class="text-muted small">Live enterprise activity for {{ now()->format('l, F j, Y') }}</span>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{{ route('attendance.index') }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                        <i class="fa-solid fa-user-clock me-1"></i>Attendance Sheet
+                    </a>
+                    <a href="{{ route('transfers.index') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">
+                        <i class="fa-solid fa-truck-ramp-box me-1"></i>Material TRs
+                    </a>
+                </div>
+            </div>
+
+            <div class="row g-2 text-center">
+                {{-- 1. Today Inflow --}}
+                <div class="col-6 col-md-3 col-xl">
+                    <div class="p-3 rounded-3 bg-light border h-100">
+                        <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Today Inflow</small>
+                        <div class="fs-5 fw-bold text-success font-monospace my-1">
+                            +{{ number_format($todayPulse['income'] ?? 0, 2) }}
+                        </div>
+                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2 py-0" style="font-size:0.68rem;">
+                            Direct Inflow ETB
+                        </span>
+                    </div>
+                </div>
+
+                {{-- 2. Today Outflow --}}
+                <div class="col-6 col-md-3 col-xl">
+                    <div class="p-3 rounded-3 bg-light border h-100">
+                        <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Today Disbursements</small>
+                        <div class="fs-5 fw-bold text-danger font-monospace my-1">
+                            -{{ number_format($todayPulse['expense'] ?? 0, 2) }}
+                        </div>
+                        <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-0" style="font-size:0.68rem;">
+                            Paid Vouchers ETB
+                        </span>
+                    </div>
+                </div>
+
+                {{-- 3. Today Workforce Attendance --}}
+                <div class="col-6 col-md-3 col-xl">
+                    <div class="p-3 rounded-3 bg-light border h-100">
+                        <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Workforce Present</small>
+                        <div class="fs-5 fw-bold text-primary my-1">
+                            {{ $attendanceKpi['present'] ?? 0 }} <span class="fs-6 fw-normal text-muted">/ {{ $attendanceKpi['total_active'] ?? 0 }}</span>
+                        </div>
+                        <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-2 py-0" style="font-size:0.68rem;">
+                            {{ $attendanceKpi['rate'] ?? 0 }}% Attendance Rate
+                        </span>
+                    </div>
+                </div>
+
+                {{-- 4. Today Material Transfers (TR) --}}
+                <div class="col-6 col-md-3 col-xl">
+                    <div class="p-3 rounded-3 bg-light border h-100">
+                        <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Store Transfers (TR)</small>
+                        <div class="fs-5 fw-bold text-info my-1">
+                            {{ $transfersData['kpi']['in_transit'] ?? 0 }} <span class="fs-6 fw-normal text-muted">In-Transit</span>
+                        </div>
+                        <span class="badge bg-info bg-opacity-10 text-info rounded-pill px-2 py-0" style="font-size:0.68rem;">
+                            {{ $todayPulse['transfers'] ?? 0 }} Today • {{ $transfersData['kpi']['pending_dispatch'] ?? 0 }} Pending
+                        </span>
+                    </div>
+                </div>
+
+                {{-- 5. Urgent Decision Pipeline --}}
+                <div class="col-12 col-md-3 col-xl">
+                    <div class="p-3 rounded-3 bg-light border h-100">
+                        <small class="text-muted text-uppercase fw-bold d-block" style="font-size:0.7rem;">Urgent Decision Queue</small>
+                        <div class="fs-5 fw-bold {{ ($totalUrgentActions ?? 0) > 0 ? 'text-danger' : 'text-success' }} my-1">
+                            {{ $totalUrgentActions ?? 0 }} <span class="fs-6 fw-normal text-muted">Pending</span>
+                        </div>
+                        <span class="badge {{ ($totalUrgentActions ?? 0) > 0 ? 'bg-danger' : 'bg-success' }} bg-opacity-10 {{ ($totalUrgentActions ?? 0) > 0 ? 'text-danger' : 'text-success' }} rounded-pill px-2 py-0" style="font-size:0.68rem;">
+                            {{ ($totalUrgentActions ?? 0) > 0 ? 'Action Needed' : 'Queue Clear' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -156,14 +294,14 @@
             </div>
         </div>
 
-        {{-- Monthly Company Revenue / Income --}}
+        {{-- Period Company Revenue / Income --}}
         <div class="col-xl-3 col-md-6">
             <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #3b82f6 !important; border-radius: 12px;">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
                             <div class="text-xs fw-bold text-primary text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">
-                                <i class="fa-solid fa-arrow-trend-up me-1"></i>Monthly Income / Revenue
+                                <i class="fa-solid fa-arrow-trend-up me-1"></i>{{ $periodLabel ?? 'Monthly' }} Income
                             </div>
                             <div class="h4 mb-0 fw-bold text-dark">{{ number_format($kpi['monthly_income'] ?? 0, 2) }} ETB</div>
                             <small class="text-muted">
@@ -175,21 +313,21 @@
                         </div>
                     </div>
                     <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
-                        <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-2 py-0" style="font-size:0.7rem;">Inflow</span>
+                        <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill px-2 py-0" style="font-size:0.7rem;">Inflow Scope</span>
                         <a href="{{ route('income.index') }}" class="text-primary fw-semibold small text-decoration-none">Income Records <i class="fa-solid fa-arrow-right ms-1"></i></a>
                     </div>
                 </div>
             </div>
         </div>
 
-        {{-- Monthly Operational Expenses --}}
+        {{-- Period Operational Expenses --}}
         <div class="col-xl-3 col-md-6">
             <div class="card border-0 shadow-sm h-100 position-relative overflow-hidden" style="border-left: 4px solid #ef4444 !important; border-radius: 12px;">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
                             <div class="text-xs fw-bold text-danger text-uppercase mb-1" style="font-size:0.75rem;letter-spacing:0.5px;">
-                                <i class="fa-solid fa-arrow-trend-down me-1"></i>Monthly Expenses
+                                <i class="fa-solid fa-arrow-trend-down me-1"></i>{{ $periodLabel ?? 'Monthly' }} Expenses
                             </div>
                             <div class="h4 mb-0 fw-bold text-dark">{{ number_format($kpi['monthly_expenses'] ?? 0, 2) }} ETB</div>
                             <small class="text-muted">
@@ -201,7 +339,7 @@
                         </div>
                     </div>
                     <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
-                        <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-0" style="font-size:0.7rem;">Outflow</span>
+                        <span class="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-0" style="font-size:0.7rem;">Outflow Scope</span>
                         <a href="{{ route('expenses.index') }}" class="text-danger fw-semibold small text-decoration-none">View Expenses <i class="fa-solid fa-arrow-right ms-1"></i></a>
                     </div>
                 </div>
@@ -222,7 +360,7 @@
                                 {{ $netCash >= 0 ? '+' : '' }}{{ number_format($netCash, 2) }} ETB
                             </div>
                             <small class="text-muted">
-                                {{ $netCash >= 0 ? 'Operating Surplus' : 'Operating Deficit' }} this month
+                                {{ $netCash >= 0 ? 'Operating Surplus' : 'Operating Deficit' }} ({{ $periodLabel ?? 'Current Scope' }})
                             </small>
                         </div>
                         <div class="rounded-circle p-3 d-flex align-items-center justify-content-center" style="background: {{ $netCash >= 0 ? 'rgba(5,150,105,0.12)' : 'rgba(220,38,38,0.12)' }}; width:50px; height:50px;">
@@ -250,22 +388,23 @@
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
-                            <div class="text-xs fw-bold text-muted text-uppercase mb-1" style="font-size:0.72rem;">Projects In Progress</div>
+                            <div class="text-xs fw-bold text-muted text-uppercase mb-1" style="font-size:0.72rem;">Active Construction Projects</div>
                             <div class="h4 mb-0 fw-bold text-dark">{{ $kpi['active_projects'] ?? 0 }} <span class="fs-6 fw-normal text-muted">/ {{ $kpi['total_projects'] ?? 0 }} Total</span></div>
-                            <small class="text-muted">Value: <strong>{{ number_format($kpi['total_contract_value'] ?? 0, 0) }} ETB</strong></small>
+                            <small class="text-muted">Active Value: <strong>{{ number_format($kpi['total_contract_value'] ?? 0, 0) }} ETB</strong></small>
                         </div>
                         <div class="rounded-circle p-3 d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary" style="width:46px;height:46px;">
                             <i class="fa-solid fa-city fa-lg"></i>
                         </div>
                     </div>
-                    <div class="mt-2 pt-2 border-top">
+                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
                         <a href="{{ route('projects.index') }}" class="text-primary small text-decoration-none fw-semibold">Manage Projects <i class="fa-solid fa-arrow-right ms-1"></i></a>
+                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2 py-0" style="font-size:0.68rem;">Live Sites</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        {{-- Store Inventory Valuation --}}
+        {{-- Store Inventory Valuation & TR Status --}}
         <div class="col-xl-3 col-md-6">
             <div class="card border-0 shadow-sm h-100 rounded-3">
                 <div class="card-body p-3">
@@ -274,42 +413,44 @@
                             <div class="text-xs fw-bold text-muted text-uppercase mb-1" style="font-size:0.72rem;">Stores Inventory Value</div>
                             <div class="h4 mb-0 fw-bold text-dark">{{ number_format($kpi['inventory_value'] ?? 0, 2) }} ETB</div>
                             <small class="text-muted">
-                                @if($lowStockItems->count() > 0)
-                                    <span class="text-warning"><i class="fa-solid fa-triangle-exclamation me-1"></i>{{ $lowStockItems->count() }} low stock items</span>
-                                @else
-                                    <span class="text-success"><i class="fa-solid fa-check me-1"></i>Stock healthy</span>
-                                @endif
+                                In-Transit: <strong class="text-info">{{ $transfersData['kpi']['in_transit'] ?? 0 }} TRs moving</strong>
                             </small>
                         </div>
                         <div class="rounded-circle p-3 d-flex align-items-center justify-content-center bg-info bg-opacity-10 text-info" style="width:46px;height:46px;">
                             <i class="fa-solid fa-boxes-stacked fa-lg"></i>
                         </div>
                     </div>
-                    <div class="mt-2 pt-2 border-top">
-                        <a href="{{ route('store-manager.inventory.all') }}" class="text-info small text-decoration-none fw-semibold">All Inventory <i class="fa-solid fa-arrow-right ms-1"></i></a>
+                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                        <a href="{{ route('store-manager.inventory.all') }}" class="text-info small text-decoration-none fw-semibold">All Stores <i class="fa-solid fa-arrow-right ms-1"></i></a>
+                        <a href="{{ route('transfers.index') }}" class="text-primary small text-decoration-none fw-semibold">Transfers TR <i class="fa-solid fa-truck-moving ms-1"></i></a>
                     </div>
                 </div>
             </div>
         </div>
 
-        {{-- Total Active Workforce --}}
+        {{-- Total Active Workforce & Live Attendance --}}
         <div class="col-xl-3 col-md-6">
             <div class="card border-0 shadow-sm h-100 rounded-3">
                 <div class="card-body p-3">
                     <div class="d-flex align-items-center justify-content-between">
                         <div>
-                            <div class="text-xs fw-bold text-muted text-uppercase mb-1" style="font-size:0.72rem;">Total Active Workforce</div>
-                            <div class="h4 mb-0 fw-bold text-dark">{{ $kpi['total_employees'] ?? 0 }} <span class="fs-6 fw-normal text-muted">Employees</span></div>
+                            <div class="text-xs fw-bold text-muted text-uppercase mb-1" style="font-size:0.72rem;">Active Workforce &amp; Attendance</div>
+                            <div class="h4 mb-0 fw-bold text-dark">{{ $kpi['total_employees'] ?? 0 }} <span class="fs-6 fw-normal text-muted">Active Staff</span></div>
                             <small class="text-muted">
-                                +{{ $kpi['new_employees_month'] ?? 0 }} new this month • {{ $kpi['employees_on_leave'] ?? 0 }} on leave
+                                Today: <strong class="text-success">{{ $attendanceKpi['present'] ?? 0 }} Present ({{ $attendanceKpi['rate'] ?? 0 }}%)</strong>
                             </small>
                         </div>
                         <div class="rounded-circle p-3 d-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success" style="width:46px;height:46px;">
                             <i class="fa-solid fa-users-gear fa-lg"></i>
                         </div>
                     </div>
-                    <div class="mt-2 pt-2 border-top">
-                        <a href="{{ route('employees.index') }}" class="text-success small text-decoration-none fw-semibold">Employee Directory <i class="fa-solid fa-arrow-right ms-1"></i></a>
+                    <div class="mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+                        <a href="{{ route('employees.index') }}" class="text-success small text-decoration-none fw-semibold">Directory <i class="fa-solid fa-arrow-right ms-1"></i></a>
+                        <a href="{{ route('attendance.index') }}" class="text-primary small text-decoration-none fw-semibold">Attendance <i class="fa-solid fa-clock ms-1"></i></a>
+                    </div>
+                </div>
+            </div>
+        </div>
                     </div>
                 </div>
             </div>
@@ -550,7 +691,314 @@
     </div>
 
     {{-- ══════════════════════════════════════════════════════════════════════════
-         8. EXECUTIVE DECISION MATRIX & ACTION HUB (TABBED INTERFACE)
+         8. INTER-STORE MATERIAL TRANSFERS (TR) COMMAND CENTER
+         ══════════════════════════════════════════════════════════════════════════ --}}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden" style="border-top: 4px solid #0284c7 !important;">
+        <div class="card-header bg-white py-3 px-3 px-md-4 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-3 p-2 bg-info bg-opacity-10 text-info fs-5 d-flex align-items-center justify-content-center" style="width:42px;height:42px;">
+                    <i class="fa-solid fa-truck-ramp-box"></i>
+                </div>
+                <div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <h6 class="m-0 fw-bold text-dark fs-6">Inter-Store Material Transfers (TR) Command Center</h6>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2 py-0" style="font-size:0.7rem;">
+                            Live Logistics &amp; Inventory Balance Sync
+                        </span>
+                    </div>
+                    <small class="text-muted">Origin stock deduction, transit driver tracking, and destination store inventory synchronization</small>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <form method="POST" action="{{ route('transfers.sync-all-inventory') }}" class="d-inline" onsubmit="return confirm('Check all store transfers and automatically synchronize inventory balances across origin and destination stores?')">
+                    @csrf
+                    <button type="submit" class="btn btn-sm btn-outline-success rounded-pill px-3 shadow-xs fw-semibold">
+                        <i class="fa-solid fa-arrows-rotate me-1 text-success"></i>Check &amp; Auto-Adjust All Inventory
+                    </button>
+                </form>
+                <a href="{{ route('transfers.create') }}" class="btn btn-sm btn-primary rounded-pill px-3 shadow-xs fw-semibold">
+                    <i class="fa-solid fa-plus me-1"></i>New Transfer TR
+                </a>
+                <a href="{{ route('transfers.index') }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3 shadow-xs">
+                    <i class="fa-solid fa-list me-1"></i>All Transfers
+                </a>
+            </div>
+        </div>
+
+        <div class="card-body p-3 p-md-4">
+            {{-- Transfer KPI Row --}}
+            <div class="row g-2 text-center mb-4">
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-light border h-100">
+                        <div class="text-muted small text-uppercase fw-bold" style="font-size:0.7rem;">In-Transit (On Road)</div>
+                        <div class="fs-4 fw-bold text-info my-1 font-monospace">{{ $transfersData['kpi']['in_transit'] ?? 0 }}</div>
+                        <span class="badge bg-info bg-opacity-10 text-info rounded-pill px-2 py-0" style="font-size:0.68rem;">
+                            Assigned Drivers &amp; Trucks
+                        </span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-light border h-100">
+                        <div class="text-muted small text-uppercase fw-bold" style="font-size:0.7rem;">Ready to Dispatch</div>
+                        <div class="fs-4 fw-bold text-warning my-1 font-monospace">{{ $transfersData['kpi']['pending_dispatch'] ?? 0 }}</div>
+                        <span class="badge bg-warning bg-opacity-10 text-dark rounded-pill px-2 py-0" style="font-size:0.68rem;">
+                            Approved at Warehouse
+                        </span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-light border h-100">
+                        <div class="text-muted small text-uppercase fw-bold" style="font-size:0.7rem;">Completed / Received</div>
+                        <div class="fs-4 fw-bold text-success my-1 font-monospace">{{ $transfersData['kpi']['completed'] ?? 0 }}</div>
+                        <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2 py-0" style="font-size:0.68rem;">
+                            Delivered &amp; Inventory Synced
+                        </span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-light border h-100">
+                        <div class="text-muted small text-uppercase fw-bold" style="font-size:0.7rem;">Total Scope Movements</div>
+                        <div class="fs-4 fw-bold text-dark my-1 font-monospace">{{ $transfersData['kpi']['total_period'] ?? 0 }}</div>
+                        <span class="badge bg-secondary bg-opacity-10 text-secondary rounded-pill px-2 py-0" style="font-size:0.68rem;">
+                            {{ $periodLabel ?? 'Current Scope' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Recent Transfers Table --}}
+            @if(isset($transfersData['recent']) && $transfersData['recent']->count() > 0)
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light text-uppercase text-muted" style="font-size:0.72rem;">
+                            <tr>
+                                <th class="ps-3">Transfer #</th>
+                                <th>Route (Origin &rarr; Destination)</th>
+                                <th>Driver &amp; Vehicle</th>
+                                <th>Materials</th>
+                                <th>Origin Deduct</th>
+                                <th>Dest. Receive</th>
+                                <th>Status</th>
+                                <th class="text-end pe-3">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($transfersData['recent'] as $t)
+                                @php
+                                    $isOriginDeducted = $t->isDeductedFromOrigin();
+                                    $isDestAdded = $t->isAddedToDestination();
+                                    $itemCount = $t->items->count();
+                                    $firstItem = $t->items->first();
+                                @endphp
+                                <tr>
+                                    <td class="ps-3">
+                                        <a href="{{ route('transfers.show', $t->id) }}" class="fw-bold font-monospace text-primary text-decoration-none">
+                                            {{ $t->transfer_no ?? ('TR-#' . $t->id) }}
+                                        </a>
+                                        @if($t->physical_slip_no)
+                                            <small class="d-block text-muted font-monospace" style="font-size:0.7rem;">Slip: {{ $t->physical_slip_no }}</small>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold text-dark text-sm">
+                                            <span class="text-secondary">{{ $t->fromStore->name ?? 'Origin Store' }}</span>
+                                            <i class="fa-solid fa-arrow-right-long text-muted mx-1"></i>
+                                            <span class="text-primary">{{ $t->toStore->name ?? 'Destination Store' }}</span>
+                                        </div>
+                                        <small class="text-muted" style="font-size:0.72rem;">{{ $t->created_at->diffForHumans() }}</small>
+                                    </td>
+                                    <td>
+                                        @if($t->driver)
+                                            <div class="fw-semibold text-dark text-sm">
+                                                <i class="fa-solid fa-id-badge text-muted me-1"></i>{{ $t->driver->full_name ?? ($t->driver->name ?? 'Assigned') }}
+                                            </div>
+                                        @else
+                                            <span class="text-muted small">No Driver Assigned</span>
+                                        @endif
+                                        @if($t->vehicle_plate_no)
+                                            <span class="badge bg-light text-dark border font-monospace" style="font-size:0.68rem;">
+                                                <i class="fa-solid fa-truck me-1"></i>{{ $t->vehicle_plate_no }}
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border fw-semibold">
+                                            {{ $itemCount }} {{ Str::plural('item', $itemCount) }}
+                                        </span>
+                                        @if($firstItem && $firstItem->product)
+                                            <small class="d-block text-muted text-truncate" style="max-width:180px; font-size:0.72rem;">
+                                                {{ $firstItem->product->name }} ({{ number_format($firstItem->quantity, 1) }})
+                                            </small>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if($isOriginDeducted)
+                                            <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2 py-1" style="font-size:0.7rem;">
+                                                <i class="fa-solid fa-check me-1"></i>Deducted
+                                            </span>
+                                        @else
+                                            <span class="badge bg-warning bg-opacity-10 text-warning rounded-pill px-2 py-1" style="font-size:0.7rem;">
+                                                <i class="fa-solid fa-clock me-1"></i>Pending Out
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if($isDestAdded)
+                                            <span class="badge bg-success bg-opacity-10 text-success rounded-pill px-2 py-1" style="font-size:0.7rem;">
+                                                <i class="fa-solid fa-check me-1"></i>Stock Added
+                                            </span>
+                                        @elseif($t->status === 'in_transit')
+                                            <span class="badge bg-info bg-opacity-10 text-info rounded-pill px-2 py-1" style="font-size:0.7rem;">
+                                                <i class="fa-solid fa-truck-fast me-1"></i>In Transit
+                                            </span>
+                                        @else
+                                            <span class="badge bg-secondary bg-opacity-10 text-secondary rounded-pill px-2 py-1" style="font-size:0.7rem;">
+                                                Pending In
+                                            </span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if($t->status === 'completed')
+                                            <span class="badge bg-success rounded-pill px-2 py-1" style="font-size:0.7rem;">Completed</span>
+                                        @elseif($t->status === 'in_transit')
+                                            <span class="badge bg-info text-white rounded-pill px-2 py-1 animate-pulse" style="font-size:0.7rem;">In Transit</span>
+                                        @elseif($t->status === 'approved')
+                                            <span class="badge bg-warning text-dark rounded-pill px-2 py-1" style="font-size:0.7rem;">Approved</span>
+                                        @elseif($t->status === 'pending_approval')
+                                            <span class="badge bg-warning bg-opacity-25 text-warning-emphasis rounded-pill px-2 py-1" style="font-size:0.7rem;">Pending</span>
+                                        @else
+                                            <span class="badge bg-secondary rounded-pill px-2 py-1" style="font-size:0.7rem;">{{ ucfirst($t->status) }}</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ route('transfers.show', $t->id) }}" class="btn btn-outline-primary py-0 px-2" style="font-size:0.75rem;">
+                                                View
+                                            </a>
+                                            <form method="POST" action="{{ route('transfers.sync-inventory', $t->id) }}" class="d-inline">
+                                                @csrf
+                                                <button type="submit" class="btn btn-outline-success py-0 px-2" style="font-size:0.75rem;" title="Sync transfer inventory">
+                                                    <i class="fa-solid fa-arrows-rotate"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="text-center py-4 text-muted">
+                    <i class="fa-solid fa-truck-ramp-box fs-3 mb-2 opacity-50"></i>
+                    <p class="mb-0">No active inter-store transfers in this scope.</p>
+                </div>
+            @endif
+        </div>
+    </div>
+
+    {{-- ══════════════════════════════════════════════════════════════════════════
+         9. WORKFORCE ATTENDANCE TODAY & SITE DEPLOYMENT COMMAND
+         ══════════════════════════════════════════════════════════════════════════ --}}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden" style="border-top: 4px solid #10b981 !important;">
+        <div class="card-header bg-white py-3 px-3 px-md-4 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <div class="rounded-3 p-2 bg-success bg-opacity-10 text-success fs-5 d-flex align-items-center justify-content-center" style="width:42px;height:42px;">
+                    <i class="fa-solid fa-user-clock"></i>
+                </div>
+                <div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <h6 class="m-0 fw-bold text-dark fs-6">Today's Workforce Attendance &amp; Site Deployments</h6>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0" style="font-size:0.7rem;">
+                            Live Biometric &amp; Site Dispatch
+                        </span>
+                    </div>
+                    <small class="text-muted">Real-time attendance check-ins, punctuality tracking, and project field deployments for {{ now()->format('l, F j, Y') }}</small>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <a href="{{ route('attendance.index') }}" class="btn btn-sm btn-primary rounded-pill px-3 shadow-xs fw-semibold">
+                    <i class="fa-solid fa-clipboard-user me-1"></i>Daily Attendance Sheet
+                </a>
+                <a href="{{ route('attendance.site-deployments') }}" class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-xs">
+                    <i class="fa-solid fa-helmet-safety me-1"></i>Site Deployments
+                </a>
+                <a href="{{ route('admin.attendance.device-logs') }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3 shadow-xs">
+                    <i class="fa-solid fa-fingerprint me-1"></i>Biometric Sync
+                </a>
+            </div>
+        </div>
+
+        <div class="card-body p-3 p-md-4">
+            <div class="row g-3 align-items-center">
+                {{-- Left: Big attendance percentage gauge --}}
+                <div class="col-lg-4 text-center border-end">
+                    <div class="d-inline-flex flex-column align-items-center justify-content-center p-3">
+                        <div class="position-relative d-inline-block">
+                            <div class="display-5 fw-bold text-success font-monospace mb-0">
+                                {{ $attendanceKpi['rate'] ?? 0 }}<span class="fs-4">%</span>
+                            </div>
+                        </div>
+                        <div class="fw-semibold text-dark mt-1">Today's Attendance Rate</div>
+                        <small class="text-muted">
+                            {{ $attendanceKpi['present'] ?? 0 }} of {{ $attendanceKpi['total_active'] ?? 0 }} active personnel present
+                        </small>
+                        <div class="progress w-100 mt-2" style="height: 8px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ $attendanceKpi['rate'] ?? 0 }}%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Right: Breakdown chips --}}
+                <div class="col-lg-8">
+                    <div class="row g-2 text-center">
+                        <div class="col-6 col-sm-3">
+                            <div class="p-2 border rounded-3 bg-light">
+                                <div class="fs-5 fw-bold text-success font-monospace">{{ $attendanceKpi['present'] ?? 0 }}</div>
+                                <small class="text-muted text-uppercase fw-semibold" style="font-size:0.7rem;">Present</small>
+                                <span class="d-block text-success small" style="font-size:0.68rem;">Office &amp; Site</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-sm-3">
+                            <div class="p-2 border rounded-3 bg-light">
+                                <div class="fs-5 fw-bold text-primary font-monospace">{{ $attendanceKpi['site'] ?? 0 }}</div>
+                                <small class="text-muted text-uppercase fw-semibold" style="font-size:0.7rem;">On Site (S)</small>
+                                <span class="d-block text-primary small" style="font-size:0.68rem;">Project Field</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-sm-3">
+                            <div class="p-2 border rounded-3 bg-light">
+                                <div class="fs-5 fw-bold text-warning font-monospace">{{ $attendanceKpi['leave'] ?? 0 }}</div>
+                                <small class="text-muted text-uppercase fw-semibold" style="font-size:0.7rem;">On Leave</small>
+                                <span class="d-block text-warning small" style="font-size:0.68rem;">Approved Leave</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-sm-3">
+                            <div class="p-2 border rounded-3 bg-light">
+                                <div class="fs-5 fw-bold text-danger font-monospace">{{ $attendanceKpi['absent'] ?? 0 }}</div>
+                                <small class="text-muted text-uppercase fw-semibold" style="font-size:0.7rem;">Absent</small>
+                                <span class="d-block text-danger small" style="font-size:0.68rem;">Unaccounted</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 p-2 rounded-3 bg-light d-flex justify-content-between align-items-center flex-wrap gap-2 text-xs">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-clock-rotate-left text-warning"></i>
+                            <span class="text-muted">Punctuality:</span>
+                            <span class="fw-semibold text-dark">{{ $attendanceKpi['late'] ?? 0 }} employees flagged late (after 08:40 AM)</span>
+                        </div>
+                        <a href="{{ route('reports.attendance') }}" class="text-primary fw-semibold text-decoration-none">
+                            Full HR Attendance Report <i class="fa-solid fa-arrow-right ms-1"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ══════════════════════════════════════════════════════════════════════════
+         10. EXECUTIVE DECISION MATRIX & ACTION HUB (TABBED INTERFACE)
          ══════════════════════════════════════════════════════════════════════════ --}}
     <div id="executive-approval-hub" class="card border-0 shadow-sm rounded-3 mb-4">
         <div class="card-header bg-transparent py-3 border-0">
@@ -590,6 +1038,14 @@
                         <i class="fa-solid fa-user-check me-1 text-primary"></i>Pending Employees
                         @if(($kpi['pending_approvals'] ?? 0) > 0)
                             <span class="badge bg-primary rounded-pill ms-1">{{ $kpi['pending_approvals'] }}</span>
+                        @endif
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link fw-semibold" id="transfers-tab" data-bs-toggle="tab" data-bs-target="#tab-transfers" type="button" role="tab">
+                        <i class="fa-solid fa-truck-ramp-box me-1 text-info"></i>Store Transfers
+                        @if(($transfersData['kpi']['in_transit'] ?? 0) > 0 || ($transfersData['kpi']['pending_dispatch'] ?? 0) > 0)
+                            <span class="badge bg-info text-white rounded-pill ms-1">{{ ($transfersData['kpi']['in_transit'] ?? 0) + ($transfersData['kpi']['pending_dispatch'] ?? 0) }}</span>
                         @endif
                     </button>
                 </li>
@@ -759,7 +1215,7 @@
                                 <tbody>
                                     @foreach($pendingEmployees as $emp)
                                         <tr>
-                                            <td class="fw-semibold text-dark">{{ $emp->name ?? ($emp->first_name . ' ' . $emp->last_name) }}</td>
+                                            <td class="fw-semibold text-dark">{{ $emp->full_name ?: ($emp->name ?: trim(($emp->first_name ?? '') . ' ' . ($emp->last_name ?? ''))) }}</td>
                                             <td><span class="badge bg-light text-dark border">{{ $emp->department ?? 'General' }}</span></td>
                                             <td>{{ $emp->role_title ?? $emp->position ?? 'Staff' }}</td>
                                             <td><small class="text-muted">{{ $emp->created_at ? $emp->created_at->format('M d, Y') : 'N/A' }}</small></td>
@@ -823,6 +1279,82 @@
                         <div class="text-center py-4 text-muted">
                             <i class="fa-solid fa-circle-check fs-3 mb-2 text-success opacity-75"></i>
                             <p class="mb-0 fw-semibold">Zero critical open site issues reported.</p>
+                        </div>
+                    @endif
+                </div>
+
+                {{-- TAB 6: STORE TRANSFERS (TR) IN-TRANSIT & DISPATCH --}}
+                <div class="tab-pane fade p-3" id="tab-transfers" role="tabpanel">
+                    @if(isset($transfersData['recent']) && $transfersData['recent']->count() > 0)
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light text-uppercase text-muted" style="font-size:0.75rem;">
+                                    <tr>
+                                        <th>Transfer #</th>
+                                        <th>Origin &rarr; Destination</th>
+                                        <th>Driver / Truck</th>
+                                        <th>Items</th>
+                                        <th>Origin Deduct</th>
+                                        <th>Dest. Receive</th>
+                                        <th>Status</th>
+                                        <th class="text-end">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($transfersData['recent'] as $t)
+                                        <tr>
+                                            <td class="fw-bold font-monospace text-primary">
+                                                <a href="{{ route('transfers.show', $t->id) }}" class="text-decoration-none">
+                                                    {{ $t->transfer_no ?? ('TR-#' . $t->id) }}
+                                                </a>
+                                            </td>
+                                            <td>
+                                                <span class="text-secondary fw-semibold">{{ $t->fromStore->name ?? 'Origin' }}</span>
+                                                <i class="fa-solid fa-arrow-right text-muted mx-1"></i>
+                                                <span class="text-primary fw-semibold">{{ $t->toStore->name ?? 'Destination' }}</span>
+                                            </td>
+                                            <td>
+                                                {{ $t->driver->full_name ?? ($t->driver->name ?? 'Unassigned') }}
+                                                @if($t->vehicle_plate_no)
+                                                    <span class="badge bg-light text-dark border font-monospace ms-1">{{ $t->vehicle_plate_no }}</span>
+                                                @endif
+                                            </td>
+                                            <td><span class="badge bg-light text-dark border">{{ $t->items->count() }} items</span></td>
+                                            <td>
+                                                @if($t->isDeductedFromOrigin())
+                                                    <span class="badge bg-success bg-opacity-10 text-success"><i class="fa-solid fa-check me-1"></i>Deducted</span>
+                                                @else
+                                                    <span class="badge bg-warning bg-opacity-10 text-warning"><i class="fa-solid fa-clock me-1"></i>Pending Out</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                @if($t->isAddedToDestination())
+                                                    <span class="badge bg-success bg-opacity-10 text-success"><i class="fa-solid fa-check me-1"></i>Received</span>
+                                                @elseif($t->status === 'in_transit')
+                                                    <span class="badge bg-info bg-opacity-10 text-info"><i class="fa-solid fa-truck me-1"></i>In Transit</span>
+                                                @else
+                                                    <span class="badge bg-secondary bg-opacity-10 text-secondary">Pending In</span>
+                                                @endif
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-{{ $t->status === 'in_transit' ? 'info' : ($t->status === 'completed' ? 'success' : 'warning') }}">
+                                                    {{ ucfirst($t->status) }}
+                                                </span>
+                                            </td>
+                                            <td class="text-end">
+                                                <a href="{{ route('transfers.show', $t->id) }}" class="btn btn-sm btn-outline-primary py-1 px-3 rounded-pill text-xs">
+                                                    View Details
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="text-center py-4 text-muted">
+                            <i class="fa-solid fa-circle-check fs-3 mb-2 text-success opacity-75"></i>
+                            <p class="mb-0 fw-semibold">No active store transfers currently in transit.</p>
                         </div>
                     @endif
                 </div>

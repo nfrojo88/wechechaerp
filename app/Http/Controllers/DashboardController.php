@@ -219,8 +219,45 @@ class DashboardController extends Controller
     public function admin()
     {
         $now = now();
+        $period = request('period', 'current_month');
 
-        // 1. Pending Approvals & Action Items
+        // Determine date range according to selected period
+        $startDate = null;
+        $endDate = null;
+
+        if ($period === 'today') {
+            $startDate = $now->copy()->startOfDay();
+            $endDate = $now->copy()->endOfDay();
+            $periodLabel = "Today (" . $now->format('M d, Y') . ")";
+        } elseif ($period === 'last_30_days') {
+            $startDate = $now->copy()->subDays(30)->startOfDay();
+            $endDate = $now->copy()->endOfDay();
+            $periodLabel = "Last 30 Days";
+        } elseif ($period === 'current_year') {
+            $startDate = $now->copy()->startOfYear();
+            $endDate = $now->copy()->endOfYear();
+            $periodLabel = "Current Year (" . $now->year . ")";
+        } elseif ($period === 'all') {
+            $startDate = null;
+            $endDate = null;
+            $periodLabel = "All Time (Historical)";
+        } else {
+            $period = 'current_month';
+            $startDate = $now->copy()->startOfMonth();
+            $endDate = $now->copy()->endOfMonth();
+            $periodLabel = "Current Month (" . $now->format('F Y') . ")";
+        }
+
+        // Ethiopian Date for Header
+        $ethiopianDate = $this->safe(function() use ($now) {
+            if (class_exists(\App\Services\EthiopianDate::class)) {
+                return \App\Services\EthiopianDate::toEthiopian($now);
+            }
+            return null;
+        }, null);
+        $ethiopianDateStr = $ethiopianDate ? ($ethiopianDate['formatted_en'] . ' (' . $ethiopianDate['formatted_am'] . ')') : null;
+
+        // 1. Pending Approvals & Action Items (Filtered to active/live items - no dead files or obsolete records)
         $pendingGmPrs = $this->safe(function () {
             return \App\Models\PurchaseRequest::with([
                     'project', 'requestedBy', 'supplier',
@@ -254,10 +291,18 @@ class DashboardController extends Controller
                 ->get();
         }, collect());
 
+        // Employee registrations awaiting GM approval: strictly active, non-dead file employees
         $pendingEmployees = $this->safe(function () {
-            return \App\Models\Employee::where(function($q) {
-                $q->where('is_approved_by_gm', false)->orWhereNull('is_approved_by_gm');
-            })->latest()->take(8)->get();
+            return \App\Models\Employee::where('status', 'active')
+                ->where(function($q) {
+                    $q->where('is_approved_by_gm', false)->orWhereNull('is_approved_by_gm');
+                })
+                ->where(function($q) {
+                    $q->where('is_dead_file', false)->orWhereNull('is_dead_file');
+                })
+                ->latest()
+                ->take(8)
+                ->get();
         }, collect());
 
         $unassignedUsers = $this->safe(fn() => User::whereDoesntHave('roles')
@@ -292,17 +337,25 @@ class DashboardController extends Controller
 
         $totalCashBankBalance = (float) $cashAndBankCoas->sum('current_balance');
 
-        // 3. Monthly and YTD Incomes & Expenses
-        $monthlyIncome = $this->safe(function() use ($now) {
-            $direct = (float) (\App\Models\Payment::whereMonth('payment_date', $now->month)
-                ->whereYear('payment_date', $now->year)
-                ->sum('amount') ?? 0);
+        // 3. Incomes & Expenses (Respecting Selected Period & YTD)
+        $monthlyIncome = $this->safe(function() use ($startDate, $endDate, $now) {
+            $paymentQuery = \App\Models\Payment::query();
+            if ($startDate && $endDate) {
+                $paymentQuery->whereBetween('payment_date', [$startDate->toDateString(), $endDate->toDateString()]);
+            } else {
+                $paymentQuery->whereMonth('payment_date', $now->month)->whereYear('payment_date', $now->year);
+            }
+            $direct = (float) ($paymentQuery->sum('amount') ?? 0);
+
             $incRecords = 0;
             if (\Illuminate\Support\Facades\Schema::hasTable('income_records')) {
-                $incRecords = (float) (\App\Models\IncomeRecord::whereMonth('income_date', $now->month)
-                    ->whereYear('income_date', $now->year)
-                    ->where('status', '!=', 'cancelled')
-                    ->sum('amount') ?? 0);
+                $incQuery = \App\Models\IncomeRecord::where('status', '!=', 'cancelled');
+                if ($startDate && $endDate) {
+                    $incQuery->whereBetween('income_date', [$startDate->toDateString(), $endDate->toDateString()]);
+                } else {
+                    $incQuery->whereMonth('income_date', $now->month)->whereYear('income_date', $now->year);
+                }
+                $incRecords = (float) ($incQuery->sum('amount') ?? 0);
             }
             return $direct + $incRecords;
         }, 0);
@@ -318,28 +371,41 @@ class DashboardController extends Controller
             return $direct + $incRecords;
         }, 0);
 
-        $monthlyExpenses = $this->safe(function() use ($now) {
-            $direct = (float) (\App\Models\Expense::whereMonth('expense_date', $now->month)
-                ->whereYear('expense_date', $now->year)
-                ->sum('amount') ?? 0);
+        $monthlyExpenses = $this->safe(function() use ($startDate, $endDate, $now) {
+            $expQuery = \App\Models\Expense::query();
+            if ($startDate && $endDate) {
+                $expQuery->whereBetween('expense_date', [$startDate->toDateString(), $endDate->toDateString()]);
+            } else {
+                $expQuery->whereMonth('expense_date', $now->month)->whereYear('expense_date', $now->year);
+            }
+            $direct = (float) ($expQuery->sum('amount') ?? 0);
 
-            $paidRequests = (float) (\App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
-                ->where(function($q) use ($now) {
-                    $q->where(function($sq) use ($now) {
-                        $sq->whereNotNull('paid_at')
-                           ->whereMonth('paid_at', $now->month)
-                           ->whereYear('paid_at', $now->year);
-                    })->orWhere(function($sq) use ($now) {
-                        $sq->whereNull('paid_at')
-                           ->whereMonth('updated_at', $now->month)
-                           ->whereYear('updated_at', $now->year);
-                    })->orWhere(function($sq) use ($now) {
-                        $sq->whereNull('paid_at')
-                           ->whereMonth('created_at', $now->month)
-                           ->whereYear('created_at', $now->year);
+            $paidRequests = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                $reqQuery = \App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID);
+                if ($startDate && $endDate) {
+                    $reqQuery->where(function($q) use ($startDate, $endDate) {
+                        $q->whereBetween('paid_at', [$startDate, $endDate])
+                          ->orWhere(function($sq) use ($startDate, $endDate) {
+                              $sq->whereNull('paid_at')->whereBetween('updated_at', [$startDate, $endDate]);
+                          })
+                          ->orWhere(function($sq) use ($startDate, $endDate) {
+                              $sq->whereNull('paid_at')->whereBetween('created_at', [$startDate, $endDate]);
+                          });
                     });
-                })
-                ->sum('amount') ?? 0);
+                } else {
+                    $reqQuery->where(function($q) use ($now) {
+                        $q->where(function($sq) use ($now) {
+                            $sq->whereNotNull('paid_at')->whereMonth('paid_at', $now->month)->whereYear('paid_at', $now->year);
+                        })->orWhere(function($sq) use ($now) {
+                            $sq->whereNull('paid_at')->whereMonth('updated_at', $now->month)->whereYear('updated_at', $now->year);
+                        })->orWhere(function($sq) use ($now) {
+                            $sq->whereNull('paid_at')->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year);
+                        });
+                    });
+                }
+                $paidRequests = (float) ($reqQuery->sum('amount') ?? 0);
+            }
 
             return $direct + $paidRequests;
         }, 0);
@@ -359,6 +425,146 @@ class DashboardController extends Controller
                 ->sum('amount') ?? 0);
             return $direct + $paidRequests;
         }, 0);
+
+        // Today's Live Pulse
+        $todayPulse = $this->safe(function() use ($now) {
+            $todayDate = $now->toDateString();
+
+            $todayIncome = (float) (\App\Models\Payment::whereDate('payment_date', $todayDate)->sum('amount') ?? 0);
+            if (\Illuminate\Support\Facades\Schema::hasTable('income_records')) {
+                $todayIncome += (float) (\App\Models\IncomeRecord::whereDate('income_date', $todayDate)->where('status', '!=', 'cancelled')->sum('amount') ?? 0);
+            }
+
+            $todayExpense = (float) (\App\Models\Expense::whereDate('expense_date', $todayDate)->sum('amount') ?? 0);
+            if (\Illuminate\Support\Facades\Schema::hasTable('expense_requests')) {
+                $todayExpense += (float) (\App\Models\ExpenseRequest::where('status', \App\Models\ExpenseRequest::STATUS_PAID)
+                    ->where(function($q) use ($todayDate) {
+                        $q->whereDate('paid_at', $todayDate)
+                          ->orWhere(function($sq) use ($todayDate) {
+                              $sq->whereNull('paid_at')->whereDate('updated_at', $todayDate);
+                          });
+                    })->sum('amount') ?? 0);
+            }
+
+            $attendancePresent = 0;
+            $attendanceSite = 0;
+            $attendanceLeave = 0;
+            $attendanceAbsent = 0;
+            $totalLoggedToday = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('attendance')) {
+                $todayAttendances = \App\Models\Attendance::whereDate('attendance_date', $todayDate)->get();
+                $totalLoggedToday = $todayAttendances->count();
+                $attendancePresent = $todayAttendances->whereIn('status', ['present', 'S'])->count();
+                $attendanceSite = $todayAttendances->where('status', 'S')->count();
+                $attendanceLeave = $todayAttendances->where('status', 'leave')->count();
+                $attendanceAbsent = $todayAttendances->where('status', 'absent')->count();
+            }
+
+            $todayTransfers = 0;
+            if (\Illuminate\Support\Facades\Schema::hasTable('transfers')) {
+                $todayTransfers = \App\Models\Transfer::where(function($q) use ($todayDate) {
+                    $q->whereDate('created_at', $todayDate)
+                      ->orWhereDate('dispatched_at', $todayDate)
+                      ->orWhereDate('received_at', $todayDate);
+                })->count();
+            }
+
+            return [
+                'income'             => $todayIncome,
+                'expense'            => $todayExpense,
+                'net'                => ($todayIncome - $todayExpense),
+                'transfers'          => $todayTransfers,
+                'attendance_present' => $attendancePresent,
+                'attendance_site'    => $attendanceSite,
+                'attendance_leave'   => $attendanceLeave,
+                'attendance_absent'  => $attendanceAbsent,
+                'total_logged'       => $totalLoggedToday,
+            ];
+        }, [
+            'income' => 0, 'expense' => 0, 'net' => 0, 'transfers' => 0,
+            'attendance_present' => 0, 'attendance_site' => 0, 'attendance_leave' => 0, 'attendance_absent' => 0, 'total_logged' => 0
+        ]);
+
+        // Transfers (TR) Center Data
+        $transfersData = $this->safe(function() use ($startDate, $endDate) {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('transfers')) {
+                return [
+                    'kpi' => ['in_transit' => 0, 'pending_dispatch' => 0, 'completed' => 0, 'total_period' => 0],
+                    'recent' => collect()
+                ];
+            }
+
+            $inTransitCount = \App\Models\Transfer::where('status', \App\Models\Transfer::STATUS_IN_TRANSIT)->count();
+            $pendingDispatchCount = \App\Models\Transfer::whereIn('status', [
+                \App\Models\Transfer::STATUS_APPROVED,
+                \App\Models\Transfer::STATUS_PENDING_APPROVAL,
+                'approved_for_dispatch'
+            ])->count();
+
+            $completedQuery = \App\Models\Transfer::where('status', \App\Models\Transfer::STATUS_COMPLETED);
+            if ($startDate && $endDate) {
+                $completedQuery->whereBetween('received_at', [$startDate, $endDate]);
+            }
+            $completedCount = $completedQuery->count();
+
+            $periodQuery = \App\Models\Transfer::whereNotIn('status', ['cancelled', 'rejected']);
+            if ($startDate && $endDate) {
+                $periodQuery->whereBetween('created_at', [$startDate, $endDate]);
+            }
+            $totalPeriodCount = $periodQuery->count();
+
+            $recent = \App\Models\Transfer::with(['fromStore', 'toStore', 'driver', 'items.product'])
+                ->whereNotIn('status', ['cancelled'])
+                ->orderByRaw("CASE WHEN status = 'in_transit' THEN 1 WHEN status IN ('approved', 'pending_approval') THEN 2 ELSE 3 END")
+                ->latest('id')
+                ->take(6)
+                ->get();
+
+            return [
+                'kpi' => [
+                    'in_transit'       => $inTransitCount,
+                    'pending_dispatch' => $pendingDispatchCount,
+                    'completed'        => $completedCount,
+                    'total_period'     => $totalPeriodCount,
+                ],
+                'recent' => $recent
+            ];
+        }, [
+            'kpi' => ['in_transit' => 0, 'pending_dispatch' => 0, 'completed' => 0, 'total_period' => 0],
+            'recent' => collect()
+        ]);
+
+        // Workforce Attendance Health
+        $attendanceKpi = $this->safe(function() use ($now) {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('attendance')) {
+                return [
+                    'total_active' => 0, 'present' => 0, 'site' => 0, 'leave' => 0, 'absent' => 0, 'late' => 0, 'rate' => 0
+                ];
+            }
+            $todayDate = $now->toDateString();
+            $totalActive = \App\Models\Employee::where('status', 'active')->count();
+
+            $attendances = \App\Models\Attendance::whereDate('attendance_date', $todayDate)->get();
+            $present = $attendances->whereIn('status', ['present', 'S'])->count();
+            $site = $attendances->where('status', 'S')->count();
+            $leave = $attendances->where('status', 'leave')->count();
+            $absent = $attendances->where('status', 'absent')->count();
+            $late = $attendances->filter(fn($a) => ($a->late_minutes ?? 0) > 0)->count();
+
+            $rate = $totalActive > 0 ? min(100, round(($present / $totalActive) * 100, 1)) : 0;
+
+            return [
+                'total_active' => $totalActive,
+                'present'      => $present,
+                'site'         => $site,
+                'leave'        => $leave,
+                'absent'       => $absent,
+                'late'         => $late,
+                'rate'         => $rate,
+            ];
+        }, [
+            'total_active' => 0, 'present' => 0, 'site' => 0, 'leave' => 0, 'absent' => 0, 'late' => 0, 'rate' => 0
+        ]);
 
         $inventoryValue = $this->safe(function() {
             return (float) \Illuminate\Support\Facades\DB::table('inventory')
@@ -389,11 +595,11 @@ class DashboardController extends Controller
             'total_projects'          => $this->safe(fn() => \App\Models\Project::count(), 0),
             'active_projects'         => $this->safe(fn() => \App\Models\Project::where('status', 'active')->count(), 0),
             'completed_projects'      => $this->safe(fn() => \App\Models\Project::where('status', 'completed')->count(), 0),
-            'total_contract_value'    => $this->safe(fn() => (float) \App\Models\Project::sum('contract_value'), 0),
-            'total_budget_allocated'  => $this->safe(fn() => (float) \App\Models\Project::sum('budget_allocated'), 0),
+            'total_contract_value'    => $this->safe(fn() => (float) \App\Models\Project::where('status', 'active')->sum('contract_value'), 0),
+            'total_budget_allocated'  => $this->safe(fn() => (float) \App\Models\Project::where('status', 'active')->sum('budget_allocated'), 0),
 
             'total_employees'         => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->count(), 0),
-            'new_employees_month'     => $this->safe(fn() => \App\Models\Employee::whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->count(), 0),
+            'new_employees_month'     => $this->safe(fn() => \App\Models\Employee::where('status', 'active')->whereMonth('created_at', $now->month)->whereYear('created_at', $now->year)->count(), 0),
             'employees_on_leave'      => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('leave_requests') ? \App\Models\LeaveRequest::where('status', 'approved')->whereDate('start_date', '<=', $now)->whereDate('end_date', '>=', $now)->count() : 0, 0),
 
             'monthly_income'          => $monthlyIncome,
@@ -427,6 +633,13 @@ class DashboardController extends Controller
             'incoming_letters'        => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('letters') ? \App\Models\Letter::where('type', 'incoming')->count() : 0, 0),
             'outgoing_letters'        => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('letters') ? \App\Models\Letter::where('type', 'outgoing')->count() : 0, 0),
             'total_vehicles'          => $this->safe(fn() => \Illuminate\Support\Facades\Schema::hasTable('vehicle_reminders') ? \App\Models\VehicleReminder::count() : 0, 0),
+
+            'transfers_in_transit'    => $transfersData['kpi']['in_transit'] ?? 0,
+            'transfers_pending'       => $transfersData['kpi']['pending_dispatch'] ?? 0,
+            'transfers_completed'     => $transfersData['kpi']['completed'] ?? 0,
+            'attendance_present'      => $attendanceKpi['present'] ?? 0,
+            'attendance_rate'         => $attendanceKpi['rate'] ?? 0,
+            'attendance_site'         => $attendanceKpi['site'] ?? 0,
         ];
 
         // 5. System Users by Role
@@ -438,15 +651,16 @@ class DashboardController extends Controller
             collect()
         );
 
-        // 6. Project Budgets
+        // 6. Project Budgets (Active Projects Only - no closed/dead projects)
         $projectBudgets = $this->safe(fn() =>
-            Project::withSum('budgets as budgeted_total', 'budgeted_amount')
+            Project::where('status', 'active')
+                   ->withSum('budgets as budgeted_total', 'budgeted_amount')
                    ->withSum('budgets as actual_total', 'actual_amount')
                    ->take(6)->get(),
             collect()
         );
 
-        // 7. Full Project Expenses & Utilization (Cash + Daily Material Consumption priced at latest price)
+        // 7. Full Project Expenses & Utilization (Active Projects Only: Cash + Daily Material Consumption)
         $latestPriceMap = $this->getLatestMaterialPriceMap();
         $projectExpenses = $this->safe(function () use ($latestPriceMap) {
             $usagesByProject = collect();
@@ -464,7 +678,8 @@ class DashboardController extends Controller
                     ->groupBy('project_id');
             }
 
-            return \App\Models\Project::select('projects.id', 'projects.name', 'projects.code',
+            return \App\Models\Project::where('projects.status', 'active')
+                ->select('projects.id', 'projects.name', 'projects.code',
                     'projects.contract_value', 'projects.budget_allocated', 'projects.status')
                 ->get()
                 ->map(function ($project) use ($usagesByProject, $latestPriceMap) {
@@ -512,7 +727,7 @@ class DashboardController extends Controller
             for ($i = 5; $i >= 0; $i--) {
                 $monthDate = \Carbon\Carbon::now()->subMonths($i);
                 $labels[] = $monthDate->format('M Y');
-                
+
                 $inc = (float) \Illuminate\Support\Facades\DB::table('payments')
                     ->whereMonth('payment_date', $monthDate->month)
                     ->whereYear('payment_date', $monthDate->year)
@@ -599,10 +814,18 @@ class DashboardController extends Controller
             return collect();
         }, collect());
 
-        // 12. Recent Site Issues
+        // 12. Recent Active Site Issues (Active Projects Only)
         $recentIssues = $this->safe(function() {
             if (\Illuminate\Support\Facades\Schema::hasTable('issues')) {
-                return \App\Models\Issue::with('project')->where('status', 'open')->latest()->take(5)->get();
+                return \App\Models\Issue::with('project')
+                    ->where('status', 'open')
+                    ->where(function($q) {
+                        $q->whereDoesntHave('project')
+                          ->orWhereHas('project', fn($pq) => $pq->where('status', 'active'));
+                    })
+                    ->latest()
+                    ->take(5)
+                    ->get();
             }
             return collect();
         }, collect());
@@ -619,8 +842,8 @@ class DashboardController extends Controller
         }, collect());
 
         // 14. Activity Logs & Support Tickets
-        $activityLogs = $this->safe(fn() => \App\Models\ActivityLog::with('user')->latest()->take(15)->get(), collect());
-        
+        $activityLogs = $this->safe(fn() => \App\Models\ActivityLog::with('user')->latest()->take(10)->get(), collect());
+
         $ticketStats = $this->safe(fn() => [
             'open'        => \App\Models\SupportTicket::where('status', 'open')->count(),
             'in_progress' => \App\Models\SupportTicket::where('status', 'in_progress')->count(),
@@ -628,7 +851,7 @@ class DashboardController extends Controller
             'total'       => \App\Models\SupportTicket::count(),
         ], ['open' => 0, 'in_progress' => 0, 'resolved' => 0, 'total' => 0]);
 
-        $recentTickets = $this->safe(fn() => \App\Models\SupportTicket::with('user')->latest()->take(5)->get(), collect());
+        $recentTickets = $this->safe(fn() => \App\Models\SupportTicket::with('user')->whereIn('status', ['open', 'in_progress'])->latest()->take(5)->get(), collect());
 
         // 15. Tax Compliance Data
         $taxData = $this->getTaxComplianceReportData();
@@ -646,6 +869,13 @@ class DashboardController extends Controller
 
         return view('dashboard.admin', compact(
             'kpi',
+            'period',
+            'periodLabel',
+            'ethiopianDate',
+            'ethiopianDateStr',
+            'todayPulse',
+            'transfersData',
+            'attendanceKpi',
             'usersByRole',
             'projectBudgets',
             'activityLogs',
