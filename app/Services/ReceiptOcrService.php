@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Receipt;
 use App\Models\ReceiptItem;
 use App\Models\SystemSetting;
+use App\Services\EthiopianDate;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -324,11 +325,12 @@ class ReceiptOcrService
 
             $needsReview = (!$tinValid || !$fsNoValid || ($scanData['confidence'] ?? '') === 'review' || ($scanData['confidence'] ?? '') === 'low' || ($scanData['confidence_score'] ?? 90) < 75);
 
-            $targetDate = $customReceiptDate ? \Illuminate\Support\Carbon::parse($customReceiptDate) : null;
-            $receiptDate = $targetDate ? $targetDate->toDateString() : ($scanData['receipt_date_ymd'] ?? now()->toDateString());
-            $recordTimestamp = $targetDate ? $targetDate->copy()->setTime(12, 0, 0) : now();
+            $parsedCustomDate = $customReceiptDate ? $this->parseDateToYmd($customReceiptDate) : null;
+            $receiptDate = $parsedCustomDate ?: ($scanData['receipt_date_ymd'] ?? now()->toDateString());
+            $targetCarbon = \Illuminate\Support\Carbon::parse($receiptDate);
+            $recordTimestamp = $targetCarbon->copy()->setTime(12, 0, 0);
 
-            $receiptNumber = 'RCP-' . ($targetDate ? $targetDate->format('Ymd') : now()->format('Ymd')) . '-' . strtoupper(substr(uniqid(), -4));
+            $receiptNumber = 'RCP-' . $targetCarbon->format('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
 
             $receipt = new Receipt([
                 'receipt_number'   => $receiptNumber,
@@ -391,7 +393,7 @@ class ReceiptOcrService
                     'receipt_id'       => $receipt->id,
                     'item_description' => $item['item_description'] ?? 'Material',
                     'vat_category'     => $itemPurcNorm['vat_category'],
-                    'calendar_type'    => $scanData['extracted']['calendar_type'] ?? ($scanData['calendar_type'] ?? 'G'),
+                    'calendar_type'    => $scanData['extracted']['calendar_type'] ?? ($scanData['calendar_type'] ?? 'E'),
                     'purchase_type'    => $itemPurcNorm['code'],
                     'uom'              => (string)($item['uom'] ?? ($scanData['extracted']['uom_id'] ?? ($scanData['uom_id'] ?? '9'))),
                     'qty'              => $qty,
@@ -1378,12 +1380,37 @@ PROMPT;
         if (empty($dateStr)) return null;
         $dateStr = trim($dateStr);
 
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateStr)) {
-            return $dateStr;
+        // Check if explicitly marked as Ethiopian Calendar (EC, E.C., ዓ.ም.)
+        if (stripos($dateStr, 'EC') !== false || stripos($dateStr, 'E.C.') !== false || stripos($dateStr, 'ዓ.ም.') !== false) {
+            $parsed = EthiopianDate::parseEcToGregorian($dateStr);
+            if ($parsed) {
+                return $parsed;
+            }
         }
 
+        // DD/MM/YYYY or DD-MM-YYYY
         if (preg_match('/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/', $dateStr, $m)) {
-            return sprintf('%04d-%02d-%02d', (int)$m[3], (int)$m[2], (int)$m[1]);
+            $d = (int)$m[1];
+            $mo = (int)$m[2];
+            $y = (int)$m[3];
+
+            // If year is in Ethiopian calendar range (e.g. 2012 to 2022)
+            if ($y >= 2012 && $y <= 2022 && $mo >= 1 && $mo <= 13) {
+                return EthiopianDate::toGregorian($y, $mo, $d);
+            }
+
+            return sprintf('%04d-%02d-%02d', $y, $mo, $d);
+        }
+
+        // Already YYYY-MM-DD
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $dateStr, $m)) {
+            $y = (int)$m[1];
+            $mo = (int)$m[2];
+            $d = (int)$m[3];
+            if ($y >= 2012 && $y <= 2022 && $mo >= 1 && $mo <= 13) {
+                return EthiopianDate::toGregorian($y, $mo, $d);
+            }
+            return $dateStr;
         }
 
         try {

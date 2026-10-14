@@ -110,14 +110,24 @@
                 <div class="d-flex align-items-center gap-2 flex-wrap w-100 w-xl-auto justify-content-xl-end">
                     {{-- Primary Tax Settlement Actions --}}
                     <div class="btn-group shadow-sm rounded-pill overflow-hidden" role="group">
-                        {{-- Pay 15% VAT --}}
-                        <button type="button" class="btn btn-info text-white btn-sm px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#payVatModal">
-                            <i class="fa-solid fa-percent"></i>
-                            <span>Pay 15% VAT</span>
-                            <span class="badge bg-white text-info rounded-pill ms-1 font-monospace">
-                                ETB {{ number_format($unsettledVatAmount, 2) }}
-                            </span>
-                        </button>
+                        {{-- Settle VAT (Payable to ERCA) or Credit Carried Forward --}}
+                        @if(!empty($netVatDetails['is_payable']))
+                            <button type="button" class="btn btn-danger text-white btn-sm px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#payVatModal">
+                                <i class="fa-solid fa-file-invoice-dollar"></i>
+                                <span>Settle VAT</span>
+                                <span class="badge bg-white text-danger rounded-pill ms-1 font-monospace">
+                                    ETB {{ number_format($netVatDetails['payable_amount'], 2) }}
+                                </span>
+                            </button>
+                        @else
+                            <button type="button" class="btn btn-outline-success btn-sm px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5" disabled title="Credit carried forward to next month">
+                                <i class="fa-solid fa-arrow-turn-up"></i>
+                                <span>Credit carried forward</span>
+                                <span class="badge bg-success text-white rounded-pill ms-1 font-monospace">
+                                    {{ $netVatDetails['signed_net_formatted'] ?? '0.00' }}
+                                </span>
+                            </button>
+                        @endif
 
                         {{-- Pay 3% Withholding Tax --}}
                         <button type="button" class="btn btn-danger btn-sm px-3 py-2 fw-semibold d-inline-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#payWithholdingModal">
@@ -219,6 +229,227 @@
                     @endif
                 </div>
             </div>
+        </div>
+    {{-- ── ERCA Line 100 Monthly Declaration Card ─────────────────────────────── --}}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden border-top border-4 border-primary">
+        <div class="card-header bg-white border-bottom py-3 px-3 px-md-4 d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="p-2.5 rounded-3 bg-primary bg-opacity-10 text-primary fs-4">
+                    <i class="fa-solid fa-file-shield"></i>
+                </div>
+                <div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <h5 class="fw-bold mb-0 text-dark">ERCA Line 100 Declaration &bull; {{ $monthRange['month_en'] ?? '' }} ({{ $monthRange['month_am'] ?? '' }}) {{ $selectedEthYear }} EC</h5>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2.5 py-0.5 small fw-semibold">
+                            Monthly Ethiopian Period
+                        </span>
+                    </div>
+                    <small class="text-muted">
+                        Gregorian Window: {{ $monthRange['start']->format('M d, Y') }} &ndash; {{ $monthRange['end']->format('M d, Y') }} ({{ $monthRange['days'] }} Days)
+                    </small>
+                </div>
+            </div>
+
+            {{-- Period Selector Form --}}
+            <form method="GET" action="{{ route('finance.tax-deductions.index') }}" class="d-flex align-items-center gap-2 flex-wrap ms-lg-auto">
+                <input type="hidden" name="tab" value="{{ $tab }}">
+                <input type="hidden" name="cycle" value="{{ $cycle }}">
+                @if(request('vat_source'))
+                    <input type="hidden" name="vat_source" value="{{ request('vat_source') }}">
+                @endif
+                <label class="small fw-bold text-muted text-uppercase mb-0 me-1">
+                    <i class="fa-regular fa-calendar-days text-primary me-1"></i>Period (EC):
+                </label>
+                <select name="ethiopian_month" class="form-select form-select-sm fw-semibold" style="min-width: 165px;" onchange="this.form.submit()">
+                    @foreach($availableEthMonths as $mId => $m)
+                        <option value="{{ $mId }}" {{ $selectedEthMonth == $mId ? 'selected' : '' }}>
+                            {{ $m['label'] }}
+                        </option>
+                    @endforeach
+                </select>
+                <select name="ethiopian_year" class="form-select form-select-sm fw-semibold" style="width: 110px;" onchange="this.form.submit()">
+                    @foreach($availableEthYears as $y)
+                        <option value="{{ $y }}" {{ $selectedEthYear == $y ? 'selected' : '' }}>
+                            {{ $y }} ዓ.ም.
+                        </option>
+                    @endforeach
+                </select>
+                <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3 fw-semibold">
+                    Apply
+                </button>
+            </form>
+        </div>
+
+        <div class="card-body p-3 p-md-4">
+            <div class="row g-3">
+                {{-- 1. Sales Base | Output VAT --}}
+                <div class="col-12 col-sm-6 col-xl-2">
+                    <div class="p-3 rounded-4 bg-light bg-opacity-75 border h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem;">Sales Base (ገቢ)</span>
+                            <div class="fs-5 fw-bold text-dark font-monospace mt-1">ETB {{ number_format($salesBase, 2) }}</div>
+                        </div>
+                        <div class="mt-3 pt-2 border-top border-secondary-subtle">
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.68rem;">Output VAT (15%)</span>
+                            <span class="fw-bold text-danger font-monospace">ETB {{ number_format($outputVat, 2) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- 2. Purchases Base | Input VAT --}}
+                <div class="col-12 col-sm-6 col-xl-2">
+                    <div class="p-3 rounded-4 bg-light bg-opacity-75 border h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem;">Purchases Base (ግዢ)</span>
+                            <div class="fs-5 fw-bold text-dark font-monospace mt-1">ETB {{ number_format($purchasesBase, 2) }}</div>
+                        </div>
+                        <div class="mt-3 pt-2 border-top border-secondary-subtle">
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.68rem;">Input VAT (Creditable)</span>
+                            <span class="fw-bold text-success font-monospace">ETB {{ number_format($inputVat, 2) }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- 3. Opening Credit --}}
+                <div class="col-12 col-sm-6 col-xl-2">
+                    <div class="p-3 rounded-4 bg-light bg-opacity-75 border h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem;">Opening Credit</span>
+                            <span class="text-muted d-block" style="font-size: 0.68rem;">የቀደመ ወር ተዘዋዋሪ ክሬዲት</span>
+                            <div class="fs-5 fw-bold text-info font-monospace mt-1">+ ETB {{ number_format($openingCredit, 2) }}</div>
+                        </div>
+                        <div class="mt-3 pt-2 border-top border-secondary-subtle">
+                            <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
+                                From prev month
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- 4. Signed Net VAT --}}
+                <div class="col-12 col-sm-6 col-xl-2">
+                    <div class="p-3 rounded-4 border h-100 d-flex flex-column justify-content-between {{ !empty($netVatDetails['is_payable']) ? 'bg-danger bg-opacity-10 border-danger' : (!empty($netVatDetails['is_credit']) ? 'bg-success bg-opacity-10 border-success' : 'bg-light') }}">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem;">Signed Net VAT</span>
+                            <span class="text-muted d-block" style="font-size: 0.68rem;">የተጣራ ቫት (Input - Output)</span>
+                            <div class="fs-4 fw-bold font-monospace mt-1 {{ $netVatDetails['text_class'] ?? 'text-dark' }}">
+                                {{ $netVatDetails['signed_net_formatted'] ?? '0.00' }}
+                            </div>
+                        </div>
+                        <div class="mt-2 pt-2 border-top border-secondary-subtle">
+                            <span class="badge {{ $netVatDetails['badge_class'] ?? 'bg-secondary' }} rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
+                                {{ $netVatDetails['label'] ?? '' }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- 5. Withholding Tax (3%) --}}
+                <div class="col-12 col-sm-6 col-xl-2">
+                    <div class="p-3 rounded-4 bg-light bg-opacity-75 border h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem;">Withholding Tax (3%)</span>
+                            <span class="text-muted d-block" style="font-size: 0.68rem;">የተቀነሰ ቅድመ ግብር</span>
+                            <div class="fs-5 fw-bold text-danger font-monospace mt-1">- ETB {{ number_format($monthWithholding, 2) }}</div>
+                        </div>
+                        <div class="mt-3 pt-2 border-top border-secondary-subtle">
+                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
+                                Separate Line (Not Net)
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- 6. Net Disbursed --}}
+                <div class="col-12 col-sm-6 col-xl-2">
+                    <div class="p-3 rounded-4 bg-light bg-opacity-75 border h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <span class="text-muted small text-uppercase fw-bold d-block" style="font-size: 0.72rem;">Net Disbursed</span>
+                            <span class="text-muted d-block" style="font-size: 0.68rem;">የተጣራ የተከፈለ ወጪ</span>
+                            <div class="fs-5 fw-bold text-success font-monospace mt-1">ETB {{ number_format($monthNetDisbursed, 2) }}</div>
+                        </div>
+                        <div class="mt-3 pt-2 border-top border-secondary-subtle">
+                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill small px-2 py-0.5" style="font-size: 0.68rem;">
+                                Purchases Base - WHT
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ── 12-Month Trend Table (Meskerem to Pagume) ────────────────────────────── --}}
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden">
+        <div class="card-header bg-white border-bottom py-3 px-3 px-md-4 d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-2">
+                <div class="p-2 rounded-3 bg-primary bg-opacity-10 text-primary fs-5">
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-0 text-dark">Ethiopian Year {{ $selectedEthYear }} EC VAT Trend (Meskerem &ndash; Pagume)</h6>
+                    <small class="text-muted">13-Month Output, Input, Opening Credit, and Signed Net reconciliation</small>
+                </div>
+            </div>
+            <span class="badge bg-light text-muted border rounded-pill px-3 py-1.5 font-monospace">
+                {{ $selectedEthYear }} ዓ.ም.
+            </span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0 text-nowrap">
+                <thead class="bg-light-subtle text-muted text-uppercase fw-bold" style="font-size: 0.72rem; letter-spacing: 0.5px;">
+                    <tr>
+                        <th class="ps-4 py-3">Month (EC)</th>
+                        <th class="py-3">Gregorian Window</th>
+                        <th class="py-3 text-end text-danger">Output VAT (15%)</th>
+                        <th class="py-3 text-end text-success">Input VAT (Creditable)</th>
+                        <th class="py-3 text-end text-info">Opening Credit</th>
+                        <th class="py-3 text-end text-dark">Signed Net VAT</th>
+                        <th class="py-3 text-center">Status</th>
+                        <th class="py-3 text-center pe-4">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    @foreach($monthlyTrend as $mNum => $mTrend)
+                        <tr class="{{ $mTrend['is_current'] ? 'table-primary bg-primary bg-opacity-10 fw-semibold' : '' }}">
+                            <td class="ps-4">
+                                <span class="fw-bold font-monospace text-dark">{{ $mNum }}.</span>
+                                <span class="fw-bold {{ $mTrend['is_current'] ? 'text-primary' : 'text-dark' }}">{{ $mTrend['month_name'] }}</span>
+                                <small class="text-muted">({{ $mTrend['month_am'] }})</small>
+                                @if($mTrend['is_current'])
+                                    <span class="badge bg-primary text-white rounded-pill px-2 py-0.5 ms-1 small" style="font-size: 0.65rem;">Selected</span>
+                                @endif
+                            </td>
+                            <td class="small text-muted font-monospace">
+                                {{ $mTrend['start_date'] }} &rarr; {{ $mTrend['end_date'] }}
+                            </td>
+                            <td class="text-end font-monospace text-danger">
+                                ETB {{ number_format($mTrend['output_vat'], 2) }}
+                            </td>
+                            <td class="text-end font-monospace text-success">
+                                ETB {{ number_format($mTrend['input_vat'], 2) }}
+                            </td>
+                            <td class="text-end font-monospace text-info">
+                                + ETB {{ number_format($mTrend['opening_credit'], 2) }}
+                            </td>
+                            <td class="text-end font-monospace fw-bold {{ $mTrend['text_class'] }}">
+                                {{ $mTrend['signed_net_formatted'] }}
+                            </td>
+                            <td class="text-center">
+                                <span class="badge {{ $mTrend['badge_class'] }} rounded-pill px-2.5 py-1 small">
+                                    {{ $mTrend['label'] }}
+                                </span>
+                            </td>
+                            <td class="text-center pe-4">
+                                <a href="{{ route('finance.tax-deductions.index', array_merge(request()->query(), ['ethiopian_year' => $selectedEthYear, 'ethiopian_month' => $mNum])) }}" 
+                                   class="btn btn-xs {{ $mTrend['is_current'] ? 'btn-primary' : 'btn-outline-secondary' }} rounded-pill px-2.5 py-1 small">
+                                    View Month
+                                </a>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -725,18 +956,30 @@
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <input type="date" name="from_date" class="form-control" value="{{ request('from_date') }}" title="From Date" placeholder="From Date">
+                            <select name="ethiopian_month" class="form-select" onchange="this.form.submit()">
+                                @foreach($availableEthMonths as $mId => $m)
+                                    <option value="{{ $mId }}" {{ $selectedEthMonth == $mId ? 'selected' : '' }}>
+                                        {{ $m['label'] }}
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
 
                         <div class="col-6 col-md-3">
-                            <input type="date" name="to_date" class="form-control" value="{{ request('to_date') }}" title="To Date" placeholder="To Date">
+                            <select name="ethiopian_year" class="form-select" onchange="this.form.submit()">
+                                @foreach($availableEthYears as $y)
+                                    <option value="{{ $y }}" {{ $selectedEthYear == $y ? 'selected' : '' }}>
+                                        {{ $y }} ዓ.ም.
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
 
                         <div class="col-12 col-md-2 d-flex gap-1.5">
                             <button type="submit" class="btn btn-primary flex-fill" title="Apply Filter">
                                 <i class="fa-solid fa-filter me-1"></i>Filter
                             </button>
-                            @if(request('search') || request('from_date') || request('to_date'))
+                            @if(request('search') || request('ethiopian_month') || request('ethiopian_year'))
                                 <a href="{{ route('finance.tax-deductions.index', ['tab' => 'vat', 'vat_source' => 'ocr', 'cycle' => $cycle]) }}" class="btn btn-outline-danger" title="Clear Filters">
                                     <i class="fa-solid fa-xmark"></i>
                                 </a>
@@ -809,7 +1052,7 @@
 
                                     {{-- Receipt Date (Col F) --}}
                                     <td class="small text-muted font-monospace">
-                                        {{ $rcp && $rcp->receipt_date ? $rcp->receipt_date->format('d/m/Y') : '—' }}
+                                        {{ $rcp && $rcp->receipt_date ? \App\Services\EthiopianDate::formatDateEc($rcp->receipt_date, 'DD/MM/YYYY EC') : '—' }}
                                     </td>
 
                                     {{-- MRC # (Col G) --}}
@@ -961,18 +1204,30 @@
                         </div>
 
                         <div class="col-6 col-md-2">
-                            <input type="date" name="from_date" class="form-control" value="{{ request('from_date') }}" title="From Date" placeholder="From Date">
+                            <select name="ethiopian_month" class="form-select" onchange="this.form.submit()">
+                                @foreach($availableEthMonths as $mId => $m)
+                                    <option value="{{ $mId }}" {{ $selectedEthMonth == $mId ? 'selected' : '' }}>
+                                        {{ $m['label'] }}
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
 
                         <div class="col-6 col-md-2">
-                            <input type="date" name="to_date" class="form-control" value="{{ request('to_date') }}" title="To Date" placeholder="To Date">
+                            <select name="ethiopian_year" class="form-select" onchange="this.form.submit()">
+                                @foreach($availableEthYears as $y)
+                                    <option value="{{ $y }}" {{ $selectedEthYear == $y ? 'selected' : '' }}>
+                                        {{ $y }} ዓ.ም.
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
 
                         <div class="col-12 col-md-1 d-flex gap-1.5">
                             <button type="submit" class="btn btn-primary flex-fill" title="Apply Filter">
                                 <i class="fa-solid fa-filter"></i>
                             </button>
-                            @if(request('search') || request('category') || request('vat_type') || request('from_date') || request('to_date'))
+                            @if(request('search') || request('category') || request('vat_type') || request('ethiopian_month') || request('ethiopian_year'))
                                 <a href="{{ route('finance.tax-deductions.index', ['tab' => $tab, 'vat_source' => request('vat_source'), 'cycle' => $cycle]) }}" class="btn btn-outline-danger" title="Clear Filters">
                                     <i class="fa-solid fa-xmark"></i>
                                 </a>
@@ -1012,7 +1267,7 @@
                                     {{-- Ref / Voucher # --}}
                                     <td class="ps-4">
                                         <div class="fw-bold font-monospace text-primary">{{ $item->request_number }}</div>
-                                        <div class="small text-muted">{{ optional($item->created_at)->format('d M Y, h:i A') }}</div>
+                                        <div class="small text-muted">{{ $item->created_at ? \App\Services\EthiopianDate::formatDateEc($item->created_at, 'DD/MM/YYYY EC') : '—' }}</div>
                                         @if($item->payment_reference)
                                             <span class="badge bg-light text-dark border font-monospace mt-1" style="font-size: 0.68rem;">
                                                 Ref: {{ $item->payment_reference }}
@@ -2190,6 +2445,33 @@
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setExportDatePreset('this_month')">This Month</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setExportDatePreset('last_month')">Last Month</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setExportDatePreset('all')">All Dates</button>
+                        </div>
+                    </div>
+
+                    {{-- Ethiopian Month & Year Selector --}}
+                    <div class="mb-3 p-3 bg-light rounded-3 border">
+                        <label class="form-label small fw-bold text-uppercase text-dark d-block mb-1" style="font-size:0.72rem; letter-spacing:0.5px;">
+                            <i class="fa-regular fa-calendar-days text-primary me-1"></i>Ethiopian Tax Period (ወርና ዓ.ም.)
+                        </label>
+                        <div class="row g-2">
+                            <div class="col-7">
+                                <select name="ethiopian_month" id="export_eth_month" class="form-select form-select-sm fw-semibold">
+                                    @foreach($availableEthMonths as $mId => $m)
+                                        <option value="{{ $mId }}" {{ $selectedEthMonth == $mId ? 'selected' : '' }}>
+                                            {{ $m['label'] }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-5">
+                                <select name="ethiopian_year" id="export_eth_year" class="form-select form-select-sm fw-semibold">
+                                    @foreach($availableEthYears as $y)
+                                        <option value="{{ $y }}" {{ $selectedEthYear == $y ? 'selected' : '' }}>
+                                            {{ $y }} ዓ.ም.
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
                         </div>
                     </div>
 

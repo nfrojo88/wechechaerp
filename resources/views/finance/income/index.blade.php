@@ -178,11 +178,24 @@
                         </select>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label fw-semibold text-muted small mb-1">Date Range (From - To)</label>
+                        <label class="form-label fw-semibold text-muted small mb-1">
+                            <i class="fa-regular fa-calendar-days text-primary me-1"></i>Ethiopian Tax Period
+                        </label>
                         <div class="input-group input-group-sm">
-                            <input type="date" name="from_date" class="form-control bg-light border text-dark" value="{{ request('from_date') }}">
-                            <span class="input-group-text bg-light border">-</span>
-                            <input type="date" name="to_date" class="form-control bg-light border text-dark" value="{{ request('to_date') }}">
+                            <select name="ethiopian_month" class="form-select bg-light border text-dark fw-semibold" onchange="this.form.submit()">
+                                @foreach($availableEthMonths as $mId => $m)
+                                    <option value="{{ $mId }}" {{ $selectedEthMonth == $mId ? 'selected' : '' }}>
+                                        {{ $m['label'] }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <select name="ethiopian_year" class="form-select bg-light border text-dark fw-semibold" style="max-width: 110px;" onchange="this.form.submit()">
+                                @foreach($availableEthYears as $y)
+                                    <option value="{{ $y }}" {{ $selectedEthYear == $y ? 'selected' : '' }}>
+                                        {{ $y }} ዓ.ም.
+                                    </option>
+                                @endforeach
+                            </select>
                         </div>
                     </div>
                     <div class="col-md-3">
@@ -210,7 +223,7 @@
                     <thead class="table-light text-secondary" style="font-size: 0.82rem;">
                         <tr>
                             <th class="ps-4">INCOME REF</th>
-                            <th>DATE</th>
+                            <th>DATE (EC)</th>
                             <th>DIVISION</th>
                             <th>PROJECT / SITE</th>
                             <th>BUYER &amp; TIN</th>
@@ -244,7 +257,7 @@
                                 <div class="text-muted small" style="font-size: 0.75rem;">{{ $inc->income_no }}</div>
                             </td>
                             <td class="text-nowrap">
-                                <span class="fw-semibold text-dark">{{ \Carbon\Carbon::parse($inc->income_date)->format('d-m-Y') }}</span>
+                                <span class="fw-semibold text-dark">{{ $inc->income_date ? \App\Services\EthiopianDate::formatDateEc($inc->income_date, 'DD/MM/YYYY EC') : ($inc->receipt_date ? \App\Services\EthiopianDate::formatDateEc($inc->receipt_date, 'DD/MM/YYYY EC') : '—') }}</span>
                             </td>
                             <td>
                                 <span class="badge rounded-pill {{ $badgeColor }} px-2.5 py-1.5 fw-semibold shadow-xs">
@@ -454,8 +467,10 @@
                                     <input type="number" step="0.01" name="amount" id="modalAmount" class="form-control bg-light border text-dark fw-bold" required placeholder="0.00">
                                 </div>
                                 <div class="col-6">
-                                    <label class="form-label fw-semibold small text-dark">Income Date <span class="text-danger">*</span></label>
-                                    <input type="date" name="income_date" id="modalIncomeDate" class="form-control bg-light border text-dark" required value="{{ date('Y-m-d') }}">
+                                    <label class="form-label fw-semibold small text-dark">Income Date (GC or EC) <span class="text-danger">*</span></label>
+                                    <input type="date" name="income_date" id="modalIncomeDate" class="form-control bg-light border text-dark" value="{{ date('Y-m-d') }}">
+                                    <input type="text" name="income_date_ec" id="modalIncomeDateEc" class="form-control form-control-sm bg-light border text-dark font-monospace mt-1" placeholder="DD/MM/YYYY EC">
+                                    <small class="text-muted" style="font-size:0.68rem;">Current (EC): {{ \App\Services\EthiopianDate::formatDateEc(now()) }}</small>
                                 </div>
                             </div>
 
@@ -574,6 +589,7 @@
                                 <div class="col-4">
                                     <label class="form-label fw-semibold small text-dark">Receipt Date</label>
                                     <input type="date" name="receipt_date" id="modalReceiptDate" class="form-control form-control-sm bg-light border" value="{{ date('Y-m-d') }}">
+                                    <input type="text" name="receipt_date_ec" id="modalReceiptDateEc" class="form-control form-control-sm bg-light border font-monospace mt-1" placeholder="DD/MM/YYYY EC">
                                 </div>
                                 <div class="col-4">
                                     <label class="form-label fw-semibold small text-dark">Encoded By</label>
@@ -645,6 +661,33 @@
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 small" onclick="setExportDates('this_month')">This Month</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 small" onclick="setExportDates('last_month')">Last Month</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 small" onclick="setExportDates('all')">All Dates</button>
+                        </div>
+                    </div>
+
+                    <!-- Ethiopian Month & Year Selector -->
+                    <div class="mb-3 p-3 bg-light rounded-3 border">
+                        <label class="form-label small fw-bold text-uppercase text-dark d-block mb-1" style="font-size:0.72rem; letter-spacing:0.5px;">
+                            <i class="fa-regular fa-calendar-days text-primary me-1"></i>Ethiopian Tax Period (ወርና ዓ.ም.)
+                        </label>
+                        <div class="row g-2">
+                            <div class="col-7">
+                                <select name="ethiopian_month" class="form-select form-select-sm fw-semibold">
+                                    @foreach($availableEthMonths as $mId => $m)
+                                        <option value="{{ $mId }}" {{ $selectedEthMonth == $mId ? 'selected' : '' }}>
+                                            {{ $m['label'] }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-5">
+                                <select name="ethiopian_year" class="form-select form-select-sm fw-semibold">
+                                    @foreach($availableEthYears as $y)
+                                        <option value="{{ $y }}" {{ $selectedEthYear == $y ? 'selected' : '' }}>
+                                            {{ $y }} ዓ.ም.
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -785,6 +828,12 @@ function triggerOcrScan() {
             if (data.receipt_no) document.getElementById('modalReceiptNo').value = data.receipt_no;
             if (data.mrc_no) document.getElementById('modalMrcNo').value = data.mrc_no;
             if (data.receipt_date) document.getElementById('modalReceiptDate').value = data.receipt_date;
+            if (data.receipt_date_ec) {
+                const rEc = document.getElementById('modalReceiptDateEc');
+                if (rEc) rEc.value = data.receipt_date_ec;
+                const iEc = document.getElementById('modalIncomeDateEc');
+                if (iEc) iEc.value = data.receipt_date_ec;
+            }
             if (data.amount && parseFloat(data.amount) > 0) {
                 const amtInput = document.getElementById('modalAmount');
                 amtInput.value = parseFloat(data.amount).toFixed(2);

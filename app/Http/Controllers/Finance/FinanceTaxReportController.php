@@ -13,6 +13,7 @@ use App\Models\ReceiptItem;
 use App\Models\User;
 use App\Services\ReceiptOcrService;
 use App\Services\QcService;
+use App\Services\EthiopianDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -212,12 +213,26 @@ class FinanceTaxReportController extends Controller
             $query->where('has_withholding', (bool)$hasWithholding);
         }
 
-        // Date Range Filter
-        if (!empty($fromDate)) {
-            $query->whereDate('created_at', '>=', Carbon::parse($fromDate));
+        // Ethiopian Year & Month Selector (the period is always one Ethiopian month)
+        $curEth = EthiopianDate::toEthiopian(now());
+        $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: $curEth['year']));
+        $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: $curEth['month']));
+        if ($selectedEthMonth < 1 || $selectedEthMonth > 13) {
+            $selectedEthMonth = $curEth['month'];
         }
-        if (!empty($toDate)) {
-            $query->whereDate('created_at', '<=', Carbon::parse($toDate));
+
+        $monthRange = EthiopianDate::monthRange($selectedEthYear, $selectedEthMonth);
+        $periodStart     = $monthRange['start'];
+        $periodEnd       = $monthRange['end'];
+        $periodStartDate = $monthRange['start_date'];
+        $periodEndDate   = $monthRange['end_date'];
+
+        // Period filter strictly bounded to the Ethiopian month (or legacy fallback if explicitly requested)
+        if (!empty($fromDate) && !empty($toDate) && !$request->filled('ethiopian_year') && !$request->filled('ethiopian_month')) {
+            $query->whereDate('created_at', '>=', Carbon::parse($fromDate))
+                  ->whereDate('created_at', '<=', Carbon::parse($toDate));
+        } else {
+            $query->whereBetween('created_at', [$periodStart, $periodEnd]);
         }
 
         // Funding Account Filter
@@ -238,13 +253,19 @@ class FinanceTaxReportController extends Controller
             return (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
         });
 
+        // Creditable Input VAT from paid expenses in this period (Strictly excluding VAT B!)
         $totalVatAmount = $allTaxItems->sum(function ($item) use ($cycle) {
             if ($cycle === 'active' && $item->vat_settled) return 0.0;
-            if ((float)$item->vat_amount > 0) return (float)$item->vat_amount;
+            // Exclude "VAT B" from creditable Input VAT
+            if (($item->vat_type ?? '') === 'vat_b') return 0.0;
+
+            if ((float)$item->vat_amount > 0 && ($item->vat_type ?? '') === 'exclusive') {
+                return (float)$item->vat_amount;
+            }
             $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
             $vatType = $item->vat_type ?? 'none';
             $vatRate = (float)($item->vat_rate ?? 15.00);
-            if (in_array($vatType, ['inclusive', 'vat_b'])) {
+            if ($vatType === 'inclusive') {
                 $base = round($gross / (1 + ($vatRate / 100)), 2);
                 return round($gross - $base, 2);
             } elseif ($vatType === 'exclusive') {
@@ -267,24 +288,26 @@ class FinanceTaxReportController extends Controller
         $missingSlipsCount = max(0, $totalWhtTransactions - $slipsAttachedCount);
 
         // ── SEPARATED UNSETTLED METRICS ──────────────────────────────────────────
-        // 1. Unsettled VAT Pool
+        // 1. Unsettled VAT Pool (excluding VAT B from creditable pool)
         $unsettledVatItems = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
             ->where('vat_settled', false)
             ->whereNull('vat_settlement_id')
             ->where(function ($q) {
                 $q->where('vat_amount', '>', 0)
-                  ->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']);
+                  ->orWhereIn('vat_type', ['exclusive', 'inclusive']);
             })
+            ->where('vat_type', '!=', 'vat_b')
             ->get();
 
         $unsettledVatCount = $unsettledVatItems->count();
         $unsettledVatBaseAmount = $unsettledVatItems->sum(fn($i) => (float)($i->gross_amount > 0 ? $i->gross_amount : $i->amount));
         $unsettledVatAmount = $unsettledVatItems->sum(function ($item) {
-            if ((float)$item->vat_amount > 0) return (float)$item->vat_amount;
+            if (($item->vat_type ?? '') === 'vat_b') return 0.0;
+            if ((float)$item->vat_amount > 0 && ($item->vat_type ?? '') === 'exclusive') return (float)$item->vat_amount;
             $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
             $vatType = $item->vat_type ?? 'none';
             $vatRate = (float)($item->vat_rate ?? 15.00);
-            if (in_array($vatType, ['inclusive', 'vat_b'])) {
+            if ($vatType === 'inclusive') {
                 $base = round($gross / (1 + ($vatRate / 100)), 2);
                 return round($gross - $base, 2);
             } elseif ($vatType === 'exclusive') {
@@ -313,7 +336,7 @@ class FinanceTaxReportController extends Controller
             ->where(function ($q) {
                 $q->where(function ($sub) {
                     $sub->where('vat_settled', false)->whereNull('vat_settlement_id')
-                        ->where(function ($v) { $v->where('vat_amount', '>', 0)->orWhereIn('vat_type', ['exclusive', 'inclusive', 'vat_b']); });
+                        ->where(function ($v) { $v->where('vat_amount', '>', 0)->orWhereIn('vat_type', ['exclusive', 'inclusive']); });
                 })->orWhere(function ($sub) {
                     $sub->where('withholding_settled', false)->whereNull('withholding_settlement_id')
                         ->where(function ($w) { $w->where('has_withholding', true)->orWhere('withholding_amount', '>', 0); });
@@ -363,22 +386,166 @@ class FinanceTaxReportController extends Controller
             });
         }
 
-        if (!empty($fromDate)) {
-            $ocrQuery->whereHas('receipt', fn($rq) => $rq->whereDate('receipt_date', '>=', Carbon::parse($fromDate)));
-        }
-        if (!empty($toDate)) {
-            $ocrQuery->whereHas('receipt', fn($rq) => $rq->whereDate('receipt_date', '<=', Carbon::parse($toDate)));
+        // Bounded to Ethiopian month
+        if (!empty($fromDate) && !empty($toDate) && !$request->filled('ethiopian_year') && !$request->filled('ethiopian_month')) {
+            $ocrQuery->whereHas('receipt', fn($rq) => $rq->whereDate('receipt_date', '>=', Carbon::parse($fromDate))->whereDate('receipt_date', '<=', Carbon::parse($toDate)));
+        } else {
+            $ocrQuery->whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]));
         }
 
         $ocrItems = $ocrQuery->paginate(20, ['*'], 'ocr_page')->withQueryString();
 
         $ocrStats = [
-            'total_items'   => (int)\App\Models\ReceiptItem::count(),
-            'total_value'   => (float)\App\Models\ReceiptItem::sum('total_value'),
-            'total_vat'     => (float)\App\Models\ReceiptItem::sum('vat_amount'),
-            'total_after'   => (float)\App\Models\ReceiptItem::sum('value_after_vat'),
+            'total_items'   => (int)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]))->count(),
+            'total_value'   => (float)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]))->sum('total_value'),
+            'total_vat'     => (float)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]))->sum('vat_amount'),
+            'total_after'   => (float)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]))->sum('value_after_vat'),
             'flagged_count' => (int)\App\Models\ReceiptItem::where('is_flagged', true)->count(),
         ];
+
+        // ═════════════════════════════════════════════════════════════════════
+        // MONTHLY VAT: ERCA LINE 100 & SIGNED NET VAT
+        // Output VAT = 15% VAT from Company Income receipts in the month
+        // Input VAT  = creditable 15% VAT from paid expenses, petty cash, procurement, and OCR receipts. Exclude "VAT B".
+        // Net        = Input VAT - Output VAT (factoring in opening credit)
+        // ═════════════════════════════════════════════════════════════════════
+
+        // 1. Company Income (Sales base & Output VAT)
+        $monthIncomeItems = \App\Models\IncomeRecord::where(function ($iq) use ($periodStartDate, $periodEndDate) {
+            $iq->whereBetween('income_date', [$periodStartDate, $periodEndDate])
+               ->orWhere(function ($sub) use ($periodStartDate, $periodEndDate) {
+                   $sub->whereNull('income_date')->whereBetween('receipt_date', [$periodStartDate, $periodEndDate]);
+               });
+        })->get();
+
+        $salesBase = (float)$monthIncomeItems->sum(function ($inc) {
+            $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
+            return round($gross / 1.15, 2);
+        });
+        $outputVat = (float)$monthIncomeItems->sum(function ($inc) {
+            $gross = (float)($inc->unit_price > 0 && $inc->quantity > 0 ? ($inc->unit_price * $inc->quantity) : $inc->amount);
+            $base = round($gross / 1.15, 2);
+            return round($gross - $base, 2);
+        });
+
+        // 2. Creditable Purchases & Input VAT (Exclude "VAT B")
+        $ocrItemsInMonth = \App\Models\ReceiptItem::whereHas('receipt', fn($rq) => 
+            $rq->whereBetween('receipt_date', [$periodStartDate, $periodEndDate])
+        )->get();
+
+        $ocrPurchasesBase = (float)$ocrItemsInMonth->sum('total_value');
+        $ocrInputVat      = (float)$ocrItemsInMonth->sum('vat_amount');
+
+        $expensePurchasesBase = (float)$allTaxItems->filter(fn($i) => ($i->vat_type ?? '') !== 'vat_b')->sum(function ($i) {
+            $gross = (float)($i->gross_amount > 0 ? $i->gross_amount : $i->amount);
+            if (($i->vat_type ?? '') === 'inclusive') return round($gross / 1.15, 2);
+            return $gross;
+        });
+        $expenseInputVat = $totalVatAmount; // Already strictly excludes VAT B above
+
+        if ($vatSource === 'expense') {
+            $purchasesBase = $expensePurchasesBase;
+            $inputVat      = $expenseInputVat;
+        } else {
+            $purchasesBase = $ocrPurchasesBase > 0 ? $ocrPurchasesBase : $expensePurchasesBase;
+            $inputVat      = $ocrInputVat > 0 ? $ocrInputVat : $expenseInputVat;
+        }
+
+        // 3. Opening Credit: Carry forward positive credit from immediately preceding Ethiopian month
+        $prevYear  = ($selectedEthMonth === 1) ? $selectedEthYear - 1 : $selectedEthYear;
+        $prevMonth = ($selectedEthMonth === 1) ? 13 : $selectedEthMonth - 1;
+        $prevMonthRange = EthiopianDate::monthRange($prevYear, $prevMonth);
+
+        $prevIncomeSum = (float)\App\Models\IncomeRecord::where(function ($iq) use ($prevMonthRange) {
+            $iq->whereBetween('income_date', [$prevMonthRange['start_date'], $prevMonthRange['end_date']])
+               ->orWhere(function ($sub) use ($prevMonthRange) {
+                   $sub->whereNull('income_date')->whereBetween('receipt_date', [$prevMonthRange['start_date'], $prevMonthRange['end_date']]);
+               });
+        })->sum('amount');
+        $prevOutputVat = round($prevIncomeSum - ($prevIncomeSum / 1.15), 2);
+
+        $prevExpenseItems = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
+            ->whereBetween('created_at', [$prevMonthRange['start'], $prevMonthRange['end']])
+            ->where('vat_type', '!=', 'vat_b')
+            ->get();
+        $prevExpInputVat = (float)$prevExpenseItems->sum(function ($item) {
+            if ((float)$item->vat_amount > 0 && ($item->vat_type ?? '') === 'exclusive') return (float)$item->vat_amount;
+            $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
+            if (($item->vat_type ?? '') === 'inclusive') return round($gross - ($gross / 1.15), 2);
+            if (($item->vat_type ?? '') === 'exclusive') return round($gross * 0.15, 2);
+            return 0.0;
+        });
+        $prevOcrInputVat = (float)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => 
+            $rq->whereBetween('receipt_date', [$prevMonthRange['start_date'], $prevMonthRange['end_date']])
+        )->sum('vat_amount');
+
+        $effectivePrevInput = max($prevExpInputVat, $prevOcrInputVat);
+        $openingCredit = max(0.0, round($effectivePrevInput - $prevOutputVat, 2));
+
+        // 4. Signed Net VAT Calculation
+        $netVatDetails = EthiopianDate::calculateNetVat($inputVat, $outputVat, $openingCredit);
+        $signedNetVat  = $netVatDetails['net'];
+
+        // 5. Withholding tax (3%) & Net Disbursed for the month (stays separate line, not part of Net)
+        $monthWithholding = $totalWithholdingAmount;
+        $monthNetDisbursed = $totalNetDisbursed;
+
+        // 6. 12-Month Trend Table (Meskerem to Pagume, months 1 to 13 of selected Ethiopian Year)
+        $monthlyTrend = [];
+        $runningOpeningCredit = 0.0;
+        for ($m = 1; $m <= 13; $m++) {
+            $mRange = EthiopianDate::monthRange($selectedEthYear, $m);
+            $mInc = (float)\App\Models\IncomeRecord::where(function ($iq) use ($mRange) {
+                $iq->whereBetween('income_date', [$mRange['start_date'], $mRange['end_date']])
+                   ->orWhere(function ($sub) use ($mRange) {
+                       $sub->whereNull('income_date')->whereBetween('receipt_date', [$mRange['start_date'], $mRange['end_date']]);
+                   });
+            })->sum('amount');
+            $mOut = round($mInc - ($mInc / 1.15), 2);
+
+            $mExp = ExpenseRequest::where('status', ExpenseRequest::STATUS_PAID)
+                ->whereBetween('created_at', [$mRange['start'], $mRange['end']])
+                ->where('vat_type', '!=', 'vat_b')
+                ->get();
+            $mExpIn = (float)$mExp->sum(function ($item) {
+                if ((float)$item->vat_amount > 0 && ($item->vat_type ?? '') === 'exclusive') return (float)$item->vat_amount;
+                $gross = (float)($item->gross_amount > 0 ? $item->gross_amount : $item->amount);
+                if (($item->vat_type ?? '') === 'inclusive') return round($gross - ($gross / 1.15), 2);
+                if (($item->vat_type ?? '') === 'exclusive') return round($gross * 0.15, 2);
+                return 0.0;
+            });
+            $mOcrIn = (float)\App\Models\ReceiptItem::whereHas('receipt', fn($rq) => 
+                $rq->whereBetween('receipt_date', [$mRange['start_date'], $mRange['end_date']])
+            )->sum('vat_amount');
+            $mIn = max($mExpIn, $mOcrIn);
+
+            $mNetCalc = EthiopianDate::calculateNetVat($mIn, $mOut, $runningOpeningCredit);
+
+            $monthlyTrend[$m] = [
+                'month'                => $m,
+                'month_name'           => EthiopianDate::MONTHS_EN[$m],
+                'month_am'             => EthiopianDate::MONTHS_AM[$m],
+                'start_date'           => $mRange['start_date'],
+                'end_date'             => $mRange['end_date'],
+                'output_vat'           => $mOut,
+                'input_vat'            => $mIn,
+                'opening_credit'       => $runningOpeningCredit,
+                'net'                  => $mNetCalc['net'],
+                'signed_net_formatted' => $mNetCalc['signed_net_formatted'],
+                'status'               => $mNetCalc['status'],
+                'label'                => $mNetCalc['label'],
+                'badge_class'          => $mNetCalc['badge_class'],
+                'text_class'           => $mNetCalc['text_class'],
+                'is_payable'           => $mNetCalc['is_payable'],
+                'is_credit'            => $mNetCalc['is_credit'],
+                'is_current'           => ($m === $selectedEthMonth),
+            ];
+
+            $runningOpeningCredit = $mNetCalc['credit_carry_forward'];
+        }
+
+        $availableEthYears  = EthiopianDate::getYears();
+        $availableEthMonths = EthiopianDate::getMonths();
 
         $ocrProjects = \App\Models\Project::orderBy('name')->get();
         $ocrCategories = \App\Models\Receipt::CATEGORIES;
@@ -437,7 +604,22 @@ class FinanceTaxReportController extends Controller
             'ocrStats',
             'ocrProjects',
             'ocrCategories',
-            'vatSource'
+            'vatSource',
+            'selectedEthYear',
+            'selectedEthMonth',
+            'monthRange',
+            'availableEthYears',
+            'availableEthMonths',
+            'salesBase',
+            'outputVat',
+            'purchasesBase',
+            'inputVat',
+            'openingCredit',
+            'signedNetVat',
+            'netVatDetails',
+            'monthWithholding',
+            'monthNetDisbursed',
+            'monthlyTrend'
         ));
     }
 
@@ -934,17 +1116,23 @@ class FinanceTaxReportController extends Controller
             $query->where('category', $category);
         }
 
-        if (!empty($fromDate)) {
-            $query->whereDate('created_at', '>=', Carbon::parse($fromDate));
-        }
-        if (!empty($toDate)) {
-            $query->whereDate('created_at', '<=', Carbon::parse($toDate));
+        // Ethiopian month selector for export
+        $curEth = EthiopianDate::toEthiopian(now());
+        $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: $curEth['year']));
+        $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: $curEth['month']));
+
+        if ($selectedEthMonth >= 1 && $selectedEthMonth <= 13) {
+            $mRange = EthiopianDate::monthRange($selectedEthYear, $selectedEthMonth);
+            $query->whereBetween('created_at', [$mRange['start'], $mRange['end']]);
+        } elseif (!empty($fromDate) && !empty($toDate)) {
+            $query->whereDate('created_at', '>=', Carbon::parse($fromDate))
+                  ->whereDate('created_at', '<=', Carbon::parse($toDate));
         }
 
         $records = $query->latest()->get();
 
         $headers = [
-            'Content-Type'        => 'text/csv',
+            'Content-Type'        => 'text/csv; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="tax_deductions_report_' . date('Ymd_His') . '.csv"',
             'Pragma'              => 'no-cache',
             'Cache-Control'       => 'must-revalidate, post-check=0, pre-check=0',
@@ -957,7 +1145,7 @@ class FinanceTaxReportController extends Controller
 
             fputcsv($handle, [
                 'Request #',
-                'Date',
+                'Date (EC)',
                 'Beneficiary / Requester',
                 'Category',
                 'Description',
@@ -970,7 +1158,7 @@ class FinanceTaxReportController extends Controller
                 'WHT Settled',
                 'Net Disbursed / Paid (ETB)',
                 'Payment Reference',
-                'Paid At',
+                'Paid At (EC)',
                 'Paying Account',
                 'WHT Receipt Serial #',
                 'WHT Receipt Attached',
@@ -983,13 +1171,17 @@ class FinanceTaxReportController extends Controller
                 $net = (float)$item->effective_payable_amount;
                 $vatLabel = match ($item->vat_type) {
                     'exclusive' => '15% VAT Added',
-                    'inclusive', 'vat_b' => '15% VAT B Included',
-                    default => 'No VAT (0%)',
+                    'inclusive' => '15% VAT Included',
+                    'vat_b'     => '15% VAT B (Non-creditable)',
+                    default     => 'No VAT (0%)',
                 };
+
+                $dateEc = $item->created_at ? EthiopianDate::formatDateEc($item->created_at, 'DD/MM/YYYY EC') : 'N/A';
+                $paidAtEc = $item->paid_at ? EthiopianDate::formatDateEc($item->paid_at, 'DD/MM/YYYY EC') : 'Pending';
 
                 fputcsv($handle, [
                     $item->request_number,
-                    optional($item->created_at)->format('Y-m-d H:i'),
+                    $dateEc,
                     $item->user->name ?? 'N/A',
                     $item->category,
                     $item->description,
@@ -1002,7 +1194,7 @@ class FinanceTaxReportController extends Controller
                     $item->withholding_settled ? 'YES' : 'NO',
                     number_format($net, 2, '.', ''),
                     $item->payment_reference ?? 'N/A',
-                    optional($item->paid_at)->format('Y-m-d H:i') ?? 'Pending',
+                    $paidAtEc,
                     $item->chartOfAccount->name ?? ($item->bankAccount->bank_name ?? 'Default Petty Cash'),
                     $item->withholding_receipt_number ?? 'N/A',
                     !empty($item->withholding_receipt) ? 'YES' : 'NO',
@@ -1182,7 +1374,19 @@ class FinanceTaxReportController extends Controller
                 $filePath = $file->storeAs('receipts', $filename, 'public');
             }
 
-            $targetDate = Carbon::parse($validated['receipt_date']);
+            $targetDateStr = $validated['receipt_date'];
+            if (!empty($request->input('receipt_date_ec'))) {
+                $parsed = EthiopianDate::parseEcToGregorian($request->input('receipt_date_ec'));
+                if ($parsed) {
+                    $targetDateStr = $parsed;
+                }
+            } elseif (preg_match('/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/', trim($validated['receipt_date']))) {
+                $parsed = EthiopianDate::parseEcToGregorian($validated['receipt_date']);
+                if ($parsed) {
+                    $targetDateStr = $parsed;
+                }
+            }
+            $targetDate = Carbon::parse($targetDateStr);
             $fsNoRaw    = trim($validated['fs_no'] ?? '');
             $fsNorm     = QcService::normalizeFsNo($fsNoRaw);
             $fsNo       = $fsNorm['value'] ?: $fsNoRaw;
@@ -1246,7 +1450,7 @@ class FinanceTaxReportController extends Controller
                 'receipt_id'       => $receipt->id,
                 'item_description' => $validated['description'] ?: 'Purchased Materials',
                 'vat_category'     => $vatCategory,
-                'calendar_type'    => 'G',
+                'calendar_type'    => 'E',
                 'purchase_type'    => $purcTypeCode,
                 'uom'              => '9',
                 'qty'              => 1.00,

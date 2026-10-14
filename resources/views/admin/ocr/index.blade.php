@@ -552,10 +552,22 @@
                             <input type="hidden" name="needs_review" value="1">
                         @endif
                         <input type="text" name="search" class="form-control form-control-sm" placeholder="Search FS#, TIN, Vendor..." value="{{ request('search') }}" style="width: 190px;">
-                        <input type="date" name="date_from" class="form-control form-control-sm" value="{{ request('date_from') }}" title="Date From" style="width: 130px;">
-                        <input type="date" name="date_to" class="form-control form-control-sm" value="{{ request('date_to') }}" title="Date To" style="width: 130px;">
+                        <select name="ethiopian_month" class="form-select form-select-sm" style="width: 145px;" onchange="this.form.submit()">
+                            @foreach($availableEthMonths as $mId => $m)
+                                <option value="{{ $mId }}" {{ ($selectedEthMonth ?? 1) == $mId ? 'selected' : '' }}>
+                                    {{ $m['label'] }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <select name="ethiopian_year" class="form-select form-select-sm" style="width: 105px;" onchange="this.form.submit()">
+                            @foreach($availableEthYears as $y)
+                                <option value="{{ $y }}" {{ ($selectedEthYear ?? 2018) == $y ? 'selected' : '' }}>
+                                    {{ $y }} ዓ.ም.
+                                </option>
+                            @endforeach
+                        </select>
                         <button type="submit" class="btn btn-sm btn-primary" title="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
-                        @if(request()->hasAny(['search', 'needs_review', 'date_from', 'date_to', 'category', 'project_id']))
+                        @if(request()->hasAny(['search', 'needs_review', 'ethiopian_month', 'ethiopian_year', 'date_from', 'date_to', 'category', 'project_id']))
                             <a href="{{ url('admin/receipt-ocr') }}" class="btn btn-sm btn-light border" title="Clear Filters"><i class="fa-solid fa-times"></i></a>
                         @endif
                     </form>
@@ -577,7 +589,7 @@
                             <th>Col C<br><span class="text-muted">Type</span></th>
                             <th class="text-primary fw-bold">Col D<br><span>Supplier TIN</span></th>
                             <th class="fw-bold">Col E<br><span>Seller Name</span></th>
-                            <th>Col F<br><span>Date (DD/MM/YYYY)</span></th>
+                            <th>Col F<br><span>Date (DD/MM/YYYY EC)</span></th>
                             <th>Col G<br><span>MRC No</span></th>
                             <th class="fw-bold text-dark">Col H<br><span>FS No</span></th>
                             <th class="fw-bold text-primary">Col I<br><span>Item / Description</span></th>
@@ -597,7 +609,7 @@
                                 $r = $item->receipt;
                                 $rowErrors = $item->validateRow();
                                 $isFlagged = !empty($rowErrors) || ($r && $r->needs_review);
-                                $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : '';
+                                $dateFormatted = $r && $r->receipt_date ? \App\Services\EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : '';
                                 $rawTin = $r ? (string)$r->vendor_tin : '';
                                 $tinDigits = preg_replace('/[^0-9]/', '', $rawTin);
                                 $isTinValid = $r ? ($r->tin_valid ?? (strlen($tinDigits) === 10)) : false;
@@ -1157,6 +1169,33 @@
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setOcrExportDatePreset('this_month')">This Month</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setOcrExportDatePreset('last_month')">Last Month</button>
                             <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-1 text-xs" onclick="setOcrExportDatePreset('all')">All Dates</button>
+                        </div>
+                    </div>
+
+                    {{-- Ethiopian Month & Year Selector --}}
+                    <div class="mb-3 p-3 bg-light rounded-3 border">
+                        <label class="form-label small fw-bold text-uppercase text-dark d-block mb-1" style="font-size:0.72rem; letter-spacing:0.5px;">
+                            <i class="fa-regular fa-calendar-days text-primary me-1"></i>Ethiopian Tax Period (ወርና ዓ.ም.)
+                        </label>
+                        <div class="row g-2">
+                            <div class="col-7">
+                                <select name="ethiopian_month" class="form-select form-select-sm fw-semibold">
+                                    @foreach($availableEthMonths as $mId => $m)
+                                        <option value="{{ $mId }}" {{ ($selectedEthMonth ?? 1) == $mId ? 'selected' : '' }}>
+                                            {{ $m['label'] }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-5">
+                                <select name="ethiopian_year" class="form-select form-select-sm fw-semibold">
+                                    @foreach($availableEthYears as $y)
+                                        <option value="{{ $y }}" {{ ($selectedEthYear ?? 2018) == $y ? 'selected' : '' }}>
+                                            {{ $y }} ዓ.ም.
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
                         </div>
                     </div>
 

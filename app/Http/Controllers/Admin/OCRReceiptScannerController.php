@@ -8,6 +8,7 @@ use App\Models\Receipt;
 use App\Models\ReceiptItem;
 use App\Models\SystemSetting;
 use App\Services\QcService;
+use App\Services\EthiopianDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -252,18 +253,36 @@ class OCRReceiptScannerController extends Controller
             });
         }
 
-        // Filter: Date Range
-        if ($request->filled('date_from')) {
-            $df = $request->date_from;
-            $query->whereHas('receipt', function($q) use ($df) {
-                $q->whereDate('receipt_date', '>=', $df);
-            });
+        // Ethiopian Year & Month selector
+        $curEth = EthiopianDate::toEthiopian(now());
+        $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: null));
+        $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: null));
+
+        if (!$selectedEthYear && !$selectedEthMonth && !$request->filled('date_from') && !$request->filled('date_to')) {
+            $selectedEthYear = $curEth['year'];
+            $selectedEthMonth = $curEth['month'];
         }
-        if ($request->filled('date_to')) {
-            $dt = $request->date_to;
-            $query->whereHas('receipt', function($q) use ($dt) {
-                $q->whereDate('receipt_date', '<=', $dt);
+
+        if ($selectedEthYear && $selectedEthMonth && $selectedEthMonth >= 1 && $selectedEthMonth <= 13) {
+            $monthRange = EthiopianDate::monthRange($selectedEthYear, $selectedEthMonth);
+            $query->whereHas('receipt', function($q) use ($monthRange) {
+                $q->whereBetween('receipt_date', [$monthRange['start_date'], $monthRange['end_date']]);
             });
+        } else {
+            $monthRange = null;
+            // Filter: Date Range (fallback)
+            if ($request->filled('date_from')) {
+                $df = $request->date_from;
+                $query->whereHas('receipt', function($q) use ($df) {
+                    $q->whereDate('receipt_date', '>=', $df);
+                });
+            }
+            if ($request->filled('date_to')) {
+                $dt = $request->date_to;
+                $query->whereHas('receipt', function($q) use ($dt) {
+                    $q->whereDate('receipt_date', '<=', $dt);
+                });
+            }
         }
 
         // Filter: Search query (FS No, TIN, Vendor name, Description, MRC, or Natural language queries)
@@ -352,6 +371,9 @@ class OCRReceiptScannerController extends Controller
             + (!empty($nvidiaKey) ? 1 : 0)
             + (!empty($azureKey) && !empty($azureEndpoint) ? 1 : 0);
 
+        $availableEthYears  = EthiopianDate::getYears();
+        $availableEthMonths = EthiopianDate::getMonths();
+
         return view('admin.ocr.index', compact(
             'items',
             'projects',
@@ -366,7 +388,12 @@ class OCRReceiptScannerController extends Controller
             'nvidiaKey',
             'azureKey',
             'azureEndpoint',
-            'configuredEnginesCount'
+            'configuredEnginesCount',
+            'selectedEthYear',
+            'selectedEthMonth',
+            'monthRange',
+            'availableEthYears',
+            'availableEthMonths'
         ));
     }
 
@@ -1382,30 +1409,42 @@ class OCRReceiptScannerController extends Controller
                 $cat = $request->category;
                 $query->whereHas('receipt', fn($q) => $q->where('category', $cat));
             }
-            $df = $request->input('date_from') ?: ($request->input('from_date') ?: $request->input('start_date'));
-            $dt = $request->input('date_to') ?: ($request->input('to_date') ?: $request->input('end_date'));
-            $singleDate = $request->input('date') ?: $request->input('single_date');
+            // Ethiopian Year & Month selector
+            $curEth = EthiopianDate::toEthiopian(now());
+            $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: null));
+            $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: null));
 
-            if (!empty($singleDate)) {
-                $df = $df ?: $singleDate;
-                $dt = $dt ?: $singleDate;
-            }
+            if ($selectedEthYear && $selectedEthMonth && $selectedEthMonth >= 1 && $selectedEthMonth <= 13) {
+                $mRange = EthiopianDate::monthRange($selectedEthYear, $selectedEthMonth);
+                $query->whereHas('receipt', function($q) use ($mRange) {
+                    $q->whereBetween('receipt_date', [$mRange['start_date'], $mRange['end_date']]);
+                });
+            } else {
+                $df = $request->input('date_from') ?: ($request->input('from_date') ?: $request->input('start_date'));
+                $dt = $request->input('date_to') ?: ($request->input('to_date') ?: $request->input('end_date'));
+                $singleDate = $request->input('date') ?: $request->input('single_date');
 
-            if (!empty($df)) {
-                $query->whereHas('receipt', function($q) use ($df) {
-                    $q->whereDate('receipt_date', '>=', $df)
-                      ->orWhere(function($sq) use ($df) {
-                          $sq->whereNull('receipt_date')->whereDate('created_at', '>=', $df);
-                      });
-                });
-            }
-            if (!empty($dt)) {
-                $query->whereHas('receipt', function($q) use ($dt) {
-                    $q->whereDate('receipt_date', '<=', $dt)
-                      ->orWhere(function($sq) use ($dt) {
-                          $sq->whereNull('receipt_date')->whereDate('created_at', '<=', $dt);
-                      });
-                });
+                if (!empty($singleDate)) {
+                    $df = $df ?: $singleDate;
+                    $dt = $dt ?: $singleDate;
+                }
+
+                if (!empty($df)) {
+                    $query->whereHas('receipt', function($q) use ($df) {
+                        $q->whereDate('receipt_date', '>=', $df)
+                          ->orWhere(function($sq) use ($df) {
+                              $sq->whereNull('receipt_date')->whereDate('created_at', '>=', $df);
+                          });
+                    });
+                }
+                if (!empty($dt)) {
+                    $query->whereHas('receipt', function($q) use ($dt) {
+                        $q->whereDate('receipt_date', '<=', $dt)
+                          ->orWhere(function($sq) use ($dt) {
+                              $sq->whereNull('receipt_date')->whereDate('created_at', '<=', $dt);
+                          });
+                    });
+                }
             }
             if ($request->filled('search')) {
                 $s = trim($request->search);
@@ -1466,7 +1505,7 @@ class OCRReceiptScannerController extends Controller
 
                 foreach ($items as $item) {
                     $r = $item->receipt;
-                    $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : now()->format('d/m/Y');
+                    $dateFormatted = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
                     $rawTin = $r ? (string)$r->vendor_tin : '';
                     $rawFs  = $r ? (string)$r->fs_no : '';
                     $seller = $r ? (string)$r->vendor_name : '';
@@ -1480,7 +1519,7 @@ class OCRReceiptScannerController extends Controller
 
                     $rowCells = [
                         Cell::fromValue((string)($item->vat_category ?: 'G')),
-                        Cell::fromValue((string)($item->calendar_type ?: 'G')),
+                        Cell::fromValue((string)($item->calendar_type ?: 'E')),
                         Cell::fromValue((int)($item->purchase_type ?: 3)),
                         Cell::fromValue((string)$tinText),
                         Cell::fromValue($seller),
@@ -1548,11 +1587,11 @@ class OCRReceiptScannerController extends Controller
                         }
                     }
 
-                    // Col E: Receipt Date (Format: DD-MM-YYYY, e.g. 15-08-2026)
-                    $receiptDate = $r && $r->receipt_date ? $r->receipt_date->format('d-m-Y') : now()->format('d-m-Y');
+                    // Col E: Receipt Date (Format: DD/MM/YYYY EC)
+                    $receiptDate = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
 
-                    // Col F: Encoding Date (Format: DD-MM-YYYY, e.g. 26-08-2026)
-                    $encodingDate = ($r && $r->created_at) ? $r->created_at->format('d-m-Y') : now()->format('d-m-Y');
+                    // Col F: Encoding Date (Format: DD/MM/YYYY EC)
+                    $encodingDate = ($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
 
                     // Col G: MRC (Machine Registration Code, e.g. DDB0000032 or blank)
                     $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : '';
@@ -1629,30 +1668,42 @@ class OCRReceiptScannerController extends Controller
                 $cat = $request->category;
                 $query->whereHas('receipt', fn($q) => $q->where('category', $cat));
             }
-            $df = $request->input('date_from') ?: ($request->input('from_date') ?: $request->input('start_date'));
-            $dt = $request->input('date_to') ?: ($request->input('to_date') ?: $request->input('end_date'));
-            $singleDate = $request->input('date') ?: $request->input('single_date');
+            // Ethiopian Year & Month selector
+            $curEth = EthiopianDate::toEthiopian(now());
+            $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: null));
+            $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: null));
 
-            if (!empty($singleDate)) {
-                $df = $df ?: $singleDate;
-                $dt = $dt ?: $singleDate;
-            }
+            if ($selectedEthYear && $selectedEthMonth && $selectedEthMonth >= 1 && $selectedEthMonth <= 13) {
+                $mRange = EthiopianDate::monthRange($selectedEthYear, $selectedEthMonth);
+                $query->whereHas('receipt', function($q) use ($mRange) {
+                    $q->whereBetween('receipt_date', [$mRange['start_date'], $mRange['end_date']]);
+                });
+            } else {
+                $df = $request->input('date_from') ?: ($request->input('from_date') ?: $request->input('start_date'));
+                $dt = $request->input('date_to') ?: ($request->input('to_date') ?: $request->input('end_date'));
+                $singleDate = $request->input('date') ?: $request->input('single_date');
 
-            if (!empty($df)) {
-                $query->whereHas('receipt', function($q) use ($df) {
-                    $q->whereDate('receipt_date', '>=', $df)
-                      ->orWhere(function($sq) use ($df) {
-                          $sq->whereNull('receipt_date')->whereDate('created_at', '>=', $df);
-                      });
-                });
-            }
-            if (!empty($dt)) {
-                $query->whereHas('receipt', function($q) use ($dt) {
-                    $q->whereDate('receipt_date', '<=', $dt)
-                      ->orWhere(function($sq) use ($dt) {
-                          $sq->whereNull('receipt_date')->whereDate('created_at', '<=', $dt);
-                      });
-                });
+                if (!empty($singleDate)) {
+                    $df = $df ?: $singleDate;
+                    $dt = $dt ?: $singleDate;
+                }
+
+                if (!empty($df)) {
+                    $query->whereHas('receipt', function($q) use ($df) {
+                        $q->whereDate('receipt_date', '>=', $df)
+                          ->orWhere(function($sq) use ($df) {
+                              $sq->whereNull('receipt_date')->whereDate('created_at', '>=', $df);
+                          });
+                    });
+                }
+                if (!empty($dt)) {
+                    $query->whereHas('receipt', function($q) use ($dt) {
+                        $q->whereDate('receipt_date', '<=', $dt)
+                          ->orWhere(function($sq) use ($dt) {
+                              $sq->whereNull('receipt_date')->whereDate('created_at', '<=', $dt);
+                          });
+                    });
+                }
             }
             if ($request->filled('search')) {
                 $s = trim($request->search);
@@ -1717,7 +1768,7 @@ class OCRReceiptScannerController extends Controller
 
                 foreach ($items as $item) {
                     $r = $item->receipt;
-                    $dateFormatted = $r && $r->receipt_date ? $r->receipt_date->format('d/m/Y') : now()->format('d/m/Y');
+                    $dateFormatted = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
                     $rawTin = $r ? (string)$r->vendor_tin : '';
                     $rawFs  = $r ? (string)$r->fs_no : '';
                     $seller = $r ? (string)$r->vendor_name : '';
@@ -1731,7 +1782,7 @@ class OCRReceiptScannerController extends Controller
 
                     fputcsv($out, [
                         $item->vat_category ?: 'G',
-                        $item->calendar_type ?: 'G',
+                        $item->calendar_type ?: 'E',
                         $item->purchase_type ?: 3,
                         (string)$tinText,
                         $seller,
@@ -1792,8 +1843,8 @@ class OCRReceiptScannerController extends Controller
                         }
                     }
 
-                    $receiptDate = $r && $r->receipt_date ? $r->receipt_date->format('d-m-Y') : now()->format('d-m-Y');
-                    $encodingDate = ($r && $r->created_at) ? $r->created_at->format('d-m-Y') : now()->format('d-m-Y');
+                    $receiptDate = $r && $r->receipt_date ? EthiopianDate::formatDateEc($r->receipt_date, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
+                    $encodingDate = ($r && $r->created_at) ? EthiopianDate::formatDateEc($r->created_at, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
                     $mrc = $r && !empty($r->mrc_no) ? trim((string)$r->mrc_no) : '';
 
                     // Col H: PurcType (PUR_GD = Goods, PUR_SR = Services)
@@ -2625,14 +2676,37 @@ PROMPT;
         if (empty($dateStr)) return null;
         $dateStr = trim($dateStr);
 
-        // Already YYYY-MM-DD
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateStr)) {
-            return $dateStr;
+        // Check if explicitly marked as Ethiopian Calendar (EC, E.C., ዓ.ም.)
+        if (stripos($dateStr, 'EC') !== false || stripos($dateStr, 'E.C.') !== false || stripos($dateStr, 'ዓ.ም.') !== false) {
+            $parsed = EthiopianDate::parseEcToGregorian($dateStr);
+            if ($parsed) {
+                return $parsed;
+            }
         }
 
         // DD/MM/YYYY or DD-MM-YYYY
         if (preg_match('/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/', $dateStr, $m)) {
-            return sprintf('%04d-%02d-%02d', (int)$m[3], (int)$m[2], (int)$m[1]);
+            $d = (int)$m[1];
+            $mo = (int)$m[2];
+            $y = (int)$m[3];
+
+            // If year is in Ethiopian calendar range (e.g. 2012 to 2022)
+            if ($y >= 2012 && $y <= 2022 && $mo >= 1 && $mo <= 13) {
+                return EthiopianDate::toGregorian($y, $mo, $d);
+            }
+
+            return sprintf('%04d-%02d-%02d', $y, $mo, $d);
+        }
+
+        // Already YYYY-MM-DD
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $dateStr, $m)) {
+            $y = (int)$m[1];
+            $mo = (int)$m[2];
+            $d = (int)$m[3];
+            if ($y >= 2012 && $y <= 2022 && $mo >= 1 && $mo <= 13) {
+                return EthiopianDate::toGregorian($y, $mo, $d);
+            }
+            return $dateStr;
         }
 
         try {

@@ -10,6 +10,7 @@ use App\Models\BankTransaction;
 use App\Models\SystemSetting;
 use App\Services\ReceiptOcrService;
 use App\Services\QcService;
+use App\Services\EthiopianDate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -157,21 +158,42 @@ class IncomeController extends Controller
             $query->where('project_id', $request->project_id);
         }
 
-        // Date range filtering
-        $df = $request->input('from_date') ?: ($request->input('date_from') ?: $request->input('start_date'));
-        $dt = $request->input('to_date') ?: ($request->input('date_to') ?: $request->input('end_date'));
-        $singleDate = $request->input('date');
+        // Ethiopian Year & Month selector
+        $curEth = EthiopianDate::toEthiopian(now());
+        $ey = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: null));
+        $em = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: null));
 
-        if (!empty($singleDate)) {
-            $df = $singleDate;
-            $dt = $singleDate;
+        // If no explicit date range was requested, default to current Ethiopian year & month
+        if (!$ey && !$em && !$request->filled('from_date') && !$request->filled('to_date') && !$request->filled('date_from') && !$request->filled('date_to') && !$request->filled('date')) {
+            $ey = $curEth['year'];
+            $em = $curEth['month'];
         }
 
-        if (!empty($df)) {
-            $query->whereDate('income_date', '>=', $df);
-        }
-        if (!empty($dt)) {
-            $query->whereDate('income_date', '<=', $dt);
+        if ($ey && $em && $em >= 1 && $em <= 13) {
+            $mRange = EthiopianDate::monthRange($ey, $em);
+            $query->where(function ($q) use ($mRange) {
+                $q->whereBetween('income_date', [$mRange['start_date'], $mRange['end_date']])
+                  ->orWhere(function ($sub) use ($mRange) {
+                      $sub->whereNull('income_date')->whereBetween('receipt_date', [$mRange['start_date'], $mRange['end_date']]);
+                  });
+            });
+        } else {
+            // Fallback date range filtering if explicitly supplied
+            $df = $request->input('from_date') ?: ($request->input('date_from') ?: $request->input('start_date'));
+            $dt = $request->input('to_date') ?: ($request->input('date_to') ?: $request->input('end_date'));
+            $singleDate = $request->input('date');
+
+            if (!empty($singleDate)) {
+                $df = $singleDate;
+                $dt = $singleDate;
+            }
+
+            if (!empty($df)) {
+                $query->whereDate('income_date', '>=', $df);
+            }
+            if (!empty($dt)) {
+                $query->whereDate('income_date', '<=', $dt);
+            }
         }
 
         // Free search
@@ -198,6 +220,17 @@ class IncomeController extends Controller
 
         $incomes = $query->paginate(20)->withQueryString();
 
+        $curEth = EthiopianDate::toEthiopian(now());
+        $selectedEthYear  = (int)($request->input('ethiopian_year') ?: ($request->input('year') ?: $curEth['year']));
+        $selectedEthMonth = (int)($request->input('ethiopian_month') ?: ($request->input('month') ?: $curEth['month']));
+        if ($selectedEthMonth < 1 || $selectedEthMonth > 13) {
+            $selectedEthMonth = $curEth['month'];
+        }
+
+        $monthRange = EthiopianDate::monthRange($selectedEthYear, $selectedEthMonth);
+        $availableEthYears  = EthiopianDate::getYears();
+        $availableEthMonths = EthiopianDate::getMonths();
+
         $totalRevenue = IncomeRecord::where('status', 'confirmed')->sum('amount');
         
         $coaAccounts  = $this->getCoaAccounts();
@@ -222,7 +255,12 @@ class IncomeController extends Controller
             'constructionTotal',
             'projects',
             'bankAccounts',
-            'coaAccounts'
+            'coaAccounts',
+            'selectedEthYear',
+            'selectedEthMonth',
+            'monthRange',
+            'availableEthYears',
+            'availableEthMonths'
         ));
     }
 
@@ -238,6 +276,30 @@ class IncomeController extends Controller
     public function store(Request $request)
     {
         $this->ensureSchema();
+
+        if ($request->filled('income_date_ec')) {
+            $parsed = EthiopianDate::parseEcToGregorian($request->input('income_date_ec'));
+            if ($parsed) {
+                $request->merge(['income_date' => $parsed]);
+            }
+        } elseif ($request->filled('income_date') && preg_match('/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/', trim($request->input('income_date')))) {
+            $parsed = EthiopianDate::parseEcToGregorian($request->input('income_date'));
+            if ($parsed) {
+                $request->merge(['income_date' => $parsed]);
+            }
+        }
+
+        if ($request->filled('receipt_date_ec')) {
+            $parsed = EthiopianDate::parseEcToGregorian($request->input('receipt_date_ec'));
+            if ($parsed) {
+                $request->merge(['receipt_date' => $parsed]);
+            }
+        } elseif ($request->filled('receipt_date') && preg_match('/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/', trim($request->input('receipt_date')))) {
+            $parsed = EthiopianDate::parseEcToGregorian($request->input('receipt_date'));
+            if ($parsed) {
+                $request->merge(['receipt_date' => $parsed]);
+            }
+        }
 
         $data = $request->validate([
             'project_id'          => 'nullable|exists:projects,id',
@@ -502,27 +564,48 @@ class IncomeController extends Controller
             $rawDate = $scan['extracted']['receipt_date'] ?? null;
             $receiptDate = date('Y-m-d');
             if (!empty($rawDate)) {
-                try {
-                    $receiptDate = \Carbon\Carbon::parse($rawDate)->format('Y-m-d');
-                } catch (\Throwable $e) {}
+                $rawDateTrim = trim((string)$rawDate);
+                if (stripos($rawDateTrim, 'EC') !== false || stripos($rawDateTrim, 'E.C.') !== false || stripos($rawDateTrim, 'ዓ.ም.') !== false) {
+                    $parsed = EthiopianDate::parseEcToGregorian($rawDateTrim);
+                    if ($parsed) {
+                        $receiptDate = $parsed;
+                    }
+                } elseif (preg_match('/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/', $rawDateTrim, $m)) {
+                    $d = (int)$m[1];
+                    $mo = (int)$m[2];
+                    $y = (int)$m[3];
+                    if ($y >= 2012 && $y <= 2022 && $mo >= 1 && $mo <= 13) {
+                        $receiptDate = EthiopianDate::toGregorian($y, $mo, $d);
+                    } else {
+                        try {
+                            $receiptDate = \Carbon\Carbon::parse($rawDateTrim)->format('Y-m-d');
+                        } catch (\Throwable $e) {}
+                    }
+                } else {
+                    try {
+                        $receiptDate = \Carbon\Carbon::parse($rawDateTrim)->format('Y-m-d');
+                    } catch (\Throwable $e) {}
+                }
             }
+            $receiptDateEc = EthiopianDate::formatDateEc($receiptDate);
 
             $sellerTin = SystemSetting::get('purchaser_tin', SystemSetting::get('company_tin', '38480010'));
             $sellerDigits = preg_replace('/^0+/', '', preg_replace('/[^0-9]/', '', (string)$sellerTin));
 
             return response()->json([
-                'success'      => true,
-                'file_path'    => $path,
-                'file_url'     => $fileUrl,
-                'seller_tin'   => $sellerDigits ?: '38480010',
-                'buyer_tin'    => $buyerTin,
-                'buyer_name'   => $buyerName,
-                'receipt_no'   => $fsNo,
-                'mrc_no'       => $mrcNo,
-                'amount'       => $amount,
-                'receipt_date' => $receiptDate,
-                'confidence'   => $scan['confidence'] ?? 'medium',
-                'engine'       => $scan['engine_label'] ?? 'AI Vision OCR',
+                'success'         => true,
+                'file_path'       => $path,
+                'file_url'        => $fileUrl,
+                'seller_tin'      => $sellerDigits ?: '38480010',
+                'buyer_tin'       => $buyerTin,
+                'buyer_name'      => $buyerName,
+                'receipt_no'      => $fsNo,
+                'mrc_no'          => $mrcNo,
+                'amount'          => $amount,
+                'receipt_date'    => $receiptDate,
+                'receipt_date_ec' => $receiptDateEc,
+                'confidence'      => $scan['confidence'] ?? 'medium',
+                'engine'          => $scan['engine_label'] ?? 'AI Vision OCR',
             ]);
         } catch (\Throwable $e) {
             Log::error('IncomeController scanReceipt failed: ' . $e->getMessage());
@@ -615,9 +698,9 @@ class IncomeController extends Controller
                 $priceVal = (float)($inc->unit_price > 0 ? $inc->unit_price : $inc->amount);
                 $priceVal = round($priceVal, 2);
 
-                // Col L: Receipt Date (Format: DD-MM-YYYY, e.g. 15-08-2026)
+                // Col L: Receipt Date (Format: DD/MM/YYYY EC, e.g. 15/01/2018 EC)
                 $rDate = $inc->receipt_date ?: $inc->income_date;
-                $receiptDateFormatted = $rDate ? $rDate->format('d-m-Y') : now()->format('d-m-Y');
+                $receiptDateFormatted = $rDate ? EthiopianDate::formatDateEc($rDate, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
 
                 // Col M: Encoded By (e.g. wechacha)
                 $encodedBy = trim((string)($inc->encoded_by ?: ($request->input('encoded_by') ?: (
@@ -722,7 +805,7 @@ class IncomeController extends Controller
                 $price = (float)($inc->unit_price > 0 ? $inc->unit_price : $inc->amount);
 
                 $rDate = $inc->receipt_date ?: $inc->income_date;
-                $receiptDateFormatted = $rDate ? $rDate->format('d-m-Y') : now()->format('d-m-Y');
+                $receiptDateFormatted = $rDate ? EthiopianDate::formatDateEc($rDate, 'DD/MM/YYYY EC') : EthiopianDate::formatDateEc(now(), 'DD/MM/YYYY EC');
 
                 $encodedBy = trim((string)($inc->encoded_by ?: ($request->input('encoded_by') ?: (
                     SystemSetting::get('etax_encoded_by') ?: (

@@ -7,7 +7,7 @@
             <h1 class="h3 mb-1 text-gray-800 fw-bold">
                 <i class="fas fa-file-invoice-dollar text-success me-2"></i>Income Record {{ $income->income_no }}
             </h1>
-            <p class="text-muted small mb-0">Recorded on {{ $income->income_date ? $income->income_date->format('d M Y') : '—' }}</p>
+            <p class="text-muted small mb-0">Recorded on {{ $income->income_date ? $income->income_date->format('d M Y') : '—' }} &bull; <span class="badge bg-light text-dark border font-monospace">{{ \App\Services\EthiopianDate::formatDateEc($income->income_date) }}</span></p>
         </div>
         <div class="d-flex gap-2">
             <a href="{{ route('income.index') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-sm">
@@ -122,8 +122,9 @@
                             <span class="text-dark font-monospace fw-bold">ETB {{ number_format($income->unit_price ?: $income->amount, 2) }}</span>
                         </div>
                         <div class="col-md-6">
-                            <span class="text-muted small d-block">Col L: Receipt Date</span>
-                            <span class="text-dark font-monospace">{{ $income->receipt_date ? $income->receipt_date->format('d-m-Y') : ($income->income_date ? $income->income_date->format('d-m-Y') : '—') }}</span>
+                            <span class="text-muted small d-block">Col L: Receipt Date (EC)</span>
+                            <span class="text-dark font-monospace fw-bold">{{ \App\Services\EthiopianDate::formatDateEc($income->receipt_date ?: $income->income_date) }}</span>
+                            <small class="text-muted d-block" style="font-size: 0.75rem;">(GC: {{ $income->receipt_date ? $income->receipt_date->format('d-m-Y') : ($income->income_date ? $income->income_date->format('d-m-Y') : '—') }})</small>
                         </div>
                         <div class="col-md-6">
                             <span class="text-muted small d-block">Col M: Encoded By</span>

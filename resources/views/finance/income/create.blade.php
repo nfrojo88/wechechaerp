@@ -43,8 +43,10 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
-                        <input type="date" name="income_date" class="form-control" required value="{{ date('Y-m-d') }}">
+                        <label class="form-label fw-semibold">Income Date (GC or EC) <span class="text-danger">*</span></label>
+                        <input type="date" name="income_date" class="form-control" value="{{ date('Y-m-d') }}">
+                        <input type="text" name="income_date_ec" class="form-control font-monospace mt-1" placeholder="DD/MM/YYYY EC">
+                        <small class="text-muted">Today (EC): {{ \App\Services\EthiopianDate::formatDateEc(now()) }}</small>
                     </div>
 
                     <div class="col-md-6">
@@ -192,6 +194,7 @@
                     <div class="col-md-4">
                         <label class="form-label fw-semibold">Receipt Date</label>
                         <input type="date" name="receipt_date" class="form-control" value="{{ date('Y-m-d') }}">
+                        <input type="text" name="receipt_date_ec" class="form-control font-monospace mt-1" placeholder="DD/MM/YYYY EC">
                     </div>
 
                     <div class="col-md-6">
