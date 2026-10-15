@@ -389,7 +389,9 @@ class ProcurementLifecycleService
         string $decision,
         ?string $paymentMethod = 'pay_and_buy',
         string $notes = null,
-        ?int $selectedProformaId = null
+        ?int $selectedProformaId = null,
+        array $itemProformas = [],
+        array $itemUnitPrices = []
     ): void {
         $from = $pr->status;
         $round = ($pr->gm_loop_count ?? 0) + 1;
@@ -450,29 +452,109 @@ class ProcurementLifecycleService
                 ]);
             } catch (\Throwable $e) {}
         } elseif ($decision === 'approve') {
-            // 1. Handle Selected Proforma Quote
-            $chosenProforma = null;
-            if ($selectedProformaId) {
-                $chosenProforma = $pr->proformaInvoices()->find($selectedProformaId);
-            }
-            if (!$chosenProforma) {
-                $chosenProforma = $pr->proformaInvoices()->where('gm_selected', true)->first()
-                    ?? $pr->proformaInvoices()->orderBy('grand_total', 'asc')->first();
+            // 1. Handle Proforma Selection: Single Winning Proforma OR Item-by-Item Awards
+            $hasItemProformas = !empty($itemProformas);
+            $selectedProformaIds = [];
+            $computedTotal = 0.0;
+            $primarySupplierId = null;
+
+            if ($hasItemProformas) {
+                foreach ($itemProformas as $itemId => $profId) {
+                    $prof = $pr->proformaInvoices()->find($profId);
+                    if ($prof) {
+                        $selectedProformaIds[] = $prof->id;
+                        if (!$primarySupplierId) {
+                            $primarySupplierId = $prof->supplier_id;
+                        }
+
+                        $itemModel = $pr->items()->find($itemId);
+                        if ($itemModel) {
+                            $quotedPrice = null;
+                            if (isset($itemUnitPrices[$itemId]) && (float)$itemUnitPrices[$itemId] > 0) {
+                                $quotedPrice = (float)$itemUnitPrices[$itemId];
+                            } elseif (!empty($prof->item_prices) && is_array($prof->item_prices)) {
+                                foreach ($prof->item_prices as $ip) {
+                                    if (is_array($ip) && ((!empty($ip['item_id']) && $ip['item_id'] == $itemId) || (!empty($ip['product_id']) && $ip['product_id'] == $itemModel->product_id))) {
+                                        $quotedPrice = (float)($ip['unit_price'] ?? 0);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if ($quotedPrice === null || $quotedPrice <= 0) {
+                                $quotedPrice = (float)($itemModel->estimated_unit_cost ?? 0);
+                            }
+
+                            $updateCols = ['estimated_unit_cost' => $quotedPrice];
+                            if (\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'proforma_invoice_id')) {
+                                $updateCols['proforma_invoice_id'] = $prof->id;
+                            }
+                            if (\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'supplier_id')) {
+                                $updateCols['supplier_id'] = $prof->supplier_id;
+                            }
+
+                            $itemModel->update($updateCols);
+                            $computedTotal += ($quotedPrice * (float)$itemModel->quantity);
+                        }
+                    }
+                }
             }
 
-            if ($chosenProforma) {
+            if ($hasItemProformas && !empty($selectedProformaIds)) {
                 $pr->proformaInvoices()->update(['gm_selected' => false]);
-                $chosenProforma->update(['gm_selected' => true]);
-                $finalAmount = (float)$chosenProforma->grand_total;
-                $supplierId = $chosenProforma->supplier_id;
-                $supplierName = $chosenProforma->supplier?->name ?? $chosenProforma->supplier_name;
+                $pr->proformaInvoices()->whereIn('id', array_unique($selectedProformaIds))->update(['gm_selected' => true]);
+                $finalAmount = round($computedTotal, 2);
+                $supplierId = $primarySupplierId ?: $pr->supplier_id;
             } else {
-                $finalAmount = (float)($pr->direct_buy_amount ?? 0);
-                if ($finalAmount <= 0) {
-                    $finalAmount = (float)$pr->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0));
+                $chosenProforma = null;
+                if ($selectedProformaId) {
+                    $chosenProforma = $pr->proformaInvoices()->find($selectedProformaId);
                 }
-                $supplierId = $pr->supplier_id;
-                $supplierName = $pr->supplier?->name;
+                if (!$chosenProforma) {
+                    $chosenProforma = $pr->proformaInvoices()->where('gm_selected', true)->first()
+                        ?? $pr->proformaInvoices()->orderBy('grand_total', 'asc')->first();
+                }
+
+                if ($chosenProforma) {
+                    $pr->proformaInvoices()->update(['gm_selected' => false]);
+                    $chosenProforma->update(['gm_selected' => true]);
+                    $finalAmount = (float)$chosenProforma->grand_total;
+                    $supplierId = $chosenProforma->supplier_id;
+                    $supplierName = $chosenProforma->supplier?->name ?? $chosenProforma->supplier_name;
+
+                    // Sync items with the chosen proforma's prices & supplier
+                    if (!empty($chosenProforma->item_prices) && is_array($chosenProforma->item_prices)) {
+                        foreach ($chosenProforma->item_prices as $ip) {
+                            if (is_array($ip) && isset($ip['unit_price'])) {
+                                $pCost = (float)$ip['unit_price'];
+                                $itmQuery = $pr->items();
+                                if (!empty($ip['item_id'])) {
+                                    $itmQuery->where('id', $ip['item_id']);
+                                } elseif (!empty($ip['product_id'])) {
+                                    $itmQuery->where('product_id', $ip['product_id']);
+                                } else {
+                                    continue;
+                                }
+
+                                $updateItemData = ['estimated_unit_cost' => $pCost];
+                                if (\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'proforma_invoice_id')) {
+                                    $updateItemData['proforma_invoice_id'] = $chosenProforma->id;
+                                }
+                                if (\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'supplier_id')) {
+                                    $updateItemData['supplier_id'] = $chosenProforma->supplier_id;
+                                }
+                                $itmQuery->update($updateItemData);
+                            }
+                        }
+                    }
+                } else {
+                    $finalAmount = (float)($pr->direct_buy_amount ?? 0);
+                    if ($finalAmount <= 0) {
+                        $finalAmount = (float)$pr->items->sum(fn($i) => (float)$i->quantity * (float)($i->estimated_unit_price ?? $i->unit_price ?? 0));
+                    }
+                    $supplierId = $pr->supplier_id;
+                    $supplierName = $pr->supplier?->name;
+                }
             }
 
             $pr->update([

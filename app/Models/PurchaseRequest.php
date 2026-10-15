@@ -320,5 +320,138 @@ class PurchaseRequest extends Model
     {
         return $this->morphMany(Receipt::class, 'purchasable');
     }
+
+    /**
+     * Compute a full comparative bids matrix across all attached proformas and material items.
+     */
+    public function getProformaComparisonMatrix(): array
+    {
+        $proformas = $this->proformaInvoices()->with('supplier')->get();
+        $items = $this->items()->with('product', 'supplier', 'proformaInvoice')->get();
+
+        $matrix = [
+            'has_proformas'        => $proformas->isNotEmpty(),
+            'proforma_count'       => $proformas->count(),
+            'proformas'            => [],
+            'items'                => [],
+            'best_overall_total'   => 0.0,
+            'selected_proforma_id' => $proformas->where('gm_selected', true)->value('id') ?? $proformas->first()?->id,
+            'lowest_total_proforma'=> $proformas->sortBy('grand_total')->first(),
+        ];
+
+        foreach ($proformas as $prof) {
+            $matrix['proformas'][$prof->id] = [
+                'id'            => $prof->id,
+                'proforma_no'   => $prof->proforma_no,
+                'supplier_id'   => $prof->supplier_id,
+                'supplier_name' => $prof->supplier?->name ?? ($prof->supplier_name ?: 'Vendor #' . $prof->supplier_id),
+                'supplier_phone'=> $prof->supplier?->phone,
+                'proforma_date' => $prof->proforma_date?->format('M d, Y'),
+                'valid_until'   => $prof->valid_until?->format('M d, Y'),
+                'subtotal'      => (float)$prof->subtotal,
+                'tax_amount'    => (float)$prof->tax_amount,
+                'grand_total'   => (float)$prof->grand_total,
+                'gm_selected'   => (bool)$prof->gm_selected,
+                'file_path'     => $prof->file_path,
+                'file_url'      => \App\Services\FileUploadService::url($prof->file_path),
+                'notes'         => $prof->notes,
+            ];
+        }
+
+        $optimalCombinedTotal = 0.0;
+
+        foreach ($items as $item) {
+            $qty = (float)$item->quantity;
+            $itemQuotes = [];
+            $lowestPrice = null;
+            $lowestProfId = null;
+
+            foreach ($proformas as $prof) {
+                $quotedUnit = null;
+                $quotedTotal = null;
+
+                // 1. Look in structured item_prices
+                if (!empty($prof->item_prices) && is_array($prof->item_prices)) {
+                    foreach ($prof->item_prices as $ip) {
+                        if (is_array($ip)) {
+                            $match = (!empty($ip['item_id']) && $ip['item_id'] == $item->id)
+                                || (!empty($ip['product_id']) && $ip['product_id'] == $item->product_id);
+                            if ($match && isset($ip['unit_price'])) {
+                                $quotedUnit = (float)$ip['unit_price'];
+                                $quotedTotal = isset($ip['total']) ? (float)$ip['total'] : round($quotedUnit * $qty, 2);
+                                break;
+                            }
+                        }
+                    }
+                    // Associative array check: [$item->id => price]
+                    if ($quotedUnit === null && isset($prof->item_prices[$item->id])) {
+                        $quotedUnit = (float)$prof->item_prices[$item->id];
+                        $quotedTotal = round($quotedUnit * $qty, 2);
+                    }
+                }
+
+                // 2. Fallback if single-item PR and grand_total is present
+                if ($quotedUnit === null && $items->count() === 1 && (float)$prof->grand_total > 0) {
+                    $quotedUnit = $qty > 0 ? round((float)$prof->grand_total / $qty, 2) : (float)$prof->grand_total;
+                    $quotedTotal = (float)$prof->grand_total;
+                }
+
+                if ($quotedUnit !== null && $quotedUnit > 0) {
+                    if ($lowestPrice === null || $quotedUnit < $lowestPrice) {
+                        $lowestPrice = $quotedUnit;
+                        $lowestProfId = $prof->id;
+                    }
+                }
+
+                $itemQuotes[$prof->id] = [
+                    'proforma_id'   => $prof->id,
+                    'proforma_no'   => $prof->proforma_no,
+                    'supplier_name' => $matrix['proformas'][$prof->id]['supplier_name'] ?? 'Vendor',
+                    'unit_price'    => $quotedUnit,
+                    'line_total'    => $quotedTotal,
+                ];
+            }
+
+            // Flag which quote is lowest
+            foreach ($itemQuotes as $pId => &$q) {
+                $q['is_lowest'] = ($q['unit_price'] !== null && $lowestPrice !== null && $q['unit_price'] == $lowestPrice);
+            }
+            unset($q);
+
+            if ($lowestPrice !== null) {
+                $optimalCombinedTotal += ($lowestPrice * $qty);
+            } else {
+                $optimalCombinedTotal += ((float)($item->estimated_unit_cost ?? 0) * $qty);
+            }
+
+            // Check currently awarded proforma for this item
+            $awardedProfId = $item->proforma_invoice_id;
+            if (!$awardedProfId) {
+                // If PR has a selected proforma, default item to that proforma
+                $awardedProfId = $matrix['selected_proforma_id'];
+            }
+
+            $matrix['items'][$item->id] = [
+                'item_id'             => $item->id,
+                'product_id'          => $item->product_id,
+                'product_name'        => $item->product?->name ?? ('Item #' . $item->product_id),
+                'product_code'        => $item->product?->code,
+                'quantity'            => $qty,
+                'unit'                => $item->unit,
+                'specifications'      => $item->specifications,
+                'current_unit_cost'   => (float)($item->estimated_unit_cost ?? 0),
+                'current_total'       => (float)($item->estimated_unit_cost ?? 0) * $qty,
+                'quotes'              => $itemQuotes,
+                'lowest_unit_price'   => $lowestPrice,
+                'lowest_proforma_id'  => $lowestProfId,
+                'awarded_proforma_id' => $awardedProfId,
+                'payment_method'      => $item->payment_method ?? 'pay_and_buy',
+            ];
+        }
+
+        $matrix['best_overall_total'] = round($optimalCombinedTotal, 2);
+
+        return $matrix;
+    }
 }
 

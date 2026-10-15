@@ -635,10 +635,13 @@ class PurchaseRequestController extends Controller
             ->orderByDesc('id')
             ->get();
 
+        $proformaMatrix = $purchaseRequest->getProformaComparisonMatrix();
+
         return view('procurement.purchase-requests.show', compact(
             'purchaseRequest', 'stockAvailability', 'transferAvailability', 'prTransfers', 'coaAccounts',
             'financeStaff', 'drivers', 'suppliers', 'stores', 'pricingBenchmarks',
-            'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo', 'availableProducts', 'prDeliveryReceipts', 'userStoreId'
+            'isFinalIntake', 'receiveSlipSequence', 'nextReceiveSlipNo', 'availableProducts', 'prDeliveryReceipts', 'userStoreId',
+            'proformaMatrix'
         ));
 
     }
@@ -1546,11 +1549,18 @@ class PurchaseRequestController extends Controller
         $this->authorizeStageRole($purchaseRequest, ['gm', 'general_manager']);
 
         // Defensive column check in case migration hasn't run yet
-        if (\Illuminate\Support\Facades\Schema::hasTable('purchase_request_items') && 
-            !\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'payment_method')) {
+        if (\Illuminate\Support\Facades\Schema::hasTable('purchase_request_items')) {
             try {
                 \Illuminate\Support\Facades\Schema::table('purchase_request_items', function ($table) {
-                    $table->string('payment_method', 30)->nullable()->after('status');
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'payment_method')) {
+                        $table->string('payment_method', 30)->nullable()->after('status');
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'proforma_invoice_id')) {
+                        $table->unsignedBigInteger('proforma_invoice_id')->nullable()->after('estimated_unit_cost');
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('purchase_request_items', 'supplier_id')) {
+                        $table->unsignedBigInteger('supplier_id')->nullable()->after('proforma_invoice_id');
+                    }
                 });
             } catch (\Throwable $e) {
                 // Table column may have already been added concurrently
@@ -1560,6 +1570,8 @@ class PurchaseRequestController extends Controller
         $decisionInput = $request->input('decision');
         $paymentMethodInput = $request->input('payment_method');
         $itemPaymentMethods = $request->input('item_payment_methods', []);
+        $itemProformas = $request->input('item_proformas', []);
+        $itemUnitPrices = $request->input('item_unit_prices', []);
 
         // Save item-level payment methods if provided
         if (!empty($itemPaymentMethods) && is_array($itemPaymentMethods)) {
@@ -1615,7 +1627,9 @@ class PurchaseRequestController extends Controller
             $decision,
             $paymentMethod,
             $request->notes,
-            $selectedProformaId
+            $selectedProformaId,
+            $itemProformas,
+            $itemUnitPrices
         );
 
         $decisionLabel = ($decision === 'approve') 

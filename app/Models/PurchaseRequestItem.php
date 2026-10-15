@@ -9,6 +9,7 @@ class PurchaseRequestItem extends Model
     protected $fillable = [
         'purchase_request_id', 'product_id', 'quantity', 'purchased_quantity', 'received_quantity', 'unit',
         'specifications', 'estimated_unit_cost', 'payment_method',
+        'proforma_invoice_id', 'supplier_id',
     ];
 
     protected $casts = [
@@ -21,6 +22,8 @@ class PurchaseRequestItem extends Model
 
     public function purchaseRequest() { return $this->belongsTo(PurchaseRequest::class); }
     public function product()         { return $this->belongsTo(Product::class); }
+    public function proformaInvoice() { return $this->belongsTo(ProformaInvoice::class, 'proforma_invoice_id'); }
+    public function supplier()        { return $this->belongsTo(Supplier::class, 'supplier_id'); }
 
     /**
      * Get effective purchased quantity (from database column or fallback to linked PO items).

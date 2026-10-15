@@ -979,6 +979,15 @@
                             @csrf
                             <input type="hidden" name="decision" id="gmDecisionHidden" value="pay_and_buy">
                             <input type="hidden" name="payment_method" id="gmPaymentMethodHidden" value="pay_and_buy">
+                            <input type="hidden" name="proforma_invoice_id" id="gmSelectedProformaHidden" value="{{ $proformaMatrix['selected_proforma_id'] ?? '' }}">
+                            @foreach($purchaseRequest->items as $item)
+                                @php
+                                    $itemAwardedProf = $proformaMatrix['items'][$item->id]['awarded_proforma_id'] ?? ($proformaMatrix['selected_proforma_id'] ?? '');
+                                    $itemAwardedUnitCost = $proformaMatrix['items'][$item->id]['quotes'][$itemAwardedProf]['unit_price'] ?? ($item->estimated_unit_cost ?? 0);
+                                @endphp
+                                <input type="hidden" name="item_proformas[{{ $item->id }}]" id="gmItemProformaHidden_{{ $item->id }}" value="{{ $itemAwardedProf }}">
+                                <input type="hidden" name="item_unit_prices[{{ $item->id }}]" id="gmItemUnitPriceHidden_{{ $item->id }}" value="{{ $itemAwardedUnitCost }}">
+                            @endforeach
 
                             <!-- Stacked Full-Width Approval Options (Fits sidebar perfectly) -->
                             <div class="mb-3">
@@ -1105,11 +1114,13 @@
                             @if($purchaseRequest->proformaInvoices->count() > 0)
                             <div class="mb-3" id="gmProformaSelectionCard">
                                 <label class="form-label small fw-bold text-uppercase text-dark d-flex justify-content-between align-items-center mb-1">
-                                    <span><i class="fas fa-file-invoice-dollar text-primary me-1"></i> Select Winning Proforma / Quote <span class="text-danger">*</span></span>
-                                    <span class="badge bg-primary rounded-pill">{{ $purchaseRequest->proformaInvoices->count() }} Available</span>
+                                    <span><i class="fas fa-file-invoice-dollar text-primary me-1"></i> Winning Proforma / Quote <span class="text-danger">*</span></span>
+                                    <a href="#gmBidsMatrixCard" class="btn btn-outline-primary btn-xs text-nowrap py-0 px-1.5" style="font-size: 10px;" title="Jump to Comparative Bids Matrix">
+                                        <i class="fas fa-table-cells me-1"></i> Bids Matrix
+                                    </a>
                                 </label>
                                 <p class="text-muted small mb-2" style="font-size: 11px;">
-                                    Choose which supplier quotation to approve:
+                                    Award <strong>all materials</strong> to one supplier quote below, or award <strong>per material item</strong> in the Bids Matrix:
                                 </p>
                                 <div class="list-group list-group-flush border rounded overflow-hidden shadow-xs">
                                     @php
@@ -1120,27 +1131,64 @@
                                             $isLowest = ((float)$prof->grand_total == (float)$minGrandTotal && (float)$minGrandTotal > 0);
                                             $isProfSelected = $prof->gm_selected || ($pIdx === 0 && !$purchaseRequest->proformaInvoices->where('gm_selected', true)->count());
                                         @endphp
-                                        <label class="list-group-item list-group-item-action d-flex justify-content-between align-items-center p-2 cursor-pointer gm-prof-item {{ $isProfSelected ? 'bg-light border-primary' : '' }}" 
-                                               id="gmProfItemLabel_{{ $prof->id }}"
-                                               style="cursor: pointer;" onclick="syncGmProformaSelect({{ $prof->id }})">
-                                            <div class="d-flex align-items-center">
-                                                <input class="form-check-input me-2 mt-0 gm-proforma-radio" type="radio" name="proforma_invoice_id" value="{{ $prof->id }}" id="gmProfRadio_{{ $prof->id }}" {{ $isProfSelected ? 'checked' : '' }}>
-                                                <div>
-                                                    <div class="fw-bold small text-dark">{{ $prof->supplier?->name ?? ($prof->supplier_name ?: 'Vendor #' . $prof->supplier_id) }}</div>
-                                                    <div class="text-muted font-monospace" style="font-size: 11px;">
-                                                        <code>{{ $prof->proforma_no }}</code>
-                                                        @if($isLowest)
-                                                            <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 9px;"><i class="fas fa-arrow-down me-1"></i>Lowest Price</span>
-                                                        @endif
+                                        <div class="list-group-item p-2 cursor-pointer gm-prof-item {{ $isProfSelected ? 'bg-light border-primary' : '' }}" 
+                                             id="gmProfItemLabel_{{ $prof->id }}"
+                                             style="cursor: pointer;" onclick="selectGmProformaForEntirePr({{ $prof->id }})">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div class="d-flex align-items-center">
+                                                    <input class="form-check-input me-2 mt-0 gm-proforma-radio" type="radio" name="sidebar_proforma_radio" value="{{ $prof->id }}" id="gmProfRadio_{{ $prof->id }}" {{ $isProfSelected ? 'checked' : '' }}>
+                                                    <div>
+                                                        <div class="fw-bold small text-dark">{{ $prof->supplier?->name ?? ($prof->supplier_name ?: 'Vendor #' . $prof->supplier_id) }}</div>
+                                                        <div class="text-muted font-monospace" style="font-size: 11px;">
+                                                            <code>{{ $prof->proforma_no }}</code>
+                                                            @if($isLowest)
+                                                                <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 9px;"><i class="fas fa-arrow-down me-1"></i>Lowest</span>
+                                                            @endif
+                                                        </div>
                                                     </div>
                                                 </div>
+                                                <div class="text-end">
+                                                    <div class="fw-bold text-primary small">{{ number_format($prof->grand_total, 2) }} ETB</div>
+                                                    @if(!empty($prof->item_prices))
+                                                    <a class="text-muted text-decoration-none small" style="font-size: 10px;" data-bs-toggle="collapse" href="#sidebarProfItems_{{ $prof->id }}" role="button" onclick="event.stopPropagation()">
+                                                        <i class="fas fa-chevron-down text-primary me-1"></i>{{ count($prof->item_prices) }} items
+                                                    </a>
+                                                    @else
+                                                    <div class="text-muted" style="font-size: 10px;">{{ count($prof->item_prices ?? []) }} items</div>
+                                                    @endif
+                                                </div>
                                             </div>
-                                            <div class="text-end">
-                                                <div class="fw-bold text-primary small">{{ number_format($prof->grand_total, 2) }} ETB</div>
-                                                <div class="text-muted" style="font-size: 10px;">{{ count($prof->item_prices ?? []) }} items</div>
+
+                                            @if(!empty($prof->item_prices))
+                                            <div class="collapse mt-2 pt-2 border-top" id="sidebarProfItems_{{ $prof->id }}" onclick="event.stopPropagation()">
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-borderless align-middle mb-0 text-muted" style="font-size: 10.5px;">
+                                                        <tbody>
+                                                            @foreach($prof->item_prices as $pip)
+                                                            <tr class="border-bottom border-light">
+                                                                <td class="text-dark p-0.5">{{ $pip['product_name'] ?? 'Item' }}</td>
+                                                                <td class="text-end text-dark fw-bold p-0.5">{{ number_format($pip['unit_price'] ?? 0, 2) }} ETB</td>
+                                                            </tr>
+                                                            @endforeach
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             </div>
-                                        </label>
+                                            @endif
+                                        </div>
                                     @endforeach
+                                </div>
+
+                                <div id="gmPerItemAwardNotice" class="alert alert-info py-1 px-2 mt-2 mb-0 small d-none">
+                                    <i class="fas fa-layer-group text-primary me-1"></i>
+                                    <span id="gmPerItemAwardNoticeText">Custom Per-Material Selection Active</span>
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center mt-2 p-2 bg-light rounded border">
+                                    <span class="small fw-semibold text-muted text-uppercase" style="font-size: 10.5px;">Awarded Total:</span>
+                                    <strong class="text-primary fs-6" id="gmDynamicGrandTotalDisplay">
+                                        {{ number_format($purchaseRequest->direct_buy_amount ?: ($purchaseRequest->proformaInvoices->first()?->grand_total ?? 0), 2) }} ETB
+                                    </strong>
                                 </div>
                             </div>
                             @endif
@@ -1933,6 +1981,77 @@
                                         @if($item->specifications)
                                             <br><small class="text-muted fst-italic"><i class="fas fa-info-circle me-1"></i>{{ $item->specifications }}</small>
                                         @endif
+
+                                        @if(!empty($proformaMatrix['has_proformas']))
+                                            <div class="mt-2 pt-1 border-top border-light-subtle item-proforma-bid-block" id="itemProformaBidBlock_{{ $item->id }}">
+                                                <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
+                                                    <span class="small text-muted fw-semibold" style="font-size: 11px;">
+                                                        <i class="fas fa-tags text-primary me-1"></i> Quoted Bid:
+                                                    </span>
+                                                    @if(isset($proformaMatrix['items'][$item->id]['lowest_unit_price']))
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 9px;" title="Best quoted price across all proformas">
+                                                            <i class="fas fa-arrow-down me-1"></i>Best: {{ number_format($proformaMatrix['items'][$item->id]['lowest_unit_price'], 2) }} ETB
+                                                        </span>
+                                                    @endif
+                                                </div>
+
+                                                @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
+                                                    {{-- GM Interactive Award Option Per Material --}}
+                                                    @php
+                                                        $curAwardedProfId = $proformaMatrix['items'][$item->id]['awarded_proforma_id'] ?? '';
+                                                    @endphp
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-white text-muted px-1.5" style="font-size: 11px;" title="Award proforma for this item">
+                                                            <i class="fas fa-hand-holding-dollar text-primary"></i>
+                                                        </span>
+                                                        <select class="form-select form-select-sm gm-item-proforma-select fw-semibold" 
+                                                                id="itemBidSelect_{{ $item->id }}" 
+                                                                data-item-id="{{ $item->id }}"
+                                                                data-quantity="{{ (float)$item->quantity }}"
+                                                                onchange="handleItemBidChange({{ $item->id }}, this.value)"
+                                                                style="font-size: 11px; border-color: #0d6efd;">
+                                                            <option value="">-- Choose Vendor Proforma --</option>
+                                                            @foreach($proformaMatrix['items'][$item->id]['quotes'] ?? [] as $pId => $quote)
+                                                                @if($quote['unit_price'] !== null)
+                                                                    <option value="{{ $pId }}" 
+                                                                            data-unit-price="{{ $quote['unit_price'] }}" 
+                                                                            data-total="{{ $quote['line_total'] }}"
+                                                                            data-supplier-name="{{ $quote['supplier_name'] }}"
+                                                                            data-is-lowest="{{ $quote['is_lowest'] ? '1' : '0' }}"
+                                                                            {{ (string)$curAwardedProfId === (string)$pId ? 'selected' : '' }}>
+                                                                        {{ $quote['supplier_name'] }}: {{ number_format($quote['unit_price'], 2) }} ETB (Total: {{ number_format($quote['line_total'], 2) }}) {{ $quote['is_lowest'] ? '★ LOWEST' : '' }}
+                                                                    </option>
+                                                                @else
+                                                                    <option value="{{ $pId }}" data-unit-price="0" data-total="0" disabled>
+                                                                        {{ $quote['supplier_name'] }}: [Not Quoted]
+                                                                    </option>
+                                                                @endif
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+                                                @else
+                                                    {{-- Read-only awarded quote badge --}}
+                                                    @php
+                                                        $awardedProfId = $item->proforma_invoice_id ?: ($proformaMatrix['items'][$item->id]['awarded_proforma_id'] ?? null);
+                                                        $awardedQuote = $awardedProfId ? ($proformaMatrix['items'][$item->id]['quotes'][$awardedProfId] ?? null) : null;
+                                                    @endphp
+                                                    <div id="itemAwardedBadge_{{ $item->id }}">
+                                                        @if($awardedQuote && $awardedQuote['unit_price'] !== null)
+                                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle d-inline-flex align-items-center gap-1" style="font-size: 10.5px;">
+                                                                <i class="fas fa-check-circle text-primary"></i>
+                                                                <span><strong>{{ $awardedQuote['supplier_name'] }}</strong> &bull; {{ number_format($awardedQuote['unit_price'], 2) }} ETB/{{ $item->unit }}</span>
+                                                            </span>
+                                                        @elseif($item->supplier)
+                                                            <span class="badge bg-light text-dark border" style="font-size: 10px;">
+                                                                <i class="fas fa-building me-1"></i> {{ $item->supplier->name }}
+                                                            </span>
+                                                        @else
+                                                            <span class="text-muted" style="font-size: 11px;">Pending GM selection</span>
+                                                        @endif
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endif
                                     </td>
                                     <td>
                                         @if($totalInTransfer > 0)
@@ -2017,14 +2136,14 @@
                                     </td>
                                     <td><span class="badge bg-light text-dark border">{{ $item->unit }}</span></td>
                                     @if(!$hideMoneyColumns)
-                                    <td>{{ number_format($item->estimated_unit_cost ?? 0, 2) }} ETB</td>
+                                    <td><span id="itemUnitCostDisplay_{{ $item->id }}">{{ number_format($item->estimated_unit_cost ?? 0, 2) }}</span> ETB</td>
                                     @php
                                         $effectiveQtyForTotal = ($purchQty > 0) ? $purchQty : $reqQty;
                                         $unitCostVal = (float)($item->estimated_unit_cost ?? 0);
                                         $itemCalculatedTotal = $effectiveQtyForTotal * $unitCostVal;
                                     @endphp
                                     <td class="fw-bold text-primary">
-                                        {{ number_format($itemCalculatedTotal, 2) }} ETB
+                                        <span id="itemCalculatedTotalDisplay_{{ $item->id }}">{{ number_format($itemCalculatedTotal, 2) }}</span> ETB
                                         @if($purchQty > 0)
                                             <div class="small text-muted" style="font-size: 10px;">
                                                 ({{ number_format($purchQty, 2) }} &times; {{ number_format($unitCostVal, 2) }})
@@ -2198,7 +2317,184 @@
                 </div>
             </div>
 
-                        <!-- Proforma Invoices / Supplier Quotations Section -->
+            {{-- Comparative Material Bids Matrix (Side-by-Side Vendor Quotation Comparison) --}}
+            @if(!empty($proformaMatrix['has_proformas']) && count($proformaMatrix['proformas']) > 0)
+            <div class="card border-0 shadow-sm mb-4 border-start border-4 border-info" id="gmBidsMatrixCard">
+                <div class="card-header bg-white py-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-info-subtle text-info border border-info-subtle text-uppercase fw-bold" style="font-size: 10px;">GM Comparative Analysis</span>
+                                <h6 class="fw-bold mb-0 text-dark fs-6"><i class="fas fa-table-cells text-primary me-2"></i>Vendor Quotations & Material Bids Comparison Matrix</h6>
+                            </div>
+                            <small class="text-muted d-block mt-1" style="font-size: 12px;">
+                                Side-by-side analysis of all material bids across competing suppliers. Choose winning quotes for <strong>all materials</strong> or <strong>per material item</strong>.
+                            </small>
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
+                            <button type="button" class="btn btn-sm btn-success shadow-xs fw-bold" onclick="autoSelectLowestBids()" title="Automatically select lowest quoted price for each material item">
+                                <i class="fas fa-bolt me-1"></i> Auto-Select Best (Lowest) Bid per Item
+                            </button>
+                            <a href="#gmDecisionForm" class="btn btn-sm btn-primary shadow-xs fw-semibold">
+                                <i class="fas fa-check-double me-1"></i> Go to GM Decision
+                            </a>
+                            @endif
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Summary highlight bar --}}
+                <div class="bg-light px-3 py-2 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2 small">
+                    <div class="d-flex align-items-center gap-3">
+                        <div><i class="fas fa-boxes-stacked text-secondary me-1"></i> <strong>{{ count($proformaMatrix['items']) }}</strong> Materials</div>
+                        <div><i class="fas fa-file-invoice-dollar text-primary me-1"></i> <strong>{{ count($proformaMatrix['proformas']) }}</strong> Vendor Proformas</div>
+                        @if(($proformaMatrix['best_overall_total'] ?? 0) > 0)
+                        <div><i class="fas fa-trophy text-warning me-1"></i> Combined Lowest Total: <strong class="text-success">{{ number_format($proformaMatrix['best_overall_total'], 2) }} ETB</strong></div>
+                        @endif
+                    </div>
+                    <div class="text-end">
+                        <span class="text-muted">Selected Total Award:</span> 
+                        <strong class="text-primary fs-6 ms-1" id="matrixAwardedGrandTotal">
+                            {{ number_format($purchaseRequest->direct_buy_amount ?: ($purchaseRequest->proformaInvoices->first()?->grand_total ?? 0), 2) }} ETB
+                        </strong>
+                    </div>
+                </div>
+
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-bordered align-middle mb-0 matrix-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="min-width: 240px; width: 28%;" class="ps-3 bg-light">
+                                        Material / Requested Item
+                                    </th>
+                                    <th style="width: 110px;" class="text-center bg-light">
+                                        Qty & Unit
+                                    </th>
+                                    @foreach($proformaMatrix['proformas'] as $profId => $profMeta)
+                                    <th style="min-width: 220px;" class="p-2 matrix-vendor-col-header {{ $profMeta['is_selected'] ? 'bg-primary-subtle border-primary' : '' }}" id="matrixVendorCol_{{ $profId }}">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <div class="fw-bold text-dark fs-6">{{ $profMeta['supplier_name'] }}</div>
+                                                <div class="small font-monospace text-muted" style="font-size: 11px;">
+                                                    <code>{{ $profMeta['proforma_no'] }}</code>
+                                                    @if($profMeta['is_lowest_overall'])
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 9px;"><i class="fas fa-award me-1"></i>Lowest Total</span>
+                                                    @endif
+                                                </div>
+                                                @if($profMeta['valid_until'])
+                                                    <div class="text-muted" style="font-size: 10px;">Valid: {{ \Carbon\Carbon::parse($profMeta['valid_until'])->format('M d, Y') }}</div>
+                                                @endif
+                                            </div>
+                                            @if($profMeta['file_url'])
+                                                <a href="{{ $profMeta['file_url'] }}" target="_blank" class="btn btn-xs btn-outline-secondary py-0 px-1" title="View attached document">
+                                                    <i class="fas fa-paperclip"></i>
+                                                </a>
+                                            @endif
+                                        </div>
+                                        <div class="mt-2 pt-1 border-top d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <div class="fw-bold text-primary">{{ number_format($profMeta['grand_total'], 2) }} ETB</div>
+                                                <div class="text-muted" style="font-size: 10px;">Quote Total</div>
+                                            </div>
+                                            @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
+                                            <button type="button" class="btn btn-xs btn-outline-primary fw-bold shadow-xs" onclick="selectGmProformaForEntirePr({{ $profId }})" title="Award ALL materials to this vendor">
+                                                <i class="fas fa-check-double me-1"></i> Award All
+                                            </button>
+                                            @endif
+                                        </div>
+                                    </th>
+                                    @endforeach
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($proformaMatrix['items'] as $itemId => $itemRow)
+                                <tr>
+                                    <td class="ps-3">
+                                        <div class="fw-bold text-dark">{{ $itemRow['product_name'] }}</div>
+                                        @if($itemRow['product_code'])
+                                            <code class="small text-muted">{{ $itemRow['product_code'] }}</code>
+                                        @endif
+                                        @if($itemRow['specifications'])
+                                            <div class="small text-muted fst-italic">{{ $itemRow['specifications'] }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="text-center fw-bold bg-light">
+                                        {{ number_format($itemRow['quantity'], 2) }} <span class="small fw-normal text-muted">{{ $itemRow['unit'] }}</span>
+                                    </td>
+                                    @foreach($proformaMatrix['proformas'] as $profId => $profMeta)
+                                        @php
+                                            $quote = $itemRow['quotes'][$profId] ?? null;
+                                            $isAwarded = ((string)($itemRow['awarded_proforma_id'] ?? '') === (string)$profId);
+                                            $isLowest = !empty($quote['is_lowest']);
+                                            $hasPrice = ($quote && $quote['unit_price'] !== null && (float)$quote['unit_price'] > 0);
+                                        @endphp
+                                        <td class="text-center p-2 matrix-cell {{ $isAwarded ? 'bg-primary-subtle border-primary' : ($isLowest ? 'bg-success-subtle bg-opacity-25' : '') }}" 
+                                            id="matrixCell_{{ $itemId }}_{{ $profId }}"
+                                            @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM && $hasPrice)
+                                                onclick="selectGmProformaForItem({{ $itemId }}, {{ $profId }})"
+                                                style="cursor: pointer;"
+                                            @endif
+                                        >
+                                            @if($hasPrice)
+                                                <div class="fw-bold text-dark fs-6">{{ number_format($quote['unit_price'], 2) }} <small class="text-muted fw-normal" style="font-size: 10px;">ETB/{{ $itemRow['unit'] }}</small></div>
+                                                <div class="text-muted small" style="font-size: 11px;">Total: <strong class="text-dark">{{ number_format($quote['line_total'], 2) }} ETB</strong></div>
+                                                
+                                                <div class="d-flex justify-content-center align-items-center gap-1 mt-1">
+                                                    @if($isLowest)
+                                                        <span class="badge bg-success text-white py-0.5 px-1.5" style="font-size: 9px;"><i class="fas fa-star me-1"></i>Lowest</span>
+                                                    @endif
+                                                    
+                                                    @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
+                                                        <div class="form-check m-0">
+                                                            <input class="form-check-input gm-matrix-radio" type="radio" 
+                                                                   name="matrix_item_{{ $itemId }}" 
+                                                                   id="matrixRadio_{{ $itemId }}_{{ $profId }}" 
+                                                                   value="{{ $profId }}" 
+                                                                   {{ $isAwarded ? 'checked' : '' }}
+                                                                   onchange="selectGmProformaForItem({{ $itemId }}, {{ $profId }})"
+                                                                   onclick="event.stopPropagation()">
+                                                            <label class="form-check-label small fw-semibold cursor-pointer" for="matrixRadio_{{ $itemId }}_{{ $profId }}" style="font-size: 10px;">
+                                                                Award
+                                                            </label>
+                                                        </div>
+                                                    @elseif($isAwarded)
+                                                        <span class="badge bg-primary text-white py-0.5 px-1.5" style="font-size: 9px;"><i class="fas fa-check me-1"></i>Awarded</span>
+                                                    @endif
+                                                </div>
+                                            @else
+                                                <span class="text-muted fst-italic small">[No quote provided]</span>
+                                            @endif
+                                        </td>
+                                    @endforeach
+                                </tr>
+                                @endforeach
+                            </tbody>
+                            <tfoot class="table-light border-top">
+                                <tr>
+                                    <th colspan="2" class="text-end fw-bold text-uppercase small text-muted ps-3">
+                                        Proforma Quotation Total:
+                                    </th>
+                                    @foreach($proformaMatrix['proformas'] as $profId => $profMeta)
+                                    <th class="text-center p-2">
+                                        <div class="fw-bold text-primary fs-6">{{ number_format($profMeta['grand_total'], 2) }} ETB</div>
+                                        @if($canActOnCurrentStage && $purchaseRequest->status === \App\Models\PurchaseRequest::STATUS_PENDING_GM)
+                                        <button type="button" class="btn btn-xs btn-outline-primary w-100 mt-1 shadow-xs" onclick="selectGmProformaForEntirePr({{ $profId }})">
+                                            <i class="fas fa-check me-1"></i> Choose All
+                                        </button>
+                                        @endif
+                                    </th>
+                                    @endforeach
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            @endif
+
+            <!-- Proforma Invoices / Supplier Quotations Section -->
             @if($purchaseRequest->sourcing_method === 'proforma' || $purchaseRequest->proformaInvoices->count() > 0 || in_array($purchaseRequest->status, [\App\Models\PurchaseRequest::STATUS_PENDING_PROC_TEAM, \App\Models\PurchaseRequest::STATUS_PENDING_PROFORMA_SELECTION, \App\Models\PurchaseRequest::STATUS_PENDING_GM]))
             <div class="card border-0 shadow-sm mb-4 border-start border-4 border-primary">
                 <div class="card-header bg-white font-weight-bold py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -3644,25 +3940,300 @@ function handleGmDecisionChange(select) {
     }
 }
 
+window.proformaMatrix = @json($proformaMatrix ?? []);
+
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('gmDecisionForm')) {
         recalculateItemAllocations(false);
+        if (window.proformaMatrix && window.proformaMatrix.has_proformas) {
+            syncSidebarSelectionStatus();
+            recomputeOverallAwardedTotal();
+        }
     }
 });
 
 function syncGmProformaSelect(profId) {
-    if (!profId) return;
-    const radio = document.getElementById('gmProfRadio_' + profId);
-    if (radio) {
-        radio.checked = true;
-    }
+    selectGmProformaForEntirePr(profId);
+}
+
+function selectGmProformaForEntirePr(profId) {
+    if (!profId || !window.proformaMatrix || !window.proformaMatrix.proformas) return;
+    
+    // 1. Update hidden selected proforma input
+    const hiddenProf = document.getElementById('gmSelectedProformaHidden');
+    if (hiddenProf) hiddenProf.value = profId;
+
+    // 2. Update sidebar radio & active styling
+    const sidebarRadio = document.getElementById('gmProfRadio_' + profId);
+    if (sidebarRadio) sidebarRadio.checked = true;
     document.querySelectorAll('.gm-prof-item').forEach(el => {
         el.classList.remove('bg-light', 'border-primary');
     });
     const label = document.getElementById('gmProfItemLabel_' + profId);
-    if (label) {
-        label.classList.add('bg-light', 'border-primary');
+    if (label) label.classList.add('bg-light', 'border-primary');
+
+    // Hide custom per-item notice
+    const customNotice = document.getElementById('gmPerItemAwardNotice');
+    if (customNotice) customNotice.classList.add('d-none');
+
+    // Highlight selected vendor column in matrix
+    document.querySelectorAll('.matrix-vendor-col-header').forEach(el => {
+        el.classList.remove('bg-primary-subtle', 'border-primary');
+    });
+    const colHeader = document.getElementById('matrixVendorCol_' + profId);
+    if (colHeader) colHeader.classList.add('bg-primary-subtle', 'border-primary');
+
+    // 3. Update all items to this proforma
+    const items = window.proformaMatrix.items || {};
+    let totalAwarded = 0;
+
+    Object.keys(items).forEach(itemId => {
+        const itemData = items[itemId];
+        const quote = (itemData.quotes && itemData.quotes[profId]) ? itemData.quotes[profId] : null;
+        
+        const unitPrice = (quote && quote.unit_price !== null) ? parseFloat(quote.unit_price) : parseFloat(itemData.current_unit_cost || 0);
+        const lineTotal = (quote && quote.line_total !== null) ? parseFloat(quote.line_total) : (unitPrice * parseFloat(itemData.quantity || 0));
+        totalAwarded += lineTotal;
+
+        // Update hidden inputs for item
+        const hiddenItemProf = document.getElementById('gmItemProformaHidden_' + itemId);
+        if (hiddenItemProf) hiddenItemProf.value = profId;
+
+        const hiddenItemPrice = document.getElementById('gmItemUnitPriceHidden_' + itemId);
+        if (hiddenItemPrice) hiddenItemPrice.value = unitPrice;
+
+        // Update Material Table inline select
+        const matSelect = document.getElementById('itemBidSelect_' + itemId);
+        if (matSelect) {
+            matSelect.value = profId;
+            matSelect.classList.remove('border-danger');
+        }
+
+        // Update Material Table unit cost & total displays
+        const unitCostDisplay = document.getElementById('itemUnitCostDisplay_' + itemId);
+        if (unitCostDisplay) {
+            unitCostDisplay.textContent = unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        const totalDisplay = document.getElementById('itemCalculatedTotalDisplay_' + itemId);
+        if (totalDisplay) {
+            totalDisplay.textContent = lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // Update Matrix radio & cell styles
+        document.querySelectorAll('input[name="matrix_item_' + itemId + '"]').forEach(r => {
+            r.checked = (r.value == profId);
+        });
+        document.querySelectorAll('[id^="matrixCell_' + itemId + '_"]').forEach(td => {
+            td.classList.remove('bg-primary-subtle', 'border-primary');
+        });
+        const awardedCell = document.getElementById('matrixCell_' + itemId + '_' + profId);
+        if (awardedCell) {
+            awardedCell.classList.add('bg-primary-subtle', 'border-primary');
+        }
+
+        // Update gm-item-allocation-row for sidebar split calculator
+        const allocRow = document.querySelector('.gm-item-allocation-row[data-item-id="' + itemId + '"]');
+        if (allocRow) {
+            allocRow.setAttribute('data-amount', lineTotal);
+            const lineTotalDisplay = allocRow.querySelector('.text-end.font-monospace');
+            if (lineTotalDisplay) {
+                lineTotalDisplay.textContent = lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
+            }
+        }
+    });
+
+    // 4. Update grand total displays
+    updateAwardedGrandTotalDisplay(totalAwarded);
+
+    // Recalculate sidebar item allocations (split finance/credit)
+    if (typeof recalculateItemAllocations === 'function') {
+        recalculateItemAllocations(false);
     }
+}
+
+function selectGmProformaForItem(itemId, profId) {
+    if (!itemId || !profId || !window.proformaMatrix) return;
+    
+    const items = window.proformaMatrix.items || {};
+    const itemData = items[itemId];
+    if (!itemData) return;
+
+    const quote = (itemData.quotes && itemData.quotes[profId]) ? itemData.quotes[profId] : null;
+    const unitPrice = (quote && quote.unit_price !== null) ? parseFloat(quote.unit_price) : parseFloat(itemData.current_unit_cost || 0);
+    const lineTotal = (quote && quote.line_total !== null) ? parseFloat(quote.line_total) : (unitPrice * parseFloat(itemData.quantity || 0));
+
+    // 1. Update hidden inputs
+    const hiddenItemProf = document.getElementById('gmItemProformaHidden_' + itemId);
+    if (hiddenItemProf) hiddenItemProf.value = profId;
+
+    const hiddenItemPrice = document.getElementById('gmItemUnitPriceHidden_' + itemId);
+    if (hiddenItemPrice) hiddenItemPrice.value = unitPrice;
+
+    // 2. Sync Material Table inline select
+    const matSelect = document.getElementById('itemBidSelect_' + itemId);
+    if (matSelect) {
+        matSelect.value = profId;
+        matSelect.classList.remove('border-danger');
+    }
+
+    // 3. Update Material Table displays
+    const unitCostDisplay = document.getElementById('itemUnitCostDisplay_' + itemId);
+    if (unitCostDisplay) {
+        unitCostDisplay.textContent = unitPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    const totalDisplay = document.getElementById('itemCalculatedTotalDisplay_' + itemId);
+    if (totalDisplay) {
+        totalDisplay.textContent = lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    // 4. Update Matrix radio & cell styles
+    const matrixRadio = document.getElementById('matrixRadio_' + itemId + '_' + profId);
+    if (matrixRadio) matrixRadio.checked = true;
+
+    document.querySelectorAll('[id^="matrixCell_' + itemId + '_"]').forEach(td => {
+        td.classList.remove('bg-primary-subtle', 'border-primary');
+    });
+    const awardedCell = document.getElementById('matrixCell_' + itemId + '_' + profId);
+    if (awardedCell) {
+        awardedCell.classList.add('bg-primary-subtle', 'border-primary');
+    }
+
+    // 5. Update gm-item-allocation-row for sidebar split calculator
+    const allocRow = document.querySelector('.gm-item-allocation-row[data-item-id="' + itemId + '"]');
+    if (allocRow) {
+        allocRow.setAttribute('data-amount', lineTotal);
+        const lineTotalDisplay = allocRow.querySelector('.text-end.font-monospace');
+        if (lineTotalDisplay) {
+            lineTotalDisplay.textContent = lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
+        }
+    }
+
+    // 6. Check if all items now share the same proforma or if it's mixed
+    syncSidebarSelectionStatus();
+
+    // 7. Recalculate totals
+    recomputeOverallAwardedTotal();
+}
+
+function handleItemBidChange(itemId, profId) {
+    if (!profId) return;
+    selectGmProformaForItem(itemId, profId);
+}
+
+function autoSelectLowestBids() {
+    if (!window.proformaMatrix || !window.proformaMatrix.items) return;
+    const items = window.proformaMatrix.items;
+    let selectedCount = 0;
+
+    Object.keys(items).forEach(itemId => {
+        const item = items[itemId];
+        let bestQuote = null;
+
+        if (item.quotes) {
+            Object.values(item.quotes).forEach(q => {
+                if (q.unit_price !== null && parseFloat(q.unit_price) > 0) {
+                    if (!bestQuote || parseFloat(q.unit_price) < parseFloat(bestQuote.unit_price)) {
+                        bestQuote = q;
+                    }
+                }
+            });
+        }
+
+        if (bestQuote && bestQuote.proforma_id) {
+            selectGmProformaForItem(itemId, bestQuote.proforma_id);
+            selectedCount++;
+        }
+    });
+
+    if (selectedCount > 0) {
+        const matrixCard = document.getElementById('gmBidsMatrixCard');
+        if (matrixCard) {
+            matrixCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+}
+
+function syncSidebarSelectionStatus() {
+    if (!window.proformaMatrix || !window.proformaMatrix.items) return;
+    const items = window.proformaMatrix.items || {};
+    const itemIds = Object.keys(items);
+    if (itemIds.length === 0) return;
+
+    let firstProfId = null;
+    let allSame = true;
+    let distinctVendors = new Set();
+
+    itemIds.forEach(itemId => {
+        const hiddenInput = document.getElementById('gmItemProformaHidden_' + itemId);
+        const profId = hiddenInput ? hiddenInput.value : null;
+        if (profId) distinctVendors.add(profId);
+
+        if (firstProfId === null) {
+            firstProfId = profId;
+        } else if (profId !== firstProfId) {
+            allSame = false;
+        }
+    });
+
+    const hiddenOverallProf = document.getElementById('gmSelectedProformaHidden');
+    const customNotice = document.getElementById('gmPerItemAwardNotice');
+    const customNoticeText = document.getElementById('gmPerItemAwardNoticeText');
+
+    if (allSame && firstProfId) {
+        if (hiddenOverallProf) hiddenOverallProf.value = firstProfId;
+        const radio = document.getElementById('gmProfRadio_' + firstProfId);
+        if (radio) radio.checked = true;
+        document.querySelectorAll('.gm-prof-item').forEach(el => {
+            el.classList.remove('bg-light', 'border-primary');
+        });
+        const label = document.getElementById('gmProfItemLabel_' + firstProfId);
+        if (label) label.classList.add('bg-light', 'border-primary');
+
+        if (customNotice) customNotice.classList.add('d-none');
+    } else {
+        // Mixed per-item selection
+        if (hiddenOverallProf) hiddenOverallProf.value = '';
+        document.querySelectorAll('.gm-proforma-radio').forEach(r => r.checked = false);
+        document.querySelectorAll('.gm-prof-item').forEach(el => {
+            el.classList.remove('bg-light', 'border-primary');
+        });
+
+        if (customNotice) {
+            customNotice.classList.remove('d-none');
+            if (customNoticeText) {
+                customNoticeText.textContent = 'Custom Split Active (' + distinctVendors.size + ' vendors awarded)';
+            }
+        }
+    }
+}
+
+function recomputeOverallAwardedTotal() {
+    if (!window.proformaMatrix || !window.proformaMatrix.items) return;
+    let grandTotal = 0;
+    const items = window.proformaMatrix.items || {};
+    
+    Object.keys(items).forEach(itemId => {
+        const item = items[itemId];
+        const hiddenPrice = document.getElementById('gmItemUnitPriceHidden_' + itemId);
+        const unitPrice = hiddenPrice ? parseFloat(hiddenPrice.value || 0) : 0;
+        const qty = parseFloat(item.quantity || 0);
+        grandTotal += (unitPrice * qty);
+    });
+
+    updateAwardedGrandTotalDisplay(grandTotal);
+
+    if (typeof recalculateItemAllocations === 'function') {
+        recalculateItemAllocations(false);
+    }
+}
+
+function updateAwardedGrandTotalDisplay(total) {
+    const formatted = total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ETB';
+    const disp1 = document.getElementById('gmDynamicGrandTotalDisplay');
+    if (disp1) disp1.textContent = formatted;
+
+    const disp2 = document.getElementById('matrixAwardedGrandTotal');
+    if (disp2) disp2.textContent = formatted;
 }
 
 function handleCoaSelectionChange(selectEl) {
