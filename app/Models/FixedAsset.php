@@ -448,7 +448,7 @@ class FixedAsset extends Model
                 $category = self::resolveCategory($prod->category . ' ' . $prod->sub_category, $prod->name);
 
                 $globalUnitCost = (float) (
-                    $storeInvs->where('unit_cost', '>', 0)->value('unit_cost')
+                    $storeInvs->firstWhere('unit_cost', '>', 0)?->unit_cost
                     ?: DB::table('material_prices')->where('product_id', $prod->id)->orderByDesc('effective_date')->value('price')
                     ?: $prod->unit_price
                     ?: $prod->selling_price

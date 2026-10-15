@@ -335,7 +335,7 @@ class PurchaseRequest extends Model
             'proformas'            => [],
             'items'                => [],
             'best_overall_total'   => 0.0,
-            'selected_proforma_id' => $proformas->where('gm_selected', true)->value('id') ?? $proformas->first()?->id,
+            'selected_proforma_id' => $proformas->firstWhere('gm_selected', true)?->id ?? $proformas->first()?->id,
             'lowest_total_proforma'=> $proformas->sortBy('grand_total')->first(),
         ];
 
