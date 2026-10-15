@@ -1093,6 +1093,8 @@ class AttendanceController extends Controller
      */
     protected static function applyDeploymentToAttendance(\App\Models\SiteDeploymentRequest $deployment, $hrUser = null): void
     {
+        self::ensureAttendanceSchemaReady();
+
         $workSchedule = \App\Helpers\EthiopianCalendar::getWorkSchedule();
         $start = Carbon::parse($deployment->start_date);
         $end   = Carbon::parse($deployment->end_date);
@@ -1181,13 +1183,45 @@ class AttendanceController extends Controller
                 $data['site_end_date']    = $end->toDateString();
             }
 
-            Attendance::updateOrCreate(
-                [
-                    'employee_id'     => $deployment->employee_id,
-                    'attendance_date' => $dateStr,
-                ],
-                $data
-            );
+            try {
+                Attendance::updateOrCreate(
+                    [
+                        'employee_id'     => $deployment->employee_id,
+                        'attendance_date' => $dateStr,
+                    ],
+                    $data
+                );
+            } catch (\Illuminate\Database\QueryException $qe) {
+                // If column 'source' had truncation due to old MySQL ENUM, alter table and retry
+                if (str_contains($qe->getMessage(), 'source') || $qe->getCode() == 1265 || str_contains($qe->getMessage(), '1265')) {
+                    try {
+                        $driver = DB::connection()->getDriverName();
+                        if ($driver !== 'sqlite') {
+                            DB::statement("ALTER TABLE `attendance` MODIFY `source` VARCHAR(50) NOT NULL DEFAULT 'manual'");
+                            DB::statement("ALTER TABLE `attendance` MODIFY `status` VARCHAR(50) NOT NULL DEFAULT 'present'");
+                        }
+                        Attendance::updateOrCreate(
+                            [
+                                'employee_id'     => $deployment->employee_id,
+                                'attendance_date' => $dateStr,
+                            ],
+                            $data
+                        );
+                    } catch (\Throwable $inner) {
+                        // Safe fallback to 'manual' if DDL execution is constrained
+                        $data['source'] = 'manual';
+                        Attendance::updateOrCreate(
+                            [
+                                'employee_id'     => $deployment->employee_id,
+                                'attendance_date' => $dateStr,
+                            ],
+                            $data
+                        );
+                    }
+                } else {
+                    throw $qe;
+                }
+            }
 
             $currentDate->addDay();
         }
@@ -1289,6 +1323,7 @@ class AttendanceController extends Controller
             $driver = DB::connection()->getDriverName();
             if ($driver !== 'sqlite') {
                 DB::statement("ALTER TABLE `attendance` MODIFY `status` VARCHAR(50) NOT NULL DEFAULT 'present'");
+                DB::statement("ALTER TABLE `attendance` MODIFY `source` VARCHAR(50) NOT NULL DEFAULT 'manual'");
             }
         } catch (\Throwable $e) {}
 

@@ -9,11 +9,19 @@ class Attendance extends Model
 {
     protected $table = 'attendance';
 
+    public const SOURCE_MANUAL        = 'manual';
     public const SOURCE_BIOMETRIC     = 'biometric';
+    public const SOURCE_MOBILE        = 'mobile';
+    public const SOURCE_DEVICE        = 'device';
+    public const SOURCE_BULK_UPLOAD   = 'bulk_upload';
     public const SOURCE_SITE_DISPATCH = 'site_dispatch';
 
     public const VALID_SOURCES = [
+        self::SOURCE_MANUAL,
         self::SOURCE_BIOMETRIC,
+        self::SOURCE_MOBILE,
+        self::SOURCE_DEVICE,
+        self::SOURCE_BULK_UPLOAD,
         self::SOURCE_SITE_DISPATCH,
     ];
 
